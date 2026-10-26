@@ -31,8 +31,8 @@
 # The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
 # the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
 # natively instead (--wid into a child NSView/HWND, see desktop/src/main/window/
-# backends), so they do NOT build the addon. All three OSes still produce an
-# installer; mac/win playback lands with their embed backends + vendored libmpv.
+# backends), so they do NOT build the compositor. macOS builds the in-process
+# libmpv addon and Windows the small SMTC (media controls) addon.
 name: Desktop release
 
 on:
@@ -142,7 +142,7 @@ jobs:
             ${{ runner.os }}-electron42-
 
       # Linux-only: build deps for the native compositor addon (SDL2 + GL/EGL
-      # + libmpv headers). macOS/Windows don't build the addon (they embed mpv
+      # + libmpv headers). macOS/Windows don't build the compositor (they embed mpv
       # natively), so they need no extra build deps here.
       - name: Install Linux build deps
         if: runner.os == 'Linux'
@@ -215,8 +215,7 @@ jobs:
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
       # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
-      # and Windows embed mpv natively (--wid) and ship no addon — electron-
-      # builder's native/build/Release/** glob simply matches nothing there.
+      # and Windows embed mpv natively (--wid) and have their own addons below.
       - name: Build native addon
         if: runner.os == 'Linux'
         working-directory: desktop/native
@@ -239,6 +238,17 @@ jobs:
             --target=42.4.0 \
             --dist-url=https://electronjs.org/headers \
             --arch=arm64
+
+      # Windows: the System Media Transport Controls addon (fliks_smtc_win, C++/WinRT).
+      - name: Build native addon (Windows)
+        if: runner.os == 'Windows'
+        working-directory: desktop/native
+        shell: bash
+        run: |
+          ../node_modules/.bin/node-gyp rebuild \
+            --target=42.4.0 \
+            --dist-url=https://electronjs.org/headers \
+            --arch=x64
 
       # ── Build the esbuild main/preload bundle (dist/**) ── CONFIDENT.
       - name: Build main + preload bundle

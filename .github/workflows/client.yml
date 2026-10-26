@@ -59,3 +59,25 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
+
+  # The Windows media-controls addon (C++/WinRT) only compiles on Windows.
+  desktop-win:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Build the SMTC addon against the Electron 42 ABI
+        working-directory: desktop/native
+        run: ../node_modules/.bin/node-gyp rebuild --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=x64
+      - run: test -f native/build/Release/fliks_smtc_win.node

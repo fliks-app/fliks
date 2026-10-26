@@ -179,7 +179,7 @@ const CURSOR_SHAPES: Record<string, number> = {
 const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
-// Set where the OS has a media session to feed (Linux MPRIS, macOS Now Playing).
+// Set where the OS has a media session to feed (Linux MPRIS, macOS Now Playing, Windows SMTC).
 let setOsMediaSession: ((meta: DesktopMediaMetadata | null) => Promise<void>) | null = null;
 const inputCounts: Record<string, number> = {};
 
@@ -254,14 +254,16 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
     preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
     iconPath: windowIcon(),
   });
-  if (process.platform === 'darwin') await startNowPlaying(session);
+  await startNowPlaying(session).catch((e) => console.error('[now-playing] unavailable', e));
 }
 
-/** Feeds macOS Now Playing from the player and the page's metadata, and routes its remote commands to the page as media keys. */
+/** Feeds macOS Now Playing / Windows SMTC from the player and the page's metadata, and routes its remote commands to the page as media keys. */
 async function startNowPlaying(session: import('./window/player-session').PlayerSession): Promise<void> {
-  const { loadMacAddon } = await import('./mpv/mac-mpv-player');
   const { NowPlaying } = await import('./now-playing');
-  const addon = loadMacAddon();
+  const addon =
+    process.platform === 'darwin'
+      ? (await import('./mpv/mac-mpv-player')).loadMacAddon()
+      : (await import('./smtc-win')).loadSmtcAddon(session.windowHandle);
   const nowPlaying = new NowPlaying(addon);
   const { player, uiContents } = session;
   let playing = false;

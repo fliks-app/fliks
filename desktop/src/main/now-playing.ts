@@ -12,10 +12,15 @@ export interface NowPlayingNative {
   clearNowPlaying(): void;
 }
 
+/** A platform's media controls: what NowPlaying publishes to, and the buttons it sends back (play | pause | toggle | stop | next | previous). */
+export interface NowPlayingAddon extends NowPlayingNative {
+  onRemoteCommand(cb: (name: string) => void): void;
+}
+
 /** The OS extrapolates the elapsed time from the rate: only a seek or drift past this needs a push. */
 const DRIFT_SECONDS = 3;
 
-/** macOS Now Playing: pushed on state changes and when the position leaves the OS's own extrapolation. */
+/** OS media controls (macOS Now Playing, Windows SMTC): pushed on state changes and when the position leaves the OS's own extrapolation. */
 export class NowPlaying {
   private meta: DesktopMediaMetadata | null = null;
   private artwork: Buffer | undefined;
