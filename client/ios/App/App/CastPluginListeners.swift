@@ -25,6 +25,8 @@ extension CastPlugin {
         pendingResume = nil
         detachFliksChannel()
         stopPolling()
+        stopHeartbeat()
+        heartbeat.clear()
         emitCastState(connected: false)
     }
 
@@ -101,9 +103,27 @@ extension CastPlugin {
     @objc func appDidEnterBackground() {
         pollWasActiveBeforeBackground = pollTimer != nil
         stopPolling()
+        if currentSession?.remoteMediaClient != nil { startHeartbeat() }
+    }
+
+    func startHeartbeat() {
+        stopHeartbeat()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            guard let client = self?.currentSession?.remoteMediaClient, let status = client.mediaStatus,
+                  status.playerState != .idle else { return }
+            let duration = status.mediaInformation?.streamDuration ?? 0
+            let state = status.playerState == .playing ? "playing" : "paused"
+            self?.heartbeat.send(position: client.approximateStreamPosition(), duration: duration, state: state)
+        }
+    }
+
+    func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
     }
 
     @objc func appWillEnterForeground() {
+        stopHeartbeat()
         if pollWasActiveBeforeBackground && currentSession?.remoteMediaClient != nil {
             startPolling()
         }

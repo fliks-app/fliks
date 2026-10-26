@@ -65,7 +65,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PartyService, useValue: party },
       { provide: ClockService, useValue: { serverNow: () => Date.now(), rttMs: signal(0) } },
       { provide: QueueController, useValue: queue },
-      { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false) } },
+      { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
       { provide: CastPlayerService, useValue: { hasMedia: signal(true), mediaId: signal(1), episodeId: signal(undefined) } },
       { provide: CastPlaybackTarget, useValue: { partyIntercept: null } },

@@ -37,6 +37,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setQueueNav", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMuteRanges", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "configure", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setVolume", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setVoiceActive", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setHeartbeat", returnType: CAPPluginReturnPromise),
     ]
 
     var player: AVPlayer?
@@ -57,6 +61,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     var externalPlaybackActive = false
     enum PipPhase { case inactive, active, exiting }
     var pipPhase = PipPhase.inactive
+    /// Language the item opens on, set by `configure` before `load`; empty means the container's default.
+    var preferredAudioLanguage = ""
+    /// The party voice chat holds the microphone: the session must record and play.
+    var voiceActive = false
+    /// The last play or pause the app or the user asked for; an audio session interruption does not change it.
+    var intendedPlaying = false
+    var resumeRetry = false
+    let heartbeat = PositionHeartbeat()
     var subtitleSelectionGeneration = 0
     var firstFrameEmitted = false
     var fillScreen = false
@@ -287,16 +299,53 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     func ensureAudioSessionActive() {
         let session = AVAudioSession.sharedInstance()
         do {
-            if session.category != .playback {
-                try session.setCategory(
-                    .playback,
-                    mode: .moviePlayback,
-                    options: [.allowAirPlay, .allowBluetoothA2DP]
-                )
+            // WebKit's GPU process records for the mic in its own PlayAndRecord session: ours must stay a mixable
+            // playback one, as a second recording or non-mixable session is interrupted by it.
+            let options: AVAudioSession.CategoryOptions = voiceActive ? [.mixWithOthers, .allowAirPlay, .allowBluetoothA2DP] : [.allowAirPlay, .allowBluetoothA2DP]
+            if session.category != .playback || session.categoryOptions != options {
+                try session.setCategory(.playback, mode: voiceActive ? .default : .moviePlayback, options: options)
             }
             try session.setActive(true)
         } catch {
             // Best effort: degraded audio beats a hard load failure.
+        }
+    }
+
+    @objc func setVoiceActive(_ call: CAPPluginCall) {
+        let active = call.getBool("active") ?? false
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // A repeat would re-activate the session and interrupt WebKit's mic capture.
+            guard active != self.voiceActive else { call.resolve(); return }
+            self.voiceActive = active
+            guard self.player != nil else { call.resolve(); return }
+            self.ensureAudioSessionActive()
+            call.resolve()
+        }
+    }
+
+    @objc func setVolume(_ call: CAPPluginCall) {
+        let volume = Float(min(max(call.getDouble("volume") ?? 1, 0), 1))
+        DispatchQueue.main.async { [weak self] in
+            self?.player?.volume = volume
+            call.resolve()
+        }
+    }
+
+    @objc func configure(_ call: CAPPluginCall) {
+        preferredAudioLanguage = call.getString("preferredAudioLanguage") ?? ""
+        call.resolve()
+    }
+
+    @objc func setHeartbeat(_ call: CAPPluginCall) {
+        guard let url = call.getString("url"), let token = call.getString("token"),
+              let body = call.getObject("body") else {
+            call.reject("url, token and body are required")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.heartbeat.set(url: url, token: token, body: body as [String: Any])
+            call.resolve()
         }
     }
 

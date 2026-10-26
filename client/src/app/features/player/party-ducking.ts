@@ -7,6 +7,8 @@ export const RELEASE_HOLD_MS = 1200;
 export interface DuckEngine {
   volume: number;
   readonly supportsVolume: boolean;
+  /** `volume` is writable for ducking only (iOS native player). */
+  readonly supportsDucking?: boolean;
 }
 
 /** Ramps the engine volume down to a fraction of the user's level while `active`, and back up after.
@@ -37,7 +39,7 @@ export class VoiceDucker {
 
   private apply(active: boolean): void {
     const e = this.engine();
-    if (!e?.supportsVolume) return;
+    if (!e?.supportsVolume && !e?.supportsDucking) return;
     const target = active ? this.base() * DUCK_FACTOR : this.base();
     if (this.level === null && !active) return;
     const from = this.level ?? this.base();

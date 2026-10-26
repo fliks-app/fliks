@@ -158,8 +158,20 @@ export interface NativePlayerPlugin {
 
   // ── Configuration ──
 
-  /** Android only: language the player opens on (empty clears) and ABR's starting bandwidth in bps. Sent before load(). */
+  /** Language the player opens on (empty clears), and ABR's starting bandwidth in bps (Android only). Sent before load(). */
   configure(options: { preferredAudioLanguage?: string; defaultBandwidthEstimate?: number }): Promise<void>;
+
+  // ── iOS audio and background ──
+
+  /** iOS: the party voice chat holds the microphone, so the audio session must record and play. */
+  setVoiceActive(options: { active: boolean }): Promise<void>;
+
+  /** iOS: output multiplier (0..1) on top of the system volume; the party voice ducking drives it. */
+  setVolume(options: { volume: number }): Promise<void>;
+
+  /** iOS: the heartbeat PUT the native side repeats while the WebView is suspended (backgrounded, PiP, locked).
+   *  `body` is the last JS heartbeat; position, duration and state are replaced by the player's own. */
+  setHeartbeat(options: { url: string; token: string; body: Record<string, unknown> }): Promise<void>;
 
   // ── Quality ──
 

@@ -8,6 +8,8 @@ import { DeviceService } from '../../core/services/device.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { ToastService } from '../../core/services/toast.service';
+import { NativeEngine } from '../../core/services/playback-engine/native-engine';
+import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { VoiceService } from '../../core/services/party/voice.service';
 import { QueueController } from './queue-controller';
 import type { QueueItem } from '../../core/services/playback-queue.service';
@@ -223,6 +225,14 @@ export class PartyController {
   private readonly duckEffect = effect(() => {
     const duck = this.voice.duck() && this.voice.othersSpeaking();
     untracked(() => (this.host ? this.ducker.set(duck) : undefined));
+  });
+
+  /** The native audio session must record and play while the WebView holds the mic. */
+  private readonly voiceSessionEffect = effect(() => {
+    const active = this.voice.joined();
+    untracked(() => {
+      if (this.host?.engine() instanceof NativeEngine) NativePlayer.setVoiceActive({ active }).catch(() => {});
+    });
   });
 
   private readonly liveEffect = effect(() => {

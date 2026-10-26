@@ -10,6 +10,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setResumeState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setHeartbeat", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isConnected", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getCastDevices", returnType: CAPPluginReturnPromise),
@@ -36,6 +37,9 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     /// Whether the media-status poll ran at backgrounding; restarted on foreground (Timers keep running
     /// under `UIBackgroundModes: audio`, so it would hit a paused WebView).
     var pollWasActiveBeforeBackground = false
+    /// Keeps the playback position heartbeat going while the phone is locked and the WebView suspended.
+    let heartbeat = PositionHeartbeat()
+    var heartbeatTimer: Timer?
 
     // MARK: - Initialize
 
@@ -94,6 +98,18 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                     }
                 }
             }
+        }
+    }
+
+    @objc func setHeartbeat(_ call: CAPPluginCall) {
+        guard let url = call.getString("url"), let token = call.getString("token"),
+              let body = call.getObject("body") else {
+            call.reject("url, token and body are required")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.heartbeat.set(url: url, token: token, body: body as [String: Any])
+            call.resolve()
         }
     }
 
