@@ -27,7 +27,7 @@ function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
   return {
     id: 7, name: 'p', status: 'live', scheduledAt: null, host: { userId: 1, username: 'a' },
     item: item(1, 100), playlist: null, memberCount: 1, policy: 'everyone', reactionsEnabled: true, chatEnabled: true,
-    linkSharing: false, inviteToken: null, guests: [],
+    linkSharing: false, inviteToken: null, guests: [], proposals: [],
     live: { rev, playback: { state: 'paused', anchor: { position: 0, serverTimeMs: 0 } }, members: [], messages: [{ id: rev, userId: null, username: null, text: '', system: null, sentAtMs: 0 }] },
     ...over,
   };
@@ -235,5 +235,24 @@ describe('PartyService lobby', () => {
     await svc.start();
     TestBed.tick();
     expect(voice.joined()).toBe(true);
+  });
+});
+
+describe('PartyService proposals', () => {
+  const proposal = { id: 4, item: item(2), proposedBy: 1, voterIds: [1] };
+
+  it('takes the snapshot and then the events', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(dto(1, { proposals: [proposal] }));
+    expect(svc.proposals()).toEqual([proposal]);
+    events.next({ type: 'party.proposals', partyId: 7, proposals: [{ ...proposal, voterIds: [1, 2] }] });
+    expect(svc.proposals()[0].voterIds).toEqual([1, 2]);
+  });
+
+  it('ignores the proposals of another party', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(dto(1));
+    events.next({ type: 'party.proposals', partyId: 8, proposals: [proposal] });
+    expect(svc.proposals()).toEqual([]);
   });
 });

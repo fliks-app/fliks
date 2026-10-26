@@ -14,7 +14,7 @@ import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
 import type {
-  PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartySignalKind, PartySwitches, PartyUser,
+  PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyProposal, PartySignalKind, PartySwitches, PartyUser,
 } from './api/party-api.service';
 
 /** A brief Wi-Fi handoff or the resume-reconnect race shouldn't flash a banner. */
@@ -100,6 +100,7 @@ export interface PartyStateEvent {
 export type PartyEvent =
   | PartyStateEvent
   | { type: 'party.selection'; partyId: number; rev: number; item: PartyItem }
+  | { type: 'party.proposals'; partyId: number; proposals: PartyProposal[] }
   | { type: 'party.members'; partyId: number; rev: number; members: PartyMember[] }
   | ({ type: 'party.settings'; partyId: number; rev: number; name: string } & PartySwitches)
   | { type: 'party.message'; partyId: number; message: PartyMessage }

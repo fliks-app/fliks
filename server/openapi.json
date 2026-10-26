@@ -2781,6 +2781,74 @@
         }
       }
     },
+    "/api/parties/{id}/proposals": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "Adds the proposal, or only the caller's vote when the title is already proposed.",
+        "operationId": "propose",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/proposals/{pid}": {
+      "delete": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "unpropose",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/proposals/{pid}/choose": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The host picks a proposal: the same path as `select`.",
+        "operationId": "choose",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/proposals/{pid}/vote": {
+      "put": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "vote",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "unvote",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/queue": {
       "get": {
         "tags": [

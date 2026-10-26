@@ -41,6 +41,8 @@ struct Inner {
     notified: HashSet<i32>,
     /// Held across a mutation and its delivery, so one party's events leave in `rev` order.
     gates: HashMap<i32, Arc<tokio::sync::Mutex<()>>>,
+    /// Proposal times (ms) per user, for the rate limit.
+    proposed: HashMap<i32, std::collections::VecDeque<i64>>,
 }
 
 #[derive(Clone, Default)]
@@ -72,6 +74,20 @@ fn item_of(l: &Live) -> Option<Item> {
 }
 
 impl Parties {
+    /// Records a proposal by `user`; false when they made `max` within `window` ms.
+    pub fn proposal_ok(&self, user: i32, now: i64, window: i64, max: usize) -> bool {
+        let mut inner = self.inner();
+        let q = inner.proposed.entry(user).or_default();
+        while q.front().is_some_and(|t| now - t >= window) {
+            q.pop_front();
+        }
+        if q.len() >= max {
+            return false;
+        }
+        q.push_back(now);
+        true
+    }
+
     fn inner(&self) -> std::sync::MutexGuard<'_, Inner> {
         self.0.lock_clean()
     }
@@ -415,6 +431,7 @@ pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
 /// Sets `ended`, tells the members, drops the machine and refreshes the rail.
 pub async fn end(st: &AppState, row: &Row, reason: CloseReason) -> sqlx::Result<()> {
     db::set_ended(&st.db, row.id).await?;
+    super::proposals::clear(&st.db, row.id).await?;
     mutate(st, row.id, |l| ((), vec![l.room.close(reason)])).await;
     st.parties.remove(row.id);
     st.parties.forget_notice(row.id);

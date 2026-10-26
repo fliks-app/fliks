@@ -2029,3 +2029,258 @@ async fn a_playlist_party_only_selects_a_row_of_its_playlist(pool: PgPool) {
     let (s, p) = c.call("POST", &url, &a, Some(json!({"mediaId": 1}))).await;
     assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(1)));
 }
+
+/// A film-less party of `host` with the invitees, who must be followed first.
+async fn bare_party(c: &Ctx, host: &str, invitees: &[i32]) -> String {
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            host,
+            Some(json!({"name": "pick", "inviteeIds": invitees})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    format!("/api/parties/{}", p["id"])
+}
+
+async fn propose(c: &Ctx, url: &str, tok: &str, media: i32) -> (u16, Value) {
+    c.call(
+        "POST",
+        &format!("{url}/proposals"),
+        tok,
+        Some(json!({"mediaId": media})),
+    )
+    .await
+}
+
+fn proposal_of(list: &Value, media: i32) -> Value {
+    list.as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["item"]["mediaId"] == media)
+        .cloned()
+        .unwrap_or(Value::Null)
+}
+
+#[sqlx::test(migrations = false)]
+async fn members_propose_and_vote_for_several_titles_and_a_duplicate_is_a_vote(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 4).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (_, stranger) = c.user("zed", true).await;
+    c.follow(alice, bob).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+
+    let (s, l) = propose(&c, &url, &a, 2).await;
+    assert_eq!(
+        (s, proposal_of(&l, 2)["voterIds"].clone()),
+        (201, json!([alice]))
+    );
+    let (s, _) = propose(&c, &url, &a, 3).await;
+    assert_eq!(s, 201);
+    let (s, l) = propose(&c, &url, &b, 2).await;
+    assert_eq!(s, 200, "a duplicate only adds a vote");
+    assert_eq!(l.as_array().unwrap().len(), 2);
+    assert_eq!(proposal_of(&l, 2)["voterIds"], json!([alice, bob]));
+    assert_eq!(proposal_of(&l, 2)["proposedBy"], alice);
+
+    let p3 = proposal_of(&l, 3)["id"].as_i64().unwrap();
+    let vote = format!("{url}/proposals/{p3}/vote");
+    for _ in 0..2 {
+        let (s, _) = c.call("PUT", &vote, &b, None).await;
+        assert_eq!(s, 204, "a vote is idempotent");
+    }
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    assert_eq!(
+        proposal_of(&p["proposals"], 3)["voterIds"],
+        json!([alice, bob])
+    );
+    let (s, _) = c.call("DELETE", &vote, &b, None).await;
+    assert_eq!(s, 204);
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(proposal_of(&p["proposals"], 3)["voterIds"], json!([alice]));
+    assert_eq!(
+        proposal_of(&p["proposals"], 2)["voterIds"],
+        json!([alice, bob])
+    );
+
+    let (s, _) = propose(&c, &url, &stranger, 4).await;
+    assert_eq!(s, 404, "a non-member does not see the party");
+    let (s, _) = c
+        .call("PUT", &format!("{url}/proposals/999/vote"), &b, None)
+        .await;
+    assert_eq!(s, 404);
+}
+
+#[sqlx::test(migrations = false)]
+async fn only_the_author_or_the_host_deletes_a_proposal(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 3).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (carol, cc) = c.user("carol", true).await;
+    c.follow(alice, bob).await;
+    c.follow(alice, carol).await;
+    let url = bare_party(&c, &a, &[bob, carol]).await;
+    let (_, l) = propose(&c, &url, &b, 2).await;
+    let by_bob = proposal_of(&l, 2)["id"].as_i64().unwrap();
+    let (_, l) = propose(&c, &url, &b, 3).await;
+    let other = proposal_of(&l, 3)["id"].as_i64().unwrap();
+
+    let (s, e) = c
+        .call("DELETE", &format!("{url}/proposals/{by_bob}"), &cc, None)
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_author")));
+    let (s, _) = c
+        .call("DELETE", &format!("{url}/proposals/{by_bob}"), &b, None)
+        .await;
+    assert_eq!(s, 204);
+    let (s, _) = c
+        .call("DELETE", &format!("{url}/proposals/{other}"), &a, None)
+        .await;
+    assert_eq!(s, 204, "the host deletes anyone's");
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["proposals"], json!([]));
+    let (s, _) = c
+        .call("DELETE", &format!("{url}/proposals/{other}"), &a, None)
+        .await;
+    assert_eq!(s, 404);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_party_holds_thirty_proposals_and_a_user_is_rate_limited(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 32).await;
+    let (_, a) = c.user("alice", true).await;
+    let url = bare_party(&c, &a, &[]).await;
+    let id: i32 = url.rsplit('/').next().unwrap().parse().unwrap();
+    sqlx::query(
+        r#"INSERT INTO watch_party_proposals ("partyId", "mediaId", "proposedBy")
+           SELECT $1, m.id, 1 FROM media m WHERE m.id BETWEEN 2 AND 31"#,
+    )
+    .bind(id)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (s, e) = propose(&c, &url, &a, 32).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_proposals_full")));
+    let (s, _) = propose(&c, &url, &a, 2).await;
+    assert_eq!(s, 200, "a vote for a listed title is not a new proposal");
+
+    let mut last = 0;
+    for _ in 0..10 {
+        last = propose(&c, &url, &a, 3).await.0;
+    }
+    assert_eq!(last, 429);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_title_a_member_cannot_open_reaches_them_masked_and_the_author_needs_access(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    more_media(&c, 1).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (carol, cc) = c.user("carol", false).await;
+    c.follow(alice, carol).await;
+    let url = bare_party(&c, &a, &[carol]).await;
+    let mut sc = c.stream(&cc, "dc").await;
+    let mut sa = c.stream(&a, "da").await;
+
+    let (s, _) = propose(&c, &url, &cc, 2).await;
+    assert_eq!(s, 404, "the author must open the title");
+    let (s, _) = propose(&c, &url, &a, 2).await;
+    assert_eq!(s, 201);
+
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["proposals"][0]["item"]["title"], "m0");
+    let (_, p) = c.call("GET", &url, &cc, None).await;
+    assert_eq!(p["proposals"][0]["item"]["title"], "");
+    assert_eq!(p["proposals"][0]["item"]["mediaId"], 2);
+    let masked = events_of(&mut sc, "party.proposals").await;
+    assert_eq!(masked.len(), 1);
+    assert_eq!(masked[0]["proposals"][0]["item"]["title"], "");
+    let shown = events_of(&mut sa, "party.proposals").await;
+    assert_eq!(shown[0]["proposals"][0]["item"]["title"], "m0");
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_start_takes_the_top_vote_then_the_oldest_and_the_hosts_choice_wins(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 4).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+
+    let tie = bare_party(&c, &a, &[bob]).await;
+    propose(&c, &tie, &b, 3).await;
+    propose(&c, &tie, &a, 2).await;
+    let (s, p) = c.call("POST", &format!("{tie}/start"), &a, None).await;
+    assert_eq!(
+        (s, p["item"]["mediaId"].clone()),
+        (200, json!(3)),
+        "a tie goes to the oldest"
+    );
+
+    let voted = bare_party(&c, &a, &[bob]).await;
+    propose(&c, &voted, &b, 3).await;
+    let (_, l) = propose(&c, &voted, &a, 2).await;
+    let id = proposal_of(&l, 2)["id"].as_i64().unwrap();
+    let (s, _) = c
+        .call("PUT", &format!("{voted}/proposals/{id}/vote"), &b, None)
+        .await;
+    assert_eq!(s, 204);
+    let (s, p) = c.call("POST", &format!("{voted}/start"), &a, None).await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
+    let (s, e) = propose(&c, &voted, &b, 4).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+
+    let chosen = bare_party(&c, &a, &[bob]).await;
+    let (_, l) = propose(&c, &chosen, &b, 3).await;
+    propose(&c, &chosen, &a, 2).await;
+    let pid = proposal_of(&l, 3)["id"].as_i64().unwrap();
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{chosen}/proposals/{pid}/choose"),
+            &b,
+            None,
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")));
+    let (s, p) = c
+        .call(
+            "POST",
+            &format!("{chosen}/select"),
+            &a,
+            Some(json!({"mediaId": 4})),
+        )
+        .await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(4)));
+    let (s, p) = c.call("POST", &format!("{chosen}/start"), &a, None).await;
+    assert_eq!(
+        (s, p["item"]["mediaId"].clone()),
+        (200, json!(4)),
+        "the host's select beats votes"
+    );
+
+    let pick = bare_party(&c, &a, &[bob]).await;
+    let (_, l) = propose(&c, &pick, &b, 3).await;
+    let pid = proposal_of(&l, 3)["id"].as_i64().unwrap();
+    let (s, p) = c
+        .call("POST", &format!("{pick}/proposals/{pid}/choose"), &a, None)
+        .await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(3)));
+
+    let (s, _) = c.call("DELETE", &pick, &a, None).await;
+    assert_eq!(s, 204);
+    let left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM watch_party_proposals WHERE \"partyId\" = $1")
+            .bind(pick.rsplit('/').next().unwrap().parse::<i32>().unwrap())
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(left, 0, "ending the party clears its proposals");
+}
