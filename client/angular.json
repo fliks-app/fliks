@@ -18,6 +18,7 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
+            "polyfills": ["src/polyfills.ts"],
             "tsConfig": "tsconfig.app.json",
             "allowedCommonJsDependencies": ["shaka-player"],
             "assets": [
@@ -76,7 +77,7 @@
             },
             "tizen": {
               "baseHref": "./",
-              "polyfills": ["src/tv-polyfills.ts"],
+              "polyfills": ["src/polyfills.ts", "src/tv-polyfills.ts"],
               "outputHashing": "all",
               "optimization": {
                 "scripts": true,
@@ -91,7 +92,7 @@
             },
             "webos": {
               "baseHref": "./",
-              "polyfills": ["src/tv-polyfills.ts"],
+              "polyfills": ["src/polyfills.ts", "src/tv-polyfills.ts"],
               "outputHashing": "all",
               "optimization": {
                 "scripts": true,

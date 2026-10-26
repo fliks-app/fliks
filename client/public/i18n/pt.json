@@ -1740,6 +1740,7 @@
     "unreadable": "Pasta ilegível"
   },
   "common": {
+    "unexpected_error": "Ocorreu um erro. Recarregue a página se voltar a acontecer.",
     "browse": "Procurar…",
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementos",

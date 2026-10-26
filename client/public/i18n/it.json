@@ -1740,6 +1740,7 @@
     "unreadable": "Cartella non leggibile"
   },
   "common": {
+    "unexpected_error": "Si è verificato un errore. Ricarica la pagina se si ripete.",
     "browse": "Sfoglia…",
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementi",

@@ -1,4 +1,5 @@
 import {
+  ErrorHandler,
   ApplicationConfig,
   inject,
   isDevMode,
@@ -25,6 +26,7 @@ import {
   withViewTransitions,
 } from '@angular/router';
 import { detectDevice, viewTransitionsEnabled } from './core/services/device.service';
+import { AppErrorHandler } from './core/services/app-error-handler';
 import { HttpBackend, provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
@@ -97,6 +99,7 @@ const IS_DESKTOP_SHELL =
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
+    { provide: ErrorHandler, useClass: AppErrorHandler },
     provideZonelessChangeDetection(),
     provideAppInitializer(loadPersistedState),
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
