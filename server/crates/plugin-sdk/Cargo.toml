@@ -47,7 +47,7 @@ tokio = { version = "1", features = ["net", "rt", "time"], optional = true }
 axum = { version = "0.8", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
 tokio-rustls = { version = "0.26", default-features = false, optional = true }
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"], optional = true }
+sqlx = { version = "0.9", features = ["postgres", "runtime-tokio"], optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
 [profile.release]
