@@ -100,10 +100,10 @@ async fn ranked(
     from: DateTime<Utc>,
     to: DateTime<Utc>,
 ) -> sqlx::Result<Vec<Program>> {
-    let rows: Vec<Program> = sqlx::query_as(&format!(
+    let rows: Vec<Program> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {PROGRAM_COLS} FROM livetv_programs p WHERE p."guideChannelId" = ANY($1) AND p."startsAt" < $3 AND p."endsAt" > $2
            ORDER BY p."startsAt", p.id"#
-    ))
+    )))
     .bind(ids)
     .bind(from)
     .bind(to)
@@ -266,9 +266,9 @@ pub async fn program(
     read(&a)?;
     let id = int_param(&id.0)?;
     let missing = || AppError::not_found(format!("Program #{id} not found"));
-    let p: Program = sqlx::query_as(&format!(
+    let p: Program = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {PROGRAM_COLS} FROM livetv_programs p WHERE p.id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(&st.db)
     .await?
@@ -310,7 +310,7 @@ pub async fn search(
     let past = setting_int(&st.db, "livetv_guide_days_past", 2).await?;
     let future = setting_int(&st.db, "livetv_guide_days_future", 7).await?;
     let now = Utc::now();
-    let programs: Vec<Program> = sqlx::query_as(&format!(
+    let programs: Vec<Program> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {PROGRAM_COLS} FROM livetv_programs p
            WHERE p.title ILIKE $1 ESCAPE '\' AND p."startsAt" < $3 AND p."endsAt" > $2
              AND EXISTS (SELECT 1 FROM livetv_channels c
@@ -319,7 +319,7 @@ pub async fn search(
                            AND (cardinality($5::text[]) = 0 OR c."groupName" IS NULL
                                 OR lower(btrim(c."groupName")) <> ALL (SELECT lower(btrim(x)) FROM unnest($5::text[]) AS x)))
            ORDER BY p."startsAt", p.id LIMIT 50"#
-    ))
+    )))
     .bind(like_pattern(&text))
     .bind(now - Duration::days(past))
     .bind(now + Duration::days(future))

@@ -216,7 +216,7 @@ const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type"::text FROM media m
             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."episodeId" IS NULL)))
     ORDER BY m.id"#;
 
-async fn rescan(st: &AppState, job: &str, select: &str) -> Outcome {
+async fn rescan(st: &AppState, job: &str, select: &'static str) -> Outcome {
     let media: Vec<(i32, String, String)> = sqlx::query_as(select)
         .fetch_all(&st.db)
         .await

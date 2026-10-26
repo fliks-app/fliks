@@ -65,7 +65,7 @@ pub async fn adopt_typeorm(pool: &PgPool) -> Result<(), MigrateError> {
 
     let mut tx = pool.begin().await.map_err(MigrateError::Execute)?;
 
-    tx.ensure_migrations_table().await?;
+    tx.ensure_migrations_table("_sqlx_migrations").await?;
 
     for (timestamp, name) in typeorm_rows {
         let Some(migration) = migration_for_version(timestamp) else {

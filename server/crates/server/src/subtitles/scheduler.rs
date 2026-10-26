@@ -380,10 +380,10 @@ pub async fn upgrade(st: &AppState) -> Result<(), String> {
     let opts = resolve_opts(st).await;
     let mut last = 0;
     loop {
-        let rows: Vec<Row> = sqlx::query_as(&format!(
+        let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT {} FROM subtitle_files WHERE score::float8 < $1 AND status::text <> 'failed' AND locked = false AND id > $2 ORDER BY id ASC LIMIT 100",
             model::COLS
-        ))
+        )))
         .bind(threshold)
         .bind(last)
         .fetch_all(&st.db)

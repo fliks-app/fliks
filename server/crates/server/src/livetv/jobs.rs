@@ -34,9 +34,9 @@ pub async fn idle(st: &AppState, name: &str) -> bool {
 
 /// `LiveTvSourceRefresh`: every enabled, due source in turn; one failing never costs the ones after it.
 pub async fn refresh_sources(st: &AppState) -> Result<(), String> {
-    let sources: Vec<Source> = sqlx::query_as(&format!(
+    let sources: Vec<Source> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLS} FROM livetv_sources ORDER BY priority, name, id"
-    ))
+    )))
     .fetch_all(&st.db)
     .await
     .map_err(|e| e.to_string())?;
@@ -58,9 +58,9 @@ pub async fn refresh_sources(st: &AppState) -> Result<(), String> {
 
 /// `LiveTvGuideRefresh`: the same sweep over the guide sources, by name.
 pub async fn refresh_guides(st: &AppState) -> Result<(), String> {
-    let sources: Vec<GuideSource> = sqlx::query_as(&format!(
+    let sources: Vec<GuideSource> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {GUIDE_SOURCE_COLS} FROM livetv_guide_sources ORDER BY name, id"
-    ))
+    )))
     .fetch_all(&st.db)
     .await
     .map_err(|e| e.to_string())?;

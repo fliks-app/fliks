@@ -44,9 +44,9 @@ fn not_found(id: i32) -> AppError {
 }
 
 async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<GuideSource>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {GUIDE_SOURCE_COLS} FROM livetv_guide_sources WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(db)
     .await
@@ -59,9 +59,9 @@ pub async fn list(
 ) -> Result<Json<Vec<GuideSource>>, AppError> {
     admin(&a)?;
     Ok(Json(
-        sqlx::query_as(&format!(
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT {GUIDE_SOURCE_COLS} FROM livetv_guide_sources ORDER BY name, id"
-        ))
+        )))
         .fetch_all(&st.db)
         .await?,
     ))
@@ -189,11 +189,11 @@ pub async fn create(
         b.reject("enabled must be a boolean value");
     }
     b.finish()?;
-    let row: GuideSource = sqlx::query_as(&format!(
+    let row: GuideSource = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO livetv_guide_sources (name, kind, url, "sourceId", "refreshIntervalHours", "timezoneOffsetMinutes", language, priority, enabled)
            VALUES ($1, $2, $3, $4, COALESCE($5, 12), COALESCE($6, 0), $7, COALESCE($8, 0), COALESCE($9, true))
            RETURNING {GUIDE_SOURCE_COLS}"#
-    ))
+    )))
     .bind(name)
     .bind(kind)
     .bind(url.val())
@@ -311,16 +311,16 @@ pub async fn update(
     // Loaded before the save: the answer's nested source is the parent as it was.
     let parent: Option<Source> = match stored.source_id {
         Some(pid) => {
-            sqlx::query_as(&format!(
+            sqlx::query_as(sqlx::AssertSqlSafe(format!(
                 "SELECT {SOURCE_COLS} FROM livetv_sources WHERE id = $1"
-            ))
+            )))
             .bind(pid)
             .fetch_optional(&st.db)
             .await?
         }
         None => None,
     };
-    let saved: GuideSource = sqlx::query_as(&format!(
+    let saved: GuideSource = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"UPDATE livetv_guide_sources SET name = COALESCE($2, name), kind = COALESCE($3, kind),
              url = CASE WHEN $4 THEN $5 ELSE url END, "sourceId" = CASE WHEN $6 THEN $7 ELSE "sourceId" END,
              "refreshIntervalHours" = COALESCE($8, "refreshIntervalHours"),
@@ -328,7 +328,7 @@ pub async fn update(
              language = CASE WHEN $10 THEN $11 ELSE language END, priority = COALESCE($12, priority),
              enabled = COALESCE($13, enabled)
            WHERE id = $1 RETURNING {GUIDE_SOURCE_COLS}"#
-    ))
+    )))
     .bind(id)
     .bind(name.val())
     .bind(kind.val())

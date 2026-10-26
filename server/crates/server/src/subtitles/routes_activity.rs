@@ -182,10 +182,10 @@ pub async fn history(
       AND ($5::int[] IS NULL OR m."libraryId" = ANY($5))"#;
     let exclude = q.get("excludeEmbedded").is_some_and(|v| v == "true");
     let language = q.get("language").filter(|s| !s.is_empty());
-    let rows: Vec<ItemRow> = sqlx::query_as(&format!(
+    let rows: Vec<ItemRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{ITEM_SELECT}{filter} ORDER BY sf.\"createdAt\" DESC, sf.id ASC LIMIT {limit} OFFSET {}",
         (page - 1) * limit
-    ))
+    )))
     .bind(exclude)
     .bind(status)
     .bind(language)
@@ -193,9 +193,9 @@ pub async fn history(
     .bind(&visible)
     .fetch_all(&st.db)
     .await?;
-    let total: i64 = sqlx::query_scalar(&format!(
+    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"SELECT count(*) FROM subtitle_files sf LEFT JOIN media m ON m.id = sf."mediaId"{filter}"#
-    ))
+    )))
     .bind(exclude)
     .bind(status)
     .bind(language)
@@ -214,24 +214,24 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
     let visible = visible_media(&st, &a).await?;
     let scope = r#" FROM subtitle_files sf LEFT JOIN media m ON m.id = sf."mediaId"
       WHERE sf."providerType"::text <> 'embedded' AND ($1::int[] IS NULL OR m."libraryId" = ANY($1))"#;
-    let total: i64 = sqlx::query_scalar(&format!("SELECT count(*){scope}"))
+    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*){scope}")))
         .bind(&visible)
         .fetch_one(&st.db)
         .await?;
     let group =
         |col: &'static str| format!("SELECT {col}::text, COUNT(*)::int{scope} GROUP BY {col}");
-    let by_status: Vec<(String, i32)> = sqlx::query_as(&group("sf.status"))
+    let by_status: Vec<(String, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(group("sf.status")))
         .bind(&visible)
         .fetch_all(&st.db)
         .await?;
-    let by_provider: Vec<(String, i32)> = sqlx::query_as(&group("sf.\"providerType\""))
+    let by_provider: Vec<(String, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(group("sf.\"providerType\"")))
         .bind(&visible)
         .fetch_all(&st.db)
         .await?;
-    let recent: Vec<ItemRow> = sqlx::query_as(&format!(
+    let recent: Vec<ItemRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"{ITEM_SELECT} WHERE sf."providerType"::text <> 'embedded' AND ($1::int[] IS NULL OR m."libraryId" = ANY($1))
            ORDER BY sf."createdAt" DESC, sf.id ASC LIMIT 10"#
-    ))
+    )))
     .bind(&visible)
     .fetch_all(&st.db)
     .await?;
@@ -364,9 +364,9 @@ pub async fn blacklist_list(
 ) -> Res<Json<Value>> {
     policy(&a, Action::Read)?;
     let (page, limit) = page_limit(&q, 25.0, None)?;
-    let rows: Vec<BlacklistRow> = sqlx::query_as(&format!(
+    let rows: Vec<BlacklistRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {BL_COLS} FROM subtitle_blacklist ORDER BY "createdAt" DESC, id ASC LIMIT $1 OFFSET $2"#
-    ))
+    )))
     .bind(limit)
     .bind((page - 1) * limit)
     .fetch_all(&st.db)
@@ -420,10 +420,10 @@ pub async fn blacklist_add(
             return Err(AppError::not_found(format!("Media #{m} not found")));
         }
     }
-    let row: BlacklistRow = sqlx::query_as(&format!(
+    let row: BlacklistRow = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO subtitle_blacklist ("providerType", "providerFileId", language, "sourceTitle", reason, "mediaId")
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING {BL_COLS}"#
-    ))
+    )))
     .bind(&ptype)
     .bind(&file_id)
     .bind(&b.language)

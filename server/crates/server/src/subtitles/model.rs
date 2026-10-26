@@ -218,25 +218,25 @@ impl New {
 }
 
 pub async fn by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Row>> {
-    sqlx::query_as(&format!("SELECT {COLS} FROM subtitle_files WHERE id = $1"))
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT {COLS} FROM subtitle_files WHERE id = $1")))
         .bind(id)
         .fetch_optional(db)
         .await
 }
 
 pub async fn of_media(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<Row>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM subtitle_files WHERE "mediaId" = $1 ORDER BY language ASC, score DESC, id ASC"#
-    ))
+    )))
     .bind(media_id)
     .fetch_all(db)
     .await
 }
 
 pub async fn of_file(db: impl PgExecutor<'_>, file_id: i32) -> sqlx::Result<Vec<Row>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM subtitle_files WHERE "mediaFileId" = $1 ORDER BY language ASC, score DESC, id ASC"#
-    ))
+    )))
     .bind(file_id)
     .fetch_all(db)
     .await

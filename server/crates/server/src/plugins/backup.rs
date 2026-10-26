@@ -121,7 +121,7 @@ async fn write_tables(
         };
         buf.extend_from_slice(format!("{}{}:[", if i > 0 { "," } else { "" }, json!(t)).as_bytes());
         let sql = format!("SELECT to_jsonb(r) FROM {}.{} r{order}", quote(s), quote(t));
-        let mut rows = sqlx::query_scalar::<_, Value>(&sql).fetch(&mut *tx);
+        let mut rows = sqlx::query_scalar::<_, Value>(sqlx::AssertSqlSafe(sql)).fetch(&mut *tx);
         let mut first = true;
         while let Some(row) = rows.try_next().await? {
             if !first {
@@ -164,7 +164,7 @@ impl Plugins {
     /// From here to the end of the transaction every statement runs as the plugin's role.
     async fn as_plugin(&self, c: &mut PgConnection, id: &str) -> Result<(), InstallError> {
         let oid = database_oid(&self.db).await.map_err(internal)?;
-        sqlx::query(&format!("SET LOCAL ROLE {}", quote(&role(&oid, id))))
+        sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE {}", quote(&role(&oid, id)))))
             .execute(c)
             .await
             .map_err(internal)
@@ -191,7 +191,7 @@ impl Plugins {
         let mut out = vec![];
         for t in tables(&mut tx, &s).await.map_err(internal)? {
             let n: i64 =
-                sqlx::query_scalar(&format!("SELECT count(*) FROM {}.{}", quote(&s), quote(&t)))
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {}.{}", quote(&s), quote(&t))))
                     .fetch_one(&mut *tx)
                     .await
                     .map_err(internal)?;
@@ -315,16 +315,16 @@ impl Plugins {
         let known = tables(tx, &s).await.map_err(internal)?;
         for t in &known {
             // Re-checked under the lock, so nothing lands between the check and the inserts.
-            sqlx::query(&format!(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "LOCK TABLE {}.{} IN EXCLUSIVE MODE",
                 quote(&s),
                 quote(t)
-            ))
+            )))
             .execute(&mut *tx)
             .await
             .map_err(internal)?;
             let any: Option<i32> =
-                sqlx::query_scalar(&format!("SELECT 1 FROM {}.{} LIMIT 1", quote(&s), quote(t)))
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT 1 FROM {}.{} LIMIT 1", quote(&s), quote(t))))
                     .fetch_optional(&mut *tx)
                     .await
                     .map_err(internal)?;
@@ -362,10 +362,10 @@ impl Plugins {
                     continue;
                 }
                 let list = r.keys().map(|k| quote(k)).collect::<Vec<_>>().join(", ");
-                sqlx::query(&format!(
+                sqlx::query(sqlx::AssertSqlSafe(format!(
                     "INSERT INTO {target} ({list}) OVERRIDING SYSTEM VALUE
                      SELECT {list} FROM jsonb_populate_record(NULL::{target}, $1)"
-                ))
+                )))
                 .bind(Value::Object(r.clone()))
                 .execute(&mut *tx)
                 .await
@@ -382,11 +382,11 @@ impl Plugins {
             .await
             .map_err(internal)?;
             for c in serials {
-                sqlx::query(&format!(
+                sqlx::query(sqlx::AssertSqlSafe(format!(
                     "SELECT setval(pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), $3),
                        (SELECT COALESCE(MAX({}), 0) + 1 FROM {target}), false)",
                     quote(&c)
-                ))
+                )))
                 .bind(&s)
                 .bind(&t)
                 .bind(&c)

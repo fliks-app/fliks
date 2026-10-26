@@ -51,9 +51,10 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
     a.require(Action::Read, Subject::Settings)?;
     let probe = sqlx::query("SELECT 1").execute(&st.db).await;
     let ok = probe.is_ok();
-    let count = |sql: &'static str| async {
+    let db = &st.db;
+    let count = |sql: &'static str| async move {
         if ok {
-            sqlx::query_scalar(sql).fetch_one(&st.db).await.unwrap_or(0)
+            sqlx::query_scalar(sql).fetch_one(db).await.unwrap_or(0)
         } else {
             0
         }

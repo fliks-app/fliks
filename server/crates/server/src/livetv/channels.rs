@@ -102,7 +102,7 @@ impl<'a> Visible<'a> {
         let (offset, limit) = page.map_or((0, i64::MAX), |(p, s)| ((p - 1).saturating_mul(s), s));
         let query = self.query.filter(|q| !q.is_empty()).map(like_pattern);
         let group = self.group.filter(|g| !g.is_empty());
-        let items = sqlx::query_as::<_, ChannelItem>(&format!(
+        let items = sqlx::query_as::<_, ChannelItem>(sqlx::AssertSqlSafe(format!(
             r#"SELECT channel.id, channel.name, channel.number,
                       CASE WHEN channel."logoPath" LIKE '/api/livetv/channels/%' THEN channel."logoPath" END AS "logoPath",
                       channel."groupName", channel."guideChannelId", COALESCE(pref.favorite, false) AS favorite
@@ -110,7 +110,7 @@ impl<'a> Visible<'a> {
                ORDER BY COALESCE(pref.favorite, false) DESC, channel.number ASC NULLS LAST, channel."sortIndex" ASC,
                         channel.name ASC, channel.id ASC OFFSET $7 LIMIT $8"#,
             self.where_clause()
-        ))
+        )))
         .bind(self.user_id)
         .bind(self.denied)
         .bind(group)
@@ -127,10 +127,10 @@ impl<'a> Visible<'a> {
 
     pub async fn count(&self, db: &PgPool) -> sqlx::Result<i64> {
         let query = self.query.filter(|q| !q.is_empty()).map(like_pattern);
-        sqlx::query_scalar(&format!(
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT count(*) {VISIBLE_JOIN} {}",
             self.where_clause()
-        ))
+        )))
         .bind(self.user_id)
         .bind(self.denied)
         .bind(self.group.filter(|g| !g.is_empty()))
@@ -221,10 +221,10 @@ pub async fn visible_channel(
     enabled_only: bool,
 ) -> Result<Option<Option<String>>, AppError> {
     let denied = denied_for(st, a).await?;
-    let row: Option<Located> = sqlx::query_as(&format!(
+    let row: Option<Located> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT c."groupName" FROM livetv_channels c WHERE c.id = $1 AND (NOT $3 OR c.enabled) AND {}"#,
         not_denied("c")
-    ))
+    )))
     .bind(id)
     .bind(&denied)
     .bind(enabled_only)
@@ -354,18 +354,18 @@ pub async fn admin_list(
         enabled: q.get("enabled").map(|v| v == "true"),
         query: query.filter(|v| !v.is_empty()).map(|v| format!("%{v}%")),
     };
-    let total: i64 = sqlx::query_scalar(&format!(
+    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT count(*) FROM livetv_channels c {ADMIN_WHERE}"
-    ))
+    )))
     .bind(f.group.as_deref())
     .bind(f.enabled)
     .bind(f.query.as_deref())
     .bind(f.source_id)
     .fetch_one(&st.db)
     .await?;
-    let channels: Vec<Channel> = sqlx::query_as(&format!(
+    let channels: Vec<Channel> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {CHANNEL_COLS} FROM livetv_channels c {ADMIN_WHERE} ORDER BY c.name ASC, c.id ASC OFFSET $5 LIMIT $6"
-    ))
+    )))
     .bind(f.group.as_deref())
     .bind(f.enabled)
     .bind(f.query.as_deref())
@@ -375,16 +375,16 @@ pub async fn admin_list(
     .fetch_all(&st.db)
     .await?;
     let ids: Vec<i32> = channels.iter().map(|c| c.id).collect();
-    let streams: Vec<Stream> = sqlx::query_as(&format!(
+    let streams: Vec<Stream> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {STREAM_COLS} FROM livetv_channel_streams s WHERE s."channelId" = ANY($1) ORDER BY s.priority, s.id"#
-    ))
+    )))
     .bind(&ids)
     .fetch_all(&st.db)
     .await?;
     let source_ids: Vec<i32> = streams.iter().filter_map(|s| s.source_id).collect();
-    let sources: Vec<Source> = sqlx::query_as(&format!(
+    let sources: Vec<Source> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLS} FROM livetv_sources WHERE id = ANY($1)"
-    ))
+    )))
     .bind(&source_ids)
     .fetch_all(&st.db)
     .await?;
@@ -653,7 +653,7 @@ pub async fn update_channel(
     let manual_group = group.present();
     let group = manual_group.then(|| normalize_group_name(group.val().as_deref()));
     let guide_set = guide.present();
-    let row: Option<Channel> = sqlx::query_as(&format!(
+    let row: Option<Channel> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"UPDATE livetv_channels c SET
              name = COALESCE($2, c.name),
              number = CASE WHEN $3 THEN $4 ELSE c.number END,
@@ -664,7 +664,7 @@ pub async fn update_channel(
              "guideChannelId" = CASE WHEN $9 THEN $10 ELSE c."guideChannelId" END,
              "guideMatchKind" = CASE WHEN $9 THEN 'manual' ELSE c."guideMatchKind" END
            WHERE c.id = $1 RETURNING {CHANNEL_COLS}"#
-    ))
+    )))
     .bind(id)
     .bind(name.val())
     .bind(number.present())

@@ -84,7 +84,7 @@ fn letter_filter(raw: &str) -> Option<String> {
 
 /// `FROM` and `WHERE` shared by the page and the count; binds restart at `$1` in each builder.
 fn push_scope(
-    qb: &mut QueryBuilder<'_, Postgres>,
+    qb: &mut QueryBuilder<Postgres>,
     p: &Search,
     ids: &[i32],
     uid: i32,
@@ -202,7 +202,7 @@ fn push_scope(
     }
 }
 
-fn push_tsquery(qb: &mut QueryBuilder<'_, Postgres>, q: &str) {
+fn push_tsquery(qb: &mut QueryBuilder<Postgres>, q: &str) {
     let tsq = prefix_tsquery(q);
     if tsq.is_empty() {
         qb.push("plainto_tsquery('french', ")
@@ -213,7 +213,7 @@ fn push_tsquery(qb: &mut QueryBuilder<'_, Postgres>, q: &str) {
     }
 }
 
-fn push_search(qb: &mut QueryBuilder<'_, Postgres>, q: &str) {
+fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
     qb.push(" AND (media.\"searchVector\" @@ ");
     push_tsquery(qb, q);
     let like = format!("%{q}%");
@@ -227,8 +227,8 @@ fn push_search(qb: &mut QueryBuilder<'_, Postgres>, q: &str) {
 
 /// Rule 26 in SQL: a media without a known cutoff never reaches here (inner join); movies compare their best file,
 /// series each monitored episode of seasons > 0 not shadowed by a range (pooled across seasons).
-fn push_cutoff(qb: &mut QueryBuilder<'_, Postgres>, map: &QualityMap) {
-    let rank = |qb: &mut QueryBuilder<'_, Postgres>, files_on: &str| {
+fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
+    let rank = |qb: &mut QueryBuilder<Postgres>, files_on: &str| {
         qb.push("COALESCE((SELECT MAX(qr.rank) FROM media_files f JOIN unnest(");
         qb.push_bind(map.names.clone())
             .push("::text[], ")

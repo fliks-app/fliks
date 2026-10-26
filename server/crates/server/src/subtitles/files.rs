@@ -42,7 +42,7 @@ const MEDIA_SQL: &str = r#"SELECT m.id, m.title, m."type"::text AS kind, m.year,
   FROM media m LEFT JOIN libraries l ON l.id = m."libraryId""#;
 
 pub async fn load_media(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<MediaCtx>> {
-    sqlx::query_as(&format!("{MEDIA_SQL} WHERE m.id = $1"))
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("{MEDIA_SQL} WHERE m.id = $1")))
         .bind(id)
         .fetch_optional(db)
         .await
@@ -53,9 +53,9 @@ pub async fn media_batch(
     after: i32,
     limit: i64,
 ) -> sqlx::Result<Vec<MediaCtx>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{MEDIA_SQL} WHERE m.monitored = true AND m.id > $1 ORDER BY m.id ASC LIMIT $2"
-    ))
+    )))
     .bind(after)
     .bind(limit)
     .fetch_all(db)
@@ -77,18 +77,18 @@ pub const FILE_COLS: &str = r#"id, "mediaId" AS media_id, "episodeId" AS episode
   "streamInfo" AS stream_info, "osdbHash" AS osdb_hash, "osdbBytesize" AS osdb_bytesize"#;
 
 pub async fn file_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<FileRow>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {FILE_COLS} FROM media_files WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(db)
     .await
 }
 
 pub async fn files_of_media(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Vec<FileRow>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {FILE_COLS} FROM media_files WHERE "mediaId" = $1 ORDER BY id"#
-    ))
+    )))
     .bind(media)
     .fetch_all(db)
     .await

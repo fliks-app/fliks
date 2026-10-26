@@ -99,7 +99,7 @@ impl MediaRow {
 }
 
 async fn media(db: &PgPool, id: i32) -> sqlx::Result<Option<MediaRow>> {
-    sqlx::query_as(&format!("{MEDIA_SELECT} WHERE m.id = $1"))
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("{MEDIA_SELECT} WHERE m.id = $1")))
         .bind(id)
         .fetch_optional(db)
         .await
@@ -193,9 +193,9 @@ const EPISODE_SELECT: &str = r#"SELECT id, "seasonId" AS season_id, "episodeNumb
   FROM episodes"#;
 
 async fn episodes_of(db: &PgPool, season_id: i32) -> sqlx::Result<Vec<EpisodeRow>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"{EPISODE_SELECT} WHERE "seasonId" = $1 ORDER BY id"#
-    ))
+    )))
     .bind(season_id)
     .fetch_all(db)
     .await
@@ -225,9 +225,9 @@ async fn qualities_by(
     column: &str,
     ids: &[i32],
 ) -> sqlx::Result<HashMap<i32, Vec<String>>> {
-    let rows: Vec<(i32, String)> = sqlx::query_as(&format!(
+    let rows: Vec<(i32, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT "{column}", quality FROM media_files WHERE "{column}" = ANY($1) ORDER BY id"#
-    ))
+    )))
     .bind(ids)
     .fetch_all(db)
     .await?;
@@ -239,9 +239,9 @@ async fn qualities_by(
 }
 
 async fn file_qualities(db: &PgPool, column: &str, id: i32) -> sqlx::Result<Vec<String>> {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"SELECT quality FROM media_files WHERE "{column}" = $1 ORDER BY id"#
-    ))
+    )))
     .bind(id)
     .fetch_all(db)
     .await

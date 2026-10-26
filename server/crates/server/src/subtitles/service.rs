@@ -36,9 +36,9 @@ pub const PROVIDER_COLS: &str = r#"id, "createdAt" AS created_at, "updatedAt" AS
   enabled, settings, priority"#;
 
 pub async fn enabled_providers(db: impl PgExecutor<'_>) -> sqlx::Result<Vec<ProviderRow>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {PROVIDER_COLS} FROM subtitle_providers WHERE enabled = true ORDER BY priority ASC, id ASC"
-    ))
+    )))
     .fetch_all(db)
     .await
 }

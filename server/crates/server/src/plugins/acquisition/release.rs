@@ -22,7 +22,7 @@ pub async fn matches(
 ) -> sqlx::Result<Vec<t::ReleaseMatch>> {
     let db = &st.db;
     let library: Vec<MediaRow> =
-        sqlx::query_as(&format!("{MEDIA_SELECT} WHERE m.monitored ORDER BY m.id"))
+        sqlx::query_as(sqlx::AssertSqlSafe(format!("{MEDIA_SELECT} WHERE m.monitored ORDER BY m.id")))
             .fetch_all(db)
             .await?;
     let (library, identified) = identify(library, titles).await;
@@ -402,9 +402,9 @@ async fn season_and_episode(
         )
         .await?;
         if let (Some(s), Some(en)) = (season, episode_n) {
-            episode = sqlx::query_as::<_, EpisodeRow>(&format!(
+            episode = sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(format!(
                 r#"{EPISODE_SELECT} WHERE "seasonId" = $1 AND "episodeNumber" = $2"#
-            ))
+            )))
             .bind(s.0)
             .bind(en as i32)
             .fetch_optional(db)

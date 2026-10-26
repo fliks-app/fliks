@@ -61,9 +61,9 @@ fn compile(pattern: &Option<String>, field: &str) -> Result<Option<GroupPattern>
 pub async fn list(State(st): State<AppState>, a: Authed) -> Result<Json<Vec<Source>>, AppError> {
     admin(&a)?;
     Ok(Json(
-        sqlx::query_as(&format!(
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT {SOURCE_COLS} FROM livetv_sources ORDER BY priority, name, id"
-        ))
+        )))
         .fetch_all(&st.db)
         .await?,
     ))
@@ -174,13 +174,13 @@ pub async fn create(
     let f = read_fields(&body, false)?;
     compile(&text(&f.include), "includeGroupsPattern").map_err(AppError::bad_request)?;
     compile(&text(&f.exclude), "excludeGroupsPattern").map_err(AppError::bad_request)?;
-    let row: Source = sqlx::query_as(&format!(
+    let row: Source = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO livetv_sources (name, kind, url, username, password, "userAgent", referer, "maxStreams", "maxStreamsIsManual",
              "refreshIntervalHours", enabled, priority, "includeGroupsPattern", "excludeGroupsPattern")
            VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 0), $8 IS NOT NULL, COALESCE($9, 12), COALESCE($10, true),
                    COALESCE($11, 0), $12, $13)
            RETURNING {SOURCE_COLS}"#
-    ))
+    )))
     .bind(text(&f.name))
     .bind(text(&f.kind))
     .bind(text(&f.url))
@@ -245,7 +245,7 @@ pub async fn update(
     // Blank or absent keeps the password, null clears.
     let password_set =
         matches!(f.password, Opt::Null) || matches!(&f.password, Opt::Val(v) if !v.is_empty());
-    let row: Source = sqlx::query_as(&format!(
+    let row: Source = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"UPDATE livetv_sources SET name = COALESCE($2, name), kind = COALESCE($3, kind), url = COALESCE($4, url),
              username = CASE WHEN $5 THEN $6 ELSE username END, password = CASE WHEN $7 THEN $8 ELSE password END,
              "userAgent" = CASE WHEN $9 THEN $10 ELSE "userAgent" END, referer = CASE WHEN $11 THEN $12 ELSE referer END,
@@ -258,7 +258,7 @@ pub async fn update(
              "playlistLastModified" = CASE WHEN $21 THEN NULL ELSE "playlistLastModified" END,
              "channelCount" = CASE WHEN $21 THEN 0 ELSE "channelCount" END
            WHERE id = $1 RETURNING {SOURCE_COLS}"#
-    ))
+    )))
     .bind(id)
     .bind(text(&f.name))
     .bind(text(&f.kind))

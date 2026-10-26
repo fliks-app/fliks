@@ -43,25 +43,25 @@ pub async fn rule_row(db: &PgPool, id: i32) -> sqlx::Result<Option<RuleRow>> {
 }
 
 pub async fn rule_list(db: &PgPool) -> sqlx::Result<Vec<Value>> {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT {RULE} FROM cleanup_rules ORDER BY name ASC, id ASC"
-    ))
+    )))
     .fetch_all(db)
     .await
 }
 
 pub async fn rule_find(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {
-    sqlx::query_scalar(&format!("SELECT {RULE} FROM cleanup_rules WHERE id = $1"))
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT {RULE} FROM cleanup_rules WHERE id = $1")))
         .bind(id)
         .fetch_optional(db)
         .await
 }
 
 pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"WITH r AS (INSERT INTO cleanup_rules (name, enabled, levels, criteria, action, "graceDays", "deleteSeriesWhenEmpty", "reminderDays")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *) SELECT {RULE} FROM r"#
-    ))
+    )))
     .bind(&r.name)
     .bind(r.enabled)
     .bind(&r.levels)
@@ -75,10 +75,10 @@ pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
 }
 
 pub async fn rule_update(db: &PgPool, id: i32, r: &Rule) -> sqlx::Result<Option<Value>> {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"WITH r AS (UPDATE cleanup_rules SET name = $2, enabled = $3, levels = $4, criteria = $5, action = $6,
         "graceDays" = $7, "deleteSeriesWhenEmpty" = $8, "reminderDays" = $9 WHERE id = $1 RETURNING *) SELECT {RULE} FROM r"#
-    ))
+    )))
     .bind(id)
     .bind(&r.name)
     .bind(r.enabled)

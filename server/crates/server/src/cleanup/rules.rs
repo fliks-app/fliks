@@ -116,7 +116,7 @@ pub fn compile(
     level: &str,
     disk_libs: &[i32],
     unmonitor: bool,
-) -> QueryBuilder<'static, Postgres> {
+) -> QueryBuilder<Postgres> {
     let sc = Scope::of(level);
     let (ids, from, excluded) = match level {
         "season" => (

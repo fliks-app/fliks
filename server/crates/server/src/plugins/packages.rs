@@ -36,17 +36,17 @@ const COLUMNS: &str = r#"id, "pluginId", version, archive, origin::text AS origi
     manifest, enabled, status::text AS status, "statusReason", "networkInternal", "heldUpdate""#;
 
 pub async fn all(db: &PgPool) -> sqlx::Result<Vec<Package>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLUMNS} FROM plugin_packages ORDER BY id"
-    ))
+    )))
     .fetch_all(db)
     .await
 }
 
 pub async fn find(db: &PgPool, id: &str) -> sqlx::Result<Option<Package>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLUMNS} FROM plugin_packages WHERE "pluginId" = $1"#
-    ))
+    )))
     .bind(id)
     .fetch_optional(db)
     .await
@@ -212,27 +212,27 @@ const SOURCE_COLUMNS: &str =
     r#"id, url, enabled, "publicKey", "lastRefreshedAt", "lastRefreshError", "cachedCatalog""#;
 
 pub async fn sources(db: &PgPool, enabled_only: bool) -> sqlx::Result<Vec<Source>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLUMNS} FROM plugin_sources WHERE NOT $1 OR enabled ORDER BY id"
-    ))
+    )))
     .bind(enabled_only)
     .fetch_all(db)
     .await
 }
 
 pub async fn source(db: &PgPool, id: i32) -> sqlx::Result<Option<Source>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLUMNS} FROM plugin_sources WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(db)
     .await
 }
 
 pub async fn source_by_url(db: &PgPool, url: &str) -> sqlx::Result<Option<Source>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLUMNS} FROM plugin_sources WHERE url = $1 ORDER BY id LIMIT 1"
-    ))
+    )))
     .bind(url)
     .fetch_optional(db)
     .await
