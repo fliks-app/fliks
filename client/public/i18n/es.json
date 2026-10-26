@@ -3612,7 +3612,7 @@
     "voice_leave": "Salir de la voz",
     "voice_mute": "Silenciar el micrófono",
     "voice_unmute": "Activar el micrófono",
-    "voice_duck": "Bajar la película cuando alguien habla",
+    "voice_duck": "Bajar el volumen cuando alguien habla",
     "voice_headphones": "Los auriculares evitan el eco.",
     "voice_mic_denied": "Se denegó el acceso al micrófono",
     "voice_listen_only_tv": "Este dispositivo no tiene micrófono: solo puedes escuchar.",

@@ -179,7 +179,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     this.party.closed.pipe(takeUntilDestroyed()).subscribe(() => void this.router.navigateByUrl('/'));
     effect(() => {
       const h = this.gone() ? null : this.head();
-      if (h) this.navbar.enterHeroPage(h.name);
+      if (h) this.navbar.enterHeroPage(h.name, this.media()?.logoUrl ?? null);
       else this.navbar.leaveHeroPage();
     });
     effect(() => this.background.set(this, this.fanart()));
@@ -212,7 +212,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** A member's own copy first (a regenerated token no longer resolves for them), the invite link's preview otherwise. */
   private fetch(): Promise<PartyPreview> {
     const token = this.token;
-    if (!token) return this.api.get(this.id);
+    // Quiet: a party out of reach (declined, ended, kicked) shows the gone page, not a toast.
+    if (!token) return this.api.get(this.id, true);
     return this.api.get(this.id, true).catch(() => this.api.byToken(token));
   }
 
@@ -292,6 +293,22 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (!ok) return;
     const dto = await runBusy(this.busy, () => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
     if (dto) this.apply(dto);
+  }
+
+  protected async end(): Promise<void> {
+    const h = this.head()!;
+    const key = h.status === 'live' ? 'end' : 'cancel';
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant(`party.${key}_title`),
+      message: this.translate.instant(`party.${key}_message`, { name: h.name }),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    // Joined, the service closes the party and its `closed` takes the page home.
+    if (this.joined()) return void runBusy(this.busy, () => this.party.end());
+    if ((await runBusy(this.busy, () => this.api.end(this.id))) === null) return;
+    this.toast.info(this.translate.instant('party.closed_host_ended'));
+    this.home();
   }
 
   protected async decline(): Promise<void> {

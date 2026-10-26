@@ -83,8 +83,10 @@ export class KeyboardController {
       return;
     }
 
-    // TV only: any other key while the bar is hidden just wakes it; a focused cue and back are exempt.
-    if (!isBackKey && !cueFocused && !this.host.chrome.visible() && this.host.isTv()) {
+    // Any other key on a hidden bar just wakes it, on TV or with focus left in the bar (Space still plays);
+    // a focused cue and back are exempt.
+    const inBar = !!activeEl?.closest('app-player-controls') && e.key !== ' ';
+    if (!isBackKey && !cueFocused && !this.host.chrome.visible() && (this.host.isTv() || inBar)) {
       this.host.chrome.show();
       e.preventDefault();
       e.stopPropagation();

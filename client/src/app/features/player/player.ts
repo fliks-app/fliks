@@ -641,6 +641,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     mediaId: () => this.mediaId,
     episodeId: () => this.episodeId,
     seekTo: (t) => this.seekInternal(t),
+    showControls: () => this.chrome.show(),
     pausePlayback: () => this.pausePlayback(),
     playLocal: () => {
       this.state.paused.set(false);

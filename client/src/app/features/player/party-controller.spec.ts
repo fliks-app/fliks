@@ -85,6 +85,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     episodeId: () => undefined,
     seekTo: vi.fn(),
     pausePlayback: vi.fn().mockResolvedValue(undefined),
+    showControls: vi.fn(),
     playLocal: vi.fn(),
     position: () => 0,
     onBack: vi.fn(),
@@ -94,6 +95,17 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
 }
 
 describe('PartyController user actions', () => {
+  it('shows the controls when the party goes from playing to paused, whoever paused', () => {
+    const { ctl, party, host } = setup();
+    party.live.set({ state: 'playing' });
+    TestBed.tick();
+    expect(host.showControls).not.toHaveBeenCalled();
+    party.live.set({ state: 'paused' });
+    TestBed.tick();
+    expect(host.showControls).toHaveBeenCalledTimes(1);
+    ctl.dispose();
+  });
+
   it('sends play/pause as intents and leaves the engine alone', () => {
     const { ctl, party, state, engine, host } = setup();
     party.live.set({ state: 'paused' });

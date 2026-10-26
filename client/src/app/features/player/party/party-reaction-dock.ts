@@ -1,19 +1,23 @@
 import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideSmilePlus, LucideX } from '@lucide/angular';
+import { LucideMic, LucideMicOff, LucideSmilePlus, LucideX } from '@lucide/angular';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { PartyService } from '../../../core/services/party/party.service';
+import { VoiceService } from '../../../core/services/party/voice.service';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 const POP_MS = 220;
 // A second tap of a fast double tap lands on the folded row's spot this long after it folds.
 const SETTLE_MS = 400;
+// Held this long, the mic button talks only while pressed.
+const HOLD_MS = 250;
 
-/** Reaction button of the player's action strip: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
+/** Reaction button of the player's action strip: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings).
+ *  In voice, a mic button follows: a tap toggles it, a hold talks while pressed. */
 @Component({
   selector: 'app-party-reaction-dock',
-  imports: [TranslatePipe, LucideSmilePlus, LucideX, TvRowDirective],
+  imports: [TranslatePipe, LucideMic, LucideMicOff, LucideSmilePlus, LucideX, TvRowDirective],
   templateUrl: './party-reaction-dock.html',
   styleUrl: './party-reaction-dock.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,6 +31,10 @@ export class PartyReactionDockComponent {
   private readonly toggleBtn = viewChild.required<ElementRef<HTMLButtonElement>>('toggle');
   readonly open = this.reactions.rowOpen.asReadonly();
   protected readonly settling = signal(false);
+  protected readonly voice = inject(VoiceService);
+  private holdTimer?: ReturnType<typeof setTimeout>;
+  private held = false;
+  private heldFromMuted = false;
 
   constructor() {
     // Back folds the row before anything else, like the player's other menus.
@@ -53,6 +61,29 @@ export class PartyReactionDockComponent {
     this.fold();
     this.settling.set(true);
     setTimeout(() => this.settling.set(false), SETTLE_MS);
+  }
+
+  protected micDown(): void {
+    clearTimeout(this.holdTimer);
+    this.holdTimer = setTimeout(() => {
+      this.held = true;
+      this.heldFromMuted = this.voice.muted();
+      if (this.heldFromMuted) void this.voice.setMuted(false);
+    }, HOLD_MS);
+  }
+
+  /** A pointer tap acts on release: Android sends no click after a long press. */
+  protected micUp(released: boolean): void {
+    clearTimeout(this.holdTimer);
+    if (this.held) {
+      this.held = false;
+      if (this.heldFromMuted) void this.voice.setMuted(true);
+    } else if (released) void this.voice.toggleMute();
+  }
+
+  /** Only a keyboard or D-pad activation (`detail` 0): pointer taps went through `micUp`. */
+  protected micClick(event: MouseEvent): void {
+    if (event.detail === 0) void this.voice.toggleMute();
   }
 
   /** Focus returns to the button when it sat on an emoji, which leaves the D-pad order as the row folds. */

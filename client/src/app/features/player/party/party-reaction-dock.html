@@ -29,4 +29,26 @@
     <svg lucideSmilePlus class="icon icon-closed h-5 w-5"></svg>
     <svg lucideX class="icon icon-open h-5 w-5"></svg>
   </button>
+  @if (voice.joined()) {
+    <button
+      type="button"
+      class="dock-toggle mic"
+      [class.active]="!voice.muted()"
+      [disabled]="voice.listenOnly()"
+      [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
+      [attr.aria-pressed]="!voice.muted()"
+      (pointerdown)="micDown()"
+      (pointerup)="micUp(true)"
+      (pointercancel)="micUp(false)"
+      (pointerleave)="micUp(false)"
+      (contextmenu)="$event.preventDefault()"
+      (click)="micClick($event)"
+    >
+      @if (voice.muted()) {
+        <svg lucideMicOff class="h-5 w-5"></svg>
+      } @else {
+        <svg lucideMic class="h-5 w-5"></svg>
+      }
+    </button>
+  }
 </div>

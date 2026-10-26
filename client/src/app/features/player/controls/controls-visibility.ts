@@ -5,7 +5,7 @@ import { desktopBridgeOrNull } from '../../../core/plugins/desktop-player.bridge
 const HIDE_DELAY_TV_MS = 5000;
 const HIDE_DELAY_MS = 3000;
 
-/** Owns whether the player's controls are on screen: auto-hide countdown, suspending pins, blur of hidden buttons and the cursor; provided per player. */
+/** Owns whether the player's controls are on screen: auto-hide countdown, suspending pins and the cursor; provided per player. */
 @Injectable()
 export class ControlsVisibilityService {
   private readonly device = inject(DeviceService);
@@ -21,14 +21,11 @@ export class ControlsVisibilityService {
   /** Bumped by any interaction that should restart the countdown. */
   private readonly activity = signal(0);
   private pinned: Signal<boolean> = computed(() => false);
-  /** The controls element to blur out of when hiding. */
-  private surfaceSelector = 'app-player-controls';
 
   /** `pinned` names the states that must keep the bar up: paused, buffering,
    *  a drag in flight. An open panel is tracked here. */
-  configure(options: { pinned?: Signal<boolean>; surfaceSelector?: string } = {}): void {
+  configure(options: { pinned?: Signal<boolean> } = {}): void {
     if (options.pinned) this.pinned = options.pinned;
-    if (options.surfaceSelector) this.surfaceSelector = options.surfaceSelector;
   }
 
   show(seekOsd = false): void {
@@ -37,12 +34,10 @@ export class ControlsVisibilityService {
     this.resetHideTimer();
   }
 
+  /** Focus stays on the hidden button, so a key wakes the bar where the viewer left it; the players'
+   *  key handlers turn that key into a wake instead of pressing the invisible button. */
   hide(): void {
     this.visible.set(false);
-    // Or the next OK on a remote presses a button nobody can see, the back
-    // arrow being the likeliest one. A floating cue outlives the bar and keeps focus.
-    const active = document.activeElement as HTMLElement | null;
-    if (active?.closest(this.surfaceSelector) && !active.closest('.player-floating-cue')) active.blur();
   }
 
   /** A tap on the surface. An open dropdown swallows it so the bar stays. */
@@ -56,8 +51,7 @@ export class ControlsVisibilityService {
     this.activity.update((n) => n + 1);
   }
 
-  /** Focus moved inside the bar. Ignored while hidden: the hide itself blurs,
-   *  and whatever picks the focus up next would re-arm the countdown forever. */
+  /** Focus moved inside the bar. Ignored while hidden, or a focus change would re-arm the countdown forever. */
   onInteraction(): void {
     if (this.visible()) this.resetHideTimer();
   }

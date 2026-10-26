@@ -274,10 +274,12 @@ export class PartyService {
     await this.api.status(id, { deviceId: this.deviceId(), status: ready ? 'ready' : 'waiting', position }).catch(() => {});
   }
 
-  /** Host: ends the party for everyone; the `party.closed` event then takes the player out. */
+  /** Host: ends the party for everyone and closes it here without waiting for its `party.closed`. */
   async end(): Promise<void> {
     const id = this.party()?.id;
-    if (id != null) await this.api.end(id);
+    if (id == null) return;
+    await this.api.end(id);
+    if (this.party()?.id === id) this.onClosed('host_ended');
   }
 
   /** The explicit leave action: the host ends the party for everyone after a confirmation, a member just leaves. False when declined. */
