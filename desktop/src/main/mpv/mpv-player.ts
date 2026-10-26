@@ -160,6 +160,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
       '--ytdl=no',
+      // The app publishes the OS media session itself; mpv's own would pause it behind the page's back.
+      '--media-controls=no',
       // Buffering / reconnect tuning shared with the libmpv addons (see module).
       ...MPV_STREAM_OPTIONS.map(([name, value]) => `--${name}=${value}`),
       `--input-ipc-server=${this.sockPath}`,
