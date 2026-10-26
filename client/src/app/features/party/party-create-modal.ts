@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal,
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { PartyService, type PartyCreateTarget } from '../../core/services/party/party.service';
+import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
@@ -15,7 +16,7 @@ export function toLocalInput(d: Date): string {
 /** "Watch together" dialog, mounted once in the layout and opened through `PartyService.createRequest`. */
 @Component({
   selector: 'app-party-create-modal',
-  imports: [FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent],
+  imports: [FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, MediaPickerComponent],
   templateUrl: './party-create-modal.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -23,7 +24,10 @@ export class PartyCreateModalComponent {
   private readonly party = inject(PartyService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
+  protected readonly picker = viewChild.required(MediaPickerComponent);
   protected readonly target = signal<PartyCreateTarget | null>(null);
+  /** The film the party starts on; null means the host chooses it later. */
+  protected readonly film = signal<{ mediaId: number; mediaFileId?: number; episodeId?: number | null; title: string } | null>(null);
   protected readonly name = signal('');
   protected readonly later = signal(false);
   protected readonly when = signal('');
@@ -40,6 +44,7 @@ export class PartyCreateModalComponent {
       untracked(() => {
         this.party.createRequest.set(null);
         this.target.set(req);
+        this.film.set(req.mediaId == null ? null : { mediaId: req.mediaId, mediaFileId: req.mediaFileId, episodeId: req.episodeId, title: req.title });
         this.name.set(req.title);
         this.later.set(false);
         const soon = new Date(Date.now() + 3_600_000);
@@ -57,12 +62,19 @@ export class PartyCreateModalComponent {
     return !this.busy() && this.name().trim().length > 0 && (!this.later() || !!this.when());
   }
 
+  protected pick([pick]: MediaPick[]): void {
+    if (!pick) return;
+    this.film.set({ mediaId: pick.mediaId, episodeId: pick.episodeId, title: pick.title });
+    if (!this.name().trim()) this.name.set(pick.title);
+  }
+
   protected close(): void {
     this.dialog()?.nativeElement.close();
   }
 
   protected async submit(): Promise<void> {
     const t = this.target();
+    const film = this.film();
     if (!t || !this.canSubmit()) return;
     this.busy.set(true);
     try {
@@ -70,7 +82,7 @@ export class PartyCreateModalComponent {
         name: this.name().trim(),
         ...(t.playlistId != null
           ? { playlistId: t.playlistId }
-          : t.mediaId != null && { mediaId: t.mediaId, mediaFileId: t.mediaFileId, ...(t.episodeId != null && { episodeId: t.episodeId }) }),
+          : film && { mediaId: film.mediaId, ...(film.mediaFileId != null && { mediaFileId: film.mediaFileId }), ...(film.episodeId != null && { episodeId: film.episodeId }) }),
         ...(this.later() && { scheduledAt: new Date(this.when()).toISOString() }),
         inviteeIds: this.invitees(),
       });

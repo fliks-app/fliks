@@ -2,7 +2,7 @@
   <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
     <h2 class="text-lg font-bold">{{ 'party.programme' | translate }}</h2>
     @if (isHost()) {
-      <button type="button" class="btn btn-sm btn-outline" [disabled]="busy()" (click)="picker().show()">{{ 'party.programme_add' | translate }}</button>
+      <button type="button" class="btn btn-sm btn-outline" data-act="add" (click)="picker().show()">{{ 'party.programme_add' | translate }}</button>
     }
   </div>
   @if (rows().length) {
@@ -10,13 +10,14 @@
       @for (r of rows(); track r.item.mediaId + ':' + r.item.episodeId; let i = $index; let first = $first; let last = $last) {
         <li appTvRow class="flex items-center gap-3 rounded-box bg-base-200 p-2" [class.ring-2]="r.playing" [class.ring-primary]="r.playing" [attr.aria-current]="r.playing ? 'true' : null">
           <span class="w-5 shrink-0 text-center text-sm text-base-content/60">{{ i + 1 }}</span>
-          @if (r.item.posterUrl) {
-            <img [src]="r.item.posterUrl | resolveUrl: 'thumb'" [alt]="r.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
+          @let shown = r.hidden ? ('party.proposal_hidden' | translate) : r.title;
+          @if (r.item.posterUrl && !r.hidden) {
+            <img [src]="r.item.posterUrl | resolveUrl: 'thumb'" [alt]="shown" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
           } @else {
             <div class="h-16 w-11 shrink-0 rounded-md bg-base-300"></div>
           }
           <div class="min-w-0 flex-1">
-            <p class="truncate font-medium">{{ r.title }}</p>
+            <p class="truncate font-medium" [class.text-base-content/60]="r.hidden">{{ shown }}</p>
             @if (r.label) {
               <p class="truncate text-sm text-base-content/60">{{ r.label }}</p>
             }
@@ -25,13 +26,13 @@
             }
           </div>
           @if (isHost()) {
-            <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_up' | translate" [disabled]="busy() || first" (click)="move(i, -1)">
+            <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_up' | translate" data-act="up" [disabled]="first" (click)="move(i, -1)">
               <svg lucideChevronUp class="h-4 w-4"></svg>
             </button>
-            <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_down' | translate" [disabled]="busy() || last" (click)="move(i, 1)">
+            <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_down' | translate" data-act="down" [disabled]="last" (click)="move(i, 1)">
               <svg lucideChevronDown class="h-4 w-4"></svg>
             </button>
-            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.programme_remove' | translate" [disabled]="busy()" (click)="remove(i)">
+            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.programme_remove' | translate" data-act="remove" (click)="remove(i)">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>
           }

@@ -15,7 +15,7 @@ class StubPicker {
 }
 
 const item = (mediaId: number, episodeId: number | null = null): PartyItem =>
-  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null }) as PartyItem;
+  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, hidden: false }) as PartyItem;
 const A = item(1);
 const B = item(2, 20);
 const C = item(2, 21);
@@ -81,6 +81,39 @@ describe('PartyProgrammeComponent', () => {
     expect(f.componentInstance['items']().map((i: PartyItem) => i.episodeId)).toEqual([null, 21, 20]);
   });
 
+  it('keeps the move buttons enabled and the focus on the moved row', async () => {
+    const f = await setup(true);
+    document.body.append(el(f));
+    api.programme.mockReturnValue(new Promise(() => {}));
+    const down = rowButtons(f, 0)[1];
+    down.focus();
+    down.click();
+    f.detectChanges();
+    await f.whenStable();
+    expect(down.disabled).toBe(false);
+    expect(document.activeElement).toBe(rowButtons(f, 1)[1]);
+    rowButtons(f, 2)[0].click();
+    expect(api.programme).toHaveBeenCalledTimes(1);
+    el(f).remove();
+  });
+
+  it('keeps Add enabled while a save runs, so the picker returns the focus to it', async () => {
+    const f = await setup(true);
+    api.programme.mockReturnValue(new Promise(() => {}));
+    f.componentInstance['append']([{ mediaId: 3, episodeId: null, title: 'T' }]);
+    f.detectChanges();
+    expect((el(f).querySelector('[data-act=add]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('keeps a row hidden from the host in the PUT, as a neutral row', async () => {
+    api.queue.mockResolvedValue([A, { ...B, title: '', hidden: true }, C]);
+    const f = await setup(true);
+    expect(el(f).querySelectorAll('li')[1].textContent).toContain('party.proposal_hidden');
+    rowButtons(f, 0)[1].click();
+    await flush();
+    expect(ids(0)).toEqual(['2:20', '1:', '2:21']);
+  });
+
   it('removes an item', async () => {
     const f = await setup(true);
     rowButtons(f, 1)[2].click();
@@ -100,9 +133,9 @@ describe('PartyProgrammeComponent', () => {
   it('appends the picker output, dropping what is already there', async () => {
     const f = await setup(true);
     f.componentInstance['append']([
-      { mediaId: 2, episodeId: 21 },
-      { mediaId: 2, episodeId: 22 },
-      { mediaId: 3, episodeId: null },
+      { mediaId: 2, episodeId: 21, title: 'x' },
+      { mediaId: 2, episodeId: 22, title: 'x' },
+      { mediaId: 3, episodeId: null, title: 'x' },
     ]);
     await flush();
     expect(ids(0)).toEqual(['1:', '2:20', '2:21', '2:22', '3:']);

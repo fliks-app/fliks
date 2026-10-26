@@ -1,5 +1,6 @@
 import { Component, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
 import { leavingLabel } from '../../shared/utils/cleanup.util';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
@@ -135,6 +136,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly leavingSoon = signal<Media[]>([]);
+  /** The call to action of a rail with nothing in it: below every zone, so its arrival moves none of them. */
+  protected readonly showPartyEmpty = computed(
+    () => this.partiesLoaded() && !this.parties().length && this.partyApi.supported() && this.visibleSections().some((s) => s.type === 'watch-parties'),
+  );
   /** Live and scheduled watch parties of the viewer, live first (server order). */
   readonly parties = signal<PartySummaryDto[]>([]);
   protected readonly partiesLoaded = signal(false);
@@ -251,6 +256,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   protected newParty(): void {
     this.party.createRequest.set({ title: '' });
   }
+
+  private readonly partyCreated = this.party.created.pipe(takeUntilDestroyed()).subscribe(() => this.loadParties());
 
   private readonly partyEvents = this.sse.partyEvents.subscribe((e) => {
     if (this.routeFresh()) return;

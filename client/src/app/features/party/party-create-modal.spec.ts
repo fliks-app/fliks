@@ -6,10 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PartyService } from '../../core/services/party/party.service';
 import { PartyCreateModalComponent } from './party-create-modal';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
+import { MediaPickerComponent } from '../../shared/components/media-picker/media-picker';
 
 @Component({ selector: 'app-party-invitee-picker', template: '' })
 class StubPicker {
   readonly selected = model<number[]>([]);
+}
+
+@Component({ selector: 'app-media-picker', template: '' })
+class StubMediaPicker {
+  show = vi.fn();
 }
 
 describe('PartyCreateModalComponent', () => {
@@ -22,8 +28,8 @@ describe('PartyCreateModalComponent', () => {
     HTMLDialogElement.prototype.showModal = vi.fn();
     HTMLDialogElement.prototype.close = vi.fn();
     TestBed.overrideComponent(PartyCreateModalComponent, {
-      remove: { imports: [PartyInviteePickerComponent] },
-      add: { imports: [StubPicker] },
+      remove: { imports: [PartyInviteePickerComponent, MediaPickerComponent] },
+      add: { imports: [StubPicker, StubMediaPicker] },
     });
     TestBed.configureTestingModule({
       providers: [
@@ -61,5 +67,24 @@ describe('PartyCreateModalComponent', () => {
     (fixture.nativeElement.querySelector('form.flex') as HTMLFormElement).dispatchEvent(new Event('submit'));
     await fixture.whenStable();
     expect(create.mock.calls[0][0]).toMatchObject({ mediaId: 4, mediaFileId: 8 });
+  });
+
+  it('creates with the film picked in the dialog, and drops it with Pick later', async () => {
+    const fixture = await open({ title: '' });
+    const modal = fixture.componentInstance as unknown as { pick(p: unknown[]): void; film: { set(v: null): void }; name(): string };
+    modal.pick([{ mediaId: 6, episodeId: 60, title: 'Chosen' }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Chosen');
+    expect(modal.name()).toBe('Chosen');
+    (el.querySelector('form.flex') as HTMLFormElement).dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    expect(create.mock.calls[0][0]).toMatchObject({ mediaId: 6, episodeId: 60 });
+    expect(create.mock.calls[0][0]).not.toHaveProperty('mediaFileId');
+    create.mockClear();
+    modal.film.set(null);
+    (el.querySelector('form.flex') as HTMLFormElement).dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    expect(create.mock.calls[0][0]).not.toHaveProperty('mediaId');
   });
 });

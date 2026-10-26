@@ -7,8 +7,14 @@
         @if (target()?.playlistId != null) {
           <p class="text-sm text-base-content/70">{{ 'party.playlist_label' | translate: { name: target()!.title } }}</p>
         }
-        @if (target()?.mediaId == null && target()?.playlistId == null) {
-          <p class="text-sm text-base-content/70">{{ 'party.create_film_later' | translate }}</p>
+        @if (target()?.playlistId == null) {
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="min-w-0 flex-1 text-sm text-base-content/70">{{ film()?.title || ('party.create_film_later' | translate) }}</p>
+            <button type="button" class="btn btn-sm btn-outline" (click)="picker().show()">{{ 'party.create_film_choose' | translate }}</button>
+            @if (film()) {
+              <button type="button" class="btn btn-sm btn-ghost" (click)="film.set(null)">{{ 'party.create_film_clear' | translate }}</button>
+            }
+          </div>
         }
         <label class="form-control">
           <span class="mb-1 text-sm font-semibold">{{ 'party.create_name' | translate }}</span>
@@ -42,4 +48,5 @@
     }
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  <app-media-picker (picked)="pick($event)" />
 </dialog>

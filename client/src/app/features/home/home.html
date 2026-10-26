@@ -72,12 +72,6 @@
               />
             }
           </app-horizontal-scroller>
-        } @else if (partiesLoaded() && partyApi.supported()) {
-          <section appTvRow class="flex flex-col items-start gap-3">
-            <h2 class="text-lg font-bold">{{ 'party.rail_title' | translate }}</h2>
-            <p class="text-base-content/70">{{ 'party.rail_empty' | translate }}</p>
-            <button type="button" class="btn btn-primary btn-sm" (click)="newParty()">{{ 'party.new_party' | translate }}</button>
-          </section>
         }
       }
 
@@ -311,6 +305,14 @@
         />
       }
     </app-horizontal-scroller>
+  }
+
+  @if (showPartyEmpty()) {
+    <section appTvRow class="flex flex-col items-start gap-3">
+      <h2 class="text-lg font-bold">{{ 'party.rail_title' | translate }}</h2>
+      <p class="text-base-content/70">{{ 'party.rail_empty' | translate }}</p>
+      <button type="button" class="btn btn-primary btn-sm" (click)="newParty()">{{ 'party.new_party' | translate }}</button>
+    </section>
   }
 
   <!-- Compact box (icon beside text) up through tablet portrait; stacked box

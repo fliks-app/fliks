@@ -7,13 +7,13 @@
     <ul class="flex flex-col gap-2">
       @for (p of rows(); track p.id) {
         <li appTvRow class="flex items-center gap-3 rounded-box bg-base-200 p-2">
-          @if (p.item.title && p.item.posterUrl) {
+          @if (!p.item.hidden && p.item.posterUrl) {
             <img [src]="p.item.posterUrl | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
           } @else {
             <div class="h-16 w-11 shrink-0 rounded-md bg-base-300"></div>
           }
           <div class="min-w-0 flex-1">
-            @if (p.item.title) {
+            @if (!p.item.hidden) {
               <p class="truncate font-medium">{{ p.item.title }}</p>
             } @else {
               <p class="truncate font-medium text-base-content/60">{{ 'party.proposal_hidden' | translate }}</p>
@@ -31,17 +31,17 @@
             [class.btn-primary]="voted(p)"
             [class.btn-outline]="!voted(p)"
             [attr.aria-pressed]="voted(p)"
-            [disabled]="busy()"
+            [attr.data-vote]="p.id"
             (click)="vote(p)"
           >
             <svg lucideThumbsUp class="h-4 w-4"></svg>
             {{ 'party.vote' | translate }} · {{ p.voterIds.length }}
           </button>
-          @if (isHost()) {
-            <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="choose(p)">{{ 'party.choose' | translate }}</button>
+          @if (isHost() && !p.item.hidden) {
+            <button type="button" class="btn btn-sm btn-primary" (click)="choose(p)">{{ 'party.choose' | translate }}</button>
           }
           @if (canRemove(p)) {
-            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.proposal_remove' | translate" [disabled]="busy()" (click)="remove(p)">
+            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.proposal_remove' | translate" (click)="remove(p)">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>
           }

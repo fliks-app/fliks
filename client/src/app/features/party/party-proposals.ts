@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideThumbsUp, LucideTrash2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyProposal } from '../../core/services/api/party-api.service';
@@ -8,7 +8,7 @@ import { MediaPickerComponent, type MediaPick } from '../../shared/components/me
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { type PartyPerson } from '../player/party/party-people';
-import { runBusy } from './party-busy';
+import { keepFocus, runBusy } from './party-busy';
 
 /** Most votes first, the oldest (lowest id) among equals; the server resolves a start the same way. */
 export function sortProposals(list: readonly PartyProposal[]): PartyProposal[] {
@@ -25,6 +25,8 @@ export function sortProposals(list: readonly PartyProposal[]): PartyProposal[] {
 export class PartyProposalsComponent {
   private readonly api = inject(PartyApiService);
   private readonly auth = inject(AuthService);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly partyId = input.required<number>();
   readonly proposals = input.required<PartyProposal[]>();
@@ -37,6 +39,22 @@ export class PartyProposalsComponent {
   protected readonly busy = signal(false);
   protected readonly me = computed(() => this.auth.user()?.id ?? null);
   protected readonly rows = computed(() => sortProposals(this.proposals()));
+
+  /** The proposal whose vote button holds the focus: a re-sort moves its row and drops it. */
+  private focused: number | null = null;
+
+  constructor() {
+    effect(() => {
+      this.rows();
+      untracked(() => this.restoreFocus());
+    });
+  }
+
+  private restoreFocus(): void {
+    const id = this.focused;
+    if (id == null) return;
+    keepFocus(this.injector, () => this.host.nativeElement.querySelector<HTMLElement>(`[data-vote="${id}"]`));
+  }
 
   protected name(userId: number): string {
     return this.people().find((p) => p.userId === userId)?.username ?? '?';
@@ -55,8 +73,10 @@ export class PartyProposalsComponent {
     if (pick) void runBusy(this.busy, () => this.api.propose(this.partyId(), pick.mediaId, pick.episodeId ?? undefined));
   }
 
-  protected vote(p: PartyProposal): void {
-    void runBusy(this.busy, () => this.api.vote(this.partyId(), p.id, !this.voted(p)));
+  protected async vote(p: PartyProposal): Promise<void> {
+    this.focused = p.id;
+    await runBusy(this.busy, () => this.api.vote(this.partyId(), p.id, !this.voted(p)));
+    this.restoreFocus();
   }
 
   protected remove(p: PartyProposal): void {

@@ -13,7 +13,7 @@ class StubPicker {
   show = vi.fn();
 }
 
-const item = (title: string) => ({ mediaId: 1, episodeId: null, mediaFileId: null, title, posterUrl: null }) as PartyItem;
+const item = (title: string) => ({ mediaId: 1, episodeId: null, mediaFileId: null, title, hidden: title === '', posterUrl: null }) as PartyItem;
 const prop = (id: number, voterIds: number[], proposedBy = 2, title = `T${id}`): PartyProposal => ({ id, item: item(title), proposedBy, voterIds });
 
 describe('sortProposals', () => {
@@ -47,12 +47,13 @@ describe('PartyProposalsComponent', () => {
   }
   const buttons = (f: { nativeElement: HTMLElement }, row = 0) => Array.from((f.nativeElement as HTMLElement).querySelectorAll('li')[row].querySelectorAll('button'));
 
-  it('toggles the vote with PUT then DELETE and reflects it in aria-pressed', () => {
+  it('toggles the vote with PUT then DELETE and reflects it in aria-pressed', async () => {
     const el = setup({ me: 1, host: false, proposals: [prop(5, [1]), prop(6, [2])] });
     const [mine, other] = [buttons(el, 0)[0], buttons(el, 1)[0]];
     expect(mine.getAttribute('aria-pressed')).toBe('true');
     expect(other.getAttribute('aria-pressed')).toBe('false');
     mine.click();
+    await vi.waitFor(() => expect(api.vote).toHaveBeenCalledTimes(1));
     other.click();
     expect(api.vote).toHaveBeenNthCalledWith(1, 9, 5, false);
     expect(api.vote).toHaveBeenNthCalledWith(2, 9, 6, true);
@@ -81,6 +82,41 @@ describe('PartyProposalsComponent', () => {
     buttons(host)[1].click();
     await vi.waitFor(() => expect(chosen).toHaveBeenCalledWith({ id: 9 }));
     expect(api.choose).toHaveBeenCalledWith(9, 1);
+  });
+
+  it('keeps the vote button enabled and focused while the request runs', async () => {
+    const el = setup({ me: 1, host: false, proposals: [prop(5, [1])] });
+    document.body.append(el.nativeElement);
+    api.vote.mockReturnValue(new Promise(() => {}));
+    const vote = buttons(el)[0];
+    vote.focus();
+    vote.click();
+    el.detectChanges();
+    expect(vote.disabled).toBe(false);
+    expect(document.activeElement).toBe(vote);
+    vote.click();
+    expect(api.vote).toHaveBeenCalledTimes(1);
+    el.nativeElement.remove();
+  });
+
+  it('puts the focus back on the vote button when the re-sort moves its row', async () => {
+    const el = setup({ me: 1, host: false, proposals: [prop(5, [], 2), prop(6, [], 2)] });
+    document.body.append(el.nativeElement);
+    const vote = () => (el.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-vote="6"]')!;
+    vote().focus();
+    vote().click();
+    await vi.waitFor(() => expect(api.vote).toHaveBeenCalled());
+    el.componentRef.setInput('proposals', [prop(5, [], 2), prop(6, [1], 2)]);
+    el.detectChanges();
+    await el.whenStable();
+    expect((el.nativeElement as HTMLElement).querySelector('li [data-vote]')!.getAttribute('data-vote')).toBe('6');
+    expect(document.activeElement).toBe(vote());
+    el.nativeElement.remove();
+  });
+
+  it('offers no Choose on a masked proposal', () => {
+    const el = setup({ me: 1, host: true, proposals: [prop(1, [], 2, '')] });
+    expect(buttons(el)).toHaveLength(2);
   });
 
   it('shows a neutral text for a masked title', () => {
