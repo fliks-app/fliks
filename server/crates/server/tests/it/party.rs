@@ -24,7 +24,8 @@ async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
     sqlx::raw_sql(
         r#"INSERT INTO libraries (name) VALUES ('l');
-           INSERT INTO media (title, type, "libraryId") VALUES ('Film', 'movie', 1);"#,
+           INSERT INTO media (title, type, "libraryId") VALUES ('Film', 'movie', 1);
+           INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (1, 'film', 1, 'q');"#,
     )
     .execute(&pool)
     .await
@@ -129,11 +130,21 @@ impl Ctx {
 
 async fn more_media(c: &Ctx, n: usize) {
     for i in 0..n {
-        sqlx::query(r#"INSERT INTO media (title, type, "libraryId") VALUES ($1, 'movie', 1)"#)
-            .bind(format!("m{i}"))
-            .execute(&c.pool)
-            .await
-            .unwrap();
+        let id: i32 = sqlx::query_scalar(
+            r#"INSERT INTO media (title, type, "libraryId") VALUES ($1, 'movie', 1) RETURNING id"#,
+        )
+        .bind(format!("m{i}"))
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES ($1, $2, 1, 'q')"#,
+        )
+        .bind(id)
+        .bind(format!("m{i}"))
+        .execute(&c.pool)
+        .await
+        .unwrap();
     }
 }
 
@@ -1107,7 +1118,12 @@ async fn creating_a_playlist_party_needs_a_readable_playlist_and_opens_on_its_fi
         (s, titles),
         (
             200,
-            vec![json!("Film"), json!("Show S01E01"), json!("Show S01E02")]
+            vec![
+                json!("Film"),
+                json!(""),
+                json!("Show S01E01"),
+                json!("Show S01E02")
+            ]
         )
     );
     // the rows were copied: the playlist changing does not change the party
@@ -1118,7 +1134,7 @@ async fn creating_a_playlist_party_needs_a_readable_playlist_and_opens_on_its_fi
     let (_, q) = c
         .call("GET", &format!("/api/parties/{id}/queue"), &a, None)
         .await;
-    assert_eq!(q.as_array().unwrap().len(), 3);
+    assert_eq!(q.as_array().unwrap().len(), 4);
     sqlx::query("DELETE FROM playlists WHERE id = 1")
         .execute(&c.pool)
         .await
@@ -1190,10 +1206,18 @@ async fn next_skips_what_a_member_cannot_open_and_the_end_idles_the_party(pool: 
     assert_eq!(
         sys[sys.len() - 2..],
         [
-            ("item_skipped".to_owned(), json!({"title": ""})),
-            ("item_changed".to_owned(), json!({"title": "Show S01E01"})),
+            (
+                "item_skipped".to_owned(),
+                json!({"mediaId": 2, "episodeId": null, "title": "Gap"})
+            ),
+            (
+                "item_changed".to_owned(),
+                json!({"mediaId": 3, "episodeId": 1, "title": "Show S01E01"})
+            ),
         ]
     );
+    let (_, theirs) = c.call("GET", &path, &b, None).await;
+    assert_eq!(systems(&theirs)[sys.len() - 2].1["title"], "");
     assert_eq!(show(&now), json!("waiting"));
 
     // a stale next is refused without a skip message
@@ -1410,6 +1434,10 @@ async fn next_and_previous_walk_the_programme_and_skip_an_episode_without_a_file
     let path = format!("/api/parties/{id}");
     let (_, q) = c.call("GET", &format!("{path}/queue"), &a, None).await;
     assert_eq!(eps(&q), vec![json!(3)]);
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES (2, 4, 'c', 1, 'q')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     let (s, p) = c
         .call(
             "PUT",
@@ -1419,6 +1447,11 @@ async fn next_and_previous_walk_the_programme_and_skip_an_episode_without_a_file
         )
         .await;
     assert_eq!((s, p["item"]["episodeId"].clone()), (200, json!(3)));
+    // the file of episode 4 goes away after the pick
+    sqlx::query(r#"DELETE FROM media_files WHERE "relativePath" = 'c'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     c.call("POST", &format!("{path}/start"), &a, None).await;
     c.call(
         "POST",
@@ -1443,7 +1476,10 @@ async fn next_and_previous_walk_the_programme_and_skip_an_episode_without_a_file
     assert_eq!(now["item"]["episodeId"], 5);
     let sys = systems(&now);
     assert_eq!(sys[sys.len() - 2].0, "item_skipped");
-    assert_eq!(sys[sys.len() - 2].1, json!({"title": "Show S01E03"}));
+    assert_eq!(
+        sys[sys.len() - 2].1,
+        json!({"mediaId": 2, "episodeId": 4, "title": "Show S01E03"})
+    );
     // the end of the programme: idle on the last item
     let (_, now) = step(&c, &a, &path, "next").await;
     let sys = systems(&now);
@@ -1548,7 +1584,8 @@ async fn the_programme_is_edited_during_playback_by_the_host_only(pool: PgPool) 
     // an item a member cannot open is refused, one already there is not
     sqlx::raw_sql(
         r#"INSERT INTO libraries (name) VALUES ('l2');
-           INSERT INTO media (title, type, "libraryId") VALUES ('Gap', 'movie', 2);"#,
+           INSERT INTO media (title, type, "libraryId") VALUES ('Gap', 'movie', 2);
+           INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (3, 'gap', 1, 'q');"#,
     )
     .execute(&c.pool)
     .await
@@ -2158,6 +2195,10 @@ async fn select_replaces_the_copied_playlist_programme_by_one_item(pool: PgPool)
         )
         .await;
     let id = p["id"].clone();
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES (3, 2, 'e2', 1, 'q')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     let (s, p) = c
         .call(
             "POST",
@@ -2426,4 +2467,376 @@ async fn the_start_takes_the_top_vote_then_the_oldest_and_the_hosts_choice_wins(
             .await
             .unwrap();
     assert_eq!(left, 0, "ending the party clears its proposals");
+}
+
+/// A second library with a film in it, which alice opens and nobody else does.
+async fn hidden_film(c: &Ctx, alice: i32) {
+    sqlx::raw_sql(&format!(
+        r#"INSERT INTO libraries (name) VALUES ('l2');
+           INSERT INTO media (title, type, "libraryId") VALUES ('Hidden', 'movie', 2);
+           INSERT INTO library_user_access ("userId", "libraryId") VALUES ({alice}, 2);
+           INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (2, 'hidden', 1, 'q');"#
+    ))
+    .execute(&c.pool)
+    .await
+    .unwrap();
+}
+
+async fn put_programme(c: &Ctx, url: &str, tok: &str, media: &[i32]) -> (u16, Value) {
+    let items: Vec<_> = media.iter().map(|m| json!({"mediaId": m})).collect();
+    c.call(
+        "PUT",
+        &format!("{url}/programme"),
+        tok,
+        Some(json!({ "items": items })),
+    )
+    .await
+}
+
+async fn join(c: &Ctx, url: &str, tok: &str, device: &str) -> (u16, Value) {
+    c.call(
+        "POST",
+        &format!("{url}/join"),
+        tok,
+        Some(json!({"deviceId": device})),
+    )
+    .await
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_guest_in_the_lobby_before_the_owner_never_takes_the_host_role(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+    let (_sb, _sa) = (c.stream(&b, "db").await, c.stream(&a, "da").await);
+    assert_eq!(join(&c, &url, &b, "db").await.0, 200);
+    party::tick(&c.st).await;
+    party::tick(&c.st).await;
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    assert_eq!(p["host"]["userId"], alice);
+    let host_of = |p: &Value, user: i32| {
+        p["live"]["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["userId"] == user)
+            .map(|m| m["role"].clone())
+    };
+    assert_eq!(host_of(&p, bob), Some(json!("member")));
+    for (path, method, body) in [
+        ("/start", "POST", None),
+        ("", "PATCH", Some(json!({"regenerateToken": true}))),
+        ("", "DELETE", None),
+    ] {
+        let (s, e) = c.call(method, &format!("{url}{path}"), &b, body).await;
+        assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")), "{path}");
+    }
+    let (s, e) = c
+        .call("POST", &format!("{url}/members/{bob}/host"), &a, None)
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid")));
+
+    assert_eq!(join(&c, &url, &a, "da").await.0, 200);
+    party::tick(&c.st).await;
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    assert_eq!(p["host"]["userId"], alice);
+    assert_eq!(host_of(&p, alice), Some(json!("host")));
+    assert_eq!(host_of(&p, bob), Some(json!("member")));
+    let (s, _) = c
+        .call("PATCH", &url, &a, Some(json!({"name": "mine"})))
+        .await;
+    assert_eq!(s, 200);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_reorder_or_a_start_never_puts_a_title_a_member_cannot_open_in_front_of_them(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    hidden_film(&c, alice).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+    assert_eq!(put_programme(&c, &url, &a, &[1, 2]).await.0, 200);
+    let mut sb = c.stream(&b, "db").await;
+    assert_eq!(join(&c, &url, &b, "db").await.0, 200);
+    events_of(&mut sb, "party.programme").await;
+
+    // the reorder brings an item nobody told bob about to the head
+    let (s, e) = put_programme(&c, &url, &a, &[2, 1]).await;
+    assert_eq!(
+        (s, msg(&e), e["usernames"].clone()),
+        (409, Some("party.error_member_no_access"), json!(["bob"]))
+    );
+    assert!(
+        events_of(&mut sb, "party.programme")
+            .await
+            .iter()
+            .all(|e| e["item"]["mediaId"] != 2)
+    );
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["item"]["mediaId"], 1);
+    let (_, q) = c.call("GET", &format!("{url}/queue"), &b, None).await;
+    assert_eq!(
+        (
+            q[1]["hidden"].clone(),
+            q[1]["title"].clone(),
+            q[1]["mediaId"].clone()
+        ),
+        (json!(true), json!(""), json!(2))
+    );
+    assert_eq!(q[0]["hidden"], false);
+    // a reorder that keeps the head is fine
+    assert_eq!(put_programme(&c, &url, &a, &[1]).await.0, 200);
+
+    // bob lost his library after joining: the start refuses a head he cannot open
+    sqlx::query(r#"DELETE FROM library_user_access WHERE "userId" = $1"#)
+        .bind(bob)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, e) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!(
+        (s, msg(&e), e["usernames"].clone()),
+        (409, Some("party.error_member_no_access"), json!(["bob"]))
+    );
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["status"], "scheduled");
+    sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, 1)"#)
+        .bind(bob)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!((s, p["status"].clone()), (200, json!("live")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn nothing_without_a_file_is_picked_or_started_and_a_series_needs_its_episode(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_alice, a) = c.user("alice", true).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('Empty', 'movie', 1), ('Show', 'series', 1);
+           INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, 3);
+           INSERT INTO episodes ("episodeNumber", title, "seasonId") VALUES (1, 'e1', 1), (2, 'e2', 1);
+           INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES (3, 1, 'e1', 1, 'q');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let invalid = |(s, e): (u16, Value)| (s, msg(&e).map(str::to_owned));
+    let bad = (400, Some("party.error_invalid_item".to_owned()));
+    let create = |body: Value| c.call("POST", "/api/parties", &a, Some(body));
+    assert_eq!(
+        invalid(create(json!({"name": "n", "mediaId": 2})).await),
+        bad
+    );
+    assert_eq!(
+        invalid(create(json!({"name": "n", "mediaId": 3})).await),
+        bad
+    );
+    assert_eq!(
+        invalid(create(json!({"name": "n", "mediaId": 3, "episodeId": 2})).await),
+        bad
+    );
+    let (s, p) = create(json!({"name": "n", "mediaId": 1})).await;
+    assert_eq!(s, 201);
+    let url = format!("/api/parties/{}", p["id"]);
+    assert_eq!(invalid(put_programme(&c, &url, &a, &[1, 2]).await), bad);
+    assert_eq!(invalid(propose(&c, &url, &a, 2).await), bad);
+    assert_eq!(invalid(propose(&c, &url, &a, 3).await), bad);
+
+    // the file went away after the pick: the start refuses
+    sqlx::query(r#"DELETE FROM media_files WHERE "mediaId" = 1"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, e) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_no_item")));
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["status"], "scheduled");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_start_is_taken_once_and_loses_to_an_end(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_alice, a) = c.user("alice", true).await;
+    let mut sa = c.stream(&a, "da").await;
+    more_media(&c, 1).await;
+    let (cr, ar) = (&c, &a);
+    let lobby = |media: i32| async move {
+        let (_, p) = cr
+            .call(
+                "POST",
+                "/api/parties",
+                ar,
+                Some(json!({"name": "n", "mediaId": media})),
+            )
+            .await;
+        let url = format!("/api/parties/{}", p["id"]);
+        assert_eq!(join(cr, &url, ar, "da").await.0, 200);
+        url
+    };
+    let url = lobby(1).await;
+    events_of(&mut sa, "party.state").await;
+    let start = format!("{url}/start");
+    let ((s1, _), (s2, _)) = tokio::join!(
+        c.call("POST", &start, &a, None),
+        c.call("POST", &start, &a, None)
+    );
+    assert_eq!((s1, s2), (200, 200));
+    assert_eq!(events_of(&mut sa, "party.state").await.len(), 1);
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["status"], "live");
+
+    let url = lobby(2).await;
+    let start = format!("{url}/start");
+    let ((s, _), (end, _)) = tokio::join!(
+        c.call("POST", &start, &a, None),
+        c.call("DELETE", &url, &a, None)
+    );
+    assert_eq!(end, 204);
+    assert!([200, 409].contains(&s), "{s}");
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["status"], "ended");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_programme_holds_five_hundred_items_whoever_adds_them(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_alice, a) = c.user("alice", true).await;
+    sqlx::query(
+        r#"INSERT INTO media (title, type, "libraryId")
+           SELECT 'm' || g, 'movie', 1 FROM generate_series(1, 500) g"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality)
+           SELECT id, 'f' || id, 1, 'q' FROM media WHERE id > 1"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let url = bare_party(&c, &a, &[]).await;
+    let rest: Vec<i32> = (2..=501).collect();
+    assert_eq!(put_programme(&c, &url, &a, &rest).await.0, 200);
+    let all: Vec<i32> = (1..=501).collect();
+    let (s, e) = put_programme(&c, &url, &a, &all).await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+    let (_, l) = propose(&c, &url, &a, 1).await;
+    let pid = proposal_of(&l, 1)["id"].as_i64().unwrap();
+    let (s, e) = c
+        .call("POST", &format!("{url}/proposals/{pid}/choose"), &a, None)
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+    let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
+    assert_eq!(q.as_array().unwrap().len(), 500);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_kicked_or_declined_user_no_longer_votes_or_proposes(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 2).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (carol, t) = c.user("carol", true).await;
+    c.follow(alice, bob).await;
+    c.follow(alice, carol).await;
+    let url = bare_party(&c, &a, &[bob, carol]).await;
+    propose(&c, &url, &b, 2).await;
+    let (_, l) = propose(&c, &url, &t, 3).await;
+    let pid = proposal_of(&l, 3)["id"].as_i64().unwrap();
+    c.call("PUT", &format!("{url}/proposals/{pid}/vote"), &b, None)
+        .await;
+    let (s, _) = c
+        .call("POST", &format!("{url}/members/{bob}/kick"), &a, None)
+        .await;
+    assert_eq!(s, 204);
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    let proposals = p["proposals"].as_array().unwrap();
+    assert_eq!(proposals.len(), 1);
+    assert_eq!(proposals[0]["voterIds"], json!([carol]));
+
+    let (_sc, _sa) = (c.stream(&t, "dc").await, c.stream(&a, "da").await);
+    assert_eq!(join(&c, &url, &t, "dc").await.0, 200);
+    let (s, _) = c.call("POST", &format!("{url}/decline"), &t, None).await;
+    assert_eq!(s, 204);
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["proposals"], json!([]));
+    assert_eq!(p["live"]["members"], json!([]));
+    let (s, e) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_no_item")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_chat_goes_with_an_ended_party_and_item_messages_name_only_what_a_viewer_opens(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    hidden_film(&c, alice).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+    assert_eq!(put_programme(&c, &url, &a, &[1, 2]).await.0, 200);
+    let (_sa, mut sb) = (c.stream(&a, "da").await, c.stream(&b, "db").await);
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        assert_eq!(join(&c, &url, t, d).await.0, 200);
+    }
+    c.call("POST", &format!("{url}/start"), &a, None).await;
+    events_of(&mut sb, "party.message").await;
+    let (_, now) = c.call("GET", &url, &a, None).await;
+    let rev = now["live"]["rev"].as_u64().unwrap();
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{url}/intent"),
+            &a,
+            Some(json!({"deviceId": "da", "action": "next", "baseRev": rev})),
+        )
+        .await;
+    assert_eq!(s, 202);
+    // nothing left after the film bob cannot open: the party idles, the skipped row is named to alice only
+    let skipped = |p: &Value| {
+        systems(p)
+            .into_iter()
+            .find(|s| s.0 == "item_skipped")
+            .map(|s| s.1)
+            .unwrap()
+    };
+    let (_, pa) = c.call("GET", &url, &a, None).await;
+    let (_, pb) = c.call("GET", &url, &b, None).await;
+    assert_eq!(
+        skipped(&pa),
+        json!({"mediaId": 2, "episodeId": null, "title": "Hidden"})
+    );
+    assert_eq!(
+        skipped(&pb),
+        json!({"mediaId": 2, "episodeId": null, "title": ""})
+    );
+    let live = events_of(&mut sb, "party.message").await;
+    let sent = live
+        .iter()
+        .find(|e| e["message"]["system"]["kind"] == "item_skipped")
+        .expect("bob is told too");
+    assert_eq!(sent["message"]["system"]["args"]["title"], "");
+    let stored: Value = sqlx::query_scalar(
+        r#"SELECT "system"->'args' FROM watch_party_messages WHERE "system"->>'kind' = 'item_skipped'"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, json!({"mediaId": 2, "episodeId": null}));
+
+    c.call("DELETE", &url, &a, None).await;
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM watch_party_messages")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
 }

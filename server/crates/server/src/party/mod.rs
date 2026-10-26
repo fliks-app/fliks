@@ -7,5 +7,5 @@ mod registry;
 mod routes;
 
 pub use proposals::*;
-pub use registry::{Parties, boot, spawn, sweep};
+pub use registry::{Parties, boot, spawn, sweep, tick};
 pub use routes::*;

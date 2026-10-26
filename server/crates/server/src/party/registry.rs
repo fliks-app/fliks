@@ -4,7 +4,7 @@ use super::{
     db::{self, Row},
     dto::{MemberDto, PartyItem, PlaybackDto, UserRef},
 };
-use crate::{events::SseEvent, state::AppState, sync::MutexExt};
+use crate::{events::SseEvent, http::AppError, state::AppState, sync::MutexExt};
 use chrono::{DateTime, Utc};
 use fliks_domain::{
     js::now_ms,
@@ -115,9 +115,14 @@ impl Parties {
 
     /// Frees the machine; the lobby notice stays, a still `scheduled` row must not repeat it.
     pub fn remove(&self, id: i32) {
+        self.inner().live.remove(&id);
+    }
+
+    fn forget(&self, id: i32) {
         let mut g = self.inner();
         g.live.remove(&id);
         g.gates.remove(&id);
+        g.notified.remove(&id);
     }
 
     pub fn forget_notice(&self, id: i32) {
@@ -169,11 +174,8 @@ impl Parties {
             .is_some_and(|l| l.can_end(user, device, item))
     }
 
-    fn gate(&self, id: i32) -> Option<Arc<tokio::sync::Mutex<()>>> {
-        let mut g = self.inner();
-        g.live
-            .contains_key(&id)
-            .then(|| g.gates.entry(id).or_default().clone())
+    fn gate(&self, id: i32) -> Arc<tokio::sync::Mutex<()>> {
+        self.inner().gates.entry(id).or_default().clone()
     }
 
     /// Runs `f` on the machine under the lock; `None` when the party has no machine.
@@ -223,6 +225,7 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         poster_url,
         fanart_url,
         additional_fanart_urls,
+        hidden: false,
     }
 }
 
@@ -284,6 +287,12 @@ fn json(v: impl serde::Serialize) -> Value {
     to_value(v).expect("typed dto")
 }
 
+/// The party's gate: whoever holds it is the only one writing the party (programme, start, end)
+/// or delivering its events.
+pub async fn hold(st: &AppState, id: i32) -> tokio::sync::OwnedMutexGuard<()> {
+    st.parties.gate(id).lock_owned().await
+}
+
 /// Runs `f` on the machine and delivers its effects, serialized per party so events leave in the
 /// order the machine produced them; `None` when the party has no machine.
 pub async fn mutate<R>(
@@ -291,11 +300,67 @@ pub async fn mutate<R>(
     id: i32,
     f: impl FnOnce(&mut Live) -> (R, Vec<Effect>),
 ) -> Option<R> {
-    let gate = st.parties.gate(id)?;
-    let _held = gate.lock().await;
+    let _held = hold(st, id).await;
+    mutate_held(st, id, f).await
+}
+
+/// `mutate` for a caller that already holds the gate.
+pub async fn mutate_held<R>(
+    st: &AppState,
+    id: i32,
+    f: impl FnOnce(&mut Live) -> (R, Vec<Effect>),
+) -> Option<R> {
     let (r, d) = st.parties.act(id, f)?;
     deliver(st, id, d).await;
     Some(r)
+}
+
+const ITEM_KINDS: [&str; 2] = ["item_changed", "item_skipped"];
+
+fn is_item_message(m: &Message) -> bool {
+    m.system
+        .as_ref()
+        .is_some_and(|s| ITEM_KINDS.contains(&s.kind.as_str()))
+}
+
+fn item_key(m: &Message) -> Option<(i32, Option<i32>)> {
+    let args = &m.system.as_ref().filter(|_| is_item_message(m))?.args;
+    let media = i32::try_from(args.get("mediaId")?.as_i64()?).ok()?;
+    let episode = args
+        .get("episodeId")
+        .and_then(Value::as_i64)
+        .and_then(|e| i32::try_from(e).ok());
+    Some((media, episode))
+}
+
+/// Sets `args.title` of the item messages to what `viewer` may know: the title of a media they can
+/// open, else an empty one. Stored messages carry the row, never the title.
+pub async fn reveal(st: &AppState, viewer: i32, messages: &mut [Message]) -> Result<(), AppError> {
+    let keys: Vec<_> = messages.iter().filter_map(item_key).collect();
+    let mut medias: Vec<i32> = keys.iter().map(|k| k.0).collect();
+    medias.sort_unstable();
+    medias.dedup();
+    let (infos, libraries, allowed) = if keys.is_empty() {
+        Default::default()
+    } else {
+        (
+            db::item_infos(&st.db, &keys).await?,
+            db::media_libraries(&st.db, &medias).await?,
+            super::routes::user_libraries(st, viewer)
+                .await?
+                .unwrap_or_default(),
+        )
+    };
+    for m in messages.iter_mut().filter(|m| is_item_message(m)) {
+        let title = item_key(m)
+            .filter(|k| libraries.get(&k.0).is_some_and(|lib| allowed.contains(lib)))
+            .and_then(|k| infos.get(&k).map(|i| i.title.clone()))
+            .unwrap_or_default();
+        if let Some(args) = m.system.as_mut().and_then(|s| s.args.as_object_mut()) {
+            args.insert("title".into(), Value::String(title));
+        }
+    }
+    Ok(())
 }
 
 /// Persists and emits what a mutation produced; a failed write is logged, never fails the action.
@@ -385,10 +450,22 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 if let Err(err) = db::save_message(&st.db, party, &m).await {
                     tracing::warn!(error = %err, party, "party message not saved");
                 }
-                emit(SseEvent::PartyMessage {
-                    party_id: pid,
-                    message: json(m),
-                });
+                for (user, conn) in &d.audience {
+                    let mut mine = [m.clone()];
+                    if let Err(err) = reveal(st, *user, &mut mine).await {
+                        tracing::warn!(error = %err, party, "party message titles not resolved");
+                        continue;
+                    }
+                    let [message] = mine;
+                    st.hub.emit_to_connection(
+                        *user,
+                        conn,
+                        SseEvent::PartyMessage {
+                            party_id: pid,
+                            message: json(message),
+                        },
+                    );
+                }
             }
             Effect::Reaction {
                 user_id,
@@ -430,13 +507,15 @@ pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Sets `ended`, tells the members, drops the machine and refreshes the rail.
+/// Sets `ended`, tells the members, drops the machine, the proposals and the chat, and refreshes
+/// the rail. Under the gate, so a start or an edit in flight finishes first or sees the end.
 pub async fn end(st: &AppState, row: &Row, reason: CloseReason) -> sqlx::Result<()> {
+    let _held = hold(st, row.id).await;
     db::set_ended(&st.db, row.id).await?;
     super::proposals::clear(&st.db, row.id).await?;
-    mutate(st, row.id, |l| ((), vec![l.room.close(reason)])).await;
-    st.parties.remove(row.id);
-    st.parties.forget_notice(row.id);
+    mutate_held(st, row.id, |l| ((), vec![l.room.close(reason)])).await;
+    st.parties.forget(row.id);
+    db::clear_chat(&st.db, row.id).await?;
     notify_updated(st, row).await
 }
 
@@ -467,7 +546,7 @@ pub fn spawn(st: &AppState) {
     });
 }
 
-async fn tick(st: &AppState) {
+pub async fn tick(st: &AppState) {
     let now = now_ms();
     for id in st.parties.ids() {
         let Some(expired) = mutate(st, id, |l| {
@@ -497,12 +576,17 @@ async fn tick(st: &AppState) {
                 }
             }
             // An empty lobby just frees its machine; the schedule decides the row's fate.
-            _ => st.parties.remove(id),
+            Ok(_) => {
+                let _held = hold(st, id).await;
+                st.parties.remove(id);
+            }
+            // The machine stays and its expiry is judged again at the next tick.
+            Err(e) => tracing::warn!(error = %e, party = id, "party expiry not checked"),
         }
     }
 }
 
-/// Rule 11: lobby reminder once, and expiry of a `scheduled` row never started.
+/// Rule 11: start reminder once, and expiry of a `scheduled` row never started.
 pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
     let now_ms = now.timestamp_millis();
     for row in db::scheduled_rows(&st.db).await? {
@@ -518,8 +602,10 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Tells the guests their lobby is open, once per schedule.
-async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
+/// Tells the guests the party is about to start (the room itself is open from creation), once per
+/// schedule; the sweep does it at `scheduledAt - 15 min`, a creation or reschedule that is already
+/// due does not wait for it.
+pub async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
     if !st.parties.inner().notified.insert(row.id) {
         return Ok(());
     }
@@ -532,10 +618,4 @@ async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
         },
     );
     Ok(())
-}
-
-/// Opens a lobby now instead of at the next sweep: its machine exists and the guests are told.
-pub async fn open_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
-    ensure(st, row, false).await?;
-    announce_lobby(st, row).await
 }
