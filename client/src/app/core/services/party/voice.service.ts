@@ -102,12 +102,15 @@ export class VoiceService {
       // The audio session must record before WebKit opens the mic, or capture starts on `.playback` and stalls the player.
       if (Capacitor.getPlatform() === 'ios') await NativePlayer.setVoiceActive({ active: true }).catch(() => {});
       await this.openMic();
+      // Peers offer as soon as the server flags us: an offer that lands before this is set is dropped.
+      this.joined.set(true);
       await this.api.voice(id, me, true, true);
       this.muted.set(true);
-      this.joined.set(true);
       this.startPoll();
       this.sync(this.party.members());
     } catch (err) {
+      for (const peer of [...this.peers.keys()]) this.closePeer(peer);
+      this.joined.set(false);
       this.releaseMic();
       if (Capacitor.getPlatform() === 'ios') void NativePlayer.setVoiceActive({ active: false }).catch(() => {});
       this.party.onActionError(err);

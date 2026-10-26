@@ -11,8 +11,9 @@ import { PartyService } from './party.service';
 import { VoiceService } from './voice.service';
 
 function setup() {
+  vi.stubGlobal('RTCPeerConnection', class {});
   const rejoined = new Subject<void>();
-  const api = { voice: vi.fn().mockResolvedValue(undefined) };
+  const api = { voice: vi.fn().mockResolvedValue(undefined), iceServers: vi.fn().mockResolvedValue({ iceServers: [] }) };
   TestBed.configureTestingModule({
     providers: [
       VoiceService,
@@ -42,5 +43,25 @@ describe('VoiceService rejoin', () => {
     rejoined.next();
     await Promise.resolve();
     expect(api.voice).not.toHaveBeenCalled();
+  });
+});
+
+describe('VoiceService join', () => {
+  it('accepts signals while the server is still flagging the join', async () => {
+    const { voice, api } = setup();
+    let flagged!: () => void;
+    api.voice.mockReturnValue(new Promise<void>((r) => (flagged = r)));
+    const joining = voice.join();
+    await vi.waitFor(() => expect(api.voice).toHaveBeenCalled());
+    expect(voice.joined()).toBe(true);
+    flagged();
+    await joining;
+  });
+
+  it('is not joined when the server refuses', async () => {
+    const { voice, api } = setup();
+    api.voice.mockRejectedValue(new Error('full'));
+    await voice.join();
+    expect(voice.joined()).toBe(false);
   });
 });
