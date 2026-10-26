@@ -485,8 +485,8 @@ pub enum SseEvent {
         kind: String,
         data: Value,
     },
-    #[serde(rename = "party.selection")]
-    PartySelection {
+    #[serde(rename = "party.programme")]
+    PartyProgramme {
         party_id: i64,
         rev: i64,
         item: Value,
@@ -668,7 +668,7 @@ mod tests {
             json!({"type":"party.starting","partyId":1,"name":"n"}),
             json!({"type":"party.updated","partyId":1}),
             json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
-            json!({"type":"party.selection","partyId":1,"rev":3,"item":{"mediaId":1}}),
+            json!({"type":"party.programme","partyId":1,"rev":3,"item":{"mediaId":1}}),
             json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"voterIds":[2]}]}),
         ]
     }

@@ -52,7 +52,7 @@ pub struct Parties(Arc<Mutex<Inner>>);
 pub struct View {
     pub rev: u64,
     pub playback: Option<PlaybackDto>,
-    /// The playing item, else the selection.
+    /// The playing item; none before the start.
     pub item: Option<Item>,
     pub host_id: i32,
     pub members: Vec<Member>,
@@ -67,10 +67,7 @@ pub struct Brief {
 }
 
 fn item_of(l: &Live) -> Option<Item> {
-    l.playback
-        .as_ref()
-        .map(|p| p.item.clone())
-        .or_else(|| l.room.selection.clone())
+    l.playback.as_ref().map(|p| p.item.clone())
 }
 
 impl Parties {
@@ -97,7 +94,7 @@ impl Parties {
     }
 
     /// Creates the machine for a row that has none: a `live` row boots paused (rule 10), else a
-    /// room holding the chosen film, with nothing playing; `chat` is the history it reopens with.
+    /// room with nothing playing; `chat` is the history it reopens with.
     fn insert(&self, row: &Row, fresh: bool, chat: Vec<Message>) {
         let args = (row.name.clone(), row.policy, row.owner_id, now_ms());
         self.inner().live.entry(row.id).or_insert_with(|| {
@@ -106,7 +103,7 @@ impl Parties {
                 Some(item) if row.status == "live" && !fresh => {
                     Live::boot(n, p, h, item, row.position, now)
                 }
-                item => Live::new(n, p, h, item, now),
+                _ => Live::new(n, p, h, now),
             };
             l.room.reactions_enabled = row.reactions_enabled;
             l.room.chat_enabled = row.chat_enabled;
@@ -344,11 +341,16 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                     action: action.map(Into::into),
                 });
             }
-            Effect::Selection { rev, item } => {
-                let dto = item_dto(st, &item)
-                    .await
-                    .unwrap_or_else(|_| item_dto_of(None, &item));
-                emit(SseEvent::PartySelection {
+            Effect::Programme { rev, item } => {
+                let dto = match item {
+                    Some(item) => Some(
+                        item_dto(st, &item)
+                            .await
+                            .unwrap_or_else(|_| item_dto_of(None, &item)),
+                    ),
+                    None => None,
+                };
+                emit(SseEvent::PartyProgramme {
                     party_id: pid,
                     rev: rev as i64,
                     item: json(dto),

@@ -2781,6 +2781,20 @@
         }
       }
     },
+    "/api/parties/{id}/programme": {
+      "put": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The host replaces the programme: reorder, remove and add are one list.",
+        "operationId": "programme",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/proposals": {
       "post": {
         "tags": [
@@ -2816,7 +2830,7 @@
         "tags": [
           "crate::party"
         ],
-        "summary": "The host picks a proposal: the same path as `select`.",
+        "summary": "The host picks a proposal: it joins the end of the programme (the head when it is empty).",
         "operationId": "choose",
         "responses": {
           "200": {
@@ -2880,7 +2894,7 @@
         "tags": [
           "crate::party"
         ],
-        "summary": "The host fixes the film the start will play, while the party is still `scheduled`.",
+        "summary": "The host replaces the programme by one item.",
         "operationId": "select",
         "responses": {
           "200": {

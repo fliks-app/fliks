@@ -148,12 +148,19 @@ describe('PartyService room before the start', () => {
     expect(svc.item()).toBeNull();
   });
 
-  it('takes the film the host chose from party.selection, once', () => {
+  it('takes the programme head from party.programme, once', () => {
     const { svc, events } = setup();
     svc.applySnapshot(lobby());
-    events.next({ type: 'party.selection', partyId: 7, rev: 2, item: item(3) });
+    events.next({ type: 'party.programme', partyId: 7, rev: 2, item: item(3) });
     expect(svc.item()?.mediaId).toBe(3);
-    events.next({ type: 'party.selection', partyId: 7, rev: 2, item: item(4) });
+    events.next({ type: 'party.programme', partyId: 7, rev: 2, item: item(4) });
+    expect(svc.item()?.mediaId).toBe(3);
+  });
+
+  it('keeps the playing item when the programme is edited after the start', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(dto(2, { item: item(3) }));
+    events.next({ type: 'party.programme', partyId: 7, rev: 5, item: null });
     expect(svc.item()?.mediaId).toBe(3);
   });
 

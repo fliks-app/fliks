@@ -1059,6 +1059,10 @@ async fn creating_a_playlist_party_needs_a_readable_playlist_and_opens_on_its_fi
         (s, p2["item"]["title"].clone()),
         (201, json!("Show S01E01"))
     );
+    let (_, q) = c
+        .call("GET", &format!("/api/parties/{}/queue", p2["id"]), &a, None)
+        .await;
+    assert_eq!(eps(&q), vec![json!(1), json!(2)]);
     // an item outside the playlist, an unreadable playlist, and a missing media
     for (t, body, code, key) in [
         (
@@ -1106,6 +1110,15 @@ async fn creating_a_playlist_party_needs_a_readable_playlist_and_opens_on_its_fi
             vec![json!("Film"), json!("Show S01E01"), json!("Show S01E02")]
         )
     );
+    // the rows were copied: the playlist changing does not change the party
+    sqlx::query("DELETE FROM playlist_items WHERE \"mediaId\" = 1")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (_, q) = c
+        .call("GET", &format!("/api/parties/{id}/queue"), &a, None)
+        .await;
+    assert_eq!(q.as_array().unwrap().len(), 3);
     sqlx::query("DELETE FROM playlists WHERE id = 1")
         .execute(&c.pool)
         .await
@@ -1239,7 +1252,9 @@ async fn next_skips_what_a_member_cannot_open_and_the_end_idles_the_party(pool: 
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_hosts_ended_moves_a_playlist_party_on_and_a_plain_party_only_idles(pool: PgPool) {
+async fn the_hosts_ended_moves_a_playlist_party_on_and_next_on_an_idle_single_film_does_nothing(
+    pool: PgPool,
+) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;
     playlist_setup(&c, alice).await;
@@ -1311,7 +1326,7 @@ async fn the_hosts_ended_moves_a_playlist_party_on_and_a_plain_party_only_idles(
     assert_eq!(now["item"]["episodeId"], 1);
     assert_eq!(now["live"]["playback"]["state"], "waiting");
 
-    // without a playlist, next is refused and ended only idles
+    // a film alone is a programme of one: a next on the idle party changes nothing
     let (_, p) = c
         .call(
             "POST",
@@ -1330,15 +1345,11 @@ async fn the_hosts_ended_moves_a_playlist_party_on_and_a_plain_party_only_idles(
         Some(json!({"deviceId": "da"})),
     )
     .await;
-    let (s, e) = c
-        .call(
-            "POST",
-            &format!("/api/parties/{plain}/intent"),
-            &a,
-            Some(json!({"deviceId": "da", "action": "next", "baseRev": 0})),
-        )
-        .await;
-    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid")));
+    let path = format!("/api/parties/{plain}");
+    let (s, now) = step(&c, &a, &path, "next").await;
+    assert_eq!(s, 202);
+    assert_eq!(now["live"]["playback"]["state"], "idle");
+    assert_ne!(systems(&now).last().unwrap().0, "queue_ended");
 }
 
 async fn step(c: &Ctx, a: &str, path: &str, action: &str) -> (u16, Value) {
@@ -1352,12 +1363,9 @@ async fn step(c: &Ctx, a: &str, path: &str, action: &str) -> (u16, Value) {
     (s, now)
 }
 
-#[sqlx::test(migrations = false)]
-async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(pool: PgPool) {
-    let c = ctx(pool).await;
-    let (alice, a) = c.user("alice", true).await;
-    let _ca = c.connect(alice, "da");
-    // Seasons 1 (special), 2, 3; episodes 1 S00E01 (file), 2 S01E02, 3 S01E01, 4 S01E03 (no file), 5 S02E01
+/// Library 1, a series (media 2): seasons 0 (special), 1, 2; episodes 1 S00E01, 2 S01E02, 3 S01E01,
+/// 4 S01E03 (no file), 5 S02E01.
+async fn series_setup(c: &Ctx) {
     sqlx::raw_sql(
         r#"INSERT INTO media (title, type, "libraryId") VALUES ('Show', 'series', 1);
            INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (0, 2), (1, 2), (2, 2);
@@ -1369,6 +1377,27 @@ async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(p
     .execute(&c.pool)
     .await
     .unwrap();
+}
+
+fn eps(q: &Value) -> Vec<Value> {
+    q.as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["episodeId"].clone())
+        .collect()
+}
+
+fn programme_of(episodes: &[i32]) -> Value {
+    json!({"items": episodes.iter().map(|e| json!({"mediaId": 2, "episodeId": e})).collect::<Vec<_>>()})
+}
+
+#[sqlx::test(migrations = false)]
+async fn next_and_previous_walk_the_programme_and_skip_an_episode_without_a_file(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "da");
+    series_setup(&c).await;
+    // a single episode is a programme of one: the series does not follow
     let (_, p) = c
         .call(
             "POST",
@@ -1378,24 +1407,28 @@ async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(p
         )
         .await;
     let id = p["id"].as_i64().unwrap();
-    c.call("POST", &format!("/api/parties/{id}/start"), &a, None)
+    let path = format!("/api/parties/{id}");
+    let (_, q) = c.call("GET", &format!("{path}/queue"), &a, None).await;
+    assert_eq!(eps(&q), vec![json!(3)]);
+    let (s, p) = c
+        .call(
+            "PUT",
+            &format!("{path}/programme"),
+            &a,
+            Some(programme_of(&[3, 2, 4, 5])),
+        )
         .await;
+    assert_eq!((s, p["item"]["episodeId"].clone()), (200, json!(3)));
+    c.call("POST", &format!("{path}/start"), &a, None).await;
     c.call(
         "POST",
-        &format!("/api/parties/{id}/join"),
+        &format!("{path}/join"),
         &a,
         Some(json!({"deviceId": "da"})),
     )
     .await;
-    let path = format!("/api/parties/{id}");
-    let (s, q) = c.call("GET", &format!("{path}/queue"), &a, None).await;
-    let eps: Vec<_> = q
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|i| i["episodeId"].clone())
-        .collect();
-    assert_eq!((s, eps), (200, vec![json!(3), json!(2), json!(5)]));
+    let (_, q) = c.call("GET", &format!("{path}/queue"), &a, None).await;
+    assert_eq!(eps(&q), vec![json!(3), json!(2), json!(4), json!(5)]);
 
     // previous at the first episode has nowhere to go: accepted, nothing changes
     let (_, before) = c.call("GET", &path, &a, None).await;
@@ -1403,16 +1436,18 @@ async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(p
     assert_eq!(s, 202);
     assert_eq!(systems(&now).len(), systems(&before).len());
     assert_eq!(now["live"]["rev"], before["live"]["rev"]);
-    for want in [2, 5] {
-        let (s, now) = step(&c, &a, &path, "next").await;
-        assert_eq!((s, now["item"]["episodeId"].clone()), (202, json!(want)));
-        assert_eq!(now["item"]["mediaFileId"], Value::Null);
-    }
-    // the last episode: idle, nothing skipped for the episode without a file
+    let (s, now) = step(&c, &a, &path, "next").await;
+    assert_eq!((s, now["item"]["episodeId"].clone()), (202, json!(2)));
+    // the file-less episode is skipped, and named
+    let (_, now) = step(&c, &a, &path, "next").await;
+    assert_eq!(now["item"]["episodeId"], 5);
+    let sys = systems(&now);
+    assert_eq!(sys[sys.len() - 2].0, "item_skipped");
+    assert_eq!(sys[sys.len() - 2].1, json!({"title": "Show S01E03"}));
+    // the end of the programme: idle on the last item
     let (_, now) = step(&c, &a, &path, "next").await;
     let sys = systems(&now);
     assert_eq!(sys.last().unwrap().0, "queue_ended");
-    assert!(sys.iter().all(|s| s.0 != "item_skipped"));
     assert_eq!(
         (
             now["live"]["playback"]["state"].clone(),
@@ -1424,18 +1459,110 @@ async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(p
     let (s, again) = step(&c, &a, &path, "next").await;
     assert_eq!(s, 202);
     assert_eq!(systems(&again).len(), sys.len());
+    // previous goes back over the skipped episode
     let (_, now) = step(&c, &a, &path, "previous").await;
     assert_eq!(now["item"]["episodeId"], 2);
-    // a special sits outside the queue: next starts at the top
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_programme_is_edited_during_playback_by_the_host_only(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let (_ca, _cb) = (c.connect(alice, "da"), c.connect(bob, "db"));
+    series_setup(&c).await;
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "mediaId": 2, "episodeId": 3, "inviteeIds": [bob]})),
+        )
+        .await;
+    let id = p["id"].as_i64().unwrap();
+    let path = format!("/api/parties/{id}");
     c.call(
-        "POST",
-        &format!("{path}/intent"),
+        "PUT",
+        &format!("{path}/programme"),
         &a,
-        Some(json!({"deviceId": "da", "action": "setItem", "item": {"mediaId": 2, "episodeId": 1}, "baseRev": now["live"]["rev"]})),
+        Some(programme_of(&[3, 2])),
+    )
+    .await;
+    c.call("POST", &format!("{path}/start"), &a, None).await;
+    let mut sb = c.stream(&b, "db").await;
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        c.call(
+            "POST",
+            &format!("{path}/join"),
+            t,
+            Some(json!({"deviceId": d})),
+        )
+        .await;
+    }
+    let (s, e) = c
+        .call(
+            "PUT",
+            &format!("{path}/programme"),
+            &b,
+            Some(programme_of(&[3])),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")));
+
+    // reorder, add and remove while the first episode plays: it stays, the queue changes
+    let (s, p) = c
+        .call(
+            "PUT",
+            &format!("{path}/programme"),
+            &a,
+            Some(programme_of(&[3, 5, 2])),
+        )
+        .await;
+    assert_eq!((s, p["item"]["episodeId"].clone()), (200, json!(3)));
+    let edits = events_of(&mut sb, "party.programme").await;
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0]["item"], Value::Null);
+    let (_, q) = c.call("GET", &format!("{path}/queue"), &b, None).await;
+    assert_eq!(eps(&q), vec![json!(3), json!(5), json!(2)]);
+    let (_, now) = step(&c, &a, &path, "next").await;
+    assert_eq!(now["item"]["episodeId"], 5);
+    // removing what is left after the current item ends the programme there
+    c.call(
+        "PUT",
+        &format!("{path}/programme"),
+        &a,
+        Some(programme_of(&[3, 5])),
     )
     .await;
     let (_, now) = step(&c, &a, &path, "next").await;
-    assert_eq!(now["item"]["episodeId"], 3);
+    assert_eq!(systems(&now).last().unwrap().0, "queue_ended");
+
+    // invalid lists: a duplicate, an episode of no season of the media
+    for body in [programme_of(&[3, 3]), programme_of(&[99])] {
+        let (s, e) = c
+            .call("PUT", &format!("{path}/programme"), &a, Some(body))
+            .await;
+        assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+    }
+    // an item a member cannot open is refused, one already there is not
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (name) VALUES ('l2');
+           INSERT INTO media (title, type, "libraryId") VALUES ('Gap', 'movie', 2);"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, 2)"#)
+        .bind(alice)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let gap = json!({"items": [{"mediaId": 3}]});
+    let (s, e) = c
+        .call("PUT", &format!("{path}/programme"), &a, Some(gap))
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_member_no_access")));
 }
 
 #[sqlx::test(migrations = false)]
@@ -1876,7 +2003,7 @@ async fn a_party_without_a_film_takes_the_hosts_selection_and_starts_on_it(pool:
         )
         .await;
     assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
-    let picked = events_of(&mut sb, "party.selection").await;
+    let picked = events_of(&mut sb, "party.programme").await;
     assert_eq!(picked.len(), 1);
     assert_eq!(picked[0]["item"]["mediaId"], 2);
     let (_, p) = c.call("GET", &url, &b, None).await;
@@ -1899,7 +2026,12 @@ async fn a_party_without_a_film_takes_the_hosts_selection_and_starts_on_it(pool:
             Some(json!({"mediaId": 1})),
         )
         .await;
-    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+    assert_eq!((s, msg(&e)), (200, None));
+    // the playing film stays, the programme behind it is replaced
+    assert_eq!(e["item"]["mediaId"], 2);
+    let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
+    assert_eq!(q[0]["mediaId"], 1);
+    assert_eq!(q.as_array().unwrap().len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
@@ -1945,7 +2077,7 @@ async fn a_selection_every_member_cannot_open_is_refused_and_a_member_without_ac
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_row_is_the_source_of_truth_when_the_start_follows_a_selection_the_machine_missed(
+async fn the_programme_is_the_source_of_truth_when_the_start_follows_a_head_the_machine_missed(
     pool: PgPool,
 ) {
     let c = ctx(pool).await;
@@ -1956,11 +2088,13 @@ async fn the_row_is_the_source_of_truth_when_the_start_follows_a_selection_the_m
         .await;
     let id = p["id"].as_i64().unwrap();
     let url = format!("/api/parties/{id}");
-    sqlx::query(r#"UPDATE watch_parties SET "mediaId" = 2 WHERE id = $1"#)
-        .bind(id as i32)
-        .execute(&c.pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO watch_party_items ("partyId", position, "mediaId") VALUES ($1, 0, 2)"#,
+    )
+    .bind(id as i32)
+    .execute(&c.pool)
+    .await
+    .unwrap();
     let (s, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
     assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
     assert_ne!(p["live"]["playback"], Value::Null);
@@ -2011,7 +2145,7 @@ async fn a_selection_survives_the_lobby_being_freed_and_select_tells_the_rail(po
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_playlist_party_only_selects_a_row_of_its_playlist(pool: PgPool) {
+async fn select_replaces_the_copied_playlist_programme_by_one_item(pool: PgPool) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;
     playlist_setup(&c, alice).await;
@@ -2023,11 +2157,20 @@ async fn a_playlist_party_only_selects_a_row_of_its_playlist(pool: PgPool) {
             Some(json!({"name": "n", "playlistId": 1})),
         )
         .await;
-    let url = format!("/api/parties/{}/select", p["id"]);
-    let (s, e) = c.call("POST", &url, &a, Some(json!({"mediaId": 3}))).await;
-    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
-    let (s, p) = c.call("POST", &url, &a, Some(json!({"mediaId": 1}))).await;
-    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(1)));
+    let id = p["id"].clone();
+    let (s, p) = c
+        .call(
+            "POST",
+            &format!("/api/parties/{id}/select"),
+            &a,
+            Some(json!({"mediaId": 3, "episodeId": 2})),
+        )
+        .await;
+    assert_eq!((s, p["item"]["episodeId"].clone()), (200, json!(2)));
+    let (_, q) = c
+        .call("GET", &format!("/api/parties/{id}/queue"), &a, None)
+        .await;
+    assert_eq!(q.as_array().unwrap().len(), 1);
 }
 
 /// A film-less party of `host` with the invitees, who must be followed first.

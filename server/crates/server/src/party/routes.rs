@@ -22,7 +22,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use chrono::Utc;
 use fliks_domain::{
@@ -30,7 +30,7 @@ use fliks_domain::{
     js::now_ms,
     party::{
         ANIMATED_REACTIONS, CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent,
-        Item, LOBBY_OPEN_BEFORE_MS, Policy, noto_code,
+        Item, LOBBY_OPEN_BEFORE_MS, Policy, noto_code, same_row,
     },
 };
 use serde_json::{Value, json};
@@ -46,6 +46,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}", get(show).patch(patch).delete(end))
         .route("/api/parties/{id}/join", post(join))
         .route("/api/parties/{id}/select", post(select))
+        .route("/api/parties/{id}/programme", put(programme))
         .route("/api/parties/{id}/start", post(start))
         .route("/api/parties/{id}/leave", post(leave))
         .route("/api/parties/{id}/intent", post(intent))
@@ -258,7 +259,7 @@ async fn summaries_with(
     };
     let items: Vec<Option<Item>> = rows
         .iter()
-        .map(|(r, b)| b.as_ref().map_or_else(|| r.item(), |b| b.item.clone()))
+        .map(|(r, b)| b.as_ref().and_then(|b| b.item.clone()).or_else(|| r.item()))
         .collect();
     let dtos = opt_item_dtos(st, &items).await?;
     Ok(rows
@@ -419,9 +420,9 @@ async fn check_item(st: &AppState, item: &Item) -> R<()> {
     }
 }
 
-/// The item a party opens on: the requested one, else the playlist's first the owner can play;
-/// `None` for a party with neither.
-async fn first_item(st: &AppState, a: &Authed, b: &Create) -> R<Option<Item>> {
+/// The programme a party opens with: the requested item alone, or a playlist's rows from the first
+/// one the owner can play (the requested one when given); empty for a party with neither.
+async fn initial_programme(st: &AppState, a: &Authed, b: &Create) -> R<Vec<Item>> {
     let requested = |media_id| Item {
         media_id,
         media_file_id: b.media_file_id,
@@ -429,31 +430,41 @@ async fn first_item(st: &AppState, a: &Authed, b: &Create) -> R<Option<Item>> {
     };
     let invalid_item = || fail(StatusCode::BAD_REQUEST, "party.error_invalid_item");
     let (media_id, playlist) = match (b.media_id, b.playlist_id) {
-        (None, None) if b.media_file_id.is_none() && b.episode_id.is_none() => return Ok(None),
+        (None, None) if b.media_file_id.is_none() && b.episode_id.is_none() => return Ok(vec![]),
         (None, None) => return Err(invalid_item()),
         (Some(media_id), None) => {
             let item = requested(media_id);
             let ids = accessible_library_ids(&st.db, a).await?;
             assert_media_accessible(&st.db, media_id, &ids).await?;
-            return Ok(Some(item));
+            return Ok(vec![item]);
         }
         (media_id, Some(playlist)) => (media_id, playlist),
     };
     let requested = media_id.map(requested);
     playlists::assert_role(&st.db, a.user.id, playlist, Role::Viewer).await?;
     let rows = db::playlist_rows(&st.db, playlist).await?;
-    for row in rows {
+    for (at, row) in rows.iter().enumerate() {
         let wanted = requested
             .as_ref()
             .is_none_or(|r| r.media_id == row.item.media_id && r.episode_id == row.item.episode_id);
         if wanted && row.playable && media_ok(st, a, row.item.media_id).await? {
-            return Ok(Some(Item {
-                media_file_id: b.media_file_id,
-                ..row.item
-            }));
+            let mut items = distinct(rows[at..].iter().map(|r| r.item.clone()).collect());
+            items[0].media_file_id = b.media_file_id;
+            return Ok(items);
         }
     }
     Err(invalid_item())
+}
+
+/// The items in order, a later copy of one already there dropped.
+fn distinct(items: Vec<Item>) -> Vec<Item> {
+    let mut out: Vec<Item> = vec![];
+    for it in items {
+        if !out.iter().any(|o| same_row(o, &it)) {
+            out.push(it);
+        }
+    }
+    out
 }
 
 #[utoipa::path(post, path = "/api/parties", responses((status = 201)))]
@@ -464,8 +475,8 @@ pub async fn create(
 ) -> R<(StatusCode, Json<PartyDto>)> {
     b.validate()?;
     let me = a.user.id;
-    let item = first_item(&st, &a, &b).await?;
-    if let Some(item) = &item {
+    let programme = initial_programme(&st, &a, &b).await?;
+    if let Some(item) = programme.first() {
         check_item(&st, item).await?;
     }
     let invitees = check_followed(&st, me, b.invitee_ids.as_deref().unwrap_or_default()).await?;
@@ -484,7 +495,7 @@ pub async fn create(
             link_sharing: b.link_sharing.unwrap_or(inherit_link),
             name: &valid_name(&b.name)?,
             owner: me,
-            item: item.as_ref(),
+            programme: &programme,
             playlist_id: b.playlist_id,
             policy,
             scheduled_at: at,
@@ -659,7 +670,12 @@ pub async fn join(
     let how = access(&st, &row, me, b.token.as_deref()).await?;
     require_open(&row)?;
     registry::ensure(&st, &row, false).await?;
-    let item = st.parties.brief(id).ok_or_else(not_live)?.item;
+    let item = st
+        .parties
+        .brief(id)
+        .ok_or_else(not_live)?
+        .item
+        .or_else(|| row.item());
     if how == Access::TokenOnly && db::is_kicked(&st.db, id, me).await? {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_kicked"));
     }
@@ -682,7 +698,7 @@ pub async fn join(
     Ok(Json(dto(&st, &row, me, true).await?))
 }
 
-/// The host fixes the film the start will play, while the party is still `scheduled`.
+/// The host replaces the programme by one item.
 #[utoipa::path(post, path = "/api/parties/{id}/select", responses((status = 200)))]
 pub async fn select(
     State(st): State<AppState>,
@@ -690,42 +706,67 @@ pub async fn select(
     PathParams(id): PathParams<i32>,
     ValidJson(b): ValidJson<ItemIn>,
 ) -> R<Json<PartyDto>> {
-    let me = a.user.id;
-    let mut row = row_of(&st, id).await?;
-    access(&st, &row, me, None).await?;
-    require_host(&st, &row, me)?;
-    require_open(&row)?;
-    if row.status != "scheduled" {
-        return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
-    }
-    select_item(&st, &a, &mut row, Item::from(b)).await?;
-    Ok(Json(dto(&st, &row, me, true).await?))
+    let mut row = host_row(&st, id, a.user.id).await?;
+    select_item(&st, &a, &mut row, vec![Item::from(b)]).await?;
+    Ok(Json(dto(&st, &row, a.user.id, true).await?))
 }
 
-/// Fixes what the start plays: the one path for a host `select`, a chosen proposal and a start
-/// that takes the top vote.
-pub(super) async fn select_item(st: &AppState, a: &Authed, row: &mut Row, item: Item) -> R<()> {
+/// The host replaces the programme: reorder, remove and add are one list.
+#[utoipa::path(put, path = "/api/parties/{id}/programme", responses((status = 200)))]
+pub async fn programme(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+    ValidJson(b): ValidJson<ProgrammeIn>,
+) -> R<Json<PartyDto>> {
+    b.validate()?;
+    let mut row = host_row(&st, id, a.user.id).await?;
+    let items = b.items.into_iter().map(Item::from).collect();
+    select_item(&st, &a, &mut row, items).await?;
+    Ok(Json(dto(&st, &row, a.user.id, true).await?))
+}
+
+async fn host_row(st: &AppState, id: i32, me: i32) -> R<Row> {
+    let row = row_of(st, id).await?;
+    access(st, &row, me, None).await?;
+    require_host(st, &row, me)?;
+    require_open(&row)?;
+    Ok(row)
+}
+
+/// The one path that writes the programme (`select`, `programme`, a chosen proposal, a start on the
+/// top vote), before and during the party. The items it adds must be open to the host and to every
+/// current member; the ones already there are left alone (a member who cannot open one is skipped).
+pub(super) async fn select_item(
+    st: &AppState,
+    a: &Authed,
+    row: &mut Row,
+    items: Vec<Item>,
+) -> R<()> {
     let id = row.id;
+    if distinct(items.clone()).len() != items.len() {
+        return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+    }
+    let current = db::programme_rows(&st.db, id).await?;
+    let added: Vec<Item> = items
+        .iter()
+        .filter(|i| !current.iter().any(|r| same_row(&r.item, i)))
+        .cloned()
+        .collect();
     let ids = accessible_library_ids(&st.db, a).await?;
-    assert_media_accessible(&st.db, item.media_id, &ids).await?;
-    if let Some(playlist) = row.playlist_id {
-        let rows = db::playlist_rows(&st.db, playlist).await?;
-        let listed = rows.iter().any(|r| {
-            r.playable && r.item.media_id == item.media_id && r.item.episode_id == item.episode_id
-        });
-        if !listed {
-            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
-        }
+    for item in &added {
+        assert_media_accessible(&st.db, item.media_id, &ids).await?;
     }
-    vet_item(st, id, &item).await?;
-    if !db::set_selection(&st.db, id, &item).await? {
-        return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
+    if !added.is_empty() {
+        vet_items(st, id, &added).await?;
     }
-    row.media_id = Some(item.media_id);
-    row.media_file_id = item.media_file_id;
-    row.episode_id = item.episode_id;
-    mutate(st, id, |l| ((), l.room.select(item.clone()))).await;
-    notify_updated(st, row).await?;
+    db::set_programme(&st.db, id, &items).await?;
+    let head = items.first().cloned();
+    mutate(st, id, |l| ((), l.programme(head))).await;
+    *row = row_of(st, id).await?;
+    if row.status == "scheduled" {
+        notify_updated(st, row).await?;
+    }
     Ok(())
 }
 
@@ -744,7 +785,7 @@ pub async fn start(
         if row.item().is_none() {
             let top = super::proposals::top(&st.db, id).await?;
             let item = top.ok_or_else(|| machine_err(PartyErr::NoItem))?;
-            select_item(&st, &a, &mut row, item).await?;
+            select_item(&st, &a, &mut row, vec![item]).await?;
         }
         db::set_live(&st.db, id).await?;
         row.status = "live".into();
@@ -792,12 +833,18 @@ pub(super) async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
     Ok(row)
 }
 
-/// An item a party is about to take (`setItem`, `select`): it belongs to its media and every
-/// current member can open it, else 409 `party.error_member_no_access` naming those who cannot.
-async fn vet_item(st: &AppState, id: i32, it: &Item) -> R<()> {
-    check_item(st, it).await?;
+/// Items a party is about to take (`setItem`, `select`, a programme edit): each belongs to its media
+/// and every current member can open them all, else 409 `party.error_member_no_access` naming
+/// those who cannot.
+async fn vet_items(st: &AppState, id: i32, items: &[Item]) -> R<()> {
+    for it in items {
+        check_item(st, it).await?;
+    }
     let members = st.parties.view(id).map_or_else(Vec::new, |v| v.members);
-    let library = db::media_libraries(&st.db, &[it.media_id]).await?;
+    let mut medias: Vec<i32> = items.iter().map(|i| i.media_id).collect();
+    medias.sort_unstable();
+    medias.dedup();
+    let libraries = db::media_libraries(&st.db, &medias).await?;
     let mut denied = vec![];
     let mut checked = vec![];
     for m in &members {
@@ -805,9 +852,11 @@ async fn vet_item(st: &AppState, id: i32, it: &Item) -> R<()> {
             continue;
         }
         checked.push(m.user_id);
-        let open = user_libraries(st, m.user_id)
-            .await?
-            .is_some_and(|ids| library.get(&it.media_id).is_some_and(|l| ids.contains(l)));
+        let open = user_libraries(st, m.user_id).await?.is_some_and(|ids| {
+            medias
+                .iter()
+                .all(|media| libraries.get(media).is_some_and(|l| ids.contains(l)))
+        });
         if !open {
             denied.push(m.username.clone());
         }
@@ -839,7 +888,7 @@ pub async fn intent(
     let item: Option<Item> = b.item.map(Into::into);
     let mut title = None;
     if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
-        vet_item(&st, id, it).await?;
+        vet_items(&st, id, std::slice::from_ref(it)).await?;
         title = Some(item_dto(&st, it).await?.title);
     }
     let plan = match b.action {
@@ -851,7 +900,7 @@ pub async fn intent(
         IntentAction::Next | IntentAction::Previous => {
             return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid"));
         }
-        // An `ended` that takes effect moves a followed queue on.
+        // An `ended` that takes effect moves the programme on.
         IntentAction::Ended if st.parties.can_end(id, me, &b.device_id, item.as_ref()) => {
             queue_step(&st, &row, true).await?
         }
@@ -898,8 +947,8 @@ pub async fn intent(
     }
 }
 
-/// The step to take in what the party follows, judged for every user in the party right now, and
-/// the item it was computed from; `None` when it follows nothing (a single movie).
+/// The step to take in the programme, judged for every user in the party right now, and the item
+/// it was computed from; `None` when the programme is empty.
 async fn queue_step(
     st: &AppState,
     row: &Row,
@@ -907,7 +956,7 @@ async fn queue_step(
 ) -> R<Option<(fliks_domain::party::Step, Item)>> {
     let view = st.parties.view(row.id).ok_or_else(not_live)?;
     let current = view.item.clone().ok_or_else(not_live)?;
-    let rows = db::queue_rows(&st.db, row.playlist_id, Some(&current)).await?;
+    let rows = db::programme_rows(&st.db, row.id).await?;
     if rows.is_empty() {
         return Ok(None);
     }
@@ -1195,8 +1244,7 @@ pub async fn queue(
     PathParams(id): PathParams<i32>,
 ) -> R<Json<Vec<PartyItem>>> {
     let row = member_row(&st, id, a.user.id).await?;
-    let current = st.parties.brief(id).map_or_else(|| row.item(), |b| b.item);
-    let rows = db::queue_rows(&st.db, row.playlist_id, current.as_ref()).await?;
+    let rows = db::programme_rows(&st.db, row.id).await?;
     let ids = accessible_library_ids(&st.db, &a).await?;
     let mut medias: Vec<i32> = rows.iter().map(|r| r.item.media_id).collect();
     medias.sort_unstable();

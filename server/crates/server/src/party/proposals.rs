@@ -24,7 +24,10 @@ use axum::{
     http::StatusCode,
     routing::{delete, post},
 };
-use fliks_domain::{js::now_ms, party::Item};
+use fliks_domain::{
+    js::now_ms,
+    party::{Item, same_row},
+};
 use sqlx::PgPool;
 
 const MAX_PROPOSALS: i64 = 30;
@@ -301,7 +304,7 @@ pub async fn unvote(
     set_vote(&st, id, pid, a.user.id, false).await
 }
 
-/// The host picks a proposal: the same path as `select`.
+/// The host picks a proposal: it joins the end of the programme (the head when it is empty).
 #[utoipa::path(post, path = "/api/parties/{id}/proposals/{pid}/choose", responses((status = 200)))]
 pub async fn choose(
     State(st): State<AppState>,
@@ -324,6 +327,14 @@ pub async fn choose(
         media_file_id: None,
         episode_id,
     };
-    select_item(&st, &a, &mut row, item).await?;
+    let mut items: Vec<Item> = db::programme_rows(&st.db, id)
+        .await?
+        .into_iter()
+        .map(|r| r.item)
+        .collect();
+    if !items.iter().any(|i| same_row(i, &item)) {
+        items.push(item);
+    }
+    select_item(&st, &a, &mut row, items).await?;
     Ok(Json(super::routes::dto(&st, &row, me, true).await?))
 }

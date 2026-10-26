@@ -83,7 +83,7 @@ describe('PartyPageComponent film selection', () => {
     fixture.detectChanges();
     await flush();
     expect(getOne).toHaveBeenLastCalledWith(1);
-    // The joined copy follows `party.selection`.
+    // The joined copy follows `party.programme`.
     const svc = TestBed.inject(PartyService) as unknown as { party: typeof service.party };
     svc.party.set({ ...dto(item(2)) });
     await flush();
