@@ -65,7 +65,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     var preferredAudioLanguage = ""
     /// The party voice chat holds the microphone: the session must record and play.
     var voiceActive = false
-    var resumeAfterSessionSwitch = false
     let heartbeat = PositionHeartbeat()
     var subtitleSelectionGeneration = 0
     var firstFrameEmitted = false
@@ -297,14 +296,12 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     func ensureAudioSessionActive() {
         let session = AVAudioSession.sharedInstance()
         do {
-            // Voice chat: WebKit's getUserMedia needs a recording category, and `.playback` would cut the mic.
+            // WebKit's GPU process holds its own non-mixable PlayAndRecord session for the mic: both sides must mix,
+            // or each activation interrupts the other and AVPlayer loses.
             if voiceActive {
-                if session.category != .playAndRecord {
-                    try session.setCategory(
-                        .playAndRecord,
-                        mode: .default,
-                        options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowAirPlay]
-                    )
+                let options: AVAudioSession.CategoryOptions = [.mixWithOthers, .defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
+                if session.category != .playAndRecord || session.categoryOptions != options {
+                    try session.setCategory(.playAndRecord, mode: .default, options: options)
                 }
             } else if session.category != .playback {
                 try session.setCategory(
@@ -324,17 +321,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.voiceActive = active
-            guard let player = self.player else { call.resolve(); return }
-            let wasPlaying = player.timeControlStatus != .paused
-            self.resumeAfterSessionSwitch = wasPlaying
+            guard self.player != nil else { call.resolve(); return }
             self.ensureAudioSessionActive()
             call.resolve()
-            // The category switch can interrupt AVPlayer asynchronously; an app pause clears the flag.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self = self, self.resumeAfterSessionSwitch else { return }
-                self.resumeAfterSessionSwitch = false
-                if self.player?.timeControlStatus == .paused { self.ensureAudioSessionActive(); self.player?.play() }
-            }
         }
     }
 
@@ -432,8 +421,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func play(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
-            // An interruption or the voice switch can leave the session inactive, and play() then does nothing.
-            self?.ensureAudioSessionActive()
             self?.player?.play()
             call.resolve()
         }
@@ -441,7 +428,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func pause(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
-            self?.resumeAfterSessionSwitch = false
             self?.player?.pause()
             call.resolve()
         }
