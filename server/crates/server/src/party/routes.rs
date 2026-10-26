@@ -400,6 +400,11 @@ pub(super) async fn conceal_items(
             item.poster_url = None;
             item.fanart_url = None;
             item.additional_fanart_urls = vec![];
+            item.still_url = None;
+            item.series_title = None;
+            item.season_number = None;
+            item.episode_number = None;
+            item.episode_title = None;
             item.hidden = true;
         }
     }
@@ -800,9 +805,8 @@ async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()
     let head = items.first().cloned();
     mutate_held(st, id, |l| ((), l.programme(head))).await;
     *row = row_of(st, id).await?;
-    if row.status == "scheduled" {
-        notify_updated(st, row).await?;
-    }
+    // Owner and guests on the party page are not in the room once it is live: they refetch on this.
+    notify_updated(st, row).await?;
     Ok(())
 }
 

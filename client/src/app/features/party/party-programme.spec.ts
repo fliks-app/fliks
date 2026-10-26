@@ -3,8 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MediaService } from '../../core/services/api/media.service';
 import { PartyApiService, type PartyItem } from '../../core/services/api/party-api.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
+import { DeviceService } from '../../core/services/device.service';
 import { SseService } from '../../core/services/sse.service';
 import { MediaPickerComponent } from '../../shared/components/media-picker/media-picker';
 import { PartyProgrammeComponent } from './party-programme';
@@ -37,7 +38,8 @@ describe('PartyProgrammeComponent', () => {
         provideZonelessChangeDetection(),
         provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
         { provide: PartyApiService, useValue: api },
-        { provide: MediaService, useValue: { getOne: vi.fn().mockResolvedValue(null) } },
+        { provide: DeviceService, useValue: { isTv: () => false, isPhone: () => false } },
+        { provide: ConfirmationService, useValue: { confirm: vi.fn().mockResolvedValue(true) } },
         { provide: SseService, useValue: { partyEvents: events } },
       ],
     });
@@ -52,7 +54,7 @@ describe('PartyProgrammeComponent', () => {
     return fixture;
   }
   const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
-  const rowButtons = (f: { nativeElement: unknown }, row: number) => Array.from(el(f).querySelectorAll('li')[row].querySelectorAll('button'));
+  const rowButtons = (f: { nativeElement: unknown }, row: number) => Array.from(el(f).querySelectorAll('li')[row].querySelectorAll<HTMLButtonElement>('button[data-act]'));
   const ids = (call: number) => api.programme.mock.calls[call][1].map((i: { mediaId: number; episodeId?: number }) => `${i.mediaId}:${i.episodeId ?? ''}`);
 
   it('shows the list to a member without controls', async () => {

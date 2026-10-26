@@ -512,10 +512,9 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     const opened = this.firstFrameGate.wait();
     await this.command(['loadfile', opts.url, 'replace', 0, fileOpts.join(',')]);
     if (gen !== this.loadGen) return;
-    // The persistent mpv keeps its pause state across loads; force playback so a
-    // freshly opened file always autoplays. The JS side treats this engine like
-    // the mobile native player (playWhenReady) and never calls play() itself.
-    await this.set('pause', false);
+    // The persistent mpv keeps its pause state across loads: set it per load. The JS side
+    // never calls play() after an autoplay load, like the mobile native player.
+    await this.set('pause', !!opts.startPaused);
     if (gen !== this.loadGen) return;
     // Resolve only once the file has opened, like the libmpv backends: a caller's
     // follow-up sub-add would otherwise hit mpv while no file is open.

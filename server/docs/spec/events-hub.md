@@ -160,7 +160,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 49 | `party.updated` | Us(owner + invitees) | `{partyId}` |
 | 50 | `party.signal` | C (one member: the target) | `{partyId, from: {userId, deviceId}, kind: 'offer'|'answer'|'ice'|'bye', data: object}` (`watch-party.md`, Voice) |
 | 51 | `party.programme` | C (members) | `{partyId, rev, item: PartyItem|null}` (`watch-party.md`) |
-| 52 | `party.proposals` | Us(owner + guests), one payload each | `{partyId, proposals: {id, item: PartyItem, proposedBy, voterIds}[]}` (`watch-party.md`, Proposals) |
+| 52 | `party.proposals` | Us(owner + guests), one payload each | `{partyId, proposals: {id, item: PartyItem, proposedBy, upvoterIds, downvoterIds}[]}` (`watch-party.md`, Proposals) |
 | 53 | `pairing.cancelled` | U(target user) | `{userId: number, pairingId: string}` |
 
 Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 52 of the 53 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 53. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.

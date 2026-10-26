@@ -47,8 +47,12 @@ function duration(min: number): string {
   return `PT${h ? `${h}H` : ''}${m || !h ? `${m}M` : ''}`;
 }
 
+export function partyDurationMin(runtimeMin?: number | null): number {
+  return runtimeMin && runtimeMin > 0 ? Math.round(runtimeMin) : DEFAULT_DURATION_MIN;
+}
+
 export function buildPartyIcs(p: PartyIcsInput): string {
-  const runtime = p.runtimeMin && p.runtimeMin > 0 ? Math.round(p.runtimeMin) : DEFAULT_DURATION_MIN;
+  const runtime = partyDurationMin(p.runtimeMin);
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',

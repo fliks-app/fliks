@@ -538,7 +538,7 @@ async fn a_party_without_link_sharing_hides_the_token_from_members(pool: PgPool)
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_scheduled_party_is_joinable_from_creation_and_expires(pool: PgPool) {
+async fn a_scheduled_party_expires_only_once_its_room_is_empty(pool: PgPool) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;
     let _ca = c.connect(alice, "d");
@@ -573,9 +573,29 @@ async fn a_scheduled_party_is_joinable_from_creation_and_expires(pool: PgPool) {
     .execute(&c.pool)
     .await
     .unwrap();
-    party::sweep(&c.st, chrono::Utc::now()).await.unwrap();
-    let (s, p) = c.call("GET", &format!("/api/parties/{id}"), &a, None).await;
-    assert_eq!((s, p["status"].clone()), (200, json!("ended")));
+    let status = |now| {
+        let c = &c;
+        let a = &a;
+        async move {
+            party::sweep(&c.st, now).await.unwrap();
+            let (_, p) = c.call("GET", &format!("/api/parties/{id}"), a, None).await;
+            p["status"].clone()
+        }
+    };
+    assert_eq!(status(chrono::Utc::now()).await, json!("scheduled"));
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("/api/parties/{id}/leave"),
+            &a,
+            Some(json!({"deviceId": "d"})),
+        )
+        .await;
+    assert_eq!(s, 204);
+    party::tick(&c.st).await;
+    assert_eq!(status(chrono::Utc::now()).await, json!("scheduled"));
+    let later = chrono::Utc::now() + chrono::Duration::minutes(121);
+    assert_eq!(status(later).await, json!("ended"));
 }
 
 fn texts(p: &Value) -> Vec<&str> {
@@ -2259,7 +2279,7 @@ async fn members_propose_and_vote_for_several_titles_and_a_duplicate_is_a_vote(p
 
     let (s, l) = propose(&c, &url, &a, 2).await;
     assert_eq!(
-        (s, proposal_of(&l, 2)["voterIds"].clone()),
+        (s, proposal_of(&l, 2)["upvoterIds"].clone()),
         (201, json!([alice]))
     );
     let (s, _) = propose(&c, &url, &a, 3).await;
@@ -2267,33 +2287,55 @@ async fn members_propose_and_vote_for_several_titles_and_a_duplicate_is_a_vote(p
     let (s, l) = propose(&c, &url, &b, 2).await;
     assert_eq!(s, 200, "a duplicate only adds a vote");
     assert_eq!(l.as_array().unwrap().len(), 2);
-    assert_eq!(proposal_of(&l, 2)["voterIds"], json!([alice, bob]));
+    assert_eq!(proposal_of(&l, 2)["upvoterIds"], json!([alice, bob]));
     assert_eq!(proposal_of(&l, 2)["proposedBy"], alice);
 
     let p3 = proposal_of(&l, 3)["id"].as_i64().unwrap();
     let vote = format!("{url}/proposals/{p3}/vote");
     for _ in 0..2 {
-        let (s, _) = c.call("PUT", &vote, &b, None).await;
+        let (s, _) = c.call("PUT", &vote, &b, Some(json!({"value": 1}))).await;
         assert_eq!(s, 204, "a vote is idempotent");
     }
     let (_, p) = c.call("GET", &url, &b, None).await;
     assert_eq!(
-        proposal_of(&p["proposals"], 3)["voterIds"],
+        proposal_of(&p["proposals"], 3)["upvoterIds"],
         json!([alice, bob])
     );
+    let (s, _) = c.call("PUT", &vote, &b, Some(json!({"value": -1}))).await;
+    assert_eq!(s, 204, "the other way switches the vote");
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(
+        proposal_of(&p["proposals"], 3)["upvoterIds"],
+        json!([alice])
+    );
+    assert_eq!(
+        proposal_of(&p["proposals"], 3)["downvoterIds"],
+        json!([bob])
+    );
+    let (s, _) = c.call("PUT", &vote, &b, Some(json!({"value": 2}))).await;
+    assert_eq!(s, 400);
     let (s, _) = c.call("DELETE", &vote, &b, None).await;
     assert_eq!(s, 204);
     let (_, p) = c.call("GET", &url, &a, None).await;
-    assert_eq!(proposal_of(&p["proposals"], 3)["voterIds"], json!([alice]));
     assert_eq!(
-        proposal_of(&p["proposals"], 2)["voterIds"],
+        proposal_of(&p["proposals"], 3)["upvoterIds"],
+        json!([alice])
+    );
+    assert_eq!(proposal_of(&p["proposals"], 3)["downvoterIds"], json!([]));
+    assert_eq!(
+        proposal_of(&p["proposals"], 2)["upvoterIds"],
         json!([alice, bob])
     );
 
     let (s, _) = propose(&c, &url, &stranger, 4).await;
     assert_eq!(s, 404, "a non-member does not see the party");
     let (s, _) = c
-        .call("PUT", &format!("{url}/proposals/999/vote"), &b, None)
+        .call(
+            "PUT",
+            &format!("{url}/proposals/999/vote"),
+            &b,
+            Some(json!({"value": 1})),
+        )
         .await;
     assert_eq!(s, 404);
 }
@@ -2413,13 +2455,36 @@ async fn the_start_takes_the_top_vote_then_the_oldest_and_the_hosts_choice_wins(
     let (_, l) = propose(&c, &voted, &a, 2).await;
     let id = proposal_of(&l, 2)["id"].as_i64().unwrap();
     let (s, _) = c
-        .call("PUT", &format!("{voted}/proposals/{id}/vote"), &b, None)
+        .call(
+            "PUT",
+            &format!("{voted}/proposals/{id}/vote"),
+            &b,
+            Some(json!({"value": 1})),
+        )
         .await;
     assert_eq!(s, 204);
     let (s, p) = c.call("POST", &format!("{voted}/start"), &a, None).await;
     assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
     let (s, e) = propose(&c, &voted, &b, 4).await;
     assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+
+    let downed = bare_party(&c, &a, &[bob]).await;
+    let (_, l) = propose(&c, &downed, &b, 3).await;
+    propose(&c, &downed, &a, 2).await;
+    let id = proposal_of(&l, 3)["id"].as_i64().unwrap();
+    c.call(
+        "PUT",
+        &format!("{downed}/proposals/{id}/vote"),
+        &b,
+        Some(json!({"value": -1})),
+    )
+    .await;
+    let (s, p) = c.call("POST", &format!("{downed}/start"), &a, None).await;
+    assert_eq!(
+        (s, p["item"]["mediaId"].clone()),
+        (200, json!(2)),
+        "a downvote sinks the oldest"
+    );
 
     let chosen = bare_party(&c, &a, &[bob]).await;
     let (_, l) = propose(&c, &chosen, &b, 3).await;
@@ -2751,8 +2816,13 @@ async fn a_kicked_or_declined_user_no_longer_votes_or_proposes(pool: PgPool) {
     propose(&c, &url, &b, 2).await;
     let (_, l) = propose(&c, &url, &t, 3).await;
     let pid = proposal_of(&l, 3)["id"].as_i64().unwrap();
-    c.call("PUT", &format!("{url}/proposals/{pid}/vote"), &b, None)
-        .await;
+    c.call(
+        "PUT",
+        &format!("{url}/proposals/{pid}/vote"),
+        &b,
+        Some(json!({"value": 1})),
+    )
+    .await;
     let (s, _) = c
         .call("POST", &format!("{url}/members/{bob}/kick"), &a, None)
         .await;
@@ -2760,7 +2830,7 @@ async fn a_kicked_or_declined_user_no_longer_votes_or_proposes(pool: PgPool) {
     let (_, p) = c.call("GET", &url, &a, None).await;
     let proposals = p["proposals"].as_array().unwrap();
     assert_eq!(proposals.len(), 1);
-    assert_eq!(proposals[0]["voterIds"], json!([carol]));
+    assert_eq!(proposals[0]["upvoterIds"], json!([carol]));
 
     let (_sc, _sa) = (c.stream(&t, "dc").await, c.stream(&a, "da").await);
     assert_eq!(join(&c, &url, &t, "dc").await.0, 200);

@@ -103,17 +103,36 @@ struct HomeRow: View {
 
 // MARK: - Watch parties
 
-/// Live and scheduled parties of the viewer, live first (server order); nothing when there are none.
+/// Live and scheduled parties of the viewer, live first (server order), after the "New party" entry.
 private struct WatchPartiesRow: View {
     var onSelect: (Int) -> Void
     @Environment(PartyService.self) private var service
 
+    private enum Entry: Identifiable {
+        case new
+        case party(Party)
+        var id: Int { if case let .party(p) = self { return p.id } else { return -1 } }
+    }
+
     var body: some View {
-        ZoneRow(title: tr("party.rail_title"), portrait: false, state: .loaded(service.homeParties)) { party in
-            MediaCard(imagePath: party.item?.fanartUrl ?? party.item?.posterUrl, title: party.name,
-                      subtitle: party.cardSubtitle, portrait: false, backdropPath: party.item?.fanartUrl,
-                      cornerLabel: party.status == "live" ? tr("party.live") : nil) {
-                onSelect(party.id)
+        Rail(title: tr("party.rail_title"), items: [Entry.new] + service.homeParties.map(Entry.party)) { entry in
+            switch entry {
+            case .new:
+                VStack(alignment: .leading, spacing: 10) {
+                    Button { service.openCreate() } label: {
+                        Image(systemName: "plus").font(.system(size: 60, weight: .semibold))
+                            .frame(width: 360, height: 202)
+                            .background(Color.white.opacity(0.12))
+                    }
+                    .buttonStyle(.card)
+                    Text(tr("party.new_party")).font(.callout.weight(.semibold)).lineLimit(1).frame(width: 360, alignment: .leading)
+                }
+            case let .party(party):
+                MediaCard(imagePath: party.item?.fanartUrl ?? party.item?.posterUrl, title: party.name,
+                          subtitle: party.cardSubtitle, portrait: false, backdropPath: party.item?.fanartUrl,
+                          cornerLabel: party.status == "live" ? tr("party.live") : nil) {
+                    onSelect(party.id)
+                }
             }
         }
     }

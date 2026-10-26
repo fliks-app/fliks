@@ -249,17 +249,8 @@ import UIKit
     var isBuffering: Bool { player?.timeControlStatus == .waitingToPlayAtSpecifiedRate }
     var currentItemIds: (mediaId: Int, episodeId: Int?) { (mediaId, episodeId) }
 
-    /// AVKit keeps its loading indicator up until the player has played once, so a party that starts paused
-    /// plays a moment, muted, to clear it.
-    func partyPrime() async {
-        guard let player else { return }
-        player.isMuted = true
-        player.play()
-        for _ in 0..<60 where player.timeControlStatus != .playing { try? await Task.sleep(for: .milliseconds(50)) }
-        try? await Task.sleep(for: .milliseconds(150))
-        player.pause()
-        applyMuteGate()
-    }
+    /// Loads the media pipeline without playing, so a paused party shows its first frame and AVKit drops its spinner.
+    func partyPreroll() async { _ = await player?.preroll(atRate: 1) }
 
     func partyPlay() { player?.play() }
     func partyPause() { player?.pause() }

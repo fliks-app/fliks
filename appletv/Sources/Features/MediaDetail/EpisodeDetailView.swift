@@ -129,9 +129,7 @@ struct EpisodeDetailView: View {
                     .accessibilityLabel(isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched"))
                     if let fileId {
                         Button {
-                            Task {
-                                await party.create(name: media.title, mediaId: mediaId, mediaFileId: fileId, episodeId: episode.id)
-                            }
+                            party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId, mediaFileId: fileId, episodeId: episode.id))
                         } label: {
                             Label(tr("party.watch_together"), systemImage: "person.2.fill")
                         }

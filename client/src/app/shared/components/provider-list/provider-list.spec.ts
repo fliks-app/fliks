@@ -698,7 +698,7 @@ describe('resolveRowActionRoute', () => {
 });
 
 describe('ProviderListComponent — editor dialog chrome', () => {
-  it('names the dialog from the page, and closes on the ✕ without saving', async () => {
+  it('names the dialog from the page, and closes on the close button without saving', async () => {
     const get = vi.fn(() =>
       of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
     );
@@ -713,9 +713,7 @@ describe('ProviderListComponent — editor dialog chrome', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('x.new_indexer');
 
-    const close = Array.from(fixture.nativeElement.querySelectorAll('dialog button')).find(
-      (b) => (b as HTMLButtonElement).textContent?.trim() === '✕',
-    ) as HTMLButtonElement | undefined;
+    const close = fixture.nativeElement.querySelector('dialog button[aria-label="common.close"]') as HTMLButtonElement | null;
     expect(close).toBeTruthy();
     close!.click();
     await fixture.whenStable();

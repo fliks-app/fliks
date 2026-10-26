@@ -132,10 +132,8 @@ struct MediaDetailView: View {
 
                 if let target {
                     Button(action: {
-                        Task {
-                            await party.create(name: media.title, mediaId: mediaId,
-                                               mediaFileId: target.mediaFileId, episodeId: target.episodeId)
-                        }
+                        party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId,
+                                                           mediaFileId: target.mediaFileId, episodeId: target.episodeId))
                     }) {
                         Label(tr("party.watch_together"), systemImage: "person.2.fill")
                     }

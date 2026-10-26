@@ -351,6 +351,14 @@ app.whenReady().then(async () => {
     deviceName: deviceName(),
   }));
 
+  ipcMain.handle(IPC.openCalendarEvent, async (_e, ics: string, fileName: string) => {
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'fliks-cal-'));
+    const file = path.join(dir, path.basename(fileName));
+    await fs.promises.writeFile(file, ics);
+    const err = await shell.openPath(file);
+    if (err) throw new Error(err);
+  });
+
   ipcMain.handle(IPC.setMediaSession, (_e, meta: DesktopMediaMetadata | null) => setOsMediaSession?.(meta));
 
   ipcMain.handle(IPC.getPlayerCapabilities, async () => {

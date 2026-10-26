@@ -29,6 +29,8 @@ export interface DesktopSubtitleTrack {
 export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
+  /** Open paused on the first frame instead of autoplaying. */
+  startPaused?: boolean;
   headers?: Record<string, string>;
   /** Preferred audio language (mpv `alang`). Applied as a file-local loadfile
    *  option so mpv auto-selects the matching audio rendition on the initial load
@@ -157,6 +159,8 @@ export const IPC = {
   destroy: 'player:destroy',
   /** Host OS identity (name + version), resolved natively. */
   getSystemInfo: 'system:info',
+  /** Opens an ICS in the OS default calendar handler. */
+  openCalendarEvent: 'system:openCalendarEvent',
   /** Runtime playback capabilities (e.g. Dolby Vision reshape support). */
   getPlayerCapabilities: 'player:getCapabilities',
   /** main → renderer (one channel, discriminated by DesktopEvent.type). */
@@ -312,6 +316,7 @@ export interface FliksDesktopApi {
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;
+  openCalendarEvent(ics: string, fileName: string): Promise<void>;
   getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }

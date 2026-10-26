@@ -6,42 +6,72 @@
   @if (rows().length) {
     <ul class="flex flex-col gap-2">
       @for (p of rows(); track p.id) {
-        <li appTvRow class="flex items-center gap-3 rounded-box bg-base-200 p-2">
+        <li appTvRow class="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 rounded-box bg-base-200 p-2 sm:grid-cols-[auto_1fr_auto_auto]">
           @if (!p.item.hidden && p.item.posterUrl) {
-            <img [src]="p.item.posterUrl | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
+            <img [src]="p.item.posterUrl | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="row-span-2 h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover sm:row-span-1" />
           } @else {
-            <div class="h-16 w-11 shrink-0 rounded-md bg-base-300"></div>
+            <div class="row-span-2 h-16 w-11 shrink-0 rounded-md bg-base-300 sm:row-span-1"></div>
           }
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0">
             @if (!p.item.hidden) {
               <p class="truncate font-medium">{{ p.item.title }}</p>
             } @else {
               <p class="truncate font-medium text-base-content/60">{{ 'party.proposal_hidden' | translate }}</p>
             }
             <p class="truncate text-sm text-base-content/60">{{ 'party.proposed_by' | translate: { name: name(p.proposedBy) } }}</p>
-            <div class="mt-1 flex -space-x-2">
-              @for (id of p.voterIds; track id) {
-                <app-user-avatar class="rounded-full ring-2 ring-base-200" [username]="name(id)" size="w-6 h-6 text-xs" />
-              }
-            </div>
           </div>
-          <button
-            type="button"
-            class="btn btn-sm gap-1"
-            [class.btn-primary]="voted(p)"
-            [class.btn-outline]="!voted(p)"
-            [attr.aria-pressed]="voted(p)"
-            [attr.data-vote]="p.id"
-            (click)="vote(p)"
-          >
-            <svg lucideThumbsUp class="h-4 w-4"></svg>
-            {{ 'party.vote' | translate }} · {{ p.voterIds.length }}
-          </button>
-          @if (isHost() && !p.item.hidden) {
-            <button type="button" class="btn btn-sm btn-primary" (click)="choose(p)">{{ 'party.choose' | translate }}</button>
-          }
+          <div class="col-start-2 flex flex-wrap items-center gap-1 sm:col-start-3 sm:row-start-1">
+            <div class="flex items-center">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-square"
+                [class.text-primary]="myVote(p) === 1"
+                [attr.aria-pressed]="myVote(p) === 1"
+                [attr.aria-label]="'party.vote_up' | translate"
+                [attr.data-vote]="p.id"
+                data-value="1"
+                (pointerdown)="pressStart(p)"
+                (pointerup)="pressEnd()"
+                (pointerleave)="pressEnd()"
+                (pointercancel)="pressEnd()"
+                (contextmenu)="$event.preventDefault()"
+                (click)="vote(p, 1)"
+              >
+                <svg lucideThumbsUp class="h-5 w-5"></svg>
+              </button>
+              <button type="button" class="ml-0.5 cursor-pointer pr-1 text-sm tabular-nums hover:underline" [class.text-primary]="myVote(p) === 1" [attr.aria-label]="'party.voters_title' | translate" (click)="showVoters(p)">
+                {{ p.upvoterIds.length }}
+              </button>
+            </div>
+
+            <div class="flex items-center">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-square"
+                [class.text-primary]="myVote(p) === -1"
+                [attr.aria-pressed]="myVote(p) === -1"
+                [attr.aria-label]="'party.vote_down' | translate"
+                [attr.data-vote]="p.id"
+                data-value="-1"
+                (pointerdown)="pressStart(p)"
+                (pointerup)="pressEnd()"
+                (pointerleave)="pressEnd()"
+                (pointercancel)="pressEnd()"
+                (contextmenu)="$event.preventDefault()"
+                (click)="vote(p, -1)"
+              >
+                <svg lucideThumbsDown class="h-5 w-5"></svg>
+              </button>
+              <button type="button" class="ml-0.5 cursor-pointer pr-1 text-sm tabular-nums hover:underline" [class.text-primary]="myVote(p) === -1" [attr.aria-label]="'party.voters_title' | translate" (click)="showVoters(p)">
+                {{ p.downvoterIds.length }}
+              </button>
+            </div>
+            @if (isHost() && !p.item.hidden) {
+              <button type="button" class="btn btn-sm btn-primary" (click)="choose(p)">{{ 'party.choose' | translate }}</button>
+            }
+          </div>
           @if (canRemove(p)) {
-            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.proposal_remove' | translate" (click)="remove(p)">
+            <button type="button" class="btn btn-sm btn-ghost btn-square col-start-3 row-span-2 row-start-1 self-center text-error sm:col-start-4 sm:row-span-1" [attr.aria-label]="'party.proposal_remove' | translate" (click)="remove(p)">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>
           }
@@ -52,4 +82,27 @@
     <p class="text-base-content/60">{{ 'party.proposals_empty' | translate }}</p>
   }
   <app-media-picker (picked)="propose($event)" />
+  <dialog #votersDialog class="modal" (close)="voters.set(null)">
+    <div class="modal-box max-w-sm">
+      <app-modal-header [title]="'party.voters_title' | translate" />
+      @if (voters(); as v) {
+        @for (side of [{ key: 'party.voters_up', ids: v.upvoterIds }, { key: 'party.voters_down', ids: v.downvoterIds }]; track side.key) {
+          <h3 class="mt-3 mb-1 text-sm font-medium opacity-70">{{ side.key | translate }} · {{ side.ids.length }}</h3>
+          @if (side.ids.length) {
+            <ul class="flex flex-col gap-2">
+              @for (id of side.ids; track id) {
+                <li class="flex items-center gap-2">
+                  <app-user-avatar [username]="name(id)" size="w-7 h-7 text-xs" />
+                  <span class="truncate">{{ name(id) }}</span>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="text-sm opacity-60">{{ 'party.voters_none' | translate }}</p>
+          }
+        }
+      }
+    </div>
+    <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  </dialog>
 </section>

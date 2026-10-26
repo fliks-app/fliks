@@ -645,11 +645,11 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
     const char* cmd[] = {"loadfile", url.c_str(), "replace", "-1", optstr.c_str(), nullptr};
     M::command_async(g_state.mpv, 0, cmd);
   }
-  // The persistent mpv keeps its pause state across loads; force playback so a
-  // freshly opened file always autoplays. The JS side treats this engine like
-  // the mobile native player (playWhenReady) and never calls play() itself.
+  // The persistent mpv keeps its pause state across loads: set it per load. The JS side
+  // never calls play() after an autoplay load, like the mobile native player.
   {
-    const char* pause[] = {"set", "pause", "no", nullptr};
+    const bool startPaused = o.Has("startPaused") && o.Get("startPaused").ToBoolean().Value();
+    const char* pause[] = {"set", "pause", startPaused ? "yes" : "no", nullptr};
     M::command_async(g_state.mpv, 0, pause);
   }
   // sidecar subtitles

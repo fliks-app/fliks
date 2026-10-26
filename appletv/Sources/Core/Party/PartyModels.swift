@@ -12,13 +12,39 @@ struct PartyItem: Codable, Equatable {
     let title: String
     let posterUrl: String?
     let fanartUrl: String?
+    /// Episode fields, nil for a movie (and all blank when `hidden`).
+    var stillUrl: String? = nil
+    var seriesTitle: String? = nil
+    var seasonNumber: Int? = nil
+    var episodeNumber: Int? = nil
+    var episodeTitle: String? = nil
     /// The viewer cannot open the media: title and artwork are blank, the ids stay.
     let hidden: Bool
+}
+
+extension PartyItem: Identifiable {
+    var id: String { "\(mediaId).\(episodeId ?? 0)" }
 }
 
 extension PartyItem {
     /// The title (`Title S01E02` for an episode), or the neutral line of a masked row.
     var shownTitle: String { hidden ? tr("party.proposal_hidden") : title }
+
+    /// The series title for an episode, else the title: the Continue Watching card's title.
+    var cardTitle: String { hidden ? tr("party.proposal_hidden") : (seriesTitle ?? title) }
+    /// What a removal names: the episode for an episode, the film otherwise.
+    var itemName: String { cardSubtitle ?? cardTitle }
+
+    /// "S01E02 - Episode title" like the Continue Watching card; nil for a movie or a masked row.
+    var cardSubtitle: String? {
+        guard !hidden, let season = seasonNumber, let number = episodeNumber else { return nil }
+        let label = String(format: "S%02dE%02d", season, number)
+        guard let episodeTitle, !episodeTitle.isEmpty else { return label }
+        return "\(label) - \(episodeTitle)"
+    }
+
+    /// Still, then fanart, then poster; nothing for a masked row.
+    var cardImage: String? { hidden ? nil : (stillUrl ?? fanartUrl ?? posterUrl) }
 }
 
 /// A film suggested for the start; read-only on the TV.
@@ -26,11 +52,13 @@ struct PartyProposal: Codable, Equatable, Identifiable {
     let id: Int
     let item: PartyItem
     let proposedBy: Int
-    let voterIds: [Int]
+    let upvoterIds: [Int]
+    let downvoterIds: [Int]
+    var score: Int { upvoterIds.count - downvoterIds.count }
 
-    /// Most votes first, the oldest (lowest id) among equals: how the server picks the start.
+    /// Best score (ups minus downs) first, the oldest (lowest id) among equals: how the server picks the start.
     static func sorted(_ list: [PartyProposal]) -> [PartyProposal] {
-        list.sorted { $0.voterIds.count != $1.voterIds.count ? $0.voterIds.count > $1.voterIds.count : $0.id < $1.id }
+        list.sorted { $0.score != $1.score ? $0.score > $1.score : $0.id < $1.id }
     }
 }
 
@@ -214,4 +242,30 @@ extension Party {
         guard let playlist else { return base }
         return "\(base) · \(trp("party.playlist_label", ["name": playlist.name]))"
     }
+}
+
+/// What the create sheet starts from: a film or episode, a playlist, or nothing (the Home entry).
+struct PartyCreateTarget: Equatable {
+    var name = ""
+    var mediaId: Int?
+    var mediaFileId: Int?
+    var episodeId: Int?
+    var playlistId: Int?
+}
+
+/// `POST /api/parties`; nil fields stay out of the body.
+struct PartyCreateRequest: Encodable {
+    var name: String
+    var mediaId: Int?
+    var mediaFileId: Int?
+    var episodeId: Int?
+    var playlistId: Int?
+    var scheduledAt: String?
+    var policy: String?
+    var reactionsEnabled: Bool?
+    var chatEnabled: Bool?
+    var linkSharing: Bool?
+    var inviteeIds: [Int]?
+
+    static func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
 }

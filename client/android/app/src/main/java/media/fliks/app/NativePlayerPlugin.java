@@ -285,6 +285,7 @@ public class NativePlayerPlugin extends Plugin {
         JSArray subtitles = call.getArray("subtitles", new JSArray());
         boolean offline = call.getBoolean("offline", false);
         boolean backgroundAudio = call.getBoolean("backgroundAudio", false);
+        boolean startPaused = call.getBoolean("startPaused", false);
         String title = call.getString("title", "");
         String artist = call.getString("artist", "");
         String artworkUrl = call.getString("artworkUrl");
@@ -574,7 +575,7 @@ public class NativePlayerPlugin extends Plugin {
             // (an intermittent IllegalStateException, about 1 in 6 plays).
             if (startTime > 0) player.seekTo((long) (startTime * 1000));
             player.prepare();
-            player.setPlayWhenReady(true);
+            player.setPlayWhenReady(!startPaused); // a paused prepare still renders its first frame
             startPositionUpdates();
             scheduleMuteMessages();
             applyGate();

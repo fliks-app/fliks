@@ -20,7 +20,7 @@ import { VoiceService } from './voice.service';
 import { ReactionsService } from './reactions.service';
 
 const item = (mediaId: number, episodeId: number | null = null): PartyItem => ({
-  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], hidden: false,
+  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, hidden: false,
 });
 
 function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
@@ -144,7 +144,7 @@ describe('PartyService queue cursor', () => {
 });
 
 describe('PartyService stale snapshots', () => {
-  const proposal = { id: 4, item: item(2), proposedBy: 1, voterIds: [1] };
+  const proposal = { id: 4, item: item(2), proposedBy: 1, upvoterIds: [1], downvoterIds: [] };
   const lobby = (rev: number, over: Partial<PartyDto> = {}) =>
     dto(rev, { status: 'scheduled', item: item(1), live: { ...dto(rev).live!, playback: null }, ...over });
 
@@ -308,7 +308,7 @@ describe('PartyService lobby', () => {
   });
 
   it('keeps voice joined across start', async () => {
-    vi.stubGlobal('RTCPeerConnection', class {});
+    vi.stubGlobal('RTCPeerConnection', class { close() {} });
     const { svc, api } = setup();
     const voice = TestBed.inject(VoiceService);
     svc.applySnapshot(lobby());
@@ -321,14 +321,14 @@ describe('PartyService lobby', () => {
 });
 
 describe('PartyService proposals', () => {
-  const proposal = { id: 4, item: item(2), proposedBy: 1, voterIds: [1] };
+  const proposal = { id: 4, item: item(2), proposedBy: 1, upvoterIds: [1], downvoterIds: [] };
 
   it('takes the snapshot and then the events', () => {
     const { svc, events } = setup();
     svc.applySnapshot(dto(1, { proposals: [proposal] }));
     expect(svc.proposals()).toEqual([proposal]);
-    events.next({ type: 'party.proposals', partyId: 7, proposals: [{ ...proposal, voterIds: [1, 2] }] });
-    expect(svc.proposals()[0].voterIds).toEqual([1, 2]);
+    events.next({ type: 'party.proposals', partyId: 7, proposals: [{ ...proposal, upvoterIds: [1, 2] }] });
+    expect(svc.proposals()[0].upvoterIds).toEqual([1, 2]);
   });
 
   it('ignores the proposals of another party', () => {

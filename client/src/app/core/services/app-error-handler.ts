@@ -13,9 +13,18 @@ export class AppErrorHandler implements ErrorHandler {
 
   handleError(error: unknown): void {
     console.error(error);
+    if (!actionable(error)) return;
     const now = Date.now();
     if (now - this.lastToastAt < TOAST_GAP_MS) return;
     this.lastToastAt = now;
     this.toast.error(this.translate.instant('common.unexpected_error'));
   }
+}
+
+/** An opaque cross-origin "Script error." (no error behind the event) or an aborted transition tells the user nothing. */
+function actionable(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  if (error.name === 'AbortError') return false;
+  const cause = (error as { cause?: unknown }).cause;
+  return !(typeof ErrorEvent !== 'undefined' && cause instanceof ErrorEvent && !cause.error);
 }

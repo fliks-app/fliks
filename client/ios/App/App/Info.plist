@@ -38,6 +38,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Fliks uses the camera to take your profile picture.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Fliks adds watch parties to your calendar.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Fliks uses the microphone for voice chat in watch parties.</string>
 	<key>NSLocalNetworkUsageDescription</key>

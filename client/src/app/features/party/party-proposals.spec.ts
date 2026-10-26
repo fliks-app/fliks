@@ -14,12 +14,17 @@ class StubPicker {
 }
 
 const item = (title: string) => ({ mediaId: 1, episodeId: null, mediaFileId: null, title, hidden: title === '', posterUrl: null }) as PartyItem;
-const prop = (id: number, voterIds: number[], proposedBy = 2, title = `T${id}`): PartyProposal => ({ id, item: item(title), proposedBy, voterIds });
+const prop = (id: number, voterIds: number[], proposedBy = 2, title = `T${id}`, downvoterIds: number[] = []): PartyProposal => ({ id, item: item(title), proposedBy, upvoterIds: voterIds, downvoterIds });
 
 describe('sortProposals', () => {
   it('puts the most voted first, then the oldest', () => {
     const sorted = sortProposals([prop(3, [1]), prop(1, [1]), prop(2, [1, 2]), prop(4, [])]);
     expect(sorted.map((p) => p.id)).toEqual([2, 1, 3, 4]);
+  });
+
+  it('ranks by ups minus downs', () => {
+    const sorted = sortProposals([prop(1, [1, 2], 2, 'a', [3, 4, 5]), prop(2, []), prop(3, [1], 2, 'c', [])]);
+    expect(sorted.map((p) => p.id)).toEqual([3, 2, 1]);
   });
 });
 
@@ -55,31 +60,31 @@ describe('PartyProposalsComponent', () => {
     mine.click();
     await vi.waitFor(() => expect(api.vote).toHaveBeenCalledTimes(1));
     other.click();
-    expect(api.vote).toHaveBeenNthCalledWith(1, 9, 5, false);
-    expect(api.vote).toHaveBeenNthCalledWith(2, 9, 6, true);
+    expect(api.vote).toHaveBeenNthCalledWith(1, 9, 5, null);
+    expect(api.vote).toHaveBeenNthCalledWith(2, 9, 6, 1);
   });
 
   it('offers delete to the author or the host only', () => {
     const rows = [prop(1, [], 1), prop(2, [], 2)];
     const guest = setup({ me: 1, host: false, proposals: rows });
-    expect(buttons(guest, 0)).toHaveLength(2);
-    expect(buttons(guest, 1)).toHaveLength(1);
+    expect(buttons(guest, 0)).toHaveLength(5);
+    expect(buttons(guest, 1)).toHaveLength(4);
     TestBed.resetTestingModule();
     const host = setup({ me: 3, host: true, proposals: rows });
     expect(buttons(host, 1).some((b) => b.querySelector('svg'))).toBe(true);
-    expect(buttons(host, 0)).toHaveLength(3);
+    expect(buttons(host, 0)).toHaveLength(6);
   });
 
   it('shows Choose to the host only and emits the new snapshot', async () => {
     const guest = setup({ me: 2, host: false, proposals: [prop(1, [])] });
-    expect(buttons(guest)).toHaveLength(2);
+    expect(buttons(guest)).toHaveLength(5);
     TestBed.resetTestingModule();
     const host = setup({ me: 1, host: true, proposals: [prop(1, [])] });
     api.choose.mockResolvedValue({ id: 9 });
     const chosen = vi.fn();
     host.componentInstance.chosen.subscribe(chosen);
-    expect(buttons(host)).toHaveLength(3);
-    buttons(host)[1].click();
+    expect(buttons(host)).toHaveLength(6);
+    buttons(host).find((b) => b.textContent?.includes('party.choose'))!.click();
     await vi.waitFor(() => expect(chosen).toHaveBeenCalledWith({ id: 9 }));
     expect(api.choose).toHaveBeenCalledWith(9, 1);
   });
@@ -116,7 +121,7 @@ describe('PartyProposalsComponent', () => {
 
   it('offers no Choose on a masked proposal', () => {
     const el = setup({ me: 1, host: true, proposals: [prop(1, [], 2, '')] });
-    expect(buttons(el)).toHaveLength(2);
+    expect(buttons(el)).toHaveLength(5);
   });
 
   it('shows a neutral text for a masked title', () => {

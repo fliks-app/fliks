@@ -70,6 +70,7 @@ function closeReason(err: unknown): PartyCloseReason | null {
 }
 
 const BUBBLE_MS = 4000;
+const REJOIN_RETRY_MS = 2000;
 /** How long a reaction rises over the video; its CSS animation follows. */
 export const REACTION_MS = 2000;
 const MAX_MESSAGES = 200;
@@ -447,6 +448,8 @@ export class PartyService {
     } catch (err) {
       const reason = closeReason(err);
       if (reason) this.onClosed(reason);
+      // A restarting server may not register the stream yet: retry while it stays up.
+      else setTimeout(() => this.party()?.id === id && this.sse.connected() && void this.rejoin(), REJOIN_RETRY_MS);
     }
   }
 

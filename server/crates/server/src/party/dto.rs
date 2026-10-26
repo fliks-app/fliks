@@ -234,6 +234,12 @@ pub struct PartyItem {
     pub poster_url: Option<String>,
     pub fanart_url: Option<String>,
     pub additional_fanart_urls: Vec<String>,
+    /// Episode only, else null: still, series title, season and episode numbers, episode title.
+    pub still_url: Option<String>,
+    pub series_title: Option<String>,
+    pub season_number: Option<i32>,
+    pub episode_number: Option<i32>,
+    pub episode_title: Option<String>,
     /// The viewer cannot open the media: title and artwork are blanked, the ids stay.
     pub hidden: bool,
 }
@@ -309,7 +315,23 @@ pub struct ProposalDto {
     pub id: i32,
     pub item: PartyItem,
     pub proposed_by: i32,
-    pub voter_ids: Vec<i32>,
+    pub upvoter_ids: Vec<i32>,
+    pub downvoter_ids: Vec<i32>,
+}
+
+/// `1` up, `-1` down.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VoteIn {
+    #[serde(deserialize_with = "vote_value")]
+    pub value: i16,
+}
+
+fn vote_value<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i16, D::Error> {
+    match i16::deserialize(d)? {
+        v @ (1 | -1) => Ok(v),
+        _ => Err(serde::de::Error::custom("value must be 1 or -1")),
+    }
 }
 
 #[derive(Deserialize)]

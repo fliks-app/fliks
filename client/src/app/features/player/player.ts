@@ -647,6 +647,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.paused.set(false);
       this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
     },
+    releasePlayback: () => {
+      if (!this.loadedPaused) return;
+      this.loadedPaused = false;
+      // Before the post-load step it plays by itself; after it, nothing else will.
+      if (this.postLoadDone) void this.engine?.play().catch(() => this.autoplayBlocked.set(true));
+    },
     position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
     onBack: () => this.onBack(),
   }), null);
@@ -1576,6 +1582,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return surface;
   }
 
+  /** What the engine's next load() opened paused, so the post-load `play()` is skipped. */
+  private loadedPaused = false;
+  /** The first load's post-load step ran (it issues the solo autoplay). */
+  private postLoadDone = false;
+  /** The engine itself was opened paused: a native engine then needs an explicit `play()` once released. */
+  private openedPaused = false;
+
+  /** Engines that can open paused do so for a party that is not playing; the others autoplay and the party pauses them. */
+  private armStartPaused(engine: PlaybackEngine): void {
+    if (engine.startPaused === undefined) return;
+    engine.startPaused = this.loadedPaused = this.openedPaused = this.partyCtl.startsPaused();
+  }
+
   /** Shared wiring for the transparent-overlay native engines (ExoPlayer/AVPlayer, Electron mpv): bind state,
    *  surface the first frame, arm session-expired recovery. */
   private wireNativePlayerEngine(engine: PlaybackEngine): void {
@@ -2457,6 +2476,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async prepareLoad(): Promise<void> {
     this.audioSwitchPending = null;
     this.configureAudioLanguage();
+    if (this.engine) this.armStartPaused(this.engine);
     if (this.engine instanceof NativeEngine) {
       this.engine.setPreloadedSubtitles(await this.nativeSidecars());
     }
@@ -2649,6 +2669,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async completePostLoadSetup(resumeTime: number | undefined): Promise<void> {
     // A fallback can settle after ngOnDestroy; its intervals would never be cleared.
     if (this.destroyed || !this.engine) return;
+    this.postLoadDone = true;
     // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
     const trackSetupPromise = (async () => {
       if (this.isOfflinePlayback) {
@@ -2681,7 +2702,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
       if (this.partyCtl.active()) this.partyCtl.resync();
-    } else if (!this.isNativeEngine() || this.isDesktopNative) {
+    } else if ((!this.isNativeEngine() || this.isDesktopNative || this.openedPaused) && !this.loadedPaused) {
       this.engine!.play().catch(() => {
         // No user gesture on a remotely started device: the browser refuses autoplay. Reported so a controller
         // can tell why the device is paused (its own play button is refused too).
@@ -2740,7 +2761,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.spriteAbort?.abort();
     void this.loadSpriteMetadata();
 
-    if (!this.isNativeEngine()) this.engine?.play().catch(() => this.autoplayBlocked.set(true));
+    if (!this.isNativeEngine() && !this.loadedPaused) this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     // Reveal the controls across the switch so the new title/episode shows;
     // the auto-hide countdown retracts them on the usual delay.
     this.chrome.show();
