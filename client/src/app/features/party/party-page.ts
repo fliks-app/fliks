@@ -16,10 +16,13 @@ import { ToastService } from '../../core/services/toast.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
-import { connectedCount, missingCount, partyPeople, withoutVoice, type PartyPerson } from '../player/party/party-people';
+import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../player/party/party-people';
 import { runBusy } from './party-busy';
 import { PartyHostDialogComponent } from './party-host-dialog';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
+import { PartyChatComponent } from '../player/party/party-chat';
+import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
+import { VoiceService } from '../../core/services/party/voice.service';
 import { LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2 } from '@lucide/angular';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -51,7 +54,7 @@ function findEpisode(media: Media | null, id: number | null | undefined) {
 @Component({
   selector: 'app-party-page',
   imports: [
-    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyPersonRowComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2,
   ],
@@ -70,6 +73,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly clock = inject(ClockService);
   private readonly mediaService = inject(MediaService);
   protected readonly party = inject(PartyService);
+  private readonly voice = inject(VoiceService);
   protected readonly navbar = inject(NavbarService);
   protected readonly tv = inject(TvService);
   private readonly background = inject(BackgroundService);
@@ -149,7 +153,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
-    return v ? withoutVoice(partyPeople(v.host, v.guests ?? [], members, new Set())) : [];
+    return v ? partyPeople(v.host, v.guests ?? [], members, this.voice.speaking()) : [];
   });
   /** Invited by the host and not in the lobby: the one case where the party can be declined. */
   protected readonly invited = computed(() => {
