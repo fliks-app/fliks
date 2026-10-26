@@ -1,0 +1,96 @@
+<dialog #dialog class="modal" (close)="onClosed()">
+  <div class="modal-box flex h-[85dvh] max-w-3xl flex-col gap-0 overflow-hidden p-0" appTvSection appDefaultFocus="[autofocus]">
+    <app-modal-header flush [title]="(series()?.title ?? ('media_picker.title' | translate))" (closed)="close()" />
+
+    <div class="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3 sm:px-6">
+      @if (series(); as s) {
+        <div appTvRow class="flex items-center gap-2">
+          <button type="button" class="btn btn-ghost btn-sm" autofocus (click)="series.set(null)">
+            <svg lucideChevronLeft class="h-4 w-4"></svg>
+            {{ 'media_picker.back' | translate }}
+          </button>
+        </div>
+
+        @if (seriesLoading()) {
+          <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+        } @else {
+          <div class="min-h-0 flex-1 overflow-y-auto scroll-ring-safe flex flex-col gap-3">
+            <app-season-picker
+              [seasons]="seasons()"
+              [selected]="selectedSeason()"
+              selectedBadgeKey="media_picker.season_selected"
+              unselectedBadgeKey="media_picker.season_other"
+              (seasonToggled)="selectSeason($event)"
+            />
+
+            @if (modes().length > 1) {
+              <div appTvRow role="radiogroup" class="flex flex-wrap gap-2" [attr.aria-label]="'media_picker.mode_label' | translate">
+                @for (m of modes(); track m) {
+                  <button type="button" role="radio" class="btn btn-sm" [class.btn-primary]="mode() === m" [attr.aria-checked]="mode() === m" (click)="setMode(m)">
+                    {{ 'media_picker.mode_' + (m === 'untilEnd' ? 'until_end' : m) | translate }}
+                  </button>
+                }
+              </div>
+            }
+
+            @if (episodes().length) {
+              <p class="text-sm text-base-content/60">
+                {{ (mode() === 'multiple' ? 'media_picker.episodes_hint_multiple' : 'media_picker.episodes_hint') | translate }}
+              </p>
+              <ul class="flex flex-col gap-1">
+                @for (ep of episodes(); track ep.id) {
+                  <li appTvRow>
+                    <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-base-200" [disabled]="mode() === 'season'" (click)="onEpisode(ep)">
+                      @if (mode() === 'multiple') {
+                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary pointer-events-none" tabindex="-1" [checked]="ticked().has(ep.id)" />
+                      }
+                      <span class="badge badge-ghost badge-sm shrink-0">{{ ep.episodeNumber }}</span>
+                      <span class="min-w-0 flex-1 truncate">{{ ep.title || ('media_picker.episode_number' | translate: { number: ep.episodeNumber }) }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else if (seasonNumber() !== null || !seasons().length) {
+              <p class="py-6 text-center text-sm text-base-content/50">{{ 'media_picker.no_episodes' | translate }}</p>
+            }
+          </div>
+
+          @if (confirmable()) {
+            <div appTvRow class="flex justify-end">
+              <button type="button" class="btn btn-primary" [disabled]="confirmCount() === 0" (click)="confirm()">
+                {{ 'media_picker.add_count' | translate: { count: confirmCount() } }}
+              </button>
+            </div>
+          }
+        }
+      } @else {
+        <input
+          type="search"
+          class="input input-bordered w-full"
+          autofocus
+          [placeholder]="'media_picker.search_placeholder' | translate"
+          [attr.aria-label]="'media_picker.search_placeholder' | translate"
+          [ngModel]="query()"
+          (ngModelChange)="onQuery($event)"
+        />
+
+        <div class="min-h-0 flex-1 overflow-y-auto scroll-ring-safe">
+          @if (loading() && !results().length) {
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+          } @else if (results().length) {
+            <div appTvSection class="grid grid-cols-3 gap-3 pb-2 sm:grid-cols-4">
+              @for (m of results(); track m.id) {
+                <app-media-card [media]="m" clickIntent="play" [hideStatusBar]="true" [posterMorph]="false" (clicked)="choose(m)" />
+              }
+            </div>
+          } @else {
+            <p class="py-12 text-center text-sm text-base-content/50">
+              {{ (searched() ? 'media_picker.no_results' : 'media_picker.hint') | translate }}
+            </p>
+          }
+        </div>
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

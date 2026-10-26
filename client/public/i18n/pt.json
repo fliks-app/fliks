@@ -3707,5 +3707,25 @@
     "reschedule_message": "Nova data para \"{{name}}\": {{when}}. Confirmar?",
     "regenerate_title": "Criar um novo link",
     "regenerate_message": "O link de convite atual deixará de funcionar. Quem só tiver esse link perderá o acesso."
+  },
+  "media_picker": {
+    "title": "Escolher um título",
+    "search_placeholder": "Pesquisar na biblioteca…",
+    "hint": "Escreva um título para pesquisar na sua biblioteca.",
+    "no_results": "Nada encontrado na biblioteca.",
+    "back": "Voltar",
+    "mode_label": "O que adicionar",
+    "mode_this": "Este episódio",
+    "mode_until_end": "Até ao fim da temporada",
+    "mode_season": "Temporada inteira",
+    "mode_multiple": "Vários episódios",
+    "episodes_hint": "Escolha o primeiro episódio.",
+    "episodes_hint_multiple": "Marque os episódios a adicionar.",
+    "no_episodes": "Nenhum episódio disponível nesta temporada.",
+    "season_selected": "Escolhida",
+    "season_other": "Escolher",
+    "episode_number": "Episódio {{number}}",
+    "add_count_one": "Adicionar {{count}} episódio",
+    "add_count_other": "Adicionar {{count}} episódios"
   }
 }
