@@ -1,7 +1,7 @@
 //! Film proposals and votes of a `scheduled` party (`docs/spec/watch-party.md`, Proposals).
 use super::{
     db,
-    dto::{PartyDto, PartyItem, ProposalDto, ProposalIn},
+    dto::{PartyDto, PartyItem, ProposalDto, ProposalIn, VoteIn},
     registry::item_dtos,
     routes::{
         Edit, R, conceal_items, edit_programme, fail, host_of, member_row, not_found, require_host,
@@ -42,12 +42,13 @@ pub(super) fn proposal_router() -> Router<AppState> {
         .route("/api/parties/{id}/proposals/{pid}/choose", post(choose))
 }
 
-type Raw = (i32, i32, Option<i32>, i32, Vec<i32>);
+type Raw = (i32, i32, Option<i32>, i32, Vec<i32>, Vec<i32>);
 
 async fn raw(db: &PgPool, party: i32) -> sqlx::Result<Vec<Raw>> {
     sqlx::query_as(
         r#"SELECT p.id, p."mediaId", p."episodeId", p."proposedBy",
-                  COALESCE(array_agg(v."userId" ORDER BY v."userId") FILTER (WHERE v."userId" IS NOT NULL), '{}')
+                  COALESCE(array_agg(v."userId" ORDER BY v."userId") FILTER (WHERE v."value" = 1), '{}'),
+                  COALESCE(array_agg(v."userId" ORDER BY v."userId") FILTER (WHERE v."value" = -1), '{}')
            FROM watch_party_proposals p
            LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
            WHERE p."partyId" = $1
@@ -82,12 +83,15 @@ async fn resolve(st: &AppState, rows: Vec<Raw>) -> Result<Vec<ProposalDto>, AppE
     Ok(rows
         .into_iter()
         .zip(items)
-        .map(|((id, _, _, proposed_by, voter_ids), item)| ProposalDto {
-            id,
-            item,
-            proposed_by,
-            voter_ids,
-        })
+        .map(
+            |((id, _, _, proposed_by, upvoter_ids, downvoter_ids), item)| ProposalDto {
+                id,
+                item,
+                proposed_by,
+                upvoter_ids,
+                downvoter_ids,
+            },
+        )
         .collect())
 }
 
@@ -115,12 +119,12 @@ async fn announce(st: &AppState, row: &db::Row) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The proposal the start takes: most votes, then the oldest.
+/// The proposal the start takes: best score (ups minus downs), then the oldest.
 pub(super) async fn top(db: &PgPool, party: i32) -> sqlx::Result<Option<Item>> {
     let row: Option<(i32, Option<i32>)> = sqlx::query_as(
         r#"SELECT p."mediaId", p."episodeId" FROM watch_party_proposals p
            WHERE p."partyId" = $1
-           ORDER BY (SELECT count(*) FROM watch_party_votes v WHERE v."proposalId" = p.id) DESC,
+           ORDER BY (SELECT COALESCE(sum(v."value"), 0) FROM watch_party_votes v WHERE v."proposalId" = p.id) DESC,
                     p."createdAt", p.id
            LIMIT 1"#,
     )
@@ -251,7 +255,8 @@ pub async fn propose(
         }
     };
     sqlx::query(
-        r#"INSERT INTO watch_party_votes ("proposalId", "userId") VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
+        r#"INSERT INTO watch_party_votes ("proposalId", "userId") VALUES ($1, $2)
+           ON CONFLICT ("proposalId", "userId") DO UPDATE SET "value" = 1"#,
     )
     .bind(pid)
     .bind(me)
@@ -298,15 +303,29 @@ pub async fn unpropose(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn set_vote(st: &AppState, id: i32, pid: i32, me: i32, on: bool) -> R<StatusCode> {
+async fn set_vote(st: &AppState, id: i32, pid: i32, me: i32, value: Option<i16>) -> R<StatusCode> {
     let row = open_row(st, id, me).await?;
     author(st, id, pid).await?;
-    let sql = if on {
-        r#"INSERT INTO watch_party_votes ("proposalId", "userId") VALUES ($1, $2) ON CONFLICT DO NOTHING"#
-    } else {
-        r#"DELETE FROM watch_party_votes WHERE "proposalId" = $1 AND "userId" = $2"#
+    match value {
+        Some(value) => sqlx::query(
+            r#"INSERT INTO watch_party_votes ("proposalId", "userId", "value") VALUES ($1, $2, $3)
+                   ON CONFLICT ("proposalId", "userId") DO UPDATE SET "value" = $3"#,
+        )
+        .bind(pid)
+        .bind(me)
+        .bind(value)
+        .execute(&st.db)
+        .await?,
+        None => {
+            sqlx::query(
+                r#"DELETE FROM watch_party_votes WHERE "proposalId" = $1 AND "userId" = $2"#,
+            )
+            .bind(pid)
+            .bind(me)
+            .execute(&st.db)
+            .await?
+        }
     };
-    sqlx::query(sql).bind(pid).bind(me).execute(&st.db).await?;
     announce(st, &row).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -316,8 +335,9 @@ pub async fn vote(
     State(st): State<AppState>,
     SessionAuthed(a): SessionAuthed,
     PathParams((id, pid)): PathParams<(i32, i32)>,
+    ValidJson(b): ValidJson<VoteIn>,
 ) -> R<StatusCode> {
-    set_vote(&st, id, pid, a.user.id, true).await
+    set_vote(&st, id, pid, a.user.id, Some(b.value)).await
 }
 
 #[utoipa::path(delete, path = "/api/parties/{id}/proposals/{pid}/vote", responses((status = 204)))]
@@ -326,7 +346,7 @@ pub async fn unvote(
     SessionAuthed(a): SessionAuthed,
     PathParams((id, pid)): PathParams<(i32, i32)>,
 ) -> R<StatusCode> {
-    set_vote(&st, id, pid, a.user.id, false).await
+    set_vote(&st, id, pid, a.user.id, None).await
 }
 
 /// The host picks a proposal: it joins the end of the programme (the head when it is empty).

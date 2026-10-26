@@ -672,7 +672,7 @@ mod tests {
             json!({"type":"party.updated","partyId":1}),
             json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
             json!({"type":"party.programme","partyId":1,"rev":3,"item":{"mediaId":1}}),
-            json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"voterIds":[2]}]}),
+            json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"upvoterIds":[2],"downvoterIds":[]}]}),
         ]
     }
 

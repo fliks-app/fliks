@@ -536,6 +536,11 @@ pub struct ItemInfo {
     pub poster_url: Option<String>,
     pub fanart_url: Option<String>,
     pub additional_fanart_urls: Vec<String>,
+    pub still_url: Option<String>,
+    pub series_title: Option<String>,
+    pub season_number: Option<i32>,
+    pub episode_number: Option<i32>,
+    pub episode_title: Option<String>,
 }
 
 /// Media title (with `S01E02` for an episode) and artwork of every `(media, episode)` key, in one
@@ -553,11 +558,13 @@ pub async fn item_infos(
         Option<Vec<String>>,
         Option<i32>,
         Option<i32>,
+        Option<String>,
+        Option<String>,
     );
     let (media, episode): (Vec<i32>, Vec<Option<i32>>) = keys.iter().copied().unzip();
     let rows: Vec<Row> = sqlx::query_as(
         r#"SELECT q.media, q.episode, m.title, m."posterUrl", m."fanartUrl", m."additionalFanartUrls",
-                  s."seasonNumber", e."episodeNumber"
+                  s."seasonNumber", e."episodeNumber", e."stillUrl", e.title
            FROM unnest($1::int[], $2::int[]) AS q(media, episode)
            JOIN media m ON m.id = q.media
            LEFT JOIN episodes e ON e.id = q.episode
@@ -570,7 +577,19 @@ pub async fn item_infos(
     Ok(rows
         .into_iter()
         .map(
-            |(media, episode, title, poster, fanart, additional, season, number)| {
+            |(
+                media,
+                episode,
+                title,
+                poster,
+                fanart,
+                additional,
+                season,
+                number,
+                still,
+                ep_title,
+            )| {
+                let series = episode.map(|_| title.clone());
                 let title = match (season, number) {
                     (Some(s), Some(e)) => format!("{title} S{s:02}E{e:02}"),
                     _ => title,
@@ -582,6 +601,11 @@ pub async fn item_infos(
                         poster_url: poster,
                         fanart_url: fanart,
                         additional_fanart_urls: additional.unwrap_or_default(),
+                        still_url: still,
+                        series_title: series,
+                        season_number: season,
+                        episode_number: number,
+                        episode_title: ep_title.filter(|t| !t.is_empty()),
                     },
                 )
             },

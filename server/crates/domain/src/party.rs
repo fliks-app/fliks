@@ -391,6 +391,10 @@ impl Room {
         self.chat.iter().skip(skip).cloned().collect()
     }
 
+    pub fn empty_since(&self) -> Option<i64> {
+        self.empty_since
+    }
+
     /// The party reopens its countdown when it goes live with the room possibly long empty.
     pub fn reset_empty(&mut self, now: i64) {
         self.empty_since =

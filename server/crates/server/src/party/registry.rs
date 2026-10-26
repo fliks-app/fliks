@@ -39,6 +39,8 @@ struct Inner {
     live: HashMap<i32, Live>,
     /// ponytail: lost on restart, so a restart inside the lobby window repeats `party.starting` once.
     notified: HashSet<i32>,
+    /// When a freed `scheduled` room last emptied, for the schedule expiry.
+    emptied: HashMap<i32, i64>,
     /// Held across a mutation and its delivery, so one party's events leave in `rev` order.
     gates: HashMap<i32, Arc<tokio::sync::Mutex<()>>>,
     /// Proposal times (ms) per user, for the rate limit.
@@ -115,7 +117,19 @@ impl Parties {
 
     /// Frees the machine; the lobby notice stays, a still `scheduled` row must not repeat it.
     pub fn remove(&self, id: i32) {
-        self.inner().live.remove(&id);
+        let mut g = self.inner();
+        if let Some(t) = g.live.remove(&id).and_then(|l| l.room.empty_since()) {
+            g.emptied.insert(id, t);
+        }
+    }
+
+    /// Rule 11: `None` while the room has a present member, else when it emptied (0: never joined).
+    fn empty_since(&self, id: i32) -> Option<i64> {
+        let g = self.inner();
+        match g.live.get(&id) {
+            Some(l) => l.room.empty_since(),
+            None => Some(g.emptied.get(&id).copied().unwrap_or(0)),
+        }
     }
 
     fn forget(&self, id: i32) {
@@ -123,6 +137,7 @@ impl Parties {
         g.live.remove(&id);
         g.gates.remove(&id);
         g.notified.remove(&id);
+        g.emptied.remove(&id);
     }
 
     pub fn forget_notice(&self, id: i32) {
@@ -208,23 +223,30 @@ impl Brief {
 }
 
 pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
-    let (title, poster_url, fanart_url, additional_fanart_urls) = match info {
-        Some(i) => (
-            i.title,
-            i.poster_url,
-            i.fanart_url,
-            i.additional_fanart_urls,
-        ),
-        None => Default::default(),
-    };
+    let i = info.unwrap_or(db::ItemInfo {
+        title: String::new(),
+        poster_url: None,
+        fanart_url: None,
+        additional_fanart_urls: vec![],
+        still_url: None,
+        series_title: None,
+        season_number: None,
+        episode_number: None,
+        episode_title: None,
+    });
     PartyItem {
         media_id: item.media_id,
         media_file_id: item.media_file_id,
         episode_id: item.episode_id,
-        title,
-        poster_url,
-        fanart_url,
-        additional_fanart_urls,
+        title: i.title,
+        poster_url: i.poster_url,
+        fanart_url: i.fanart_url,
+        additional_fanart_urls: i.additional_fanart_urls,
+        still_url: i.still_url,
+        series_title: i.series_title,
+        season_number: i.season_number,
+        episode_number: i.episode_number,
+        episode_title: i.episode_title,
         hidden: false,
     }
 }
@@ -593,7 +615,11 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
         let Some(at) = row.scheduled_at.map(|t| t.timestamp_millis()) else {
             continue;
         };
-        if now_ms >= at + SCHEDULE_EXPIRY_MS {
+        let expires = st
+            .parties
+            .empty_since(row.id)
+            .map(|e| at.max(e) + SCHEDULE_EXPIRY_MS);
+        if expires.is_some_and(|t| now_ms >= t) {
             end(st, &row, CloseReason::Expired).await?;
         } else if now_ms >= at - LOBBY_OPEN_BEFORE_MS {
             announce_lobby(st, &row).await?;
