@@ -3,16 +3,14 @@
 name: Client
 
 on:
-  pull_request:
+  workflow_call:
+  push:
     branches: [main]
-    paths: &paths
+    paths:
       - 'client/**'
       - 'desktop/**'
       - '!**/*.md'
       - '.github/workflows/client.yml'
-  push:
-    branches: [main]
-    paths: *paths
 
 concurrency:
   group: client-${{ github.ref }}
