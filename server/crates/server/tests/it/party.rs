@@ -168,7 +168,7 @@ async fn create_checks_follows_and_join_checks_access_and_connection(pool: PgPoo
     assert_eq!(p["status"], "scheduled");
     assert_eq!(p["host"]["username"], "alice");
     assert_eq!(p["inviteToken"].as_str().unwrap().len(), 22);
-    assert_eq!(p["live"]["state"], "idle");
+    assert_eq!(p["live"]["playback"], Value::Null);
     let (id, token) = (
         p["id"].as_i64().unwrap(),
         p["inviteToken"].as_str().unwrap().to_owned(),
@@ -267,7 +267,10 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
     let (s, e) = c
         .call("POST", &url, &a, Some(intent("da", "seek", 1)))
         .await;
-    assert_eq!((s, e["live"]["state"].clone()), (409, json!("waiting")));
+    assert_eq!(
+        (s, e["live"]["playback"]["state"].clone()),
+        (409, json!("waiting"))
+    );
     let (s, _) = c
         .call(
             "POST",
@@ -335,7 +338,7 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
         )
         .await;
     assert_eq!((s, p["status"].clone()), (201, json!("scheduled")));
-    assert_eq!(p["live"]["state"], "idle");
+    assert_eq!(p["live"]["playback"], Value::Null);
     assert!(p["scheduledAt"].is_string());
     assert_eq!(events_of(&mut sb, "party.starting").await.len(), 1);
 
@@ -360,7 +363,7 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
             Some(json!({"scheduledAt": at(-5)})),
         )
         .await;
-    assert_eq!((s, p["live"]["state"].clone()), (200, json!("idle")));
+    assert_eq!((s, p["live"]["playback"].clone()), (200, Value::Null));
     assert_eq!(events_of(&mut sb, "party.starting").await.len(), 1);
     let (s, p) = c
         .call("POST", &format!("/api/parties/{id}/start"), &a, None)
@@ -929,7 +932,12 @@ async fn creating_a_playlist_party_needs_a_readable_playlist_and_opens_on_its_fi
             404,
             "Playlist #1 not found",
         ),
-        (&a, json!({"name": "n"}), 400, "party.error_invalid_item"),
+        (
+            &a,
+            json!({"name": "n", "episodeId": 1}),
+            400,
+            "party.error_invalid_item",
+        ),
     ] {
         let (s, e) = c.call("POST", "/api/parties", t, Some(body)).await;
         assert_eq!((s, msg(&e)), (code, Some(key)));
@@ -994,7 +1002,7 @@ async fn next_skips_what_a_member_cannot_open_and_the_end_idles_the_party(pool: 
         .await;
     }
     let url = format!("/api/parties/{id}/intent");
-    let show = |p: &Value| p["live"]["state"].clone();
+    let show = |p: &Value| p["live"]["playback"]["state"].clone();
     let rev = |p: &Value| p["live"]["rev"].as_u64().unwrap();
     let path = format!("/api/parties/{id}");
     let get = || c.call("GET", &path, &a, None);
@@ -1142,7 +1150,7 @@ async fn the_hosts_ended_moves_a_playlist_party_on_and_a_plain_party_only_idles(
     assert_eq!(s, 204);
     tokio::time::sleep(Duration::from_millis(1200)).await;
     let (_, now) = c.call("GET", &format!("/api/parties/{id}"), &a, None).await;
-    assert_eq!(now["live"]["state"], "playing");
+    assert_eq!(now["live"]["playback"]["state"], "playing");
     let (s, _) = c
         .call(
             "POST",
@@ -1154,7 +1162,7 @@ async fn the_hosts_ended_moves_a_playlist_party_on_and_a_plain_party_only_idles(
     assert_eq!(s, 202);
     let (_, now) = c.call("GET", &format!("/api/parties/{id}"), &a, None).await;
     assert_eq!(now["item"]["episodeId"], 1);
-    assert_eq!(now["live"]["state"], "waiting");
+    assert_eq!(now["live"]["playback"]["state"], "waiting");
 
     // without a playlist, next is refused and ended only idles
     let (_, p) = c
@@ -1260,7 +1268,7 @@ async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(p
     assert!(sys.iter().all(|s| s.0 != "item_skipped"));
     assert_eq!(
         (
-            now["live"]["state"].clone(),
+            now["live"]["playback"]["state"].clone(),
             now["item"]["episodeId"].clone()
         ),
         (json!("idle"), json!(5))
@@ -1312,6 +1320,7 @@ async fn a_kick_survives_a_restart_and_only_a_new_token_or_an_invite_lifts_it(po
 
     // not a guest anywhere, and the machine is gone: the block is in the database
     c.st.parties.remove(id as i32);
+    let _ca = c.connect(alice, "da");
     let (_, p) = c.call("GET", &url, &a, None).await;
     assert_eq!(p["guests"], json!([]));
     let (_, list) = c.call("GET", "/api/parties", &b, None).await;
@@ -1387,6 +1396,7 @@ async fn a_recreated_machine_keeps_its_revision_above_the_old_one_and_a_lobby_ha
         .await;
     let old = p["live"]["rev"].as_u64().unwrap();
     c.st.parties.remove(id as i32);
+    let _ca = c.connect(alice, "da");
     tokio::time::sleep(Duration::from_millis(5)).await;
     let (_, p) = c.call("POST", &format!("{url}/join"), &a, join).await;
     assert!(p["live"]["rev"].as_u64().unwrap() > old);
@@ -1445,17 +1455,17 @@ async fn an_ended_for_another_item_is_ignored_and_one_for_the_current_item_count
     .await;
     tokio::time::sleep(Duration::from_millis(1200)).await;
     assert_eq!(
-        c.call("GET", &url, &a, None).await.1["live"]["state"],
+        c.call("GET", &url, &a, None).await.1["live"]["playback"]["state"],
         "playing"
     );
     assert_eq!(send("ended", json!({"mediaId": 99})).await, 202);
     assert_eq!(
-        c.call("GET", &url, &a, None).await.1["live"]["state"],
+        c.call("GET", &url, &a, None).await.1["live"]["playback"]["state"],
         "playing"
     );
     assert_eq!(send("ended", json!({"mediaId": 1})).await, 202);
     let (_, p) = c.call("GET", &url, &a, None).await;
-    assert_eq!(p["live"]["state"], "idle");
+    assert_eq!(p["live"]["playback"]["state"], "idle");
     let rev = p["live"]["rev"].clone();
     assert_eq!(send("ended", json!({"mediaId": 1})).await, 202);
     assert_eq!(c.call("GET", &url, &a, None).await.1["live"]["rev"], rev);
@@ -1559,6 +1569,7 @@ async fn an_item_a_user_cannot_open_is_not_named_to_them(pool: PgPool) {
         .await
         .unwrap();
     c.st.parties.remove(id as i32);
+    let _ca = c.connect(alice, "da");
     let (_, list) = c.call("GET", "/api/parties", &b, None).await;
     assert_eq!(list[0]["item"]["title"], "");
     let (_, p) = c.call("GET", &format!("/api/parties/{id}"), &b, None).await;
@@ -1651,4 +1662,229 @@ async fn an_invitee_declines_and_the_party_leaves_their_list(pool: PgPool) {
     assert_eq!(p["guests"].as_array().unwrap().len(), 0);
     let (s, _) = c.call("POST", &format!("{url}/decline"), &b, None).await;
     assert_eq!(s, 404, "a second decline finds no invitation");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_party_without_a_film_takes_the_hosts_selection_and_starts_on_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 1).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "later", "inviteeIds": [bob]})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    let id = p["id"].as_i64().unwrap();
+    let url = format!("/api/parties/{id}");
+    assert_eq!(
+        (p["item"].clone(), p["live"]["playback"].clone()),
+        (Value::Null, Value::Null)
+    );
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list[0]["item"], Value::Null);
+
+    let (s, e) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_no_item")));
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["status"], "scheduled");
+
+    let mut sa = c.stream(&a, "da").await;
+    let mut sb = c.stream(&b, "db").await;
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let (s, p) = c
+            .call(
+                "POST",
+                &format!("{url}/join"),
+                t,
+                Some(json!({"deviceId": d})),
+            )
+            .await;
+        assert_eq!((s, p["item"].clone()), (200, Value::Null));
+    }
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &b,
+            Some(json!({"mediaId": 2})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")));
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 2, "episodeId": 99})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+
+    let (s, p) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 2})),
+        )
+        .await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
+    let picked = events_of(&mut sb, "party.selection").await;
+    assert_eq!(picked.len(), 1);
+    assert_eq!(picked[0]["item"]["mediaId"], 2);
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    assert_eq!(
+        (p["item"]["mediaId"].clone(), p["live"]["playback"].clone()),
+        (json!(2), Value::Null)
+    );
+
+    let (s, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!((s, p["status"].clone()), (200, json!("live")));
+    assert_eq!(p["item"]["mediaId"], 2);
+    assert_eq!(p["live"]["playback"]["state"], "waiting");
+    let states = events_of(&mut sa, "party.state").await;
+    assert_eq!(states.last().unwrap()["item"]["mediaId"], 2);
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 1})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_selection_every_member_cannot_open_is_refused_and_a_member_without_access_may_join_a_room_with_no_film(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", false).await;
+    c.follow(alice, bob).await;
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "room", "inviteeIds": [bob]})),
+        )
+        .await;
+    let url = format!("/api/parties/{}", p["id"]);
+    let _ca = c.connect(alice, "da");
+    let _cb = c.connect(bob, "db");
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let (s, _) = c
+            .call(
+                "POST",
+                &format!("{url}/join"),
+                t,
+                Some(json!({"deviceId": d})),
+            )
+            .await;
+        assert_eq!(s, 200);
+    }
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 1})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_member_no_access")));
+    assert_eq!(e["usernames"], json!(["bob"]));
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_row_is_the_source_of_truth_when_the_start_follows_a_selection_the_machine_missed(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    more_media(&c, 1).await;
+    let (_, a) = c.user("alice", true).await;
+    let (_, p) = c
+        .call("POST", "/api/parties", &a, Some(json!({"name": "room"})))
+        .await;
+    let id = p["id"].as_i64().unwrap();
+    let url = format!("/api/parties/{id}");
+    sqlx::query(r#"UPDATE watch_parties SET "mediaId" = 2 WHERE id = $1"#)
+        .bind(id as i32)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
+    assert_ne!(p["live"]["playback"], Value::Null);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_selection_survives_the_lobby_being_freed_and_select_tells_the_rail(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 1).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "room", "inviteeIds": [bob]})),
+        )
+        .await;
+    let id = p["id"].as_i64().unwrap();
+    let url = format!("/api/parties/{id}");
+    let mut sb = c.stream(&b, "db").await;
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 2})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(events_of(&mut sb, "party.updated").await.len(), 1);
+
+    c.st.parties.remove(id as i32);
+    let _ca = c.connect(alice, "da");
+    let (s, p) = c
+        .call(
+            "POST",
+            &format!("{url}/join"),
+            &a,
+            Some(json!({"deviceId": "da"})),
+        )
+        .await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(2)));
+    let (_, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!(p["live"]["playback"]["state"], "waiting");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_playlist_party_only_selects_a_row_of_its_playlist(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    playlist_setup(&c, alice).await;
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "playlistId": 1})),
+        )
+        .await;
+    let url = format!("/api/parties/{}/select", p["id"]);
+    let (s, e) = c.call("POST", &url, &a, Some(json!({"mediaId": 3}))).await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+    let (s, p) = c.call("POST", &url, &a, Some(json!({"mediaId": 1}))).await;
+    assert_eq!((s, p["item"]["mediaId"].clone()), (200, json!(1)));
 }

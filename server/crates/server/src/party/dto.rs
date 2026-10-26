@@ -263,7 +263,7 @@ pub struct PartySummaryDto {
     #[serde(with = "iso_ms::opt")]
     pub lobby_opens_at: Option<DateTime<Utc>>,
     pub host: UserRef,
-    pub item: PartyItem,
+    pub item: Option<PartyItem>,
     pub playlist: Option<PlaylistRef>,
     pub member_count: usize,
 }
@@ -282,11 +282,16 @@ pub struct MemberDto {
 }
 
 #[derive(Serialize)]
+pub struct PlaybackDto {
+    pub state: State,
+    pub anchor: Anchor,
+}
+
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PartyLive {
     pub rev: u64,
-    pub state: State,
-    pub anchor: Anchor,
+    pub playback: Option<PlaybackDto>,
     pub members: Vec<MemberDto>,
     pub messages: Vec<Message>,
 }

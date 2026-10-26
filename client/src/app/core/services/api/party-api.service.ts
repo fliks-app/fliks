@@ -58,10 +58,15 @@ export interface PartyMessage {
   sentAtMs: number;
 }
 
-export interface PartyLive {
-  rev: number;
+/** What plays; absent before the host starts the party. */
+export interface PartyPlayback {
   state: PartyPlayState;
   anchor: PartyAnchor;
+}
+
+export interface PartyLive {
+  rev: number;
+  playback: PartyPlayback | null;
   members: PartyMember[];
   messages: PartyMessage[];
 }
@@ -79,7 +84,8 @@ export interface PartySummaryDto {
   /** When the lobby opens, on the server's clock. */
   lobbyOpensAt: string | null;
   host: PartyUser;
-  item: PartyItem;
+  /** The playing item, else the film chosen for the start; null while none is chosen. */
+  item: PartyItem | null;
   /** The playlist the party follows; the server picks what plays next from it. */
   playlist: PartyPlaylistRef | null;
   memberCount: number;

@@ -30,7 +30,7 @@ struct PartyLobbyView: View {
         .onAppear {
             visible = true
             if service.party == nil { dismiss() }
-            backdrop.url = service.party?.item.fanartUrl ?? service.party?.item.posterUrl
+            backdrop.url = service.party?.item?.fanartUrl ?? service.party?.item?.posterUrl
         }
         // Going live hands the screen to the player, which owns the party from there.
         .onDisappear {
@@ -68,6 +68,7 @@ struct PartyLobbyView: View {
                         Label(tr("party.start"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(service.party?.item == nil)
                 }
                 Button { Task { await service.setReady(!ready) } } label: {
                     Label(ready ? tr("party.not_ready") : tr("party.ready"),

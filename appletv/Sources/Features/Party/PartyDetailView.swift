@@ -39,7 +39,7 @@ struct PartyDetailView: View {
                     if dto.status == "ended" { throw APIError.badStatus(404) }
                     party = dto
                     service.setPreview(dto)
-                    backdrop.url = dto.item.fanartUrl ?? dto.item.posterUrl
+                    backdrop.url = dto.item?.fanartUrl ?? dto.item?.posterUrl
                 } catch APIError.badStatus(404, _) {
                     gone = true
                     party = nil

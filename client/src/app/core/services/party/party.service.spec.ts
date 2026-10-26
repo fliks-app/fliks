@@ -28,7 +28,7 @@ function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
     id: 7, name: 'p', status: 'live', scheduledAt: null, lobbyOpensAt: null, host: { userId: 1, username: 'a' },
     item: item(1, 100), playlist: null, memberCount: 1, policy: 'everyone', reactionsEnabled: true, chatEnabled: true,
     linkSharing: false, inviteToken: null, guests: [],
-    live: { rev, state: 'paused', anchor: { position: 0, serverTimeMs: 0 }, members: [], messages: [{ id: rev, userId: null, username: null, text: '', system: null, sentAtMs: 0 }] },
+    live: { rev, playback: { state: 'paused', anchor: { position: 0, serverTimeMs: 0 } }, members: [], messages: [{ id: rev, userId: null, username: null, text: '', system: null, sentAtMs: 0 }] },
     ...over,
   };
 }
@@ -133,6 +133,36 @@ describe('PartyService refetch', () => {
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(router.navigate).toHaveBeenCalledTimes(1);
     expect(api.queue).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PartyService room before the start', () => {
+  const lobby = (over: Partial<PartyDto> = {}) =>
+    dto(1, { status: 'scheduled', item: null, live: { ...dto(1).live!, playback: null }, ...over });
+
+  it('is a lobby with no playback and no item', () => {
+    const { svc } = setup();
+    svc.applySnapshot(lobby());
+    expect(svc.lobby()).toBe(true);
+    expect(svc.live()).toBeNull();
+    expect(svc.item()).toBeNull();
+  });
+
+  it('takes the film the host chose from party.selection, once', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(lobby());
+    events.next({ type: 'party.selection', partyId: 7, rev: 2, item: item(3) });
+    expect(svc.item()?.mediaId).toBe(3);
+    events.next({ type: 'party.selection', partyId: 7, rev: 2, item: item(4) });
+    expect(svc.item()?.mediaId).toBe(3);
+  });
+
+  it('builds the playback once the party has started', () => {
+    const { svc } = setup();
+    svc.applySnapshot(lobby());
+    svc.applySnapshot(dto(2, { item: item(3) }));
+    expect(svc.live()?.item.mediaId).toBe(3);
+    expect(svc.live()?.state).toBe('paused');
   });
 });
 

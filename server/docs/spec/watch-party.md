@@ -1,12 +1,12 @@
 # Spec: watch party
 
-Synchronized playback of one media item at a time between several users, with an ephemeral chat. A party can follow a playlist or, on an episode, its series. Persisted part: the party row and its guests (invitees and link joiners). Live part (state machine, members, chat): in memory in a `PartyRegistry` held by `AppState`, like `presence.md`.
+Synchronized playback of one media item at a time between several users, with an ephemeral chat. A party starts as a room, with or without a film chosen yet; playback exists only after the start. A party can follow a playlist or, on an episode, its series. Persisted part: the party row and its guests (invitees and link joiners). Live part (state machine, members, chat): in memory in a `PartyRegistry` held by `AppState`, like `presence.md`.
 
 ## Model
 
 Table `watch_parties`:
 - `id serial PK`, `name text NOT NULL` (1..80), `ownerId int FK users ON DELETE CASCADE`
-- `mediaId int FK media ON DELETE CASCADE`, `mediaFileId int NULL`, `episodeId int NULL`: the current item
+- `mediaId int NULL FK media ON DELETE CASCADE`, `mediaFileId int NULL`, `episodeId int NULL`: the current item once `live`, the film chosen for the start while `scheduled` (null: none chosen yet). CHECKs: `status = 'scheduled' OR "mediaId" IS NOT NULL`, and `"mediaId" IS NOT NULL OR ("mediaFileId" IS NULL AND "episodeId" IS NULL)`
 - `playlistId int NULL FK playlists ON DELETE SET NULL`: the playlist the party follows; deleting the playlist leaves a plain party on its current item
 - `inviteToken text UNIQUE NOT NULL` (22 chars base64url, 128 random bits)
 - `policy text NOT NULL DEFAULT 'everyone'` (`everyone` | `host_only`)
@@ -18,20 +18,26 @@ Table `watch_parties`:
 
 Table `watch_party_invitees`: `partyId FK watch_parties ON DELETE CASCADE`, `userId FK users ON DELETE CASCADE`, PK `(partyId, userId)`, `source text NOT NULL DEFAULT 'invite'` (`invite` | `link` | `kicked`, CHECK). A row is a guest of the party: `invite` for an explicit invitation, `link` for a user who joined with the token. `kicked` is not a guest: it records a kick (below) and is ignored by every listing, guest DTO, notification and access check.
 
-Live state, only while `status = live`:
-- `state`: `idle | waiting | paused | playing`
-- `anchor { position: f64, serverTimeMs: i64 }`: while `playing`, `position(t) = anchor.position + (t - anchor.serverTimeMs) / 1000`; otherwise `anchor.position`.
-- `rev: u64`, +1 on every mutation of state, item, members or settings. A machine starts `rev` and its message ids at the epoch ms of its creation, so a recreated one (restart, expired lobby) stays above what clients already hold.
+Live state, in memory, is `Live { room, playback }`.
+
+`Room` (exists from the lobby on, kept through the start):
+- `rev: u64`, +1 on every mutation of playback, selection, members or settings. A machine starts `rev` and its message ids at the epoch ms of its creation, so a recreated one (restart, expired lobby) stays above what clients already hold.
 - `members[]`: `{ userId, username, deviceId, connectionId, role: host|member, status: ready|buffering|away|waiting, lastSeenMs, rttMs }`. A member key is `(userId, deviceId)`: the same user on a second device is a second member.
 - `chat`: ring buffer of the last 200 `PartyMessage`.
+- `selection: Item | null`: the film the start plays, fixed by the host (`select`); null until chosen.
+
+`Playback` (`playback`, null before the start; `status = live` has one):
+- `item`: the item playing.
+- `state`: `idle | waiting | paused | playing`
+- `anchor { position: f64, serverTimeMs: i64 }`: while `playing`, `position(t) = anchor.position + (t - anchor.serverTimeMs) / 1000`; otherwise `anchor.position`.
 
 ## Access
 
 - Every route requires a session credential (`SessionAuthed`). No CASL policy beyond that.
-- Creating a party: the owner must pass `assert_media_accessible` on `mediaId`. With `playlistId` the owner must also be able to read the playlist (`playlists.md` rule 4, min role viewer, else 404 `Playlist #<id> not found`); the party then follows it for as long as it lives, whatever the owner's access to it later. Each invitee must be a user the owner follows with an `accepted` follow; otherwise 400 `party.error_invitee_not_followed`.
-- Viewing or joining: the owner, any guest (invitee or link joiner), or anyone presenting the `inviteToken` (any account). The joiner must pass `assert_media_accessible` on the current item, else 403 `party.error_no_access` (the client names the party and the media).
-- `setItem` to a new item: every current member must pass `assert_media_accessible`; otherwise 409 `party.error_member_no_access` with `{ usernames: string[] }`. `next`, `previous` and the advance after `ended` skip such an item instead (Followed queue).
-- Host-only actions: `PATCH`, `DELETE`, schedule, kick, transfer, `start`, token regeneration. Others get 403 `party.error_not_host`.
+- Creating a party: the owner must pass `assert_media_accessible` on `mediaId` when there is one. With `playlistId` the owner must also be able to read the playlist (`playlists.md` rule 4, min role viewer, else 404 `Playlist #<id> not found`); the party then follows it for as long as it lives, whatever the owner's access to it later. Each invitee must be a user the owner follows with an `accepted` follow; otherwise 400 `party.error_invitee_not_followed`.
+- Viewing or joining: the owner, any guest (invitee or link joiner), or anyone presenting the `inviteToken` (any account). The joiner must pass `assert_media_accessible` on the current item (the selection before the start), else 403 `party.error_no_access` (the client names the party and the media). A party with no item yet skips the check.
+- `setItem` to a new item, and `select`: every current member must pass `assert_media_accessible`; otherwise 409 `party.error_member_no_access` with `{ usernames: string[] }`. `next`, `previous` and the advance after `ended` skip such an item instead (Followed queue).
+- Host-only actions: `PATCH`, `DELETE`, schedule, kick, transfer, `select`, `start`, token regeneration. Others get 403 `party.error_not_host`.
 - `reactionsEnabled = false`: `POST /reactions` is 403 `party.error_reactions_off`; `chatEnabled = false`: `POST /messages` (quick phrases included) is 403 `party.error_chat_off`. System messages keep flowing.
 - `linkSharing = false`: `PartyDto.inviteToken` is null for everyone but the current host, members included. Joining with a token already held keeps working, and regenerating the token stays host-only.
 - `policy = host_only`: `play|pause|seek|setItem|next|previous` intents from a non-host get 403 `party.error_host_only`.
@@ -44,14 +50,15 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 | Method path | Body / query | Response | Notes |
 |---|---|---|---|
 | `GET /api/time` | none | `{ t1: i64, t2: i64 }` | server epoch ms at request reception (`t1`) and right before writing the response (`t2`). Any authenticated caller. |
-| `POST /api/parties` | `{ name, mediaId?, mediaFileId?, episodeId?, playlistId?: int, scheduledAt?: ISO, policy?, reactionsEnabled?, chatEnabled?, linkSharing?, inviteeIds?: int[] (max 50) }` | 201 `PartyDto` | `mediaId` is required without `playlistId` (400 `party.error_invalid_item`). With `playlistId`, `mediaId`/`episodeId` pick the first item, which must be a row of the playlist (else 400 `party.error_invalid_item`); left out, it is the playlist's first playable item for the owner (none: 400 `party.error_invalid_item`). `scheduledAt` null or in the past ⇒ `scheduledAt = now`. The party is always `scheduled`; when its lobby window is open (always for "now") the lobby machine exists at once, with `live` non-null, and `party.starting` goes to the invitees right away. Going live is `POST /start`. Emits `party.invited` to invitees. No duplicates: when the host already has an open party on the same item (same `mediaId`, `mediaFileId`, `episodeId`, `playlistId`), that party is returned as a 201 and nothing is inserted or announced. "Open" for a "now" creation is `live`, or `scheduled` with its lobby open; a creation with a future `scheduledAt` matches a `scheduled` party with the same start, so several at different times stay allowed. The lookup and the insert share one transaction under a `pg_advisory_xact_lock` on host+item (a unique index cannot express the lobby window). A switch left out takes the owner's value from their most recent party (default true). |
+| `POST /api/parties` | `{ name, mediaId?, mediaFileId?, episodeId?, playlistId?: int, scheduledAt?: ISO, policy?, reactionsEnabled?, chatEnabled?, linkSharing?, inviteeIds?: int[] (max 50) }` | 201 `PartyDto` | `mediaId` is optional: left out without `playlistId`, the party has no item (`item: null`) until the host `select`s one. With `playlistId`, `mediaId`/`episodeId` pick the first item, which must be a row of the playlist (else 400 `party.error_invalid_item`); left out, it is the playlist's first playable item for the owner (none: 400 `party.error_invalid_item`). `scheduledAt` null or in the past ⇒ `scheduledAt = now`. The party is always `scheduled`; when its lobby window is open (always for "now") the lobby machine exists at once, with `live` non-null (`playback: null`), and `party.starting` goes to the invitees right away. Going live is `POST /start`. Emits `party.invited` to invitees. No duplicates: when the host already has an open party on the same item (same `mediaId`, `mediaFileId`, `episodeId`, `playlistId`), that party is returned as a 201 and nothing is inserted or announced; a party without an item never matches. "Open" for a "now" creation is `live`, or `scheduled` with its lobby open; a creation with a future `scheduledAt` matches a `scheduled` party with the same start, so several at different times stay allowed. The lookup and the insert share one transaction under a `pg_advisory_xact_lock` on host+item (a unique index cannot express the lobby window). A switch left out takes the owner's value from their most recent party (default true). |
 | `GET /api/parties` | none | `PartySummaryDto[]` | parties with status `scheduled` or `live` where the caller is owner or has a guest row (invitee or link joiner); `live` first, then `scheduledAt` ascending. |
 | `GET /api/parties/{id}` | none | `PartyDto` | full snapshot; `live` is filled whenever the party has an in-memory state: `live`, or a `scheduled` party whose lobby is open. Also allowed to a member who joined with the token. |
 | `GET /api/parties/by-token/{token}` | none | `PartyDto` | resolves an invite link; does not join. A caller with a `kicked` row gets 403 `party.error_kicked`. The owner, a guest or a member gets the full snapshot; anyone else only the summary fields and switches, with `guests: []` and `live: null` until they join. |
 | `PATCH /api/parties/{id}` | `{ name?, policy?, reactionsEnabled?, chatEnabled?, linkSharing?, scheduledAt?: ISO, regenerateToken?: bool }` | `PartyDto` | host only; `scheduledAt` only while `scheduled` (else 409 `party.error_not_scheduled`); a past date is clamped to now, which opens the lobby at once (machine and `party.starting` immediately, not at the next sweep). Cancelling is `DELETE`; starting early is `POST /start`, which takes a scheduled party live at any time. Emits `party.settings` to members, and `party.updated` to the owner and guests only when the summary changed (reschedule or rename). `regenerateToken` also deletes the party's `kicked` rows and every `link` guest row except the host's, removing those users from the live party. |
 | `DELETE /api/parties/{id}` | none | 204 | host only; sets `ended`, emits `party.closed {reason: 'host_ended'}` to members and `party.updated` to invitees. |
 | `POST /api/parties/{id}/join` | `{ deviceId, token? }` | `PartyDto` | opens the lobby of a `scheduled` party if within 15 min of `scheduledAt` (status stays `scheduled`, members are kept in memory); before that 409 `party.error_not_open`. `connectionId` = the caller's SSE connection for that `deviceId` (from the hub); none ⇒ 409 `party.error_no_connection`. Rejoining with the same `(userId, deviceId)` replaces the connection and resets status. A successful join with the token by a user without a guest row inserts one with `source = link`. |
-| `POST /api/parties/{id}/start` | none | `PartyDto` | host only; `scheduled` ⇒ `live`, `startedAt = now`; the only way to go live. With the host a present member, the party enters `waiting` toward `playing` at the anchor, as a host `play` would (rule 1), without the `resumed` message; else state `idle`. |
+| `POST /api/parties/{id}/select` | `{ mediaId, mediaFileId?, episodeId? }` | `PartyDto` | host only, while `scheduled` (else 409 `party.error_not_scheduled`); fixes the film the start plays, written to the row's item columns. Same item check as `setItem` (400 `party.error_invalid_item`) and every current member must pass the access check (409 `party.error_member_no_access` with `usernames`); the host must pass it too, as at creation. On a party that follows a playlist the item must be a playable row of it, else 400 `party.error_invalid_item`. Written only while the row is still `scheduled` (a race with `start` is 409 `party.error_not_scheduled`). Emits `party.selection` to members and `party.updated` to the owner and guests (the home rail shows the film). |
+| `POST /api/parties/{id}/start` | none | `PartyDto` | host only; `scheduled` ⇒ `live`, `startedAt = now`; the only way to go live. Without an item chosen: 409 `party.error_no_item`, nothing changes. The item comes from the row, which is the source of truth, and becomes the `playback` item. With the host a present member, the party enters `waiting` toward `playing` at the anchor, as a host `play` would (rule 1), without the `resumed` message; else state `idle`. |
 | `POST /api/parties/{id}/leave` | `{ deviceId }` | 204 | removes the member; host leaving ⇒ host transferred to the oldest member. |
 | `POST /api/parties/{id}/intent` | `{ deviceId, action: play\|pause\|seek\|setItem\|ended\|next\|previous, position?: f64, item?: { mediaId, mediaFileId?, episodeId? }, baseRev: u64 }` | 202 `{ rev }` | `baseRev < rev` and action is `seek`, `setItem`, `next` or `previous` ⇒ 409 `party.error_stale` with the `PartyDto` in body. `play`/`pause` are applied whatever `baseRev`. `ended` carries `item { mediaId, episodeId? }`, the item the client saw end, and counts only while the state is `playing` or `paused` on that item (same `mediaId` and `episodeId`), so a second device's `ended`, or one that raced a step, is a 202 no-op. It is honoured from the host, or from any member while the host has no non-`away` member and `item` is given; a missing `item` is still accepted from the host and matches the current item. `next` and `previous` need `item` absent and a party that follows a queue, else 400 `party.error_invalid` (Followed queue). |
 | `GET /api/parties/{id}/queue` | none | `PartyItem[]` | the followed queue in its order (Followed queue), those in a library the caller can access; `[]` for a party on a movie. Owner, guests and members, like `GET /api/parties/{id}`. |
@@ -66,9 +73,9 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 
 DTOs (camelCase, every key present, `null` not absent):
 - `PartyItem { mediaId, mediaFileId: int|null, episodeId: int|null, title: string, posterUrl: string|null, fanartUrl: string|null, additionalFanartUrls: string[] }` (the media DTO's artwork fields, so the client picks the same backdrop)
-- `PartySummaryDto { id, name, status, scheduledAt: ISO|null, lobbyOpensAt: ISO|null (`scheduledAt - LOBBY_OPEN_BEFORE_MS` while `scheduled`, else null), host: { userId, username }, item: PartyItem, playlist: { id, name }|null, memberCount: int }`
+- `PartySummaryDto { id, name, status, scheduledAt: ISO|null, lobbyOpensAt: ISO|null (`scheduledAt - LOBBY_OPEN_BEFORE_MS` while `scheduled`, else null), host: { userId, username }, item: PartyItem|null (the playing item, else the selection, else null), playlist: { id, name }|null, memberCount: int }`
 - `PartyDto = PartySummaryDto + { policy, reactionsEnabled, chatEnabled, linkSharing, inviteToken: string|null (host, and members while `linkSharing`), guests: { userId, username, source: 'invite'|'link' }[], live: PartyLive|null }`
-- `PartyLive { rev, state, anchor: { position, serverTimeMs }, members: PartyMember[], messages: PartyMessage[] (last 50) }`
+- `PartyLive { rev, playback: { state, anchor: { position, serverTimeMs } }|null (null before the start), members: PartyMember[], messages: PartyMessage[] (last 50) }`
 - `PartyMember { userId, username, deviceId, role, status, deviceName: string|null, formFactor: string|null, voice: { muted: bool }|null }` (`voice` null = not in the voice channel)
 - `PartyMessage { id: u64, userId: int|null (null = system), username: string|null, text: string, system: { kind: string, by: string|null, args: object }|null, sentAtMs: i64 }`
 
@@ -76,6 +83,7 @@ DTOs (camelCase, every key present, `null` not absent):
 
 To each member connection (`emit_to_connection`):
 - `party.state { partyId, rev, state, item: PartyItem, anchor, whenMs: i64|null, by: { userId, username }|null, action: string|null }`. `whenMs` is the server epoch at which clients apply `playing` (scheduled unpause); null = apply now.
+- `party.selection { partyId, rev, item: PartyItem }`: the host chose the film (the item is resolved without access control: every member was checked).
 - `party.members { partyId, rev, members }`
 - `party.settings { partyId, rev, name, policy, reactionsEnabled, chatEnabled, linkSharing }`
 - `party.message { partyId, message: PartyMessage }`
@@ -83,9 +91,9 @@ To each member connection (`emit_to_connection`):
 - `party.closed { partyId, reason: host_ended|expired|kicked }`
 
 To users (`emit_to_users`):
-- `party.invited { partyId, name, scheduledAt, host: { userId, username }, item: PartyItem }` to explicit invitees only (a link joiner upgraded by an invitation included, never a plain link join).
+- `party.invited { partyId, name, scheduledAt, host: { userId, username }, item: PartyItem|null }` to explicit invitees only (a link joiner upgraded by an invitation included, never a plain link join).
 - `party.starting { partyId, name }` to every guest when the lobby opens (15 min before, or at once for a party for now) and when a party goes live; also to an invitee added while the lobby is open or the party is live.
-- `party.updated { partyId }` to owner + every guest on reschedule, cancel, start, end, and when a guest row is added by a link join or removed by a kick (the kicked user included) or a decline: the home rail refetches `GET /api/parties`.
+- `party.updated { partyId }` to owner + every guest on reschedule, cancel, start, end, film selection, and when a guest row is added by a link join or removed by a kick (the kicked user included) or a decline: the home rail refetches `GET /api/parties`.
 
 Clients drop any `party.state|members|settings` whose `rev` is ≤ the last applied one, and refetch `GET /api/parties/{id}` after an SSE reconnect or a `rev` gap.
 
@@ -137,7 +145,7 @@ Every state, member or settings mutation bumps `rev` and emits the matching even
 ## Implementation notes
 
 - Code: the pure machine is `fliks_domain::party`; routes, registry and tick are `server/crates/server/src/party/`. Wire events nest `item`, `anchor`, `members`, `message`, `host` as plain JSON in `SseEvent`.
-- Extra error keys: 403 `party.error_not_member` (caller has no member for that `deviceId`), 403 `party.error_kicked` (token rejoin after a kick), 409 `party.error_not_live` (no live state, or `intent` on a `scheduled` party), 409 `party.error_ended`, 400 `party.error_invalid` / `party.error_invalid_<name|text|item|invitees>`, 429 `party.error_rate_limited`. A kick or host transfer aimed at a non-member is 404 `party.error_not_found`.
+- Extra error keys: 403 `party.error_not_member` (caller has no member for that `deviceId`), 403 `party.error_kicked` (token rejoin after a kick), 409 `party.error_no_item` (`start` with no item chosen), `party.error_not_live` (no live state, or `intent` on a `scheduled` party), 409 `party.error_ended`, 400 `party.error_invalid` / `party.error_invalid_<name|text|item|invitees>`, 429 `party.error_rate_limited`. A kick or host transfer aimed at a non-member is 404 `party.error_not_found`.
 - Error bodies are the usual `{statusCode, message, error}`, except 409 `party.error_stale`, whose body is the bare `PartyDto`;  409 `party.error_member_no_access` adds `usernames: string[]`.
 - `intent` returns 202 `{ rev }`; an `ended` that does not count is accepted and ignored. `leave`, `status` and chat need only a member of an in-memory party.
 - Rule 9 is polled by the 1 s tick through `Hub::has_connection`; there is no hub hook. After an SSE reconnect the member is `away`: the client calls `join` again (same `deviceId`) to re-attach its new connection.
@@ -147,4 +155,4 @@ Every state, member or settings mutation bumps `rev` and emits the matching even
 - `party.starting` before a lobby opens is remembered in memory only: a restart inside the 15 min window repeats it once; an empty lobby freed by the tick keeps its mark while the row is `scheduled`.
 - Mutations of one party (and their delivery) are serialized, so its events leave in `rev` order. Rate counters of a member who left are dropped once their window ends. The lobby and expiry checks run every 10 s from the registry tick, not the job scheduler.
 - `GET /api/time`: `t1` is taken when the handler starts, after authentication.
-- Lobby (a `scheduled` party whose lobby is open): `live` is non-null with `state: idle` and anchor 0; members start `waiting`, `status` ready/waiting toggles emit `party.members`, chat works. `start` keeps the members and chat and the party goes `live`.
+- Lobby (a `scheduled` party whose lobby is open): `live` is non-null with `playback: null`; members start `waiting`, `status` ready/waiting toggles emit `party.members`, chat works; `play|pause|seek|setItem|next|previous|ended` are 409 `party.error_not_live`. `start` keeps the members and chat, builds the `playback` from the selection, and the party goes `live`.

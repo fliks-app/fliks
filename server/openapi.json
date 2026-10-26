@@ -2807,6 +2807,20 @@
         }
       }
     },
+    "/api/parties/{id}/select": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The host fixes the film the start will play, while the party is still `scheduled`.",
+        "operationId": "select",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/signal": {
       "post": {
         "tags": [
