@@ -296,19 +296,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     func ensureAudioSessionActive() {
         let session = AVAudioSession.sharedInstance()
         do {
-            // WebKit's GPU process holds its own non-mixable PlayAndRecord session for the mic: both sides must mix,
-            // or each activation interrupts the other and AVPlayer loses.
-            if voiceActive {
-                let options: AVAudioSession.CategoryOptions = [.mixWithOthers, .defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
-                if session.category != .playAndRecord || session.categoryOptions != options {
-                    try session.setCategory(.playAndRecord, mode: .default, options: options)
-                }
-            } else if session.category != .playback {
-                try session.setCategory(
-                    .playback,
-                    mode: .moviePlayback,
-                    options: [.allowAirPlay, .allowBluetoothA2DP]
-                )
+            // WebKit's GPU process records for the mic in its own PlayAndRecord session: ours must stay a mixable
+            // playback one, as a second recording or non-mixable session is interrupted by it.
+            let options: AVAudioSession.CategoryOptions = voiceActive ? [.mixWithOthers, .allowAirPlay, .allowBluetoothA2DP] : [.allowAirPlay, .allowBluetoothA2DP]
+            if session.category != .playback || session.categoryOptions != options {
+                try session.setCategory(.playback, mode: voiceActive ? .default : .moviePlayback, options: options)
             }
             try session.setActive(true)
         } catch {
