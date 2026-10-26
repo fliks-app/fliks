@@ -8,7 +8,9 @@ use crate::{events::SseEvent, state::AppState, sync::MutexExt};
 use chrono::{DateTime, Utc};
 use fliks_domain::{
     js::now_ms,
-    party::{CloseReason, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, SCHEDULE_EXPIRY_MS},
+    party::{
+        CloseReason, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, Message, SCHEDULE_EXPIRY_MS,
+    },
 };
 use serde_json::{Value, to_value};
 use std::{
@@ -16,6 +18,15 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+/// Creates the machine of a party that has none, with its stored chat.
+pub async fn ensure(st: &AppState, row: &Row, fresh: bool) -> sqlx::Result<()> {
+    if !st.parties.has(row.id) {
+        let chat = db::load_chat(&st.db, row.id).await?;
+        st.parties.insert(row, fresh, chat);
+    }
+    Ok(())
+}
 
 /// Effects of one mutation plus the members present when it ended.
 pub struct Delivery {
@@ -65,9 +76,13 @@ impl Parties {
         self.0.lock_clean()
     }
 
+    fn has(&self, id: i32) -> bool {
+        self.inner().live.contains_key(&id)
+    }
+
     /// Creates the machine for a row that has none: a `live` row boots paused (rule 10), else a
-    /// room holding the chosen film, with nothing playing.
-    pub fn ensure(&self, row: &Row, fresh: bool) {
+    /// room holding the chosen film, with nothing playing; `chat` is the history it reopens with.
+    fn insert(&self, row: &Row, fresh: bool, chat: Vec<Message>) {
         let args = (row.name.clone(), row.policy, row.owner_id, now_ms());
         self.inner().live.entry(row.id).or_insert_with(|| {
             let (n, p, h, now) = args;
@@ -80,6 +95,7 @@ impl Parties {
             l.room.reactions_enabled = row.reactions_enabled;
             l.room.chat_enabled = row.chat_enabled;
             l.room.link_sharing = row.link_sharing;
+            l.room.restore_chat(chat);
             l
         });
     }
@@ -347,10 +363,15 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 chat_enabled,
                 link_sharing,
             }),
-            Effect::Message(m) => emit(SseEvent::PartyMessage {
-                party_id: pid,
-                message: json(m),
-            }),
+            Effect::Message(m) => {
+                if let Err(err) = db::save_message(&st.db, party, &m).await {
+                    tracing::warn!(error = %err, party, "party message not saved");
+                }
+                emit(SseEvent::PartyMessage {
+                    party_id: pid,
+                    message: json(m),
+                });
+            }
             Effect::Reaction {
                 user_id,
                 username,
@@ -403,7 +424,7 @@ pub async fn end(st: &AppState, row: &Row, reason: CloseReason) -> sqlx::Result<
 /// Rule 10: every `live` row gets a machine, which starts its empty countdown.
 pub async fn boot(st: &AppState) -> sqlx::Result<()> {
     for row in db::live_rows(&st.db).await? {
-        st.parties.ensure(&row, false);
+        ensure(st, &row, false).await?;
     }
     Ok(())
 }
@@ -496,6 +517,6 @@ async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
 
 /// Opens a lobby now instead of at the next sweep: its machine exists and the guests are told.
 pub async fn open_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
-    st.parties.ensure(row, false);
+    ensure(st, row, false).await?;
     announce_lobby(st, row).await
 }
