@@ -1,16 +1,14 @@
-import { ChangeDetectionStrategy, Component, booleanAttribute, ElementRef, OnDestroy, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, OnDestroy, afterNextRender, booleanAttribute, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideCheck, LucideChevronLeft } from '@lucide/angular';
 import { Episode, Media, MediaService, Season } from '../../../core/services/api/media.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
-import { hideShadowedEpisodes } from '../../../features/media-detail/media-detail.utils';
-import { DefaultFocusDirective } from '../../directives/default-focus.directive';
-import { TvRowDirective } from '../../directives/tv-row.directive';
-import { TvSectionDirective } from '../../directives/tv-section.directive';
+import { SeasonLabelPipe } from '../../../core/pipes/season-label.pipe';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
+import { episodeBadgeLabel, hideShadowedEpisodes } from '../../../features/media-detail/media-detail.utils';
 import { MediaCardComponent } from '../media-card/media-card';
 import { ModalHeaderComponent } from '../modal-header';
-import { SeasonPickerComponent } from '../season-picker/season-picker.component';
 
 export interface MediaPick {
   mediaId: number;
@@ -21,11 +19,31 @@ export type EpisodePickMode = 'this' | 'untilEnd' | 'season' | 'multiple';
 
 export const SEARCH_DEBOUNCE_MS = 300;
 
+const MODE_KEY: Record<EpisodePickMode, string> = {
+  this: 'this',
+  untilEnd: 'until_end',
+  season: 'season',
+  multiple: 'multiple',
+};
+
+export interface PickerSeason {
+  seasonNumber: number;
+  episodes: Episode[];
+}
+
 /** Playable episodes of a season, in play order. */
 export function playableEpisodes(season: Season | undefined): Episode[] {
   return hideShadowedEpisodes(season?.episodes ?? [])
     .filter((e) => e.hasFile)
     .sort((a, b) => a.episodeNumber - b.episodeNumber);
+}
+
+/** Seasons with something to play, specials (season 0) last. */
+export function pickerSeasons(seasons: Season[] | undefined): PickerSeason[] {
+  return (seasons ?? [])
+    .map((s) => ({ seasonNumber: s.seasonNumber, episodes: playableEpisodes(s) }))
+    .filter((s) => s.episodes.length > 0)
+    .sort((a, b) => (a.seasonNumber || Infinity) - (b.seasonNumber || Infinity));
 }
 
 /** Episodes a mode adds, in play order; `anchor` is the clicked episode, `ticked` the multi-select. */
@@ -50,23 +68,23 @@ export function pickEpisodes(mode: EpisodePickMode, episodes: Episode[], anchor:
   imports: [
     FormsModule,
     TranslatePipe,
+    TranslatePluralPipe,
+    SeasonLabelPipe,
+    LucideCheck,
     LucideChevronLeft,
     ModalHeaderComponent,
     MediaCardComponent,
-    SeasonPickerComponent,
-    TvSectionDirective,
-    TvRowDirective,
-    DefaultFocusDirective,
   ],
   templateUrl: './media-picker.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MediaPickerComponent implements OnDestroy {
   private readonly media = inject(MediaService);
-  private readonly keyboard = inject(KeyboardOverlayService);
+  private readonly injector = inject(Injector);
+  protected readonly keyboard = inject(KeyboardOverlayService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
-  /** Allows the "several episodes" mode; otherwise only "this episode" is offered. */
+  /** Allows the episode modes beyond "this episode". */
   readonly multiple = input(false, { transform: booleanAttribute });
   readonly picked = output<MediaPick[]>();
 
@@ -78,33 +96,31 @@ export class MediaPickerComponent implements OnDestroy {
   protected readonly seriesLoading = signal(false);
   protected readonly seasonNumber = signal<number | null>(null);
   protected readonly mode = signal<EpisodePickMode>('this');
+  /** Ticked episode ids across every season. */
   protected readonly ticked = signal<ReadonlySet<number>>(new Set());
 
   protected readonly modes = computed<EpisodePickMode[]>(() =>
     this.multiple() ? ['this', 'untilEnd', 'season', 'multiple'] : ['this']);
-  protected readonly seasons = computed(() =>
-    (this.series()?.seasons ?? [])
-      .map((s) => ({ seasonNumber: s.seasonNumber, episodeCount: playableEpisodes(s).length }))
-      .filter((s) => s.episodeCount > 0)
-      .sort((a, b) => a.seasonNumber - b.seasonNumber));
-  protected readonly selectedSeason = computed(() => new Set(this.seasonNumber() == null ? [] : [this.seasonNumber()!]));
+  protected readonly seasons = computed(() => pickerSeasons(this.series()?.seasons));
   protected readonly episodes = computed(() =>
-    playableEpisodes(this.series()?.seasons?.find((s) => s.seasonNumber === this.seasonNumber())));
+    this.seasons().find((s) => s.seasonNumber === this.seasonNumber())?.episodes ?? []);
+  protected readonly allEpisodes = computed(() => this.seasons().flatMap((s) => s.episodes));
   protected readonly confirmable = computed(() => this.mode() === 'season' || this.mode() === 'multiple');
-  protected readonly confirmCount = computed(() =>
-    pickEpisodes(this.mode(), this.episodes(), null, this.ticked()).length);
+  protected readonly confirmCount = computed(() => this.confirmEpisodes().length);
 
   private timer: ReturnType<typeof setTimeout> | undefined;
   private searchSeq = 0;
+  private chooseSeq = 0;
 
   show(): void {
-    clearTimeout(this.timer);
+    const el = this.dialog()?.nativeElement;
+    if (!el || el.open) return;
+    this.reset();
     this.query.set('');
     this.results.set([]);
     this.searched.set(false);
-    this.series.set(null);
     this.keyboard.enter();
-    this.dialog()?.nativeElement.showModal();
+    el.showModal();
   }
 
   close(): void {
@@ -113,11 +129,37 @@ export class MediaPickerComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     clearTimeout(this.timer);
+    if (this.dialog()?.nativeElement.open) this.keyboard.leave();
   }
 
   protected onClosed(): void {
-    clearTimeout(this.timer);
+    this.reset();
     this.keyboard.leave();
+  }
+
+  /** Drops pending timers and in-flight responses, and returns to the search view. */
+  private reset(): void {
+    clearTimeout(this.timer);
+    this.searchSeq++;
+    this.chooseSeq++;
+    this.loading.set(false);
+    this.series.set(null);
+    this.seriesLoading.set(false);
+    this.seasonNumber.set(null);
+    this.mode.set('this');
+    this.ticked.set(new Set());
+  }
+
+  private focusView(): void {
+    afterNextRender(() => this.dialog()?.nativeElement.querySelector<HTMLElement>('[autofocus]')?.focus(), { injector: this.injector });
+  }
+
+  protected modeKey(m: EpisodePickMode): string {
+    return MODE_KEY[m];
+  }
+
+  protected badge(ep: Episode): string {
+    return episodeBadgeLabel(ep);
   }
 
   protected onQuery(value: string): void {
@@ -153,24 +195,30 @@ export class MediaPickerComponent implements OnDestroy {
       this.emit([{ mediaId: m.id, episodeId: null }]);
       return;
     }
+    const seq = ++this.chooseSeq;
     this.seriesLoading.set(true);
     this.series.set(m);
+    this.seasonNumber.set(null);
+    this.mode.set('this');
+    this.ticked.set(new Set());
+    this.focusView();
     try {
       const full = await this.media.getOne(m.id);
+      if (seq !== this.chooseSeq) return;
       this.series.set(full);
-      this.mode.set('this');
-      this.ticked.set(new Set());
       this.seasonNumber.set(this.seasons()[0]?.seasonNumber ?? null);
     } catch {
-      this.series.set(null);
+      if (seq === this.chooseSeq) this.series.set(null);
     } finally {
-      this.seriesLoading.set(false);
+      if (seq === this.chooseSeq) this.seriesLoading.set(false);
     }
   }
 
-  protected selectSeason(n: number): void {
-    this.seasonNumber.set(n);
-    this.ticked.set(new Set());
+  protected back(): void {
+    this.chooseSeq++;
+    this.seriesLoading.set(false);
+    this.series.set(null);
+    this.focusView();
   }
 
   protected setMode(m: EpisodePickMode): void {
@@ -192,7 +240,13 @@ export class MediaPickerComponent implements OnDestroy {
   }
 
   protected confirm(): void {
-    this.emitEpisodes(pickEpisodes(this.mode(), this.episodes(), null, this.ticked()));
+    this.emitEpisodes(this.confirmEpisodes());
+  }
+
+  private confirmEpisodes(): Episode[] {
+    const mode = this.mode();
+    if (mode === 'multiple') return pickEpisodes(mode, this.allEpisodes(), null, this.ticked());
+    return mode === 'season' ? this.episodes() : [];
   }
 
   private emitEpisodes(eps: Episode[]): void {
