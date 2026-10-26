@@ -9,7 +9,7 @@ use crate::{
     },
     http::{
         AppError,
-        auth::SessionAuthed,
+        auth::FileBoundAuthed,
         validate::{PathParams, ValidJson},
     },
     presence::{Beat, LiveSession, now_ms},
@@ -261,15 +261,57 @@ fn reply(lost: bool, state: Option<Option<Value>>) -> Response {
     }
 }
 
+/// A file-bound token beats only for its own file, which must belong to the media (and episode) beaten.
+async fn check_bound_file(
+    st: &AppState,
+    bound: u32,
+    media: i32,
+    episode: Option<i64>,
+    body_file: Option<i64>,
+) -> Result<(), AppError> {
+    let forbidden = || AppError::forbidden("Forbidden resource");
+    if body_file != Some(i64::from(bound)) {
+        return Err(forbidden());
+    }
+    let episode = episode.and_then(|e| i32::try_from(e).ok());
+    let owned = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS(
+             SELECT 1 FROM media_files mf
+             LEFT JOIN episodes e ON e.id = mf."episodeId"
+             LEFT JOIN seasons s ON s.id = e."seasonId"
+             WHERE mf.id = $1 AND COALESCE(s."mediaId", mf."mediaId") = $2
+               AND mf."episodeId" IS NOT DISTINCT FROM $3)"#,
+    )
+    .bind(bound as i32)
+    .bind(media)
+    .bind(episode)
+    .fetch_one(&st.db)
+    .await?;
+    owned.then_some(()).ok_or_else(forbidden)
+}
+
 #[utoipa::path(put, path = "/api/playback/media/{mediaId}/state", responses((status = 200), (status = 400), (status = 403)))]
 pub async fn heartbeat(
     State(st): State<AppState>,
-    SessionAuthed(a): SessionAuthed,
+    FileBoundAuthed {
+        auth: a,
+        bound_file,
+    }: FileBoundAuthed,
     PathParams(media): PathParams<i32>,
     headers: HeaderMap,
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Response, AppError> {
     let user = a.user.id;
+    if let Some(bound) = bound_file {
+        check_bound_file(
+            &st,
+            bound,
+            media,
+            int(&body, "episodeId"),
+            int(&body, "mediaFileId"),
+        )
+        .await?;
+    }
     let mut lost = false;
     let mut attributed = None;
     let mut state_changed = false;

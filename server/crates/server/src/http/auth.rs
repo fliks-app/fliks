@@ -194,6 +194,14 @@ pub struct StreamAuthed(pub Authed);
 #[derive(Debug, Clone)]
 pub struct SessionAuthed(pub Authed);
 
+/// `Authed` that also takes a file-bound stream token (`mf`); the route must check `bound_file`
+/// against what the request touches. Unbound stream tokens are 401.
+#[derive(Debug, Clone)]
+pub struct FileBoundAuthed {
+    pub auth: Authed,
+    pub bound_file: Option<u32>,
+}
+
 /// No credentials at all is `None`; credentials that fail are still 401, never downgraded to anonymous.
 #[derive(Debug, Clone)]
 pub struct OptionalAuthed(pub Option<Authed>);
@@ -296,6 +304,33 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
         required(parts, state).await.map(Self)
+    }
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for FileBoundAuthed
+where
+    AppState: FromRef<S>,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
+        let auth = required(parts, state).await?;
+        let Some(scope) = auth.scope else {
+            return Ok(Self {
+                auth,
+                bound_file: None,
+            });
+        };
+        let bound_file = (scope == TokenScope::Stream)
+            .then(|| token_of(parts))
+            .flatten()
+            .and_then(|t| AppState::from_ref(state).jwt.verify(&t))
+            .and_then(|c| c.mf)
+            .ok_or_else(unauthorized)?;
+        Ok(Self {
+            auth,
+            bound_file: Some(bound_file),
+        })
     }
 }
 
