@@ -348,12 +348,13 @@ async fn resume_download_and_explicit_start(pool: PgPool) {
         "a download never touches history"
     );
     info(&c, "").await;
-    let at: chrono::DateTime<chrono::Utc> =
-        sqlx::query_scalar(r#"SELECT "lastPlayedAt" FROM playback_states"#)
+    let (at, file): (chrono::DateTime<chrono::Utc>, Option<i32>) =
+        sqlx::query_as(r#"SELECT "lastPlayedAt", "mediaFileId" FROM playback_states"#)
             .fetch_one(&c.pool)
             .await
             .unwrap();
     assert_ne!(at.format("%Y").to_string(), "2000");
+    assert_eq!(file, Some(c.file), "the opened file is the row's");
 }
 
 #[sqlx::test(migrations = false)]
