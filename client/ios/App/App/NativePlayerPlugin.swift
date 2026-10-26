@@ -213,6 +213,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let startTime = call.getDouble("startTime") ?? 0
+        let startPaused = call.getBool("startPaused") ?? false
         let headers = parseHeaders(call.getObject("headers"))
         let backgroundAudio = call.getBool("backgroundAudio") ?? false
         let title = call.getString("title") ?? ""
@@ -237,7 +238,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             let item = self.buildPlayerItem(url: url, assetHeaders: headers)
             let player = self.attachPlayerItem(item)
             self.setupObservers()
-            self.startPlayback(player: player, startTime: startTime)
+            self.startPlayback(player: player, startTime: startTime, startPaused: startPaused)
 
             // `.automatic` rather than `.pauses`: an explicit pause-on-background policy
             // is not documented as exempting auto-PiP from inline.
@@ -407,13 +408,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Frame-accurate seek (`.zero` tolerance) then `play()`: the default tolerance snaps audio and video to different
     /// keyframes, a 0-3 s A/V desync. `play()` stays outside the completion handler, which may report `finished=false`.
-    func startPlayback(player: AVPlayer, startTime: Double) {
+    /// A paused start still paints its first frame (`isReadyForDisplay`).
+    func startPlayback(player: AVPlayer, startTime: Double, startPaused: Bool) {
         if startTime > 0 {
             applyMuteGate(at: startTime)
             let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
             player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
         }
-        player.play()
+        if !startPaused { player.play() }
     }
 
     @objc func play(_ call: CAPPluginCall) {

@@ -58,6 +58,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativePlayerPlugin.class);
         registerPlugin(RemoteNotificationPlugin.class);
         registerPlugin(SaveFilePlugin.class);
+        registerPlugin(CalendarPlugin.class);
         super.onCreate(savedInstanceState);
         if (savedInstanceState == null) handleDownloadsIntent(getIntent());
 
@@ -137,6 +138,14 @@ public class MainActivity extends BridgeActivity {
         // was reset alongside.
         applyEdgeToEdge();
         getWindow().getDecorView().post(this::applyLightStatusBar);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // A covering activity (share sheet) pauses us and the framework then pads the content root
+        // with the bar insets; re-asserting decorFits=false first keeps the WebView full-bleed.
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
     }
 
     @Override
