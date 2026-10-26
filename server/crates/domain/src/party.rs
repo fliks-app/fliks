@@ -405,12 +405,24 @@ impl Live {
             (!self.members.iter().any(|m| m.status != MemberStatus::Away)).then_some(now);
     }
 
-    /// `POST /start`: the lobby goes live and every member, invited or not, gets the new state.
+    /// `POST /start`: the lobby goes live and every member, invited or not, gets the new state. With
+    /// the host in, it plays once everyone has loaded.
     pub fn go_live(&mut self, now: i64) -> Vec<Effect> {
         let mut out = Vec::new();
         self.lobby = false;
         self.reset_empty(now);
-        self.state_effect(&mut out, now, None, None, None);
+        let host = self
+            .members
+            .iter()
+            .find(|m| m.user_id == self.host_id && m.status != MemberStatus::Away)
+            .cloned();
+        match host {
+            Some(h) => {
+                let p = self.anchor.position;
+                self.enter_waiting(&mut out, p, true, &h, Action::Play, now);
+            }
+            None => self.state_effect(&mut out, now, None, None, None),
+        }
         out
     }
 
@@ -1369,6 +1381,21 @@ mod tests {
         let out = l.go_live(3);
         assert!(!l.lobby);
         assert!(out.iter().any(|e| matches!(e, Effect::State { .. })));
+        assert_eq!(l.state, State::Idle);
+    }
+
+    #[test]
+    fn go_live_with_the_host_in_plays_once_everyone_is_ready() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
+        l.lobby = true;
+        l.join(1, "alice", "d1", "c1", 0);
+        l.join(2, "bob", "d2", "c2", 0);
+        l.go_live(1);
+        assert_eq!(l.state, State::Waiting);
+        ready(&mut l, 1, "d1", 0.0, 2);
+        assert_eq!(l.state, State::Waiting);
+        let out = ready(&mut l, 2, "d2", 0.0, 3);
+        assert_eq!(state_of(&out).map(|s| s.0), Some(State::Playing));
     }
 
     #[test]
