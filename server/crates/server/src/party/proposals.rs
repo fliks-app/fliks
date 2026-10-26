@@ -4,8 +4,8 @@ use super::{
     dto::{PartyDto, PartyItem, ProposalDto, ProposalIn},
     registry::item_dtos,
     routes::{
-        R, conceal_items, fail, host_of, member_row, not_found, require_host, require_open,
-        select_item,
+        Edit, R, conceal_items, edit_programme, fail, host_of, member_row, not_found, require_host,
+        require_open,
     },
 };
 use crate::{
@@ -24,10 +24,7 @@ use axum::{
     http::StatusCode,
     routing::{delete, post},
 };
-use fliks_domain::{
-    js::now_ms,
-    party::{Item, same_row},
-};
+use fliks_domain::{js::now_ms, party::Item};
 use sqlx::PgPool;
 
 const MAX_PROPOSALS: i64 = 30;
@@ -135,6 +132,34 @@ pub(super) async fn top(db: &PgPool, party: i32) -> sqlx::Result<Option<Item>> {
         media_file_id: None,
         episode_id,
     }))
+}
+
+/// Drops the votes and the proposals of users who left the party (kicked, declined, revoked): they
+/// no longer count in `top`. The others are told when something went.
+pub(super) async fn forget_users(
+    st: &AppState,
+    row: &db::Row,
+    users: &[i32],
+) -> Result<(), AppError> {
+    let votes = sqlx::query(
+        r#"DELETE FROM watch_party_votes v USING watch_party_proposals p
+           WHERE v."proposalId" = p.id AND p."partyId" = $1 AND v."userId" = ANY($2)"#,
+    )
+    .bind(row.id)
+    .bind(users)
+    .execute(&st.db)
+    .await?;
+    let proposals = sqlx::query(
+        r#"DELETE FROM watch_party_proposals WHERE "partyId" = $1 AND "proposedBy" = ANY($2)"#,
+    )
+    .bind(row.id)
+    .bind(users)
+    .execute(&st.db)
+    .await?;
+    if votes.rows_affected() + proposals.rows_affected() > 0 {
+        announce(st, row).await?;
+    }
+    Ok(())
 }
 
 pub(super) async fn clear(db: &PgPool, party: i32) -> sqlx::Result<()> {
@@ -327,14 +352,6 @@ pub async fn choose(
         media_file_id: None,
         episode_id,
     };
-    let mut items: Vec<Item> = db::programme_rows(&st.db, id)
-        .await?
-        .into_iter()
-        .map(|r| r.item)
-        .collect();
-    if !items.iter().any(|i| same_row(i, &item)) {
-        items.push(item);
-    }
-    select_item(&st, &a, &mut row, items).await?;
+    edit_programme(&st, &a, &mut row, Edit::Append(item)).await?;
     Ok(Json(super::routes::dto(&st, &row, me, true).await?))
 }

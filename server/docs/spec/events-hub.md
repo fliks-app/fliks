@@ -103,7 +103,7 @@ The hub and registry are in-memory: no SQL. Audience resolution for media-scoped
 
 ## Events
 
-### Wire events (`SseEvent`, 48 named types + `ping` + `plugin.<id>.<type>`)
+### Wire events (`SseEvent`, 52 named types + `ping` + `plugin.<id>.<type>`)
 
 Audience legend: B = broadcast to every connection; U(x) = connections of user x (+household hook for the three `remote.*` types); Us(list) = connections of those users; C = one connection. Payload types are TypeScript-style; `?` = may be absent on the wire.
 
@@ -162,7 +162,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 51 | `party.programme` | C (members) | `{partyId, rev, item: PartyItem|null}` (`watch-party.md`) |
 | 52 | `party.proposals` | Us(owner + guests), one payload each | `{partyId, proposals: {id, item: PartyItem, proposedBy, voterIds}[]}` (`watch-party.md`, Proposals) |
 
-Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 40 `SseEvent` types (the union writes the three `social.followed|follow_request|follow_accepted` as one member at). All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
+Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 51 of the 52 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 52. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 
 `RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`.
 

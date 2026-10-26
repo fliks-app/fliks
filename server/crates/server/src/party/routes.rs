@@ -3,7 +3,8 @@ use super::{
     dto::*,
     queue as steps,
     registry::{
-        self, Brief, View, item_dto, item_dtos, member_dtos, mutate, notify_updated, opt_item_dtos,
+        self, Brief, View, hold, item_dtos, member_dtos, mutate, mutate_held, notify_updated,
+        opt_item_dtos, reveal,
     },
 };
 use crate::{
@@ -214,7 +215,11 @@ async fn access(st: &AppState, row: &Row, me: i32, token: Option<&str>) -> R<Acc
     Err(not_found())
 }
 
+/// The owner until the start, then whoever the machine says.
 pub(super) fn host_of(st: &AppState, row: &Row) -> i32 {
+    if row.status == "scheduled" {
+        return row.owner_id;
+    }
     st.parties.brief(row.id).map_or(row.owner_id, |b| b.host_id)
 }
 
@@ -315,12 +320,15 @@ pub(super) async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<
     } else {
         vec![]
     };
-    let live = view.filter(|_| full).map(|v: View| PartyLive {
+    let mut live = view.filter(|_| full).map(|v: View| PartyLive {
         rev: v.rev,
         playback: v.playback,
         members: member_dtos(st, v.host_id, &v.members),
         messages: v.messages,
     });
+    if let Some(l) = &mut live {
+        reveal(st, viewer, &mut l.messages).await?;
+    }
     Ok(PartyDto {
         summary,
         policy: row.policy,
@@ -392,6 +400,7 @@ pub(super) async fn conceal_items(
             item.poster_url = None;
             item.fanart_url = None;
             item.additional_fanart_urls = vec![];
+            item.hidden = true;
         }
     }
     Ok(())
@@ -502,13 +511,13 @@ pub async fn create(
         },
         &invitees,
         scheduled.is_none(),
-        now + chrono::Duration::milliseconds(LOBBY_OPEN_BEFORE_MS),
+        now,
     )
     .await?;
     if created {
         announce_invited(&st, &row, &invitees).await?;
         if starting_due(&row) {
-            registry::open_lobby(&st, &row).await?;
+            registry::announce_lobby(&st, &row).await?;
         }
     }
     Ok((StatusCode::CREATED, Json(dto(&st, &row, me, true).await?)))
@@ -618,6 +627,7 @@ pub async fn patch(
     if regenerate {
         db::clear_kicked(&st.db, id).await?;
         let gone = db::drop_link_guests(&st.db, id, host_of(&st, &row)).await?;
+        super::proposals::forget_users(&st, &row, &gone).await?;
         mutate(&st, id, |l| {
             let fx = gone
                 .iter()
@@ -635,7 +645,7 @@ pub async fn patch(
         );
     }
     if b.scheduled_at.is_some() && starting_due(&row) {
-        registry::open_lobby(&st, &row).await?;
+        registry::announce_lobby(&st, &row).await?;
     }
     if b.scheduled_at.is_some() || renamed {
         notify_updated(&st, &row).await?;
@@ -707,7 +717,7 @@ pub async fn select(
     ValidJson(b): ValidJson<ItemIn>,
 ) -> R<Json<PartyDto>> {
     let mut row = host_row(&st, id, a.user.id).await?;
-    select_item(&st, &a, &mut row, vec![Item::from(b)]).await?;
+    edit_programme(&st, &a, &mut row, Edit::Replace(vec![Item::from(b)])).await?;
     Ok(Json(dto(&st, &row, a.user.id, true).await?))
 }
 
@@ -719,10 +729,9 @@ pub async fn programme(
     PathParams(id): PathParams<i32>,
     ValidJson(b): ValidJson<ProgrammeIn>,
 ) -> R<Json<PartyDto>> {
-    b.validate()?;
     let mut row = host_row(&st, id, a.user.id).await?;
     let items = b.items.into_iter().map(Item::from).collect();
-    select_item(&st, &a, &mut row, items).await?;
+    edit_programme(&st, &a, &mut row, Edit::Replace(items)).await?;
     Ok(Json(dto(&st, &row, a.user.id, true).await?))
 }
 
@@ -734,35 +743,63 @@ async fn host_row(st: &AppState, id: i32, me: i32) -> R<Row> {
     Ok(row)
 }
 
+pub(super) enum Edit {
+    Replace(Vec<Item>),
+    /// The item joins the end, unless it is already there.
+    Append(Item),
+}
+
 /// The one path that writes the programme (`select`, `programme`, a chosen proposal, a start on the
-/// top vote), before and during the party. The items it adds must be open to the host and to every
-/// current member; the ones already there are left alone (a member who cannot open one is skipped).
-pub(super) async fn select_item(
-    st: &AppState,
-    a: &Authed,
-    row: &mut Row,
-    items: Vec<Item>,
-) -> R<()> {
+/// top vote), before and during the party, under the party's gate so edits and their events keep
+/// their order.
+pub(super) async fn edit_programme(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
+    let _held = hold(st, row.id).await;
+    edit_held(st, a, row, edit).await
+}
+
+/// `edit_programme` for a caller that holds the gate. Before the start the head is what the start
+/// plays and every member is told it, so it must be open to all of them like the items added; the
+/// items already there are left alone (a member who cannot open one is skipped).
+async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
     let id = row.id;
-    if distinct(items.clone()).len() != items.len() {
+    *row = row_of(st, id).await?;
+    require_open(row)?;
+    let current = db::programme_rows(&st.db, id).await?;
+    let items = match edit {
+        Edit::Replace(items) => items,
+        Edit::Append(item) => {
+            let mut items: Vec<Item> = current.iter().map(|r| r.item.clone()).collect();
+            if !items.iter().any(|i| same_row(i, &item)) {
+                items.push(item);
+            }
+            items
+        }
+    };
+    if items.len() > MAX_PROGRAMME || distinct(items.clone()).len() != items.len() {
         return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
     }
-    let current = db::programme_rows(&st.db, id).await?;
-    let added: Vec<Item> = items
+    let mut vetted: Vec<Item> = items
         .iter()
         .filter(|i| !current.iter().any(|r| same_row(&r.item, i)))
         .cloned()
         .collect();
+    if row.status == "scheduled"
+        && let Some(head) = items.first()
+        && current.first().is_none_or(|c| !same_row(&c.item, head))
+        && !vetted.iter().any(|i| same_row(i, head))
+    {
+        vetted.push(head.clone());
+    }
     let ids = accessible_library_ids(&st.db, a).await?;
-    for item in &added {
+    for item in &vetted {
         assert_media_accessible(&st.db, item.media_id, &ids).await?;
     }
-    if !added.is_empty() {
-        vet_items(st, id, &added).await?;
+    if !vetted.is_empty() {
+        vet_items(st, id, &vetted).await?;
     }
     db::set_programme(&st.db, id, &items).await?;
     let head = items.first().cloned();
-    mutate(st, id, |l| ((), l.programme(head))).await;
+    mutate_held(st, id, |l| ((), l.programme(head))).await;
     *row = row_of(st, id).await?;
     if row.status == "scheduled" {
         notify_updated(st, row).await?;
@@ -770,6 +807,8 @@ pub(super) async fn select_item(
     Ok(())
 }
 
+/// Takes a `scheduled` party live on the head of its programme. The gate makes it the only start:
+/// a second one, or one that lost to an end, finds the row already moved.
 #[utoipa::path(post, path = "/api/parties/{id}/start", responses((status = 200)))]
 pub async fn start(
     State(st): State<AppState>,
@@ -777,34 +816,58 @@ pub async fn start(
     PathParams(id): PathParams<i32>,
 ) -> R<Json<PartyDto>> {
     let me = a.user.id;
-    let mut row = row_of(&st, id).await?;
+    let row = row_of(&st, id).await?;
     access(&st, &row, me, None).await?;
     require_host(&st, &row, me)?;
     require_open(&row)?;
     if row.status == "scheduled" {
-        if row.item().is_none() {
-            let top = super::proposals::top(&st.db, id).await?;
-            let item = top.ok_or_else(|| machine_err(PartyErr::NoItem))?;
-            select_item(&st, &a, &mut row, vec![item]).await?;
-        }
-        db::set_live(&st.db, id).await?;
-        row.status = "live".into();
-        registry::ensure(&st, &row, true).await?;
-        let item = row.item().ok_or_else(|| machine_err(PartyErr::NoItem))?;
-        mutate(&st, id, |l| ((), l.go_live(item, now_ms())))
-            .await
-            .ok_or_else(not_live)?;
-        let guests = db::guest_ids(&st.db, id).await?;
-        st.hub.emit_to_users(
-            &guests,
-            SseEvent::PartyStarting {
-                party_id: id.into(),
-                name: row.name.clone(),
-            },
-        );
-        notify_updated(&st, &row).await?;
+        let _held = hold(&st, id).await;
+        go_live(&st, &a, id).await?;
     }
+    let row = row_of(&st, id).await?;
     Ok(Json(dto(&st, &row, me, true).await?))
+}
+
+/// The start, under the gate. An empty programme takes the top vote; a head nobody can play, or a
+/// member cannot open, is refused as a `setItem` would.
+async fn go_live(st: &AppState, a: &Authed, id: i32) -> R<()> {
+    let mut row = row_of(st, id).await?;
+    require_open(&row)?;
+    if row.status != "scheduled" {
+        return Ok(());
+    }
+    registry::ensure(st, &row, false).await?;
+    if row.item().is_none() {
+        let top = super::proposals::top(&st.db, id).await?;
+        let item = top.ok_or_else(|| machine_err(PartyErr::NoItem))?;
+        edit_held(st, a, &mut row, Edit::Append(item)).await?;
+    }
+    let head = db::programme_rows(&st.db, id)
+        .await?
+        .into_iter()
+        .next()
+        .filter(|r| r.playable)
+        .ok_or_else(|| machine_err(PartyErr::NoItem))?
+        .item;
+    let ids = accessible_library_ids(&st.db, a).await?;
+    assert_media_accessible(&st.db, head.media_id, &ids).await?;
+    vet_items(st, id, std::slice::from_ref(&head)).await?;
+    let item = db::set_live(&st.db, id)
+        .await?
+        .ok_or_else(|| machine_err(PartyErr::NoItem))?;
+    mutate_held(st, id, |l| ((), l.go_live(item, now_ms())))
+        .await
+        .ok_or_else(not_live)?;
+    let guests = db::guest_ids(&st.db, id).await?;
+    st.hub.emit_to_users(
+        &guests,
+        SseEvent::PartyStarting {
+            party_id: id.into(),
+            name: row.name.clone(),
+        },
+    );
+    notify_updated(st, &row).await?;
+    Ok(())
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/leave", responses((status = 204)))]
@@ -886,10 +949,8 @@ pub async fn intent(
     }
     registry::ensure(&st, &row, false).await?;
     let item: Option<Item> = b.item.map(Into::into);
-    let mut title = None;
     if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
         vet_items(&st, id, std::slice::from_ref(it)).await?;
-        title = Some(item_dto(&st, it).await?.title);
     }
     let plan = match b.action {
         IntentAction::Next | IntentAction::Previous if item.is_none() => Some(
@@ -920,7 +981,6 @@ pub async fn intent(
                     action,
                     position: b.position,
                     item,
-                    item_title: title,
                     base_rev: b.base_rev,
                 },
                 now_ms(),
@@ -1150,6 +1210,7 @@ pub async fn kick(
         None => return Err(not_found()),
     }
     db::kick_guest(&st.db, id, user).await?;
+    super::proposals::forget_users(&st, &row, &[user]).await?;
     notify_updated(&st, &row).await?;
     st.hub.emit_to_users(
         &[user],
@@ -1177,11 +1238,9 @@ pub async fn transfer(
 ) -> R<StatusCode> {
     let row = member_row(&st, id, a.user.id).await?;
     require_host(&st, &row, a.user.id)?;
-    run(&st, id, |l| {
-        l.room.transfer(user, &a.user.username, now_ms())
-    })
-    .await?
-    .map_err(target_err)?;
+    run(&st, id, |l| l.transfer(user, &a.user.username, now_ms()))
+        .await?
+        .map_err(target_err)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1227,6 +1286,23 @@ pub async fn decline(
     if !db::drop_invitation(&st.db, id, me).await? {
         return Err(not_found());
     }
+    super::proposals::forget_users(&st, &row, &[me]).await?;
+    mutate(&st, id, |l| {
+        let devices: Vec<String> = l
+            .room
+            .members
+            .iter()
+            .filter(|m| m.user_id == me)
+            .map(|m| m.device_id.clone())
+            .collect();
+        let fx = devices
+            .iter()
+            .filter_map(|d| l.leave(me, d, now_ms()).ok())
+            .flatten()
+            .collect();
+        ((), fx)
+    })
+    .await;
     notify_updated(&st, &row).await?;
     st.hub.emit_to_users(
         &[me],
@@ -1244,16 +1320,13 @@ pub async fn queue(
     PathParams(id): PathParams<i32>,
 ) -> R<Json<Vec<PartyItem>>> {
     let row = member_row(&st, id, a.user.id).await?;
-    let rows = db::programme_rows(&st.db, row.id).await?;
-    let ids = accessible_library_ids(&st.db, &a).await?;
-    let mut medias: Vec<i32> = rows.iter().map(|r| r.item.media_id).collect();
-    medias.sort_unstable();
-    medias.dedup();
-    let libraries = db::media_libraries(&st.db, &medias).await?;
-    let visible: Vec<Item> = rows
+    let items: Vec<Item> = db::programme_rows(&st.db, row.id)
+        .await?
         .into_iter()
         .map(|r| r.item)
-        .filter(|i| libraries.get(&i.media_id).is_some_and(|l| ids.contains(l)))
         .collect();
-    Ok(Json(item_dtos(&st, &visible).await?))
+    let mut dtos = item_dtos(&st, &items).await?;
+    let mut refs: Vec<&mut PartyItem> = dtos.iter_mut().collect();
+    conceal_items(&st, a.user.id, &mut refs).await?;
+    Ok(Json(dtos))
 }

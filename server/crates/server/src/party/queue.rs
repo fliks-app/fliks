@@ -17,8 +17,6 @@ pub async fn step(
     medias.sort_unstable();
     medias.dedup();
     let libraries = db::media_libraries(&st.db, &medias).await?;
-    let keys: Vec<_> = cands.iter().map(|c| (c.media_id, c.episode_id)).collect();
-    let infos = db::item_infos(&st.db, &keys).await?;
     // `None`: a user who can open nothing (disabled or deleted).
     let mut allowed = Vec::with_capacity(users.len());
     for u in users {
@@ -32,25 +30,14 @@ pub async fn step(
                     .iter()
                     .all(|a| a.as_ref().is_some_and(|ids| ids.contains(lib)))
             });
-        let title = infos
-            .get(&(cand.media_id, cand.episode_id))
-            .map(|i| i.title.clone())
-            .unwrap_or_default();
-        // The message reaches every member: a title someone cannot open stays unnamed.
-        let visible = libraries.get(&cand.media_id).is_some_and(|lib| {
-            allowed
-                .iter()
-                .all(|a| a.as_ref().is_some_and(|ids| ids.contains(lib)))
-        });
-        let label = if visible { title } else { String::new() };
         if open {
             return Ok(Step {
                 forward,
                 skipped,
-                next: Some((cand, label)),
+                next: Some(cand),
             });
         }
-        skipped.push(label);
+        skipped.push(cand);
     }
     Ok(Step {
         forward,

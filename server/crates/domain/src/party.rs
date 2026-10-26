@@ -139,16 +139,22 @@ pub fn candidates(queue: &[Item], current: &Item, forward: bool) -> Vec<Item> {
     }
 }
 
+/// The `args` of an `item_changed` / `item_skipped` message: the row, never its title, which each
+/// viewer resolves for themselves.
+fn item_args(i: &Item) -> Value {
+    json!({ "mediaId": i.media_id, "episodeId": i.episode_id })
+}
+
 pub fn same_row(a: &Item, b: &Item) -> bool {
     a.media_id == b.media_id && a.episode_id == b.episode_id
 }
 
-/// The server's pick for a queue step: the titles passed over and the row that plays (`None`:
+/// The server's pick for a queue step: the rows passed over and the row that plays (`None`:
 /// nothing playable is left in that direction).
 pub struct Step {
     pub forward: bool,
-    pub skipped: Vec<String>,
-    pub next: Option<(Item, String)>,
+    pub skipped: Vec<Item>,
+    pub next: Option<Item>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -267,13 +273,12 @@ pub enum Error {
     NotStarted,
 }
 
-/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on;
-/// `item_title` labels a `setItem` in its system message; an `ended` names `item`, the one it ended.
+/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on; an `ended`
+/// names `item`, the one it ended.
 pub struct Intent {
     pub action: Action,
     pub position: Option<f64>,
     pub item: Option<Item>,
-    pub item_title: Option<String>,
     pub base_rev: u64,
 }
 
@@ -445,9 +450,9 @@ impl Room {
     }
 
     /// Moves the host role to the oldest present member when the host has no member left; returns
-    /// the new host's username.
-    fn hand_over(&mut self) -> Option<String> {
-        if self.has_user(self.host_id) {
+    /// the new host's username. Before the start (`started` false) the owner stays host.
+    fn hand_over(&mut self, started: bool) -> Option<String> {
+        if !started || self.has_user(self.host_id) {
             return None;
         }
         let next = self
@@ -560,7 +565,7 @@ impl Room {
     }
 
     /// The target must be a member; the host role moves to that user.
-    pub fn transfer(&mut self, to_user: i32, by: &str, now: i64) -> Result<Vec<Effect>, Error> {
+    fn transfer(&mut self, to_user: i32, by: &str, now: i64) -> Result<Vec<Effect>, Error> {
         let m = self
             .members
             .iter()
@@ -834,7 +839,6 @@ impl Playback {
             action,
             position,
             item,
-            item_title,
             base_rev,
         } = req;
         let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
@@ -921,7 +925,7 @@ impl Playback {
             }
             Action::SetItem => {
                 let it = item.ok_or(Error::Invalid("item"))?;
-                self.change_item(room, &mut out, &actor, it, item_title, now);
+                self.change_item(room, &mut out, &actor, it, now);
             }
             Action::Ended => {}
         }
@@ -935,7 +939,6 @@ impl Playback {
         out: &mut Vec<Effect>,
         actor: &Member,
         item: Item,
-        title: Option<String>,
         now: i64,
     ) {
         let playing = self.state == State::Playing;
@@ -945,7 +948,7 @@ impl Playback {
             out,
             "item_changed",
             Some(&actor.username),
-            json!({ "title": title }),
+            item_args(&self.item),
             now,
         );
     }
@@ -980,7 +983,7 @@ impl Playback {
         ended: bool,
         now: i64,
     ) {
-        let Some((item, title)) = step.next else {
+        let Some(item) = step.next else {
             if !step.forward || (self.state == State::Idle && !ended) {
                 return;
             }
@@ -992,12 +995,12 @@ impl Playback {
             return;
         };
         Self::skipped(room, out, &step.skipped, now);
-        self.change_item(room, out, actor, item, Some(title), now);
+        self.change_item(room, out, actor, item, now);
     }
 
-    fn skipped(room: &mut Room, out: &mut Vec<Effect>, titles: &[String], now: i64) {
-        for title in titles {
-            room.sys(out, "item_skipped", None, json!({ "title": title }), now);
+    fn skipped(room: &mut Room, out: &mut Vec<Effect>, items: &[Item], now: i64) {
+        for item in items {
+            room.sys(out, "item_skipped", None, item_args(item), now);
         }
     }
 }
@@ -1037,6 +1040,14 @@ impl Live {
         self.playback
             .as_ref()
             .is_some_and(|p| p.can_end(&self.room, user_id, device_id, item))
+    }
+
+    /// Before the start the host is the owner, whoever is in the room, so the role does not move.
+    pub fn transfer(&mut self, to_user: i32, by: &str, now: i64) -> Result<Vec<Effect>, Error> {
+        if self.playback.is_none() {
+            return Err(Error::Invalid("host"));
+        }
+        self.room.transfer(to_user, by, now)
     }
 
     /// The host edited the programme: `head` is its first item, which the start plays. Once
@@ -1095,7 +1106,7 @@ impl Live {
         let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
         let m = room.members.remove(i);
         room.prune_limits(now);
-        let host = room.hand_over();
+        let host = room.hand_over(self.playback.is_some());
         let mut out = vec![];
         room.members_effect(&mut out);
         room.sys(&mut out, "left", Some(&m.username), json!({}), now);
@@ -1115,7 +1126,7 @@ impl Live {
         pb.intent(&mut self.room, user_id, device_id, req, now)
     }
 
-    /// A queue step chosen by the server: one `item_skipped` message per passed-over title, then
+    /// A queue step chosen by the server: one `item_skipped` message per passed-over row, then
     /// `step.next` as a `setItem` would (`None`: nothing playable is left). The gates of `setItem`
     /// run first, so a refused call leaves no message behind. Only a forward step that finds
     /// nothing idles the party and appends `queue_ended`, once; a backward one, or a forward one on
@@ -1225,7 +1236,7 @@ impl Live {
             .collect();
         room.members.retain(|m| !gone.contains(m));
         room.prune_limits(now);
-        let host = room.hand_over();
+        let host = room.hand_over(self.playback.is_some());
         if changed || !gone.is_empty() {
             room.members_effect(&mut out);
         }
@@ -1340,7 +1351,6 @@ mod tests {
                 action: Action::Play,
                 position: None,
                 item: None,
-                item_title: None,
                 base_rev: l.room.rev,
             },
             now,
@@ -1414,7 +1424,6 @@ mod tests {
                 action: Action::Seek,
                 position: Some(50.0),
                 item: None,
-                item_title: None,
                 base_rev: l.room.rev,
             },
             0,
@@ -1434,7 +1443,6 @@ mod tests {
                 action: Action::Seek,
                 position: Some(80.0),
                 item: None,
-                item_title: None,
                 base_rev: l.room.rev,
             },
             6000,
@@ -1456,7 +1464,6 @@ mod tests {
                 action: Action::Pause,
                 position: None,
                 item: None,
-                item_title: None,
                 base_rev: 0,
             },
             5,
@@ -1478,7 +1485,6 @@ mod tests {
                     action: Action::Pause,
                     position: None,
                     item: None,
-                    item_title: None,
                     base_rev: 0,
                 },
                 start + 4000,
@@ -1533,7 +1539,6 @@ mod tests {
             action: Action::Play,
             position: None,
             item: None,
-            item_title: None,
             base_rev: 0,
         };
         assert_eq!(l.intent(1, "d1", intent, 1).err(), Some(Error::NotStarted));
@@ -1588,7 +1593,6 @@ mod tests {
                     action: a,
                     position: Some(1.0),
                     item: Some(item()),
-                    item_title: None,
                     base_rev: l.room.rev,
                 },
                 0,
@@ -1603,7 +1607,6 @@ mod tests {
                     action: Action::Play,
                     position: None,
                     item: None,
-                    item_title: None,
                     base_rev: l.room.rev
                 },
                 0
@@ -1625,7 +1628,6 @@ mod tests {
                 action: Action::Seek,
                 position: Some(9.0),
                 item: None,
-                item_title: None,
                 base_rev: old,
             },
             1,
@@ -1638,7 +1640,6 @@ mod tests {
                 action: Action::SetItem,
                 position: None,
                 item: Some(item()),
-                item_title: None,
                 base_rev: old,
             },
             1,
@@ -1652,7 +1653,6 @@ mod tests {
                     action: Action::Pause,
                     position: None,
                     item: None,
-                    item_title: None,
                     base_rev: old
                 },
                 1
@@ -1667,7 +1667,6 @@ mod tests {
                     action: Action::Play,
                     position: None,
                     item: None,
-                    item_title: None,
                     base_rev: old
                 },
                 2
@@ -1694,7 +1693,6 @@ mod tests {
                     action: Action::SetItem,
                     position: None,
                     item: Some(next.clone()),
-                    item_title: None,
                     base_rev: l.room.rev,
                 },
                 0,
@@ -1717,7 +1715,6 @@ mod tests {
                     action: Action::Ended,
                     position: None,
                     item: None,
-                    item_title: None,
                     base_rev: 0
                 },
                 5
@@ -1735,7 +1732,6 @@ mod tests {
                     action: Action::Ended,
                     position: None,
                     item: None,
-                    item_title: None,
                     base_rev: 0,
                 },
                 5,
@@ -1761,6 +1757,23 @@ mod tests {
         l.join(2, "bob", "d2b", "c2b", 11);
         l.leave(2, "d2", 12).unwrap();
         assert_eq!(l.room.host_id, 2);
+    }
+
+    #[test]
+    fn before_the_start_the_owner_stays_host_whoever_is_in_the_room() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
+        l.join(2, "bob", "d2", "c2", 0);
+        l.join(3, "carol", "d3", "c3", 0);
+        let out = l.tick(1000, |_| true);
+        assert_eq!(l.room.host_id, 1);
+        assert!(!kinds(&out).contains(&"host_changed".to_owned()));
+        l.leave(2, "d2", 5).unwrap();
+        assert_eq!(l.room.host_id, 1);
+        assert_eq!(l.transfer(3, "alice", 6), Err(Error::Invalid("host")));
+        l.go_live(item(), 10);
+        l.join(1, "alice", "d1", "c1", 11);
+        l.leave(1, "d1", 12).unwrap();
+        assert_eq!(l.room.host_id, 3);
     }
 
     #[test]
@@ -2043,7 +2056,7 @@ mod tests {
     }
 
     #[test]
-    fn set_item_names_the_new_item_in_its_system_message() {
+    fn set_item_names_the_new_row_in_its_system_message() {
         let mut l = party();
         let out = l
             .intent(
@@ -2053,7 +2066,6 @@ mod tests {
                     action: Action::SetItem,
                     position: None,
                     item: Some(row(2, Some(3))),
-                    item_title: Some("Show S01E03".into()),
                     base_rev: l.room.rev,
                 },
                 0,
@@ -2068,14 +2080,14 @@ mod tests {
             })
             .unwrap();
         assert_eq!(sys.kind, "item_changed");
-        assert_eq!(sys.args, json!({ "title": "Show S01E03" }));
+        assert_eq!(sys.args, json!({ "mediaId": 2, "episodeId": 3 }));
     }
 
-    fn step(forward: bool, skipped: &[&str], next: Option<(Item, &str)>) -> Step {
+    fn step(forward: bool, skipped: &[i32], next: Option<Item>) -> Step {
         Step {
             forward,
-            skipped: skipped.iter().map(|s| (*s).to_owned()).collect(),
-            next: next.map(|(i, t)| (i, t.to_owned())),
+            skipped: skipped.iter().map(|m| row(*m, None)).collect(),
+            next,
         }
     }
 
@@ -2085,7 +2097,7 @@ mod tests {
         l.pb_mut().state = State::Playing;
         let rev = l.room.rev;
         let out = l
-            .advance(1, "d1", rev, step(true, &["Show S01E02"], None), 5)
+            .advance(1, "d1", rev, step(true, &[7], None), 5)
             .unwrap()
             .1;
         assert_eq!(l.pb().state, State::Idle);
@@ -2093,7 +2105,7 @@ mod tests {
         assert_eq!(kinds(&out), ["item_skipped", "queue_ended"]);
         let (rev, chat) = (l.room.rev, l.room.chat.len());
         let out = l
-            .advance(1, "d1", rev, step(true, &["Show S01E02"], None), 6)
+            .advance(1, "d1", rev, step(true, &[7], None), 6)
             .unwrap()
             .1;
         assert!(out.is_empty());
@@ -2106,7 +2118,7 @@ mod tests {
         l.pb_mut().state = State::Playing;
         let (rev, chat) = (l.room.rev, l.room.chat.len());
         let out = l
-            .advance(1, "d1", rev, step(false, &["Gap"], None), 5)
+            .advance(1, "d1", rev, step(false, &[8], None), 5)
             .unwrap()
             .1;
         assert!(out.is_empty());
@@ -2120,7 +2132,7 @@ mod tests {
     fn an_advance_skips_then_switches_and_a_refused_one_leaves_no_message() {
         let mut l = party();
         let rev = l.room.rev;
-        let next = || step(true, &["Gap"], Some((row(3, None), "Film")));
+        let next = || step(true, &[8], Some(row(3, None)));
         let out = l.advance(1, "d1", rev, next(), 0).unwrap().1;
         assert_eq!(kinds(&out), ["item_skipped", "item_changed"]);
         assert_eq!(l.pb().item, row(3, None));
@@ -2146,7 +2158,6 @@ mod tests {
                 action: Action::Ended,
                 position: None,
                 item,
-                item_title: None,
                 base_rev: 0,
             },
             9,
@@ -2190,7 +2201,7 @@ mod tests {
     fn an_ended_advance_is_dropped_when_the_item_moved_on() {
         let mut l = party();
         l.pb_mut().state = State::Playing;
-        let to = || step(true, &[], Some((row(3, None), "Film")));
+        let to = || step(true, &[], Some(row(3, None)));
         let out = l
             .advance_after_ended(1, "d1", None, &row(8, None), to(), 5)
             .unwrap()

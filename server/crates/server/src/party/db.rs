@@ -79,14 +79,15 @@ pub async fn owner_switches(db: &PgPool, owner: i32) -> sqlx::Result<Option<(boo
 }
 
 /// The party the host already has for this item, else a new one (`true`). A "now" creation matches
-/// an open party (live, or a lobby open by `lobby_cutoff`); a scheduled one matches the same start.
-/// Transaction-scoped advisory lock on host+item: the match is a time window, no unique index fits.
+/// an open party (live, or scheduled and already due at `now`); a scheduled one matches the same
+/// start. Transaction-scoped advisory lock on host+item: the match is a time window, no unique
+/// index fits.
 pub async fn insert(
     db: &PgPool,
     n: &New<'_>,
     invitees: &[i32],
     immediate: bool,
-    lobby_cutoff: DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> sqlx::Result<(Row, bool)> {
     let mut tx = db.begin().await?;
     let item = n.programme.first();
@@ -113,7 +114,7 @@ pub async fn insert(
             .bind(item.episode_id)
             .bind(n.playlist_id)
             .bind(immediate)
-            .bind(lobby_cutoff)
+            .bind(now)
             .bind(n.scheduled_at)
             .fetch_optional(&mut *tx)
             .await?
@@ -394,19 +395,25 @@ pub async fn update_settings(
     Ok(())
 }
 
-/// Goes live on the head of the programme, which becomes the playing item.
-pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<()> {
-    sqlx::query(
+/// Goes live on the head of the programme, which becomes the playing item and is returned. `None`
+/// when the party is not `scheduled` or its programme is empty: nothing changed.
+pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<Option<Item>> {
+    let row: Option<(i32, Option<i32>, Option<i32>)> = sqlx::query_as(
         r#"UPDATE watch_parties p SET status = 'live', "startedAt" = now(),
                "mediaId" = h."mediaId", "mediaFileId" = h."mediaFileId", "episodeId" = h."episodeId"
            FROM (SELECT "mediaId", "mediaFileId", "episodeId" FROM watch_party_items
                  WHERE "partyId" = $1 ORDER BY position LIMIT 1) h
-           WHERE p.id = $1"#,
+           WHERE p.id = $1 AND p.status = 'scheduled'
+           RETURNING h."mediaId", h."mediaFileId", h."episodeId""#,
     )
     .bind(id)
-    .execute(db)
+    .fetch_optional(db)
     .await?;
-    Ok(())
+    Ok(row.map(|(media_id, media_file_id, episode_id)| Item {
+        media_id,
+        media_file_id,
+        episode_id,
+    }))
 }
 
 pub async fn set_ended(db: &PgPool, id: i32) -> sqlx::Result<()> {
@@ -447,6 +454,15 @@ pub async fn save_message(db: &PgPool, party: i32, m: &Message) -> sqlx::Result<
     .bind(DateTime::from_timestamp_millis(m.sent_at_ms).unwrap_or_default())
     .execute(db)
     .await?;
+    Ok(())
+}
+
+/// Drops the chat of a party that ended: nothing reads it again.
+pub async fn clear_chat(db: &PgPool, party: i32) -> sqlx::Result<()> {
+    sqlx::query(r#"DELETE FROM watch_party_messages WHERE "partyId" = $1"#)
+        .bind(party)
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -576,12 +592,16 @@ pub async fn media_libraries(db: &PgPool, media: &[i32]) -> sqlx::Result<HashMap
         .collect())
 }
 
-/// True when the file and the episode (if given) belong to the media.
+/// True when the file and the episode (if given) belong to the media, and something plays for it; a
+/// series needs its episode.
 pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
     sqlx::query_scalar(
         r#"SELECT ($2::int IS NULL OR EXISTS (SELECT 1 FROM media_files WHERE id = $2 AND "mediaId" = $1))
                AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM episodes e JOIN seasons s ON s.id = e."seasonId"
-                                               WHERE e.id = $3 AND s."mediaId" = $1))"#,
+                                               WHERE e.id = $3 AND s."mediaId" = $1))
+               AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series'))
+               AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1
+                           AND ($3::int IS NULL OR f."episodeId" = $3))"#,
     )
     .bind(item.media_id)
     .bind(item.media_file_id)

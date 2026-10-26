@@ -6,7 +6,7 @@ use fliks_domain::party::{
 };
 use serde::{Deserialize, Serialize};
 
-const MAX_PROGRAMME: usize = 500;
+pub const MAX_PROGRAMME: usize = 500;
 const MAX_INVITEES: usize = 50;
 const MAX_TEXT: usize = 500;
 const MAX_SIGNAL_BYTES: usize = 16 * 1024;
@@ -104,16 +104,7 @@ pub struct ProgrammeIn {
     pub items: Vec<ItemIn>,
 }
 
-impl ProgrammeIn {
-    pub fn validate(&self) -> Result<(), AppError> {
-        if self.items.len() > MAX_PROGRAMME {
-            return Err(invalid("item"));
-        }
-        Ok(())
-    }
-}
-
-/// `Action` plus the playlist steps, which the server turns into a `setItem` of its own choosing.
+/// `Action` plus the programme steps, which the server turns into a `setItem` of its own choosing.
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum IntentAction {
@@ -243,6 +234,8 @@ pub struct PartyItem {
     pub poster_url: Option<String>,
     pub fanart_url: Option<String>,
     pub additional_fanart_urls: Vec<String>,
+    /// The viewer cannot open the media: title and artwork are blanked, the ids stay.
+    pub hidden: bool,
 }
 
 #[derive(Serialize, Clone)]
