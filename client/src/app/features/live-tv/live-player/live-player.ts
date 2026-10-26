@@ -270,7 +270,6 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     });
     this.chrome.configure({
       pinned: computed(() => this.paused() || this.loading() || this.miniGuideOpen()),
-      surfaceSelector: 'app-player-controls, .live-player-strip',
     });
     void this.bootstrap();
     window.addEventListener('pagehide', this.releaseOnUnload);
