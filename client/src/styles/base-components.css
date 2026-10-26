@@ -429,9 +429,13 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   background-color: var(--color-primary);
 }
 
-/* Every modal keeps a gap above and below instead of touching the viewport edges. */
+/* Every modal is centred inside the safe area and keeps a gap above and below it. */
+.modal {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 .modal-box {
-  max-height: calc(100dvh - 2rem);
+  max-height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 
 /* CDK drag and drop: siblings slide out of the way, and a dropped item glides into its slot. */
