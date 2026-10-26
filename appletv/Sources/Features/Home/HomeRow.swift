@@ -110,8 +110,8 @@ private struct WatchPartiesRow: View {
 
     var body: some View {
         ZoneRow(title: tr("party.rail_title"), portrait: false, state: .loaded(service.homeParties)) { party in
-            MediaCard(imagePath: party.item.fanartUrl ?? party.item.posterUrl, title: party.name,
-                      subtitle: party.cardSubtitle, portrait: false, backdropPath: party.item.fanartUrl,
+            MediaCard(imagePath: party.item?.fanartUrl ?? party.item?.posterUrl, title: party.name,
+                      subtitle: party.cardSubtitle, portrait: false, backdropPath: party.item?.fanartUrl,
                       cornerLabel: party.status == "live" ? tr("party.live") : nil) {
                 onSelect(party.id)
             }

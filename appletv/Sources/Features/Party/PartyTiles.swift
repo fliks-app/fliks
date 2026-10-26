@@ -13,7 +13,11 @@ struct PartyHeaderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(party.name).font(.system(size: 48, weight: .bold))
-            if party.item.title != party.name { Text(party.item.title).font(.title3) }
+            if let item = party.item {
+                if item.title != party.name { Text(item.title).font(.title3) }
+            } else {
+                Text(tr("party.no_item")).font(.title3)
+            }
             HStack(spacing: 16) {
                 Text(trp("party.hosted_by", ["host": party.host.username]))
                 Text(party.scheduledAt.map(PartyDate.text)

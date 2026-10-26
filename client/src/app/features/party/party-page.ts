@@ -105,8 +105,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const item = this.head()?.item;
     return item ? pickFanart({ ...item, id: item.mediaId }) : null;
   });
-  protected readonly heroUrl = computed(() => this.fanart() ?? this.head()?.item.posterUrl ?? null);
-  private readonly episodeInfo = computed(() => findEpisode(this.media(), this.head()?.item.episodeId));
+  protected readonly heroUrl = computed(() => this.fanart() ?? this.head()?.item?.posterUrl ?? null);
+  private readonly episodeInfo = computed(() => findEpisode(this.media(), this.head()?.item?.episodeId));
   protected readonly overview = computed(() => {
     return this.episodeInfo()?.episode.overview || this.media()?.overview || '';
   });
@@ -226,7 +226,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       const dto = await this.fetch();
       this.gone.set(dto.status === 'ended');
       this.loaded.set(dto);
-      if (!this.media()) void this.mediaService.getOne(dto.item.mediaId).then((m) => this.media.set(m), () => undefined);
+      if (!this.media() && dto.item) void this.mediaService.getOne(dto.item.mediaId).then((m) => this.media.set(m), () => undefined);
     } catch {
       this.gone.set(true);
     }
@@ -254,8 +254,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected async addToCalendar(): Promise<void> {
     const v = this.view();
     if (!v?.scheduledAt) return;
-    const media = this.media() ?? (await this.mediaService.getOne(v.item.mediaId).catch(() => null));
-    const episode = findEpisode(media, v.item.episodeId)?.episode;
+    const media = this.media() ?? (v.item ? await this.mediaService.getOne(v.item.mediaId).catch(() => null) : null);
+    const episode = findEpisode(media, v.item?.episodeId)?.episode;
     const ics = buildPartyIcs({
       id: v.id,
       name: v.name,

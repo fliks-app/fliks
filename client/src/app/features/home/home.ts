@@ -226,7 +226,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   protected partyImage(p: PartySummaryDto): string | null {
-    return pickFanart({ ...p.item, id: p.item.mediaId }) ?? p.item.posterUrl;
+    const item = p.item;
+    return item ? (pickFanart({ ...item, id: item.mediaId }) ?? item.posterUrl) : null;
   }
   protected partyState(p: PartySummaryDto): Record<string, unknown> {
     return { party: p };
