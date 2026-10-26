@@ -37,6 +37,11 @@ export class NavbarService {
     () => this.device.isDesktop() || this.effectiveSidebarPinned(),
   );
 
+  /** Native phone bottom dock; landscape is too short for it, so the topbar hamburger takes over there. */
+  readonly phoneDock = computed(
+    () => this.isNativePlatform && this.device.isPhone() && !this.isLandscape(),
+  );
+
   private readonly device = inject(DeviceService);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
@@ -52,6 +57,7 @@ export class NavbarService {
   private get isNative() { return this.isNativePlatform; }
   /** True while the viewport matches Tailwind's `lg` breakpoint (≥1024px). */
   private readonly isLargeScreen = signal(false);
+  private readonly isLandscape = signal(false);
 
 
   constructor() {
@@ -59,6 +65,9 @@ export class NavbarService {
       const mq = window.matchMedia('(min-width: 1024px)');
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
+      const landscape = window.matchMedia('(orientation: landscape)');
+      this.isLandscape.set(landscape.matches);
+      landscape.addEventListener('change', (e) => this.isLandscape.set(e.matches));
     }
     // Empty, not `router.url`: seeding before the initial navigation would push a phantom '/' entry.
     let lastUrl = '';
