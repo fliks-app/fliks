@@ -67,6 +67,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     var voiceActive = false
     /// The last play or pause the app or the user asked for; an audio session interruption does not change it.
     var intendedPlaying = false
+    var resumeRetry = false
     let heartbeat = PositionHeartbeat()
     var subtitleSelectionGeneration = 0
     var firstFrameEmitted = false
@@ -314,6 +315,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let active = call.getBool("active") ?? false
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            // A repeat would re-activate the session and interrupt WebKit's mic capture.
+            guard active != self.voiceActive else { call.resolve(); return }
             self.voiceActive = active
             guard self.player != nil else { call.resolve(); return }
             self.ensureAudioSessionActive()
