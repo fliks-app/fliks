@@ -33,7 +33,7 @@ tracing = "0.1"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 futures-util = { version = "0.3", default-features = false }
 sqlx = { version = "0.9", features = ["postgres", "runtime-tokio", "macros", "json", "chrono", "migrate"] }
-fliks-engine-core = { git = "https://github.com/fliks-app/engine", tag = "v1.7.0" }
+fliks-engine-core = { git = "https://github.com/fliks-app/engine", tag = "v1.7.1" }
 utoipa = "5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 getrandom = "0.4"
