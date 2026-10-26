@@ -3612,7 +3612,7 @@
     "voice_leave": "Leave voice",
     "voice_mute": "Mute microphone",
     "voice_unmute": "Unmute microphone",
-    "voice_duck": "Lower the movie when someone talks",
+    "voice_duck": "Lower the volume when someone talks",
     "voice_headphones": "Headphones avoid echo.",
     "voice_mic_denied": "Microphone access was denied",
     "voice_listen_only_tv": "This device has no microphone: you can listen only.",

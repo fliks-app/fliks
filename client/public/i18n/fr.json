@@ -3612,7 +3612,7 @@
     "voice_leave": "Quitter le vocal",
     "voice_mute": "Couper le micro",
     "voice_unmute": "Activer le micro",
-    "voice_duck": "Baisser le film quand quelqu'un parle",
+    "voice_duck": "Baisser le volume quand quelqu'un parle",
     "voice_headphones": "Un casque évite l'écho.",
     "voice_mic_denied": "L'accès au micro a été refusé",
     "voice_listen_only_tv": "Cet appareil n'a pas de micro : vous pouvez seulement écouter.",
