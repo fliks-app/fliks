@@ -10,7 +10,7 @@ export const QOE_CAUSE_DOT_CLASS: Record<QoeStallCause, string> = {
   server: QOE_VERDICT_BAR_CLASS.server,
   network: QOE_VERDICT_BAR_CLASS.network,
   device: QOE_VERDICT_BAR_CLASS.device,
-  unknown: QOE_VERDICT_BAR_CLASS.unknown,
+  unknown: 'bg-base-content/30',
 };
 
 /** Icon colour per cause, matching the dot palette above. */

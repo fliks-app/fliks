@@ -1,7 +1,7 @@
 import type { QoeDiagnosis, QoeVerdict } from '../../core/services/api/qoe-api.service';
 import type { Fmt } from './qoe-stall';
 
-export const QOE_VERDICTS: readonly QoeVerdict[] = ['ok', 'network', 'device', 'server', 'error', 'unknown'];
+export const QOE_VERDICTS: readonly QoeVerdict[] = ['ok', 'network', 'device', 'server', 'error'];
 
 export const QOE_VERDICT_BAR_CLASS: Record<QoeVerdict, string> = {
   ok: 'bg-success',
@@ -9,7 +9,6 @@ export const QOE_VERDICT_BAR_CLASS: Record<QoeVerdict, string> = {
   device: 'bg-info',
   server: 'bg-error',
   error: 'bg-error',
-  unknown: 'bg-base-content/30',
 };
 
 /** The dot follows the verdict alone, so it never disagrees with the verdict label next to it. */

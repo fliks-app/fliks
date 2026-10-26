@@ -41,7 +41,7 @@ describe('blockSummary', () => {
 
 describe('helpers', () => {
   it('opens details for server and device verdicts only', () => {
-    expect(['server', 'device', 'network', 'ok', 'error', 'unknown'].map((v) => detailsOpen(v as never))).toEqual([true, true, false, false, false, false]);
+    expect(['server', 'device', 'network', 'ok', 'error'].map((v) => detailsOpen(v as never))).toEqual([true, true, false, false, false]);
   });
 
   it('formats positions', () => {

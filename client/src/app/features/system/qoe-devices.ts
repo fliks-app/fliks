@@ -37,7 +37,7 @@ export function mergeDevices(rows: QoeDeviceSummary[], labelOf: (r: QoeDeviceSum
         stallSessions: g.reduce((a, r) => a + r.stallSessions, 0),
         avgDroppedPct: weighted(g, (r) => r.avgDroppedPct),
         hwDecoderPct: weighted(g, (r) => r.hwDecoderPct),
-        topVerdict: (bySize.find((r) => r.topVerdict !== 'unknown') ?? bySize[0]).topVerdict,
+        topVerdict: bySize[0].topVerdict,
       };
     })
     .sort((a, b) => b.sessions - a.sessions);

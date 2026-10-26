@@ -130,7 +130,7 @@ pub fn parse_events(raw: &Value, now: f64, sent_at: Option<f64>) -> Vec<QoeEvent
                 ));
             }
             EventType::Reload => {
-                let r = ["audio", "subtitles", "quality", "remux_fallback", "other"];
+                let r = ["audio", "subtitles", "quality", "remux_fallback", "audio_fallback", "other"];
                 ev.reason = Some(reason(o, &r));
                 ev.from = text(g("from"), 80);
                 ev.to = text(g("to"), 80);

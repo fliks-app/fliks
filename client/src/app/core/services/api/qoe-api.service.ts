@@ -5,9 +5,9 @@ import { firstValueFrom } from 'rxjs';
 // Wire contract: plan/playback-qoe.plan.md. Every backend shape the admin UI
 // reads is mapped here, so a backend adjustment touches this file only.
 
-export type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error' | 'unknown';
+export type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error';
 export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
-export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'other';
+export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'audio_fallback' | 'other';
 /** What forced a recovery: the server forgot the session, refused the stream, or the picture froze. */
 export type QoeRecoveryReason = 'session_lost' | 'session_expired' | 'stall' | 'other';
 

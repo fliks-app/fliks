@@ -229,7 +229,6 @@ pub enum Verdict {
     Device,
     Server,
     Error,
-    Unknown,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

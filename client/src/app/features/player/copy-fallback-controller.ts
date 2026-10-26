@@ -22,8 +22,8 @@ export interface CopyFallbackHost {
 const DEVICE_PROFILE_EXTENSIONS_FEATURE = 'deviceProfileExtensions';
 const RELOAD_IDLE_WAIT_MS = 3_000;
 
-/** DirectPlay/remux -> transcode fallback: an undecodable copy is rejected once
- *  per session and reloaded with `rejectCopy`. One per player, bound via {@link attach}. */
+/** Copy fallback: an undecodable copy is rejected once per session and reloaded, with the failed audio codec
+ *  dropped from the profile when the engine names it, else with `rejectCopy`. One per player, bound via {@link attach}. */
 @Injectable()
 export class CopyFallbackController {
   private host!: CopyFallbackHost;
@@ -31,6 +31,8 @@ export class CopyFallbackController {
   /** Files whose copy this device failed to decode: every later playback-info
    *  for them asks `rejectCopy`, so no reload bounces back onto that copy. */
   private readonly rejectCopyFileIds = new Set<number>();
+  /** Audio codecs this device failed to decode, per file: dropped from every later profile for it. */
+  private readonly rejectedAudio = new Map<number, Set<string>>();
   /** Session the fallback already retried once for. Keyed by sid (not a plain
    *  boolean) so the next negotiation re-arms it. */
   private remuxFallbackSid: string | undefined;
@@ -53,6 +55,10 @@ export class CopyFallbackController {
     );
   }
 
+  rejectedAudioCodecs(mediaFileId: number): ReadonlySet<string> {
+    return this.rejectedAudio.get(mediaFileId) ?? new Set();
+  }
+
   /** For a caught load()/reload rejection: Shaka throws load-time fatals (4032/4012) without an `error` event;
    *  `onRecovered` runs the post-load setup the caller's catch skipped. */
   fallBackFromLoadError(
@@ -64,17 +70,14 @@ export class CopyFallbackController {
     );
   }
 
-  /** An undecodable copy (DirectPlay or remux): reject it and reload once per session
-   *  through `reloadStream`; `rejectCopy` forces a transcode, so it can't loop. True when handled. */
+  /** An undecodable copy: reject it and reload once per session through `reloadStream`. A copied audio codec
+   *  the engine names is dropped in any mode, else DirectPlay/remux gets `rejectCopy`; neither can loop. True when handled. */
   maybeFallback(
-    err: { source?: PlaybackError['source']; code?: number; message?: string },
+    err: { source?: PlaybackError['source']; code?: number; message?: string; audioCodec?: string },
     position: number,
     onRecovered?: () => Promise<void> | void,
   ): boolean {
     if (this.host.isDestroyed()) return false;
-    const mode = this.host.playbackMode();
-    if (mode !== 'remux' && mode !== 'direct') return false;
-    if (!this.host.hasServerFeature(DEVICE_PROFILE_EXTENSIONS_FEATURE)) return false;
     if (!isUndecodableError(err)) return false;
     const sid = this.host.currentSid();
     if (!sid) return false;
@@ -82,11 +85,26 @@ export class CopyFallbackController {
       if (this.remuxFallback && onRecovered) this.remuxFallbackOnRecovered ??= onRecovered;
       return this.remuxFallback != null;
     }
+    const fileId = this.host.currentMediaFileId();
+    const audio = err.audioCodec?.toLowerCase();
+    let why: ReloadWhy;
+    if (audio) {
+      const rejected = this.rejectedAudio.get(fileId) ?? new Set<string>();
+      if (rejected.has(audio)) return false;
+      this.rejectedAudio.set(fileId, rejected.add(audio));
+      why = { reason: 'audio_fallback', from: audio };
+      console.warn(`[player] ${audio} audio failed to decode, retrying without it`);
+    } else {
+      const mode = this.host.playbackMode();
+      if (mode !== 'remux' && mode !== 'direct') return false;
+      if (!this.host.hasServerFeature(DEVICE_PROFILE_EXTENSIONS_FEATURE)) return false;
+      this.rejectCopyFileIds.add(fileId);
+      why = { reason: 'remux_fallback' };
+      console.warn('[player] copy failed to decode, retrying with rejectCopy');
+    }
     this.remuxFallbackSid = sid;
-    this.rejectCopyFileIds.add(this.host.currentMediaFileId());
-    console.warn('[player] copy failed to decode, retrying with rejectCopy');
     this.remuxFallbackOnRecovered = onRecovered;
-    this.remuxFallback = this.runRemuxFallback(position).finally(() => {
+    this.remuxFallback = this.runRemuxFallback(position, why).finally(() => {
       this.remuxFallback = null;
       this.remuxFallbackOnRecovered = undefined;
     });
@@ -95,7 +113,7 @@ export class CopyFallbackController {
 
   /** The load path that reported the failure still holds its reload guard, so
    *  wait for it before reloading. Always cards on failure: the copy is gone. */
-  private async runRemuxFallback(position: number): Promise<void> {
+  private async runRemuxFallback(position: number, why: ReloadWhy): Promise<void> {
     this.host.setRecovering(true);
     try {
       if (!(await this.waitForReloadIdle())) {
@@ -110,7 +128,7 @@ export class CopyFallbackController {
       }
       // A recovery that settled meanwhile lowered the veil.
       this.host.setRecovering(true);
-      await this.host.reloadStream(position, { reason: 'remux_fallback' });
+      await this.host.reloadStream(position, why);
       await this.remuxFallbackOnRecovered?.();
     } catch (e) {
       if (!this.host.hasError()) this.host.failWith(e);

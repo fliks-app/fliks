@@ -1573,8 +1573,7 @@
       "network": "Rede",
       "device": "Dispositivo",
       "server": "Servidor",
-      "error": "Erro",
-      "unknown": "Dados insuficientes"
+      "error": "Erro"
     },
     "reason": {
       "fatal_error": "A reprodução falhou com um erro e não recuperou.",
@@ -1585,7 +1584,6 @@
       "stalls_buffer_ahead": "Paragens com dados em buffer: o dispositivo não acompanhou.",
       "dropped_frames": "O descodificador descartou uma parte elevada dos fotogramas.",
       "software_decoder": "Descodificação por software.",
-      "too_little_data": "Tempo de reprodução insuficiente para avaliar.",
       "healthy": "Nenhum problema detetado.",
       "cmcd_missing": "O cliente declara CMCD mas o servidor não recebeu nenhum.",
       "session_lost": "Cortes: o servidor já não conhecia a sessão e o leitor teve de a recriar.",
@@ -1680,6 +1678,7 @@
       "reload_subtitles_off": "Legendas incorporadas desativadas",
       "reload_subtitles_hls": "Legendas carregadas via HLS ({{lang}})",
       "reload_remux_fallback": "O remux passou para a transcodificação",
+      "reload_audio_fallback": "Alternativa de áudio: {{codec}} não descodificado pelo dispositivo, transcodificado",
       "reload_other": "Recarga do fluxo",
       "recovery_after": "Retomado após {{duration}}"
     },

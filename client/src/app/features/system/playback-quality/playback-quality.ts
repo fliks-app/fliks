@@ -486,8 +486,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
   }
 
   /** The marker of a change: what changed, not just that something did. */
-  changeIcon(type: string, reason?: string, cast = false): 'quality' | 'recovery' | 'audio' | 'subtitles' | 'reload' | 'cast' | 'other' {
+  changeIcon(
+    type: string, reason?: string, cast = false,
+  ): 'quality' | 'recovery' | 'audio' | 'subtitles' | 'reload' | 'fallback' | 'cast' | 'other' {
     if (cast) return 'cast';
+    if (reason === 'remux_fallback' || reason === 'audio_fallback') return 'fallback';
     if (type === 'quality_switch') return 'quality';
     if (type === 'recovery') return 'recovery';
     if (type === 'reload') return reason === 'audio' ? 'audio' : reason === 'subtitles' ? 'subtitles' : 'reload';
@@ -539,6 +542,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
         return d.to ? title('qoe.transition.reload_subtitles_on', { lang: lang(d.to) }) : title('qoe.transition.reload_subtitles_off');
       case 'remux_fallback':
         return title('qoe.transition.reload_remux_fallback');
+      case 'audio_fallback':
+        return title('qoe.transition.reload_audio_fallback', { codec: (d.from ?? '-').toUpperCase() });
       default:
         return title('qoe.transition.reload_other');
     }

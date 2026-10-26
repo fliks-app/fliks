@@ -749,12 +749,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
   private readonly sdrFallbackFileIds = new Set<number>();
 
-  /** `deviceProfileService.getProfile()` with `rejectCopy` forced when {@link CopyFallbackController} flagged
-   *  the file, and HDR off once an AirPlay receiver refused it. */
+  /** `deviceProfileService.getProfile()` with `rejectCopy` forced and failed audio codecs dropped when
+   *  {@link CopyFallbackController} flagged the file, and HDR off once an AirPlay receiver refused it. */
   private deviceProfileFor(mediaFileId: number, passthrough = true): DeviceProfile {
     let profile = this.deviceProfileService.getProfile({ passthrough });
     if (this.copyFallback.shouldForceRejectCopy(mediaFileId)) {
       profile = { ...profile, rejectCopy: true };
+    }
+    const badAudio = this.copyFallback.rejectedAudioCodecs(mediaFileId);
+    if (badAudio.size) {
+      profile = {
+        ...profile,
+        directPlayProfiles: profile.directPlayProfiles.map((p) => ({
+          ...p,
+          audioCodecs: p.audioCodecs.filter((c) => !badAudio.has(c.toLowerCase())),
+        })),
+      };
     }
     if (this.sdrFallbackFileIds.has(mediaFileId)) {
       profile = { ...profile, supportsHdr: false, supportsDolbyVision: false, dolbyVisionProfiles: undefined };
@@ -2756,7 +2766,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
       }
       this.copyFallback.maybeFallback(
-        { source: e.source, code: e.code, message: e.message },
+        { source: e.source, code: e.code, message: e.message, audioCodec: e.audioCodec },
         this.engine?.currentTime || this.state.currentTime() || 0,
       );
     });
@@ -3612,8 +3622,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.subs.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
       payload.hasNext = this.queueCtl.upNext() !== null;
-      // While casting, CastPlayerService's own heartbeat carries the receiver's sample.
-      if (!this.castService.isConnected() && this.engine) {
+      // While casting, CastPlayerService's own heartbeat carries the receiver's sample; a sample after a
+      // fatal error would read as playback carrying on and clear it from the verdict.
+      if (!this.castService.isConnected() && this.engine && !this.state.error()) {
         payload.qoe = this.qoe.current(sessionId) ?? undefined;
         void this.qoe.refresh(this.engine, sessionId);
       }

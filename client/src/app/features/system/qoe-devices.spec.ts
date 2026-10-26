@@ -19,13 +19,13 @@ describe('mergeDevices', () => {
   it('merges browser versions into one device, weighting the averages by playbacks', () => {
     const merged = mergeDevices(
       [
-        row('Chrome/120', { sessions: 3, stallSessions: 1, avgDroppedPct: 1, topVerdict: 'unknown' }),
+        row('Chrome/120', { sessions: 3, stallSessions: 1, avgDroppedPct: 1, topVerdict: 'ok' }),
         row('Chrome/121', { sessions: 1, avgDroppedPct: 5, topVerdict: 'network' }),
       ],
       label,
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0]).toMatchObject({ label: 'Chrome on Linux', raw: ['Chrome/120', 'Chrome/121'], sessions: 4, stallSessions: 1, avgDroppedPct: 2, topVerdict: 'network' });
+    expect(merged[0]).toMatchObject({ label: 'Chrome on Linux', raw: ['Chrome/120', 'Chrome/121'], sessions: 4, stallSessions: 1, avgDroppedPct: 2, topVerdict: 'ok' });
   });
 
   it('keeps engines apart', () => {

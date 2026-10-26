@@ -1573,8 +1573,7 @@
       "network": "Netzwerk",
       "device": "Gerät",
       "server": "Server",
-      "error": "Fehler",
-      "unknown": "Zu wenig Daten"
+      "error": "Fehler"
     },
     "reason": {
       "fatal_error": "Die Wiedergabe ist mit einem Fehler fehlgeschlagen und wurde nicht wiederhergestellt.",
@@ -1585,7 +1584,6 @@
       "stalls_buffer_ahead": "Aussetzer trotz Puffer: Das Gerät kam nicht mit.",
       "dropped_frames": "Der Decoder hat viele Frames verworfen.",
       "software_decoder": "Software-Decodierung.",
-      "too_little_data": "Zu wenig Wiedergabezeit für eine Beurteilung.",
       "healthy": "Kein Problem erkannt.",
       "cmcd_missing": "Der Client meldet CMCD, aber der Server hat keine Daten erhalten.",
       "session_lost": "Unterbrechungen: Der Server kannte die Sitzung nicht mehr, der Player musste sie neu erstellen.",
@@ -1680,6 +1678,7 @@
       "reload_subtitles_off": "Eingebrannte Untertitel deaktiviert",
       "reload_subtitles_hls": "Untertitel über HLS geladen ({{lang}})",
       "reload_remux_fallback": "Remux auf Transkodierung zurückgefallen",
+      "reload_audio_fallback": "Audio-Ausweichlösung: {{codec}} vom Gerät nicht dekodiert, transkodiert",
       "reload_other": "Stream neu geladen",
       "recovery_after": "Fortgesetzt nach {{duration}}"
     },
