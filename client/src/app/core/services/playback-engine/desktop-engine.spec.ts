@@ -239,6 +239,53 @@ describe('DesktopEngine audio', () => {
   });
 });
 
+describe('DesktopEngine open retry', () => {
+  const transportError: DesktopEvent = { type: 'error', payload: { code: 2, message: 'loading failed' } };
+  let bridge: Bridge;
+  let engine: DesktopEngine;
+  let errors: unknown[];
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    bridge = installBridge();
+    engine = new DesktopEngine();
+    await engine.init(document.createElement('div'));
+    errors = [];
+    engine.on('error', (e) => errors.push(e));
+    await engine.load('https://srv/api/stream/1?token=t', 0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (window as any).fliksDesktop;
+  });
+
+  it('reopens the same load on a transport error, then reports the third one', async () => {
+    for (let i = 0; i < 2; i++) {
+      bridge.emit(transportError);
+      await vi.runAllTimersAsync();
+    }
+    expect(bridge.load).toHaveBeenCalledTimes(3);
+    expect(bridge.load.mock.calls[2][0]).toEqual(bridge.load.mock.calls[0][0]);
+    expect(errors).toHaveLength(0);
+
+    bridge.emit(transportError);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('reports a decode error at once', () => {
+    bridge.emit({ type: 'error', payload: { code: -1, message: 'loading failed' } });
+    expect(errors).toHaveLength(1);
+  });
+
+  it('drops a pending retry once another item loads', async () => {
+    bridge.emit(transportError);
+    await engine.load('https://srv/api/stream/2?token=t', 0);
+    await vi.runAllTimersAsync();
+    expect(bridge.load).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('DesktopEngine getQoeSample', () => {
   const qoe = {
     droppedFrames: 4,
