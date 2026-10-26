@@ -107,5 +107,8 @@
   "party.end_title": "End the party",
   "party.end_message": "End \"{{name}}\" for everyone?",
   "party.tv_leave_host_message": "You are the host: leaving ends \"{{name}}\" for everyone.",
-  "party.tv_leave_host_confirm": "Leave and end"
+  "party.tv_leave_host_confirm": "Leave and end",
+  "party.tv_votes_one": "{{count}} vote",
+  "party.tv_votes_other": "{{count}} votes",
+  "party.tv_proposals_empty": "No proposals yet. Guests suggest films from the web or the mobile app."
 }

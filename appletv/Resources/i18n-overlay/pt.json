@@ -106,5 +106,8 @@
   "party.end_title": "Terminar a sessão",
   "party.end_message": "Terminar \"{{name}}\" para todos?",
   "party.tv_leave_host_message": "Você é o anfitrião: sair encerrará \"{{name}}\" para todos.",
-  "party.tv_leave_host_confirm": "Sair e encerrar"
+  "party.tv_leave_host_confirm": "Sair e encerrar",
+  "party.tv_votes_one": "{{count}} voto",
+  "party.tv_votes_other": "{{count}} votos",
+  "party.tv_proposals_empty": "Ainda sem propostas. Os convidados sugerem filmes pela web ou pela app móvel."
 }
