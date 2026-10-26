@@ -83,11 +83,6 @@
             <span class="loading loading-spinner loading-md"></span>
           }
         }
-        @if (h.status === 'scheduled' && canHost() && !h.playlist) {
-          <button type="button" class="btn gap-2" [class.btn-primary]="!h.item" [class.btn-ghost]="!!h.item" [disabled]="busy()" (click)="picker()?.show()">
-            {{ (h.item ? 'party.change_item' : 'party.pick_item') | translate }}
-          </button>
-        }
         @if (h.status === 'scheduled' && canHost() && !joined()) {
           <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
         }
@@ -164,6 +159,9 @@
     @if (view(); as v) {
       <div class="grid items-start gap-6 lg:grid-cols-2">
         <div class="flex min-w-0 flex-col gap-6">
+          @if (v.status !== 'ended' && hostView()) {
+            <app-party-programme [partyId]="v.id" [isHost]="canHost()" [current]="head()?.item ?? null" [live]="v.status === 'live'" (changed)="apply($event)" />
+          }
           @if (phase() === 'lobby' && joined()) {
             <app-party-proposals [partyId]="v.id" [proposals]="party.proposals()" [people]="people()" [isHost]="party.isHost()" (chosen)="apply($event)" />
           }
@@ -190,7 +188,6 @@
       </div>
       @if (canHost() && hostView(); as hv) {
         <app-party-host-dialog [view]="hv" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
-        <app-media-picker (picked)="select($event)" />
       }
     } @else {
       <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>

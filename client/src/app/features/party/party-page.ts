@@ -20,6 +20,7 @@ import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../
 import { runBusy } from './party-busy';
 import { PartyHostDialogComponent } from './party-host-dialog';
 import { PartyProposalsComponent } from './party-proposals';
+import { PartyProgrammeComponent, findEpisode } from './party-programme';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyChatComponent } from '../player/party/party-chat';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
@@ -30,7 +31,6 @@ import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
-import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { SynopsisComponent } from '../../shared/components/synopsis/synopsis';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
@@ -43,20 +43,11 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 const JOIN_RETRY_MS = 10_000;
 
-function findEpisode(media: Media | null, id: number | null | undefined) {
-  if (id == null) return null;
-  for (const season of media?.seasons ?? []) {
-    const episode = season.episodes?.find((e) => e.id === id);
-    if (episode) return { season, episode };
-  }
-  return null;
-}
-
 /** `/parties/:id`: a party's page. Scheduled: info and host actions; lobby open: members, ready and start; live: join. */
 @Component({
   selector: 'app-party-page',
   imports: [
-    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyProposalsComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent, MediaPickerComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyProposalsComponent, PartyProgrammeComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2,
   ],
@@ -83,7 +74,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   protected readonly hostDialog = viewChild(PartyHostDialogComponent);
-  protected readonly picker = viewChild(MediaPickerComponent);
 
   private readonly id = Number(this.route.snapshot.params['id']);
   private readonly token: string | undefined = this.route.snapshot.queryParams['token'];
@@ -240,15 +230,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (id == null) return;
     const m = await this.mediaService.getOne(id).catch(() => null);
     if (m && this.head()?.item?.mediaId === id) this.media.set(m);
-  }
-
-  protected async select(picks: MediaPick[]): Promise<void> {
-    const [pick] = picks;
-    if (!pick) return;
-    const dto = await runBusy(this.busy, () =>
-      this.api.select(this.id, { mediaId: pick.mediaId, ...(pick.episodeId != null && { episodeId: pick.episodeId }) }),
-    );
-    if (dto) this.apply(dto);
   }
 
   private async joinLobby(): Promise<void> {

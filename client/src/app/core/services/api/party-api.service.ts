@@ -165,6 +165,10 @@ export class PartyApiService {
     return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/select`, body));
   }
 
+  programme(id: number, items: { mediaId: number; mediaFileId?: number; episodeId?: number }[]) {
+    return firstValueFrom(this.http.put<PartyDto>(`/api/parties/${id}/programme`, { items }));
+  }
+
   queue(id: number) {
     return firstValueFrom(this.http.get<PartyItem[]>(`/api/parties/${id}/queue`));
   }
