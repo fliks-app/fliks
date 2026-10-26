@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartyItem, type PartyProposal } from '../../core/services/api/party-api.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { BackgroundService } from '../../core/services/background.service';
@@ -27,7 +27,7 @@ const dto = (it: PartyItem | null) =>
 describe('PartyPageComponent film selection', () => {
   let api: { get: ReturnType<typeof vi.fn>; select: ReturnType<typeof vi.fn> };
   let getOne: ReturnType<typeof vi.fn>;
-  let service: { party: ReturnType<typeof signal<PartyDto | null>> };
+  let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>> };
   const flush = async () => {
     for (let i = 0; i < 5; i++) await Promise.resolve();
     TestBed.tick();
@@ -36,7 +36,7 @@ describe('PartyPageComponent film selection', () => {
   beforeEach(() => {
     api = { get: vi.fn().mockResolvedValue(dto(null)), select: vi.fn() };
     getOne = vi.fn((id: number) => Promise.resolve({ id, title: `T${id}` }));
-    service = { party: signal<PartyDto | null>(null) };
+    service = { party: signal<PartyDto | null>(null), proposals: signal<PartyProposal[]>([]) };
     const stub = (v: object) => v as never;
     vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
     TestBed.overrideComponent(PartyPageComponent, { set: { template: '', imports: [] } });
@@ -88,5 +88,20 @@ describe('PartyPageComponent film selection', () => {
     svc.party.set({ ...dto(item(2)) });
     await flush();
     expect(getOne).toHaveBeenLastCalledWith(2);
+  });
+
+  it('enables the start with a film or at least one proposal', async () => {
+    const fixture = TestBed.createComponent(PartyPageComponent);
+    fixture.detectChanges();
+    await flush();
+    const page = fixture.componentInstance as unknown as { canStart(): boolean };
+    const svc = TestBed.inject(PartyService) as unknown as typeof service;
+    expect(page.canStart()).toBe(false);
+    svc.proposals.set([{ id: 1, item: item(1), proposedBy: 1, voterIds: [1] }]);
+    expect(page.canStart()).toBe(true);
+    svc.proposals.set([]);
+    svc.party.set(dto(item(2)));
+    await flush();
+    expect(page.canStart()).toBe(true);
   });
 });
