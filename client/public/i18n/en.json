@@ -1740,6 +1740,7 @@
     "unreadable": "Folder not readable"
   },
   "common": {
+    "unexpected_error": "Something went wrong. Reload the page if it keeps happening.",
     "browse": "Browse…",
     "item_count_one": "{{count}} item",
     "item_count_other": "{{count}} items",

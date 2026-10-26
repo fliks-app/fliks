@@ -82,6 +82,8 @@
               {{ (ready() ? 'party.not_ready' : 'party.ready') | translate }}
             </button>
             <button type="button" class="btn btn-ghost" (click)="leave()">{{ 'party.leave' | translate }}</button>
+          } @else if (sse.serverUnreachable()) {
+            <span class="text-base-content/60">{{ 'connectivity.server_unreachable' | translate }}</span>
           } @else {
             <span class="loading loading-spinner loading-md"></span>
           }

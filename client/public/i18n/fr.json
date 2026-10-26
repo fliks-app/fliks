@@ -1740,6 +1740,7 @@
     "unreadable": "Dossier illisible"
   },
   "common": {
+    "unexpected_error": "Une erreur est survenue. Rechargez la page si elle se reproduit.",
     "browse": "Parcourir…",
     "item_count_one": "{{count}} élément",
     "item_count_other": "{{count}} éléments",

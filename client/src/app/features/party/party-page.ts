@@ -66,7 +66,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly confirm = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly sse = inject(SseService);
+  protected readonly sse = inject(SseService);
   private readonly clock = inject(ClockService);
   private readonly mediaService = inject(MediaService);
   protected readonly party = inject(PartyService);

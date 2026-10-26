@@ -9,7 +9,7 @@ export async function getOrCreateDeviceId(): Promise<string> {
   const isNative = Capacitor.isNativePlatform();
   const existing = await readDeviceId(isNative);
   if (existing) return existing;
-  const id = generateUuid();
+  const id = crypto.randomUUID();
   await writeDeviceId(id, isNative);
   return id;
 }
@@ -40,18 +40,6 @@ export function getDeviceName(): string {
   const browser = detectBrowser(ua);
   const os = detectOs(ua) ?? '';
   return os ? `${browser} - ${os}` : browser;
-}
-
-function generateUuid(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // RFC 4122-ish fallback for older runtimes.
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
 }
 
 async function readDeviceId(isNative: boolean): Promise<string | null> {

@@ -1740,6 +1740,7 @@
     "unreadable": "Carpeta ilegible"
   },
   "common": {
+    "unexpected_error": "Se ha producido un error. Recarga la página si vuelve a ocurrir.",
     "browse": "Explorar…",
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementos",
