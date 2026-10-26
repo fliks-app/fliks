@@ -1,7 +1,7 @@
 @if (voice.supported && (variant() !== 'hint' || voice.joined())) {
-  <div [class]="variant() === 'controls' ? 'flex items-center gap-2 text-sm' : 'flex flex-col gap-2 px-3 py-2 text-sm'">
+  <div [class]="variant() === 'controls' ? 'flex min-w-0 items-center gap-2 text-sm' : 'flex flex-col gap-2 px-3 py-2 text-sm'">
     @if (variant() !== 'hint') {
-      <div class="flex items-center gap-2">
+      <div class="flex min-w-0 items-center gap-2">
         @if (voice.joined()) {
           <button
             type="button"
@@ -14,10 +14,10 @@
           >
             @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
           </button>
-          <button type="button" class="btn btn-sm" (click)="voice.leave()">{{ 'party.voice_leave' | translate }}</button>
+          <button type="button" class="btn btn-sm min-w-0" (click)="voice.leave()"><span class="truncate">{{ 'party.voice_leave' | translate }}</span></button>
         } @else {
-          <button type="button" class="btn btn-sm btn-primary gap-1" [disabled]="voice.busy()" (click)="voice.join()">
-            <svg lucideMic class="h-4 w-4"></svg>{{ 'party.voice_join' | translate }}
+          <button type="button" class="btn btn-sm btn-primary min-w-0 gap-1" [disabled]="voice.busy()" (click)="voice.join()">
+            <svg lucideMic class="h-4 w-4 shrink-0"></svg><span class="truncate">{{ 'party.voice_join' | translate }}</span>
           </button>
         }
         @if (variant() === 'full') {
