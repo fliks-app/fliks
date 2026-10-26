@@ -527,7 +527,7 @@ export class PartyService {
   private onMessage(m: PartyMessage): void {
     if (this.messages().some((x) => x.id === m.id)) return;
     this.messages.update((l) => [...l, m].slice(-MAX_MESSAGES));
-    if (this.panelOpen() || m.system) return;
+    if (this.panelOpen() || this.lobby() || m.system) return;
     this.unread.update((n) => n + 1);
     this.bubbles.update((l) => [...l, m].slice(-3));
     setTimeout(() => this.bubbles.update((l) => l.filter((x) => x.id !== m.id)), BUBBLE_MS);

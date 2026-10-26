@@ -16,6 +16,7 @@ import { SseService, type PartyEvent } from '../sse.service';
 import { ToastService } from '../toast.service';
 import { ClockService } from './clock.service';
 import { PartyService } from './party.service';
+import { VoiceService } from './voice.service';
 import { ReactionsService } from './reactions.service';
 
 const item = (mediaId: number, episodeId: number | null = null): PartyItem => ({
@@ -36,7 +37,7 @@ function setup(connected = false, confirmed = true) {
   const events = new Subject<PartyEvent>();
   const api = {
     join: vi.fn(), get: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
-    leave: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
+    leave: vi.fn().mockResolvedValue(undefined), start: vi.fn(), voice: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
   };
   const confirm = vi.fn().mockResolvedValue(confirmed);
   const sse = { partyEvents: events, connected: signal(connected), targetId: signal('dev') };
@@ -173,5 +174,36 @@ describe('PartyService leaveOrEnd', () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(api.leave).toHaveBeenCalledOnce();
     expect(api.end).not.toHaveBeenCalled();
+  });
+});
+
+describe('PartyService lobby', () => {
+  const lobby = () => dto(1, { status: 'scheduled' });
+  const message = (id: number): PartyEvent =>
+    ({ type: 'party.message', partyId: 7, rev: id, message: { id, userId: 2, username: 'b', text: 'hi', system: null, sentAtMs: 0 } }) as PartyEvent;
+
+  it('keeps a lobby message out of unread and bubbles, and keeps it after start', async () => {
+    const { svc, api, events } = setup();
+    svc.applySnapshot(lobby());
+    events.next(message(50));
+    expect(svc.unread()).toBe(0);
+    expect(svc.bubbles()).toEqual([]);
+    api.start.mockResolvedValue(dto(2, { live: { ...dto(2).live!, messages: [...svc.messages()] } }));
+    await svc.start();
+    expect(svc.messages().some((m) => m.id === 50)).toBe(true);
+    events.next(message(51));
+    expect(svc.unread()).toBe(1);
+  });
+
+  it('keeps voice joined across start', async () => {
+    vi.stubGlobal('RTCPeerConnection', class {});
+    const { svc, api } = setup();
+    const voice = TestBed.inject(VoiceService);
+    svc.applySnapshot(lobby());
+    voice.joined.set(true);
+    api.start.mockResolvedValue(dto(2));
+    await svc.start();
+    TestBed.tick();
+    expect(voice.joined()).toBe(true);
   });
 });

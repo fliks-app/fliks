@@ -152,7 +152,7 @@
     }
 
     @if (view(); as v) {
-      <div class="grid items-start gap-6">
+      <div class="grid items-start gap-6 lg:grid-cols-2">
         <div class="flex min-w-0 flex-col gap-6">
           <section class="flex flex-col gap-3">
             <div class="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -165,7 +165,15 @@
               }
             </ul>
           </section>
+          @if (phase() === 'lobby' && joined()) {
+            <app-party-voice-bar variant="full" />
+          }
         </div>
+        @if (phase() === 'lobby' && joined()) {
+          <div class="flex h-80 flex-col rounded-box bg-base-200">
+            <app-party-chat />
+          </div>
+        }
       </div>
       @if (canHost() && hostView(); as hv) {
         <app-party-host-dialog [view]="hv" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
