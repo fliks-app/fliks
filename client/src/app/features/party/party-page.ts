@@ -179,7 +179,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     this.party.closed.pipe(takeUntilDestroyed()).subscribe(() => void this.router.navigateByUrl('/'));
     effect(() => {
       const h = this.gone() ? null : this.head();
-      if (h) this.navbar.enterHeroPage(h.name);
+      if (h) this.navbar.enterHeroPage(h.name, this.media()?.logoUrl ?? null);
       else this.navbar.leaveHeroPage();
     });
     effect(() => this.background.set(this, this.fanart()));
