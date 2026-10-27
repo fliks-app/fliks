@@ -54,7 +54,6 @@ import {
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
   type AudioStreamChoice,
 } from '../../core/services/player-settings.service';
-import { Immersive } from '../../core/plugins/immersive.plugin';
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
@@ -70,7 +69,7 @@ import { NativeEngine } from '../../core/services/playback-engine/native-engine'
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
-import { Orientation, releasePlayerOrientation } from '../../core/plugins/orientation.plugin';
+import { PlayerScreen } from './player-screen';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
@@ -495,11 +494,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected readonly partyDialog = signal<'party' | 'reactions' | null>(null);
   protected readonly partyPanelShown = computed(() => this.partyCtl.active() && this.party.panelOpen() && !this.inPipMode());
   readonly pipAvailable = signal(true);
-  readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
-  readonly orientationLocked = signal(false);
-  private readonly landscapeOnOpen =
-    this.serverConfig.isNative && !this.device.isTv() && this.playerSettings.get().landscapeOnOpen;
-  private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
+  protected readonly screen = new PlayerScreen({
+    native: this.serverConfig.isNative,
+    landscapeOnOpen: !this.device.isTv() && this.playerSettings.get().landscapeOnOpen,
+    immersiveInPortrait: () => !this.paused() && !this.chrome.visible(),
+    suspended: () => this.inPipMode(),
+    casting: () => this.castService.isConnected(),
+    onRotate: () => {
+      if (this.isNativeEngine() && this.engine) this.applyNativeSubtitleStyle();
+    },
+  });
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
   /** Whether {@link applyVideoCrop} last handed mpv a crop; the overlay reads
@@ -576,10 +580,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // after the picker's wait or that Android resumes would otherwise leave the receiver empty.
       untracked(() => {
         // The picture is on the TV: the phone turns freely for the cast controls.
-        if (this.isNative) {
-          this.orientationLocked.set(false);
-          Orientation.unlock().catch(() => {});
-        }
+        this.screen.releaseForCast();
         if (this.engine && !this.castPlayerService.hasMedia()) {
           void this.handOffToCast();
           return;
@@ -594,7 +595,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else if (!casting && this.wasCasting) {
       // Just disconnected — reload local engine and resume at Cast position
       const castPos = this.castService.currentTime();
-      if (this.isNative && this.landscapeOnOpen) untracked(() => releasePlayerOrientation(true));
+      untracked(() => this.screen.applyLandscapeOnOpen());
       void this.resumeLocalAfterCast(castPos).then(() => {
         if (this.partyCtl.active()) this.partyCtl.resync();
       });
@@ -677,21 +678,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
     onBack: () => this.onBack(),
   }), null);
-
-  // Immersive mode: landscape=always, portrait=only while playing with controls hidden
-  private readonly immersiveEffect = effect(() => {
-    if (!this.isNative || this.inPipMode()) return;
-    const landscape = this.isLandscape();
-    const shouldBeImmersive = landscape || (!this.paused() && !this.chrome.visible());
-    if (shouldBeImmersive) {
-      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
-      document.body.classList.add('immersive');
-    } else {
-      Immersive.exit().catch(() => {});
-      document.body.classList.remove('immersive');
-      Immersive.setLightStatusBar({ light: false }).catch(() => {});
-    }
-  });
 
   // Sync play/pause state to PiP action button
   private readonly pipPlaybackEffect = effect(() => {
@@ -1086,11 +1072,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.recovery.clearEpisode();
     this.firstLoadSetupDone = false;
 
-    // On native: listen to orientation changes (immersive handled by effect)
-    if (this.isNative) {
-      screen.orientation?.addEventListener('change', this.onOrientationChange);
-      if (this.landscapeOnOpen && !this.castService.isConnected()) releasePlayerOrientation(true);
-    }
+    this.screen.open();
 
     this.webCrop.init();
     const video = this.videoEl()?.nativeElement;
@@ -1399,11 +1381,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     window.removeEventListener('pagehide', this.onBeforeUnload);
     document.removeEventListener('visibilitychange', this.onTvVisibility);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
+    this.screen.close();
     if (this.isNative) {
-      screen.orientation?.removeEventListener('change', this.onOrientationChange);
-      Orientation.unlock().catch(() => {});
-      Immersive.exit().catch(() => {});
-      document.body.classList.remove('immersive');
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
       window.removeEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.removeEventListener('pipAction', this.onPipAction as EventListener);
@@ -2337,13 +2316,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       video.requestPictureInPicture();
     }
-  }
-
-  onToggleOrientationLock() {
-    const locked = !this.orientationLocked();
-    this.orientationLocked.set(locked);
-    if (locked) Orientation.lock().catch(() => {});
-    else releasePlayerOrientation(this.landscapeOnOpen);
   }
 
   /** A destination picked from the player's own list takes over the running
@@ -3330,19 +3302,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const action = (e as CustomEvent).detail?.action;
     if (action === 'togglePlayback') {
       this.onTogglePlay();
-    }
-  };
-
-  private onOrientationChange = () => {
-    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
-    // iOS WKWebView sometimes doesn't reflow fixed-position elements after
-    // rotation, leaving the player UI oversized. Force a layout recalc.
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    document.documentElement.style.setProperty('--vh', `${window.innerHeight}px`);
-    // Native subtitle bottom margin is a % of video height — reapply after
-    // orientation change so the value is recalculated against the new dimensions.
-    if (this.isNativeEngine() && this.engine) {
-      this.applyNativeSubtitleStyle();
     }
   };
 

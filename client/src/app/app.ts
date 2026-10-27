@@ -29,7 +29,7 @@ import { OfflinePlaybackSyncService } from './core/services/offline-playback-syn
 import { RemoteService } from './core/services/remote.service';
 import { remoteOverlayOpen } from './core/services/remote-playback-target';
 import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
-import { TIZEN_MEDIA_KEYS } from './features/player/media-keys';
+import { TIZEN_MEDIA_KEYS } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 import { TranslateService } from '@ngx-translate/core';
 
