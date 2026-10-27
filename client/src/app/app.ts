@@ -6,6 +6,7 @@ import { Immersive } from './core/plugins/immersive.plugin';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
+import { CastPartyRelayService } from './core/services/party/cast-party-relay.service';
 import { SseService } from './core/services/sse.service';
 import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
@@ -66,6 +67,8 @@ export class App implements OnInit, OnDestroy {
   /** Injected so a command aimed at this device is honoured wherever the user
    *  is in the app: including the player route, which sits outside the layout. */
   private readonly remote = inject(RemoteService);
+  /** Injected so party reactions reach the Chromecast from any page. */
+  private readonly castPartyRelay = inject(CastPartyRelayService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private backButtonListener?: { remove: () => Promise<void> };

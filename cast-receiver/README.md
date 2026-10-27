@@ -33,6 +33,7 @@ Your media stays on your NAS — only the receiver shell is centralised.
 - `receiver.js` — boots CAF SDK, hooks LOAD/IDLE, applies subtitle defaults.
 - `receiver.css` — branding, idle splash, `::cue` style.
 - `fliks-icon.svg` — splash logo.
+- `emoji/` — animated reaction emoji; copied in at deploy, not committed.
 
 No build step. The directory is published as-is to GitHub Pages by
 [`.github/workflows/deploy-cast-receiver.yml`](../.github/workflows/deploy-cast-receiver.yml).
@@ -93,6 +94,17 @@ Sender sends, receiver reads:
   edlLabels?: { cut: string; commercial: string },  // notice texts, translated by the sender
   episodeId?: number,  // when applicable
 }
+```
+
+Party floaters, relayed by a sender on `urn:x-cast:media.fliks.app` (the first sender to send
+one is followed until it disconnects). `img` is an absolute `http(s)` URL or null; the receiver
+prefers its bundled `emoji/<code>.webp`, which the deploy workflow copies from `server/public/emoji`
+because a plain-HTTP NAS cannot serve images to the HTTPS receiver. Test from DevTools with
+`partyFloat({kind:'party_reaction', emoji:'🔥', username:'a', img:null})`.
+
+```ts
+{ kind: 'party_reaction', emoji: string, username: string, img: string | null }
+{ kind: 'party_chat', id: number | string, username: string, text: string, sep: string }
 ```
 
 Reserved for upcoming features (skip-intro markers, queue auto-next,

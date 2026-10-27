@@ -764,6 +764,21 @@ public class CastPlugin extends Plugin {
     }
 
     @PluginMethod()
+    public void sendMessage(PluginCall call) {
+        runOnMainThread(() -> {
+            String message = call.getString("message");
+            if (message == null || castSession == null || !castSession.isConnected()) {
+                call.reject("No Cast session");
+                return;
+            }
+            castSession.sendMessage(FLIKS_NAMESPACE, message).setResultCallback(status -> {
+                if (status.isSuccess()) call.resolve();
+                else call.reject("sendMessage failed: " + status.getStatusCode());
+            });
+        });
+    }
+
+    @PluginMethod()
     public void disconnect(PluginCall call) {
         runOnMainThread(() -> {
             if (sessionManager != null) {

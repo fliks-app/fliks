@@ -9,6 +9,7 @@ import { CastDiscovery, type DiscoveredDevice } from './mdns';
 import {
   mediaStatusEvent,
   mergeActiveTracks,
+  NS_FLIKS,
   pickAudioTrack,
   receiverMessageEvent,
   type CastTrack,
@@ -243,6 +244,12 @@ class CastSender {
     });
   }
 
+  /** Only the Fliks namespace: the renderer must not reach other receiver channels. */
+  sendMessage(namespace: string, message: string): void {
+    if (namespace !== NS_FLIKS || !this.transportId) return;
+    this.channel?.send(NS_FLIKS, this.transportId, JSON.parse(message) as Record<string, unknown>);
+  }
+
   setActiveSubtitle(trackId: number): void {
     this.editTracks({ textId: trackId > 0 ? trackId : null });
   }
@@ -315,6 +322,9 @@ export function registerCastIpc(): void {
   ipcMain.handle(CAST_IPC.disconnect, () => sender.disconnect());
   ipcMain.handle(CAST_IPC.setVolume, (_e, level: number) => sender.setVolume(level));
   ipcMain.handle(CAST_IPC.setMuted, (_e, muted: boolean) => sender.setMuted(muted));
+  ipcMain.handle(CAST_IPC.sendMessage, (_e, namespace: string, message: string) =>
+    sender.sendMessage(namespace, message),
+  );
   ipcMain.handle(CAST_IPC.setActiveSubtitle, (_e, trackId: number) =>
     sender.setActiveSubtitle(trackId),
   );

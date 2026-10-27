@@ -459,6 +459,74 @@ context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
   context.sendCustomMessage(CAPS_NAMESPACE, event.senderId, reply);
 });
 
+// --- Party reactions and chat bubbles ------------------------------------
+//
+// A sender relays the party's floating reactions and chat; only the first one to send is
+// followed, so two phones in the same party do not double every item.
+
+const MAX_REACTIONS = 8;
+const MAX_BUBBLES = 3;
+let partySender = null;
+
+const partyLayer = document.getElementById('party-layer');
+const reactionBox = partyLayer.querySelector('.party-reactions');
+const bubbleBox = partyLayer.querySelector('.party-bubbles');
+
+const dropOnEnd = (el) => el.addEventListener('animationend', () => el.remove());
+const trim = (box, max) => { while (box.children.length > max) box.firstChild.remove(); };
+
+// The bundled copy works over HTTPS; the sender's URL covers anything not bundled.
+function emojiNode(emoji, img) {
+  const glyph = () => { const t = document.createElement('span'); t.textContent = emoji; return t; };
+  const code = Array.from(emoji, (c) => c.codePointAt(0).toString(16)).join('_');
+  const sources = ['emoji/' + code + '.webp'];
+  if (typeof img === 'string' && /^https?:/i.test(img)) sources.push(img);
+  const node = document.createElement('img');
+  node.alt = emoji;
+  node.onerror = () => {
+    const next = sources.shift();
+    if (next) node.src = next; else node.replaceWith(glyph());
+  };
+  node.onerror();
+  return node;
+}
+
+function partyFloat(msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.kind === 'party_reaction' && typeof msg.emoji === 'string') {
+    const el = document.createElement('div');
+    el.className = 'party-reaction';
+    el.style.left = (10 + Math.random() * 80) + '%';
+    el.appendChild(emojiNode(msg.emoji, msg.img));
+    dropOnEnd(el);
+    reactionBox.appendChild(el);
+    trim(reactionBox, MAX_REACTIONS);
+  } else if (msg.kind === 'party_chat' && typeof msg.text === 'string') {
+    const el = document.createElement('div');
+    el.className = 'party-bubble';
+    const name = document.createElement('b');
+    name.textContent = String(msg.username || '');
+    const text = document.createElement('span');
+    text.textContent = String(msg.sep || ': ') + msg.text;
+    el.append(name, text);
+    dropOnEnd(el);
+    bubbleBox.appendChild(el);
+    trim(bubbleBox, MAX_BUBBLES);
+  }
+}
+self.partyFloat = partyFloat;
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || typeof msg.kind !== 'string' || !msg.kind.startsWith('party_')) return;
+  if (partySender && partySender !== event.senderId) return;
+  partySender = event.senderId;
+  partyFloat(msg);
+});
+context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
+  if (event.senderId === partySender) partySender = null;
+});
+
 // --- Boot ---------------------------------------------------------------
 //
 // `useShakaForHls: true` makes CAF use Shaka for HLS — the same engine

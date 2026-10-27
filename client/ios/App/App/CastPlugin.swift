@@ -24,6 +24,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         CAPPluginMethod(name: "setActiveSubtitle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setVolume", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMuted", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
     ]
 
     var sessionManager: GCKSessionManager?
@@ -423,6 +424,21 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             let muted = call.getBool("muted") ?? false
             self?.currentSession?.setDeviceMuted(muted)
             call.resolve()
+        }
+    }
+
+    @objc func sendMessage(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let message = call.getString("message"), let channel = self?.fliksChannel, channel.isConnected else {
+                call.reject("No Cast channel")
+                return
+            }
+            do {
+                try channel.sendTextMessage(message)
+                call.resolve()
+            } catch {
+                call.reject(error.localizedDescription)
+            }
         }
     }
 

@@ -120,6 +120,8 @@ const cast: FliksCastApi = {
   disconnect: () => ipcRenderer.invoke(CAST_IPC.disconnect),
   setVolume: (opts: { level: number }) => ipcRenderer.invoke(CAST_IPC.setVolume, opts.level),
   setMuted: (opts: { muted: boolean }) => ipcRenderer.invoke(CAST_IPC.setMuted, opts.muted),
+  sendMessage: (opts: { namespace: string; message: string }) =>
+    ipcRenderer.invoke(CAST_IPC.sendMessage, opts.namespace, opts.message),
   setActiveSubtitle: (opts: { trackId: number }) =>
     ipcRenderer.invoke(CAST_IPC.setActiveSubtitle, opts.trackId),
   setActiveAudioLanguage: (opts: { language: string; name: string }) =>

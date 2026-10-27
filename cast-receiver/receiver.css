@@ -94,3 +94,77 @@ body.playing .splash {
 .edl-notice.show {
   opacity: 1;
 }
+
+/* Party reactions and chat bubbles: above the player and splash, below the EDL notice. */
+.party-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  overflow: hidden;
+  pointer-events: none;
+  display: none;
+}
+
+body.playing .party-layer {
+  display: block;
+}
+
+.party-reaction {
+  position: absolute;
+  bottom: 10vh;
+  width: 7vh;
+  height: 7vh;
+  font-size: 7vh;
+  line-height: 1;
+  will-change: transform, opacity;
+  animation:
+    party-rise 2s cubic-bezier(0.61, 1, 0.88, 1) forwards,
+    party-fade 2s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.party-reaction img {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes party-rise {
+  from { transform: translateY(0); }
+  to { transform: translateY(-40vh); }
+}
+
+@keyframes party-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.party-bubbles {
+  position: absolute;
+  top: 12vh;
+  right: 4%;
+  max-width: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1vh;
+}
+
+.party-bubble {
+  padding: 1vh 2vh;
+  border-radius: 2.5vh;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 3vh;
+  overflow-wrap: anywhere;
+  will-change: transform, opacity;
+  animation: party-bubble 4s ease-in-out forwards;
+}
+
+.party-bubble span {
+  opacity: 0.8;
+}
+
+@keyframes party-bubble {
+  0% { opacity: 0; transform: translateY(1.5vh); }
+  6% { opacity: 1; transform: translateY(0); }
+  93% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
