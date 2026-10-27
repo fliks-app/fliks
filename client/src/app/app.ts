@@ -1,7 +1,8 @@
 import { Component, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, take } from 'rxjs';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { Immersive } from './core/plugins/immersive.plugin';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
@@ -121,7 +122,6 @@ export class App implements OnInit, OnDestroy {
           // Cold start: splash teardown drops the window insets, leaving the status bar opaque; re-assert edge-to-edge after hide() settles
           // (chaining directly on hide() resolves too early).
           if (Capacitor.getPlatform() === 'android') {
-            const Immersive = registerPlugin<{ applyEdgeToEdge(): Promise<void> }>('Immersive');
             setTimeout(() => void Immersive.applyEdgeToEdge().catch(() => {}), 200);
           }
         });

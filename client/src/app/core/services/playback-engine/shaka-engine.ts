@@ -382,7 +382,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   configure(config: EngineConfig): void {
-    this.player?.configure(config);
+    const { preferredAudioLanguage, ...rest } = config;
+    this.player?.configure(
+      preferredAudioLanguage === undefined
+        ? rest
+        : { ...rest, preferredAudio: preferredAudioLanguage ? [{ language: preferredAudioLanguage }] : [] },
+    );
   }
 
   // ─── Stats ─────────────────────────────────────────────────────────

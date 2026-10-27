@@ -52,6 +52,7 @@ import {
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
   type AudioStreamChoice,
 } from '../../core/services/player-settings.service';
+import { Immersive } from '../../core/plugins/immersive.plugin';
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
@@ -86,17 +87,11 @@ interface AudioOption {
   supported?: boolean;
 }
 
-interface ImmersivePlugin {
-  enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
-  exit(): Promise<void>;
-  setLightStatusBar(options: { light: boolean }): Promise<void>;
-}
 /** Long enough to fold a start-up burst into one report, short enough that a
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
 const HEARTBEAT_MS = 10_000;
 
-const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
 interface PipPlugin {
   isAvailable(): Promise<{ available: boolean }>;
