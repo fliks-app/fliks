@@ -70,6 +70,9 @@ export class PartyProgrammeComponent {
     }),
   );
 
+  /** A TV host reorders with the arrows instead. */
+  protected readonly draggable = computed(() => this.isHost() && !this.device.isTv() && this.rows().length > 1);
+
   constructor() {
     effect(() => {
       this.partyId();

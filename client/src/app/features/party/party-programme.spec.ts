@@ -31,14 +31,14 @@ describe('PartyProgrammeComponent', () => {
     api.programme.mockReset().mockResolvedValue({ id: 9 });
   });
 
-  async function setup(host: boolean, live = false, current: PartyItem | null = null) {
+  async function setup(host: boolean, live = false, current: PartyItem | null = null, tv = true) {
     TestBed.overrideComponent(PartyProgrammeComponent, { remove: { imports: [MediaPickerComponent] }, add: { imports: [StubPicker] } });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
         { provide: PartyApiService, useValue: api },
-        { provide: DeviceService, useValue: { isTv: () => false, isPhone: () => false } },
+        { provide: DeviceService, useValue: { isTv: () => tv, isPhone: () => false } },
         { provide: ConfirmationService, useValue: { confirm: vi.fn().mockResolvedValue(true) } },
         { provide: SseService, useValue: { partyEvents: events } },
       ],
@@ -62,6 +62,21 @@ describe('PartyProgrammeComponent', () => {
     expect(el(f).querySelectorAll('li')).toHaveLength(3);
     expect(el(f).querySelector('button')).toBeNull();
     expect(el(f).querySelector('app-media-picker')).toBeNull();
+  });
+
+  it('drags off TV, without the arrows', async () => {
+    const f = await setup(true, false, null, false);
+    expect(el(f).querySelectorAll('[cdkDragHandle]')).toHaveLength(3);
+    expect(el(f).querySelector('[data-act=up]')).toBeNull();
+  });
+
+  it('has nothing to reorder with a single item', async () => {
+    api.queue.mockResolvedValue([A]);
+    const offTv = await setup(true, false, null, false);
+    expect(el(offTv).querySelector('[cdkDragHandle]')).toBeNull();
+    TestBed.resetTestingModule();
+    const onTv = await setup(true);
+    expect(el(onTv).querySelector('[data-act=up]')).toBeNull();
   });
 
   it('moves an item down with the full list in the PUT', async () => {

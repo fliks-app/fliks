@@ -6,11 +6,11 @@
     }
   </div>
   @if (rows().length) {
-    <ol cdkDropList [cdkDropListDisabled]="!isHost() || device.isTv()" (cdkDropListDropped)="drop($event)" class="flex flex-col gap-2">
+    <ol cdkDropList [cdkDropListDisabled]="!draggable()" (cdkDropListDropped)="drop($event)" class="flex flex-col gap-2">
       @for (r of rows(); track r.item.mediaId + ':' + r.item.episodeId; let i = $index; let first = $first; let last = $last) {
         <li appTvRow cdkDrag [attr.data-row]="r.item.mediaId + ':' + r.item.episodeId" class="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-1 rounded-box bg-base-200 p-2 sm:grid-cols-[auto_auto_1fr_auto]" [class.ring-2]="r.playing" [class.ring-primary]="r.playing" [attr.aria-current]="r.playing ? 'true' : null">
           <div *cdkDragPlaceholder class="h-[4.5rem] rounded-box bg-base-300 sm:h-20"></div>
-          @if (isHost() && !device.isTv()) {
+          @if (draggable()) {
             <button type="button" cdkDragHandle class="btn btn-ghost btn-xs btn-square row-span-2 cursor-grab touch-none sm:row-span-1" [attr.aria-label]="'playlists.drag' | translate">
               <svg lucideGripVertical class="h-4 w-4"></svg>
             </button>
@@ -34,8 +34,7 @@
           </div>
           @if (isHost()) {
             <div class="col-start-3 flex items-center gap-1 sm:col-start-4 sm:row-start-1">
-              <!-- Keyboard and remote reorder; a phone drags by the handle. -->
-              @if (!device.isPhone()) {
+              @if (device.isTv() && rows().length > 1) {
                 <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_up' | translate" data-act="up" [disabled]="first" (click)="move(i, -1)">
                   <svg lucideChevronUp class="h-4 w-4"></svg>
                 </button>
