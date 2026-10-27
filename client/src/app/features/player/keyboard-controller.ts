@@ -51,9 +51,9 @@ export class KeyboardController {
     if (document.querySelector('dialog[open]')) return;
     // The sync panel owns its keys; only Back still reaches the handlers below.
     if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
-    // Focus beside the bar (party panel, error overlay) keeps arrows, OK and Space for its own buttons.
+    // Focus beside the bar (party panel, error overlay) keeps arrows and OK for its own buttons.
     const elsewhere = !!activeEl && activeEl !== document.body && !activeEl.closest('app-player-controls');
-    if (elsewhere && (e.key.startsWith('Arrow') || e.key === 'Enter' || e.key === ' ')) return;
+    if (elsewhere && (e.key.startsWith('Arrow') || e.key === 'Enter')) return;
 
     // Hidden bar: Up raises the controls, Down the reaction row alone; Back closes the row.
     const chrome = this.host.chrome;
@@ -130,17 +130,7 @@ export class KeyboardController {
     switch (e.key) {
       case ' ':
       case 'k':
-        // Space activates a focused control in the bar natively; 'k' always toggles playback.
-        if (
-          e.key === ' ' &&
-          (cueFocused ||
-            (this.host.chrome.visible() &&
-              activeEl &&
-              activeEl !== document.body &&
-              activeEl.closest('app-player-controls')))
-        ) {
-          return; // fall through to native activation
-        }
+        // Always playback, never a press of the focused button: that is Enter's job.
         e.preventDefault();
         if (control) this.host.onTogglePlay();
         break;

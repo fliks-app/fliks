@@ -9,6 +9,7 @@ describe('KeyboardController layers', () => {
   let chrome: ControlsVisibilityService;
   let reactions: boolean;
   const openReactions = vi.fn();
+  const togglePlay = vi.fn();
 
   function controller(): KeyboardController {
     const host = {
@@ -18,6 +19,7 @@ describe('KeyboardController layers', () => {
       isTv: () => false,
       canControlPlayback: () => true,
       playbackRate: () => 1,
+      onTogglePlay: togglePlay,
       reactionsAvailable: () => reactions,
       openReactions: () => {
         openReactions();
@@ -44,8 +46,21 @@ describe('KeyboardController layers', () => {
     chrome.hide();
     reactions = true;
     openReactions.mockClear();
+    togglePlay.mockClear();
   });
   afterEach(() => document.querySelectorAll('dialog').forEach((d) => d.remove()));
+
+  it('plays or pauses on Space whatever button holds the focus', () => {
+    const bar = document.body.appendChild(document.createElement('app-player-controls'));
+    const btn = bar.appendChild(document.createElement('button'));
+    btn.focus();
+    chrome.show();
+    const e = press(' ');
+    controller().onKeyDown(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(togglePlay).toHaveBeenCalledOnce();
+    bar.remove();
+  });
 
   it('leaves arrows and OK to a panel beside the bar', () => {
     const btn = document.body.appendChild(document.createElement('button'));
