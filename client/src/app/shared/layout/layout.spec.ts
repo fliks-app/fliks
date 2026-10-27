@@ -193,7 +193,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       },
       {
         provide: CastPlayerService,
-        useValue: { hasMedia: () => false, mediaTitle: () => '', expanded: { update: () => {} } },
+        useValue: { hasMedia: () => false, mediaTitle: () => '' },
       },
       { provide: AppUpdateService, useValue: { available: () => false } },
       {

@@ -3,26 +3,37 @@ import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import { TranslateService } from '@ngx-translate/core';
-import { PlaybackOption, PlaybackTarget } from './playback-target';
+import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
+import { PlaybackSession } from './playback/playback-session';
+import { PartyService } from './party/party.service';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from '../../features/player/party-sync';
 import { MediaService } from './api/media.service';
 import { PlayerSettingsService } from './player-settings.service';
 import { QueueItem } from './playback-queue.service';
 import { resolveNextEpisodeItem } from '../../shared/utils/media-play.util';
 
-/** Pure pass-through facade to CastService + CastPlayerService. */
+/** The Chromecast receiver as a playback output: a pass-through facade to CastService + CastPlayerService. */
 @Injectable({ providedIn: 'root' })
-export class CastPlaybackTarget implements PlaybackTarget {
+export class CastPlaybackTarget implements PlaybackOutput {
   private readonly cast = inject(CastService);
   private readonly cp = inject(CastPlayerService);
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly session = inject(PlaybackSession);
+  private readonly party = inject(PartyService);
 
   readonly buffering = this.cast.buffering;
-  readonly currentTime = this.cast.currentTime;
   readonly duration = this.cast.duration;
   readonly isConnected = this.cast.isConnected;
-  readonly isPaused = this.cast.isPaused;
+  readonly paused = this.cast.isPaused;
+  readonly uiPaused = this.cast.isPaused;
+  readonly ended = this.cast.ended;
+  readonly seekLocked = computed(() => false);
+  readonly position = this.cast.currentTime;
+  readonly ready = computed(() => this.cast.isConnected() && this.cp.hasMedia() && this.cast.duration() > 0);
+  readonly item = computed(() => ({ mediaId: this.cp.mediaId(), episodeId: this.cp.episodeId() }));
+  readonly sync: PlaybackSync = { slackS: CAST_DRIFT_IGNORE_S, drift: { ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS } };
   readonly muted = this.cast.muted;
   readonly volume = this.cast.volume;
   readonly hasMedia = this.cp.hasMedia;
@@ -45,14 +56,18 @@ export class CastPlaybackTarget implements PlaybackTarget {
   readonly activeSubtitleId = this.cp.activeSubtitleId;
   readonly activeAudioTrackId = this.cp.activeAudioTrackId;
   readonly activeQualityId = this.cp.activeQualityId;
-  readonly expanded = this.cp.expanded;
-
-  /** Set by the party controller: in a party the overlay's controls are intents, not receiver commands. */
-  partyIntercept: { active(): boolean; togglePlay(): boolean; seek(time: number): boolean; next(): boolean } | null = null;
 
   seek(time: number): void {
-    if (this.partyIntercept?.seek(time)) return;
     this.cast.seek(time);
+  }
+
+  play(): void {
+    this.cast.play();
+  }
+
+  pause(): Promise<void> {
+    this.cast.pause();
+    return Promise.resolve();
   }
 
   setVolume(level: number): void {
@@ -64,7 +79,6 @@ export class CastPlaybackTarget implements PlaybackTarget {
   }
 
   togglePlayPause(): void {
-    if (this.partyIntercept?.togglePlay()) return;
     this.cast.togglePlayPause();
   }
 
@@ -123,13 +137,12 @@ export class CastPlaybackTarget implements PlaybackTarget {
   private readonly endedEffect = effect(() => {
     if (!this.cast.ended()) return;
     untracked(() => {
-      if (this.partyIntercept?.active() || !this.playerSettings.settings().autoPlayNext || !this.canPlayNext()) return;
+      if (this.party.active() || !this.playerSettings.settings().autoPlayNext || !this.canPlayNext()) return;
       this.playNext();
     });
   });
 
   playNext(): void {
-    if (this.partyIntercept?.next()) return;
     const next = this.nextItem();
     if (!next?.mediaFileId) {
       console.warn('[cast-playback-target] playNext with nothing queued');
@@ -150,16 +163,16 @@ export class CastPlaybackTarget implements PlaybackTarget {
    *  top-bar chip is how you come back to it. */
   stopPlayback(): void {
     // The receiver must keep a stream for the party to drive: stopping leaves the cast instead.
-    if (this.partyIntercept?.active()) return this.disconnect();
+    if (this.party.active()) return this.disconnect();
     this.cast.stop();
     this.cp.clear();
-    this.cp.expanded.set(false);
+    this.session.expanded.set(false);
   }
 
   /** Leave the device. Ends the Cast session, which stops the receiver with it. */
   disconnect(): void {
     this.cast.disconnect();
     this.cp.clear();
-    this.cp.expanded.set(false);
+    this.session.expanded.set(false);
   }
 }

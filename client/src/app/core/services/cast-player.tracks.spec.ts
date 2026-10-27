@@ -11,6 +11,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { buildCastAudioOptions, CastPlayerService } from './cast-player.service';
+import { PlaybackSession } from './playback/playback-session';
 import { PlayerSettingsService } from './player-settings.service';
 import { ServerConfigService } from './server-config.service';
 import { ToastService } from './toast.service';
@@ -391,7 +392,7 @@ describe('cast quick start', () => {
     });
     await vi.waitFor(() => expect(h.cast.loadMedia).toHaveBeenCalled());
 
-    expect(h.svc.expanded()).toBe(true);
+    expect(TestBed.inject(PlaybackSession).expanded()).toBe(true);
     answer();
     await started;
   });

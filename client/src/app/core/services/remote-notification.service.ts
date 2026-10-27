@@ -45,9 +45,9 @@ export class RemoteNotificationService {
         title: episode || t.mediaTitle(),
         artist: episode ? t.mediaTitle() : undefined,
         artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
-        playing: !t.isPaused(),
+        playing: !t.uiPaused(),
         buffering: t.buffering(),
-        position: untracked(t.currentTime),
+        position: untracked(t.position),
         duration: t.duration(),
         canSetVolume: t.canSetVolume(),
         volume: t.volume(),
@@ -65,10 +65,10 @@ export class RemoteNotificationService {
     if (!t.isConnected()) return;
     switch (action) {
       case 'play':
-        if (t.isPaused()) t.togglePlayPause();
+        if (t.uiPaused()) t.togglePlayPause();
         break;
       case 'pause':
-        if (!t.isPaused()) t.togglePlayPause();
+        if (!t.uiPaused()) t.togglePlayPause();
         break;
       case 'seek':
         t.seek(value);

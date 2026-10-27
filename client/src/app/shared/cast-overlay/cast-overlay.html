@@ -1,4 +1,4 @@
-@if (t.isConnected() && t.hasMedia() && t.expanded()) {
+@if (t.isConnected() && t.hasMedia() && session.expanded()) {
     <!-- Backdrop (mobile only) -->
     <div class="fixed inset-0 z-[60] bg-black/50 lg:hidden" (click)="toggle()"></div>
 
@@ -98,14 +98,14 @@
 
             <div>
               <app-seekbar #seekbar
-                [currentTime]="t.currentTime()"
+                [currentTime]="t.position()"
                 [duration]="t.duration()"
                 [loading]="t.buffering()"
                 [spriteUrl]="t.spriteUrl()"
                 [spriteMetadata]="t.spriteMetadata()"
                 variant="cast"
                 [showBuffered]="false"
-                (seek)="t.seek($event)"
+                (seek)="seek($event)"
               />
               <div class="flex justify-between text-sm text-base-content/50 mt-1">
                 <span>{{ formatTime(seekbar.displayTime()) }}</span>
@@ -116,22 +116,22 @@
 
           <!-- Playback buttons in three columns: the mid-playback next-episode button would slide a flex row's play button off centre. -->
           <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-6 lg:gap-4">
-            <button class="btn btn-ghost btn-circle lg:btn-sm justify-self-end" (click)="t.seek(t.currentTime() - 10)">
+            <button class="btn btn-ghost btn-circle lg:btn-sm justify-self-end" (click)="seek(t.position() - 10)">
               <svg lucideRotateCcw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
             </button>
-            <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="t.togglePlayPause()">
+            <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="togglePlay()">
               @if (t.buffering()) {
                 <!-- Same reading as the player: the transport stays where it is
                      and the button says the stream is not ready yet. -->
                 <span class="loading loading-spinner loading-md lg:loading-sm"></span>
-              } @else if (t.isPaused()) {
+              } @else if (t.uiPaused()) {
                 <svg lucidePlay class="h-8 w-8 lg:h-6 lg:w-6"></svg>
               } @else {
                 <svg lucidePause class="h-8 w-8 lg:h-6 lg:w-6"></svg>
               }
             </button>
             <div class="flex items-center gap-4 lg:gap-3 justify-self-start">
-              <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="t.seek(t.currentTime() + 10)">
+              <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="seek(t.position() + 10)">
                 <svg lucideRotateCw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
               </button>
               @if (t.canPlayNext()) {
@@ -139,7 +139,7 @@
                      two seeks it sits beside. -->
                 <button class="btn btn-ghost btn-circle btn-sm lg:btn-xs"
                         [attr.aria-label]="'player.play_next' | translate"
-                        (click)="t.playNext()">
+                        (click)="next()">
                   <svg lucideSkipForward class="h-5 w-5 lg:h-4 lg:w-4"></svg>
                 </button>
               }

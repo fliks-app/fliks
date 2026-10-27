@@ -23,7 +23,8 @@ import type { PreRollItem } from '@fliks/plugin-ui';
 import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { backTarget } from './back-target';
-import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { LocalPlaybackOutput } from './local-playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -273,8 +274,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly airPlay = inject(AirPlayService);
   private detachAirPlay: () => void = () => {};
   private readonly castPlayerService = inject(CastPlayerService);
+  private readonly session = inject(PlaybackSession);
   /** The cast screen covers the player: the shell, which stays mounted to run a party, must not take its taps. */
-  protected readonly castScreenUp = computed(() => this.castService.isConnected() && this.castPlayerService.expanded());
+  protected readonly castScreenUp = computed(() => this.castService.isConnected() && this.session.expanded());
   private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -660,22 +662,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected readonly partyCtl = inject(PartyController);
   private readonly _partyAttach = (this.partyCtl.attach({
     engine: () => this.engine,
-    mediaId: () => this.mediaId,
-    episodeId: () => this.episodeId,
-    seekTo: (t) => this.seekInternal(t),
     showControls: () => this.chrome.show(),
-    pausePlayback: () => this.pausePlayback(),
-    playLocal: () => {
-      this.state.paused.set(false);
-      this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
-    },
     releasePlayback: () => {
       if (!this.loadedPaused) return;
       this.loadedPaused = false;
       // Before the post-load step it plays by itself; after it, nothing else will.
       if (this.postLoadDone) void this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     },
-    position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
     onBack: () => this.onBack(),
   }), null);
 
@@ -1347,6 +1340,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remote.dispose();
     this.partyCtl.dispose();
+    this.detachLocalOutput();
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
@@ -1557,7 +1551,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         };
         engine.onNext = () => void this.queueCtl.advance();
         engine.onPrevious = () =>
-          void (this.partyCtl.active() ? this.partyCtl.requestPrevious() : this.queueCtl.playQueueItem(this.queue.index() - 1));
+          void this.queueCtl.playPrevious();
         engine.onStop = () => this.onBack();
         engine.onToggleLike = () => void this.queueCtl.notificationLike.toggle();
       }
@@ -1721,7 +1715,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onTogglePlay() {
     if (!this.engine) return;
-    if (!this.subs.subtitleSyncOpen() && this.partyCtl.togglePlay()) return;
+    if (!this.subs.subtitleSyncOpen() && this.session.command({ type: 'toggle' })) return;
     // Coalesce rapid taps: a second toggle inside this window is dropped so play()/pause() can't interleave
     // with an in-flight MSE append and desync A/V.
     const now = Date.now();
@@ -1770,7 +1764,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeek(time: number) {
-    if (this.partyCtl.seek(time)) return;
+    if (this.session.command({ type: 'seek', at: time })) return;
     const dur = this.duration();
     if (!dur) {
       // Clamping to Math.min(time, 0) would jump to the start and report
@@ -1938,6 +1932,46 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     hasEngine: () => !!this.engine,
     seek: (t) => this.seekInternal(t),
   });
+  private readonly detachLocalOutput = this.session.attachLocal(
+    new LocalPlaybackOutput(
+      {
+        engine: () => this.engine,
+        mediaId: () => this.mediaId,
+        episodeId: () => this.episodeId,
+        seekTo: (t) => this.seekInternal(t),
+        pausePlayback: () => this.pausePlayback(),
+        playLocal: () => {
+          this.state.paused.set(false);
+          this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+        },
+        position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
+        mediaTitle: this.mediaTitle,
+        episodeTitle: this.episodeTitle,
+        fanartUrl: this.fanartUrl,
+        spriteUrl: this.spriteUrl,
+        spriteMetadata: this.spriteMetadata,
+        subtitles: this.subs.availableSubtitles,
+        audioTracks: this.availableAudioTracks,
+        qualities: this.qualityManager.availableQualities,
+        activeSubtitleId: this.subs.activeSubtitleId,
+        activeAudioTrackId: this.activeAudioTrackId,
+        activeQualityId: this.activeQualityId,
+        skipCue: computed(() => {
+          if (this.cues.commercialCueVisible()) return { labelKey: 'player.edl.skip_commercial' };
+          return this.cues.skipIntroVisible() ? { labelKey: 'player.skip_intro' } : null;
+        }),
+        canPlayNext: computed(() => this.queueCtl.upNext() !== null),
+        skip: () => this.cues.onSkipCue(),
+        playNext: () => void this.queueCtl.advance(),
+        selectSubtitle: (id) => void this.subs.selectById(id),
+        selectAudio: (id) => void this.onSelectAudioTrack(id),
+        selectQuality: (id) => void this.onSelectQualityById(id),
+        onBack: () => this.onBack(),
+      },
+      this.state,
+    ),
+  );
+
   private readonly cueTimerPauseEffect = effect(() => this.cues.syncTimers());
   private readonly skipIntroCueEffect = effect(() => this.cues.syncIntroCue());
   private readonly commercialCueEffect = effect(() => this.cues.syncCommercialCue());
@@ -2354,7 +2388,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeId: this.episodeId,
       positionSeconds: position,
     });
-    remoteOverlayOpen.set(true);
+    this.session.expanded.set(true);
     this.onBack();
   }
 
@@ -2389,7 +2423,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.engine.unload();
     }
     await this.startCastFromPlayer(position);
-    this.castPlayerService.expanded.set(true);
+    this.session.expanded.set(true);
     // Closing the player leaves the party: it stays mounted behind the cast overlay.
     if (this.partyCtl.active()) this.partyCtl.resync();
     else this.onBack();
@@ -2718,7 +2752,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.subs.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
       );
       await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
-      this.castPlayerService.expanded.set(true);
+      this.session.expanded.set(true);
       if (this.partyCtl.active()) this.partyCtl.resync();
     } else if ((!this.isNativeEngine() || this.isDesktopNative || this.openedPaused) && !this.loadedPaused) {
       this.engine!.play().catch(() => {

@@ -16,7 +16,7 @@ import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
 import { ToastService } from '../../core/services/toast.service';
-import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
 
 const LAST_USED_KEY = 'fliks.remote.lastUsedPickerRow';
@@ -52,6 +52,7 @@ export class RemotePickerListComponent {
   protected readonly castService = inject(CastService);
   private readonly airPlay = inject(AirPlayService);
   private readonly castTarget = inject(CastPlaybackTarget);
+  private readonly session = inject(PlaybackSession);
   private readonly party = inject(PartyService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -171,7 +172,7 @@ export class RemotePickerListComponent {
       // Only hand off to the control card when there is already something to
       // control; picking an idle device would otherwise land on a dead end.
       const playing = this.remote.targets().find((t) => t.targetId === row.id)?.nowPlaying;
-      if (playing) remoteOverlayOpen.set(true);
+      if (playing) this.session.expanded.set(true);
     }
   }
 

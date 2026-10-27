@@ -170,7 +170,7 @@
     [nextLabelKey]="queueCtl.nextLabelKey()"
     [queueItems]="preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
     [queueIndex]="queueCtl.queueIndex()"
-    (selectQueueItem)="partyCtl.active() ? partyCtl.requestQueueItem($event) : queueCtl.playQueueItem($event)"
+    (selectQueueItem)="queueCtl.playQueueItem($event)"
     [activeQualityLabel]="activeQualityLabel()"
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"

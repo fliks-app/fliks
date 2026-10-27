@@ -16,6 +16,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
+import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { TizenEngine } from '../../core/services/playback-engine/tizen-engine';
@@ -253,13 +254,13 @@ function createHarness(opts: {
           play: vi.fn(),
         },
       },
-      { provide: CastPlaybackTarget, useValue: { partyIntercept: null } },
+      { provide: CastPlaybackTarget, useValue: { isConnected: () => false } },
+      { provide: RemotePlaybackTarget, useValue: { isConnected: () => false } },
       {
         provide: CastPlayerService,
         useValue: {
           liveSessionId: () => undefined,
           qoeSample: () => null,
-          expanded: { set: vi.fn() },
           getCastDeviceProfile: () => DEVICE_PROFILE,
           reloadCastStream: vi.fn(),
           startCast: vi.fn(),

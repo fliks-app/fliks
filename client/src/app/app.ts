@@ -6,7 +6,6 @@ import { Immersive } from './core/plugins/immersive.plugin';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
-import { CastPlayerService } from './core/services/cast-player.service';
 import { SseService } from './core/services/sse.service';
 import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
@@ -27,7 +26,7 @@ import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
 import { RemoteService } from './core/services/remote.service';
-import { remoteOverlayOpen } from './core/services/remote-playback-target';
+import { PlaybackSession } from './core/services/playback/playback-session';
 import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
 import { TIZEN_MEDIA_KEYS } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
@@ -43,7 +42,7 @@ import { TranslateService } from '@ngx-translate/core';
 export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly tvKeyboard = inject(TvKeyboardDeferralService);
-  private readonly castPlayer = inject(CastPlayerService);
+  private readonly session = inject(PlaybackSession);
   private readonly sse = inject(SseService);
   private readonly remoteNotification = inject(RemoteNotificationService);
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
@@ -247,12 +246,8 @@ export class App implements OnInit, OnDestroy {
     }
     // The playback overlay is one component driven by whichever target is
     // active, so back has to close either one.
-    if (this.castPlayer.expanded()) {
-      this.castPlayer.expanded.set(false);
-      return;
-    }
-    if (remoteOverlayOpen()) {
-      remoteOverlayOpen.set(false);
+    if (this.session.expanded()) {
+      this.session.expanded.set(false);
       return;
     }
     // Close the topmost bottom sheet, dialog or other dismissable layer before navigating.

@@ -58,7 +58,7 @@ import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
-import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePickerComponent } from '../remote-picker/remote-picker';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
 import {
@@ -149,6 +149,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly tv = inject(TvService);
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
+  private readonly session = inject(PlaybackSession);
   readonly appUpdate = inject(AppUpdateService);
   private readonly updateModal = viewChild(AppUpdateModalComponent);
   private readonly title = inject(Title);
@@ -534,14 +535,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     setTimeout(() => this.retrying.set(false), 10_000);
   }
 
+  /** The chip of a cast or an already selected remote target opens its control card, not the device picker. */
   toggleCastOverlay() {
-    this.castPlayer.expanded.update(v => !v);
-  }
-
-  /** Mirrors `toggleCastOverlay`: the chip shown once a remote target is
-   *  already selected opens its control card, not the device picker. */
-  toggleRemoteControlOverlay(): void {
-    remoteOverlayOpen.update(v => !v);
+    this.session.expanded.update(v => !v);
   }
 
   formatDevice(

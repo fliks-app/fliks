@@ -21,7 +21,7 @@ describe('PlayableMediaService.play', () => {
         PlayableMediaService,
         { provide: Router, useValue: { navigate } },
         { provide: CastService, useValue: { isConnected: () => !!over.cast } },
-        { provide: CastPlayerService, useValue: { quickStart, expanded: { set: vi.fn() } } },
+        { provide: CastPlayerService, useValue: { quickStart } },
         { provide: StreamingApiService, useValue: {} },
         {
           provide: MediaService,

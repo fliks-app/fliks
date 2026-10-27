@@ -8,7 +8,8 @@ import { formatTime } from '../../core/utils/player.utils';
 import { RemoteService } from '../../core/services/remote.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
-import { PlaybackOption } from '../../core/services/playback-target';
+import { PlaybackOption } from '../../core/services/playback/playback-output';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { AppSettingsService } from '../../core/services/app-settings.service';
 import { SeekbarComponent } from '../components/seekbar/seekbar';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
@@ -62,6 +63,7 @@ export class CastOverlayComponent {
   private readonly appSettings = inject(AppSettingsService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly remoteTarget = inject(RemotePlaybackTarget);
+  protected readonly session = inject(PlaybackSession);
 
   get t() {
     return this.remote.isRemoting() ? this.remoteTarget : this.castTarget;
@@ -69,11 +71,24 @@ export class CastOverlayComponent {
 
   @HostListener('document:keydown.escape')
   onEscape() {
-    if (this.t.expanded()) this.t.expanded.set(false);
+    if (this.session.expanded()) this.session.expanded.set(false);
   }
 
   toggle() {
-    this.t.expanded.update(v => !v);
+    this.session.expanded.update(v => !v);
+  }
+
+  /** In a party the transport buttons are intents, otherwise they act on the receiver. */
+  protected togglePlay() {
+    this.session.command({ type: 'toggle' });
+  }
+
+  protected seek(at: number) {
+    this.session.command({ type: 'seek', at });
+  }
+
+  protected next() {
+    this.session.command({ type: 'next' });
   }
 
   private readonly translate = inject(TranslateService);

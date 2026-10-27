@@ -14,23 +14,14 @@ import { VoiceService } from '../../core/services/party/voice.service';
 import { QueueController } from './queue-controller';
 import type { QueueItem } from '../../core/services/playback-queue.service';
 import { VoiceDucker } from './party-ducking';
-import { CastService } from '../../core/services/cast.service';
-import { CastPlayerService } from '../../core/services/cast-player.service';
-import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
-import { CastPartyOutput, type PartyOutput } from './party-output';
+import { PlaybackSession, type PlaybackCommand } from '../../core/services/playback/playback-session';
+import type { PlaybackOutput } from '../../core/services/playback/playback-output';
 import { DRIFT_CHECK_MS, driftAction, driftProfile, groupPosition } from './party-sync';
 
 export interface PartyHost {
   engine(): PlaybackEngine | null;
-  mediaId(): number;
-  episodeId(): number | undefined;
-  /** Locked seek that does not go through the user path, so nothing is re-emitted. */
-  seekTo(time: number): void;
-  pausePlayback(): Promise<void>;
-  playLocal(): void;
   /** The party no longer drives playback (its rejoin failed): play as a solo player would. */
   releasePlayback(): void;
-  position(): number;
   onBack(): void;
   showControls(): void;
 }
@@ -38,8 +29,6 @@ export interface PartyHost {
 const READY_TIMEOUT_MS = 60_000;
 const UNLOCK_TIMEOUT_MS = 35_000;
 const POLL_MS = 100;
-/** Close enough to the anchor that a seek would only restart a transcode for nothing. */
-const SEEK_SLACK_S = 0.25;
 
 /** Keeps the local engine on the party's timeline: user transport actions become intents, `party.state` drives the engine
  *  directly (never through `onTogglePlay`/`onSeek`, so nothing echoes back). */
@@ -55,9 +44,7 @@ export class PartyController {
   private readonly voice = inject(VoiceService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly castService = inject(CastService);
-  private readonly castTarget = inject(CastPlaybackTarget);
-  private readonly castOutput = new CastPartyOutput(this.castService, inject(CastPlayerService));
+  private readonly session = inject(PlaybackSession);
   private host!: PartyHost;
   private readonly ducker = new VoiceDucker(
     () => this.host?.engine() ?? null,
@@ -73,6 +60,7 @@ export class PartyController {
   private lastReported: 'ready' | 'buffering' = 'ready';
   private destroyed = false;
   private closedSub: Subscription | null = null;
+  private unroute: (() => void) | null = null;
 
   readonly active = this.party.active;
 
@@ -84,52 +72,32 @@ export class PartyController {
     return this.party.active() || this.resuming();
   }
 
-  private readonly localOutput: PartyOutput = {
-    ready: () => !!this.host.engine() && this.state.videoStarted(),
-    paused: () => this.host.engine()?.paused === true,
-    uiPaused: () => this.state.uiPaused(),
-    buffering: () => this.state.buffering(),
-    ended: () => this.state.ended(),
-    seekLocked: () => this.state.seekLocked(),
-    position: () => this.host.position(),
-    item: () => ({ mediaId: this.host.mediaId(), episodeId: this.host.episodeId() }),
-    seekTo: (t) => this.host.seekTo(t),
-    pause: () => this.host.pausePlayback(),
-    play: () => this.host.playLocal(),
-    slackS: SEEK_SLACK_S,
-    rate: {
-      get: () => this.host.engine()?.playbackRate ?? 1,
-      set: (r) => {
-        const engine = this.host.engine();
-        if (engine) engine.playbackRate = r;
-      },
-    },
-  };
-
-  private readonly castIntercept: NonNullable<CastPlaybackTarget['partyIntercept']> = {
-    active: () => this.party.active(),
-    togglePlay: () => this.togglePlay(),
-    seek: (t) => this.seek(t),
-    next: () => {
-      if (!this.party.active()) return false;
-      void this.requestNext();
-      return true;
-    },
-  };
-
-  /** The receiver while a Cast session is up, else the local engine. */
-  private out(): PartyOutput {
-    return this.castService.isConnected() ? this.castOutput : this.localOutput;
+  /** The active output: the receiver while a Cast session is up, else the local engine. */
+  private out(): PlaybackOutput {
+    return this.session.output()!;
   }
+
+  private readonly takeCommand = (c: PlaybackCommand): boolean => {
+    switch (c.type) {
+      case 'toggle':
+        return this.togglePlay();
+      case 'seek':
+        return this.seek(c.at);
+      case 'next':
+        void this.requestNext();
+        return true;
+      case 'prev':
+        void this.requestPrevious();
+        return true;
+      case 'item':
+        void this.requestQueueItem(c.index);
+        return true;
+    }
+  };
 
   attach(host: PartyHost): void {
     this.host = host;
-    this.queueCtl.interceptAdvance = (auto) => {
-      if (!this.party.active()) return false;
-      if (!auto) void this.requestNext();
-      return true;
-    };
-    this.castTarget.partyIntercept = this.castIntercept;
+    this.unroute = this.session.setPartyRouter(this.takeCommand);
     this.closedSub = this.party.closed.subscribe(() => this.goHome());
     this.driftTimer = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
     void this.resumeFromUrl();
@@ -163,9 +131,7 @@ export class PartyController {
     this.clearPlayTimer();
     if (this.driftTimer) clearInterval(this.driftTimer);
     this.ducker.stop();
-    this.queueCtl.interceptAdvance = null;
-    // A player replacing this one attached its own before this teardown ran.
-    if (this.castTarget.partyIntercept === this.castIntercept) this.castTarget.partyIntercept = null;
+    this.unroute?.();
     this.closedSub?.unsubscribe();
     // Closing the player is leaving the party.
     if (this.party.active()) void this.party.leave();
@@ -339,9 +305,8 @@ export class PartyController {
   /** False when a newer apply superseded this one while waiting. */
   private async seekIfFar(target: number, gen: number, force: boolean): Promise<boolean> {
     const out = this.out();
-    const step = out === this.localOutput ? (this.host.engine()?.positionStepS ?? 0) : 0;
-    if (force || Math.abs(out.position() - target) > out.slackS + step) {
-      out.seekTo(target);
+    if (force || Math.abs(out.position() - target) > out.sync.slackS + (out.sync.stepS?.() ?? 0)) {
+      out.seek(target);
       this.lastCorrectiveSeek = Date.now();
       await this.untilUnlocked(gen);
     }
@@ -388,21 +353,22 @@ export class PartyController {
     const now = this.clock.serverNow();
     if (out.paused() || out.buffering() || now < (live.whenMs ?? live.anchor.serverTimeMs)) return;
     const drift = out.position() - groupPosition('playing', live.anchor, now);
-    const rateOk = !!out.rate && this.rateSupported();
-    const positionStepS = this.host.engine()?.positionStepS ?? 0;
+    const rate = out.sync.rate;
+    const rateOk = !!rate && this.rateSupported();
+    const positionStepS = out.sync.stepS?.() ?? 0;
     const action = driftAction(drift, {
       rateSupported: rateOk,
       msSinceSeek: Date.now() - this.lastCorrectiveSeek,
       seekLocked: out.seekLocked(),
-      ...(out.drift ?? driftProfile({ positionStepS, rateSupported: rateOk })),
+      ...(out.sync.drift ?? driftProfile({ positionStepS, rateSupported: rateOk })),
     });
     if (action.kind === 'seek') {
       this.lastCorrectiveSeek = Date.now();
-      out.seekTo(groupPosition('playing', live.anchor, now));
+      out.seek(groupPosition('playing', live.anchor, now));
       return;
     }
-    if (!out.rate) return;
-    const rate = action.kind === 'rate' ? action.rate : 1;
-    if (out.rate.get() !== rate && (action.kind === 'rate' || this.rateSupported())) out.rate.set(rate);
+    if (!rate) return;
+    const target = action.kind === 'rate' ? action.rate : 1;
+    if (rate.get() !== target && (action.kind === 'rate' || this.rateSupported())) rate.set(target);
   }
 }

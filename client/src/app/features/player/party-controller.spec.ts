@@ -12,7 +12,12 @@ import { ClockService } from '../../core/services/party/clock.service';
 import { VoiceService } from '../../core/services/party/voice.service';
 import { PartyService } from '../../core/services/party/party.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
+import { MediaService } from '../../core/services/api/media.service';
+import { PlayerSettingsService } from '../../core/services/player-settings.service';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { ToastService } from '../../core/services/toast.service';
+import { LocalPlaybackOutput, type LocalOutputHost } from './local-playback-output';
 import { PartyController, type PartyHost } from './party-controller';
 import { QueueController } from './queue-controller';
 
@@ -44,7 +49,6 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
   };
   const queue = {
     upNext: () => null,
-    interceptAdvance: null as unknown,
     queueItems: () =>
       opts.film
         ? []
@@ -67,8 +71,11 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: QueueController, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
-      { provide: CastPlayerService, useValue: { hasMedia: signal(true), mediaId: signal(1), episodeId: signal(undefined) } },
-      { provide: CastPlaybackTarget, useValue: { partyIntercept: null } },
+      { provide: CastPlayerService, useValue: { hasMedia: signal(true), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]) } },
+      CastPlaybackTarget,
+      { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false) } },
+      { provide: MediaService, useValue: {} },
+      { provide: PlayerSettingsService, useValue: { settings: () => ({ autoPlayNext: false }) } },
       { provide: DeviceService, useValue: { tvPlatform: () => null, isTv: () => false } },
       { provide: ToastService, useValue: toast },
       { provide: ActivatedRoute, useValue: route },
@@ -79,7 +86,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
   const ctl = TestBed.inject(PartyController);
   const state = TestBed.inject(PlayerStateService);
   const engine = { play: vi.fn(), pause: vi.fn(), seek: vi.fn(), paused: false, playbackRate: 1, currentTime: 0 };
-  const host: PartyHost = {
+  const host = {
     engine: () => engine as never,
     mediaId: () => 1,
     episodeId: () => undefined,
@@ -90,7 +97,8 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     releasePlayback: vi.fn(),
     position: () => 0,
     onBack: vi.fn(),
-  };
+  } as unknown as PartyHost & LocalOutputHost;
+  TestBed.inject(PlaybackSession).attachLocal(new LocalPlaybackOutput(host, state));
   ctl.attach(host);
   return { closed, ctl, party, state, engine, host, queue, toast, cast, router, route };
 }

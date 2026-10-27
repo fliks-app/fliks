@@ -1,3 +1,4 @@
+import { PlaybackSession } from './playback/playback-session';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
@@ -167,6 +168,7 @@ const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.si
 @Injectable({ providedIn: 'root' })
 export class CastPlayerService {
   private readonly cast = inject(CastService);
+  private readonly session = inject(PlaybackSession);
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly qoeReporter = inject(QoeReporter);
@@ -360,8 +362,6 @@ export class CastPlayerService {
 
   /** Whether a Cast session is actively playing media (not just connected). */
   readonly hasMedia = signal(false);
-  /** Whether the Cast overlay card is expanded. */
-  readonly expanded = signal(false);
   /** Server-side session id of the Cast stream, heartbeated instead of the sender's local sid while casting. */
   readonly liveSessionId = signal<string | null>(null);
   /** The viewing being cast; kept from the local player that handed it over. */
@@ -511,7 +511,7 @@ export class CastPlayerService {
     this.setLiveSession(null);
     this.playbackId = null;
     this.hasMedia.set(false);
-    this.expanded.set(false);
+    this.session.expanded.set(false);
     this.mediaFileId.set(0);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
@@ -1096,7 +1096,7 @@ export class CastPlayerService {
       activeSubtitleId: startSubtitle?.id ?? null,
       activeAudioStreamIndex: audioIndex,
     });
-    if (opts.expand) this.expanded.set(true);
+    if (opts.expand) this.session.expanded.set(true);
 
     if (!(await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, true))) {
       // Nothing is playing: drop the dead overlay (and its transcode) so a new cast starts clean.

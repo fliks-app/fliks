@@ -7,7 +7,7 @@ import { ContinueWatchingItem, StreamingApiService } from './api/streaming-api.s
 import { PlaybackQueueService, QueueItem } from './playback-queue.service';
 import { RemoteService } from './remote.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { remoteOverlayOpen } from './remote-playback-target';
+import { PlaybackSession } from './playback/playback-session';
 import { launchPickFor, type LaunchTracks } from './track-manager.service';
 import { launchTracksToWire } from './remote.service';
 
@@ -33,6 +33,7 @@ export interface PlayContext {
 @Injectable({ providedIn: 'root' })
 export class PlayableMediaService {
   private readonly router = inject(Router);
+  private readonly session = inject(PlaybackSession);
   readonly castService = inject(CastService);
   private readonly castPlayer = inject(CastPlayerService);
   private readonly streamingApi = inject(StreamingApiService);
@@ -67,7 +68,7 @@ export class PlayableMediaService {
     if (targetId) {
       // `send` itself handles an offline target (toast + no local fallback) -
       // never silently demote to Cast/local here.
-      remoteOverlayOpen.set(true);
+      this.session.expanded.set(true);
       void this.remote.send(targetId, {
         action: 'load',
         mediaId: ctx.mediaId,
@@ -142,7 +143,7 @@ export class PlayableMediaService {
       // The queue drives only the local player: a remote target won't
       // consume it, so don't leave one behind for a later local play to inherit.
       this.queue.clear();
-      remoteOverlayOpen.set(true);
+      this.session.expanded.set(true);
       void this.remote.send(targetId, {
         action: 'load',
         mediaId: start.mediaId,
