@@ -72,6 +72,10 @@ device-side registration needed.
 
 ## Local dev
 
+The deploy workflow adds two gitignored folders; recreate them locally with the same step:
+`cp -r server/public/emoji cast-receiver/emoji`, and Noto's `NotoColorEmoji.ttf` (CBDT, v2.051)
+in `cast-receiver/fonts/` (the Cast OS ships no emoji font and its Chrome can't read COLRv1).
+
 The Chromecast can't load `localhost`. To iterate on `cast-receiver/`
 without re-deploying:
 

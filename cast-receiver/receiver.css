@@ -1,3 +1,10 @@
+/* The Cast OS has no emoji font; deployed by deploy-cast-receiver.yml (see README for local dev). */
+@font-face {
+  font-family: "Fliks Emoji";
+  src: url("fonts/NotoColorEmoji.ttf") format("truetype");
+  font-display: swap;
+}
+
 /* Fliks Cast receiver — brand chrome + subtitle styling that mirrors
    the in-app player. CAF's <cast-media-player> is fixed full-viewport
    on its own; we only override the idle/splash and subtitle look. */
@@ -100,6 +107,7 @@ body.playing .splash {
   position: fixed;
   inset: 0;
   z-index: 150;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif, "Fliks Emoji";
   overflow: hidden;
   pointer-events: none;
   display: none;

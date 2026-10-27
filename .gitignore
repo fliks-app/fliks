@@ -101,3 +101,7 @@ macos/.build/
 macos/*.xcodeproj/xcuserdata/
 macos/*.xcodeproj/project.xcworkspace/xcuserdata/
 __pycache__/
+
+# Fetched by deploy-cast-receiver.yml
+cast-receiver/emoji/
+cast-receiver/fonts/

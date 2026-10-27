@@ -478,9 +478,10 @@ const trim = (box, max) => { while (box.children.length > max) box.firstChild.re
 // The bundled copy works over HTTPS; the sender's URL covers anything not bundled.
 function emojiNode(emoji, img) {
   const glyph = () => { const t = document.createElement('span'); t.textContent = emoji; return t; };
+  // The sender only sends an image for the animated set; anything else draws from the emoji font.
+  if (typeof img !== 'string' || !/^https?:/i.test(img)) return glyph();
   const code = Array.from(emoji, (c) => c.codePointAt(0).toString(16)).join('_');
-  const sources = ['emoji/' + code + '.webp'];
-  if (typeof img === 'string' && /^https?:/i.test(img)) sources.push(img);
+  const sources = ['emoji/' + code + '.webp', img];
   const node = document.createElement('img');
   node.alt = emoji;
   node.onerror = () => {
@@ -491,8 +492,16 @@ function emojiNode(emoji, img) {
   return node;
 }
 
+const emojiFont = document.fonts.load('1em "Fliks Emoji"', '\u{1F600}').catch(() => {});
+
 function partyFloat(msg) {
   if (!msg || typeof msg !== 'object') return;
+  // Waits for the emoji font (preloaded at boot) so the first emoji is not drawn as tofu.
+  emojiFont.then(() => showParty(msg));
+}
+self.partyFloat = partyFloat;
+
+function showParty(msg) {
   if (msg.kind === 'party_reaction' && typeof msg.emoji === 'string') {
     const el = document.createElement('div');
     el.className = 'party-reaction';
@@ -514,7 +523,6 @@ function partyFloat(msg) {
     trim(bubbleBox, MAX_BUBBLES);
   }
 }
-self.partyFloat = partyFloat;
 
 context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   const msg = event.data;
