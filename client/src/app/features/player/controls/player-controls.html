@@ -98,7 +98,12 @@
      z-30 keeps the bottom bar (z-40) clickable; mobile big buttons sit in a separate z-50 layer, as a tall bar can grow into this area. -->
 @if (isMobileTouch()) {
   <!-- No dblclick listener here: WebKit redirects a double tap to the nearest dblclick listener, taking the dock's second tap. -->
-  <div class="absolute inset-0 z-30 flex items-center justify-center" (click)="onSurfaceClick($event)"></div>
+  <div
+    class="absolute inset-0 z-30 flex items-center justify-center"
+    (click)="onSurfaceClick($event)"
+    (touchstart)="onSurfaceTouchStart($event)"
+    (touchend)="onSurfaceTouchEnd($event)"
+  ></div>
 } @else {
   <div
     class="absolute inset-0 z-30 flex items-center justify-center"
@@ -293,8 +298,10 @@
 
 <!-- ===== ACTION STRIP: bottom row under the controls, outside their fade so the reaction button can stay up alone.
      The bottom section reserves its height (--strip-h). ===== -->
-@if (dock() && (!isTv() || visible())) {
+@if (dock() && ((visible() && !seekOsd()) || reactionsOnly())) {
   <div
+    animate.enter="action-strip-in"
+    animate.leave="action-strip-out"
     class="pointer-events-none absolute left-0 right-0 z-[57] flex h-11 items-center justify-end"
     style="padding-left: var(--bar-pl); padding-right: var(--bar-pr); bottom: var(--bar-pb);"
   >
@@ -715,10 +722,14 @@
       class="btn btn-ghost btn-circle text-white/80"
       [class.btn-sm]="isSm"
       [class.btn-md]="!isSm"
-      [attr.aria-label]="'player.fullscreen' | translate"
+      [attr.aria-label]="(fullscreen() ? 'player.exit_fullscreen' : 'player.fullscreen') | translate"
       (click)="toggleFullscreen.emit()"
     >
-      <svg lucideMaximize [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      @if (fullscreen()) {
+        <svg lucideMinimize [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      } @else {
+        <svg lucideMaximize [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      }
     </button>
   }
 </ng-template>

@@ -68,7 +68,7 @@
         }
       </div>
 
-      <div appTvRow data-party-actions class="flex flex-wrap items-center gap-2 mt-6 mb-2">
+      <div appTvRow [attr.data-party-actions]="actionsSettled() ? '' : null" class="flex flex-wrap items-center gap-2 mt-6 mb-2">
         @if (phase() === 'live') {
           <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" (click)="join()">
             <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>

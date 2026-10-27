@@ -7,12 +7,12 @@
   <!-- Under the top bar, the newest message last. -->
   <div
     class="absolute flex max-w-[70%] flex-col items-end"
-    style="top: max(4.5rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right))"
+    style="top: max(6.5rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right))"
   >
     @for (m of party.chatEnabled() ? party.bubbles() : []; track m.id) {
       <div class="bubble" animate.enter="bubble-in" animate.leave="bubble-out">
         <div class="min-h-0 overflow-hidden">
-          <div class="rounded-2xl bg-black/70 px-3 py-1.5 text-sm text-white">
+          <div class="rounded-2xl bg-black/70 px-3.5 py-2 text-base text-white">
             @if (m.system) {
               <span class="italic opacity-80">{{ m.system.by }}</span>
             } @else {

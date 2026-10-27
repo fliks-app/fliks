@@ -772,6 +772,25 @@ describe('PlayerComponent seek OSD', () => {
     expect(e.preventDefault).toHaveBeenCalled();
   });
 
+  it('lets a focused reaction row pick and send with the bar hidden', () => {
+    const h = hiddenBar();
+    const dock = document.createElement('app-party-reaction-dock');
+    const emoji = document.createElement('button');
+    dock.append(emoji);
+    document.body.append(dock);
+    emoji.focus();
+    try {
+      for (const key of ['Enter', 'ArrowLeft', 'ArrowRight']) {
+        const e = press(key);
+        h.component['keyboard'].onKeyDown(e);
+        expect(e.preventDefault).not.toHaveBeenCalled();
+      }
+      expect(h.component.chrome.visible()).toBe(false);
+    } finally {
+      dock.remove();
+    }
+  });
+
   it('cues clear a smaller bar in OSD mode, and sit flush once it hides', () => {
     const h = hiddenBar();
     expect(h.component.nativeSubtitleBottomBump()).toBe(0);

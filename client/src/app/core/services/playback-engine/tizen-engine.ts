@@ -113,6 +113,10 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private orientationHandler: (() => void) | null = null;
   private _seekInFlight = false;
   private _pendingSeek: number | null = null;
+  /** Between open() and the end of prepareAsync: AVPlay refuses seekTo there (PLAYER_ERROR_SEEK_FAILED). */
+  private _preparing = false;
+  /** A failed seek is retried once through a reload; a second failure there must not reload again. */
+  private _reloadingForSeek = false;
 
   private muteRanges: readonly TimeRange[] = [];
   /** True while the TV mute was engaged by the gate, never when the user already muted. */
@@ -249,6 +253,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     _headers?: Record<string, string>,
   ): Promise<void> {
     this._lastLoadedUrl = url;
+    this._preparing = true;
     this.resetFirstFrame();
     this._currentTime = 0;
     this._duration = 0;
@@ -287,6 +292,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
+        this._preparing = false;
         this.stopIfOwner();
         const msg = 'AVPlay prepareAsync timeout (30s)';
         this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
@@ -317,9 +323,14 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             }
             if (startTime && startTime > 0) this._currentTime = startTime;
             this.muteGate.sync();
+            this._preparing = false;
             resolve();
+            const pending = this._pendingSeek;
+            this._pendingSeek = null;
+            if (pending !== null) void this.seek(pending);
           }),
           (err) => done(() => {
+            this._preparing = false;
             this.stopIfOwner();
             this.emit('error', { code: -1, message: 'AVPlay prepare failed: ' + String(err), errorKey: 'player.playback_error' });
             reject(new Error('AVPlay prepare failed: ' + String(err)));
@@ -327,6 +338,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         );
       } catch (e) {
         done(() => {
+          this._preparing = false;
           this.stopIfOwner();
           const msg = 'AVPlay prepareAsync threw: ' + (e instanceof Error ? e.message : String(e));
           this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
@@ -449,7 +461,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   async seek(position: number): Promise<void> {
     if (!isFinite(position) || isNaN(position)) return;
-    if (this._seekInFlight) {
+    if (this._seekInFlight || this._preparing) {
       this._pendingSeek = position;
       return;
     }
@@ -486,18 +498,21 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
               if (settled) return;
               clearTimeout(timer);
               settled = true;
-              if (!this._lastLoadedUrl) {
+              if (!this._lastLoadedUrl || this._reloadingForSeek) {
                 reject(new Error(`seek failed: ${err}`));
                 return;
               }
               // Clear the in-flight flag and drop the queued seek first, so the reload's seek isn't blocked and no stale seek replays.
               this._seekInFlight = false;
               this._pendingSeek = null;
+              this._reloadingForSeek = true;
               try {
                 await this.load(this._lastLoadedUrl, position);
                 resolve();
               } catch (e) {
                 reject(e);
+              } finally {
+                this._reloadingForSeek = false;
               }
             },
           );

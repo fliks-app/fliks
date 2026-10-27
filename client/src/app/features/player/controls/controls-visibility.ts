@@ -12,6 +12,8 @@ export class ControlsVisibilityService {
 
   /** Starts up: the viewer is looking at a paused or loading frame. */
   readonly visible = signal(true);
+  /** The reaction row alone, raised by ArrowDown on a hidden bar; the controls stay down. */
+  readonly reactionsOnly = signal(false);
   /** Reduced to the seekbar, raised by an arrow-key seek. Survives a hide so
    *  the full bar does not remount during the fade-out. */
   readonly seekOsd = signal(false);
@@ -30,7 +32,14 @@ export class ControlsVisibilityService {
 
   show(seekOsd = false): void {
     this.seekOsd.set(seekOsd);
+    this.reactionsOnly.set(false);
     this.visible.set(true);
+    this.resetHideTimer();
+  }
+
+  showReactions(): void {
+    this.visible.set(false);
+    this.reactionsOnly.set(true);
     this.resetHideTimer();
   }
 
@@ -38,11 +47,12 @@ export class ControlsVisibilityService {
    *  key handlers turn that key into a wake instead of pressing the invisible button. */
   hide(): void {
     this.visible.set(false);
+    this.reactionsOnly.set(false);
   }
 
   /** A tap on the surface. An open dropdown swallows it so the bar stays. */
   toggle(): void {
-    if (this.visible() && !this.dropdownOpen()) this.hide();
+    if (this.reactionsOnly() || (this.visible() && !this.dropdownOpen())) this.hide();
     else this.show();
   }
 
@@ -53,7 +63,7 @@ export class ControlsVisibilityService {
 
   /** Focus moved inside the bar. Ignored while hidden, or a focus change would re-arm the countdown forever. */
   onInteraction(): void {
-    if (this.visible()) this.resetHideTimer();
+    if (this.visible() || this.reactionsOnly()) this.resetHideTimer();
   }
 
   onPanelOpenChange(open: boolean): void {
@@ -81,7 +91,8 @@ export class ControlsVisibilityService {
   }
 
   private readonly autoHide = effect((onCleanup) => {
-    if (!this.visible() || this.pinned() || this.panelOpen()) return;
+    const reactions = this.reactionsOnly();
+    if (!reactions && (!this.visible() || this.pinned() || this.panelOpen())) return;
     this.activity();
     const delay = this.device.isTv() ? HIDE_DELAY_TV_MS : HIDE_DELAY_MS;
     const id = setTimeout(() => this.hide(), delay);

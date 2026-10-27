@@ -110,7 +110,8 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
-    supportsDirectPlay: true,
+    // AVPlay refuses every seek on a progressive HTTP file (seekTo, jumpForward, the IDLE seed): a remux keeps the quality and seeks.
+    supportsDirectPlay: false,
     supportsAbr: true,
   },
   // webOS folds the audio group by language (eng/eng/hin gives two entries): a second English rendition is unreachable, only a reload swaps it.

@@ -33,6 +33,7 @@ The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect 
 ## Angular conventions
 
 - Always use external template files (`templateUrl`) instead of inline templates (`template`) in components.
+- **Focus rings must never be clipped.** Any element that clips its content (`overflow-*` other than `visible`, a scroller, a `clip-path`) and holds focusables must leave room on every clipped side for the 4px `--focus-ring` plus the focus lift (`scale(1.04)`, `1.06` on TV): use `.scroll-ring-safe` (`px-1 -mx-1 py-1 scroll-py-1`) or the same padding-plus-negative-margin by hand, and more when a badge or the lift sticks out further. Check the first and last item of every row and grid you add, with the keyboard, before calling it done.
 - Never hardcode user-facing strings. Use `TranslateService` (ngx-translate) for all text, including toast messages (e.g. `this.toast.success(this.translate.instant('key'))` not `this.toast.success('Settings saved')`).
 
 ## Git workflow

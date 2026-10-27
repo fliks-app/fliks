@@ -1,12 +1,13 @@
 <dialog #dialog class="modal" (close)="closed.emit()" [style.padding-bottom.px]="keyboard.height()">
   <!-- In the player the keyboard overlays the page: the box centres and shrinks into the space above it. -->
-  <div class="modal-box max-w-2xl" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
+  <div appTvSection class="modal-box max-w-2xl" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
     <app-modal-header [title]="'party.reaction_settings' | translate" />
-    <div class="flex flex-col gap-4 pt-2">
+    <div appTvSection class="flex flex-col gap-4 pt-2">
       @if (!party.reactionsEnabled()) {
         <p class="text-sm text-warning">{{ 'party.reactions_off_notice' | translate }}</p>
       }
       <app-toggle-field
+        autofocus
         [label]="'party.reaction_enabled' | translate"
         [value]="reactions.enabled()"
         (valueChange)="reactions.setEnabled($event)"
@@ -17,13 +18,7 @@
         [value]="reactions.dock()"
         (valueChange)="reactions.setDock($event)"
       />
-      <app-toggle-field
-        [label]="'party.reaction_keep_open' | translate"
-        [disabled]="!reactions.enabled()"
-        [value]="reactions.keepOpen()"
-        (valueChange)="reactions.setKeepOpen($event)"
-      />
-      <div class="flex flex-col gap-2" [class.opacity-50]="!reactions.enabled()" [attr.inert]="reactions.enabled() ? null : ''">
+      <div appTvSection class="flex flex-col gap-2" [class.opacity-50]="!reactions.enabled()" [attr.inert]="reactions.enabled() ? null : ''">
         <div class="flex items-center justify-between gap-2">
           <span class="font-medium">{{ 'party.reaction_bar' | translate }}</span>
           <button type="button" class="link text-sm" (click)="reset()">{{ 'party.reaction_bar_reset' | translate }}</button>
@@ -50,7 +45,7 @@
             </button>
           }
         </label>
-        <div class="max-h-72 overflow-y-auto px-2 pt-2">
+        <div appTvGrid class="max-h-72 overflow-y-auto px-2 pt-2">
           @for (s of sections(); track s.key) {
             @if (s.emojis.length) {
               <section class="mb-3">
@@ -59,18 +54,48 @@
                 }
                 @if (s.key === 'bar') {
                   <!-- One row (8 at most): the horizontal strategy slides siblings with transforms, which animate; mixed reorders the DOM. -->
-                  <div
-                    cdkDropList
-                    cdkDropListOrientation="horizontal"
-                    class="flex gap-2 overflow-x-auto pt-2"
-                    (cdkDropListDropped)="reactions.move($event.previousIndex, $event.currentIndex)"
-                  >
-                    @for (e of s.emojis; track e) {
-                      <div cdkDrag cdkDragPreviewContainer="parent" [cdkDragDisabled]="isTv()" class="w-14 shrink-0 cursor-grab">
-                        <ng-container *ngTemplateOutlet="cell; context: { $implicit: e }" />
-                        <div *cdkDragPlaceholder class="h-11 w-14 shrink-0 rounded-xl border-2 border-dashed border-base-content/30 bg-base-content/10"></div>
-                      </div>
-                    }
+                  <!-- Enter on an emoji picks it up for ←/→, past the last one is the trash; a pointer drags it there too. -->
+                  <div class="flex items-center gap-2">
+                    <div
+                      cdkDropList
+                      #barList="cdkDropList"
+                      cdkDropListOrientation="horizontal"
+                      [cdkDropListConnectedTo]="[trashList]"
+                      [appKeyboardReorder]="s.emojis.length"
+                      removable
+                      #reorder="reorder"
+                      class="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pt-2 pb-1 scroll-px-1"
+                      (cdkDropListDropped)="reactions.move($event.previousIndex, $event.currentIndex)"
+                      (moved)="reactions.move($event.from, $event.to)"
+                      (removed)="toggle(s.emojis[$event])"
+                    >
+                      @for (e of s.emojis; track e) {
+                        <div
+                          cdkDrag
+                          data-reorder-item
+                          [cdkDragData]="e"
+                          cdkDragPreviewContainer="parent"
+                          [cdkDragDisabled]="isTv()"
+                          class="relative w-14 shrink-0 cursor-grab"
+                          (cdkDragStarted)="dragging.set(true)"
+                          (cdkDragEnded)="dragging.set(false)"
+                        >
+                          <ng-container *ngTemplateOutlet="cell; context: { $implicit: e }" />
+                          <div *cdkDragPlaceholder class="h-11 w-14 shrink-0 rounded-xl border-2 border-dashed border-base-content/30 bg-base-content/10"></div>
+                        </div>
+                      }
+                    </div>
+                    <div
+                      cdkDropList
+                      #trashList="cdkDropList"
+                      class="reorder-trash mt-1 grid h-11 w-14 shrink-0 place-items-center rounded-xl border-2 border-dashed text-error"
+                      [class.invisible]="reorder.index() === null && !dragging()"
+                      [class.armed]="reorder.overTrash()"
+                      [attr.aria-label]="'party.reaction_remove' | translate"
+                      (cdkDropListDropped)="$event.previousContainer !== $event.container && toggle($event.item.data)"
+                    >
+                      <svg lucideTrash2 class="h-5 w-5"></svg>
+                    </div>
                   </div>
                 } @else {
                   <div class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10">
@@ -104,8 +129,8 @@
   @let i = reactions.bar().indexOf(e);
   <button
     type="button"
-    class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
-    [class]="i >= 0 ? 'border-primary bg-primary/10' : 'border-transparent'"
+    class="btn btn-ghost relative h-11 w-full rounded-xl px-0 text-xl"
+    [class.bg-primary/10]="i >= 0"
     [attr.aria-pressed]="i >= 0"
     [attr.title]="data.label(e)"
     (click)="toggle(e)"

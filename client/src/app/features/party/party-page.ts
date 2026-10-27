@@ -16,6 +16,7 @@ import { SseService } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { groupPosition } from '../player/party-sync';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../player/party/party-people';
@@ -54,7 +55,7 @@ const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.erro
 @Component({
   selector: 'app-party-page',
   imports: [
-    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyInviteComponent, PartyProposalsComponent, PartyProgrammeComponent, PartyCoverComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, DefaultFocusDirective, PartyHostDialogComponent, PartyInviteComponent, PartyProposalsComponent, PartyProgrammeComponent, PartyCoverComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllipsisVertical, LucidePlay, LucideSettings, LucideShare2, LucideUserMinus, LucideX, DropdownMenuComponent,
   ],
@@ -176,6 +177,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** The chat column exists in the lobby only; the live phase gives the page its full width. */
   protected readonly chatShown = computed(() => this.phase() === 'lobby' && this.joined());
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');
+  /** The action row has its final buttons: before the lobby join only Quit shows, and the default focus must wait for Ready/Start. */
+  protected readonly actionsSettled = computed(() => this.phase() !== 'lobby' || this.joined());
   /** Where the group is in the playing item, from the last snapshot; refetched on every transition. */
   protected readonly progress = computed(() => {
     const p = this.view()?.live?.playback;

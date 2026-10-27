@@ -9,8 +9,6 @@ import { sanitizeBar, toggleBar } from './reaction-bar';
 const BAR_KEY = 'party.reactionBar';
 const ENABLED_KEY = 'party.reactionsEnabled';
 const DOCK_KEY = 'party.reactionDock';
-const KEEP_OPEN_KEY = 'party.reactionKeepOpen';
-const ROW_OPEN_KEY = 'party.reactionRowOpen';
 
 function readBar(): string[] | null {
   try {
@@ -38,11 +36,9 @@ export class ReactionsService {
   /** Master switch: off hides the dock and the reactions rising over the video. */
   readonly enabled = signal(readFlag(ENABLED_KEY, true));
   /** The floating reaction button over the video. */
+  /** The emoji the keyboard last sat on in the row, where ArrowDown lands again. */
+  lastFocused: string | null = null;
   readonly dock = signal(readFlag(DOCK_KEY, true));
-  /** The row stays open after a reaction is sent. */
-  readonly keepOpen = signal(readFlag(KEEP_OPEN_KEY, true));
-  /** The row is unfolded; restored at the next party. */
-  readonly rowOpen = signal(readFlag(ROW_OPEN_KEY, false));
 
   private loading: Promise<void> | null = null;
 
@@ -88,16 +84,6 @@ export class ReactionsService {
   setDock(on: boolean): void {
     this.dock.set(on);
     writeFlag(DOCK_KEY, on);
-  }
-
-  setKeepOpen(on: boolean): void {
-    this.keepOpen.set(on);
-    writeFlag(KEEP_OPEN_KEY, on);
-  }
-
-  setRowOpen(open: boolean): void {
-    this.rowOpen.set(open);
-    writeFlag(ROW_OPEN_KEY, open);
   }
 
   private save(bar: string[] | null): void {

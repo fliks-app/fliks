@@ -1,5 +1,6 @@
 import {
   Component,
+  booleanAttribute,
   input,
   model,
 } from '@angular/core';
@@ -19,6 +20,8 @@ export class ToggleFieldComponent {
   readonly label = input.required<string>();
   readonly hint = input<string>();
   readonly disabled = input<boolean>(false);
+  /** Focus the switch when its dialog opens, instead of the dialog's close button. */
+  readonly autofocus = input(false, { transform: booleanAttribute });
   /** Override the toggle accent color (default: toggle-primary). */
   readonly toggleClass = input<string>('toggle-primary');
 }

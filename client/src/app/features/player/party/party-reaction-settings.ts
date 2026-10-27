@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideSearch, LucideX } from '@lucide/angular';
+import { LucideSearch, LucideTrash2, LucideX } from '@lucide/angular';
 import { EmojiDataService } from '../../../core/services/party/emoji-data.service';
 import { MAX_BAR } from '../../../core/services/party/reaction-bar';
 import { PartyService } from '../../../core/services/party/party.service';
@@ -11,6 +11,9 @@ import { ReactionsService } from '../../../core/services/party/reactions.service
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import { KeyboardReorderDirective } from '../../../shared/directives/keyboard-reorder.directive';
+import { TvGridDirective } from '../../../shared/directives/tv-grid.directive';
+import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 interface Section {
@@ -24,7 +27,7 @@ interface Section {
 /** Reaction settings, opened from the player's settings menu; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
-  imports: [FormsModule, NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, ToggleFieldComponent],
+  imports: [FormsModule, NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
   templateUrl: './party-reaction-settings.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -35,6 +38,8 @@ export class PartyReactionSettingsComponent {
   protected readonly keyboard = inject(KeyboardOverlayService);
   protected readonly skeletonCells = Array.from({ length: 30 }, (_, i) => i);
   protected readonly isTv = inject(DeviceService).isTv;
+  /** A pointer drag is in flight: the trash shows as its drop target. */
+  protected readonly dragging = signal(false);
   protected readonly max = MAX_BAR;
   protected readonly query = signal('');
   /** Set when a tap was refused because the bar is full. */

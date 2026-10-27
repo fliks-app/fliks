@@ -6,6 +6,7 @@ import {
   SCROLLER_SELECTOR,
   isFocusCandidate,
   isRendered,
+  wantsFocusRestore,
 } from './focusable.constants';
 
 /** Spatial navigation for D-pad and keyboard arrows: container tree (`[appTvSection]`/`[appTvRow]`) first,
@@ -13,7 +14,7 @@ import {
 
 interface ContainerNode {
   readonly el: HTMLElement;
-  readonly orientation: 'vertical' | 'horizontal';
+  readonly orientation: 'vertical' | 'horizontal' | 'grid';
   readonly isWrapping: boolean;
   parent: ContainerNode | null;
   /** Last focusable that received focus inside this container (or any
@@ -24,6 +25,9 @@ interface ContainerNode {
 /** Page scroll step (px) when an up/down move has no focusable neighbour — lets
  *  the user reach non-focusable info content below the last card. */
 const PAGE_SCROLL_AMOUNT_PX = 300;
+
+/** How long a lost focus waits for its button to come back (re-enabled or replaced) before giving up. */
+const FOCUS_RESCUE_MS = 5000;
 
 /** Held-key pacing: auto-repeat outruns smooth scrolls and judders. Taps are never paced. */
 const REPEAT_MIN_INTERVAL_MS = 200;
@@ -40,6 +44,9 @@ export class TvSpatialNavService {
   /** Whole-document focusable list, cleared by the observer below; rescanning hundreds of cards per D-pad press stalls the main thread. */
   private focusableCache: HTMLElement[] | null = null;
   private focusObserver?: MutationObserver;
+  /** The focused element, its parent and spot, to hand the focus on when a click swaps or disables it. */
+  private lastFocus: { el: HTMLElement; parent: HTMLElement | null; rect: DOMRect } | null = null;
+  private focusLostAt = 0;
 
   constructor() {
     // Handler is a no-op for non-arrow keys, so binding on touch-only devices is harmless.
@@ -59,13 +66,17 @@ export class TvSpatialNavService {
     window.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
     this.destroyRef.onDestroy(() => window.removeEventListener('wheel', wheelHandler, { capture: true } as any));
     // Track the deepest focused element per container for last-active-child memory.
-    const focusInHandler = (e: FocusEvent) => this.updateActiveChild(e.target as HTMLElement | null);
+    const focusInHandler = (e: FocusEvent) => {
+      this.updateActiveChild(e.target as HTMLElement | null);
+      this.rememberFocus();
+    };
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
     // Clear the cache on DOM changes that affect focusability; attribute filter avoids cosmetic churn.
     if (typeof MutationObserver !== 'undefined') {
       this.focusObserver = new MutationObserver(() => {
         this.focusableCache = null;
+        this.rescueFocus();
       });
       this.focusObserver.observe(document.body, {
         childList: true,
@@ -85,7 +96,7 @@ export class TvSpatialNavService {
   /** Register a container, auto-parented to the closest registered DOM ancestor (DI is too coarse here). */
   registerContainer(
     el: HTMLElement,
-    options: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean },
+    options: { orientation: 'vertical' | 'horizontal' | 'grid'; isWrapping?: boolean },
   ): void {
     if (this.containers.has(el)) return;
     const parent = this.findParentContainer(el);
@@ -140,6 +151,43 @@ export class TvSpatialNavService {
     return (this.focusableCache ??= collectFocusables());
   }
 
+  private rememberFocus(): void {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body) return;
+    this.lastFocus = { el, parent: el.parentElement, rect: el.getBoundingClientRect() };
+    this.focusLostAt = 0;
+  }
+
+  /** A pressed button that vanished (swapped by an `@if`) or got disabled (busy) drops the focus on <body>: hand it
+   *  back to the button once re-enabled, or to its nearest replacement under the same parent. Keyboard/D-pad only. */
+  private rescueFocus(): void {
+    const last = this.lastFocus;
+    if (!last || !wantsFocusRestore()) return;
+    const { el, parent, rect } = last;
+    const gone = !el.isConnected;
+    // A blur on a button still there and enabled was on purpose: only a removal or a disable counts as lost.
+    if (!this.focusLostAt && (gone || el.matches(':disabled'))) this.focusLostAt = Date.now();
+    if (!this.focusLostAt || document.activeElement !== document.body) return;
+    if (Date.now() - this.focusLostAt > FOCUS_RESCUE_MS || !parent?.isConnected) {
+      this.lastFocus = null;
+      return;
+    }
+    if (!gone) {
+      if (!el.matches(':disabled')) el.focus({ preventScroll: true });
+      return;
+    }
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let best: HTMLElement | null = null;
+    let bestDist = Infinity;
+    for (const c of collectFocusables(parent)) {
+      const r = c.getBoundingClientRect();
+      const d = Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy);
+      if (d < bestDist) [best, bestDist] = [c, d];
+    }
+    best?.focus({ preventScroll: true });
+  }
+
   private focusFirstIfNoFocus() {
     if (typeof document === 'undefined') return;
     if (document.activeElement && document.activeElement !== document.body) return;
@@ -150,6 +198,8 @@ export class TvSpatialNavService {
   }
 
   private onKey(e: KeyboardEvent) {
+    // The spot is taken before Enter activates, so a replacement lands where the press was.
+    this.rememberFocus();
     // Some Android WebView builds don't report a `key` for D-pad events but
     // still ship `keyCode` 37/38/39/40 — accept either form.
     const dir = ARROW_TO_DIR[e.key] ?? KEYCODE_TO_DIR[e.keyCode];
@@ -214,6 +264,7 @@ export class TvSpatialNavService {
       const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
       if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
         next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        this.scrollEdgeToFocus(next);
         // Last so it wins: on the TV WebView smooth scrollIntoView leaves a horizontal scroller untouched, stranding focus off-card.
         this.scrollRowToFocus(next);
       }
@@ -224,6 +275,18 @@ export class TvSpatialNavService {
     if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
       const top = dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX;
       window.scrollBy({ top, behavior: 'smooth' });
+    }
+  }
+
+  /** A vertical scroller's first or last row scrolls it to that edge: `nearest` stops at the item's box,
+   *  short of the padding, a heading or a badge beside it, and clips the ring. */
+  private scrollEdgeToFocus(el: HTMLElement): void {
+    for (let s = el.parentElement; s && s !== document.body; s = s.parentElement) {
+      if (s.scrollHeight <= s.clientHeight || !/auto|scroll/.test(getComputedStyle(s).overflowY)) continue;
+      const r = el.getBoundingClientRect();
+      const others = collectFocusables(s).map((o) => o.getBoundingClientRect());
+      if (!others.some((o) => o.bottom <= r.top)) s.scrollTo({ top: 0, behavior: 'smooth' });
+      else if (!others.some((o) => o.top >= r.bottom)) s.scrollTo({ top: s.scrollHeight, behavior: 'smooth' });
     }
   }
 
@@ -303,9 +366,10 @@ export class TvSpatialNavService {
         ? containing.reduce((inner, m) => (inner.contains(m) ? m : inner))
         : modals[0] ?? null;
     }
-    if (!openModal && active && active !== document.body && this.containers.size > 0) {
+    // Inside a modal the tree still orders a section's children, as long as the step stays in the modal.
+    if (active && active !== document.body && this.containers.size > 0 && (!openModal || this.inContainerWithin(active, openModal))) {
       const tree = this.findNeighborInTree(active, dir);
-      if (tree) return tree;
+      if (tree && (!openModal || openModal.contains(tree))) return tree;
     }
     const all = openModal ? collectFocusables(openModal) : this.getFocusables();
     if (!all.length) return null;
@@ -388,6 +452,12 @@ export class TvSpatialNavService {
   }
 
   /** Tree-aware step: climbs from the deepest container, then bridges to a peer top-level one; null falls back to rect scoring. */
+  /** `el` sits in a registered container that is itself inside `root`. */
+  private inContainerWithin(el: HTMLElement, root: HTMLElement): boolean {
+    const c = this.findParentContainer(el);
+    return !!c && root.contains(c.el);
+  }
+
   private findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const activeRect = active.getBoundingClientRect();
     const activeCx = activeRect.left + activeRect.width / 2;
@@ -395,6 +465,13 @@ export class TvSpatialNavService {
     let topMost: ContainerNode | null = null;
     while (cur) {
       topMost = cur;
+      // A grid moves by geometry inside itself; only its edge hands the step to the enclosing container.
+      if (cur.orientation === 'grid') {
+        const inGrid = nearestInDirection(collectFocusables(cur.el), active, dir);
+        if (inGrid) return inGrid;
+        cur = cur.parent;
+        continue;
+      }
       const horizontal = cur.orientation === 'horizontal';
       const orientationMatches = horizontal === (dir === 'left' || dir === 'right');
       if (orientationMatches) {
@@ -406,6 +483,11 @@ export class TvSpatialNavService {
           const idx = children.indexOf(ownChild);
           const step = dir === 'right' || dir === 'down' ? 1 : -1;
           let nextIdx = idx + step;
+          // Siblings sharing the active child's band (a header's buttons in a vertical section) are not a step on this axis.
+          const from = ownChild.getBoundingClientRect();
+          while (nextIdx >= 0 && nextIdx < children.length && sharesBand(children[nextIdx].getBoundingClientRect(), from, horizontal)) {
+            nextIdx += step;
+          }
           if (cur.isWrapping && children.length > 0) {
             nextIdx = (nextIdx + children.length) % children.length;
           }
@@ -515,6 +597,34 @@ export class TvSpatialNavService {
     }
     return out;
   }
+}
+
+/** The candidate closest to `from` in `dir`, weighing drift across the axis double. */
+export function nearestInDirection(candidates: HTMLElement[], from: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
+  const f = from.getBoundingClientRect();
+  const fx = f.left + f.width / 2;
+  const fy = f.top + f.height / 2;
+  let best: HTMLElement | null = null;
+  let bestScore = Infinity;
+  for (const el of candidates) {
+    if (el === from) continue;
+    const r = el.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - fx;
+    const dy = r.top + r.height / 2 - fy;
+    const along = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy;
+    if (along <= 4) continue;
+    const score = along + 2 * Math.abs(dir === 'left' || dir === 'right' ? dy : dx);
+    if (score < bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  }
+  return best;
+}
+
+/** `r` overlaps `from` along the step axis: beside it in a vertical step, above or below it in a horizontal one. */
+export function sharesBand(r: DOMRect, from: DOMRect, horizontal: boolean): boolean {
+  return horizontal ? r.left < from.right - 4 && r.right > from.left + 4 : r.top < from.bottom - 4 && r.bottom > from.top + 4;
 }
 
 function matchesFocusable(el: HTMLElement): boolean {
