@@ -9,10 +9,10 @@
 }
 /* Media queries, not clamp(): Tizen's Chromium 76 has no clamp(). */
 @media (min-width: 1280px) {
-  .reaction { font-size: 3.25rem; }
+  .reaction { font-size: 2.875rem; }
 }
 @media (min-width: 1920px) {
-  .reaction { font-size: 4rem; }
+  .reaction { font-size: 3.25rem; }
 }
 @keyframes party-rise {
   from { transform: translateY(0); }
