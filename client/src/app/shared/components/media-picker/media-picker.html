@@ -20,7 +20,7 @@
       <app-content-type-toggle class="w-full shrink-0 lg:w-56" [(value)]="contentType" />
 
       <div class="flex min-h-0 flex-1 gap-6">
-        <aside class="hidden w-56 shrink-0 overflow-y-auto lg:block">
+        <aside class="scroll-ring-safe hidden w-56 shrink-0 overflow-y-auto lg:block">
           <ng-container *ngTemplateOutlet="filters" />
         </aside>
         <div class="min-h-0 flex-1 overflow-y-auto scroll-ring-safe" [style.padding-bottom.px]="keyboard.height()">
@@ -32,7 +32,7 @@
           @if (browsing()) {
             @if (suggestions().length) {
               <h3 class="mb-3 font-semibold">{{ 'search.discover_suggestions' | translate }}</h3>
-              <div data-picker-grid class="grid grid-cols-3 gap-3 pb-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
+              <div data-picker-grid class="grid grid-cols-3 gap-3 p-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
                 @for (r of suggestions(); track r.media.id) {
                   @if (selected()?.id === r.media.id) {
                     <ng-container *ngTemplateOutlet="detail" />
@@ -47,7 +47,7 @@
           } @else if (loading() && !results().length) {
             <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
           } @else if (results().length) {
-            <div data-picker-grid class="grid grid-cols-3 gap-3 pb-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
+            <div data-picker-grid class="grid grid-cols-3 gap-3 p-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
               @for (r of results(); track r.id) {
                 @if (selected()?.id === r.id) {
                   <ng-container *ngTemplateOutlet="detail" />
@@ -125,7 +125,7 @@
         <div class="flex justify-center py-4"><span class="loading loading-spinner loading-md"></span></div>
       } @else {
         @if (seasons().length) {
-          <div role="tablist" class="tabs tabs-border flex-nowrap overflow-x-auto overflow-y-hidden">
+          <div role="tablist" class="tabs tabs-border scroll-ring-safe flex-nowrap overflow-x-auto overflow-y-hidden">
             @for (s of seasons(); track s.seasonNumber) {
               <button type="button" role="tab" class="tab shrink-0 whitespace-nowrap" [class.tab-active]="seasonNumber() === s.seasonNumber" [attr.aria-selected]="seasonNumber() === s.seasonNumber" (click)="setSeason(s.seasonNumber)">
                 {{ s.seasonNumber | seasonLabel }}
