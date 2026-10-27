@@ -47,6 +47,19 @@ describe('KeyboardController layers', () => {
   });
   afterEach(() => document.querySelectorAll('dialog').forEach((d) => d.remove()));
 
+  it('leaves arrows and OK to a panel beside the bar', () => {
+    const btn = document.body.appendChild(document.createElement('button'));
+    btn.focus();
+    const k = controller();
+    for (const key of ['ArrowRight', 'ArrowUp', 'Enter']) {
+      const e = press(key);
+      k.onKeyDown(e);
+      expect(e.defaultPrevented).toBe(false);
+    }
+    expect([chrome.visible(), chrome.seekOsd()]).toEqual([false, false]);
+    btn.remove();
+  });
+
   it('raises the controls on ArrowUp and the reaction row alone on ArrowDown', () => {
     const k = controller();
     k.onKeyDown(press('ArrowDown'));

@@ -51,6 +51,9 @@ export class KeyboardController {
     if (document.querySelector('dialog[open]')) return;
     // The sync panel owns its keys; only Back still reaches the handlers below.
     if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
+    // Focus beside the bar (party panel, error overlay) keeps arrows, OK and Space for its own buttons.
+    const elsewhere = !!activeEl && activeEl !== document.body && !activeEl.closest('app-player-controls');
+    if (elsewhere && (e.key.startsWith('Arrow') || e.key === 'Enter' || e.key === ' ')) return;
 
     // Hidden bar: Up raises the controls, Down the reaction row alone; Back closes the row.
     const chrome = this.host.chrome;
