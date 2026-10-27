@@ -14,7 +14,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Immersive } from '../../../core/plugins/immersive.plugin';
+import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LiveTvApiService,
@@ -57,12 +58,6 @@ import { Orientation, releasePlayerOrientation } from '../../../core/plugins/ori
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 
 /** Same native plugins as the VOD player (player.ts), duplicated rather than shared. */
-interface ImmersivePlugin {
-  enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
-  exit(): Promise<void>;
-  setLightStatusBar(options: { light: boolean }): Promise<void>;
-}
-const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
 /** How far back a rewind press steps, inside the DVR window. */
 const REWIND_STEP_SECONDS = 10;

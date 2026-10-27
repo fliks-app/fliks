@@ -15,7 +15,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd, Scroll } from '@angular/router';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { Immersive } from '../../core/plugins/immersive.plugin';
 import { Keyboard } from '@capacitor/keyboard';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -204,7 +205,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     // Read the signal so the effect re-runs when transparency flips, in case
     // future code wants to react to it.
     void this.navbarTransparent();
-    const Immersive = registerPlugin<any>('Immersive');
     Immersive.setLightStatusBar({ light: false }).catch(() => {});
   }) : null;
 

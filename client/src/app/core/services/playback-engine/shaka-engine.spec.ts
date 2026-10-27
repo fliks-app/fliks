@@ -101,6 +101,16 @@ describe('ShakaEngine subtitle authority', () => {
   });
 });
 
+describe('ShakaEngine.configure', () => {
+  it('maps the preferred audio language onto preferredAudio', async () => {
+    const engine = await initEngine();
+    engine.configure({ preferredAudioLanguage: 'fr' });
+    expect(player.configure).toHaveBeenLastCalledWith({ preferredAudio: [{ language: 'fr' }] });
+    engine.configure({ preferredAudioLanguage: '' });
+    expect(player.configure).toHaveBeenLastCalledWith({ preferredAudio: [] });
+  });
+});
+
 describe('ShakaEngine.addTextTrack', () => {
   const rendition = (id: number, language: string, forced = false) => ({ id, language, forced });
 

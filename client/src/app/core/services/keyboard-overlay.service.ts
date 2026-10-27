@@ -1,12 +1,7 @@
 import { Injectable, signal } from '@angular/core';
-import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { Immersive } from '../plugins/immersive.plugin';
 import { Keyboard, KeyboardResize } from '@capacitor/keyboard';
-
-interface KeyboardOverlayPlugin {
-  setKeyboardOverlay(options: { enabled: boolean }): Promise<void>;
-}
-
-const Immersive = registerPlugin<KeyboardOverlayPlugin>('Immersive');
 
 /** Lets the soft keyboard cover the UI instead of resizing the WebView; `height` (CSS px) is for what must stay above it. Native only. */
 @Injectable({ providedIn: 'root' })
