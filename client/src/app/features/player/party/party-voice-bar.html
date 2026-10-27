@@ -2,31 +2,34 @@
   <div [class]="variant() === 'controls' ? 'flex items-center gap-2 text-sm' : 'flex flex-col gap-2 px-3 py-2 text-sm'">
     @if (variant() !== 'hint') {
       <div class="flex items-center gap-2">
-        @if (voice.joined()) {
-          @if (!voice.listenOnly()) {
-            <button
-              type="button"
-              class="btn btn-sm btn-square"
-              [class.btn-error]="!voice.muted()"
-              [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
-              [attr.aria-pressed]="!voice.muted()"
-              (click)="voice.toggleMute()"
-            >
-              @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
-            </button>
-          }
-          <button type="button" class="btn btn-sm" (click)="voice.leave()">{{ 'party.voice_leave' | translate }}</button>
-        } @else {
+        @if (voice.joined() && !voice.listenOnly()) {
           <button
             type="button"
-            class="btn btn-sm btn-primary gap-1"
-            [disabled]="voice.busy() || voice.blocked()"
-            [attr.aria-label]="'party.voice_join' | translate"
-            (click)="voice.join()"
+            class="btn btn-sm btn-square"
+            [class.btn-error]="!voice.muted()"
+            [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
+            [attr.aria-pressed]="!voice.muted()"
+            (click)="voice.toggleMute()"
           >
-            <svg lucideMic class="h-4 w-4"></svg><span [class]="variant() === 'controls' ? 'hidden @min-[18rem]:inline' : ''">{{ 'party.voice_join' | translate }}</span>
+            @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
           </button>
         }
+        <!-- Join and leave share one button so the focus stays on it across the switch. -->
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-primary]="!voice.joined()"
+          [class.gap-1]="!voice.joined()"
+          [disabled]="voice.busy() || (!voice.joined() && voice.blocked())"
+          [attr.aria-label]="(voice.joined() ? 'party.voice_leave' : 'party.voice_join') | translate"
+          (click)="voice.joined() ? voice.leave() : voice.join()"
+        >
+          @if (voice.joined()) {
+            {{ 'party.voice_leave' | translate }}
+          } @else {
+            <svg lucideMic class="h-4 w-4"></svg><span [class]="variant() === 'controls' ? 'hidden @min-[18rem]:inline' : ''">{{ 'party.voice_join' | translate }}</span>
+          }
+        </button>
         @if (variant() === 'full') {
           <span class="ml-auto flex items-center gap-1 text-sm opacity-70" [attr.aria-label]="'party.voice_count' | translatePlural: inVoice()">
             <svg lucideUser class="h-4 w-4"></svg>{{ inVoice() }}
