@@ -671,7 +671,7 @@ mod tests {
                 "reactionsEnabled":true,"chatEnabled":true,"linkSharing":false,"public":true}),
             json!({"type":"party.message","partyId":1,"message":{"id":1}}),
             json!({"type":"party.reaction","partyId":1,"userId":2,"username":"u","emoji":"x"}),
-            json!({"type":"party.closed","partyId":1,"reason":"expired"}),
+            json!({"type":"party.closed","partyId":1,"reason":"expired","by":null}),
             json!({"type":"party.invited","partyId":1,"name":"n","scheduledAt":null,"host":{"userId":1,"username":"u"},"item":{"mediaId":1}}),
             json!({"type":"party.starting","partyId":1,"name":"n"}),
             json!({"type":"party.updated","partyId":1}),
