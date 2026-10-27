@@ -47,6 +47,7 @@ pub enum Subject {
     Playlist,
     LiveTvChannel,
     Role,
+    Party,
     Settings,
     All,
     /// `plugin:<id>:<name>`, stored whole.
@@ -70,6 +71,7 @@ impl FromStr for Subject {
             "Playlist" => Self::Playlist,
             "LiveTvChannel" => Self::LiveTvChannel,
             "Role" => Self::Role,
+            "Party" => Self::Party,
             "Settings" => Self::Settings,
             "all" => Self::All,
             _ if is_plugin_subject(s) => Self::Plugin(s.to_owned()),
@@ -184,6 +186,15 @@ impl Permissions {
         }
         if has("roles.manage") {
             grant(Manage, S::Role);
+        }
+        if has("parties.create") {
+            grant(Create, S::Party);
+        }
+        if has("parties.read_public") {
+            grant(Read, S::Party);
+        }
+        if has("parties.manage") {
+            grant(Manage, S::Party);
         }
         rules.push((Read, S::User, Cond::Own));
         rules.push((Update, S::User, Cond::Own));

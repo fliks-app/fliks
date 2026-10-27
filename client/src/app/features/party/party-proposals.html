@@ -1,16 +1,17 @@
 <section class="flex flex-col gap-3">
   <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
     <h2 class="text-lg font-bold">{{ 'party.proposals' | translate }}</h2>
-    <button type="button" class="btn btn-sm btn-outline" (click)="picker().show()">{{ 'party.propose' | translate }}</button>
+    <button type="button" class="btn btn-sm btn-outline gap-1" (click)="picker().show()"><svg lucideLightbulb class="h-4 w-4"></svg>{{ 'party.propose' | translate }}</button>
   </div>
   @if (rows().length) {
     <ul class="flex flex-col gap-2">
       @for (p of rows(); track p.id) {
-        <li appTvRow class="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 rounded-box bg-base-200 p-2 sm:grid-cols-[auto_1fr_auto_auto]">
-          @if (!p.item.hidden && p.item.posterUrl) {
-            <img [src]="p.item.posterUrl | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="row-span-2 h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover sm:row-span-1" />
+        <li appTvRow [attr.data-row]="p.id" class="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 rounded-box bg-base-200 p-2 sm:grid-cols-[auto_1fr_auto_auto]">
+          @let t = thumb(p.item);
+          @if (!p.item.hidden && t.url) {
+            <img [src]="t.url | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="row-span-2 h-14 shrink-0 rounded-md bg-base-300 object-cover sm:row-span-1 sm:h-16" [class]="t.aspect" />
           } @else {
-            <div class="row-span-2 h-16 w-11 shrink-0 rounded-md bg-base-300 sm:row-span-1"></div>
+            <div class="row-span-2 h-14 shrink-0 rounded-md bg-base-300 sm:row-span-1 sm:h-16" [class]="t.aspect"></div>
           }
           <div class="min-w-0">
             @if (!p.item.hidden) {
@@ -48,7 +49,7 @@
               <button
                 type="button"
                 class="btn btn-ghost btn-sm btn-square"
-                [class.text-primary]="myVote(p) === -1"
+                [class.text-error]="myVote(p) === -1"
                 [attr.aria-pressed]="myVote(p) === -1"
                 [attr.aria-label]="'party.vote_down' | translate"
                 [attr.data-vote]="p.id"
@@ -62,7 +63,7 @@
               >
                 <svg lucideThumbsDown class="h-5 w-5"></svg>
               </button>
-              <button type="button" class="ml-0.5 cursor-pointer pr-1 text-sm tabular-nums hover:underline" [class.text-primary]="myVote(p) === -1" [attr.aria-label]="'party.voters_title' | translate" (click)="showVoters(p)">
+              <button type="button" class="ml-0.5 cursor-pointer pr-1 text-sm tabular-nums hover:underline" [class.text-error]="myVote(p) === -1" [attr.aria-label]="'party.voters_title' | translate" (click)="showVoters(p)">
                 {{ p.downvoterIds.length }}
               </button>
             </div>
@@ -81,26 +82,38 @@
   } @else {
     <p class="text-base-content/60">{{ 'party.proposals_empty' | translate }}</p>
   }
-  <app-media-picker (picked)="propose($event)" />
+  <app-media-picker multiple verb="propose" [taken]="taken()" (picked)="propose($event)" />
   <dialog #votersDialog class="modal" (close)="voters.set(null)">
     <div class="modal-box max-w-sm">
       <app-modal-header [title]="'party.voters_title' | translate" />
       @if (voters(); as v) {
-        @for (side of [{ key: 'party.voters_up', ids: v.upvoterIds }, { key: 'party.voters_down', ids: v.downvoterIds }]; track side.key) {
-          <h3 class="mt-3 mb-1 text-sm font-medium opacity-70">{{ side.key | translate }} · {{ side.ids.length }}</h3>
-          @if (side.ids.length) {
-            <ul class="flex flex-col gap-2">
-              @for (id of side.ids; track id) {
-                <li class="flex items-center gap-2">
-                  <app-user-avatar [username]="name(id)" size="w-7 h-7 text-xs" />
-                  <span class="truncate">{{ name(id) }}</span>
-                </li>
+        <div class="flex flex-col gap-4 pt-1">
+          @for (side of [{ key: 'party.voters_up', ids: v.upvoterIds, up: true }, { key: 'party.voters_down', ids: v.downvoterIds, up: false }]; track side.key) {
+            <section class="flex flex-col gap-2">
+              <h3 class="flex items-center gap-2 text-base font-semibold" [class.text-primary]="side.up" [class.text-error]="!side.up">
+                @if (side.up) {
+                  <svg lucideThumbsUp class="h-5 w-5"></svg>
+                } @else {
+                  <svg lucideThumbsDown class="h-5 w-5"></svg>
+                }
+                <span class="text-base-content">{{ side.key | translate }}</span>
+                <span class="badge badge-sm" [class.badge-primary]="side.up && side.ids.length" [class.badge-error]="!side.up && side.ids.length">{{ side.ids.length }}</span>
+              </h3>
+              @if (side.ids.length) {
+                <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
+                  @for (id of side.ids; track id) {
+                    <li class="flex items-center gap-3 rounded-lg px-2 py-1.5">
+                      <app-user-avatar [username]="name(id)" size="w-8 h-8 text-sm" />
+                      <span class="truncate font-medium">{{ name(id) }}</span>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="rounded-box bg-base-200 px-4 py-3 text-sm text-base-content/60">{{ 'party.voters_none' | translate }}</p>
               }
-            </ul>
-          } @else {
-            <p class="text-sm opacity-60">{{ 'party.voters_none' | translate }}</p>
+            </section>
           }
-        }
+        </div>
       }
     </div>
     <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>

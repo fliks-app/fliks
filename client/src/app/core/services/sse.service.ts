@@ -105,7 +105,7 @@ export type PartyEvent =
   | ({ type: 'party.settings'; partyId: number; rev: number; name: string } & PartySwitches)
   | { type: 'party.message'; partyId: number; message: PartyMessage }
   | { type: 'party.reaction'; partyId: number; userId: number; username: string; emoji: string }
-  | { type: 'party.closed'; partyId: number; reason: 'host_ended' | 'expired' | 'kicked' }
+  | { type: 'party.closed'; partyId: number; reason: 'host_ended' | 'expired' | 'kicked'; by?: string | null }
   | { type: 'party.invited'; partyId: number; name: string; scheduledAt: string | null; host: PartyUser; item: PartyItem | null }
   | { type: 'party.starting'; partyId: number; name: string }
   | { type: 'party.updated'; partyId: number }

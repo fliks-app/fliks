@@ -27,7 +27,7 @@ function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
   return {
     id: 7, name: 'p', status: 'live', scheduledAt: null, host: { userId: 1, username: 'a' },
     item: item(1, 100), playlist: null, memberCount: 1, policy: 'everyone', reactionsEnabled: true, chatEnabled: true,
-    linkSharing: false, inviteToken: null, guests: [], proposals: [],
+    linkSharing: false, public: false, cover: null, inviteToken: null, guests: [], proposals: [],
     live: { rev, playback: { state: 'paused', anchor: { position: 0, serverTimeMs: 0 } }, members: [], messages: [{ id: rev, userId: null, username: null, text: '', system: null, sentAtMs: 0 }] },
     ...over,
   };
@@ -37,7 +37,7 @@ function setup(connected = false, confirmed = true) {
   const events = new Subject<PartyEvent>();
   const api = {
     join: vi.fn(), get: vi.fn(), create: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
-    leave: vi.fn().mockResolvedValue(undefined), start: vi.fn(), voice: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
+    leave: vi.fn().mockResolvedValue(undefined), status: vi.fn().mockResolvedValue(undefined), kick: vi.fn().mockResolvedValue(undefined), start: vi.fn(), voice: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
   };
   const confirm = vi.fn().mockResolvedValue(confirmed);
   const sse = { partyEvents: events, connected: signal(connected), targetId: signal('dev') };
@@ -193,11 +193,24 @@ describe('PartyService refetch', () => {
   it('coalesces the start fan-out and opens the player once', async () => {
     const { svc, api, router } = setup();
     svc.applySnapshot(dto(1, { status: 'scheduled' }));
+    await svc.setReady(true);
     api.get.mockImplementation(() => Promise.resolve(dto(2)));
     await Promise.all([svc.refetch(), svc.refetch(), svc.refetch()]);
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(router.navigate).toHaveBeenCalledTimes(1);
     expect(api.queue).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a member who was not ready on the page, out of the room', async () => {
+    const { svc, api, router } = setup();
+    const skipped = vi.fn();
+    svc.startSkipped.subscribe(skipped);
+    svc.applySnapshot(dto(1, { status: 'scheduled' }));
+    api.get.mockResolvedValue(dto(2));
+    await svc.refetch();
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(skipped).toHaveBeenCalledWith(expect.objectContaining({ status: 'live' }));
+    expect(api.leave).toHaveBeenCalledWith(7, 'dev');
   });
 });
 
@@ -205,6 +218,7 @@ describe('PartyService rejoin into a started party', () => {
   it('opens the player when the party went live while the stream was down', async () => {
     const { svc, api, sse, router } = setup();
     svc.applySnapshot(dto(1, { status: 'scheduled', item: null, live: { ...dto(1).live!, playback: null } }));
+    await svc.setReady(true);
     api.join.mockResolvedValue(dto(4));
     await reconnect(sse);
     await vi.waitFor(() => expect(router.navigate).toHaveBeenCalledOnce());
@@ -336,5 +350,77 @@ describe('PartyService proposals', () => {
     svc.applySnapshot(dto(1));
     events.next({ type: 'party.proposals', partyId: 8, proposals: [proposal] });
     expect(svc.proposals()).toEqual([]);
+  });
+});
+
+describe('PartyService kick', () => {
+  it('removes the person only once the host confirms', async () => {
+    const { svc, api } = setup(false, false);
+    await svc.kick({ userId: 3, username: 'c' }, 7);
+    expect(api.kick).not.toHaveBeenCalled();
+    TestBed.resetTestingModule();
+    const ok = setup(false, true);
+    await ok.svc.kick({ userId: 3, username: 'c' }, 7);
+    expect(ok.api.kick).toHaveBeenCalledWith(7, 3);
+  });
+});
+
+describe('PartyService closed', () => {
+  it('names who ended the party in the toast', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(dto(1));
+    const toast = TestBed.inject(ToastService) as unknown as { info: ReturnType<typeof vi.fn> };
+    events.next({ type: 'party.closed', partyId: 7, reason: 'host_ended', by: 'admin' });
+    expect(toast.info).toHaveBeenCalledWith('party.closed_host_ended_by');
+  });
+});
+
+describe('PartyService action errors', () => {
+  it('rejoins once when a restarted server lost the room', async () => {
+    const { svc, api } = setup(false);
+    svc.applySnapshot(dto(1));
+    api.join.mockResolvedValue(dto(1));
+    const toast = TestBed.inject(ToastService) as unknown as { error: ReturnType<typeof vi.fn> };
+    svc.onActionError(http(403, 'party.error_not_member'));
+    svc.onActionError(http(409, 'party.error_not_live'));
+    await new Promise((r) => setTimeout(r));
+    expect(api.join).toHaveBeenCalledTimes(1);
+    expect(svc.reconnecting()).toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('holds the reconnecting state from a dropped stream until the rejoin lands', async () => {
+    const { svc, api, sse } = setup(false);
+    svc.applySnapshot(dto(1));
+    api.join.mockResolvedValue(dto(1));
+    await reconnect(sse);
+    expect(svc.reconnecting()).toBeNull();
+    sse.connected.set(false);
+    TestBed.tick();
+    expect(svc.reconnecting()).toBe('server');
+    let release!: (d: PartyDto) => void;
+    api.join.mockReturnValue(new Promise<PartyDto>((r) => (release = r)));
+    sse.connected.set(true);
+    TestBed.tick();
+    expect(svc.reconnecting()).toBe('room');
+    release(dto(1));
+    await new Promise((r) => setTimeout(r));
+    expect(svc.reconnecting()).toBeNull();
+  });
+
+  it('names an unreachable server instead of a generic failure', () => {
+    const { svc } = setup();
+    svc.applySnapshot(dto(1));
+    const toast = TestBed.inject(ToastService) as unknown as { error: ReturnType<typeof vi.fn> };
+    svc.onActionError(new HttpErrorResponse({ status: 502 }));
+    expect(toast.error).toHaveBeenCalledWith('errors.network');
+  });
+
+  it('reports a failed kick instead of swallowing it', async () => {
+    const { svc, api } = setup();
+    api.kick.mockRejectedValue(new HttpErrorResponse({ status: 0 }));
+    const toast = TestBed.inject(ToastService) as unknown as { error: ReturnType<typeof vi.fn> };
+    await svc.kick({ userId: 3, username: 'c' }, 7);
+    expect(toast.error).toHaveBeenCalledWith('errors.network');
   });
 });

@@ -1,4 +1,4 @@
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpClient, HttpContext, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -8,7 +8,7 @@ import {
   type TranslationObject,
 } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { errorInterceptor } from './error.interceptor';
+import { errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
 import { NetworkService } from '../services/network.service';
 import { ToastService } from '../services/toast.service';
 
@@ -17,6 +17,7 @@ import { ToastService } from '../services/toast.service';
 const EN_ERRORS: TranslationObject = {
   errors: {
     network: 'Unable to reach the server',
+    '502': 'Invalid gateway or proxy',
     '404': 'Resource not found',
     '500': 'Internal server error',
     '503': 'Service temporarily unavailable',
@@ -150,6 +151,25 @@ describe('errorInterceptor', () => {
 
   it('stays silent on an i18n load failure', () => {
     fireAndFlush('/i18n/fr.json', { message: 'not found' }, { status: 404 });
+    expect(toast.toasts()).toEqual([]);
+  });
+
+  it.each([0, 502, 504])('toasts a mutation once when the server is unreachable (%s), however many fail', (status) => {
+    for (const url of ['/api/a', '/api/b']) {
+      client.post(url, {}).subscribe({ error: () => {} });
+      http.expectOne(url).flush(null, { status, statusText: 'x' });
+    }
+    expect(toast.toasts().map((t) => t.message)).toEqual(['Unable to reach the server']);
+  });
+
+  it('keeps a GET silent when the server is unreachable', () => {
+    fireAndFlush('/api/whatever', null, { status: 502 });
+    expect(toast.toasts()).toEqual([]);
+  });
+
+  it('leaves an opted-out mutation to its caller', () => {
+    client.post('/api/a', {}, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }).subscribe({ error: () => {} });
+    http.expectOne('/api/a').flush(null, { status: 502, statusText: 'x' });
     expect(toast.toasts()).toEqual([]);
   });
 });

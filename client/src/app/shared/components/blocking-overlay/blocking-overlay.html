@@ -1,0 +1,13 @@
+<dialog #dialog class="modal" (cancel)="$event.preventDefault()">
+  <div class="modal-box flex max-w-sm flex-col items-center gap-4 text-center">
+    @if (progress() === null) {
+      <span class="loading loading-spinner loading-lg"></span>
+    } @else {
+      <progress class="progress progress-primary w-full" [value]="progress()" max="100"></progress>
+    }
+    <p>{{ message() }}</p>
+    @for (a of actions(); track a.label; let first = $first) {
+      <button type="button" class="btn btn-ghost" [attr.autofocus]="first ? '' : null" (click)="a.run()">{{ a.label }}</button>
+    }
+  </div>
+</dialog>

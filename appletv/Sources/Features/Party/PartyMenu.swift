@@ -45,14 +45,14 @@ enum PartyMenu {
             ])
         }
         var all = rows + pending(p).map { guest -> UIMenuElement in
-            let label = "\(guest.username) · \(tr(guest.source == "link" ? "party.person_link" : "party.person_invited"))"
+            let label = "\(guest.username) · \(tr(guest.source == "link" ? "party.person_link" : "party.person_absent"))"
             guard p.isHost else { return UIAction(title: label, attributes: .disabled) { _ in } }
             return UIMenu(title: label, children: [
                 UIAction(title: tr("party.kick"), attributes: .destructive) { _ in Task { await p.kick(guest.userId) } },
             ])
         }
         if p.isHost {
-            all.append(UIAction(title: tr("party.invite"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
+            all.append(UIAction(title: tr("party.programme_add"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
         }
         return UIMenu(title: "\(tr("party.tab_members")) (\(p.members.count))", image: UIImage(systemName: "person.3"), children: all)
     }

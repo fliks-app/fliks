@@ -2,7 +2,7 @@
   <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
     <h2 class="text-lg font-bold">{{ 'party.programme' | translate }}</h2>
     @if (isHost()) {
-      <button type="button" class="btn btn-sm btn-outline" data-act="add" (click)="picker().show()">{{ 'party.programme_add' | translate }}</button>
+      <button type="button" class="btn btn-sm btn-outline gap-1" data-act="add" (click)="picker().show()"><svg lucidePlus class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}</button>
     }
   </div>
   @if (rows().length) {
@@ -18,10 +18,10 @@
             <span class="row-span-2 w-5 text-center text-sm text-base-content/60 sm:row-span-1">{{ i + 1 }}</span>
           }
           @let shown = r.hidden ? ('party.proposal_hidden' | translate) : r.title;
-          @if (r.image && !r.hidden) {
-            <img [src]="r.image | resolveUrl: 'thumb'" [alt]="shown" loading="lazy" class="row-span-2 aspect-video h-14 rounded-md bg-base-300 object-cover sm:row-span-1 sm:h-16" />
+          @if (r.thumb.url && !r.hidden) {
+            <img [src]="r.thumb.url | resolveUrl: 'thumb'" [alt]="shown" loading="lazy" class="row-span-2 h-14 rounded-md bg-base-300 object-cover sm:row-span-1 sm:h-16" [class]="r.thumb.aspect" />
           } @else {
-            <div class="row-span-2 aspect-video h-14 rounded-md bg-base-300 sm:row-span-1 sm:h-16"></div>
+            <div class="row-span-2 h-14 rounded-md bg-base-300 sm:row-span-1 sm:h-16" [class]="r.thumb.aspect"></div>
           }
           <div class="min-w-0 flex-1">
             <p class="truncate font-medium" [class.text-base-content/60]="r.hidden">{{ shown }}</p>
@@ -42,6 +42,13 @@
                   <svg lucideChevronDown class="h-4 w-4"></svg>
                 </button>
               }
+              @if (!live() && isProposed(r.item)) {
+                <span class="tooltip" [attr.data-tip]="'party.programme_unaccept' | translate">
+                  <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_unaccept' | translate" data-act="unaccept" (click)="unaccept(i)">
+                    <svg lucideUndo2 class="h-4 w-4"></svg>
+                  </button>
+                </span>
+              }
               <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.programme_remove' | translate" data-act="remove" (click)="remove(i)">
                 <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>
@@ -54,6 +61,6 @@
     <p class="text-base-content/60">{{ (isHost() ? 'party.programme_empty_host' : 'party.programme_empty') | translate }}</p>
   }
   @if (isHost()) {
-    <app-media-picker multiple (picked)="append($event)" />
+    <app-media-picker multiple [taken]="items()" (picked)="append($event)" />
   }
 </section>

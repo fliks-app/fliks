@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, model, output, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
-import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucideTrash2 } from '@lucide/angular';
+import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
 import { type Media } from '../../core/services/api/media.service';
 import { SseService } from '../../core/services/sse.service';
@@ -13,6 +13,8 @@ import { MediaPickerComponent, type MediaPick } from '../../shared/components/me
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { episodeLabel } from '../../shared/utils/episode-label';
 import { keepFocus, runBusy } from './party-busy';
+import { rowTops, slideRows } from './party-flip';
+import { itemThumb } from './party-thumb';
 
 export function findEpisode(media: Media | null | undefined, id: number | null | undefined) {
   if (id == null) return null;
@@ -23,13 +25,13 @@ export function findEpisode(media: Media | null | undefined, id: number | null |
   return null;
 }
 
-const sameItem = (a: { mediaId: number; episodeId: number | null }, b: { mediaId: number; episodeId: number | null }) =>
+export const sameItem = (a: { mediaId: number; episodeId: number | null }, b: { mediaId: number; episodeId: number | null }) =>
   a.mediaId === b.mediaId && a.episodeId === b.episodeId;
 
 /** The party's ordered programme: everyone sees it, the host reorders, removes and appends. */
 @Component({
   selector: 'app-party-programme',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucideTrash2],
+  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
   templateUrl: './party-programme.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -51,7 +53,10 @@ export class PartyProgrammeComponent {
   readonly changed = output<PartyDto>();
 
   protected readonly picker = viewChild.required(MediaPickerComponent);
-  protected readonly items = signal<PartyItem[]>([]);
+  /** The programme as loaded and edited here; the page reads it to hide proposals already in it. */
+  readonly items = model<PartyItem[]>([]);
+  /** Items that came from a proposal, which the host can send back to the proposals. */
+  readonly proposed = input<readonly { mediaId: number; episodeId: number | null }[]>([]);
   protected readonly busy = signal(false);
   private seq = 0;
 
@@ -64,7 +69,7 @@ export class PartyProgrammeComponent {
         hidden: !!item.hidden,
         title: item.seriesTitle ?? item.title,
         label,
-        image: item.stillUrl ?? item.fanartUrl ?? item.posterUrl,
+        thumb: itemThumb(item),
         playing: this.live() && !!cur && sameItem(cur, item),
       };
     }),
@@ -85,29 +90,12 @@ export class PartyProgrammeComponent {
 
   private async load(): Promise<void> {
     const seq = ++this.seq;
-    const items = await this.api.queue(this.partyId()).catch(() => null);
+    const items = await this.api.queue(this.partyId(), true).catch(() => null);
     if (!items || seq !== this.seq) return;
-    const before = this.rowTops();
+    const root = this.host.nativeElement;
+    const before = rowTops(root);
     this.items.set(items);
-    afterNextRender(() => this.slideFrom(before), { injector: this.injector });
-  }
-
-  private rowTops(): Map<string, number> {
-    const tops = new Map<string, number>();
-    for (const el of this.host.nativeElement.querySelectorAll<HTMLElement>('[data-row]')) {
-      tops.set(el.dataset['row']!, el.getBoundingClientRect().top);
-    }
-    return tops;
-  }
-
-  /** FLIP: a row another client moved slides from its old place instead of jumping. */
-  private slideFrom(before: Map<string, number>): void {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    for (const el of this.host.nativeElement.querySelectorAll<HTMLElement>('[data-row]')) {
-      const old = before.get(el.dataset['row']!);
-      const dy = old === undefined ? 0 : old - el.getBoundingClientRect().top;
-      if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 250, easing: 'ease-out' });
-    }
+    afterNextRender(() => slideRows(root, before), { injector: this.injector });
   }
 
   /** Sends the full list; the screen follows at once and goes back to the previous list on failure. */
@@ -144,6 +132,17 @@ export class PartyProgrammeComponent {
     [next[index], next[to]] = [next[to], next[index]];
     void this.save(next, true);
     this.focusRow(to, by < 0 ? 'up' : 'down');
+  }
+
+  protected isProposed(item: PartyItem): boolean {
+    return this.proposed().some((p) => sameItem(p, item));
+  }
+
+  /** Back to the proposals: the proposal kept its votes, only the programme row goes. */
+  protected unaccept(index: number): void {
+    const next = this.items().filter((_, i) => i !== index);
+    void this.save(next, true);
+    this.focusRow(Math.min(index, next.length - 1), 'remove');
   }
 
   protected async remove(index: number): Promise<void> {

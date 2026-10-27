@@ -233,6 +233,7 @@ pub enum Effect {
         reactions_enabled: bool,
         chat_enabled: bool,
         link_sharing: bool,
+        public: bool,
     },
     Message(Message),
     Reaction {
@@ -242,6 +243,8 @@ pub enum Effect {
     },
     Closed {
         reason: CloseReason,
+        /// Who ended the party or kicked; none for an expiry.
+        by: Option<String>,
         to: Vec<(i32, String)>,
     },
     /// The programme was edited; `item` is its head while it is still what the start plays.
@@ -299,6 +302,8 @@ pub struct Room {
     pub chat_enabled: bool,
     /// Whether members, not only the host, receive the invite token.
     pub link_sharing: bool,
+    /// Whether the party is listed to every user allowed to see public parties.
+    pub public: bool,
     pub host_id: i32,
     pub rev: u64,
     pub members: Vec<Member>,
@@ -346,6 +351,7 @@ impl Room {
             reactions_enabled: true,
             chat_enabled: true,
             link_sharing: true,
+            public: false,
             host_id,
             rev: now.max(1) as u64,
             members: vec![],
@@ -453,33 +459,6 @@ impl Room {
             .all(|m| m.status == MemberStatus::Ready)
     }
 
-    /// Moves the host role to the oldest present member when the host has no member left; returns
-    /// the new host's username. Before the start (`started` false) the owner stays host.
-    fn hand_over(&mut self, started: bool) -> Option<String> {
-        if !started || self.has_user(self.host_id) {
-            return None;
-        }
-        let next = self
-            .members
-            .iter()
-            .min_by_key(|m| (m.status == MemberStatus::Away, m.joined))?;
-        let (id, username) = (next.user_id, next.username.clone());
-        self.host_id = id;
-        Some(username)
-    }
-
-    fn announce_host(&mut self, out: &mut Vec<Effect>, username: Option<String>, now: i64) {
-        if let Some(username) = username {
-            self.sys(
-                out,
-                "host_changed",
-                None,
-                json!({ "username": username }),
-                now,
-            );
-        }
-    }
-
     /// Drops the rate counters of members who left, keeping a window still running so a rejoin
     /// cannot reset it.
     fn prune_limits(&mut self, now: i64) {
@@ -540,32 +519,61 @@ impl Room {
         out
     }
 
+    /// A system message the routes post (`docs/spec/watch-party.md`, system messages).
+    pub fn note(&mut self, kind: &str, by: &str, args: Value, now: i64) -> Vec<Effect> {
+        let mut out = vec![];
+        self.sys(&mut out, kind, Some(by), args, now);
+        out
+    }
+
+    /// Applies the given switches; a new name and each switch that changed also post their message.
     pub fn set_settings(
         &mut self,
+        by: &str,
         name: Option<String>,
         policy: Option<Policy>,
-        reactions_enabled: Option<bool>,
-        chat_enabled: Option<bool>,
-        link_sharing: Option<bool>,
+        switches: [Option<bool>; 4],
+        now: i64,
     ) -> Vec<Effect> {
-        if let Some(n) = name {
+        let mut changes = vec![];
+        if let Some(n) = name.filter(|n| *n != self.name) {
+            changes.push(("renamed", json!({ "name": n })));
             self.name = n;
         }
-        if let Some(p) = policy {
+        if let Some(p) = policy.filter(|p| *p != self.policy) {
+            changes.push((
+                "setting_changed",
+                json!({ "setting": "policy", "value": p }),
+            ));
             self.policy = p;
         }
-        self.reactions_enabled = reactions_enabled.unwrap_or(self.reactions_enabled);
-        self.chat_enabled = chat_enabled.unwrap_or(self.chat_enabled);
-        self.link_sharing = link_sharing.unwrap_or(self.link_sharing);
+        let [reactions, chat, link, public] = switches;
+        let flags = [
+            ("reactionsEnabled", &mut self.reactions_enabled, reactions),
+            ("chatEnabled", &mut self.chat_enabled, chat),
+            ("linkSharing", &mut self.link_sharing, link),
+            ("public", &mut self.public, public),
+        ];
+        for (setting, current, new) in flags {
+            if let Some(v) = new.filter(|v| v != current) {
+                *current = v;
+                changes.push(("setting_changed", json!({ "setting": setting, "value": v })));
+            }
+        }
         let rev = self.bump();
-        vec![Effect::Settings {
+        let mut out = vec![Effect::Settings {
             rev,
             name: self.name.clone(),
             policy: self.policy,
             reactions_enabled: self.reactions_enabled,
             chat_enabled: self.chat_enabled,
             link_sharing: self.link_sharing,
-        }]
+            public: self.public,
+        }];
+        for (kind, args) in changes {
+            self.sys(&mut out, kind, Some(by), args, now);
+        }
+        out
     }
 
     /// The target must be a member; the host role moves to that user.
@@ -589,9 +597,10 @@ impl Room {
         Ok(out)
     }
 
-    pub fn close(&self, reason: CloseReason) -> Effect {
+    pub fn close(&self, reason: CloseReason, by: Option<String>) -> Effect {
         Effect::Closed {
             reason,
+            by,
             to: self.audience(),
         }
     }
@@ -1110,11 +1119,9 @@ impl Live {
         let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
         let m = room.members.remove(i);
         room.prune_limits(now);
-        let host = room.hand_over(self.playback.is_some());
         let mut out = vec![];
         room.members_effect(&mut out);
         room.sys(&mut out, "left", Some(&m.username), json!({}), now);
-        room.announce_host(&mut out, host, now);
         self.settle(&mut out, now);
         Ok(out)
     }
@@ -1240,14 +1247,12 @@ impl Live {
             .collect();
         room.members.retain(|m| !gone.contains(m));
         room.prune_limits(now);
-        let host = room.hand_over(self.playback.is_some());
         if changed || !gone.is_empty() {
             room.members_effect(&mut out);
         }
         for m in &gone {
             room.sys(&mut out, "left", Some(&m.username), json!({}), now);
         }
-        room.announce_host(&mut out, host, now);
         if let Some(pb) = &mut self.playback
             && pb.state == State::Waiting
             && (room.all_ready()
@@ -1263,6 +1268,7 @@ impl Live {
         } else if now - *room.empty_since.get_or_insert(now) >= EMPTY_TTL_MS {
             out.push(Effect::Closed {
                 reason: CloseReason::Expired,
+                by: None,
                 to: vec![],
             });
         }
@@ -1283,6 +1289,7 @@ impl Live {
         room.prune_limits(now);
         let mut out = vec![Effect::Closed {
             reason: CloseReason::Kicked,
+            by: Some(by.to_owned()),
             to: gone
                 .iter()
                 .map(|m| (m.user_id, m.connection_id.clone()))
@@ -1747,24 +1754,19 @@ mod tests {
     }
 
     #[test]
-    fn host_leaving_hands_over_to_the_oldest_member() {
+    fn the_host_stays_host_after_leaving() {
         let mut l = party();
         l.join(3, "carol", "d3", "c3", 0);
-        l.leave(1, "d1", 10).unwrap();
-        assert_eq!(l.room.host_id, 2);
-        assert!(
-            l.room
-                .chat
-                .iter()
-                .any(|m| m.system.as_ref().is_some_and(|s| s.kind == "host_changed"))
-        );
-        l.join(2, "bob", "d2b", "c2b", 11);
-        l.leave(2, "d2", 12).unwrap();
-        assert_eq!(l.room.host_id, 2);
+        let out = l.leave(1, "d1", 10).unwrap();
+        assert_eq!(l.room.host_id, 1);
+        assert!(!kinds(&out).contains(&"host_changed".to_owned()));
+        let out = l.tick(AWAY_GRACE_MS, |_| true);
+        assert_eq!(l.room.host_id, 1);
+        assert!(!kinds(&out).contains(&"host_changed".to_owned()));
     }
 
     #[test]
-    fn before_the_start_the_owner_stays_host_whoever_is_in_the_room() {
+    fn the_owner_stays_host_whoever_is_in_the_room() {
         let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
         l.join(2, "bob", "d2", "c2", 0);
         l.join(3, "carol", "d3", "c3", 0);
@@ -1777,11 +1779,11 @@ mod tests {
         l.go_live(item(), 10);
         l.join(1, "alice", "d1", "c1", 11);
         l.leave(1, "d1", 12).unwrap();
-        assert_eq!(l.room.host_id, 3);
+        assert_eq!(l.room.host_id, 1);
     }
 
     #[test]
-    fn a_dropped_connection_goes_away_then_is_removed_and_the_host_moves() {
+    fn a_dropped_connection_goes_away_then_is_removed_and_the_host_stays() {
         let mut l = party();
         let out = l.tick(1000, |c| c != "c1");
         assert!(out.iter().any(|e| matches!(e, Effect::Members { .. })));
@@ -1790,7 +1792,7 @@ mod tests {
         assert_eq!(l.room.members.len(), 2);
         l.tick(1000 + AWAY_GRACE_MS, |c| c != "c1");
         assert_eq!(l.room.members.len(), 1);
-        assert_eq!(l.room.host_id, 2);
+        assert_eq!(l.room.host_id, 1);
     }
 
     #[test]
@@ -1842,7 +1844,7 @@ mod tests {
         l.join(2, "bob", "d2b", "c2b", 0);
         let out = l.kick(2, "alice", 5).unwrap();
         assert!(
-            matches!(&out[0], Effect::Closed { reason: CloseReason::Kicked, to } if to.len() == 2)
+            matches!(&out[0], Effect::Closed { reason: CloseReason::Kicked, to, .. } if to.len() == 2)
         );
         assert!(!l.room.has_user(2));
         assert_eq!(l.kick(1, "alice", 6).unwrap_err(), Error::Invalid("host"));
@@ -1991,7 +1993,7 @@ mod tests {
         let mut l = party();
         let r = l.room.rev;
         l.room
-            .set_settings(Some("n".into()), Some(Policy::HostOnly), None, None, None);
+            .set_settings("h", Some("n".into()), Some(Policy::HostOnly), [None; 4], 0);
         assert_eq!(l.room.rev, r + 1);
         for i in 0..250 {
             l.room
@@ -2003,18 +2005,72 @@ mod tests {
     }
 
     #[test]
+    fn settings_post_a_message_only_for_what_changed() {
+        let mut l = party();
+        let name = l.room.name.clone();
+        let policy = l.room.policy;
+        let kinds = |fx: &[Effect]| -> Vec<(String, Value)> {
+            fx.iter()
+                .filter_map(|e| match e {
+                    Effect::Message(m) => {
+                        m.system.as_ref().map(|s| (s.kind.clone(), s.args.clone()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let fx = l.room.set_settings(
+            "h",
+            Some(name),
+            Some(policy),
+            [Some(true), Some(false), None, Some(false)],
+            0,
+        );
+        assert_eq!(
+            kinds(&fx),
+            [(
+                "setting_changed".to_string(),
+                json!({ "setting": "chatEnabled", "value": false })
+            )]
+        );
+        let other = if policy == Policy::HostOnly {
+            Policy::Everyone
+        } else {
+            Policy::HostOnly
+        };
+        let fx = l
+            .room
+            .set_settings("h", Some("n".into()), Some(other), [None; 4], 1);
+        assert_eq!(
+            kinds(&fx),
+            [
+                ("renamed".to_string(), json!({ "name": "n" })),
+                (
+                    "setting_changed".to_string(),
+                    json!({ "setting": "policy", "value": other })
+                ),
+            ]
+        );
+    }
+
+    #[test]
     fn switched_off_chat_and_reactions_refuse_but_system_messages_flow() {
         let mut l = party();
         let r = l.room.rev;
-        let e = l
-            .room
-            .set_settings(None, None, Some(false), Some(false), Some(false));
+        let e = l.room.set_settings(
+            "h",
+            None,
+            None,
+            [Some(false), Some(false), Some(false), Some(true)],
+            0,
+        );
         assert!(matches!(
             e[0],
             Effect::Settings {
                 reactions_enabled: false,
                 chat_enabled: false,
                 link_sharing: false,
+                public: true,
                 ..
             }
         ));
@@ -2026,8 +2082,13 @@ mod tests {
         );
         let left = l.leave(2, "d2", 1).unwrap();
         assert!(left.iter().any(|e| matches!(e, Effect::Message(_))));
-        l.room
-            .set_settings(None, None, Some(true), Some(true), Some(true));
+        l.room.set_settings(
+            "h",
+            None,
+            None,
+            [Some(true), Some(true), Some(true), Some(false)],
+            0,
+        );
         assert!(l.room.react(1, "d1", "x", 0).is_ok());
         assert!(l.room.post_message(1, "d1", "m", 0).is_ok());
     }
@@ -2238,23 +2299,6 @@ mod tests {
             .1;
         assert_eq!(state_of(&out).unwrap().0, State::Idle);
         assert_eq!(kinds(&out), ["queue_ended"]);
-    }
-
-    #[test]
-    fn handover_is_decided_before_the_members_are_announced() {
-        let mut l = party();
-        let host_of = |out: &[Effect]| {
-            out.iter().find_map(|e| match e {
-                Effect::Members { host_id, .. } => Some(*host_id),
-                _ => None,
-            })
-        };
-        let out = l.leave(1, "d1", 5).unwrap();
-        assert_eq!((l.room.host_id, host_of(&out)), (2, Some(2)));
-        let mut l = party();
-        l.tick(0, |c| c != "c1");
-        let out = l.tick(AWAY_GRACE_MS, |c| c != "c1");
-        assert_eq!((l.room.host_id, host_of(&out)), (2, Some(2)));
     }
 
     #[test]

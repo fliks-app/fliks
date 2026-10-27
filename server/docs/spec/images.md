@@ -18,10 +18,10 @@ Scope: the two `/api/images/*` serving routes. They are public, with no auth ext
 ### A. Request handling
 
 1. Both routes call the same `serve(type, id, variant, size)`; the no-variant route passes no `variant`. Unknown query keys (e.g. the client's `?v=<hash>`) are ignored.
-2. `type` must be exactly one of `media`, `person`, `episode`, `season`, `request`, `user` (case-sensitive), else 404. `livetv` is deliberately absent (its logos can belong to a restricted group and are served by the live TV controller with an access check).
+2. `type` must be exactly one of `media`, `person`, `episode`, `season`, `request`, `user`, `party` (case-sensitive), else 404. `livetv` is deliberately absent (its logos can belong to a restricted group and are served by the live TV controller with an access check).
 3. `id`: for `request` it must match `^(movie|series)-\d+$` (`\d` is ASCII `[0-9]`, no whitespace tolerated; the string key lands in a filesystem path, so this is the traversal guard), else 404. For every other type `id` must be a canonical integer (rule 16), else 404.
 4. `size` query: one of `thumb`, `medium`, `full` (exact, lower-case); anything else, absent, empty, or repeated (`?size=a&size=b` / `size[]=`: an array, not a string) means `full`.
-5. `variant` is a raw string. It is used only for `media` and `request` (poster default); for `person`, `episode`, `season`, `user` it is accepted and ignored (`/api/images/person/5/anything` serves person 5). Well-formed values are `poster`, `fanart`, `fanart-<N>` and `logo` (`logo` selects `.png`, everything else `.jpg`). A path parameter is percent-decoded, so `..%2F..%2Fusers%2F5` would resolve outside `media/<id>/`: for `media` and `request`, `variant` is validated (rule 15).
+5. `variant` is a raw string. It is used only for `media` and `request` (poster default); for `person`, `episode`, `season`, `user`, `party` it is accepted and ignored (`/api/images/person/5/anything` serves person 5). Well-formed values are `poster`, `fanart`, `fanart-<N>` and `logo` (`logo` selects `.png`, everything else `.jpg`). A path parameter is percent-decoded, so `..%2F..%2Fusers%2F5` would resolve outside `media/<id>/`: for `media` and `request`, `variant` is validated (rule 15).
 
 ### B. File resolution and fallback
 
@@ -36,6 +36,7 @@ Scope: the two `/api/images/*` serving routes. They are public, with no auth ext
     | `episode` | `<dataDir>/episodes/<id><S>.jpg` |
     | `season` | `<dataDir>/seasons/<id><S>.jpg` |
     | `user` | `<dataDir>/users/<id><S>.jpg` (avatars are a single stored file, so any `?size=thumb|medium` falls back to `full` and carries `X-Image-Size-Served: full`) |
+    | `party` | `<dataDir>/parties/<id><S>.jpg` (an uploaded party cover, `watch-party.md`; single file like an avatar) |
 
     `livetv` also has a branch in `getDiskPath` (`livetv/<id><S>.png`) but is unreachable here (rule 2).
 8. Success response: status 200, body = the file bytes, headers `Cache-Control: public, max-age=86400` (always, set by the handler), plus the standard static-file headers: `Content-Type` from the extension (`image/jpeg` for `.jpg`, `image/png` for `.png`, no `charset`), `Content-Length`, `Last-Modified` (file mtime), a weak `ETag` derived from the mtime in seconds (rule 17), `Accept-Ranges: bytes`; conditional requests (`If-None-Match`, `If-Modified-Since`) answer 304 and `Range` / `If-Range` answer 206/416.

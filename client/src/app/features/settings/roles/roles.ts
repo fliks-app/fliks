@@ -17,6 +17,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+import { PERMISSION_GROUPS, PERMISSION_INCLUDES, includedBy } from '../../../core/permissions';
 import { parsePluginGrant } from '../../../core/utils/plugin-grant';
 
 /** `read:plugin:fliks.download:queue`, or the bare subject, split for display. */
@@ -52,6 +53,15 @@ export class RolesSettingsComponent implements OnInit {
   readonly editingRole = signal<RoleRow | null>(null);
 
   readonly corePermissions = computed(() => this.availablePermissions().filter((perm) => !parseGrant(perm)));
+
+  /** Core permissions by domain; one the server offers but no group lists falls under `other`. */
+  readonly permissionGroups = computed(() => {
+    const offered = new Set(this.corePermissions());
+    const listed = new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions));
+    const groups = PERMISSION_GROUPS.map((g) => ({ id: g.id, permissions: g.permissions.filter((p) => offered.has(p)) }));
+    groups.push({ id: 'other', permissions: [...offered].filter((p) => !listed.has(p)) });
+    return groups.filter((g) => g.permissions.length);
+  });
 
   /** Plugin grants, grouped under the plugin that declares them. A grant the edited role holds
    *  but no installed plugin offers is still listed, so saving cannot drop it unnoticed. */
@@ -129,6 +139,17 @@ export class RolesSettingsComponent implements OnInit {
 
   closeEditor() {
     this.editorDialog()?.nativeElement.close();
+  }
+
+  /** The checked permissions that include `perm`, as labels; non-empty means `perm` is implied. */
+  includedIn(perm: string): string {
+    return includedBy(this.formPermissions(), perm).map((p) => this.permLabel(p)).join(', ');
+  }
+
+  /** What `perm` includes among the permissions the server offers, as labels. */
+  includes(perm: string): string {
+    const offered = this.corePermissions();
+    return (PERMISSION_INCLUDES[perm] ?? []).filter((p) => offered.includes(p)).map((p) => this.permLabel(p)).join(', ');
   }
 
   togglePermission(perm: string) {

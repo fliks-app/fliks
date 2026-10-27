@@ -5,6 +5,7 @@ use fliks_server::{
     events::{self, Connection, Identity},
     party,
     state::AppState,
+    users,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -42,12 +43,20 @@ async fn ctx(pool: PgPool) -> Ctx {
 impl Ctx {
     /// A user with a token; `access` grants the only library.
     async fn user(&self, name: &str, access: bool) -> (i32, String) {
-        let id: i32 =
-            sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ($1) RETURNING id"#)
-                .bind(name)
-                .fetch_one(&self.pool)
-                .await
-                .unwrap();
+        self.user_with(name, access, &["parties.create"]).await
+    }
+
+    /// Like `user`, with a role granting exactly `perms`.
+    async fn user_with(&self, name: &str, access: bool, perms: &[&str]) -> (i32, String) {
+        let id: i32 = sqlx::query_scalar(
+            r#"WITH r AS (INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2, false) RETURNING id)
+               INSERT INTO users (username, "roleId") SELECT $1, id FROM r RETURNING id"#,
+        )
+        .bind(name)
+        .bind(serde_json::to_string(perms).unwrap())
+        .fetch_one(&self.pool)
+        .await
+        .unwrap();
         if access {
             sqlx::query(
                 r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, 1)"#,
@@ -783,6 +792,65 @@ async fn party_with(c: &Ctx, tok: &str, invitees: Vec<i32>) -> i64 {
         .await;
     assert_eq!(s, 200);
     id
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_guest_outside_the_room_is_told_of_every_playback_move(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let _ca = c.connect(alice, "da");
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("/api/parties/{id}/join"),
+            &a,
+            Some(json!({"deviceId": "da"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let mut sb = c.stream(&b, "db").await;
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("/api/parties/{id}/intent"),
+            &a,
+            Some(json!({"deviceId": "da", "action": "play", "position": 12.0, "baseRev": 0})),
+        )
+        .await;
+    assert_eq!(s, 202);
+    assert_eq!(events_of(&mut sb, "party.updated").await.len(), 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn ending_names_who_ended_it_to_the_members(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let mut sb = c.stream(&b, "db").await;
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("/api/parties/{id}/join"),
+            &b,
+            Some(json!({"deviceId": "db"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let (s, _) = c
+        .call("DELETE", &format!("/api/parties/{id}"), &a, None)
+        .await;
+    assert_eq!(s, 204);
+    let closed = events_of(&mut sb, "party.closed").await;
+    assert_eq!(closed.len(), 1);
+    assert_eq!(
+        (closed[0]["reason"].clone(), closed[0]["by"].clone()),
+        (json!("host_ended"), json!("alice"))
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -1963,21 +2031,21 @@ async fn simultaneous_creates_yield_one_party(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn an_invitee_declines_and_the_party_leaves_their_list(pool: PgPool) {
+async fn a_guest_quits_and_the_party_leaves_their_list(pool: PgPool) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;
     let (bob, b) = c.user("bob", true).await;
-    let (_, d) = c.user("dave", true).await;
+    let (dave, d) = c.user("dave", true).await;
     c.follow(alice, bob).await;
     let id = party_with(&c, &a, vec![bob]).await;
     let url = format!("/api/parties/{id}");
     let (_, list) = c.call("GET", "/api/parties", &b, None).await;
     assert_eq!(list.as_array().unwrap().len(), 1);
-    let (s, _) = c.call("POST", &format!("{url}/decline"), &a, None).await;
-    assert_eq!(s, 400, "the host cannot decline");
-    let (s, e) = c.call("POST", &format!("{url}/decline"), &d, None).await;
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &a, None).await;
+    assert_eq!(s, 400, "the host cannot quit");
+    let (s, e) = c.call("POST", &format!("{url}/quit"), &d, None).await;
     assert_eq!((s, msg(&e)), (404, Some("party.error_not_found")));
-    let (s, _) = c.call("POST", &format!("{url}/decline"), &b, None).await;
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &b, None).await;
     assert_eq!(s, 204);
     let (_, list) = c.call("GET", "/api/parties", &b, None).await;
     assert_eq!(list.as_array().unwrap().len(), 0);
@@ -1985,8 +2053,18 @@ async fn an_invitee_declines_and_the_party_leaves_their_list(pool: PgPool) {
     assert_eq!(s, 404);
     let (_, p) = c.call("GET", &url, &a, None).await;
     assert_eq!(p["guests"].as_array().unwrap().len(), 0);
-    let (s, _) = c.call("POST", &format!("{url}/decline"), &b, None).await;
-    assert_eq!(s, 404, "a second decline finds no invitation");
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &b, None).await;
+    assert_eq!(s, 404, "a second quit finds no guest row");
+
+    let token = p["inviteToken"].as_str().unwrap().to_owned();
+    let _cd = c.connect(dave, "dd");
+    let join = json!({"deviceId": "dd", "token": token});
+    let (s, _) = c.call("POST", &format!("{url}/join"), &d, Some(join)).await;
+    assert_eq!(s, 200);
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &d, None).await;
+    assert_eq!(s, 204, "a link joiner quits too");
+    let (_, list) = c.call("GET", "/api/parties", &d, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
 }
 
 #[sqlx::test(migrations = false)]
@@ -2403,6 +2481,91 @@ async fn a_party_holds_thirty_proposals_and_a_user_is_rate_limited(pool: PgPool)
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_batch_proposes_in_order_as_one_request_and_is_all_or_nothing(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 31).await;
+    let (alice, a) = c.user("alice", true).await;
+    let url = bare_party(&c, &a, &[]).await;
+    let batch = |ids: Vec<i32>| {
+        let items: Vec<Value> = ids.into_iter().map(|m| json!({"mediaId": m})).collect();
+        json!({ "items": items })
+    };
+    let at = format!("{url}/proposals/batch");
+
+    let (s, l) = c
+        .call("POST", &at, &a, Some(batch((2..=13).collect())))
+        .await;
+    assert_eq!(s, 201, "twelve titles cost one rate-limit slot");
+    let order: Vec<Value> = l
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["item"]["mediaId"].clone())
+        .collect();
+    assert_eq!(order, (2..=13).map(|m| json!(m)).collect::<Vec<_>>());
+    assert_eq!(proposal_of(&l, 2)["upvoterIds"], json!([alice]));
+
+    let (s, _) = c
+        .call("POST", &at, &a, Some(batch((14..=32).collect())))
+        .await;
+    assert_eq!(s, 409, "past thirty the whole batch is refused");
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["proposals"].as_array().unwrap().len(), 12);
+
+    let (s, _) = c.call("POST", &at, &a, Some(batch(vec![]))).await;
+    assert_eq!(s, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_party_opens_on_several_items_in_order(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 3).await;
+    let (_, a) = c.user("alice", true).await;
+    let create = |items: Value| json!({"name": "trio", "items": items});
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(create(
+                json!([{"mediaId": 3}, {"mediaId": 2}, {"mediaId": 4}]),
+            )),
+        )
+        .await;
+    assert_eq!(s, 201);
+    assert_eq!(p["item"]["mediaId"], json!(3));
+    let (_, q) = c
+        .call("GET", &format!("/api/parties/{}/queue", p["id"]), &a, None)
+        .await;
+    let order: Vec<Value> = q
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["mediaId"].clone())
+        .collect();
+    assert_eq!(order, vec![json!(3), json!(2), json!(4)]);
+
+    let (s, _) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(create(json!([{"mediaId": 2}, {"mediaId": 2}]))),
+        )
+        .await;
+    assert_eq!(s, 400, "a duplicate is refused");
+    let (s, _) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "x", "mediaId": 2, "items": [{"mediaId": 3}]})),
+        )
+        .await;
+    assert_eq!(s, 400, "items exclude mediaId");
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_title_a_member_cannot_open_reaches_them_masked_and_the_author_needs_access(
     pool: PgPool,
 ) {
@@ -2433,7 +2596,7 @@ async fn a_title_a_member_cannot_open_reaches_them_masked_and_the_author_needs_a
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_start_takes_the_top_vote_then_the_oldest_and_the_hosts_choice_wins(pool: PgPool) {
+async fn the_start_takes_the_top_vote_refuses_a_tie_and_the_hosts_choice_wins(pool: PgPool) {
     let c = ctx(pool).await;
     more_media(&c, 4).await;
     let (alice, a) = c.user("alice", true).await;
@@ -2443,11 +2606,11 @@ async fn the_start_takes_the_top_vote_then_the_oldest_and_the_hosts_choice_wins(
     let tie = bare_party(&c, &a, &[bob]).await;
     propose(&c, &tie, &b, 3).await;
     propose(&c, &tie, &a, 2).await;
-    let (s, p) = c.call("POST", &format!("{tie}/start"), &a, None).await;
+    let (s, e) = c.call("POST", &format!("{tie}/start"), &a, None).await;
     assert_eq!(
-        (s, p["item"]["mediaId"].clone()),
-        (200, json!(3)),
-        "a tie goes to the oldest"
+        (s, msg(&e)),
+        (409, Some("party.error_vote_tie")),
+        "a tie starts nothing"
     );
 
     let voted = bare_party(&c, &a, &[bob]).await;
@@ -2804,7 +2967,7 @@ async fn a_programme_holds_five_hundred_items_whoever_adds_them(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_kicked_or_declined_user_no_longer_votes_or_proposes(pool: PgPool) {
+async fn a_kicked_or_quitting_user_no_longer_votes_or_proposes(pool: PgPool) {
     let c = ctx(pool).await;
     more_media(&c, 2).await;
     let (alice, a) = c.user("alice", true).await;
@@ -2834,7 +2997,7 @@ async fn a_kicked_or_declined_user_no_longer_votes_or_proposes(pool: PgPool) {
 
     let (_sc, _sa) = (c.stream(&t, "dc").await, c.stream(&a, "da").await);
     assert_eq!(join(&c, &url, &t, "dc").await.0, 200);
-    let (s, _) = c.call("POST", &format!("{url}/decline"), &t, None).await;
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &t, None).await;
     assert_eq!(s, 204);
     let (_, p) = c.call("GET", &url, &a, None).await;
     assert_eq!(p["proposals"], json!([]));
@@ -2909,4 +3072,464 @@ async fn the_chat_goes_with_an_ended_party_and_item_messages_name_only_what_a_vi
         .await
         .unwrap();
     assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn creating_a_party_needs_parties_create(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user_with("alice", true, &["media.read"]).await;
+    let (s, e) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "mediaId": 1})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("Forbidden resource")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_public_party_is_listed_and_joinable_only_with_read_public(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, h) = c.user("host", true).await;
+    let (_, viewer) = c.user_with("viewer", true, &["parties.read_public"]).await;
+    let (_, outsider) = c.user_with("outsider", true, &[]).await;
+    let (_, private) = c.user("private", true).await;
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &h,
+            Some(json!({"name": "n", "mediaId": 1, "public": true})),
+        )
+        .await;
+    assert_eq!((s, p["public"].clone()), (201, json!(true)));
+    let id = p["id"].as_i64().unwrap();
+    let (_, q) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &private,
+            Some(json!({"name": "q", "mediaId": 1})),
+        )
+        .await;
+    assert_eq!(q["public"], json!(false));
+
+    let (s, list) = c.call("GET", "/api/parties", &viewer, None).await;
+    let ids: Vec<_> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_i64().unwrap())
+        .collect();
+    assert_eq!((s, ids), (200, vec![id]));
+    let (_, list) = c.call("GET", "/api/parties", &outsider, None).await;
+    assert!(list.as_array().unwrap().is_empty());
+
+    let path = format!("/api/parties/{id}");
+    let (s, v) = c.call("GET", &path, &viewer, None).await;
+    assert_eq!((s, v["inviteToken"].clone()), (200, Value::Null));
+    let (s, _) = c.call("GET", &path, &outsider, None).await;
+    assert_eq!(s, 404);
+
+    let _conn = c.connect(2, "d1");
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{path}/join"),
+            &viewer,
+            Some(json!({"deviceId": "d1"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let source: String = sqlx::query_scalar(
+        r#"SELECT source FROM watch_party_invitees WHERE "partyId" = $1 AND "userId" = 2"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(source, "public");
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{path}/join"),
+            &outsider,
+            Some(json!({"deviceId": "d1"})),
+        )
+        .await;
+    assert_eq!(s, 404);
+
+    let (s, _) = c
+        .call("PATCH", &path, &viewer, Some(json!({"public": false})))
+        .await;
+    assert_eq!(s, 403);
+    let (s, p) = c
+        .call("PATCH", &path, &h, Some(json!({"public": false})))
+        .await;
+    assert_eq!((s, p["public"].clone()), (200, json!(false)));
+    let (_, list) = c.call("GET", "/api/parties", &viewer, None).await;
+    assert_eq!(
+        list.as_array().unwrap().len(),
+        1,
+        "still a guest after the join"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn parties_manage_lists_edits_and_ends_any_party(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, h) = c.user("host", true).await;
+    let (_, m) = c.user_with("mod", true, &["parties.manage"]).await;
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &h,
+            Some(json!({"name": "n", "mediaId": 1})),
+        )
+        .await;
+    let path = format!("/api/parties/{}", p["id"]);
+    let (s, list) = c.call("GET", "/api/parties", &m, None).await;
+    assert_eq!((s, list.as_array().unwrap().len()), (200, 1));
+    let (s, _) = c.call("GET", &path, &m, None).await;
+    assert_eq!(s, 200);
+    let (s, p) = c
+        .call("PATCH", &path, &m, Some(json!({"name": "renamed"})))
+        .await;
+    assert_eq!((s, p["name"].clone()), (200, json!("renamed")));
+    let (s, _) = c.call("DELETE", &path, &m, None).await;
+    assert_eq!(s, 204);
+    let (_, list) = c.call("GET", "/api/parties", &h, None).await;
+    assert!(list.as_array().unwrap().is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_vote_a_switch_and_a_quit_post_their_chat_event(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 2).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+    let (_, l) = propose(&c, &url, &a, 2).await;
+    let pid = proposal_of(&l, 2)["id"].as_i64().unwrap();
+    let title = proposal_of(&l, 2)["item"]["title"].clone();
+    let (s, _) = c
+        .call(
+            "PUT",
+            &format!("{url}/proposals/{pid}/vote"),
+            &b,
+            Some(json!({"value": -1})),
+        )
+        .await;
+    assert_eq!(s, 204);
+    c.call("DELETE", &format!("{url}/proposals/{pid}/vote"), &b, None)
+        .await;
+    for body in [json!({"chatEnabled": false}), json!({"chatEnabled": false})] {
+        let (s, _) = c.call("PATCH", &url, &a, Some(body)).await;
+        assert_eq!(s, 200);
+    }
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &b, None).await;
+    assert_eq!(s, 204);
+
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    let by_kind = |k: &str| -> Vec<Value> {
+        systems(&p)
+            .into_iter()
+            .filter(|s| s.0 == k)
+            .map(|s| s.1)
+            .collect()
+    };
+    assert_eq!(
+        by_kind("proposed"),
+        [json!({"mediaId": 2, "episodeId": null, "count": 1, "title": title})]
+    );
+    assert_eq!(
+        by_kind("voted"),
+        [json!({"mediaId": 2, "episodeId": null, "value": -1, "title": title})],
+        "clearing the vote posts nothing"
+    );
+    assert_eq!(
+        by_kind("setting_changed"),
+        [json!({"setting": "chatEnabled", "value": false})],
+        "the second, identical patch changes nothing"
+    );
+    assert_eq!(by_kind("quit"), [json!({})]);
+}
+
+fn picture(format: image::ImageFormat) -> Vec<u8> {
+    let mut out = std::io::Cursor::new(vec![]);
+    image::RgbImage::from_pixel(4, 4, image::Rgb([9, 99, 199]))
+        .write_to(&mut out, format)
+        .unwrap();
+    out.into_inner()
+}
+
+async fn put_cover(c: &Ctx, tok: &str, id: i64, mime: &str, data: &[u8]) -> (u16, Value) {
+    let mut body = format!("--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.jpg\"\r\nContent-Type: {mime}\r\n\r\n").into_bytes();
+    body.extend_from_slice(data);
+    body.extend_from_slice(b"\r\n--B--\r\n");
+    let req = Request::post(format!("/api/parties/{id}/cover"))
+        .header("authorization", format!("Bearer {tok}"))
+        .header("content-type", "multipart/form-data; boundary=B")
+        .body(Body::from(body))
+        .unwrap();
+    let res = c.app.clone().oneshot(req).await.unwrap();
+    let s = res.status().as_u16();
+    let b = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (s, serde_json::from_slice(&b).unwrap_or(Value::Null))
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_cover_is_an_item_or_a_mosaic_of_programme_items_and_follows_the_programme(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 5).await;
+    let (_, a) = c.user("alice", true).await;
+    let (_, b) = c.user("bob", true).await;
+    let items =
+        json!([{"mediaId": 1}, {"mediaId": 2}, {"mediaId": 3}, {"mediaId": 4}, {"mediaId": 5}]);
+    let (s, e) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "x", "items": items, "cover": {"kind": "item", "mediaId": 9}})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_cover")));
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "x", "items": items, "cover": {"kind": "item", "mediaId": 4}})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    assert_eq!(p["cover"]["kind"], "item");
+    assert_eq!(p["cover"]["item"]["mediaId"], 4);
+    let url = format!("/api/parties/{}", p["id"]);
+
+    let patch = |cover: Value| c.call("PATCH", &url, &a, Some(json!({ "cover": cover })));
+    let m = |ids: &[i32]| json!({"kind": "mosaic", "items": ids.iter().map(|i| json!({"mediaId": i})).collect::<Vec<_>>()});
+    for bad in [
+        json!({"kind": "item", "mediaId": 9}),
+        m(&[1]),
+        m(&[1, 1]),
+        m(&[1, 2, 3, 4, 5]),
+        m(&[1, 9]),
+        json!({"kind": "upload", "v": 1}),
+    ] {
+        let (s, e) = patch(bad.clone()).await;
+        assert_eq!(
+            (s, msg(&e)),
+            (400, Some("party.error_invalid_cover")),
+            "{bad}"
+        );
+    }
+    let (s, p) = patch(m(&[1, 2, 3])).await;
+    assert_eq!(s, 200);
+    assert_eq!(p["cover"]["items"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        systems(&p)
+            .iter()
+            .filter(|(k, _)| k == "cover_changed")
+            .count(),
+        1
+    );
+    let (s, _) = patch(m(&[1, 2, 3])).await;
+    assert_eq!(s, 200);
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(
+        systems(&p)
+            .iter()
+            .filter(|(k, _)| k == "cover_changed")
+            .count(),
+        1,
+        "an unchanged cover posts nothing"
+    );
+    let (s, _) = c
+        .call("PATCH", &url, &b, Some(json!({"cover": null})))
+        .await;
+    assert_eq!(s, 404, "a stranger cannot touch it");
+
+    let programme = |ids: &[i32]| json!({"items": ids.iter().map(|i| json!({"mediaId": i})).collect::<Vec<_>>()});
+    let (_, p) = c
+        .call(
+            "PUT",
+            &format!("{url}/programme"),
+            &a,
+            Some(programme(&[1, 2, 4])),
+        )
+        .await;
+    assert_eq!(p["cover"]["kind"], "mosaic");
+    assert_eq!(p["cover"]["items"].as_array().unwrap().len(), 2);
+    let (_, p) = c
+        .call(
+            "PUT",
+            &format!("{url}/programme"),
+            &a,
+            Some(programme(&[2, 4])),
+        )
+        .await;
+    assert_eq!(
+        (&p["cover"]["kind"], &p["cover"]["item"]["mediaId"]),
+        (&json!("item"), &json!(2))
+    );
+    let (_, p) = c
+        .call(
+            "PUT",
+            &format!("{url}/programme"),
+            &a,
+            Some(programme(&[4])),
+        )
+        .await;
+    assert_eq!(p["cover"], Value::Null);
+    let (_, p) = patch(json!({"kind": "item", "mediaId": 4})).await;
+    assert_eq!(p["cover"]["item"]["mediaId"], 4);
+    let (_, p) = patch(Value::Null).await;
+    assert_eq!(p["cover"], Value::Null);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_uploaded_cover_is_deleted_on_reset_replacement_end_and_account_removal(pool: PgPool) {
+    let dir = fliks_server::paths::data_dir().join("parties");
+    let c = ctx(pool).await;
+    let (_, a) = c.user("alice", true).await;
+    let (owner, o) = c.user("owner", true).await;
+    let create = |tok: String| {
+        let c = &c;
+        async move {
+            let (_, p) = c
+                .call(
+                    "POST",
+                    "/api/parties",
+                    &tok,
+                    Some(json!({"name": "x", "mediaId": 1})),
+                )
+                .await;
+            p["id"].as_i64().unwrap()
+        }
+    };
+    let (first, second, third) = (
+        create(a.clone()).await,
+        create(a.clone()).await,
+        create(o.clone()).await,
+    );
+    let file = |id: i64| dir.join(format!("{id}.jpg"));
+
+    let jpeg = picture(image::ImageFormat::Jpeg);
+    for junk in [&b"x"[..], b"<svg xmlns='http://www.w3.org/2000/svg'/>"] {
+        assert_eq!(put_cover(&c, &a, first, "image/jpeg", junk).await.0, 400);
+    }
+    let (s, p) = put_cover(
+        &c,
+        &a,
+        first,
+        "image/png",
+        &picture(image::ImageFormat::Png),
+    )
+    .await;
+    assert_eq!(s, 200, "a PNG is accepted");
+    let stored = std::fs::read(file(first)).unwrap();
+    assert!(stored.starts_with(&[0xff, 0xd8]), "and stored as a JPEG");
+    let (s, p2) = put_cover(
+        &c,
+        &a,
+        first,
+        "image/webp",
+        &picture(image::ImageFormat::WebP),
+    )
+    .await;
+    assert_eq!(s, 200, "a WebP too");
+    let _ = p;
+    let (s, p) = put_cover(&c, &a, first, "image/jpeg", &jpeg).await;
+    assert_eq!(s, 200);
+    let _ = p2;
+    let url = p["cover"]["url"].as_str().unwrap();
+    assert!(
+        url.starts_with(&format!("/api/images/party/{first}?v=")),
+        "{url}"
+    );
+    assert_eq!(std::fs::read(file(first)).unwrap(), jpeg);
+    let (s, p) = c
+        .call("DELETE", &format!("/api/parties/{first}/cover"), &a, None)
+        .await;
+    assert_eq!((s, &p["cover"]), (200, &Value::Null));
+    assert!(!file(first).exists());
+
+    put_cover(&c, &a, second, "image/jpeg", &jpeg).await;
+    let (s, p) = c
+        .call(
+            "PATCH",
+            &format!("/api/parties/{second}"),
+            &a,
+            Some(json!({"cover": {"kind": "item", "mediaId": 1}})),
+        )
+        .await;
+    assert_eq!((s, &p["cover"]["kind"]), (200, &json!("item")));
+    assert!(!file(second).exists(), "an item cover replaces the upload");
+
+    put_cover(&c, &a, second, "image/jpeg", &jpeg).await;
+    let (s, _) = c
+        .call("DELETE", &format!("/api/parties/{second}"), &a, None)
+        .await;
+    assert_eq!(s, 204);
+    assert!(!file(second).exists(), "an ended party keeps no upload");
+    let (_, p) = c
+        .call("GET", &format!("/api/parties/{second}"), &a, None)
+        .await;
+    assert_eq!(p["cover"], Value::Null);
+
+    put_cover(&c, &o, third, "image/jpeg", &jpeg).await;
+    assert!(file(third).exists());
+    let users = users::router().with_state(c.st.clone());
+    let (_, admin) = c.user_with("admin", false, &["users.manage"]).await;
+    let res = users
+        .oneshot(
+            Request::delete(format!("/api/users/{owner}"))
+                .header("authorization", format!("Bearer {admin}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 200);
+    assert!(
+        !file(third).exists(),
+        "the owner's account takes the file along"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn choosing_an_episode_proposal_fills_an_empty_programme_and_starts_on_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    series_setup(&c).await;
+    let (_, a) = c.user("alice", true).await;
+    let url = bare_party(&c, &a, &[]).await;
+    let (s, l) = c
+        .call(
+            "POST",
+            &format!("{url}/proposals"),
+            &a,
+            Some(json!({"mediaId": 2, "episodeId": 3})),
+        )
+        .await;
+    assert_eq!(s, 201, "{l}");
+    let pid = l[0]["id"].as_i64().unwrap();
+    let (s, p) = c
+        .call("POST", &format!("{url}/proposals/{pid}/choose"), &a, None)
+        .await;
+    assert_eq!(s, 200, "{p}");
+    assert_eq!(
+        (&p["item"]["mediaId"], &p["item"]["episodeId"]),
+        (&json!(2), &json!(3))
+    );
+    let (s, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!(s, 200, "{p}");
+    assert_eq!(p["item"]["episodeId"], 3);
 }

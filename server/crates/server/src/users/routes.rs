@@ -8,22 +8,20 @@ use crate::{
         auth::{Authed, UserRow},
         validate::{PathParams, ValidJson, int_param},
     },
+    images::upload,
     state::AppState,
 };
 use axum::{
     Json, Router,
-    extract::{
-        DefaultBodyLimit, FromRequest, Multipart, Request, State, multipart::MultipartRejection,
-    },
+    extract::{FromRequest, Multipart, Request, State, multipart::MultipartRejection},
     http::StatusCode,
     routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json as Jsonb};
-use std::path::PathBuf;
 
-const AVATAR_MAX: usize = 5 * 1024 * 1024;
+const AVATAR_DIR: &str = "users";
 const BCRYPT_COST: u32 = 12;
 const MSG_ROLE_ASSIGN: &str = "Only users with roles.manage permission can assign a role";
 const MSG_ROLE_CHANGE: &str = "Only users with roles.manage permission can change a role";
@@ -34,7 +32,7 @@ const MSG_LIBRARIES: &str = "Only users with users.manage permission can change 
 pub fn router() -> Router<AppState> {
     let avatar = post(set_avatar)
         .delete(clear_avatar)
-        .layer(DefaultBodyLimit::max(AVATAR_MAX + 64 * 1024));
+        .layer(upload::body_limit());
     Router::new()
         .route("/api/users", get(list).post(create))
         .route("/api/users/me/avatar", avatar)
@@ -369,10 +367,14 @@ pub async fn remove(
     if target.is_admin && target.enabled && db::is_last_enabled_admin(&mut tx, id).await? {
         return Err(AppError::conflict("Cannot remove the last enabled admin"));
     }
+    let covers = crate::party::owned_uploads(&st.db, id).await?;
     sqlx::query!("DELETE FROM users WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    for party in covers {
+        upload::remove(crate::party::COVER_DIR, party).await;
+    }
     st.hub.drop_connections_for_user(id);
     revoke_in_background(&st, id);
     Ok(())
@@ -392,12 +394,6 @@ pub async fn stats(
         .ok_or_else(|| not_found(id))
 }
 
-fn avatar_path(id: i32, suffix: &str) -> PathBuf {
-    crate::paths::data_dir()
-        .join("users")
-        .join(format!("{id}{suffix}"))
-}
-
 async fn set_avatar_url(db: &PgPool, id: i32, url: Option<String>) -> Result<(), AppError> {
     let done = sqlx::query!(
         r#"UPDATE users SET avatar = $1, "updatedAt" = now() WHERE id = $2"#,
@@ -412,50 +408,15 @@ async fn set_avatar_url(db: &PgPool, id: i32, url: Option<String>) -> Result<(),
     Ok(())
 }
 
-fn upload_error(e: impl std::fmt::Display) -> AppError {
-    tracing::warn!(error = %e, "avatar upload failed");
-    AppError::bad_request("No image uploaded")
-}
-
 #[utoipa::path(post, path = "/api/users/me/avatar", responses((status = 201)))]
 pub async fn set_avatar(
     State(st): State<AppState>,
     a: Authed,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<(StatusCode, Json<PublicUser>), AppError> {
-    let mut multipart = multipart.map_err(upload_error)?;
-    let mut file: Option<(Option<String>, Vec<u8>)> = None;
-    while let Some(mut field) = multipart.next_field().await.map_err(upload_error)? {
-        if field.file_name().is_none() {
-            continue;
-        }
-        let name = field.name().unwrap_or_default().to_owned();
-        if name != "file" {
-            return Err(AppError::bad_request(format!("Unexpected field - {name}")));
-        }
-        let mime = field.content_type().map(str::to_owned);
-        let mut bytes = Vec::new();
-        while let Some(chunk) = field.chunk().await.map_err(upload_error)? {
-            bytes.extend_from_slice(&chunk);
-            if bytes.len() > AVATAR_MAX {
-                return Err(AppError::payload_too_large("File too large"));
-            }
-        }
-        file.get_or_insert((mime, bytes));
-    }
-    let Some((mime, bytes)) = file.filter(|(_, b)| !b.is_empty()) else {
-        return Err(AppError::bad_request("No image uploaded"));
-    };
-    if mime.as_deref() != Some("image/jpeg") {
-        return Err(AppError::bad_request("Avatar must be a JPEG image"));
-    }
+    let bytes = upload::read_jpeg(multipart, "Avatar").await?;
     let id = a.user.id;
-    let dest = avatar_path(id, ".jpg");
-    let io = |e: std::io::Error| AppError::internal(e.to_string());
-    tokio::fs::create_dir_all(dest.parent().expect("avatar dir"))
-        .await
-        .map_err(io)?;
-    tokio::fs::write(&dest, bytes).await.map_err(io)?;
+    upload::write(AVATAR_DIR, id, &bytes).await?;
     let version = chrono::Utc::now().timestamp_millis();
     set_avatar_url(
         &st.db,
@@ -473,13 +434,7 @@ pub async fn clear_avatar(
 ) -> Result<Json<PublicUser>, AppError> {
     let id = a.user.id;
     set_avatar_url(&st.db, id, None).await?;
-    for suffix in [".jpg", "-thumb.jpg", "-medium.jpg", ".src.json"] {
-        if let Err(e) = tokio::fs::remove_file(avatar_path(id, suffix)).await
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            tracing::warn!(user = id, error = %e, "avatar file removal failed");
-        }
-    }
+    upload::remove(AVATAR_DIR, id).await;
     public(&st.db, id).await
 }
 

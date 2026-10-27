@@ -4,7 +4,8 @@
     <div class="flex flex-col gap-4 pt-2">
       @if (party.isHost() && party.party(); as p) {
         <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_everyone' | translate }}</h3>
-        <app-party-host-switches [value]="p" (changed)="party.updateSettings($event)" />
+        <app-party-host-switches [value]="draft() ?? p" (changed)="draft.set({ ...(draft() ?? p), ...$event })" />
+        <button type="button" class="btn btn-primary btn-sm self-end" [disabled]="!dirty()" (click)="save()">{{ 'common.save' | translate }}</button>
         <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_me' | translate }}</h3>
       }
       <!-- Laid out like app-toggle-field below: the icon takes the switch's column. -->

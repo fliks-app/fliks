@@ -60,9 +60,9 @@ struct PartyDetailView: View {
                 Label(tr("party.join"), systemImage: "play.fill")
             }
             .buttonStyle(.borderedProminent)
-            if !joined, PartyPeople.isInvited(AuthService.shared.currentUser?.id, host: party.host, guests: party.guests ?? []) {
-                Button { Task { await service.decline(id: party.id) } } label: {
-                    Label(tr("party.decline"), systemImage: "xmark")
+            if !joined, PartyPeople.isGuest(AuthService.shared.currentUser?.id, host: party.host, guests: party.guests ?? []) {
+                Button { Task { await service.quit(id: party.id) } } label: {
+                    Label(tr("party.leave"), systemImage: "xmark")
                 }
                 .buttonStyle(.bordered)
             }
@@ -94,7 +94,7 @@ struct PartyDetailView: View {
                     ForEach(people) { person in
                         AvatarTile(name: person.username, caption: person.caption, dimmed: !person.present)
                     }
-                    if isHost { AvatarTile(name: tr("party.invite"), symbol: "plus") { service.sheet = .invite } }
+                    if isHost { AvatarTile(name: tr("party.programme_add"), symbol: "plus") { service.sheet = .invite } }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 24)

@@ -16,6 +16,7 @@ import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { clearPosterStamps, previewPosterName, stampPoster, stampPosterNamed } from '../../utils/view-transition';
 import { armPageSlide } from '../../utils/page-slide';
 import { ServerConfigService } from '../../../core/services/server-config.service';
+import { PosterMosaicComponent } from '../poster-mosaic/poster-mosaic';
 import { imageUrlWithSize } from '../../../core/pipes/resolve-url.pipe';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
@@ -49,7 +50,7 @@ export type BarStatus =
   | 'unreleased'
   | 'queued';
 
-export type CardBadge = 'library' | 'pending' | 'declined' | null;
+export type CardBadge = 'library' | 'pending' | 'declined' | 'added' | null;
 export type CardStatus = 'watched' | 'missing' | null;
 
 /** What the device holds for the card's title: shown as a glyph when ready, a ring while in flight. */
@@ -61,7 +62,7 @@ export interface CardDownloadState {
 @Component({
   selector: 'app-media-card',
   imports: [
-    CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
+    CachedSrcDirective, PosterMosaicComponent,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
     LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload,
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
@@ -108,6 +109,8 @@ export class MediaCardComponent {
 
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);
+  /** 2 to 4 posters shown as a mosaic instead of `imageUrl`. */
+  readonly posters = input<string[]>([]);
   /** Landscape artwork the destination hero shows for a feed-row card; the poster morph lands on it. */
   readonly fanartUrl = input<string | null>(null);
   /** Mask the image behind a blur until the viewer clicks it (anti-spoiler). */

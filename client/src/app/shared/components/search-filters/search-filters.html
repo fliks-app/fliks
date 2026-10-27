@@ -1,0 +1,65 @@
+<div class="flex flex-col gap-4">
+  <h3 class="font-semibold">{{ 'search.filters' | translate }}</h3>
+
+  <div class="flex flex-col gap-1">
+    <span class="text-sm text-base-content/60">{{ 'search.sort_label' | translate }}</span>
+    <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="sort()" (ngModelChange)="sort.set($event)">
+      @for (o of sortOptions; track o.value) {
+        <option [value]="o.value">{{ o.labelKey | translate }}</option>
+      }
+    </select>
+  </div>
+
+  @if (genres().length) {
+    <div class="flex flex-col gap-1">
+      <span class="text-sm text-base-content/60">{{ 'search.genres_label' | translate }}</span>
+      <div class="flex flex-wrap gap-2 mt-1">
+        @for (g of genres(); track g.id) {
+          <button
+            type="button"
+            class="badge badge-lg cursor-pointer"
+            [class.badge-primary]="selectedGenres().has(g.id)"
+            [class.badge-outline]="!selectedGenres().has(g.id)"
+            [attr.aria-pressed]="selectedGenres().has(g.id)"
+            (click)="toggleGenre(g.id)"
+          >{{ g.name }}</button>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="flex flex-col gap-1">
+    <span class="text-sm text-base-content/60 flex justify-between">
+      <span>{{ 'search.rating_label' | translate }}</span>
+      <span class="tabular-nums">{{ voteMin() }}+</span>
+    </span>
+    <input type="range" min="0" max="9" step="1" class="range range-primary range-sm w-full" [ngModel]="voteMin()" (ngModelChange)="voteMin.set(+$event)" />
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <span class="text-sm text-base-content/60">{{ 'search.year_label' | translate }}</span>
+    <div class="flex items-center gap-2">
+      <input
+        type="number" inputmode="numeric" min="1900" max="2100"
+        class="input input-bordered input-sm w-full"
+        [placeholder]="'search.year_from' | translate"
+        [ngModel]="yearMin()"
+        (ngModelChange)="yearMin.set($event ? +$event : null)"
+      />
+      <span class="text-base-content/40">–</span>
+      <input
+        type="number" inputmode="numeric" min="1900" max="2100"
+        class="input input-bordered input-sm w-full"
+        [placeholder]="'search.year_to' | translate"
+        [ngModel]="yearMax()"
+        (ngModelChange)="yearMax.set($event ? +$event : null)"
+      />
+    </div>
+  </div>
+
+  @if (engaged()) {
+    <div class="pt-1">
+      <button type="button" class="btn btn-ghost btn-sm w-full" (click)="clear()">{{ 'search.clear' | translate }}</button>
+    </div>
+  }
+</div>

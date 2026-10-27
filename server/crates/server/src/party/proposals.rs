@@ -1,8 +1,8 @@
 //! Film proposals and votes of a `scheduled` party (`docs/spec/watch-party.md`, Proposals).
 use super::{
     db,
-    dto::{PartyDto, PartyItem, ProposalDto, ProposalIn, VoteIn},
-    registry::item_dtos,
+    dto::{PartyDto, PartyItem, ProposalDto, ProposalIn, ProposalsIn, VoteIn},
+    registry::{item_dtos, note},
     routes::{
         Edit, R, conceal_items, edit_programme, fail, host_of, member_row, not_found, require_host,
         require_open,
@@ -12,7 +12,7 @@ use crate::{
     events::SseEvent,
     http::{
         AppError,
-        auth::SessionAuthed,
+        auth::{Authed, SessionAuthed},
         validate::{PathParams, ValidJson},
     },
     libraries::acl::{accessible_library_ids, assert_media_accessible},
@@ -25,6 +25,7 @@ use axum::{
     routing::{delete, post},
 };
 use fliks_domain::{js::now_ms, party::Item};
+use serde_json::{Value, json};
 use sqlx::PgPool;
 
 const MAX_PROPOSALS: i64 = 30;
@@ -34,6 +35,7 @@ const MAX_PER_WINDOW: usize = 10;
 pub(super) fn proposal_router() -> Router<AppState> {
     Router::new()
         .route("/api/parties/{id}/proposals", post(propose))
+        .route("/api/parties/{id}/proposals/batch", post(propose_batch))
         .route("/api/parties/{id}/proposals/{pid}", delete(unpropose))
         .route(
             "/api/parties/{id}/proposals/{pid}/vote",
@@ -119,26 +121,32 @@ async fn announce(st: &AppState, row: &db::Row) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The proposal the start takes: best score (ups minus downs), then the oldest.
-pub(super) async fn top(db: &PgPool, party: i32) -> sqlx::Result<Option<Item>> {
-    let row: Option<(i32, Option<i32>)> = sqlx::query_as(
-        r#"SELECT p."mediaId", p."episodeId" FROM watch_party_proposals p
-           WHERE p."partyId" = $1
-           ORDER BY (SELECT COALESCE(sum(v."value"), 0) FROM watch_party_votes v WHERE v."proposalId" = p.id) DESC,
-                    p."createdAt", p.id
-           LIMIT 1"#,
+/// The proposal the start takes: the most upvotes, then the fewest downvotes; a tie on both is a
+/// 409 the host settles by accepting one.
+pub(super) async fn top(db: &PgPool, party: i32) -> R<Option<Item>> {
+    let rows: Vec<(i32, Option<i32>, i64, i64)> = sqlx::query_as(
+        r#"SELECT p."mediaId", p."episodeId",
+                  count(*) FILTER (WHERE v."value" = 1), count(*) FILTER (WHERE v."value" = -1)
+           FROM watch_party_proposals p LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
+           WHERE p."partyId" = $1 GROUP BY p.id
+           ORDER BY 3 DESC, 4 ASC LIMIT 2"#,
     )
     .bind(party)
-    .fetch_optional(db)
+    .fetch_all(db)
     .await?;
-    Ok(row.map(|(media_id, episode_id)| Item {
+    if let [a, b] = rows.as_slice()
+        && (a.2, a.3) == (b.2, b.3)
+    {
+        return Err(fail(StatusCode::CONFLICT, "party.error_vote_tie"));
+    }
+    Ok(rows.first().map(|&(media_id, episode_id, ..)| Item {
         media_id,
         media_file_id: None,
         episode_id,
     }))
 }
 
-/// Drops the votes and the proposals of users who left the party (kicked, declined, revoked): they
+/// Drops the votes and the proposals of users who left the party (kicked, quit, revoked): they
 /// no longer count in `top`. The others are told when something went.
 pub(super) async fn forget_users(
     st: &AppState,
@@ -192,8 +200,31 @@ pub async fn propose(
     PathParams(id): PathParams<i32>,
     ValidJson(b): ValidJson<ProposalIn>,
 ) -> R<(StatusCode, Json<Vec<ProposalDto>>)> {
+    add_proposals(&st, &a, id, vec![b]).await
+}
+
+/// [`propose`] for several titles at once, in order: one request against the rate limit.
+#[utoipa::path(post, path = "/api/parties/{id}/proposals/batch", responses((status = 201), (status = 200)))]
+pub async fn propose_batch(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+    ValidJson(b): ValidJson<ProposalsIn>,
+) -> R<(StatusCode, Json<Vec<ProposalDto>>)> {
+    if b.items.is_empty() || b.items.len() > MAX_PROPOSALS as usize {
+        return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+    }
+    add_proposals(&st, &a, id, b.items).await
+}
+
+async fn add_proposals(
+    st: &AppState,
+    a: &Authed,
+    id: i32,
+    items: Vec<ProposalIn>,
+) -> R<(StatusCode, Json<Vec<ProposalDto>>)> {
     let me = a.user.id;
-    let row = open_row(&st, id, me).await?;
+    let row = open_row(st, id, me).await?;
     if !st
         .parties
         .proposal_ok(me, now_ms(), RATE_WINDOW_MS, MAX_PER_WINDOW)
@@ -203,16 +234,21 @@ pub async fn propose(
             "party.error_rate_limited",
         ));
     }
-    let item = Item {
-        media_id: b.media_id,
-        media_file_id: None,
-        episode_id: b.episode_id,
-    };
-    if !db::item_valid(&st.db, &item).await? {
-        return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+    let ids = accessible_library_ids(&st.db, a).await?;
+    let items: Vec<Item> = items
+        .into_iter()
+        .map(|b| Item {
+            media_id: b.media_id,
+            media_file_id: None,
+            episode_id: b.episode_id,
+        })
+        .collect();
+    for item in &items {
+        if !db::item_valid(&st.db, item).await? {
+            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+        }
+        assert_media_accessible(&st.db, item.media_id, &ids).await?;
     }
-    let ids = accessible_library_ids(&st.db, &a).await?;
-    assert_media_accessible(&st.db, item.media_id, &ids).await?;
     let mut tx = st.db.begin().await?;
     // The party row lock serializes the count and the insert.
     sqlx::query(r#"SELECT 1 FROM watch_parties WHERE id = $1 AND status = 'scheduled' FOR UPDATE"#)
@@ -220,68 +256,96 @@ pub async fn propose(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_not_scheduled"))?;
-    let existing: Option<i32> = sqlx::query_scalar(
-        r#"SELECT id FROM watch_party_proposals
-           WHERE "partyId" = $1 AND "mediaId" = $2 AND COALESCE("episodeId", 0) = COALESCE($3, 0)"#,
-    )
-    .bind(id)
-    .bind(item.media_id)
-    .bind(item.episode_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    let created = existing.is_none();
-    let pid = match existing {
-        Some(pid) => pid,
-        None => {
-            let count: i64 = sqlx::query_scalar(
-                r#"SELECT count(*) FROM watch_party_proposals WHERE "partyId" = $1"#,
-            )
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
-            if count >= MAX_PROPOSALS {
-                return Err(fail(StatusCode::CONFLICT, "party.error_proposals_full"));
+    let mut added = 0;
+    for item in &items {
+        let existing: Option<i32> = sqlx::query_scalar(
+            r#"SELECT id FROM watch_party_proposals
+               WHERE "partyId" = $1 AND "mediaId" = $2 AND COALESCE("episodeId", 0) = COALESCE($3, 0)"#,
+        )
+        .bind(id)
+        .bind(item.media_id)
+        .bind(item.episode_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let pid = match existing {
+            Some(pid) => pid,
+            None => {
+                let count: i64 = sqlx::query_scalar(
+                    r#"SELECT count(*) FROM watch_party_proposals WHERE "partyId" = $1"#,
+                )
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+                if count >= MAX_PROPOSALS {
+                    return Err(fail(StatusCode::CONFLICT, "party.error_proposals_full"));
+                }
+                added += 1;
+                sqlx::query_scalar(
+                    r#"INSERT INTO watch_party_proposals ("partyId", "mediaId", "episodeId", "proposedBy")
+                       VALUES ($1, $2, $3, $4) RETURNING id"#,
+                )
+                .bind(id)
+                .bind(item.media_id)
+                .bind(item.episode_id)
+                .bind(me)
+                .fetch_one(&mut *tx)
+                .await?
             }
-            sqlx::query_scalar(
-                r#"INSERT INTO watch_party_proposals ("partyId", "mediaId", "episodeId", "proposedBy")
-                   VALUES ($1, $2, $3, $4) RETURNING id"#,
-            )
-            .bind(id)
-            .bind(item.media_id)
-            .bind(item.episode_id)
-            .bind(me)
-            .fetch_one(&mut *tx)
-            .await?
-        }
-    };
-    sqlx::query(
-        r#"INSERT INTO watch_party_votes ("proposalId", "userId") VALUES ($1, $2)
-           ON CONFLICT ("proposalId", "userId") DO UPDATE SET "value" = 1"#,
-    )
-    .bind(pid)
-    .bind(me)
-    .execute(&mut *tx)
-    .await?;
+        };
+        sqlx::query(
+            r#"INSERT INTO watch_party_votes ("proposalId", "userId") VALUES ($1, $2)
+               ON CONFLICT ("proposalId", "userId") DO UPDATE SET "value" = 1"#,
+        )
+        .bind(pid)
+        .bind(me)
+        .execute(&mut *tx)
+        .await?;
+    }
     tx.commit().await?;
-    announce(&st, &row).await?;
-    let status = if created {
+    announce(st, &row).await?;
+    if added > 0 {
+        let by = &a.user.username;
+        note(
+            st,
+            &row,
+            "proposed",
+            by,
+            item_args(&items[0], json!({ "count": added })),
+        )
+        .await?;
+    }
+    let status = if added > 0 {
         StatusCode::CREATED
     } else {
         StatusCode::OK
     };
-    Ok((status, Json(snapshot(&st, id, me).await?)))
+    Ok((status, Json(snapshot(st, id, me).await?)))
 }
 
-/// Who proposed `pid` of party `id`, 404 when it is not one of its proposals.
-async fn author(st: &AppState, id: i32, pid: i32) -> R<i32> {
-    sqlx::query_scalar(
-        r#"SELECT "proposedBy" FROM watch_party_proposals WHERE id = $1 AND "partyId" = $2"#,
+/// `args` of a system message about `item`, plus `extra`.
+fn item_args(item: &Item, mut extra: Value) -> Value {
+    extra["mediaId"] = item.media_id.into();
+    extra["episodeId"] = item.episode_id.into();
+    extra
+}
+
+/// Who proposed `pid` of party `id` and its title, 404 when it is not one of its proposals.
+async fn proposal(st: &AppState, id: i32, pid: i32) -> R<(i32, Item)> {
+    let (by, media_id, episode_id): (i32, i32, Option<i32>) = sqlx::query_as(
+        r#"SELECT "proposedBy", "mediaId", "episodeId" FROM watch_party_proposals
+           WHERE id = $1 AND "partyId" = $2"#,
     )
     .bind(pid)
     .bind(id)
     .fetch_optional(&st.db)
     .await?
-    .ok_or_else(not_found)
+    .ok_or_else(not_found)?;
+    let item = Item {
+        media_id,
+        media_file_id: None,
+        episode_id,
+    };
+    Ok((by, item))
 }
 
 #[utoipa::path(delete, path = "/api/parties/{id}/proposals/{pid}", responses((status = 204)))]
@@ -292,7 +356,7 @@ pub async fn unpropose(
 ) -> R<StatusCode> {
     let me = a.user.id;
     let row = open_row(&st, id, me).await?;
-    if author(&st, id, pid).await? != me && host_of(&st, &row) != me {
+    if proposal(&st, id, pid).await?.0 != me && host_of(&st, &row) != me {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_not_author"));
     }
     sqlx::query("DELETE FROM watch_party_proposals WHERE id = $1")
@@ -303,9 +367,16 @@ pub async fn unpropose(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn set_vote(st: &AppState, id: i32, pid: i32, me: i32, value: Option<i16>) -> R<StatusCode> {
+async fn set_vote(
+    st: &AppState,
+    a: &Authed,
+    id: i32,
+    pid: i32,
+    value: Option<i16>,
+) -> R<StatusCode> {
+    let me = a.user.id;
     let row = open_row(st, id, me).await?;
-    author(st, id, pid).await?;
+    let (_, item) = proposal(st, id, pid).await?;
     match value {
         Some(value) => sqlx::query(
             r#"INSERT INTO watch_party_votes ("proposalId", "userId", "value") VALUES ($1, $2, $3)
@@ -327,6 +398,16 @@ async fn set_vote(st: &AppState, id: i32, pid: i32, me: i32, value: Option<i16>)
         }
     };
     announce(st, &row).await?;
+    if let Some(value) = value {
+        note(
+            st,
+            &row,
+            "voted",
+            &a.user.username,
+            item_args(&item, json!({ "value": value })),
+        )
+        .await?;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -337,7 +418,7 @@ pub async fn vote(
     PathParams((id, pid)): PathParams<(i32, i32)>,
     ValidJson(b): ValidJson<VoteIn>,
 ) -> R<StatusCode> {
-    set_vote(&st, id, pid, a.user.id, Some(b.value)).await
+    set_vote(&st, &a, id, pid, Some(b.value)).await
 }
 
 #[utoipa::path(delete, path = "/api/parties/{id}/proposals/{pid}/vote", responses((status = 204)))]
@@ -346,7 +427,7 @@ pub async fn unvote(
     SessionAuthed(a): SessionAuthed,
     PathParams((id, pid)): PathParams<(i32, i32)>,
 ) -> R<StatusCode> {
-    set_vote(&st, id, pid, a.user.id, None).await
+    set_vote(&st, &a, id, pid, None).await
 }
 
 /// The host picks a proposal: it joins the end of the programme (the head when it is empty).
@@ -359,19 +440,15 @@ pub async fn choose(
     let me = a.user.id;
     let mut row = open_row(&st, id, me).await?;
     require_host(&st, &row, me)?;
-    let (media_id, episode_id): (i32, Option<i32>) = sqlx::query_as(
-        r#"SELECT "mediaId", "episodeId" FROM watch_party_proposals WHERE id = $1 AND "partyId" = $2"#,
+    let (_, item) = proposal(&st, id, pid).await?;
+    edit_programme(&st, &a, &mut row, Edit::Append(item.clone())).await?;
+    note(
+        &st,
+        &row,
+        "proposal_chosen",
+        &a.user.username,
+        item_args(&item, json!({})),
     )
-    .bind(pid)
-    .bind(id)
-    .fetch_optional(&st.db)
-    .await?
-    .ok_or_else(not_found)?;
-    let item = Item {
-        media_id,
-        media_file_id: None,
-        episode_id,
-    };
-    edit_programme(&st, &a, &mut row, Edit::Append(item)).await?;
+    .await?;
     Ok(Json(super::routes::dto(&st, &row, me, true).await?))
 }

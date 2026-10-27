@@ -1,4 +1,5 @@
 //! Request bodies and response shapes (`docs/spec/watch-party.md`, DTOs): every key present.
+use super::cover::{Cover, CoverDto};
 use crate::http::{AppError, json::iso_ms};
 use chrono::{DateTime, Utc};
 use fliks_domain::party::{
@@ -10,6 +11,13 @@ pub const MAX_PROGRAMME: usize = 500;
 const MAX_INVITEES: usize = 50;
 const MAX_TEXT: usize = 500;
 const MAX_SIGNAL_BYTES: usize = 16 * 1024;
+
+/// For `Option<Option<T>>` fields: absent is `None`, an explicit null is `Some(None)`.
+fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    d: D,
+) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(d).map(Some)
+}
 
 fn invalid(what: &str) -> AppError {
     AppError::bad_request(format!("party.error_invalid_{what}"))
@@ -38,7 +46,10 @@ pub struct Create {
     pub reactions_enabled: Option<bool>,
     pub chat_enabled: Option<bool>,
     pub link_sharing: Option<bool>,
+    pub public: Option<bool>,
     pub invitee_ids: Option<Vec<i32>>,
+    pub items: Option<Vec<ItemIn>>,
+    pub cover: Option<Cover>,
 }
 
 impl Create {
@@ -50,6 +61,15 @@ impl Create {
             .is_some_and(|v| v.len() > MAX_INVITEES)
         {
             return Err(invalid("invitees"));
+        }
+        if let Some(items) = &self.items
+            && (items.len() > MAX_PROGRAMME
+                || self.media_id.is_some()
+                || self.media_file_id.is_some()
+                || self.episode_id.is_some()
+                || self.playlist_id.is_some())
+        {
+            return Err(invalid("item"));
         }
         Ok(())
     }
@@ -63,8 +83,11 @@ pub struct Patch {
     pub reactions_enabled: Option<bool>,
     pub chat_enabled: Option<bool>,
     pub link_sharing: Option<bool>,
+    pub public: Option<bool>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub regenerate_token: Option<bool>,
+    #[serde(default, deserialize_with = "present")]
+    pub cover: Option<Option<Cover>>,
 }
 
 #[derive(Deserialize)]
@@ -80,7 +103,7 @@ pub struct Device {
     pub device_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ItemIn {
     pub media_id: i32,
@@ -278,6 +301,8 @@ pub struct PartySummaryDto {
     pub item: Option<PartyItem>,
     pub playlist: Option<PlaylistRef>,
     pub member_count: usize,
+    pub public: bool,
+    pub cover: Option<CoverDto>,
 }
 
 #[derive(Serialize)]
@@ -339,6 +364,12 @@ fn vote_value<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i16, D::Error> {
 pub struct ProposalIn {
     pub media_id: i32,
     pub episode_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProposalsIn {
+    pub items: Vec<ProposalIn>,
 }
 
 #[derive(Serialize)]

@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { PartyApiService, type PartyDto, type PartyPreview, type PartySummaryDto } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartyItem, type PartyPreview, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { addToCalendar } from '../../core/plugins/calendar.plugin';
 import { buildPartyIcs, partyDurationMin } from './party-ics';
@@ -15,18 +15,22 @@ import { PartyService } from '../../core/services/party/party.service';
 import { SseService } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
 import { formatTime } from '../../core/utils/player.utils';
+import { groupPosition } from '../player/party-sync';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../player/party/party-people';
 import { runBusy } from './party-busy';
 import { PartyHostDialogComponent } from './party-host-dialog';
-import { PartyProposalsComponent } from './party-proposals';
-import { PartyProgrammeComponent, findEpisode } from './party-programme';
+import { PartyInviteComponent } from './party-invite';
+import { PartyProposalsComponent, bestProposals, topProposal } from './party-proposals';
+import { PartyProgrammeComponent, findEpisode, sameItem } from './party-programme';
+import { PartyCoverComponent } from './party-cover';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyChatComponent } from '../player/party/party-chat';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
 import { VoiceService } from '../../core/services/party/voice.service';
-import { LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2 } from '@lucide/angular';
+import { LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllipsisVertical, LucidePlay, LucideSettings, LucideShare2, LucideUserMinus, LucideX } from '@lucide/angular';
+import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -40,7 +44,6 @@ import { episodeLabel } from '../../shared/utils/episode-label';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { partyWhen } from './party-time';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 const JOIN_RETRY_MS = 10_000;
 
@@ -51,9 +54,9 @@ const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.erro
 @Component({
   selector: 'app-party-page',
   imports: [
-    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyProposalsComponent, PartyProgrammeComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyInviteComponent, PartyProposalsComponent, PartyProgrammeComponent, PartyCoverComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
-    LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2,
+    LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllipsisVertical, LucidePlay, LucideSettings, LucideShare2, LucideUserMinus, LucideX, DropdownMenuComponent,
   ],
   templateUrl: './party-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -74,7 +77,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly navbar = inject(NavbarService);
   protected readonly tv = inject(TvService);
   private readonly background = inject(BackgroundService);
-  private readonly device = inject(DeviceService);
+  protected readonly device = inject(DeviceService);
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   protected readonly hostDialog = viewChild(PartyHostDialogComponent);
@@ -88,6 +91,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly now = signal(this.clock.serverNow());
   protected readonly busy = signal(false);
   private readonly joining = signal(false);
+  private readonly quitting = signal(false);
   protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
   /** Pairs the page's picture with the home card it opened from. */
   protected readonly posterName = `party-poster-${this.id}`;
@@ -149,10 +153,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
     return v ? partyPeople(v.host, v.guests ?? [], members, this.voice.speaking()) : [];
   });
-  /** Invited by the host: the invitation can be declined, in the lobby or not. */
-  protected readonly invited = computed(() => {
+  /** Added by the host or joined with the link: free to quit the party for good. */
+  protected readonly guest = computed(() => {
     const me = this.auth.user()?.id;
-    return !!this.hostView()?.guests.some((g) => g.userId === me && g.source === 'invite');
+    return !!this.hostView()?.guests.some((g) => g.userId === me);
   });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
@@ -161,10 +165,25 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   );
   protected readonly link = computed(() => this.party.inviteLink(this.view()?.inviteToken ?? null));
   /** A film is chosen, or a proposal the host can open exists for the server to take the top vote from. */
-  protected readonly canStart = computed(() => !!this.head()?.item || this.party.proposals().some((p) => !p.item.hidden));
+  /** Proposals tied for first leave a start on the top vote nothing to play. */
+  protected readonly voteTied = computed(() => !this.head()?.item && bestProposals(this.party.proposals()).length > 1);
+  /** The programme as the programme section holds it. */
+  protected readonly programme = signal<PartyItem[]>([]);
+  protected readonly proposedItems = computed(() => this.party.proposals().map((p) => p.item));
+  /** A proposal already accepted into the programme leaves the list until it is sent back. */
+  protected readonly openProposals = computed(() => this.party.proposals().filter((p) => !this.programme().some((i) => sameItem(i, p.item))));
+  protected readonly canStart = computed(() => !!this.head()?.item || !!topProposal(this.party.proposals()));
   /** The chat column exists in the lobby only; the live phase gives the page its full width. */
   protected readonly chatShown = computed(() => this.phase() === 'lobby' && this.joined());
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');
+  /** Where the group is in the playing item, from the last snapshot; refetched on every transition. */
+  protected readonly progress = computed(() => {
+    const p = this.view()?.live?.playback;
+    if (!p || this.view()?.status !== 'live') return null;
+    const at = groupPosition(p.state, p.anchor, this.now());
+    const runtime = (this.episodeInfo()?.episode.runtime ?? this.media()?.runtime ?? 0) * 60;
+    return { at: runtime ? Math.min(at, runtime) : at, runtime, paused: p.state !== 'playing' };
+  });
 
   constructor() {
     // The page needs the clock offset before it has joined anything.
@@ -174,6 +193,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       clearInterval(tick);
       if (!this.party.party()) this.clock.stop();
     });
+    this.party.startSkipped.pipe(takeUntilDestroyed()).subscribe((dto) => dto.id === this.id && this.loaded.set(dto));
     this.sse.partyEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
       // Joined, the service refetches on these and the page follows its copy.
       if ((e.type === 'party.updated' || e.type === 'party.settings') && e.partyId === this.id && !this.joined()) void this.load();
@@ -192,7 +212,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     });
     // The lobby is open from creation: the page joins it once the live stream is up.
     effect(() => {
-      if (!this.sse.connected() || this.view()?.status !== 'scheduled' || this.joined() || this.joining() || this.gone()) return;
+      if (!this.sse.connected() || this.view()?.status !== 'scheduled' || this.joined() || this.joining() || this.quitting() || this.gone()) return;
       untracked(() => void this.joinLobby());
     });
   }
@@ -219,7 +239,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** A member's own copy first (a regenerated token no longer resolves for them), the invite link's preview otherwise. */
   private fetch(): Promise<PartyPreview> {
     const token = this.token;
-    // Quiet: a party out of reach (declined, ended, kicked) shows the gone page, not a toast.
+    // Quiet: a party out of reach (quit, ended, kicked) shows the gone page, not a toast.
     if (!token) return this.api.get(this.id, true);
     return this.api.get(this.id, true).catch(() => this.api.byToken(token));
   }
@@ -289,12 +309,39 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     void this.party.setReady(!this.ready());
   }
 
-  protected start(): void {
+  protected async start(): Promise<void> {
+    const me = this.auth.user()?.id;
+    const waiting = [...new Set(this.party.members().filter((m) => m.userId !== me && m.status === 'waiting').map((m) => m.username))];
+    if (waiting.length) {
+      const ok = await this.confirm.confirm({
+        title: this.translate.instant('party.start_not_ready_title'),
+        message: this.translate.instant('party.start_not_ready_message', { names: waiting.map((n) => `- ${n}`).join('\n') }),
+        confirmLabel: this.translate.instant('party.start'),
+      });
+      if (!ok) return;
+    }
     void this.party.start();
   }
 
-  protected async leave(): Promise<void> {
-    if (await this.party.leaveOrEnd()) void this.router.navigateByUrl('/');
+  protected fmt(seconds: number): string {
+    return formatTime(seconds);
+  }
+
+  /** On a tie for first, the host lets chance pick one of the tied proposals. */
+  protected async drawLots(): Promise<void> {
+    const tied = bestProposals(this.party.proposals());
+    const pick = tied[Math.floor(Math.random() * tied.length)];
+    if (!pick) return;
+    const dto = await runBusy(this.busy, () => this.api.choose(this.id, pick.id));
+    if (dto) this.apply(dto);
+  }
+
+  protected async quit(): Promise<void> {
+    this.quitting.set(true);
+    const ok = await runBusy(this.busy, () => this.party.quit(this.id).then(() => true));
+    if (ok) return this.home();
+    this.quitting.set(false);
+    this.toast.error(this.translate.instant('party.error_generic'));
   }
 
   protected apply(dto: PartyDto): void {
@@ -316,12 +363,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if ((await runBusy(this.busy, () => this.api.end(this.id))) === null) return;
     this.toast.info(this.translate.instant('party.closed_host_ended'));
     this.home();
-  }
-
-  protected async decline(): Promise<void> {
-    const ok = await runBusy(this.busy, () => this.api.decline(this.id).then(() => true));
-    if (ok) this.home();
-    else this.toast.error(this.translate.instant('party.error_generic'));
   }
 
   protected home(): void {

@@ -17,6 +17,7 @@ import { PartyApiService, type PartySummaryDto } from '../../core/services/api/p
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { PartyService } from '../../core/services/party/party.service';
 import { partyWhen } from '../party/party-time';
+import { coverPosters } from '../party/party-thumb';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { SseService } from '../../core/services/sse.service';
@@ -138,7 +139,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly leavingSoon = signal<Media[]>([]);
   /** The call to action of a rail with nothing in it: below every zone, so its arrival moves none of them. */
   protected readonly showPartyEmpty = computed(
-    () => this.partiesLoaded() && !this.parties().length && this.partyApi.supported() && this.visibleSections().some((s) => s.type === 'watch-parties'),
+    () => this.partiesLoaded() && !this.parties().length && this.partyApi.canCreate() && this.visibleSections().some((s) => s.type === 'watch-parties'),
   );
   /** Live and scheduled watch parties of the viewer, live first (server order). */
   readonly parties = signal<PartySummaryDto[]>([]);
@@ -236,9 +237,11 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   protected partyImage(p: PartySummaryDto): string | null {
-    const item = p.item;
+    if (p.cover?.kind === 'upload') return p.cover.url;
+    const item = p.cover?.kind === 'item' ? p.cover.item : p.item;
     return item ? (pickFanart({ ...item, id: item.mediaId }) ?? item.posterUrl) : null;
   }
+  protected readonly coverPosters = coverPosters;
   protected partyState(p: PartySummaryDto): Record<string, unknown> {
     return { party: p };
   }

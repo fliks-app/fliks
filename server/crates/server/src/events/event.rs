@@ -456,6 +456,7 @@ pub enum SseEvent {
         reactions_enabled: bool,
         chat_enabled: bool,
         link_sharing: bool,
+        public: bool,
     },
     #[serde(rename = "party.message")]
     PartyMessage { party_id: i64, message: Value },
@@ -467,7 +468,11 @@ pub enum SseEvent {
         emoji: String,
     },
     #[serde(rename = "party.closed")]
-    PartyClosed { party_id: i64, reason: String },
+    PartyClosed {
+        party_id: i64,
+        reason: String,
+        by: Option<String>,
+    },
     #[serde(rename = "party.invited")]
     PartyInvited {
         party_id: i64,
@@ -663,10 +668,10 @@ mod tests {
             json!({"type":"party.state","partyId":1,"rev":2,"state":"playing","item":{"mediaId":1},"anchor":{"position":1.5,"serverTimeMs":3},"whenMs":null,"by":{"userId":1,"username":"u"},"action":"play"}),
             json!({"type":"party.members","partyId":1,"rev":2,"members":[]}),
             json!({"type":"party.settings","partyId":1,"rev":2,"name":"n","policy":"host_only",
-                "reactionsEnabled":true,"chatEnabled":true,"linkSharing":false}),
+                "reactionsEnabled":true,"chatEnabled":true,"linkSharing":false,"public":true}),
             json!({"type":"party.message","partyId":1,"message":{"id":1}}),
             json!({"type":"party.reaction","partyId":1,"userId":2,"username":"u","emoji":"x"}),
-            json!({"type":"party.closed","partyId":1,"reason":"expired"}),
+            json!({"type":"party.closed","partyId":1,"reason":"expired","by":null}),
             json!({"type":"party.invited","partyId":1,"name":"n","scheduledAt":null,"host":{"userId":1,"username":"u"},"item":{"mediaId":1}}),
             json!({"type":"party.starting","partyId":1,"name":"n"}),
             json!({"type":"party.updated","partyId":1}),

@@ -1,0 +1,5 @@
+@if (cover()?.kind === 'mosaic') {
+  <app-poster-mosaic [posters]="posters()" [gridFrom]="2" />
+} @else if (image(); as src) {
+  <img [src]="src | resolveUrl: 'medium'" alt="" loading="eager" fetchpriority="high" decoding="async" class="h-full w-full object-cover" />
+}

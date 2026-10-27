@@ -19,9 +19,7 @@
 }
 @if (person().connected) {
   <span class="badge" [class.badge-success]="person().status === 'ready'" [class.badge-warning]="person().status !== 'ready' && person().status !== 'away'" [class.badge-ghost]="person().status === 'away'">{{ ('party.status_' + person().status) | translate }}</span>
-} @else if (person().source === 'invite') {
-  <span class="badge badge-ghost">{{ 'party.person_invited' | translate }}</span>
-} @else if (!person().source) {
+} @else if (person().source !== 'link') {
   <span class="badge badge-ghost">{{ 'party.person_absent' | translate }}</span>
 }
 <ng-content />

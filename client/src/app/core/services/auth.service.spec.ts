@@ -136,3 +136,38 @@ describe('AuthService.ensureStreamToken', () => {
     expect(post).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('AuthService.hasPermission', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function as(user: Partial<User>) {
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: HttpClient, useValue: { get: () => NEVER, post: () => NEVER } },
+        { provide: Router, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: () => 'https://s', isNative: false } },
+        { provide: ServerCacheService, useValue: {} },
+        {
+          provide: SessionStoreService,
+          useValue: {
+            active: () => ({ serverUrl: 'https://s', user: { id: 1, username: 'a', ...user }, accessToken: 'a', refreshToken: 'r', refreshExpiresAt: null, lastUsedAt: Date.now() }),
+          },
+        },
+      ],
+    });
+    const service = TestBed.inject(AuthService);
+    service.ensureAuthenticated().subscribe();
+    return service;
+  }
+
+  it('honours implications', () => {
+    const s = as({ permissions: ['parties.manage'] });
+    expect(s.hasPermission('parties.create')).toBe(true);
+    expect(s.hasPermission('media.read')).toBe(false);
+  });
+
+  it('grants an admin everything', () => {
+    expect(as({ isAdmin: true }).hasPermission('parties.create')).toBe(true);
+  });
+});

@@ -3,6 +3,7 @@ import { Media } from './api/media.service';
 import { MetadataSearchResult, TmdbGenre } from './api/metadata.service';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
+import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters';
 
 const EXTERNAL_KEY = 'fliks-search-external';
 
@@ -43,8 +44,8 @@ export class SearchStateService {
   // ── Discover filter panel (TMDB /discover) ──
   /** Genre list for the active tab (movie vs tv). */
   readonly discoverGenres = signal<TmdbGenre[]>([]);
-  readonly discoverSelectedGenres = signal<Set<number>>(new Set());
-  readonly discoverSort = signal('popularity.desc');
+  readonly discoverSelectedGenres = signal<ReadonlySet<number>>(new Set());
+  readonly discoverSort = signal(DEFAULT_SORT);
   readonly discoverVoteMin = signal(0);
   readonly discoverYearMin = signal<number | null>(null);
   readonly discoverYearMax = signal<number | null>(null);
@@ -55,12 +56,8 @@ export class SearchStateService {
   readonly discoverActive = signal(false);
 
   /** Any narrowing filter (genre/rating/year); sort alone doesn't count. Drives the auto-apply and the Clear button. */
-  readonly filtersEngaged = computed(
-    () =>
-      this.discoverSelectedGenres().size > 0 ||
-      this.discoverVoteMin() > 0 ||
-      this.discoverYearMin() != null ||
-      this.discoverYearMax() != null,
+  readonly filtersEngaged = computed(() =>
+    filtersEngaged(this.discoverSelectedGenres(), this.discoverVoteMin(), this.discoverYearMin(), this.discoverYearMax()),
   );
 
   /** Names of the selected discover genres (panel selects TMDB ids; results
@@ -75,7 +72,7 @@ export class SearchStateService {
   /** Reset the discover panel filters + results. */
   resetDiscover(): void {
     this.discoverSelectedGenres.set(new Set());
-    this.discoverSort.set('popularity.desc');
+    this.discoverSort.set(DEFAULT_SORT);
     this.discoverVoteMin.set(0);
     this.discoverYearMin.set(null);
     this.discoverYearMax.set(null);

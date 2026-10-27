@@ -87,19 +87,34 @@
 
       <div>
         <span class="label-text">{{ 'settings.roles.field_permissions' | translate }}</span>
-        <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          @for (perm of corePermissions(); track perm) {
-            <label class="label cursor-pointer justify-start gap-2 p-2 rounded hover:bg-base-200">
-              <input
-                type="checkbox"
-                class="checkbox checkbox-sm"
-                [checked]="formPermissions().has(perm)"
-                (change)="togglePermission(perm)"
-              />
-              <span class="label-text text-sm">{{ permLabel(perm) }}</span>
-            </label>
-          }
-        </div>
+        @for (group of permissionGroups(); track group.id) {
+          <div class="mt-3">
+            <span class="label-text text-xs opacity-70">{{ 'settings.roles.group_' + group.id | translate }}</span>
+            <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              @for (perm of group.permissions; track perm) {
+                @let via = includedIn(perm);
+                @let inc = includes(perm);
+                <label class="label cursor-pointer justify-start items-start gap-2 p-2 rounded hover:bg-base-200" [class.opacity-60]="via">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm mt-0.5"
+                    [checked]="via || formPermissions().has(perm)"
+                    [disabled]="!!via"
+                    (change)="togglePermission(perm)"
+                  />
+                  <span class="flex flex-col gap-0.5">
+                    <span class="label-text text-sm">{{ permLabel(perm) }}</span>
+                    @if (via) {
+                      <span class="text-xs text-base-content/60">{{ 'settings.roles.included_in' | translate: { name: via } }}</span>
+                    } @else if (inc && formPermissions().has(perm)) {
+                      <span class="text-xs text-base-content/60">{{ 'settings.roles.includes' | translate: { names: inc } }}</span>
+                    }
+                  </span>
+                </label>
+              }
+            </div>
+          </div>
+        }
 
         @if (pluginPermissionGroups().length) {
           <div class="mt-4">

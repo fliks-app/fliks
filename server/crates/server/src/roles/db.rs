@@ -249,8 +249,15 @@ pub async fn seed(pool: &PgPool) -> sqlx::Result<()> {
         .await?;
     if empty {
         let admin: Vec<_> = PERMISSIONS.iter().map(|p| p.to_string()).collect();
-        let user = ["media.read", "livetv.read", "requests.create"].map(String::from);
-        let readonly = ["media.read", "livetv.read"].map(String::from);
+        let user = [
+            "media.read",
+            "livetv.read",
+            "requests.create",
+            "parties.create",
+            "parties.read_public",
+        ]
+        .map(String::from);
+        let readonly = ["media.read", "livetv.read", "parties.read_public"].map(String::from);
         for (name, perms, default) in [
             ("Admin", &admin[..], false),
             ("User", &user[..], true),

@@ -115,12 +115,12 @@ struct PartyLobbyView: View {
                     }
                     ForEach(pending(), id: \.userId) { guest in
                         AvatarTile(name: guest.username,
-                                   caption: tr(guest.source == "link" ? "party.person_link" : "party.person_invited"),
+                                   caption: tr(guest.source == "link" ? "party.person_link" : "party.person_absent"),
                                    badge: PartyBadge.Badge(symbol: "envelope.fill", color: .gray), dimmed: true,
                                    action: service.isHost ? { selectedGuest = guest } : nil)
                     }
                     if service.isHost {
-                        AvatarTile(name: tr("party.invite"), symbol: "plus") { service.sheet = .invite }
+                        AvatarTile(name: tr("party.programme_add"), symbol: "plus") { service.sheet = .invite }
                     }
                 }
                 .padding(.horizontal, 20)

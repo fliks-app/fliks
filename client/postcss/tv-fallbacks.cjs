@@ -13,6 +13,8 @@
  *                                the TV bundle).
  *   - `@starting-style { … }`→ remove entirely (entry animation, optional).
  *   - `text-wrap: balance|pretty`, `field-sizing: …`              → drop.
+ *   - dynamic/small/large viewport units (`dvh`, `svw`, `lvh`, …)  → their
+ *     plain `vh`/`vw`, the same size on a TV, which has no browser chrome.
  *   - viewport-only container units (`cqi`/`cqw`/`cqh`/`cqb`)     → drop
  *     declarations that use them — `width:95cqi` would parse to an invalid
  *     length and the whole declaration is discarded anyway; removing it
@@ -139,6 +141,8 @@ function scaleToFn(value) {
 
 const CQ_UNIT = /\d(cqi|cqw|cqh|cqb)\b/;
 const DROP_PROPS = new Set(['text-wrap', 'field-sizing']);
+const VIEWPORT_UNIT = /(\d)[dsl]v(h|w|min|max)\b/;
+const VIEWPORT_UNIT_G = new RegExp(VIEWPORT_UNIT.source, 'g');
 /** Tailwind v4's `rounded-full`: `calc(infinity * 1px)`, unknown to Chromium 85. */
 const INFINITY_CALC = /calc\(\s*infinity\s*\*\s*1px\s*\)/g;
 
@@ -217,6 +221,7 @@ module.exports = () => ({
       decl.remove();
       return;
     }
+    if (VIEWPORT_UNIT.test(decl.value)) decl.value = decl.value.replace(VIEWPORT_UNIT_G, '$1v$2');
     // The transform-property → `transform` rewrite (Rule handler) leaves any
     // `transition: translate …` animating a property that no longer exists —
     // point it at `transform` instead.

@@ -24,6 +24,7 @@ use tower_http::services::ServeFile;
 
 pub mod paths;
 pub mod store;
+pub mod upload;
 
 pub use store::ImageStore;
 

@@ -688,7 +688,7 @@ export class MediaInfoHeaderComponent {
   private readonly partyApi = inject(PartyApiService);
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.recommend': () => !this.auth.sharingDisabled(),
-    'core.watch_together': () => this.partyApi.supported(),
+    'core.watch_together': () => this.partyApi.canCreate(),
     'core.download': () => !this.download() || this.download()?.status === 'ready',
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),

@@ -1,4 +1,4 @@
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of, Subject } from 'rxjs';
@@ -12,6 +12,7 @@ import { PartyProgrammeComponent } from './party-programme';
 
 @Component({ selector: 'app-media-picker', template: '' })
 class StubPicker {
+  readonly taken = input<unknown>();
   show = vi.fn();
 }
 
@@ -117,7 +118,7 @@ describe('PartyProgrammeComponent', () => {
   it('keeps Add enabled while a save runs, so the picker returns the focus to it', async () => {
     const f = await setup(true);
     api.programme.mockReturnValue(new Promise(() => {}));
-    f.componentInstance['append']([{ mediaId: 3, episodeId: null, title: 'T' }]);
+    f.componentInstance['append']([{ mediaId: 3, episodeId: null, title: 'T', posterUrl: null }]);
     f.detectChanges();
     expect((el(f).querySelector('[data-act=add]') as HTMLButtonElement).disabled).toBe(false);
   });
@@ -129,6 +130,16 @@ describe('PartyProgrammeComponent', () => {
     rowButtons(f, 0)[1].click();
     await flush();
     expect(ids(0)).toEqual(['2:20', '1:', '2:21']);
+  });
+
+  it('sends an accepted proposal back without a confirmation', async () => {
+    const f = await setup(true);
+    f.componentRef.setInput('proposed', [{ mediaId: 2, episodeId: 20 }]);
+    f.detectChanges();
+    expect(el(f).querySelectorAll('[data-act=unaccept]')).toHaveLength(1);
+    (el(f).querySelector('[data-act=unaccept]') as HTMLButtonElement).click();
+    await flush();
+    expect(ids(0)).toEqual(['1:', '2:21']);
   });
 
   it('removes an item', async () => {
@@ -150,9 +161,9 @@ describe('PartyProgrammeComponent', () => {
   it('appends the picker output, dropping what is already there', async () => {
     const f = await setup(true);
     f.componentInstance['append']([
-      { mediaId: 2, episodeId: 21, title: 'x' },
-      { mediaId: 2, episodeId: 22, title: 'x' },
-      { mediaId: 3, episodeId: null, title: 'x' },
+      { mediaId: 2, episodeId: 21, title: 'x', posterUrl: null },
+      { mediaId: 2, episodeId: 22, title: 'x', posterUrl: null },
+      { mediaId: 3, episodeId: null, title: 'x', posterUrl: null },
     ]);
     await flush();
     expect(ids(0)).toEqual(['1:', '2:20', '2:21', '2:22', '3:']);

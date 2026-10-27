@@ -30,12 +30,12 @@ struct PartyHeaderView: View {
 }
 
 extension PartyPeople.Person {
-    /// Host badge, or invited / via link, plus "not connected" when absent.
+    /// Host badge, or via link, plus "not connected" when absent.
     var caption: String {
         let base: String
         switch kind {
         case .host: return tr("party.host_badge")
-        case .invited: base = tr("party.person_invited")
+        case .invited: return present ? "" : tr("party.person_absent")
         case .link: base = tr("party.person_link")
         }
         return present ? base : "\(base) · \(tr("party.person_absent"))"

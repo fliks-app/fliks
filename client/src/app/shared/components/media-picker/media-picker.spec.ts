@@ -6,16 +6,23 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Episode, Media, Season } from '../../../core/services/api/media.service';
 import { MediaService } from '../../../core/services/api/media.service';
+import { MetadataService } from '../../../core/services/api/metadata.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { MediaCardComponent } from '../media-card/media-card';
-import { MediaPickerComponent, type MediaPick, pickEpisodes } from './media-picker';
+import { MediaPickerComponent, type MediaPick, type TakenItem, pickEpisodes } from './media-picker';
 
 @Component({
   selector: 'app-media-card',
-  template: `<button type="button" class="stub-card" (click)="clicked.emit()">{{ media()?.title }}</button>`,
+  template: `<button type="button" class="stub-card" [attr.data-badge]="badge()" (click)="clicked.emit()">{{ media()?.title ?? title() }}</button>`,
 })
 class StubMediaCardComponent {
   readonly media = input<Media | null>(null);
+  readonly imageUrl = input<string | null>(null);
+  readonly title = input('');
+  readonly subtitle = input<string | undefined>(undefined);
+  readonly badge = input<string | null>(null);
+  readonly status = input<string | null>(null);
   readonly selectOnly = input(false);
   readonly hideStatusBar = input(false);
   readonly posterMorph = input(true);
@@ -40,13 +47,22 @@ const missingMovie = { id: 4, title: 'Missing', type: 'movie', files: [] } as un
 
 @Component({
   imports: [MediaPickerComponent],
-  template: `<app-media-picker [multiple]="multiple()" (picked)="out.push($event)" />`,
+  template: `<app-media-picker [multiple]="multiple()" [taken]="taken()" (picked)="out.push($event)" />`,
 })
 class Host {
   readonly picker = viewChild.required(MediaPickerComponent);
   readonly multiple = signal(true);
+  readonly taken = signal<TakenItem[]>([]);
   readonly out: MediaPick[][] = [];
 }
+
+// jsdom ships neither: the synopsis observes its size, and the open row scrolls into view.
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+Element.prototype.scrollIntoView ??= () => {};
 
 // Mirrors the subset of public/i18n/en.json the picker renders.
 const en = {
@@ -57,6 +73,8 @@ const en = {
 describe('MediaPickerComponent', () => {
   let getAll: ReturnType<typeof vi.fn>;
   let getOne: ReturnType<typeof vi.fn>;
+  let getRecommendations: ReturnType<typeof vi.fn>;
+  let getWatchedEpisodeIds: ReturnType<typeof vi.fn>;
   let overlay: { enter: ReturnType<typeof vi.fn>; leave: ReturnType<typeof vi.fn>; height: () => number };
   let fixture: ReturnType<typeof TestBed.createComponent<Host>>;
   let host: Host;
@@ -81,6 +99,8 @@ describe('MediaPickerComponent', () => {
   const epButtons = () => Array.from(root.querySelectorAll<HTMLElement>('ul button'));
   const tabs = () => Array.from(root.querySelectorAll<HTMLElement>('[role=tab]'));
   const confirm = () => root.querySelector<HTMLElement>('.justify-end .btn-primary');
+  const firstAction = () => root.querySelector<HTMLElement>('[data-picker-focus]');
+  const collapse = () => click(root.querySelector('[data-picker-detail] .btn-square'));
   const ids = (out: MediaPick[]) => out.map((p) => p.episodeId);
   const deferred = <T>() => {
     let resolve!: (v: T) => void;
@@ -96,6 +116,9 @@ describe('MediaPickerComponent', () => {
     vi.useFakeTimers();
     getAll = vi.fn().mockResolvedValue({ data: [movie, series], total: 2 });
     getOne = vi.fn().mockResolvedValue(series);
+    getRecommendations = vi.fn().mockResolvedValue([]);
+    getWatchedEpisodeIds = vi.fn().mockResolvedValue([]);
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
     overlay = { enter: vi.fn(), leave: vi.fn(), height: () => 0 };
     HTMLDialogElement.prototype.showModal = function () {
       this.setAttribute('open', '');
@@ -112,6 +135,8 @@ describe('MediaPickerComponent', () => {
         provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of(en) } } }),
         { provide: MediaService, useValue: { getAll, getOne } },
         { provide: KeyboardOverlayService, useValue: overlay },
+        { provide: StreamingApiService, useValue: { getRecommendations, getWatchedEpisodeIds } },
+        { provide: MetadataService, useValue: { getMovieGenres: vi.fn().mockResolvedValue([{ id: 18, name: 'Drama' }]), getTvGenres: vi.fn().mockResolvedValue([]) } },
       ],
     });
     TestBed.overrideComponent(MediaPickerComponent, {
@@ -130,6 +155,7 @@ describe('MediaPickerComponent', () => {
   afterEach(() => {
     root.remove();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('searches once with the debounced query', async () => {
@@ -157,10 +183,43 @@ describe('MediaPickerComponent', () => {
     expect(root.querySelector('.loading')).toBeNull();
   });
 
-  it('emits one entry for a movie', async () => {
+  it('opens a movie alone, with its synopsis, and emits it from Add', async () => {
+    getOne.mockResolvedValue({ ...movie, overview: 'A plot.' });
     await type('film');
     await click(root.querySelector('.stub-card'));
+    expect(host.out).toEqual([]);
+    expect(root.querySelector('[data-picker-detail]')!.textContent).toContain('A plot.');
+    expect(root.querySelectorAll('.stub-card')).toHaveLength(0);
+    await click(firstAction());
     expect(host.out).toEqual([[{ mediaId: 3, episodeId: null, title: 'Film' }]]);
+  });
+
+  it('checks a taken movie and refuses to add it again', async () => {
+    host.taken.set([{ mediaId: 3, episodeId: null }]);
+    getOne.mockResolvedValue(movie);
+    await type('film');
+    expect(root.querySelector('.stub-card')!.getAttribute('data-badge')).toBe('added');
+    await click(root.querySelector('.stub-card'));
+    expect((firstAction() as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('suggests library titles while nothing is searched', async () => {
+    getRecommendations.mockResolvedValue([
+      { media: { id: 3, title: 'Film', type: 'movie', year: 2001, posterUrl: null, available: true } },
+      { media: { id: 9, title: 'Gone', type: 'movie', year: 2001, posterUrl: null, available: false } },
+    ]);
+    host.picker().close();
+    host.picker().show();
+    await flush();
+    expect(Array.from(root.querySelectorAll('.stub-card')).map((b) => b.textContent)).toEqual(['Film']);
+    expect(getAll).not.toHaveBeenCalled();
+  });
+
+  it('browses the library on a filter alone, by genre name', async () => {
+    await flush();
+    await click(Array.from(root.querySelectorAll<HTMLElement>('.badge')).find((b) => b.textContent!.trim() === 'Drama'));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(getAll).toHaveBeenCalledWith({ q: '', limit: 24, genres: ['Drama'] });
   });
 
   it('leaves out a movie with no file and keeps a series', async () => {
@@ -183,16 +242,36 @@ describe('MediaPickerComponent', () => {
   describe('series', () => {
     beforeEach(openSeries);
 
-    it('moves focus to the new view', async () => {
-      expect(document.activeElement).toBe(root.querySelector('button[autofocus]'));
-      await click(root.querySelector('button[autofocus]'));
-      expect(document.activeElement).toBe(root.querySelector('input[type=search]'));
+    it('focuses the first action of the open row and folds it back into a card', async () => {
+      expect(document.activeElement).toBe(firstAction());
+      await collapse();
+      expect(root.querySelector('[data-picker-detail]')).toBeNull();
+      expect(root.querySelectorAll('.stub-card')).toHaveLength(2);
     });
 
-    it('emits the episodes until the end of the season, in order, skipping files-less ones', async () => {
+    it('checks a taken episode and leaves it out of the season', async () => {
+      host.taken.set([{ mediaId: 7, episodeId: 12 }]);
+      await flush();
+      expect((epButtons()[1] as HTMLButtonElement).disabled).toBe(true);
+      await click(modeButton(2));
+      await click(confirm());
+      expect(host.out.map(ids)).toEqual([[11, 13, 14]]);
+    });
+
+    it('marks the episodes from the clicked one and adds them on confirm, skipping files-less ones', async () => {
       await click(modeButton(1));
       await click(epButtons()[1]);
+      expect(host.out).toEqual([]);
+      expect(epButtons().map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'true', 'true']);
+      await click(confirm());
       expect(host.out.map(ids)).toEqual([[12, 13, 14]]);
+    });
+
+    it('drops the starting episode on a season change', async () => {
+      await click(modeButton(1));
+      await click(epButtons()[1]);
+      await click(tabs()[1]);
+      expect((confirm() as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('keeps the ticks across seasons and emits them in season then episode order', async () => {
@@ -216,7 +295,7 @@ describe('MediaPickerComponent', () => {
 
     it('adds the whole season without a hint', async () => {
       await click(modeButton(2));
-      expect(root.querySelector('p.text-sm')).toBeNull();
+      expect(Array.from(root.querySelectorAll('p')).some((p) => p.textContent!.includes('hint_'))).toBe(false);
       await click(confirm());
       expect(host.out.map(ids)).toEqual([[11, 12, 13, 14]]);
     });
@@ -226,8 +305,17 @@ describe('MediaPickerComponent', () => {
       await flush();
       expect(root.querySelector('[role=group]')).toBeNull();
       await click(epButtons()[2]);
+      expect(host.out).toEqual([]);
+      await click(confirm());
       expect(host.out.map(ids)).toEqual([[13]]);
     });
+  });
+
+  it('marks watched episodes, and a season watched in full', async () => {
+    getWatchedEpisodeIds.mockResolvedValue([12, 21, 22]);
+    await openSeries();
+    expect(epButtons().map((b) => !!b.querySelector('.badge-success'))).toEqual([false, true, false, false]);
+    expect(tabs().map((t) => !!t.querySelector('svg'))).toEqual([false, true]);
   });
 
   it('keeps the last answered series when picks race', async () => {
@@ -236,7 +324,7 @@ describe('MediaPickerComponent', () => {
     getOne.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
     await type('show');
     await click(root.querySelectorAll('.stub-card')[1]);
-    await click(root.querySelector('button[autofocus]'));
+    await collapse();
     await click(root.querySelectorAll('.stub-card')[1]);
     b.resolve({ ...series, seasons: [season(1, [ep(31, 1)])] } as Media);
     await flush();

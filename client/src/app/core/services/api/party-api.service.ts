@@ -84,6 +84,18 @@ export interface PartyPlaylistRef {
   name: string;
 }
 
+/** A programme item the host picked to stand for the party. */
+export interface PartyCoverRef {
+  mediaId: number;
+  episodeId?: number;
+}
+
+/** What the host sends: a programme item or 2 to 4 of them as a mosaic. */
+export type PartyCoverChoice = { kind: 'item' } & PartyCoverRef | { kind: 'mosaic'; items: PartyCoverRef[] };
+
+/** The host's picture for the party; null = automatic (the programme head's poster). */
+export type PartyCover = { kind: 'item'; item: PartyItem } | { kind: 'mosaic'; items: PartyItem[] } | { kind: 'upload'; url: string } | null;
+
 export interface PartySummaryDto {
   id: number;
   name: string;
@@ -96,6 +108,8 @@ export interface PartySummaryDto {
   /** The playlist the party follows; the server picks what plays next from it. */
   playlist: PartyPlaylistRef | null;
   memberCount: number;
+  public: boolean;
+  cover: PartyCover;
 }
 
 /** The host's party-wide switches. */
@@ -104,9 +118,11 @@ export interface PartySwitches {
   reactionsEnabled: boolean;
   chatEnabled: boolean;
   linkSharing: boolean;
+  /** Visible to every user holding `parties.read_public`. */
+  public: boolean;
 }
 
-export type PartyGuestSource = 'invite' | 'link';
+export type PartyGuestSource = 'invite' | 'link' | 'public';
 
 export interface PartyGuest extends PartyUser {
   source: PartyGuestSource;
@@ -139,7 +155,13 @@ export interface CreatePartyBody {
   playlistId?: number;
   scheduledAt?: string;
   policy?: PartyPolicy;
+  reactionsEnabled?: boolean;
+  chatEnabled?: boolean;
+  linkSharing?: boolean;
+  public?: boolean;
   inviteeIds?: number[];
+  items?: { mediaId: number; mediaFileId?: number; episodeId?: number }[];
+  cover?: PartyCoverChoice;
 }
 
 export interface PartyIntentBody {
@@ -152,7 +174,7 @@ export interface PartyIntentBody {
 
 const PARTY_SINCE = '5.2.0';
 
-/** Calls the caller reports itself (a stale seek is expected, a status beacon is noise). */
+/** Calls the caller reports itself (a stale seek is expected, a status beacon is noise, a lost room is rejoined). */
 const QUIET = () => ({ context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
 
 @Injectable({ providedIn: 'root' })
@@ -164,6 +186,10 @@ export class PartyApiService {
 
   supported(): boolean {
     return this.serverVersion.supports(PARTY_SINCE);
+  }
+
+  canCreate(): boolean {
+    return this.supported() && this.auth.hasPermission('parties.create');
   }
 
   create(body: CreatePartyBody) {
@@ -178,8 +204,18 @@ export class PartyApiService {
     return firstValueFrom(this.http.put<PartyDto>(`/api/parties/${id}/programme`, { items }));
   }
 
-  queue(id: number) {
-    return firstValueFrom(this.http.get<PartyItem[]>(`/api/parties/${id}/queue`));
+  uploadCover(id: number, image: Blob) {
+    const form = new FormData();
+    form.append('file', image);
+    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/cover`, form));
+  }
+
+  removeCover(id: number) {
+    return firstValueFrom(this.http.delete<PartyDto>(`/api/parties/${id}/cover`));
+  }
+
+  queue(id: number, quiet = false) {
+    return firstValueFrom(this.http.get<PartyItem[]>(`/api/parties/${id}/queue`, quiet ? QUIET() : {}));
   }
 
   async list(): Promise<PartySummaryDto[]> {
@@ -195,13 +231,13 @@ export class PartyApiService {
     return firstValueFrom(this.http.get<PartyPreview>(`/api/parties/by-token/${encodeURIComponent(token)}`));
   }
 
-  update(id: number, body: Partial<PartySwitches> & { name?: string; scheduledAt?: string | null; regenerateToken?: boolean }) {
-    return firstValueFrom(this.http.patch<PartyDto>(`/api/parties/${id}`, body));
+  update(id: number, body: Partial<PartySwitches> & { name?: string; scheduledAt?: string | null; regenerateToken?: boolean; cover?: PartyCoverChoice | null }, quiet = false) {
+    return firstValueFrom(this.http.patch<PartyDto>(`/api/parties/${id}`, body, quiet ? QUIET() : {}));
   }
 
-  /** An invited user drops their own invitation; a 404 means it is already gone. */
-  decline(id: number) {
-    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/decline`, {}, QUIET())).catch((e) => {
+  /** A guest leaves the party for good; a 404 means they already had. */
+  quit(id: number) {
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/quit`, {}, QUIET())).catch((e) => {
       if (e?.status !== 404) throw e;
     });
   }
@@ -216,8 +252,9 @@ export class PartyApiService {
     );
   }
 
-  propose(id: number, mediaId: number, episodeId?: number) {
-    return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals`, { mediaId, ...(episodeId != null && { episodeId }) }));
+  proposeMany(id: number, items: { mediaId: number; episodeId: number | null }[]) {
+    const body = { items: items.map(({ mediaId, episodeId }) => ({ mediaId, ...(episodeId != null && { episodeId }) })) };
+    return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals/batch`, body));
   }
 
   unpropose(id: number, proposalId: number) {
@@ -235,7 +272,7 @@ export class PartyApiService {
   }
 
   start(id: number) {
-    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/start`, {}));
+    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/start`, {}, QUIET()));
   }
 
   leave(id: number, deviceId: string) {
@@ -251,7 +288,7 @@ export class PartyApiService {
   }
 
   sendMessage(id: number, deviceId: string, text: string) {
-    return firstValueFrom(this.http.post<PartyMessage>(`/api/parties/${id}/messages`, { deviceId, text }));
+    return firstValueFrom(this.http.post<PartyMessage>(`/api/parties/${id}/messages`, { deviceId, text }, QUIET()));
   }
 
   iceServers() {
@@ -289,11 +326,11 @@ export class PartyApiService {
   }
 
   kick(id: number, userId: number) {
-    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/members/${userId}/kick`, {}));
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/members/${userId}/kick`, {}, QUIET()));
   }
 
   transferHost(id: number, userId: number) {
-    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/members/${userId}/host`, {}));
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/members/${userId}/host`, {}, QUIET()));
   }
 
   invite(id: number, userIds: number[]) {

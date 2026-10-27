@@ -4,7 +4,7 @@ use super::{
     db::{self, Row},
     dto::{MemberDto, PartyItem, PlaybackDto, UserRef},
 };
-use crate::{events::SseEvent, http::AppError, state::AppState, sync::MutexExt};
+use crate::{events::SseEvent, http::AppError, images::upload, state::AppState, sync::MutexExt};
 use chrono::{DateTime, Utc};
 use fliks_domain::{
     js::now_ms,
@@ -110,6 +110,7 @@ impl Parties {
             l.room.reactions_enabled = row.reactions_enabled;
             l.room.chat_enabled = row.chat_enabled;
             l.room.link_sharing = row.link_sharing;
+            l.room.public = row.public;
             l.room.restore_chat(chat);
             l
         });
@@ -337,7 +338,21 @@ pub async fn mutate_held<R>(
     Some(r)
 }
 
-const ITEM_KINDS: [&str; 2] = ["item_changed", "item_skipped"];
+/// Posts a system message in the party's chat, creating the machine of a scheduled party that has
+/// none so the message is kept.
+pub async fn note(st: &AppState, row: &Row, kind: &str, by: &str, args: Value) -> sqlx::Result<()> {
+    ensure(st, row, false).await?;
+    mutate(st, row.id, |l| ((), l.room.note(kind, by, args, now_ms()))).await;
+    Ok(())
+}
+
+const ITEM_KINDS: [&str; 5] = [
+    "item_changed",
+    "item_skipped",
+    "proposed",
+    "voted",
+    "proposal_chosen",
+];
 
 fn is_item_message(m: &Message) -> bool {
     m.system
@@ -393,6 +408,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
             st.hub.emit_to_connection(*user, conn, ev.clone());
         }
     };
+    let mut moved = false;
     for e in d.effects {
         match e {
             Effect::Persist { position, item } => {
@@ -409,6 +425,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 by,
                 action,
             } => {
+                moved = true;
                 let dto = item_dto(st, &item)
                     .await
                     .unwrap_or_else(|_| item_dto_of(None, &item));
@@ -459,6 +476,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 reactions_enabled,
                 chat_enabled,
                 link_sharing,
+                public,
             } => emit(SseEvent::PartySettings {
                 party_id: pid,
                 rev: rev as i64,
@@ -467,6 +485,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 reactions_enabled,
                 chat_enabled,
                 link_sharing,
+                public,
             }),
             Effect::Message(m) => {
                 if let Err(err) = db::save_message(&st.db, party, &m).await {
@@ -499,7 +518,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 username,
                 emoji,
             }),
-            Effect::Closed { reason, to } => {
+            Effect::Closed { reason, by, to } => {
                 let reason = json(reason).as_str().unwrap_or_default().to_owned();
                 for (user, conn) in to {
                     st.hub.emit_to_connection(
@@ -508,34 +527,54 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                         SseEvent::PartyClosed {
                             party_id: pid,
                             reason: reason.clone(),
+                            by: by.clone(),
                         },
                     );
                 }
             }
         }
     }
+    // The party page and the home rail outside the room follow the playback through a refetch.
+    if moved {
+        let row = db::get(&st.db, party).await;
+        if let Err(err) = match row {
+            Ok(Some(row)) => notify_updated(st, &row).await,
+            Ok(None) => Ok(()),
+            Err(e) => Err(e),
+        } {
+            tracing::warn!(error = %err, party, "party update not announced");
+        }
+    }
 }
 
-/// Owner and every guest, for the home rail.
+/// Owner and every guest, or everyone for a public party, for the home rail.
 pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
+    let ev = SseEvent::PartyUpdated {
+        party_id: row.id.into(),
+    };
+    if row.public {
+        st.hub.emit(ev);
+        return Ok(());
+    }
     let mut users = db::guest_ids(&st.db, row.id).await?;
     users.push(row.owner_id);
-    st.hub.emit_to_users(
-        &users,
-        SseEvent::PartyUpdated {
-            party_id: row.id.into(),
-        },
-    );
+    st.hub.emit_to_users(&users, ev);
     Ok(())
 }
 
 /// Sets `ended`, tells the members, drops the machine, the proposals and the chat, and refreshes
 /// the rail. Under the gate, so a start or an edit in flight finishes first or sees the end.
-pub async fn end(st: &AppState, row: &Row, reason: CloseReason) -> sqlx::Result<()> {
+pub async fn end(
+    st: &AppState,
+    row: &Row,
+    reason: CloseReason,
+    by: Option<String>,
+) -> sqlx::Result<()> {
     let _held = hold(st, row.id).await;
     db::set_ended(&st.db, row.id).await?;
+    upload::remove(super::cover::DIR, row.id).await;
     super::proposals::clear(&st.db, row.id).await?;
-    mutate_held(st, row.id, |l| ((), vec![l.room.close(reason)])).await;
+    mutate_held(st, row.id, |l| ((), vec![l.room.close(reason, by)])).await;
     st.parties.forget(row.id);
     db::clear_chat(&st.db, row.id).await?;
     notify_updated(st, row).await
@@ -593,7 +632,7 @@ pub async fn tick(st: &AppState) {
         }
         match db::get(&st.db, id).await {
             Ok(Some(row)) if row.status == "live" => {
-                if let Err(e) = end(st, &row, CloseReason::Expired).await {
+                if let Err(e) = end(st, &row, CloseReason::Expired, None).await {
                     tracing::warn!(error = %e, party = id, "party expiry failed");
                 }
             }
@@ -620,7 +659,7 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
             .empty_since(row.id)
             .map(|e| at.max(e) + SCHEDULE_EXPIRY_MS);
         if expires.is_some_and(|t| now_ms >= t) {
-            end(st, &row, CloseReason::Expired).await?;
+            end(st, &row, CloseReason::Expired, None).await?;
         } else if now_ms >= at - LOBBY_OPEN_BEFORE_MS {
             announce_lobby(st, &row).await?;
         }

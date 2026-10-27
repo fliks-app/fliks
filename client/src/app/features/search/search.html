@@ -50,11 +50,7 @@
   <!-- Media type: drives search + discover (reloads the discover genre list).
        Spans the filter-column width, the three tabs sharing it equally. -->
   @if (state.tab() === 'videos') {
-    <div class="join w-full lg:w-60">
-      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'all'" (click)="setContentType('all')">{{ 'search.filter_all' | translate }}</button>
-      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'movie'" (click)="setContentType('movie')">{{ 'search.filter_movies' | translate }}</button>
-      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'series'" (click)="setContentType('series')">{{ 'search.filter_series' | translate }}</button>
-    </div>
+    <app-content-type-toggle class="w-full lg:w-60" [value]="state.contentType()" (valueChange)="setContentType($event)" />
   }
 
   @if (state.tab() === 'people') {
@@ -265,77 +261,12 @@
 
 <!-- Discover filter panel — projected into the desktop sidebar and the mobile sheet -->
 <ng-template #filterPanel>
-  <div class="flex flex-col gap-4">
-    <h3 class="font-semibold">{{ 'search.filters' | translate }}</h3>
-
-    <div class="flex flex-col gap-1">
-      <span class="text-sm text-base-content/60">{{ 'search.sort_label' | translate }}</span>
-      <select appTvSelect
-        class="select select-bordered select-sm w-full"
-        [ngModel]="state.discoverSort()"
-        (ngModelChange)="state.discoverSort.set($event)"
-      >
-        @for (o of sortOptions; track o.value) {
-          <option [value]="o.value">{{ o.labelKey | translate }}</option>
-        }
-      </select>
-    </div>
-
-    @if (state.discoverGenres().length) {
-      <div class="flex flex-col gap-1">
-        <span class="text-sm text-base-content/60">{{ 'search.genres_label' | translate }}</span>
-        <div class="flex flex-wrap gap-2 mt-1">
-          @for (g of state.discoverGenres(); track g.id) {
-            <button
-              type="button"
-              class="badge badge-lg cursor-pointer"
-              [class.badge-primary]="state.discoverSelectedGenres().has(g.id)"
-              [class.badge-outline]="!state.discoverSelectedGenres().has(g.id)"
-              (click)="toggleGenre(g.id)"
-            >{{ g.name }}</button>
-          }
-        </div>
-      </div>
-    }
-
-    <div class="flex flex-col gap-1">
-      <span class="text-sm text-base-content/60 flex justify-between">
-        <span>{{ 'search.rating_label' | translate }}</span>
-        <span class="tabular-nums">{{ state.discoverVoteMin() }}+</span>
-      </span>
-      <input
-        type="range" min="0" max="9" step="1"
-        class="range range-primary range-sm w-full"
-        [ngModel]="state.discoverVoteMin()"
-        (ngModelChange)="state.discoverVoteMin.set(+$event)"
-      />
-    </div>
-
-    <div class="flex flex-col gap-1">
-      <span class="text-sm text-base-content/60">{{ 'search.year_label' | translate }}</span>
-      <div class="flex items-center gap-2">
-        <input
-          type="number" inputmode="numeric" min="1900" max="2100"
-          class="input input-bordered input-sm w-full"
-          [placeholder]="'search.year_from' | translate"
-          [ngModel]="state.discoverYearMin()"
-          (ngModelChange)="state.discoverYearMin.set($event ? +$event : null)"
-        />
-        <span class="text-base-content/40">–</span>
-        <input
-          type="number" inputmode="numeric" min="1900" max="2100"
-          class="input input-bordered input-sm w-full"
-          [placeholder]="'search.year_to' | translate"
-          [ngModel]="state.discoverYearMax()"
-          (ngModelChange)="state.discoverYearMax.set($event ? +$event : null)"
-        />
-      </div>
-    </div>
-
-    @if (state.filtersEngaged()) {
-      <div class="pt-1">
-        <button type="button" class="btn btn-ghost btn-sm w-full" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
-      </div>
-    }
-  </div>
+  <app-search-filters
+    [genres]="state.discoverGenres()"
+    [(selectedGenres)]="state.discoverSelectedGenres"
+    [(sort)]="state.discoverSort"
+    [(voteMin)]="state.discoverVoteMin"
+    [(yearMin)]="state.discoverYearMin"
+    [(yearMax)]="state.discoverYearMax"
+  />
 </ng-template>

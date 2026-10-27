@@ -2689,15 +2689,25 @@
         }
       }
     },
-    "/api/parties/{id}/decline": {
+    "/api/parties/{id}/cover": {
       "post": {
         "tags": [
           "crate::party"
         ],
-        "summary": "An invited user drops their own invitation; the host cannot, and anyone without one gets the 404.",
-        "operationId": "decline",
+        "operationId": "set_cover",
         "responses": {
-          "204": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "clear_cover",
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -2825,6 +2835,23 @@
         }
       }
     },
+    "/api/parties/{id}/proposals/batch": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "[`propose`] for several titles at once, in order: one request against the rate limit.",
+        "operationId": "propose_batch",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/proposals/{pid}": {
       "delete": {
         "tags": [
@@ -2884,6 +2911,20 @@
         "operationId": "queue",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/quit": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "A guest leaves the party for good; the host cannot, and anyone who is not a guest gets the 404.",
+        "operationId": "quit",
+        "responses": {
+          "204": {
             "description": ""
           }
         }
