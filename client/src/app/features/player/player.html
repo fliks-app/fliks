@@ -4,6 +4,7 @@
   class="party-shell"
   [attr.data-party-dock]="partyPanelShown() ? party.dock() : null"
   [class.in-party]="partyCtl.active()"
+  [class.hidden]="castScreenUp()"
   [class.keyboard-open]="keyboardOverlay.height() > 0"
   [style.--keyboard-h.px]="keyboardOverlay.height()"
 >

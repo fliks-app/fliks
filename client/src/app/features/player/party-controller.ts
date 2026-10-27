@@ -106,6 +106,17 @@ export class PartyController {
     },
   };
 
+  private readonly castIntercept: NonNullable<CastPlaybackTarget['partyIntercept']> = {
+    active: () => this.party.active(),
+    togglePlay: () => this.togglePlay(),
+    seek: (t) => this.seek(t),
+    next: () => {
+      if (!this.party.active()) return false;
+      void this.requestNext();
+      return true;
+    },
+  };
+
   /** The receiver while a Cast session is up, else the local engine. */
   private out(): PartyOutput {
     return this.castService.isConnected() ? this.castOutput : this.localOutput;
@@ -118,16 +129,7 @@ export class PartyController {
       if (!auto) void this.requestNext();
       return true;
     };
-    this.castTarget.partyIntercept = {
-      active: () => this.party.active(),
-      togglePlay: () => this.togglePlay(),
-      seek: (t) => this.seek(t),
-      next: () => {
-        if (!this.party.active()) return false;
-        void this.requestNext();
-        return true;
-      },
-    };
+    this.castTarget.partyIntercept = this.castIntercept;
     this.closedSub = this.party.closed.subscribe(() => this.goHome());
     this.driftTimer = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
     void this.resumeFromUrl();
@@ -162,7 +164,8 @@ export class PartyController {
     if (this.driftTimer) clearInterval(this.driftTimer);
     this.ducker.stop();
     this.queueCtl.interceptAdvance = null;
-    this.castTarget.partyIntercept = null;
+    // A player replacing this one attached its own before this teardown ran.
+    if (this.castTarget.partyIntercept === this.castIntercept) this.castTarget.partyIntercept = null;
     this.closedSub?.unsubscribe();
     // Closing the player is leaving the party.
     if (this.party.active()) void this.party.leave();

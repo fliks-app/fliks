@@ -274,6 +274,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly airPlay = inject(AirPlayService);
   private detachAirPlay: () => void = () => {};
   private readonly castPlayerService = inject(CastPlayerService);
+  /** The cast screen covers the player: the shell, which stays mounted to run a party, must not take its taps. */
+  protected readonly castScreenUp = computed(() => this.castService.isConnected() && this.castPlayerService.expanded());
   private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -570,16 +572,29 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly castSyncEffect = effect(() => {
     const casting = this.castService.isConnected();
     if (casting && !this.wasCasting) {
-      // Just connected — mute/pause local engine
-      try {
-        if (this.engine && !this.isNativeEngine()) {
-          void this.pausePlayback();
-          this.engine.muted = true;
+      // Any connect hands the local playback over, not only one from the picker: a session that lands
+      // after the picker's wait or that Android resumes would otherwise leave the receiver empty.
+      untracked(() => {
+        // The picture is on the TV: the phone turns freely for the cast controls.
+        if (this.isNative) {
+          this.orientationLocked.set(false);
+          Orientation.unlock().catch(() => {});
         }
-      } catch { /* engine may not be ready yet */ }
+        if (this.engine && !this.castPlayerService.hasMedia()) {
+          void this.handOffToCast();
+          return;
+        }
+        try {
+          if (this.engine && !this.isNativeEngine()) {
+            void this.pausePlayback();
+            this.engine.muted = true;
+          }
+        } catch { /* engine may not be ready yet */ }
+      });
     } else if (!casting && this.wasCasting) {
       // Just disconnected — reload local engine and resume at Cast position
       const castPos = this.castService.currentTime();
+      if (this.isNative && this.landscapeOnOpen) untracked(() => releasePlayerOrientation(true));
       void this.resumeLocalAfterCast(castPos).then(() => {
         if (this.partyCtl.active()) this.partyCtl.resync();
       });
@@ -1074,7 +1089,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // On native: listen to orientation changes (immersive handled by effect)
     if (this.isNative) {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
-      if (this.landscapeOnOpen) releasePlayerOrientation(true);
+      if (this.landscapeOnOpen && !this.castService.isConnected()) releasePlayerOrientation(true);
     }
 
     this.webCrop.init();
@@ -2380,7 +2395,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     const wasPlaying = this.engine && !this.engine.paused;
-    const currentPos = this.engine?.currentTime ?? 0;
     void this.pausePlayback();
 
     connect();
@@ -2392,15 +2406,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await new Promise(r => setTimeout(r, 500));
     }
 
-    if (!this.castService.isConnected()) {
-      if (wasPlaying && this.engine) this.engine.play().catch(() => {});
-      return;
-    }
+    // Connected: castSyncEffect hands the playback over.
+    if (!this.castService.isConnected() && wasPlaying && this.engine) this.engine.play().catch(() => {});
+  }
 
-    // Connected — hand off to Cast
-    if (this.engine) this.engine.muted = true;
-    if (this.engine) await this.engine.unload();
-    await this.startCastFromPlayer(currentPos);
+  private async handOffToCast(): Promise<void> {
+    const position = this.engine?.currentTime ?? 0;
+    if (this.engine) {
+      this.engine.muted = true;
+      await this.engine.unload();
+    }
+    await this.startCastFromPlayer(position);
     this.castPlayerService.expanded.set(true);
     // Closing the player leaves the party: it stays mounted behind the cast overlay.
     if (this.partyCtl.active()) this.partyCtl.resync();
@@ -2717,7 +2733,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
 
     // If Cast is already connected, send to Cast
-    if (this.castService.isConnected() && !this.isNativeEngine()) {
+    if (this.castService.isConnected()) {
       // Let the subtitle list settle before handing off, so Cast gets the
       // full list instead of whatever raced ahead of it.
       await trackSetupPromise.catch(() => {});
@@ -2730,6 +2746,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.subs.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
       );
       await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
+      this.castPlayerService.expanded.set(true);
       if (this.partyCtl.active()) this.partyCtl.resync();
     } else if ((!this.isNativeEngine() || this.isDesktopNative || this.openedPaused) && !this.loadedPaused) {
       this.engine!.play().catch(() => {
