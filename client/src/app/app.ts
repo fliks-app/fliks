@@ -255,14 +255,8 @@ export class App implements OnInit, OnDestroy {
       remoteOverlayOpen.set(false);
       return;
     }
-    // Close any open bottom sheet / dismissable layer before navigating.
+    // Close the topmost bottom sheet, dialog or other dismissable layer before navigating.
     if (this.dismissStack.dismissTop()) {
-      return;
-    }
-    // Close an open native <dialog> (topmost first) before any route-level back.
-    const openDialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
-    if (openDialogs.length) {
-      openDialogs[openDialogs.length - 1].close();
       return;
     }
     // On /watch defer to the player's back handler, which replaces the URL with the detail page instead of history.back().

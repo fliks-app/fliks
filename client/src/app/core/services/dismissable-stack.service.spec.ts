@@ -30,4 +30,29 @@ describe('DismissableStackService', () => {
     expect(order).toEqual(['top', 'bottom']);
     expect(svc.hasAny()).toBe(false);
   });
+
+  it('stacks an open dialog over a layer opened before it, and skips one dropped while open', async () => {
+    const svc = new DismissableStackService();
+    let panelOpen = true;
+    svc.push(() => {
+      panelOpen = false;
+    });
+    const dialog = document.body.appendChild(document.createElement('dialog'));
+    // jsdom has no HTMLDialogElement.close().
+    dialog.close = () => dialog.removeAttribute('open');
+    dialog.setAttribute('open', '');
+    await Promise.resolve();
+
+    svc.dismissTop();
+    expect([dialog.open, panelOpen]).toEqual([false, true]);
+    await Promise.resolve();
+
+    const dropped = document.body.appendChild(document.createElement('dialog'));
+    dropped.setAttribute('open', '');
+    await Promise.resolve();
+    dropped.remove();
+    svc.dismissTop();
+    expect(panelOpen).toBe(false);
+    dialog.remove();
+  });
 });
