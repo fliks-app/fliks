@@ -1,6 +1,6 @@
 import { computed, Signal } from '@angular/core';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
-import type { PlaybackOption, PlaybackOutput } from '../../core/services/playback/playback-output';
+import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput } from '../../core/services/playback/playback-output';
 import type { PlayerStateService } from '../../core/services/player-state.service';
 import type { SpriteMetadata } from '../../core/utils/player.utils';
 
@@ -36,10 +36,13 @@ export interface LocalOutputHost {
   selectAudio(id: string): void;
   selectQuality(id: string): void;
   onBack(): void;
+  release(): Promise<LocalHandoff | null>;
+  stepAside(): void;
+  resume(position: number): Promise<void>;
 }
 
 /** This device's player engine as a playback output. */
-export class LocalPlaybackOutput implements PlaybackOutput {
+export class LocalPlaybackOutput implements LocalOutput {
   readonly sync = {
     slackS: SEEK_SLACK_S,
     stepS: () => this.host.engine()?.positionStepS ?? 0,
@@ -130,6 +133,9 @@ export class LocalPlaybackOutput implements PlaybackOutput {
   selectQuality = (quality: PlaybackOption) => this.host.selectQuality(quality.id);
   skip = () => this.host.skip();
   playNext = () => this.host.playNext();
+  release = () => this.host.release();
+  stepAside = () => this.host.stepAside();
+  resume = (position: number) => this.host.resume(position);
   stopPlayback = () => this.host.onBack();
   disconnect = () => this.host.onBack();
 }

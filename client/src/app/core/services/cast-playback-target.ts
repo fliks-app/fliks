@@ -148,15 +148,17 @@ export class CastPlaybackTarget implements PlaybackOutput {
       console.warn('[cast-playback-target] playNext with nothing queued');
       return;
     }
-    void this.cp.quickStart({
-      mediaFileId: next.mediaFileId,
-      mediaId: next.mediaId,
-      episodeId: next.episodeId,
-      title: next.title,
-      episodeTitle: next.episodeTitle,
-      fanartUrl: next.fanartUrl ?? null,
-      startTime: 0,
-    });
+    void this.session.play(
+      {
+        fileId: next.mediaFileId,
+        mediaId: next.mediaId,
+        episodeId: next.episodeId,
+        title: next.title,
+        episodeTitle: next.episodeTitle,
+        fanartUrl: next.fanartUrl,
+      },
+      { fromStart: true, expand: false },
+    );
   }
 
   /** Stop the media but stay on the device: the session outlives it, and the

@@ -1,5 +1,6 @@
 import { Signal } from '@angular/core';
 import { SpriteMetadata } from '../../utils/player.utils';
+import type { CastPlayerService } from '../cast-player.service';
 
 /** Minimal shape the playback surfaces need for a track/quality row. */
 export interface PlaybackOption {
@@ -92,4 +93,28 @@ export interface PlaybackOutput {
   /** Stop what the output is playing. On Cast the session IS the playback, so the two collapse. */
   stopPlayback(): void;
   disconnect(): void;
+}
+
+/** What `CastPlayerService.startCast` needs to describe the media being handed to a receiver. */
+export type CastStart = Parameters<CastPlayerService['startCast']>[0];
+
+/** What a local output gives up when playback leaves this device. */
+export interface LocalHandoff {
+  position: number;
+  cast: CastStart;
+  /** The first load had not settled, so the subtitle pick may have been refused: the receiver resolves its own. */
+  resolveSubtitle: boolean;
+  audioLanguage?: string;
+  /** This device's own stream session, stopped once the receiver streams on its own. */
+  localSessionId?: string;
+}
+
+/** The player's output: the one that can leave this device and come back. */
+export interface LocalOutput extends PlaybackOutput {
+  /** Pause, mute and unload the engine; null when no item is open. */
+  release(): Promise<LocalHandoff | null>;
+  /** Pause and mute without unloading: another output already plays. */
+  stepAside(): void;
+  /** Load again, or for the first time, at `position`. */
+  resume(position: number): Promise<void>;
 }

@@ -219,6 +219,17 @@ export class PartyController {
     });
   });
 
+  /** A handoff changes which output the party drives: bring the new one to the group's position. */
+  private lastOutput: PlaybackOutput | null = null;
+  private readonly outputEffect = effect(() => {
+    const out = this.session.output();
+    untracked(() => {
+      const moved = !!this.lastOutput && !!out && out !== this.lastOutput;
+      this.lastOutput = out;
+      if (moved && this.host && this.party.active()) this.resync();
+    });
+  });
+
   private lastLiveState: PartyLiveState['state'] | null = null;
   private readonly liveEffect = effect(() => {
     const live = this.party.live();

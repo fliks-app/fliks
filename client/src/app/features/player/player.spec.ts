@@ -2725,7 +2725,7 @@ describe('PlayerComponent cast session picks', () => {
         };
         return true;
       });
-      return { run: () => h.component.resumeLocalAfterCast(30), seen: () => seen };
+      return { run: () => h.component.resumeLocal(30), seen: () => seen };
     }
 
     it('reloads on the audio and the burn-in picked on the receiver', async () => {
@@ -2759,39 +2759,26 @@ describe('PlayerComponent cast session picks', () => {
     });
   });
 
-  it('starts a cast opened on an already-connected receiver on the subtitle the local rules pick', async () => {
-    const { h, cp } = casting();
-    h.component.subs.availableSubtitles.set([castSub('ext-5'), castSub('ext-6')]);
-    cp['resolveStartSubtitle'].mockResolvedValue(castSub('ext-6'));
+  it('hands the local session id over so the session can stop it once the cast stream is up', async () => {
+    const { h } = casting();
+    (h.component as unknown as { playbackInfo: { sessionId: string } }).playbackInfo = { sessionId: 'local-sid' };
     h.component.engine.unload = vi.fn(async () => {});
 
-    await h.component.completePostLoadSetup(0);
+    const handoff = await h.component.releaseForHandoff();
 
-    expect(cp['startCast']).toHaveBeenCalledTimes(1);
-    expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: 'ext-6' });
-    h.fixture.destroy();
-  });
-
-  it('stops the local session once the cast stream is up', async () => {
-    const { h, cp } = casting();
-    (h.component as unknown as { playbackInfo: { sessionId: string } }).playbackInfo = { sessionId: 'local-sid' };
-    h.streamingApi.stopSession.mockClear();
-
-    await h.component.startCastFromPlayer(10);
-
-    expect(cp['reloadCastStream']).toHaveBeenCalled();
-    expect((h.streamingApi.stopSession.mock.calls as unknown[][]).map((c) => c[0])).toEqual(['local-sid']);
+    expect(handoff).toMatchObject({ localSessionId: 'local-sid' });
+    expect(h.component.engine.unload).toHaveBeenCalled();
   });
 
   it('hands a local Off over to the cast as Off', async () => {
-    const { h, cp } = casting();
+    const { h } = casting();
     h.component.subs.availableSubtitles.set([castSub('ext-5')]);
     h.component.subs.activeSubtitleId.set(null);
 
-    await h.component.startCastFromPlayer(10);
+    const start = h.component.castStart();
 
-    expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: null });
-    expect(cp['startCast'].mock.calls[0][0].subtitles).toEqual(h.component.subs.availableSubtitles());
+    expect(start).toMatchObject({ activeSubtitleId: null });
+    expect(start.subtitles).toEqual(h.component.subs.availableSubtitles());
   });
 });
 
@@ -3142,16 +3129,13 @@ describe('PlayerComponent negotiation entry points', () => {
     expect([call[2], call[3]]).toEqual([undefined, undefined]);
   });
 
-  it('leaves the cast ladder to the cast service: no playback-info of its own, local rung handed over', async () => {
+  it('hands the local rung to the cast without a playback-info of its own', () => {
     const h = createHarness();
-    const cp = TestBed.inject(CastPlayerService) as any;
     h.component.activeQualityId.set('720p');
     h.streamingApi.getPlaybackInfo.mockClear();
 
-    await h.component.startCastFromPlayer(10);
-
+    expect(h.component.castStart()).toMatchObject({ activeQualityId: '720p' });
     expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-    expect(cp.reloadCastStream).toHaveBeenCalledWith(10, true, '720p');
   });
 });
 

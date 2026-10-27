@@ -8,6 +8,8 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { MediaService } from './api/media.service';
 import { PlaybackQueueService } from './playback-queue.service';
 import { RemoteService } from './remote.service';
+import { CastPlaybackTarget } from './cast-playback-target';
+import { RemotePlaybackTarget } from './remote-playback-target';
 
 describe('PlayableMediaService.play', () => {
   afterEach(() => TestBed.resetTestingModule());
@@ -29,6 +31,8 @@ describe('PlayableMediaService.play', () => {
         },
         { provide: PlaybackQueueService, useValue: { clear: vi.fn() } },
         { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, send } },
+        { provide: CastPlaybackTarget, useValue: { isConnected: () => !!over.cast } },
+        { provide: RemotePlaybackTarget, useValue: { isConnected: () => !!over.target } },
       ],
     });
     return { service: TestBed.inject(PlayableMediaService), navigate, quickStart, send };

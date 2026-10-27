@@ -16,7 +16,7 @@
   [class.closing]="closing()"
   [class.player-hide-cursor]="!chrome.visible()"
   [class.native-player]="!!nativeEngine"
-  [class.hidden]="castService.isConnected()"
+  [class.hidden]="!session.isLocal()"
   (mousemove)="chrome.onPointerMove()"
   (wheel)="chrome.wakeFromPointerGesture()"
   (click)="chrome.wakeFromPointerGesture()"

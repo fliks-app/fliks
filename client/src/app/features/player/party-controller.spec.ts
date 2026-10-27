@@ -97,6 +97,9 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     releasePlayback: vi.fn(),
     position: () => 0,
     onBack: vi.fn(),
+    release: vi.fn(),
+    stepAside: vi.fn(),
+    resume: vi.fn(),
   } as unknown as PartyHost & LocalOutputHost;
   TestBed.inject(PlaybackSession).attachLocal(new LocalPlaybackOutput(host, state));
   ctl.attach(host);
