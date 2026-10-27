@@ -124,7 +124,13 @@ async fn seed_is_exact_and_idempotent(pool: PgPool) {
         (user["isDefault"].clone(), user["permissions"].clone()),
         (
             json!(true),
-            json!(["media.read", "livetv.read", "requests.create"])
+            json!([
+                "media.read",
+                "livetv.read",
+                "requests.create",
+                "parties.create",
+                "parties.read_public"
+            ])
         )
     );
 }
@@ -374,8 +380,8 @@ async fn permissions_are_validated(pool: PgPool) {
         .execute(&pool).await.unwrap();
     let (s, b) = call(&c, "GET", "/api/roles/permissions", Some(&c.admin), None).await;
     assert_eq!(s, 200);
-    assert_eq!(b.as_array().unwrap().len(), 13);
-    assert_eq!(b[12], "read:plugin:fliks.a:queue");
+    assert_eq!(b.as_array().unwrap().len(), 16);
+    assert_eq!(b[15], "read:plugin:fliks.a:queue");
     assert_eq!(
         call(
             &c,

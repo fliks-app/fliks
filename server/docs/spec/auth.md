@@ -63,10 +63,10 @@ No auth route has a policy beyond the extractor.
 19. `User.permissions` getter: `isAdmin` → `['manage:all']`; else the role's `permissions` array; no role → `[]`.
 20. If the permission list contains the literal `manage:all` (via `isAdmin` or a role that stores it), the ability is exactly `can(manage, all)` and nothing else is evaluated.
 21. Actions (closed enum, string values): `manage create read update delete approve decline grab track`. `manage` as a rule action matches every requested action; a request for `manage` matches only a `manage` rule.
-22. Subjects: `User Media FliksRequest QualityProfile LanguageProfile SubtitleProvider SubtitleFile TranslationProvider Library Playlist LiveTvChannel Role` (class names), the strings `Settings` and `all`, and `plugin:<id>:<name>`.
+22. Subjects: `User Media FliksRequest QualityProfile LanguageProfile SubtitleProvider SubtitleFile TranslationProvider Library Playlist LiveTvChannel Role Party` (class names), the strings `Settings` and `all`, and `plugin:<id>:<name>`.
 23. Plugin grants: for each permission string `p`: bare `plugin:<rest>` (starts with `plugin:` and is longer than the prefix) → `can(manage, p)`; else split at the **first** `:`, `<action>:<subject>` where `<subject>` is a plugin subject → `can(<action>, <subject>)` if `<action>` is in the enum, otherwise skipped (not widened to `manage`); anything else ignored. Shape only, no check that the plugin exists.
 24. Unconditional grants (every non-`manage:all` user): `read` and `update` on `User` with condition `{id: self}`; `read create update delete` on `Playlist`.
-25. Core permission table (12 strings, this order). Unknown strings grant nothing.
+25. Core permission table (15 strings, this order). Unknown strings grant nothing.
 
     | Permission | Grants |
     |---|---|
@@ -82,6 +82,9 @@ No auth route has a policy beyond the extractor.
     | `settings.access` | read Settings; manage Settings, QualityProfile, LanguageProfile, SubtitleProvider, TranslationProvider, Library |
     | `users.manage` | manage User; read Role |
     | `roles.manage` | manage Role |
+    | `parties.create` | create Party |
+    | `parties.manage` | manage Party (any action) |
+    | `parties.read_public` | read Party (see public parties) |
 
 26. Class-level vs instance checks: `can(action, Class)` is true when ANY rule exists for that action and subject type, conditions ignored (so every authenticated user passes `can(read, User)` and `can(update, User)` at class level); conditions only bite when an instance is passed. Handlers re-check instances (users.md, roles.md).
 27. Policy check: handler policies win over class policies; zero policies declared → deny; no authenticated user → deny; every policy must return true. Denial is 403 `{"message":"Forbidden resource","error":"Forbidden","statusCode":403}`. The explicit "any authenticated user" policy is always true. Every handler's first line requires a permission or that policy.

@@ -35,6 +35,11 @@ describe('partyPeople', () => {
     expect(missingCount(gone)).toBe(2);
   });
 
+  it('does not count a public joiner as missing either', () => {
+    const guests = [...invitees, { userId: 9, username: 'u9', source: 'public' as const }];
+    expect(missingCount(partyPeople(host, guests, [member(1, 'a', 'ready', 'host')], new Set()))).toBe(2);
+  });
+
   it('folds a user on two devices into one row with the least ready status', () => {
     const people = partyPeople(host, invitees, [member(2, 'a', 'ready'), member(2, 'b', 'buffering')], new Set());
     expect(people.filter((p) => p.userId === 2)).toHaveLength(1);

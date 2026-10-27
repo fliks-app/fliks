@@ -122,6 +122,11 @@ fn decode(bytes: &[u8]) -> Option<DynamicImage> {
     reader.decode().ok()
 }
 
+/// The image re-encoded as a JPEG at its own size.
+pub fn to_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
+    resized(&decode(bytes)?, u32::MAX, false)
+}
+
 /// Fixed width, aspect kept, never enlarged; PNG for logos, JPEG q90 otherwise.
 fn resized(img: &DynamicImage, width: u32, png: bool) -> Option<Vec<u8>> {
     let (w, h) = (img.width(), img.height());

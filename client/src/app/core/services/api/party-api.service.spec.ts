@@ -20,20 +20,20 @@ function setup(post: unknown) {
   return TestBed.inject(PartyApiService);
 }
 
-describe('PartyApiService.decline', () => {
-  it('posts to the decline route', async () => {
+describe('PartyApiService.quit', () => {
+  it('posts to the quit route', async () => {
     const post = vi.fn(() => of(undefined));
-    await setup(post).decline(7);
-    expect(post).toHaveBeenCalledWith('/api/parties/7/decline', {}, expect.anything());
+    await setup(post).quit(7);
+    expect(post).toHaveBeenCalledWith('/api/parties/7/quit', {}, expect.anything());
   });
 
-  it('treats a 404 as already declined', async () => {
+  it('treats a 404 as already gone', async () => {
     const api = setup(() => throwError(() => new HttpErrorResponse({ status: 404 })));
-    await expect(api.decline(7)).resolves.toBeUndefined();
+    await expect(api.quit(7)).resolves.toBeUndefined();
   });
 
   it('rethrows any other failure', async () => {
     const api = setup(() => throwError(() => new HttpErrorResponse({ status: 500 })));
-    await expect(api.decline(7)).rejects.toMatchObject({ status: 500 });
+    await expect(api.quit(7)).rejects.toMatchObject({ status: 500 });
   });
 });

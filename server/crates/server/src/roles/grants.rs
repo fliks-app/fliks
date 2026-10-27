@@ -2,7 +2,7 @@
 use serde_json::Value;
 use std::collections::BTreeSet;
 
-pub const PERMISSIONS: [&str; 12] = [
+pub const PERMISSIONS: [&str; 15] = [
     "media.read",
     "media.create",
     "media.edit",
@@ -15,6 +15,9 @@ pub const PERMISSIONS: [&str; 12] = [
     "settings.access",
     "users.manage",
     "roles.manage",
+    "parties.create",
+    "parties.manage",
+    "parties.read_public",
 ];
 
 /// Plugin permission names match `^[a-z][a-z0-9_-]{0,63}$`.

@@ -65,7 +65,7 @@ struct PartyInviteView: View {
     }
 
     var body: some View {
-        PartySheetPage(title: tr("party.invite")) {
+        PartySheetPage(title: tr("party.add_people")) {
             if let party = service.managed {
                 HStack(alignment: .top, spacing: 60) {
                     TileSection(title: tr("party.people")) {
@@ -92,7 +92,7 @@ struct PartyInviteView: View {
                 HStack(spacing: 30) {
                     if service.managedIsHost, !candidateList.isEmpty {
                         Button(action: send) {
-                            Text(picked.isEmpty ? tr("party.invite") : "\(tr("party.invite")) (\(picked.count))")
+                            Text(picked.isEmpty ? tr("party.programme_add") : "\(tr("party.programme_add")) (\(picked.count))")
                         }
                         .buttonStyle(.borderedProminent)
                         .opacity(picked.isEmpty ? 0.5 : 1)

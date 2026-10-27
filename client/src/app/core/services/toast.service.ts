@@ -41,6 +41,9 @@ export class ToastService {
   }
 
   private add(message: string, type: ToastType, duration: number, actions: ToastAction[] = []) {
+    // A burst of identical failures (parallel calls on a dead server) shows once.
+    const same = this.toasts().find((t) => t.message === message && t.type === type);
+    if (same) return same.id;
     const id = this.nextId++;
     this.toasts.update((list) => [...list, { id, message, type, duration, actions }]);
 

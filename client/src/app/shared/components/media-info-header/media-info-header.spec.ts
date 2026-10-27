@@ -153,7 +153,7 @@ async function createFixture(
         provide: PlayerSettingsService,
         useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => media.remembered ?? null },
       },
-      { provide: PartyApiService, useValue: { supported: () => true } },
+      { provide: PartyApiService, useValue: { supported: () => true, canCreate: () => true } },
       { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
       { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
       {

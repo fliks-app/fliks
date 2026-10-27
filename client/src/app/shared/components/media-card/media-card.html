@@ -22,7 +22,9 @@
     (keydown.enter)="onCardClick()"
     (keydown.space)="onCardClick(); $event.preventDefault()"
   >
-    @if (_img() && !imgFailed()) {
+    @if (posters().length) {
+      <app-poster-mosaic [posters]="posters()" [gridFrom]="2" />
+    } @else if (_img() && !imgFailed()) {
       <!-- Concentric with the figure's clip (which loses the border width when highlighted); bound because the view transition snapshots this img out of that clip. -->
       <img
         #cardImg
@@ -45,7 +47,7 @@
         (error)="imgFailed.set(true)"
       />
     }
-    @if (!imgLoaded()) {
+    @if (!imgLoaded() && !posters().length) {
       <div class="absolute inset-0 flex items-center justify-center bg-base-300 text-base-content/20">
         <svg lucideFilm class="h-12 w-12" [strokeWidth]="1.5"></svg>
       </div>
@@ -115,6 +117,11 @@
           @case ('pending') {
             <div class="w-5 h-5 rounded-full bg-info flex items-center justify-center shadow">
               <svg lucideClock class="h-3 w-3 text-info-content"></svg>
+            </div>
+          }
+          @case ('added') {
+            <div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow">
+              <svg lucideCheck class="h-3 w-3 text-primary-content"></svg>
             </div>
           }
           @case ('declined') {

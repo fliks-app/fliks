@@ -62,6 +62,7 @@ pub fn disk_path(
         "episode" => flat("episodes"),
         "season" => flat("seasons"),
         "user" => flat("users"),
+        "party" => flat("parties"),
         "livetv" => canonical_id(id).then(|| dir("livetv").join(format!("{id}{suffix}.png"))),
         _ => None,
     }
@@ -277,6 +278,10 @@ mod tests {
             Some("/d/persons/5-medium.jpg".into())
         );
         assert_eq!(p("user", "2", None, "full"), Some("/d/users/2.jpg".into()));
+        assert_eq!(
+            p("party", "2", None, "full"),
+            Some("/d/parties/2.jpg".into())
+        );
         assert_eq!(
             p("livetv", "1", None, "thumb"),
             Some("/d/livetv/1-thumb.png".into())

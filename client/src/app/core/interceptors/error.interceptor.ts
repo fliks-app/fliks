@@ -30,7 +30,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           : caught;
       if (err.status === 0 && req.url.includes('/api/')) network.reportDoubt();
       // Toasts for 400-499 except 408, plus 500 and 503 (an unreachable plugin); 401 is skipped since the auth guard already redirects.
+      // A mutation on an unreachable or restarting server (engine 502/504) always answers the user; GETs degrade in place.
+      const unreachable = req.method !== 'GET' && isUnreachable(err);
       const showToast =
+        unreachable ||
         (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||
         err.status === 500 ||
         err.status === 503;
@@ -61,11 +64,14 @@ function isFrameworkNotFound(status: number, message: unknown): boolean {
   return status === 404 && typeof message === 'string' && /^Cannot [A-Z]+ /.test(message);
 }
 
+/** No answer from the server: the link is down, or the front door has no upstream while it restarts. */
+export const isUnreachable = (err: HttpErrorResponse): boolean => [0, 502, 504].includes(err.status);
+
 function extractMessage(
   err: HttpErrorResponse,
   translate: TranslateService,
 ): string {
-  if (err.status === 0) {
+  if (isUnreachable(err)) {
     return translate.instant('errors.network');
   }
 

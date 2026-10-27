@@ -12,9 +12,9 @@ enum PartyPeople {
         var id: Int { userId }
     }
 
-    /// An explicit invitation of `userId` that can be declined (a link joiner has none).
-    static func isInvited(_ userId: Int?, host: PartyUser, guests: [PartyGuest]) -> Bool {
-        userId != nil && userId != host.userId && guests.contains { $0.userId == userId && $0.source == "invite" }
+    /// A guest other than the host, added or joined with the link, who can quit the party.
+    static func isGuest(_ userId: Int?, host: PartyUser, guests: [PartyGuest]) -> Bool {
+        userId != nil && userId != host.userId && guests.contains { $0.userId == userId }
     }
 
     /// Who can still be invited: the users the caller follows, minus the host and every guest.

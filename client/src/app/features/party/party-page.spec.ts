@@ -23,7 +23,7 @@ import { PartyPageComponent } from './party-page';
 const item = (mediaId: number, episodeId: number | null = null) =>
   ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, hidden: false, additionalFanartUrls: [] }) as PartyItem;
 const dto = (it: PartyItem | null) =>
-  ({ id: 9, name: 'P', status: 'scheduled', scheduledAt: null, host: { userId: 1, username: 'h' }, item: it, playlist: null, memberCount: 1, guests: [], live: null }) as unknown as PartyDto;
+  ({ id: 9, name: 'P', status: 'scheduled', scheduledAt: null, host: { userId: 1, username: 'h' }, item: it, cover: null, playlist: null, memberCount: 1, guests: [], live: null }) as unknown as PartyDto;
 
 describe('PartyPageComponent film selection', () => {
   let api: { get: ReturnType<typeof vi.fn> };
@@ -62,7 +62,7 @@ describe('PartyPageComponent film selection', () => {
         { provide: MediaService, useValue: { getOne } },
         {
           provide: PartyService,
-          useValue: stub({ ...service, closed: new Subject(), lobby: () => lobby(), isHost: () => true, me: () => null, members: () => [], enter, leave: vi.fn(), applySnapshot: vi.fn() }),
+          useValue: stub({ ...service, closed: new Subject(), startSkipped: new Subject(), lobby: () => lobby(), isHost: () => true, me: () => null, members: () => [], enter, leave: vi.fn(), applySnapshot: vi.fn() }),
         },
         { provide: VoiceService, useValue: stub({ speaking: () => [] }) },
         { provide: NavbarService, useValue: stub({ enterHeroPage() {}, leaveHeroPage() {} }) },
@@ -117,7 +117,7 @@ describe('PartyPageComponent film selection', () => {
       const fixture = TestBed.createComponent(PartyPageComponent);
       fixture.detectChanges();
       await flush();
-      return fixture.componentInstance as unknown as { gone(): boolean; invited(): boolean };
+      return fixture.componentInstance as unknown as { gone(): boolean; guest(): boolean };
     };
 
     beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout'] }));
@@ -154,17 +154,20 @@ describe('PartyPageComponent film selection', () => {
       },
     );
 
-    it('offers Decline to an invited user who is in the lobby', async () => {
+    it('offers Quit to a guest, added or joined with the link', async () => {
       const page = await mount();
       const svc = TestBed.inject(PartyService) as unknown as typeof service;
-      const invited = { ...dto(item(1)), guests: [{ userId: 1, username: 'me', source: 'invite' }] } as unknown as PartyDto;
+      const added = { ...dto(item(1)), guests: [{ userId: 1, username: 'me', source: 'invite' }] } as unknown as PartyDto;
       lobby.set(true);
-      svc.party.set(invited);
+      svc.party.set(added);
       await flush();
-      expect(page.invited()).toBe(true);
-      svc.party.set({ ...invited, guests: [{ userId: 1, username: 'me', source: 'link' }] } as unknown as PartyDto);
+      expect(page.guest()).toBe(true);
+      svc.party.set({ ...added, guests: [{ userId: 1, username: 'me', source: 'link' }] } as unknown as PartyDto);
       await flush();
-      expect(page.invited()).toBe(false);
+      expect(page.guest()).toBe(true);
+      svc.party.set({ ...added, guests: [] } as unknown as PartyDto);
+      await flush();
+      expect(page.guest()).toBe(false);
     });
   });
 });

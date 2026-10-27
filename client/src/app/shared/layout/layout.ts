@@ -40,6 +40,7 @@ import { PageScrollerService } from '../../core/services/page-scroller.service';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { PartyCreateModalComponent } from '../../features/party/party-create-modal';
+import { PartyReconnectComponent } from '../../features/party/party-reconnect';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
 import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
@@ -91,6 +92,7 @@ const PAIRING_TTL_MS = 600_000;
     AddToPlaylistModalComponent,
     RecommendModalComponent,
     PartyCreateModalComponent,
+    PartyReconnectComponent,
     TrackingModalHostComponent,
     IdentifyModalHostComponent,
     UserMenuComponent,

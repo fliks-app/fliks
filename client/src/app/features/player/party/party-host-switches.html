@@ -23,4 +23,11 @@
     [value]="value().linkSharing"
     (valueChange)="changed.emit({ linkSharing: $event })"
   />
+  <app-toggle-field
+    [label]="'party.switch_public' | translate"
+    [hint]="'party.switch_public_hint' | translate"
+    [disabled]="disabled()"
+    [value]="value().public"
+    (valueChange)="changed.emit({ public: $event })"
+  />
 </div>

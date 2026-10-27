@@ -4,12 +4,11 @@ import {
   output,
 } from '@angular/core';
 import { LucideFolder } from '@lucide/angular';
-import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
-import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
+import { PosterMosaicComponent } from '../poster-mosaic/poster-mosaic';
 
 @Component({
   selector: 'app-mosaic-card',
-  imports: [LucideFolder, ResolveUrlPipe, ImgFadeInDirective],
+  imports: [LucideFolder, PosterMosaicComponent],
   templateUrl: './mosaic-card.html',
 })
 export class MosaicCardComponent {

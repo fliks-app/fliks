@@ -325,10 +325,10 @@ import Foundation
         }
     }
 
-    /// Drops the viewer's invitation and returns to the Home; a 404 means it is already gone.
-    func decline(id: Int) async {
+    /// The viewer leaves the party for good and returns to the Home; a 404 means they already had.
+    func quit(id: Int) async {
         do {
-            try await APIClient.shared.post("/api/parties/\(id)/decline")
+            try await APIClient.shared.post("/api/parties/\(id)/quit")
         } catch APIError.badStatus(404, _) {
         } catch {
             return show(describe(error))

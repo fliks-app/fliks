@@ -1,0 +1,18 @@
+@if (posters().length >= gridFrom()) {
+  <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
+    @for (p of posters().slice(0, 4); track p) {
+      <img
+        appImgFadeIn
+        [src]="p | resolveUrl:'thumb'"
+        alt=""
+        loading="lazy"
+        class="w-full h-full object-cover"
+        [class.row-span-2]="posters().length === 2 || (posters().length === 3 && $first)"
+      />
+    }
+  </div>
+} @else if (posters().length > 0) {
+  <img appImgFadeIn [src]="posters()[0] | resolveUrl:'medium'" alt="" loading="lazy" class="w-full h-full object-cover" />
+} @else {
+  <ng-content />
+}

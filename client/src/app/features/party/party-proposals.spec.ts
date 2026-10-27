@@ -1,4 +1,4 @@
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
@@ -6,10 +6,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PartyApiService, type PartyItem, type PartyProposal } from '../../core/services/api/party-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { MediaPickerComponent } from '../../shared/components/media-picker/media-picker';
-import { PartyProposalsComponent, sortProposals } from './party-proposals';
+import { PartyProposalsComponent, sortProposals, topProposal } from './party-proposals';
 
 @Component({ selector: 'app-media-picker', template: '' })
 class StubPicker {
+  readonly taken = input<unknown>();
   show = vi.fn();
 }
 
@@ -22,14 +23,30 @@ describe('sortProposals', () => {
     expect(sorted.map((p) => p.id)).toEqual([2, 1, 3, 4]);
   });
 
-  it('ranks by ups minus downs', () => {
-    const sorted = sortProposals([prop(1, [1, 2], 2, 'a', [3, 4, 5]), prop(2, []), prop(3, [1], 2, 'c', [])]);
-    expect(sorted.map((p) => p.id)).toEqual([3, 2, 1]);
+  it('has no top proposal on a tie for first', () => {
+    expect(topProposal([prop(1, [1]), prop(2, [2])])).toBeNull();
+    expect(topProposal([prop(1, [1]), prop(2, [2], 2, 'b', [3])])?.id).toBe(1);
+    expect(topProposal([])).toBeNull();
+  });
+
+  it('keeps the shown order on a tie', () => {
+    const shown = [prop(2, [1]), prop(1, [1, 2])];
+    expect(sortProposals([prop(1, [1]), prop(2, [1])], shown).map((p) => p.id)).toEqual([2, 1]);
+  });
+
+  it('ranks by votes for, then fewest against', () => {
+    const sorted = sortProposals([prop(1, [1, 2], 2, 'a', [3, 4, 5]), prop(2, []), prop(3, [1], 2, 'c', []), prop(4, [1], 2, 'd', [2])]);
+    expect(sorted.map((p) => p.id)).toEqual([1, 3, 4, 2]);
   });
 });
 
 describe('PartyProposalsComponent', () => {
-  const api = { propose: vi.fn(), unpropose: vi.fn(), vote: vi.fn(), choose: vi.fn() };
+  const api = { proposeMany: vi.fn(), unpropose: vi.fn(), vote: vi.fn(), choose: vi.fn() };
+
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    Element.prototype.animate = vi.fn() as unknown as Element['animate'];
+  });
 
   function setup(opts: { me: number; host: boolean; proposals: PartyProposal[] }) {
     Object.values(api).forEach((f) => f.mockReset().mockResolvedValue(undefined));
@@ -50,6 +67,22 @@ describe('PartyProposalsComponent', () => {
     fixture.detectChanges();
     return fixture;
   }
+  it('pops the thumb when someone else votes, not on my own vote', async () => {
+    const animate = vi.fn();
+    Element.prototype.animate = animate as unknown as Element['animate'];
+    const f = setup({ me: 1, host: false, proposals: [prop(5, [])] });
+    f.componentRef.setInput('proposals', [prop(5, [1])]);
+    await f.whenStable();
+    expect(animate).not.toHaveBeenCalled();
+    f.componentRef.setInput('proposals', [prop(5, [1], 2, 'T5', [2])]);
+    await f.whenStable();
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect((animate.mock.contexts[0] as Element).closest('[data-value]')?.getAttribute('data-value')).toBe('-1');
+    f.componentRef.setInput('proposals', [prop(5, [1])]);
+    await f.whenStable();
+    expect(animate).toHaveBeenCalledTimes(2);
+  });
+
   const buttons = (f: { nativeElement: HTMLElement }, row = 0) => Array.from((f.nativeElement as HTMLElement).querySelectorAll('li')[row].querySelectorAll('button'));
 
   it('toggles the vote with PUT then DELETE and reflects it in aria-pressed', async () => {

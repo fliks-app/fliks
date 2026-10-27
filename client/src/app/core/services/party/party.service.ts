@@ -26,6 +26,7 @@ import { DeviceService } from '../device.service';
 import { SseService, type PartyEvent } from '../sse.service';
 import { ConfirmationService } from '../confirmation.service';
 import { ToastService } from '../toast.service';
+import { isUnreachable } from '../../interceptors/error.interceptor';
 import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { ServerConfigService } from '../server-config.service';
@@ -69,6 +70,8 @@ function closeReason(err: unknown): PartyCloseReason | null {
   return err.status === 403 ? 'kicked' : null;
 }
 
+/** Refusals a live server only gives for a room it no longer holds. */
+const ROOM_LOST = ['party.error_not_member', 'party.error_not_live'];
 const BUBBLE_MS = 4000;
 const REJOIN_RETRY_MS = 2000;
 /** How long a reaction rises over the video; its CSS animation follows. */
@@ -113,6 +116,8 @@ export class PartyService {
   readonly closed = new Subject<PartyCloseReason>();
   /** A party was created (a scheduled one stays off this client's pages, so lists reload). */
   readonly created = new Subject<void>();
+  /** The party went live while this device was not ready: it stays on the page, out of the room. */
+  readonly startSkipped = new Subject<PartyDto>();
   /** A rejoin after a dropped stream or a server restart landed: what the server held about this device is fresh again. */
   readonly rejoined = new Subject<void>();
 
@@ -142,6 +147,8 @@ export class PartyService {
   });
 
   private lastRev = 0;
+  /** What this device last reported in the lobby: only a ready member follows the start into the player. */
+  private lobbyReady = false;
   private nextKey = 0;
   private wasConnected = false;
   private refetching: Promise<void> | null = null;
@@ -163,6 +170,7 @@ export class PartyService {
     effect(() => {
       const connected = this.sse.connected();
       untracked(() => {
+        if (!connected && this.wasConnected && this.party()) this.needsRejoin.set(true);
         if (connected && !this.wasConnected && this.party()) void this.rejoin();
         this.wasConnected = connected;
       });
@@ -178,8 +186,10 @@ export class PartyService {
   // ── Entry points ──
 
   /** A party for now opens its lobby page; a scheduled one is announced with its link. */
-  async create(body: CreatePartyBody): Promise<void> {
+  async create(body: CreatePartyBody, cover?: File): Promise<void> {
     const dto = await this.api.create(body);
+    // The party exists whatever happens to the upload (its error is toasted).
+    if (cover) await this.api.uploadCover(dto.id, cover).catch(() => undefined);
     this.created.next();
     if (!body.scheduledAt) {
       await this.enter(dto.id);
@@ -270,8 +280,8 @@ export class PartyService {
       this.applySnapshot(await this.api.start(id));
       const item = this.party()?.item;
       if (item) await this.openPlayer(item);
-    } catch {
-      /* the error interceptor already toasted it */
+    } catch (err) {
+      this.onActionError(err);
     }
   }
 
@@ -279,7 +289,8 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return;
     const position = this.live()?.anchor.position ?? 0;
-    await this.api.status(id, { deviceId: this.deviceId(), status: ready ? 'ready' : 'waiting', position }).catch(() => {});
+    this.lobbyReady = ready;
+    await this.api.status(id, { deviceId: this.deviceId(), status: ready ? 'ready' : 'waiting', position }).catch((e) => this.onActionError(e));
   }
 
   /** Host: ends the party for everyone and closes it here without waiting for its `party.closed`. */
@@ -306,13 +317,26 @@ export class PartyService {
     return true;
   }
 
+  /** A guest leaves the party for good; the local state goes first so its own events refetch nothing. */
+  async quit(id: number): Promise<void> {
+    if (this.party()?.id === id) this.reset();
+    await this.api.quit(id);
+  }
+
   async leave(): Promise<void> {
     const id = this.party()?.id;
     this.reset();
     if (id != null) await this.api.leave(id, this.deviceId()).catch(() => {});
   }
 
+  private async followStart(dto: PartyDto): Promise<void> {
+    if (this.lobbyReady || this.isHost()) return this.openPlayer(dto.item!);
+    this.startSkipped.next(dto);
+    await this.leave();
+  }
+
   private reset(): void {
+    this.lobbyReady = false;
     this.clock.stop();
     this.party.set(null);
     this.live.set(null);
@@ -326,6 +350,7 @@ export class PartyService {
     this.panelOpen.set(false);
     this.lastRev = 0;
     this.queuedFor = null;
+    this.needsRejoin.set(false);
   }
 
   /** The player menu lists the queue the server steps through, and the cursor follows the item. */
@@ -425,17 +450,26 @@ export class PartyService {
     const wasLobby = this.lobby();
     const seen = this.proposalEvents;
     try {
-      const dto = await this.api.get(id);
+      const dto = await this.api.get(id, true);
       this.applySnapshot(dto, { proposals: seen === this.proposalEvents });
-      if (wasLobby && dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
+      if (wasLobby && dto.status === 'live' && dto.item) await this.followStart(dto);
     } catch {
       /* the next event or reconnect retries */
     }
   }
 
+  private rejoining = false;
+  /** The server may hold no room for this device until a rejoin lands: set by a dropped stream or a refusal only a lost room explains. */
+  private readonly needsRejoin = signal(false);
+  /** Why the party is out of reach right now (`server` down, `room` being rejoined); null once rejoined. */
+  readonly reconnecting = computed<'server' | 'room' | null>(() =>
+    !this.party() || !this.needsRejoin() ? null : this.sse.connected() ? 'room' : 'server',
+  );
+
   private async rejoin(): Promise<void> {
     const id = this.party()?.id;
-    if (id == null) return;
+    if (id == null || this.rejoining) return;
+    this.rejoining = true;
     try {
       const wasLobby = this.lobby();
       const dto = await this.api.join(id, this.deviceId(), undefined, true);
@@ -443,13 +477,16 @@ export class PartyService {
       this.lastRev = 0;
       this.messages.set([]);
       this.applySnapshot(dto);
+      this.needsRejoin.set(false);
       this.rejoined.next();
-      if (wasLobby && dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
+      if (wasLobby && dto.status === 'live' && dto.item) await this.followStart(dto);
     } catch (err) {
       const reason = closeReason(err);
       if (reason) this.onClosed(reason);
       // A restarting server may not register the stream yet: retry while it stays up.
       else setTimeout(() => this.party()?.id === id && this.sse.connected() && void this.rejoin(), REJOIN_RETRY_MS);
+    } finally {
+      this.rejoining = false;
     }
   }
 
@@ -511,6 +548,7 @@ export class PartyService {
                 reactionsEnabled: e.reactionsEnabled,
                 chatEnabled: e.chatEnabled,
                 linkSharing: e.linkSharing,
+                public: e.public,
                 inviteToken: e.linkSharing || this.isHost() ? p.inviteToken : null,
               }
             : p,
@@ -525,7 +563,7 @@ export class PartyService {
         this.onReaction(e.emoji, e.username);
         break;
       case 'party.closed':
-        this.onClosed(e.reason);
+        this.onClosed(e.reason, e.by);
         break;
     }
   }
@@ -543,7 +581,7 @@ export class PartyService {
     // A party for now opens its lobby, which sends `party.starting` with the join action.
     if (!e.scheduledAt || new Date(e.scheduledAt).getTime() <= Date.now()) return;
     this.toast.info(
-      this.translate.instant('party.toast_invited', { host: e.host.username, name: e.name }),
+      this.translate.instant('party.toast_added', { host: e.host.username, name: e.name }),
       10000,
       { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
     );
@@ -565,9 +603,10 @@ export class PartyService {
     setTimeout(() => this.reactions.update((l) => l.filter((x) => x.key !== key)), REACTION_MS);
   }
 
-  private onClosed(reason: PartyCloseReason): void {
+  private onClosed(reason: PartyCloseReason, by?: string | null): void {
     this.reset();
-    this.toast.info(this.translate.instant(`party.closed_${reason}`));
+    const key = by && reason !== 'expired' ? `party.closed_${reason}_by` : `party.closed_${reason}`;
+    this.toast.info(this.translate.instant(key, { name: by }));
     this.closed.next(reason);
   }
 
@@ -616,19 +655,27 @@ export class PartyService {
   async react(emoji: string): Promise<void> {
     const id = this.party()?.id;
     if (id == null) return;
-    await this.api.react(id, this.deviceId(), emoji).catch(() => {});
+    await this.api.react(id, this.deviceId(), emoji).catch((e) => this.onActionError(e));
   }
 
-  async kick(userId: number): Promise<void> {
-    await this.hostAction((id) => this.api.kick(id, userId));
+  /** Host: removes a person from the party (`partyId` defaults to the joined one) after a confirmation. */
+  async kick(person: { userId: number; username: string }, partyId = this.party()?.id): Promise<void> {
+    if (partyId == null) return;
+    const ok = await this.confirmation.confirm({
+      title: this.translate.instant('party.kick_title'),
+      message: this.translate.instant('party.kick_message', { name: person.username }),
+      confirmLabel: this.translate.instant('party.kick'),
+      variant: 'danger',
+    });
+    if (ok) await this.api.kick(partyId, person.userId).catch((e) => this.onActionError(e));
   }
 
-  async makeHost(userId: number): Promise<void> {
-    await this.hostAction((id) => this.api.transferHost(id, userId));
+  async makeHost(userId: number, partyId = this.party()?.id): Promise<void> {
+    if (partyId != null) await this.api.transferHost(partyId, userId).catch((e) => this.onActionError(e));
   }
 
   async updateSettings(patch: Partial<PartySwitches>): Promise<void> {
-    await this.hostAction((id) => this.api.update(id, patch));
+    await this.hostAction((id) => this.api.update(id, patch, true));
   }
 
   private async hostAction(run: (id: number) => Promise<unknown>): Promise<void> {
@@ -636,14 +683,20 @@ export class PartyService {
     if (id == null) return;
     try {
       await run(id);
-    } catch {
-      /* the error interceptor already toasted it */
+    } catch (err) {
+      this.onActionError(err);
     }
   }
 
-  /** Intent/message calls are quiet at the HTTP layer: a stale seek resyncs from the body, anything else is named to the user. */
+  /** Party calls are quiet at the HTTP layer: a stale seek resyncs from the body, anything else is named to the user. */
   onActionError(err: unknown): void {
     if (!(err instanceof HttpErrorResponse)) return;
+    if (isUnreachable(err)) return void this.toast.error(this.translate.instant('errors.network'));
+    // A restarted server lost its in-memory room while this client is still in it: rejoin, don't claim the party is gone.
+    if (this.party() && (err.status === 403 || err.status === 409) && ROOM_LOST.includes((err.error as { message?: string } | null)?.message ?? '')) {
+      this.needsRejoin.set(true);
+      return void this.rejoin();
+    }
     const body = err.error as { message?: unknown; id?: number; usernames?: string[] } | null;
     // `previous` on the first item changes nothing.
     if (err.status === 409 && body?.message === 'party.error_queue_start') return;

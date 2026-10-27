@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, inject, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideRefreshCw } from '@lucide/angular';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -8,7 +8,8 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PartyService } from '../../../core/services/party/party.service';
 import { PartyController } from '../party-controller';
-import { PartyHostSwitchesComponent } from './party-host-switches';
+import type { PartySwitches } from '../../../core/services/api/party-api.service';
+import { PartyHostSwitchesComponent, switchesPatch } from './party-host-switches';
 
 /** Party settings, opened from the party panel; lives in the player so it shows in fullscreen. */
 @Component({
@@ -27,11 +28,24 @@ export class PartySettingsComponent {
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   /** The player mounts the dialog to open it and drops it on close. */
   readonly closed = output<void>();
+  /** The host's unsaved switches; null until one is touched. */
+  protected readonly draft = signal<PartySwitches | null>(null);
+  private readonly patch = computed(() => {
+    const p = this.party.party();
+    const d = this.draft();
+    return p && d ? switchesPatch(p, d) : {};
+  });
+  protected readonly dirty = computed(() => Object.keys(this.patch()).length > 0);
 
   constructor() {
     afterNextRender(() => {
       this.dialog().nativeElement.showModal();
     });
+  }
+
+  protected async save(): Promise<void> {
+    await this.party.updateSettings(this.patch());
+    this.draft.set(null);
   }
 
   protected resync(): void {

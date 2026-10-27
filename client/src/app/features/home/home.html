@@ -57,12 +57,15 @@
       @case ('watch-parties') {
         @if (parties().length) {
           <app-horizontal-scroller [title]="'party.rail_title' | translate">
-            <button scrollerActions type="button" class="btn btn-ghost btn-xs" (click)="newParty()">{{ 'party.new_party' | translate }}</button>
+            @if (partyApi.canCreate()) {
+              <button scrollerActions type="button" class="btn btn-ghost btn-xs" (click)="newParty()">{{ 'party.new_party' | translate }}</button>
+            }
             @for (p of parties(); track p.id) {
               <app-media-card
                 [aspect]="'landscape'"
                 [attr.data-home-focus]="'party:' + p.id"
                 [imageUrl]="partyImage(p)"
+                [posters]="coverPosters(p.cover)"
                 [title]="p.name"
                 [subtitle]="partySubtitle(p)"
                 [topLeftBadge]="p.status === 'live' ? ('party.live' | translate) : undefined"

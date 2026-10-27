@@ -1,0 +1,5 @@
+<app-blocking-overlay
+  [open]="party.reconnecting() !== null"
+  [message]="(party.reconnecting() === 'server' ? 'party.reconnecting_server' : 'party.reconnecting') | translate"
+  [actions]="actions()"
+/>

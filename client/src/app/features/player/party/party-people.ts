@@ -12,7 +12,10 @@ export interface PartyPerson {
   speaking: boolean;
 }
 
-const rank = (p: PartyPerson): number => (p.connected ? 0 : p.source === 'link' ? 1 : p.source === 'invite' ? 2 : 3);
+/** Came in on their own (link or public party), so not expected back. */
+const selfJoined = (p: PartyPerson): boolean => p.source === 'link' || p.source === 'public';
+
+const rank = (p: PartyPerson): number => (p.connected ? 0 : selfJoined(p) ? 1 : p.source === 'invite' ? 2 : 3);
 
 /** Merges the members (one row per user, whatever their devices) with the guests who are not in. */
 export function partyPeople(
@@ -51,7 +54,7 @@ export function connectedCount(people: PartyPerson[]): number {
   return people.filter((p) => p.connected).length;
 }
 
-/** Expected but not here: invitees, and the party's own host when someone else holds the role. */
+/** Expected but not here: the people the host added, and the host. */
 export function missingCount(people: PartyPerson[]): number {
-  return people.filter((p) => !p.connected && p.source !== 'link').length;
+  return people.filter((p) => !p.connected && !selfJoined(p)).length;
 }

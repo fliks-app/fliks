@@ -31,9 +31,25 @@
 
       <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 lg:mt-3 text-base-content/60">
         @switch (phase()) {
-          @case ('live') { <span class="badge badge-error">{{ 'party.live' | translate }}</span> }
+          @case ('live') {
+            <span class="badge badge-error">{{ 'party.live' | translate }}</span>
+            @if (progress(); as p) {
+              <span class="flex items-center gap-2 tabular-nums">
+                @if (p.runtime) {
+                  <progress class="progress progress-primary w-24 sm:w-40" [value]="p.at" [max]="p.runtime"></progress>
+                }
+                <span>{{ fmt(p.at) }}{{ p.runtime ? ' / ' + fmt(p.runtime) : '' }}</span>
+                @if (p.paused) {
+                  <span>{{ 'party.playback_paused' | translate }}</span>
+                }
+              </span>
+            }
+          }
           @case ('lobby') { <span class="badge badge-warning">{{ 'party.status_lobby' | translate }}</span> }
           @default { <span class="skeleton h-5 w-20 rounded-full"></span> }
+        }
+        @if (h.public) {
+          <span class="badge badge-ghost">{{ 'party.public_badge' | translate }}</span>
         }
         @if (h.status !== 'live' && h.scheduledAt) {
           <span>{{ when() }}</span>
@@ -63,7 +79,7 @@
           </button>
         } @else if (phase() === 'lobby') {
           @if (joined()) {
-            @if (party.isHost()) {
+            @if (party.isHost() && ready()) {
               <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
                 <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
@@ -73,26 +89,27 @@
               type="button"
               class="btn gap-2 whitespace-nowrap"
               [class.flex-auto]="!desktopLayout()"
-              [class.btn-primary]="!ready() && !party.isHost()"
-              [class.btn-success]="ready()"
-              [class.btn-outline]="!ready() && party.isHost()"
-              [attr.autofocus]="party.isHost() && canStart() ? null : ''"
+              [class.btn-primary]="!ready()"
+              [class.btn-warning]="ready()"
+              [class.btn-outline]="ready() && party.isHost()"
+              [attr.autofocus]="party.isHost() && ready() && canStart() ? null : ''"
               (click)="toggleReady()"
             >
-              <svg lucideCheck class="h-5 w-5"></svg>
+              @if (ready()) {
+                <svg lucideX class="h-5 w-5"></svg>
+              } @else {
+                <svg lucideCheck class="h-5 w-5"></svg>
+              }
               {{ (ready() ? 'party.not_ready' : 'party.ready') | translate }}
             </button>
-            @if (!party.isHost()) {
-              <button type="button" class="btn btn-ghost" (click)="leave()">{{ 'party.leave' | translate }}</button>
-            }
           } @else if (sse.serverUnreachable()) {
             <span class="text-base-content/60">{{ 'connectivity.server_unreachable' | translate }}</span>
           } @else {
             <span class="loading loading-spinner loading-md"></span>
           }
         }
-        @if (invited()) {
-          <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="decline()">{{ 'party.decline' | translate }}</button>
+        @if (guest()) {
+          <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="quit()">{{ 'party.leave' | translate }}</button>
         }
         @if (view()?.inviteToken) {
           <button type="button" class="btn btn-ghost gap-2" (click)="copy()">
@@ -120,7 +137,12 @@
       </div>
 
       @if (!h.item && party.proposals().length && party.isHost() && phase() === 'lobby' && joined()) {
-        <p class="text-sm text-base-content/60 mb-2">{{ 'party.start_top_vote' | translate }}</p>
+        <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p class="text-sm text-base-content/60">{{ (voteTied() ? 'party.start_tie' : 'party.start_top_vote') | translate }}</p>
+          @if (voteTied()) {
+            <button type="button" class="btn btn-sm btn-outline gap-1" [disabled]="busy()" (click)="drawLots()"><svg lucideDices class="h-4 w-4"></svg>{{ 'party.draw_lots' | translate }}</button>
+          }
+        </div>
       }
 
       @if (overview()) {
@@ -141,19 +163,7 @@
         [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
       >
         <div class="shrink-0 rounded-xl overflow-hidden w-[140px] lg:w-[200px] xl:w-[220px] 2xl:w-[280px]">
-          @if (h.item?.posterUrl; as poster) {
-            <img
-              [src]="poster | resolveUrl: 'medium'"
-              [alt]="h.item.title"
-              loading="eager"
-              fetchpriority="high"
-              decoding="async"
-              class="w-full aspect-2/3 rounded-xl object-cover bg-base-300"
-              [style.view-transition-name]="posterName"
-            />
-          } @else {
-            <div class="aspect-2/3 rounded-xl bg-base-300"></div>
-          }
+          <app-party-cover class="aspect-2/3 rounded-xl overflow-hidden" [cover]="h.cover" [head]="h.item" [viewTransitionName]="posterName" />
         </div>
         <div class="flex-1 min-w-0 pt-2">
           <ng-container *ngTemplateOutlet="info" />
@@ -171,13 +181,32 @@
             <app-party-proposals [partyId]="v.id" [proposals]="party.proposals()" [people]="people()" [isHost]="party.isHost()" (chosen)="apply($event)" />
           }
           <section class="flex flex-col gap-3">
-            <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <h2 class="text-lg font-bold">{{ 'party.people' | translate }}</h2>
-              <span class="text-sm text-base-content/60">{{ 'party.people_connected' | translatePlural: connectedCount() }}@if (missingCount()) { · {{ 'party.people_missing' | translatePlural: missingCount() }} }</span>
+              <div class="flex items-center gap-3">
+                <span class="text-sm text-base-content/60">{{ 'party.people_connected' | translatePlural: connectedCount() }}@if (missingCount()) { · {{ 'party.people_missing' | translatePlural: missingCount() }} }</span>
+                @if (v.status === 'scheduled' && canHost() && hostView(); as hv) {
+                  <app-party-invite [view]="hv" (updated)="apply($event)" />
+                }
+              </div>
             </div>
             <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
               @for (p of people(); track p.userId) {
-                <li><app-party-person-row [person]="p" /></li>
+                <li>
+                  <app-party-person-row [person]="p">
+                    @if (canHost() && !p.host) {
+                      <app-dropdown-menu placement="bottom-end">
+                        <button trigger type="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.actions' | translate">
+                          <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                        </button>
+                        @if (v.status === 'live' && p.connected) {
+                          <button type="button" class="dropdown-item" (click)="party.makeHost(p.userId, v.id)"><svg lucideCrown class="h-4 w-4"></svg>{{ 'party.make_host' | translate }}</button>
+                        }
+                        <button type="button" class="dropdown-item text-error" (click)="party.kick(p, v.id)"><svg lucideUserMinus class="h-4 w-4"></svg>{{ 'party.kick' | translate }}</button>
+                      </app-dropdown-menu>
+                    }
+                  </app-party-person-row>
+                </li>
               }
             </ul>
           </section>
@@ -196,7 +225,7 @@
         }
       </div>
       @if (canHost() && hostView(); as hv) {
-        <app-party-host-dialog [view]="hv" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
+        <app-party-host-dialog [view]="hv" [link]="link()" (updated)="apply($event)" />
       }
     } @else {
       <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>

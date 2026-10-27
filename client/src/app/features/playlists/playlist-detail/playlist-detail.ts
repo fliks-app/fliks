@@ -62,6 +62,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
+import { PosterMosaicComponent } from '../../../shared/components/poster-mosaic/poster-mosaic';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
@@ -107,6 +108,7 @@ type PlaylistGroupedEntry =
     DropdownMenuComponent,
     ModalHeaderComponent,
     ResolveUrlPipe,
+    PosterMosaicComponent,
   ],
   templateUrl: './playlist-detail.html',
 })

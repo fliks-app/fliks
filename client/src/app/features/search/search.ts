@@ -12,7 +12,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -31,12 +30,13 @@ import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
-import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge, SEARCH_CARD_CONTEXT } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
+import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
+import { ContentTypeToggleComponent } from '../../shared/components/search-filters/content-type-toggle';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
@@ -44,7 +44,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 
 @Component({
   selector: 'app-search',
-  imports: [TvSelectDirective, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
+  imports: [DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -64,12 +64,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly device = inject(DeviceService);
   readonly state = inject(SearchStateService);
 
-  /** TMDB /discover sort options (label keys resolved in the template). */
-  readonly sortOptions = [
-    { value: 'popularity.desc', labelKey: 'search.sort_popularity' },
-    { value: 'vote_average.desc', labelKey: 'search.sort_rating' },
-    { value: 'primary_release_date.desc', labelKey: 'search.sort_recent' },
-  ];
   readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
   private lastDiscoveryKey = '';
   /** Load discovery rows whenever the empty state is showing, keyed on the
@@ -480,15 +474,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  toggleGenre(id: number) {
-    this.state.discoverSelectedGenres.update((set) => {
-      const next = new Set(set);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   /** Run the TMDB /discover query from the panel filters and show the results grid; stale responses are dropped. */
   async applyDiscover() {
     const ct = this.state.contentType();
@@ -520,10 +505,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
   private lastDiscoverSig = '';
 
-  clearDiscover() {
-    this.state.resetDiscover();
-  }
-
   /** Preload the discover panel on a caller-resolved genre id (language-proof); liveFilterEffect auto-applies it. */
   private applyGenreFilter(genreId: number): void {
     this.state.tab.set('videos');
@@ -533,13 +514,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Map the panel sort to the local sortBy/sortOrder, or null for the default
    *  (the panel default has no local column: the server then ranks by relevance). */
-  private mapPanelSort(): { sortBy: string; sortOrder: 'ASC' | 'DESC' } | null {
-    const s = this.state.discoverSort();
-    if (s === 'primary_release_date.desc') return { sortBy: 'year', sortOrder: 'DESC' };
-    if (s === 'vote_average.desc') return { sortBy: 'rating', sortOrder: 'DESC' };
-    return null;
-  }
-
   /** Signature of the inputs that shape the local library query, so a re-run
    *  can be skipped when nothing changed and a stale revalidation ignored. */
   private filterSig(q: string, ct: string): string {
@@ -643,22 +617,18 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     // when a genre is selected so the filter isn't silently dropped.
     if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
     else void this.ensureDiscoverGenres();
-    const type: MediaType | undefined = ct === 'all' ? undefined : ct;
-    const sort = this.mapPanelSort();
-    const localParams: SearchParams = { q, limit: 20 };
-    if (sort) {
-      localParams.sortBy = sort.sortBy;
-      localParams.sortOrder = sort.sortOrder;
-    }
-    if (type) localParams.type = type;
-    const genres = this.state.selectedGenreNames();
-    if (genres.length) localParams.genres = genres;
-    const yearMin = this.state.discoverYearMin();
-    if (yearMin != null) localParams.yearMin = yearMin;
-    const yearMax = this.state.discoverYearMax();
-    if (yearMax != null) localParams.yearMax = yearMax;
-    const voteMin = this.state.discoverVoteMin();
-    if (voteMin) localParams.voteMin = voteMin;
+    const localParams: SearchParams = {
+      q,
+      limit: 20,
+      ...libraryFilterParams({
+        type: ct,
+        genreNames: this.state.selectedGenreNames(),
+        sort: this.state.discoverSort(),
+        voteMin: this.state.discoverVoteMin(),
+        yearMin: this.state.discoverYearMin(),
+        yearMax: this.state.discoverYearMax(),
+      }),
+    };
 
     const fresh = () => this.filterSig(this.state.query().trim(), this.state.contentType()) === sig;
     this.state.localLoading.set(true);

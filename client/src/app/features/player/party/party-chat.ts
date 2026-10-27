@@ -6,6 +6,8 @@ import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { formatTime } from '../../../core/utils/player.utils';
+import { partyWhen } from '../../party/party-time';
+import { systemText } from './party-system-message';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 const MAX_LENGTH = 500;
@@ -50,11 +52,8 @@ export class PartyChatComponent {
   }
 
   protected systemText(m: PartyMessage): string {
-    const sys = m.system!;
-    const position = typeof sys.args?.['position'] === 'number' ? formatTime(sys.args['position']) : '';
-    const title = sys.args?.['title'] ?? '';
-    const kind = sys.kind === 'item_skipped' && !title ? 'item_skipped_hidden' : sys.kind;
-    return this.translate.instant(`party.system.${kind}`, { by: sys.by ?? '', position, title });
+    const { key, params } = systemText(m.system!, { position: formatTime, when: (iso) => partyWhen(iso, this.translate) });
+    return this.translate.instant(key, params);
   }
 
   protected onInput(event: Event): void {

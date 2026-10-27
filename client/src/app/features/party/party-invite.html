@@ -1,0 +1,14 @@
+<button type="button" class="btn btn-sm btn-outline gap-1" (click)="show()"><svg lucidePlus class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}</button>
+<dialog #dialog class="modal" (close)="open.set(false)">
+  <div class="modal-box max-w-md">
+    <app-modal-header [title]="'party.add_people' | translate" />
+    @if (open()) {
+      <app-party-invitee-picker [exclude]="excluded()" [(selected)]="selected" />
+    }
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" [disabled]="busy() || !selected().length" (click)="invite()">{{ 'party.programme_add' | translate }}</button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

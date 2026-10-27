@@ -1,8 +1,9 @@
 //! Queries on `watch_parties`, `watch_party_items` and `watch_party_invitees` (`docs/spec/watch-party.md`, Model).
+use super::cover::Cover;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use fliks_domain::party::{CHAT_CAP, Item, Message, Policy};
-use sqlx::PgPool;
+use sqlx::{PgPool, types::Json};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -20,9 +21,11 @@ pub struct Row {
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
     pub link_sharing: bool,
+    pub public: bool,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub status: String,
     pub position: f64,
+    pub cover: Option<Json<Cover>>,
 }
 
 impl Row {
@@ -43,7 +46,7 @@ const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id,
     CASE WHEN p.status = 'scheduled' THEN h."episodeId" ELSE p."episodeId" END AS episode_id,
     p."playlistId" AS playlist_id, p."inviteToken" AS invite_token,
     p.policy, p."reactionsEnabled" AS reactions_enabled, p."chatEnabled" AS chat_enabled,
-    p."linkSharing" AS link_sharing, p."scheduledAt" AS scheduled_at, p.status, p.position"#;
+    p."linkSharing" AS link_sharing, p."public" AS public, p."scheduledAt" AS scheduled_at, p.status, p.position, p.cover"#;
 
 const FROM: &str = r#"watch_parties p LEFT JOIN LATERAL (
     SELECT "mediaId", "mediaFileId", "episodeId" FROM watch_party_items
@@ -64,7 +67,9 @@ pub struct New<'a> {
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
     pub link_sharing: bool,
+    pub public: bool,
     pub scheduled_at: DateTime<Utc>,
+    pub cover: Option<&'a Cover>,
 }
 
 /// The owner's host switches on their latest party, for the next one's defaults.
@@ -132,8 +137,8 @@ pub async fn insert(
     };
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO watch_parties (name, "ownerId", "playlistId", "inviteToken", policy,
-               "reactionsEnabled", "chatEnabled", "linkSharing", "scheduledAt", status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'scheduled')
+               "reactionsEnabled", "chatEnabled", "linkSharing", "public", "scheduledAt", cover, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'scheduled')
            RETURNING id"#,
     )
     .bind(n.name)
@@ -144,7 +149,9 @@ pub async fn insert(
     .bind(n.reactions_enabled)
     .bind(n.chat_enabled)
     .bind(n.link_sharing)
+    .bind(n.public)
     .bind(scheduled_at)
+    .bind(n.cover.map(Json))
     .fetch_one(&mut *tx)
     .await?;
     insert_items(&mut tx, id, n.programme).await?;
@@ -157,6 +164,19 @@ pub async fn insert(
     .await?;
     tx.commit().await?;
     Ok((row, true))
+}
+
+pub async fn set_cover(
+    db: impl sqlx::PgExecutor<'_>,
+    party: i32,
+    cover: Option<&Cover>,
+) -> sqlx::Result<()> {
+    sqlx::query("UPDATE watch_parties SET cover = $2 WHERE id = $1")
+        .bind(party)
+        .bind(cover.map(Json))
+        .execute(db)
+        .await?;
+    Ok(())
 }
 
 async fn insert_items(tx: &mut sqlx::PgConnection, party: i32, items: &[Item]) -> sqlx::Result<()> {
@@ -174,9 +194,15 @@ async fn insert_items(tx: &mut sqlx::PgConnection, party: i32, items: &[Item]) -
     Ok(())
 }
 
-/// Replaces the programme in one transaction.
-pub async fn set_programme(db: &PgPool, party: i32, items: &[Item]) -> sqlx::Result<()> {
+/// Replaces the programme and the cover left over it, in one transaction.
+pub async fn set_programme(
+    db: &PgPool,
+    party: i32,
+    items: &[Item],
+    cover: Option<&Cover>,
+) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
+    set_cover(&mut *tx, party, cover).await?;
     sqlx::query(r#"DELETE FROM watch_party_items WHERE "partyId" = $1"#)
         .bind(party)
         .execute(&mut *tx)
@@ -207,7 +233,7 @@ pub async fn add_invitees(db: &PgPool, party: i32, users: &[i32]) -> sqlx::Resul
         r#"INSERT INTO watch_party_invitees ("partyId", "userId")
            SELECT $1, u FROM unnest($2::int[]) AS u
            ON CONFLICT ("partyId", "userId") DO UPDATE SET "source" = 'invite'
-           WHERE watch_party_invitees."source" IN ('link', 'kicked') RETURNING "userId""#,
+           WHERE watch_party_invitees."source" IN ('link', 'public', 'kicked') RETURNING "userId""#,
     )
     .bind(party)
     .bind(users)
@@ -256,14 +282,30 @@ pub async fn guest_ids(db: &PgPool, party: i32) -> sqlx::Result<Vec<i32>> {
     .await
 }
 
-/// Remembers a user who joined through the link; an existing row keeps its source.
-pub async fn add_link_guest(db: &PgPool, party: i32, user: i32) -> sqlx::Result<()> {
+/// How a guest without a row got in: the party's token, or a public party without it.
+#[derive(Clone, Copy)]
+pub enum JoinedVia {
+    Link,
+    Public,
+}
+
+/// Remembers a user who joined without being added; an existing row keeps its source.
+pub async fn add_joined_guest(
+    db: &PgPool,
+    party: i32,
+    user: i32,
+    via: JoinedVia,
+) -> sqlx::Result<()> {
     sqlx::query(
-        r#"INSERT INTO watch_party_invitees ("partyId", "userId", "source") VALUES ($1, $2, 'link')
+        r#"INSERT INTO watch_party_invitees ("partyId", "userId", "source") VALUES ($1, $2, $3)
            ON CONFLICT DO NOTHING"#,
     )
     .bind(party)
     .bind(user)
+    .bind(match via {
+        JoinedVia::Link => "link",
+        JoinedVia::Public => "public",
+    })
     .execute(db)
     .await?;
     Ok(())
@@ -297,10 +339,10 @@ pub async fn drop_link_guests(db: &PgPool, party: i32, keep: i32) -> sqlx::Resul
 }
 
 /// Removes the user's own invitation; false when they have none.
-pub async fn drop_invitation(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool> {
+pub async fn drop_guest(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool> {
     let r = sqlx::query(
         r#"DELETE FROM watch_party_invitees
-           WHERE "partyId" = $1 AND "userId" = $2 AND "source" = 'invite'"#,
+           WHERE "partyId" = $1 AND "userId" = $2 AND "source" <> 'kicked'"#,
     )
     .bind(party)
     .bind(user)
@@ -338,16 +380,23 @@ pub async fn is_kicked(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool>
 }
 
 /// `live` first, then `scheduledAt` ascending.
-pub async fn listed(db: &PgPool, user: i32) -> sqlx::Result<Vec<Row>> {
+/// Own and guest parties, plus the public ones (`public`, unless kicked) and every one (`all`).
+pub async fn listed(db: &PgPool, user: i32, public: bool, all: bool) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM {FROM}
            WHERE p.status IN ('scheduled', 'live')
              AND (p."ownerId" = $1 OR EXISTS (SELECT 1 FROM watch_party_invitees i
                                             WHERE i."partyId" = p.id AND i."userId" = $1
-                                              AND i."source" <> 'kicked'))
+                                              AND i."source" <> 'kicked')
+                  OR ($2 AND p."public" AND NOT EXISTS (SELECT 1 FROM watch_party_invitees k
+                                            WHERE k."partyId" = p.id AND k."userId" = $1
+                                              AND k."source" = 'kicked'))
+                  OR $3)
            ORDER BY (p.status = 'live') DESC, p."scheduledAt" ASC NULLS LAST, p.id"#
     )))
     .bind(user)
+    .bind(public)
+    .bind(all)
     .fetch_all(db)
     .await
 }
@@ -383,13 +432,14 @@ pub async fn update_settings(
     id: i32,
     name: &str,
     policy: Policy,
-    switches: (bool, bool, bool),
+    switches: (bool, bool, bool, bool),
     scheduled_at: Option<DateTime<Utc>>,
     token: &str,
 ) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE watch_parties SET name = $2, policy = $3, "reactionsEnabled" = $4,
-               "chatEnabled" = $5, "linkSharing" = $6, "scheduledAt" = $7, "inviteToken" = $8
+               "chatEnabled" = $5, "linkSharing" = $6, "public" = $7, "scheduledAt" = $8,
+               "inviteToken" = $9
            WHERE id = $1"#,
     )
     .bind(id)
@@ -398,6 +448,7 @@ pub async fn update_settings(
     .bind(switches.0)
     .bind(switches.1)
     .bind(switches.2)
+    .bind(switches.3)
     .bind(scheduled_at)
     .bind(token)
     .execute(db)
@@ -427,10 +478,14 @@ pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<Option<Item>> {
 }
 
 pub async fn set_ended(db: &PgPool, id: i32) -> sqlx::Result<()> {
-    sqlx::query(r#"UPDATE watch_parties SET status = 'ended', "endedAt" = now() WHERE id = $1 AND status <> 'ended'"#)
-        .bind(id)
-        .execute(db)
-        .await?;
+    sqlx::query(
+        r#"UPDATE watch_parties SET status = 'ended', "endedAt" = now(),
+               cover = CASE WHEN cover->>'kind' = 'upload' THEN NULL ELSE cover END
+           WHERE id = $1 AND status <> 'ended'"#,
+    )
+    .bind(id)
+    .execute(db)
+    .await?;
     Ok(())
 }
 
