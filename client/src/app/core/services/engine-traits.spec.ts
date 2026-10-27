@@ -63,7 +63,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
-    supportsDirectPlay: true,
+    supportsDirectPlay: false,
     supportsAbr: true,
   },
   [EngineKind.WEBOS]: {
@@ -178,7 +178,7 @@ describe('ENGINE_TRAITS reproduces the original ternaries', () => {
         tvPlatform !== 'tizen' && tvPlatform !== 'webos',
       );
       expect(traits.probesSegZero).toBe(!isNative);
-      expect(traits.supportsDirectPlay).toBe(true);
+      expect(traits.supportsDirectPlay).toBe(tvPlatform !== 'tizen');
     });
   }
 });

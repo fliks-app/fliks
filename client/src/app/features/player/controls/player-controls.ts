@@ -55,6 +55,7 @@ import {
   LucideArrowLeft,
   LucideExternalLink,
   LucideMaximize,
+  LucideMinimize,
   LucidePictureInPicture2,
   LucideRotateCcw,
   LucideRotateCw,
@@ -100,6 +101,9 @@ interface AppearanceRow {
   options: AppearanceOption[];
 }
 
+/** Upward travel that turns a corner touch into the reaction swipe. */
+const SWIPE_MIN_PX = 50;
+
 @Component({
   selector: 'app-player-controls',
   imports: [
@@ -111,6 +115,7 @@ interface AppearanceRow {
     LucideCheck,
     LucideChevronLeft,
     LucideMaximize,
+    LucideMinimize,
     LucidePictureInPicture2,
     LucideRotateCcw,
     LucideRotateCw,
@@ -142,7 +147,7 @@ interface AppearanceRow {
       '--bar-pl: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); ' +
       '--bar-pr: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); ' +
       '--bar-pb: calc(max(var(--ctrl-pb), var(--safe-bottom)) + var(--ctrl-inset, 0px))',
-    '[style.--strip-h]': "dock() ? '3rem' : null",
+    '[style.--strip-h]': "dock() && !seekOsd() ? '3rem' : null",
   },
 })
 export class PlayerControlsComponent {
@@ -187,8 +192,7 @@ export class PlayerControlsComponent {
     // Propagate any-panel-open state to the parent player so it can suspend
     // its auto-hide timer while a dropdown or bottom sheet is up.
     effect(() => {
-      // The TV strip leaves with the controls, so an open reaction row keeps them up.
-      const open = this.openDropdown() !== null || this.activeSheet() !== null || (this.isTv() && !!this.dock()?.open());
+      const open = this.openDropdown() !== null || this.activeSheet() !== null;
       if (open === this.lastPanelOpen) return;
       this.lastPanelOpen = open;
       this.panelOpenChange.emit(open);
@@ -242,6 +246,8 @@ export class PlayerControlsComponent {
   readonly isMobileTouch = computed(() => this.playerLayout() === 'mobile');
 
   readonly visible = input(true);
+  /** The reaction row alone is up (ArrowDown): the strip shows without the bar. */
+  readonly reactionsOnly = input(false);
   /** Reduced bar: only the seekbar and the time row. Raised by an arrow-key
    *  seek, the way TV players surface a scrub OSD instead of the toolbar. */
   readonly seekOsd = input(false);
@@ -286,6 +292,7 @@ export class PlayerControlsComponent {
   /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
    *  button which is otherwise hidden for native (mobile/TV) engines. */
   readonly isDesktop = input(false);
+  readonly fullscreen = input(false);
   readonly availableSubtitles = input<{ id: string; label: string; language?: string; menuHead?: string; menuSub?: string; burnIn?: boolean; isImage?: boolean }[]>([]);
   readonly availableQualities = input<{ id: string; label: string; lowBandwidth?: boolean }[]>([]);
   readonly activeSubtitleId = input<string | null>(null);
@@ -340,6 +347,8 @@ export class PlayerControlsComponent {
   readonly skipIntro = output<void>();
   readonly skipPreRoll = output<void>();
   readonly tapOverlay = output<void>();
+  /** An upward swipe from the bottom-right corner, where the reaction row sits. */
+  readonly swipeReactions = output<void>();
   readonly seek = output<number>();
   readonly volumeChange = output<number>();
   readonly toggleMute = output<void>();
@@ -583,6 +592,28 @@ export class PlayerControlsComponent {
       this.dropdownTrigger = (event?.currentTarget as HTMLElement) ?? null;
       // Push focus into the panel so the first item is reachable without spatial nav out of the trigger.
       this.focusDropdownEntry();
+    }
+  }
+
+  private swipeStart: { x: number; y: number } | null = null;
+
+  protected onSurfaceTouchStart(e: TouchEvent): void {
+    const t = e.touches[0];
+    // Only from the bottom-right corner, so a swipe elsewhere stays a scroll or a tap.
+    const inCorner = t && t.clientX > window.innerWidth * 0.6 && t.clientY > window.innerHeight * 0.7;
+    this.swipeStart = inCorner ? { x: t.clientX, y: t.clientY } : null;
+  }
+
+  protected onSurfaceTouchEnd(e: TouchEvent): void {
+    const start = this.swipeStart;
+    this.swipeStart = null;
+    const t = e.changedTouches[0];
+    if (!start || !t) return;
+    const up = start.y - t.clientY;
+    if (up > SWIPE_MIN_PX && up > Math.abs(t.clientX - start.x)) {
+      // The swipe must not also count as the tap that toggles the controls.
+      e.preventDefault();
+      this.swipeReactions.emit();
     }
   }
 

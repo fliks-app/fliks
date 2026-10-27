@@ -198,3 +198,39 @@ describe('TizenEngine hide / show', () => {
     expect(onError).toHaveBeenCalledOnce();
   });
 });
+
+describe('TizenEngine start position', () => {
+  afterEach(() => {
+    delete (window as unknown as { webapis?: unknown }).webapis;
+    delete (globalThis as unknown as { webapis?: unknown }).webapis;
+  });
+
+  /** AVPlay with every call a no-op, a hand-driven prepareAsync and a recorded seekTo. */
+  function avplay(currentMs: number) {
+    let prepared: (() => void) | null = null;
+    const seekTo = vi.fn((_ms: number, ok?: () => void) => ok?.());
+    const known: Record<string, unknown> = {
+      getState: () => 'IDLE',
+      getCurrentTime: () => currentMs,
+      getDuration: () => 600_000,
+      getTotalTrackInfo: () => [],
+      getCurrentStreamInfo: () => [],
+      seekTo,
+      prepareAsync: (ok: () => void) => (prepared = ok),
+    };
+    stubAvplay(new Proxy(known, { get: (t, k: string) => t[k] ?? (() => undefined) }));
+    return { seekTo, prepare: () => prepared?.() };
+  }
+
+  it('holds a seek asked during prepare and applies it once ready', async () => {
+    const av = avplay(0);
+    const engine = new TizenEngine();
+    const loading = engine.load('http://x/file.mkv');
+    await engine.seek(50);
+    expect(av.seekTo).not.toHaveBeenCalled();
+    av.prepare();
+    await loading;
+    await Promise.resolve();
+    expect(av.seekTo).toHaveBeenCalledWith(50_000, expect.any(Function), expect.any(Function));
+  });
+});

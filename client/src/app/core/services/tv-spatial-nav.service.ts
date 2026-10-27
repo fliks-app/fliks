@@ -13,7 +13,7 @@ import {
 
 interface ContainerNode {
   readonly el: HTMLElement;
-  readonly orientation: 'vertical' | 'horizontal';
+  readonly orientation: 'vertical' | 'horizontal' | 'grid';
   readonly isWrapping: boolean;
   parent: ContainerNode | null;
   /** Last focusable that received focus inside this container (or any
@@ -85,7 +85,7 @@ export class TvSpatialNavService {
   /** Register a container, auto-parented to the closest registered DOM ancestor (DI is too coarse here). */
   registerContainer(
     el: HTMLElement,
-    options: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean },
+    options: { orientation: 'vertical' | 'horizontal' | 'grid'; isWrapping?: boolean },
   ): void {
     if (this.containers.has(el)) return;
     const parent = this.findParentContainer(el);
@@ -214,6 +214,7 @@ export class TvSpatialNavService {
       const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
       if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
         next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        this.scrollEdgeToFocus(next);
         // Last so it wins: on the TV WebView smooth scrollIntoView leaves a horizontal scroller untouched, stranding focus off-card.
         this.scrollRowToFocus(next);
       }
@@ -224,6 +225,18 @@ export class TvSpatialNavService {
     if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
       const top = dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX;
       window.scrollBy({ top, behavior: 'smooth' });
+    }
+  }
+
+  /** A vertical scroller's first or last row scrolls it to that edge: `nearest` stops at the item's box,
+   *  short of the padding, a heading or a badge beside it, and clips the ring. */
+  private scrollEdgeToFocus(el: HTMLElement): void {
+    for (let s = el.parentElement; s && s !== document.body; s = s.parentElement) {
+      if (s.scrollHeight <= s.clientHeight || !/auto|scroll/.test(getComputedStyle(s).overflowY)) continue;
+      const r = el.getBoundingClientRect();
+      const others = collectFocusables(s).map((o) => o.getBoundingClientRect());
+      if (!others.some((o) => o.bottom <= r.top)) s.scrollTo({ top: 0, behavior: 'smooth' });
+      else if (!others.some((o) => o.top >= r.bottom)) s.scrollTo({ top: s.scrollHeight, behavior: 'smooth' });
     }
   }
 
@@ -303,9 +316,10 @@ export class TvSpatialNavService {
         ? containing.reduce((inner, m) => (inner.contains(m) ? m : inner))
         : modals[0] ?? null;
     }
-    if (!openModal && active && active !== document.body && this.containers.size > 0) {
+    // Inside a modal the tree still orders a section's children, as long as the step stays in the modal.
+    if (active && active !== document.body && this.containers.size > 0 && (!openModal || this.inContainerWithin(active, openModal))) {
       const tree = this.findNeighborInTree(active, dir);
-      if (tree) return tree;
+      if (tree && (!openModal || openModal.contains(tree))) return tree;
     }
     const all = openModal ? collectFocusables(openModal) : this.getFocusables();
     if (!all.length) return null;
@@ -388,6 +402,12 @@ export class TvSpatialNavService {
   }
 
   /** Tree-aware step: climbs from the deepest container, then bridges to a peer top-level one; null falls back to rect scoring. */
+  /** `el` sits in a registered container that is itself inside `root`. */
+  private inContainerWithin(el: HTMLElement, root: HTMLElement): boolean {
+    const c = this.findParentContainer(el);
+    return !!c && root.contains(c.el);
+  }
+
   private findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const activeRect = active.getBoundingClientRect();
     const activeCx = activeRect.left + activeRect.width / 2;
@@ -395,6 +415,13 @@ export class TvSpatialNavService {
     let topMost: ContainerNode | null = null;
     while (cur) {
       topMost = cur;
+      // A grid moves by geometry inside itself; only its edge hands the step to the enclosing container.
+      if (cur.orientation === 'grid') {
+        const inGrid = nearestInDirection(collectFocusables(cur.el), active, dir);
+        if (inGrid) return inGrid;
+        cur = cur.parent;
+        continue;
+      }
       const horizontal = cur.orientation === 'horizontal';
       const orientationMatches = horizontal === (dir === 'left' || dir === 'right');
       if (orientationMatches) {
@@ -406,6 +433,11 @@ export class TvSpatialNavService {
           const idx = children.indexOf(ownChild);
           const step = dir === 'right' || dir === 'down' ? 1 : -1;
           let nextIdx = idx + step;
+          // Siblings sharing the active child's band (a header's buttons in a vertical section) are not a step on this axis.
+          const from = ownChild.getBoundingClientRect();
+          while (nextIdx >= 0 && nextIdx < children.length && sharesBand(children[nextIdx].getBoundingClientRect(), from, horizontal)) {
+            nextIdx += step;
+          }
           if (cur.isWrapping && children.length > 0) {
             nextIdx = (nextIdx + children.length) % children.length;
           }
@@ -515,6 +547,34 @@ export class TvSpatialNavService {
     }
     return out;
   }
+}
+
+/** The candidate closest to `from` in `dir`, weighing drift across the axis double. */
+export function nearestInDirection(candidates: HTMLElement[], from: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
+  const f = from.getBoundingClientRect();
+  const fx = f.left + f.width / 2;
+  const fy = f.top + f.height / 2;
+  let best: HTMLElement | null = null;
+  let bestScore = Infinity;
+  for (const el of candidates) {
+    if (el === from) continue;
+    const r = el.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - fx;
+    const dy = r.top + r.height / 2 - fy;
+    const along = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy;
+    if (along <= 4) continue;
+    const score = along + 2 * Math.abs(dir === 'left' || dir === 'right' ? dy : dx);
+    if (score < bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  }
+  return best;
+}
+
+/** `r` overlaps `from` along the step axis: beside it in a vertical step, above or below it in a horizontal one. */
+export function sharesBand(r: DOMRect, from: DOMRect, horizontal: boolean): boolean {
+  return horizontal ? r.left < from.right - 4 && r.right > from.left + 4 : r.top < from.bottom - 4 && r.bottom > from.top + 4;
 }
 
 function matchesFocusable(el: HTMLElement): boolean {

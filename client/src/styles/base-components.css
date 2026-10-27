@@ -1,6 +1,8 @@
 @layer base {
   :is(a, button, select, input, [role="button"], [tabindex]) {
     @apply rounded-lg;
+    /* Room for the focus ring, the lift and a corner badge when the D-pad scrolls an item into view. */
+    scroll-margin: 0.5rem;
   }
 }
 /* The cues sit above the controls bar, so the ring's low z-index would drop
@@ -453,3 +455,40 @@ html.tv-host .toggle-primary[aria-checked='true'] {
     transition: none;
   }
 }
+
+/* The player's action strip (reactions, mic) fades in and out with the layer it belongs to. */
+.action-strip-in {
+  animation: action-strip-in 180ms ease-out;
+}
+.action-strip-out {
+  animation: action-strip-out 180ms ease-in forwards;
+}
+@keyframes action-strip-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+}
+@keyframes action-strip-out {
+  to { opacity: 0; transform: translateY(0.5rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-strip-in,
+  .action-strip-out { animation-duration: 1ms; }
+}
+
+/* KeyboardReorderDirective: the held item shows it can move either way, inside its own box so a scrolling row cannot clip it. */
+.reorder-held::before,
+.reorder-held::after {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  transform: translateY(-50%);
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-primary);
+  pointer-events: none;
+}
+.reorder-held::before { content: '\2039'; left: 0.0625rem; }
+.reorder-held::after { content: '\203A'; right: 0.0625rem; }
+.reorder-trash { border-color: color-mix(in oklab, var(--color-error) 40%, transparent); }
+.reorder-trash.armed,
+.reorder-trash.cdk-drop-list-dragging { border-style: solid; border-color: var(--color-error); background: color-mix(in oklab, var(--color-error) 15%, transparent); }

@@ -114,3 +114,9 @@ html.tv-host label.input:focus-within {
 }
 
 /* Default radius for the ring so bare focusables don't get a rectangle; in `base` so any `rounded-*` or component radius wins. */
+
+/* Chromium 85 paints backdrop-filter past border-radius, squaring the reaction row: a denser fill instead. */
+body.tv-tizen app-party-reaction-dock .emojis {
+  backdrop-filter: none;
+  background: rgb(0 0 0 / 0.75);
+}

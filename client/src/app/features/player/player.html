@@ -151,6 +151,7 @@
   <app-player-controls
     (interacted)="chrome.onInteraction()"
     [visible]="chrome.visible() && !subs.syncHidesControls()"
+    [reactionsOnly]="chrome.reactionsOnly()"
     [seekOsd]="chrome.seekOsd()"
     [paused]="uiPaused()"
     [spinner]="spinnerVisible()"
@@ -174,11 +175,13 @@
     [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
     (tapOverlay)="onTapOverlay()"
+    (swipeReactions)="reactionDock() && chrome.showReactions()"
     (seek)="onSeek($event)"
     (seekDragChange)="onSeekDragChange($event)"
     (volumeChange)="onVolumeChange($event)"
     (toggleMute)="onToggleMute()"
     (toggleFullscreen)="onToggleFullscreen()"
+    [fullscreen]="fullscreen()"
     (togglePip)="onTogglePip()"
     [canLockOrientation]="canLockOrientation"
     [orientationLocked]="orientationLocked()"
@@ -230,7 +233,7 @@
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
     (openReactionSettings)="partyDialog.set('reactions')"
   >
-    @if (partyCtl.active() && party.reactionsEnabled() && reactions.enabled() && reactions.dock()) {
+    @if (reactionDock()) {
       <app-party-reaction-dock />
     }
   </app-player-controls>

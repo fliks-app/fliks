@@ -20,6 +20,9 @@ export interface KeyboardHost {
   onBack(): void;
   onSpeedChange(rate: number): void;
   stepFrame(direction: -1 | 1): void;
+  /** A party with reactions on: ArrowDown on a hidden bar raises the reaction row alone. */
+  reactionsAvailable(): boolean;
+  openReactions(): void;
 }
 
 /** The player's document-level keyboard and TV-remote shortcuts. */
@@ -41,8 +44,33 @@ export class KeyboardController {
     // A focused floating cue is visible while the bar is hidden: it gets its activation key.
     const activeEl = document.activeElement as HTMLElement | null;
     const cueFocused = !!activeEl?.closest('.player-floating-cue');
+    // The reaction row stays up without the bar: its arrows and OK pick and send.
+    const isRowKey = e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Enter';
+    const floatingKey = cueFocused || (isRowKey && !!activeEl?.closest('app-party-reaction-dock'));
+    // An open dialog (settings, reactions) owns every key, arrows included, even with focus left behind it.
+    if (document.querySelector('dialog[open]')) return;
     // The sync panel owns its keys; only Back still reaches the handlers below.
     if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
+
+    // Hidden bar: Up raises the controls, Down the reaction row alone; Back closes the row.
+    const chrome = this.host.chrome;
+    if (!chrome.visible()) {
+      const reactions = chrome.reactionsOnly();
+      if (e.key === 'ArrowUp' || (e.key === 'ArrowDown' && !reactions)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === 'ArrowDown' && this.host.reactionsAvailable()) this.host.openReactions();
+        else chrome.show();
+        return;
+      }
+      if (reactions && (isBackKey || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isBackKey) chrome.hide();
+        return;
+      }
+      if (reactions && floatingKey) chrome.resetHideTimer();
+    }
 
     const media = mediaKeyAction({ key: e.key, keyCode: tizenKeyCode });
     if (media) {
@@ -67,7 +95,7 @@ export class KeyboardController {
 
     // Controls hidden + Left/Right: raise the seek OSD and let the seekbar own the scrub.
     const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!this.host.chrome.visible() && isSeekArrow && control) {
+    if (!this.host.chrome.visible() && isSeekArrow && control && !floatingKey) {
       e.preventDefault();
       e.stopPropagation();
       this.host.chrome.show(true);
@@ -76,7 +104,7 @@ export class KeyboardController {
     }
 
     // OK on a hidden bar raises it instead of pressing its first (invisible) button, the back arrow.
-    if (e.key === 'Enter' && !cueFocused && !this.host.chrome.visible()) {
+    if (e.key === 'Enter' && !floatingKey && !this.host.chrome.visible()) {
       this.host.chrome.show();
       e.preventDefault();
       e.stopPropagation();
@@ -86,7 +114,7 @@ export class KeyboardController {
     // Any other key on a hidden bar just wakes it, on TV or with focus left in the bar (Space still plays);
     // a focused cue and back are exempt.
     const inBar = !!activeEl?.closest('app-player-controls') && e.key !== ' ';
-    if (!isBackKey && !cueFocused && !this.host.chrome.visible() && (this.host.isTv() || inBar)) {
+    if (!isBackKey && !floatingKey && !this.host.chrome.visible() && (this.host.isTv() || inBar)) {
       this.host.chrome.show();
       e.preventDefault();
       e.stopPropagation();
@@ -175,7 +203,7 @@ export class KeyboardController {
         this.host.stepFrame(e.key === '.' ? 1 : -1);
         break;
     }
-    // Not for back (`onPlayerBackEvent` would only hide the bar, so Return looks stuck) nor a focused cue.
-    if (!isBackKey && !cueFocused) this.host.chrome.show(isSeekArrow && this.host.chrome.seekOsd());
+    // Not for back (`onPlayerBackEvent` would only hide the bar, so Return looks stuck) nor a focused cue or reaction row.
+    if (!isBackKey && !floatingKey) this.host.chrome.show(isSeekArrow && this.host.chrome.seekOsd());
   };
 }

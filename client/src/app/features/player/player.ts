@@ -2,8 +2,10 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
+  Injector,
   OnDestroy,
   ViewEncapsulation,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -132,6 +134,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 @Component({
   imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
+  host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, PartyController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
@@ -323,6 +326,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly isWebOs = this.device.tvPlatform() === 'webos';
   /** Electron shell with embedded mpv: same transparent-overlay UX as the Capacitor native engine. */
   readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
+  /** The page or, on desktop, the native compositor window is fullscreen. */
+  readonly fullscreen = signal(false);
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
   get nativeEngine(): boolean {
@@ -598,6 +603,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onBack: () => this.onBack(),
     onSpeedChange: (r) => this.onSpeedChange(r),
     stepFrame: (d) => this.stepFrame(d),
+    reactionsAvailable: () => this.reactionDock(),
+    openReactions: () => this.openReactions(),
   });
   protected readonly subs = inject(SubtitleController);
   private readonly _subsAttach = (this.subs.attach({
@@ -629,6 +636,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
   protected readonly reactions = inject(ReactionsService);
+  /** The party reaction row exists: a party with reactions on, and the viewer kept the dock. */
+  protected readonly reactionDock = computed(
+    () => this.partyCtl.active() && this.party.reactionsEnabled() && this.reactions.enabled() && this.reactions.dock(),
+  );
   protected readonly keyboardOverlay = inject(KeyboardOverlayService);
   protected readonly partyCtl = inject(PartyController);
   private readonly _partyAttach = (this.partyCtl.attach({
@@ -1756,6 +1767,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Freeze the engine→state mirror while dragging so `timeUpdate` doesn't push the bar back under the
       // user's finger; the drag pins the controls open through the chrome pin.
       this.state.seekLocked.set(true);
+      // A hidden seekbar kept the focus and took the arrow before the page handler: raise the seek OSD here.
+      if (!this.chrome.visible()) this.chrome.show(true);
     } else {
       this.chrome.resetHideTimer();
       // Keep the lock: `onSeek` fires next with the commit value and schedules its own release.
@@ -1783,6 +1796,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // into the intro on purpose without being kicked forward again.
     this.autoSkipSuppressedUntil = Date.now() + 2000;
     this.chrome.resetHideTimer();
+  }
+
+  /** The reaction row alone, open, on the emoji last focused there (else the first): the controls stay down. */
+  private readonly injector = inject(Injector);
+
+  private openReactions(): void {
+    this.chrome.showReactions();
+    afterNextRender(
+      () => {
+        const last = this.reactions.lastFocused;
+        const row = document.querySelector('app-party-reaction-dock');
+        const emoji = (last && row?.querySelector<HTMLElement>(`[data-emoji="${CSS.escape(last)}"]`)) || row?.querySelector<HTMLElement>('.emoji');
+        emoji?.focus({ preventScroll: true });
+      },
+      { injector: this.injector },
+    );
   }
 
   /** Seek with the lock and the desktop far-seek reload; not a user seek for the intro auto-skip. */
@@ -2244,11 +2273,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   });
 
+  protected onFullscreenChange(): void {
+    this.fullscreen.set(!!document.fullscreenElement);
+  }
+
   onToggleFullscreen() {
     // Desktop compositor: the visible surface is the native (SDL) window owned
     // by the addon, not this offscreen WebView, so toggle fullscreen there.
     if (this.isDesktopNative && this.engine instanceof DesktopEngine) {
       this.engine.setFullscreen(!this.engine.fullscreen);
+      this.fullscreen.set(this.engine.fullscreen);
       return;
     }
     // iOS Safari rejects the Fullscreen API on arbitrary elements; only the <video> tag's
@@ -2770,6 +2804,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
    *  410) recovers immediately; `error` routes to {@link CopyFallbackController.maybeFallback}. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
+    // A frame on screen after a failure (a quality switch, a reload) means playback is back: the error panel goes.
+    engine.on('firstFrame', () => this.state.error.set(null));
     engine.on('sessionExpired', () => {
       void this.recovery.recoverFromLostSession('session_expired');
     });
@@ -3256,6 +3292,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.fullscreen
     ) {
       this.engine.setFullscreen(false);
+      this.fullscreen.set(false);
       return;
     }
     // TV remote Return and desktop Escape close a visible controls bar first, then exit on the next press;
