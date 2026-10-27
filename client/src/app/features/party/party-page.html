@@ -7,11 +7,7 @@
   } @else if (head(); as h) {
     <ng-template #info>
       <h1 class="text-3xl lg:text-4xl font-semibold lg:font-bold tracking-tight leading-tight">
-        @if (mediaLink(); as link) {
-          <a [routerLink]="link" (pointerup)="armSlide()" class="hover:underline rounded">{{ h.name }}</a>
-        } @else {
-          {{ h.name }}
-        }
+        {{ h.name }}
       </h1>
       @if (h.playlist; as pl) {
         <p class="text-base-content/60 mt-0.5 lg:mt-1">{{ 'party.playlist_label' | translate: { name: pl.name } }}</p>
@@ -20,13 +16,14 @@
         <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">{{ 'party.no_item' | translate }}</p>
       } @else {
         @let title = h.item.hidden ? ('party.proposal_hidden' | translate) : h.item.title;
-        @if (h.name !== title || episode()) {
-          <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
-            @if (h.name !== title) { {{ title }} }
-            @if (h.name !== title && episode()) { · }
-            {{ episode() }}
-          </p>
-        }
+        @let label = episode() ? title + ' · ' + episode() : title;
+        <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
+          @if (mediaLink(); as link) {
+            <a [routerLink]="link" (pointerup)="armSlide()" class="hover:underline rounded">{{ label }}</a>
+          } @else {
+            {{ label }}
+          }
+        </p>
       }
 
       <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 lg:mt-3 text-base-content/60">
