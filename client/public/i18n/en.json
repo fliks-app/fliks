@@ -3704,6 +3704,7 @@
     "programme_up": "Move up",
     "programme_down": "Move down",
     "programme_remove_message": "Remove \"{{title}}\" from the programme?",
+    "programme_unaccept": "Back to proposals",
     "programme_remove": "Remove from the programme",
     "programme_empty_host": "The programme is empty. Add a film or episodes.",
     "programme_empty": "The programme is empty.",

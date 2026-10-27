@@ -3704,6 +3704,7 @@
     "programme_up": "Subir",
     "programme_down": "Bajar",
     "programme_remove_message": "¿Quitar «{{title}}» del programa?",
+    "programme_unaccept": "Devolver a propuestas",
     "programme_remove": "Quitar del programa",
     "programme_empty_host": "El programa está vacío. Añade una película o episodios.",
     "programme_empty": "El programa está vacío.",

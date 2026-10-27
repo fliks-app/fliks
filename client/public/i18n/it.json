@@ -3704,6 +3704,7 @@
     "programme_up": "Sposta su",
     "programme_down": "Sposta giù",
     "programme_remove_message": "Rimuovere «{{title}}» dal programma?",
+    "programme_unaccept": "Rimetti tra le proposte",
     "programme_remove": "Rimuovi dal programma",
     "programme_empty_host": "Il programma è vuoto. Aggiungi un film o degli episodi.",
     "programme_empty": "Il programma è vuoto.",

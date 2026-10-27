@@ -42,6 +42,13 @@
                   <svg lucideChevronDown class="h-4 w-4"></svg>
                 </button>
               }
+              @if (!live() && isProposed(r.item)) {
+                <span class="tooltip" [attr.data-tip]="'party.programme_unaccept' | translate">
+                  <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_unaccept' | translate" data-act="unaccept" (click)="unaccept(i)">
+                    <svg lucideUndo2 class="h-4 w-4"></svg>
+                  </button>
+                </span>
+              }
               <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.programme_remove' | translate" data-act="remove" (click)="remove(i)">
                 <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>

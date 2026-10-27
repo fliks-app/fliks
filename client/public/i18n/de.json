@@ -3704,6 +3704,7 @@
     "programme_up": "Nach oben",
     "programme_down": "Nach unten",
     "programme_remove_message": "„{{title}}\" aus dem Programm entfernen?",
+    "programme_unaccept": "Zurück zu den Vorschlägen",
     "programme_remove": "Aus dem Programm entfernen",
     "programme_empty_host": "Das Programm ist leer. Füge einen Film oder Folgen hinzu.",
     "programme_empty": "Das Programm ist leer.",

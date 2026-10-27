@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { PartyApiService, type PartyDto, type PartyPreview, type PartySummaryDto } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartyItem, type PartyPreview, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { addToCalendar } from '../../core/plugins/calendar.plugin';
 import { buildPartyIcs, partyDurationMin } from './party-ics';
@@ -23,7 +23,7 @@ import { runBusy } from './party-busy';
 import { PartyHostDialogComponent } from './party-host-dialog';
 import { PartyInviteComponent } from './party-invite';
 import { PartyProposalsComponent, bestProposals, topProposal } from './party-proposals';
-import { PartyProgrammeComponent, findEpisode } from './party-programme';
+import { PartyProgrammeComponent, findEpisode, sameItem } from './party-programme';
 import { PartyCoverComponent } from './party-cover';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyChatComponent } from '../player/party/party-chat';
@@ -167,6 +167,11 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** A film is chosen, or a proposal the host can open exists for the server to take the top vote from. */
   /** Proposals tied for first leave a start on the top vote nothing to play. */
   protected readonly voteTied = computed(() => !this.head()?.item && bestProposals(this.party.proposals()).length > 1);
+  /** The programme as the programme section holds it. */
+  protected readonly programme = signal<PartyItem[]>([]);
+  protected readonly proposedItems = computed(() => this.party.proposals().map((p) => p.item));
+  /** A proposal already accepted into the programme leaves the list until it is sent back. */
+  protected readonly openProposals = computed(() => this.party.proposals().filter((p) => !this.programme().some((i) => sameItem(i, p.item))));
   protected readonly canStart = computed(() => !!this.head()?.item || !!topProposal(this.party.proposals()));
   /** The chat column exists in the lobby only; the live phase gives the page its full width. */
   protected readonly chatShown = computed(() => this.phase() === 'lobby' && this.joined());

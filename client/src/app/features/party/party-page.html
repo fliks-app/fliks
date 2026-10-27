@@ -175,10 +175,10 @@
       <div class="grid items-start gap-6" [class]="chatShown() ? 'lg:grid-cols-2' : ''">
         <div class="flex min-w-0 flex-col gap-6">
           @if (v.status !== 'ended' && hostView()) {
-            <app-party-programme [partyId]="v.id" [isHost]="canHost()" [current]="head()?.item ?? null" [live]="v.status === 'live'" (changed)="apply($event)" />
+            <app-party-programme [partyId]="v.id" [isHost]="canHost()" [current]="head()?.item ?? null" [live]="v.status === 'live'" [proposed]="proposedItems()" [(items)]="programme" (changed)="apply($event)" />
           }
           @if (phase() === 'lobby' && joined()) {
-            <app-party-proposals [partyId]="v.id" [proposals]="party.proposals()" [people]="people()" [isHost]="party.isHost()" (chosen)="apply($event)" />
+            <app-party-proposals [partyId]="v.id" [proposals]="openProposals()" [people]="people()" [isHost]="party.isHost()" (chosen)="apply($event)" />
           }
           <section class="flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">

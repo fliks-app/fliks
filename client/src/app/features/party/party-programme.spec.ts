@@ -132,6 +132,16 @@ describe('PartyProgrammeComponent', () => {
     expect(ids(0)).toEqual(['2:20', '1:', '2:21']);
   });
 
+  it('sends an accepted proposal back without a confirmation', async () => {
+    const f = await setup(true);
+    f.componentRef.setInput('proposed', [{ mediaId: 2, episodeId: 20 }]);
+    f.detectChanges();
+    expect(el(f).querySelectorAll('[data-act=unaccept]')).toHaveLength(1);
+    (el(f).querySelector('[data-act=unaccept]') as HTMLButtonElement).click();
+    await flush();
+    expect(ids(0)).toEqual(['1:', '2:21']);
+  });
+
   it('removes an item', async () => {
     const f = await setup(true);
     rowButtons(f, 1)[2].click();

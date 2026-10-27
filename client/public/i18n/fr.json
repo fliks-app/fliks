@@ -3704,6 +3704,7 @@
     "programme_up": "Monter",
     "programme_down": "Descendre",
     "programme_remove_message": "Retirer « {{title}} » du programme ?",
+    "programme_unaccept": "Remettre en proposition",
     "programme_remove": "Retirer du programme",
     "programme_empty_host": "Le programme est vide. Ajoutez un film ou des épisodes.",
     "programme_empty": "Le programme est vide.",
