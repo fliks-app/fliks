@@ -6,6 +6,7 @@ import {
   SCROLLER_SELECTOR,
   isFocusCandidate,
   isRendered,
+  wantsFocusRestore,
 } from './focusable.constants';
 
 /** Spatial navigation for D-pad and keyboard arrows: container tree (`[appTvSection]`/`[appTvRow]`) first,
@@ -25,6 +26,9 @@ interface ContainerNode {
  *  the user reach non-focusable info content below the last card. */
 const PAGE_SCROLL_AMOUNT_PX = 300;
 
+/** How long a lost focus waits for its button to come back (re-enabled or replaced) before giving up. */
+const FOCUS_RESCUE_MS = 5000;
+
 /** Held-key pacing: auto-repeat outruns smooth scrolls and judders. Taps are never paced. */
 const REPEAT_MIN_INTERVAL_MS = 200;
 
@@ -40,6 +44,9 @@ export class TvSpatialNavService {
   /** Whole-document focusable list, cleared by the observer below; rescanning hundreds of cards per D-pad press stalls the main thread. */
   private focusableCache: HTMLElement[] | null = null;
   private focusObserver?: MutationObserver;
+  /** The focused element, its parent and spot, to hand the focus on when a click swaps or disables it. */
+  private lastFocus: { el: HTMLElement; parent: HTMLElement | null; rect: DOMRect } | null = null;
+  private focusLostAt = 0;
 
   constructor() {
     // Handler is a no-op for non-arrow keys, so binding on touch-only devices is harmless.
@@ -59,13 +66,17 @@ export class TvSpatialNavService {
     window.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
     this.destroyRef.onDestroy(() => window.removeEventListener('wheel', wheelHandler, { capture: true } as any));
     // Track the deepest focused element per container for last-active-child memory.
-    const focusInHandler = (e: FocusEvent) => this.updateActiveChild(e.target as HTMLElement | null);
+    const focusInHandler = (e: FocusEvent) => {
+      this.updateActiveChild(e.target as HTMLElement | null);
+      this.rememberFocus();
+    };
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
     // Clear the cache on DOM changes that affect focusability; attribute filter avoids cosmetic churn.
     if (typeof MutationObserver !== 'undefined') {
       this.focusObserver = new MutationObserver(() => {
         this.focusableCache = null;
+        this.rescueFocus();
       });
       this.focusObserver.observe(document.body, {
         childList: true,
@@ -140,6 +151,43 @@ export class TvSpatialNavService {
     return (this.focusableCache ??= collectFocusables());
   }
 
+  private rememberFocus(): void {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body) return;
+    this.lastFocus = { el, parent: el.parentElement, rect: el.getBoundingClientRect() };
+    this.focusLostAt = 0;
+  }
+
+  /** A pressed button that vanished (swapped by an `@if`) or got disabled (busy) drops the focus on <body>: hand it
+   *  back to the button once re-enabled, or to its nearest replacement under the same parent. Keyboard/D-pad only. */
+  private rescueFocus(): void {
+    const last = this.lastFocus;
+    if (!last || !wantsFocusRestore()) return;
+    const { el, parent, rect } = last;
+    const gone = !el.isConnected;
+    // A blur on a button still there and enabled was on purpose: only a removal or a disable counts as lost.
+    if (!this.focusLostAt && (gone || el.matches(':disabled'))) this.focusLostAt = Date.now();
+    if (!this.focusLostAt || document.activeElement !== document.body) return;
+    if (Date.now() - this.focusLostAt > FOCUS_RESCUE_MS || !parent?.isConnected) {
+      this.lastFocus = null;
+      return;
+    }
+    if (!gone) {
+      if (!el.matches(':disabled')) el.focus({ preventScroll: true });
+      return;
+    }
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let best: HTMLElement | null = null;
+    let bestDist = Infinity;
+    for (const c of collectFocusables(parent)) {
+      const r = c.getBoundingClientRect();
+      const d = Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy);
+      if (d < bestDist) [best, bestDist] = [c, d];
+    }
+    best?.focus({ preventScroll: true });
+  }
+
   private focusFirstIfNoFocus() {
     if (typeof document === 'undefined') return;
     if (document.activeElement && document.activeElement !== document.body) return;
@@ -150,6 +198,8 @@ export class TvSpatialNavService {
   }
 
   private onKey(e: KeyboardEvent) {
+    // The spot is taken before Enter activates, so a replacement lands where the press was.
+    this.rememberFocus();
     // Some Android WebView builds don't report a `key` for D-pad events but
     // still ship `keyCode` 37/38/39/40 — accept either form.
     const dir = ARROW_TO_DIR[e.key] ?? KEYCODE_TO_DIR[e.keyCode];
