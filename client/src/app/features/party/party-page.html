@@ -1,4 +1,4 @@
-<div appTvSection appDefaultFocus="[autofocus]" class="flex flex-col gap-6">
+<div appTvSection appDefaultFocus="[data-party-actions] button:not(:disabled), [autofocus]" class="flex flex-col gap-6">
   @if (gone()) {
     <div class="flex flex-col items-center gap-4 py-16 text-center">
       <p>{{ 'party.page_gone' | translate }}</p>
@@ -68,16 +68,16 @@
         }
       </div>
 
-      <div appTvRow class="flex flex-wrap items-center gap-2 mt-6 mb-2">
+      <div appTvRow data-party-actions class="flex flex-wrap items-center gap-2 mt-6 mb-2">
         @if (phase() === 'live') {
-          <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" autofocus (click)="join()">
+          <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" (click)="join()">
             <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
             {{ 'party.join' | translate }}
           </button>
         } @else if (phase() === 'lobby') {
           @if (joined()) {
             @if (party.isHost() && ready()) {
-              <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
+              <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" [disabled]="!canStart()" (click)="start()">
                 <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
               </button>
@@ -89,7 +89,6 @@
               [class.btn-primary]="!ready()"
               [class.btn-warning]="ready()"
               [class.btn-outline]="ready() && party.isHost()"
-              [attr.autofocus]="party.isHost() && ready() && canStart() ? null : ''"
               (click)="toggleReady()"
             >
               @if (ready()) {
@@ -108,13 +107,13 @@
         @if (guest()) {
           <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="quit()">{{ 'party.leave' | translate }}</button>
         }
-        @if (view()?.inviteToken) {
+        @if (view()?.inviteToken && !device.isTv()) {
           <button type="button" class="btn btn-ghost gap-2" (click)="copy()">
             <svg lucideShare2 class="h-4 w-4"></svg>
             {{ (party.canShare() ? 'party.share_link' : 'party.copy_link') | translate }}
           </button>
         }
-        @if (h.status === 'scheduled' && h.scheduledAt) {
+        @if (h.status === 'scheduled' && h.scheduledAt && !device.isTv()) {
           <button type="button" class="btn btn-ghost gap-2" (click)="addToCalendar()">
             <svg lucideCalendarPlus class="h-4 w-4"></svg>
             {{ 'party.add_to_calendar' | translate }}

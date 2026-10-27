@@ -77,7 +77,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly navbar = inject(NavbarService);
   protected readonly tv = inject(TvService);
   private readonly background = inject(BackgroundService);
-  private readonly device = inject(DeviceService);
+  protected readonly device = inject(DeviceService);
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   protected readonly hostDialog = viewChild(PartyHostDialogComponent);
