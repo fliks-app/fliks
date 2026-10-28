@@ -6,7 +6,7 @@ use fliks_engine_core::api::{JobPriority, JobRequest, JobResult, MediaInfo, Medi
 use serde_json::Value;
 use std::{
     collections::HashSet,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Mutex,
         atomic::{AtomicBool, AtomicI32, Ordering},
@@ -133,6 +133,14 @@ async fn store_clock_break(
     Ok(())
 }
 
+/// `schedule_if_needed` at `normal` priority, detached: new bytes (an import, a changed file).
+pub fn spawn_scan(st: &AppState, id: i32, path: std::path::PathBuf, info: Option<MediaInfo>) {
+    let st = st.clone();
+    tokio::spawn(async move {
+        schedule_if_needed(&st, id, &path, info, JobPriority::Normal).await;
+    });
+}
+
 /// Scans the file unless its current version was; never fails. A scan already running for the file
 /// is not waited for (ponytail: callers only need it started).
 pub async fn schedule_if_needed(
@@ -178,39 +186,72 @@ async fn scan(st: &AppState, id: i32, path: &Path, info: MediaInfo, priority: Jo
         else {
             return Err("engine answered another job kind".to_owned());
         };
-        let after = Stat::of(path).await.map_err(|e| e.to_string())?;
-        if after.version() != before.version() {
-            tracing::warn!("\"{label}\" changed while it was scanned; scan dropped");
-            return Ok(());
-        }
-        let json = serde_json::to_value(&scan).map_err(|e| e.to_string())?;
-        sqlx::query!(
-            r#"INSERT INTO media_file_scans ("mediaFileId", size, "mtimeMs", scan) VALUES ($1, $2, $3, $4)
-               ON CONFLICT ("mediaFileId") DO UPDATE SET size = EXCLUDED.size,
-                 "mtimeMs" = EXCLUDED."mtimeMs", scan = EXCLUDED.scan, "updatedAt" = now()"#,
-            id,
-            after.size as i64,
-            after.mtime_ms,
-            json
-        )
-        .execute(&st.db)
-        .await
-        .map_err(|e| e.to_string())?;
-        tracing::info!(
-            "\"{label}\" scanned in {} ms: {} keyframes",
-            t0.elapsed().as_millis(),
-            scan.keyframes.len()
-        );
-        if scan.break_seconds != prior {
-            store_clock_break(st, id, &label, scan.break_seconds)
-                .await
-                .map_err(|e| e.to_string())?;
+        if store(st, id, path, &before.version(), &scan, prior).await? {
+            tracing::info!(
+                "\"{label}\" scanned in {} ms: {} keyframes",
+                t0.elapsed().as_millis(),
+                scan.keyframes.len()
+            );
         }
         Ok::<(), String>(())
     };
     if let Err(e) = run.await {
         tracing::warn!("Source scan failed for \"{label}\": {e}");
     }
+}
+
+/// Keeps the scan a remux open ran (`OpenSessionResponse.scan`), detached; `version` is the
+/// file's at the lookup before that open.
+pub fn keep(
+    st: &AppState,
+    id: i32,
+    path: PathBuf,
+    version: String,
+    scan: SourceScan,
+    prior: Option<f64>,
+) {
+    let st = st.clone();
+    tokio::spawn(async move {
+        if let Err(e) = store(&st, id, &path, &version, &scan, prior).await {
+            tracing::warn!("Keeping the scan of \"{}\" failed: {e}", label(&path));
+        }
+    });
+}
+
+/// Stores `scan` of the bytes at `version`; false when the file changed since (the scan is dropped).
+async fn store(
+    st: &AppState,
+    id: i32,
+    path: &Path,
+    version: &str,
+    scan: &SourceScan,
+    prior: Option<f64>,
+) -> Result<bool, String> {
+    let label = label(path);
+    let after = Stat::of(path).await.map_err(|e| e.to_string())?;
+    if after.version() != version {
+        tracing::warn!("\"{label}\" changed while it was scanned; scan dropped");
+        return Ok(false);
+    }
+    let json = serde_json::to_value(scan).map_err(|e| e.to_string())?;
+    sqlx::query!(
+        r#"INSERT INTO media_file_scans ("mediaFileId", size, "mtimeMs", scan) VALUES ($1, $2, $3, $4)
+               ON CONFLICT ("mediaFileId") DO UPDATE SET size = EXCLUDED.size,
+                 "mtimeMs" = EXCLUDED."mtimeMs", scan = EXCLUDED.scan, "updatedAt" = now()"#,
+        id,
+        after.size as i64,
+        after.mtime_ms,
+        json
+    )
+    .execute(&st.db)
+    .await
+    .map_err(|e| e.to_string())?;
+    if scan.break_seconds != prior {
+        store_clock_break(st, id, &label, scan.break_seconds)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(true)
 }
 
 /// One file per minute past the cursor, only while nobody watches and the process is past its boot probes.

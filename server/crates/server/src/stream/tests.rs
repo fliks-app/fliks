@@ -547,6 +547,36 @@ async fn a_stored_scan_goes_to_the_engine_and_restores_the_clock_break(pool: PgP
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_scan_a_remux_open_ran_is_kept_without_a_job(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (mut open, _) = golden();
+    open["hints"]["scanMissing"] = json!(true);
+    open["scan"] =
+        json!({"keyframes": [{"pts": 0.0, "dts": 0.0}], "end": 10.0, "audioConfigChanges": {}});
+    c.fake.script("POST", "/v1/sessions", vec![ok(open)]);
+    info(&c, "").await;
+    let stored = || async {
+        sqlx::query_scalar::<_, Value>(
+            r#"SELECT scan FROM media_file_scans WHERE "mediaFileId" = $1"#,
+        )
+        .bind(c.file)
+        .fetch_optional(&c.pool)
+        .await
+        .unwrap()
+    };
+    let mut scan = None;
+    for _ in 0..50 {
+        scan = stored().await;
+        if scan.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(scan.map(|s| s["end"].clone()), Some(json!(10.0)));
+    assert!(c.fake.seen("POST", "/v1/jobs").is_empty(), "no second scan");
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_missing_scan_is_run_and_stored(pool: PgPool) {
     let c = ctx(pool, true).await;
     let scan = json!({"type": "Scan", "scan": {"keyframes": [], "end": 10.0, "breakSeconds": 3.0, "audioConfigChanges": {}}});
