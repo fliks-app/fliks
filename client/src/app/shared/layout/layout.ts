@@ -204,6 +204,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     const dock = this.navbar.phoneDock() ? '4rem + env(safe-area-inset-bottom, 0px)' : '0px';
     return `calc(${dock} + 1rem)`;
   });
+  /** `chromeBottom` plus the cast mini-bar (3.5rem, borders, 0.5rem gap) while it shows: what content and sticky bars clear. */
+  readonly chromeBottomTotal = computed(() =>
+    !this.device.isTv() && !this.session.isLocal() ? `calc(${this.chromeBottom()} + 4.25rem)` : this.chromeBottom(),
+  );
 
   // Android status bar icons: the app is dark-only, so light=false always.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {

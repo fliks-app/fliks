@@ -2,7 +2,8 @@
      [class.lg:drawer-open]="navbar.sidebarDocked()"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()"
      [style.--chrome-top]="chromeTop()"
-     [style.--chrome-bottom]="chromeBottom()">
+     [style.--chrome-bottom]="chromeBottom()"
+     [style.--chrome-bottom-total]="chromeBottomTotal()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever

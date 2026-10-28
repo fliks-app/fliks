@@ -28,6 +28,7 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { LiveTvAvailabilityService } from '../../core/services/live-tv-availability.service';
@@ -69,6 +70,7 @@ interface Fixture {
   sseLastEvent?: ReturnType<typeof signal<SseEvent | null>>;
   /** Marks the active page as a hero (fanart) page. */
   isHeroPage?: boolean;
+  away?: boolean;
   /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
   countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
   /** Defaults to granting only `livetv.read`, so a fixture that denies it still
@@ -195,6 +197,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: CastPlayerService,
         useValue: { hasMedia: () => false, mediaTitle: () => '' },
       },
+      { provide: PlaybackSession, useValue: { isLocal: () => !f.away, openPlayer: () => {} } },
       { provide: AppUpdateService, useValue: { available: () => false } },
       {
         provide: PluginUiRegistryService,
@@ -560,6 +563,14 @@ describe('LayoutComponent — chrome clearance', () => {
     // lands it a change detection late — after WebKit has laid out the cached
     // page the router just reattached, which iOS 18.7 never redoes.
     expect(hero).toBe(plain);
+  });
+
+  it('adds the cast mini-bar to the bottom clearance only while playback is away', async () => {
+    const here = (await createFixture(NATIVE_PHONE)).componentInstance;
+    expect(here.chromeBottomTotal()).toBe(here.chromeBottom());
+    TestBed.resetTestingModule();
+    const away = (await createFixture({ ...NATIVE_PHONE, away: true })).componentInstance;
+    expect(away.chromeBottomTotal()).toBe(`calc(${away.chromeBottom()} + 4.25rem)`);
   });
 });
 
