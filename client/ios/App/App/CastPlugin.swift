@@ -225,14 +225,17 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     /// Lets the web layer render its own device list instead of the native chooser dialog.
     @objc func getCastDevices(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
             let dm = GCKCastContext.sharedInstance().discoveryManager
+            let session = self?.currentSession
+            let connectedId = session?.connectionState == .connected ? session?.device.deviceID : nil
             var devices: [[String: Any]] = []
             for i in 0..<dm.deviceCount {
                 let device = dm.device(at: i)
                 var entry: [String: Any] = [
                     "id": device.deviceID,
-                    "name": device.friendlyName ?? device.deviceID
+                    "name": device.friendlyName ?? device.deviceID,
+                    "connected": device.deviceID == connectedId
                 ]
                 if let modelName = device.modelName {
                     entry["modelName"] = modelName
