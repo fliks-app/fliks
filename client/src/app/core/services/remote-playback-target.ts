@@ -11,7 +11,6 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
 import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
-import { PlaybackSession } from './playback/playback-session';
 import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 
 /** Drives the cast-overlay UI from a remote target; track lists come from the played file's streamInfo, fetched once the target reports playback. */
@@ -24,7 +23,6 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   private readonly mediaService = inject(MediaService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
-  private readonly session = inject(PlaybackSession);
 
   readonly position = this.remote.interpolatedPosition;
   readonly duration = computed(() => this.remote.targetState()?.durationSeconds ?? 0);
@@ -88,9 +86,6 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     effect(() => {
       const targetId = this.remote.selectedTargetId();
       untracked(() => {
-        // Every release path funnels through here, so the card cannot be left
-        // open over a device that is no longer ours to control.
-        if (!targetId) this.session.expanded.set(false);
         this.tracksLoadedForKey = null;
         this.audioOptions.set([]);
         this.subtitleOptions.set([]);
@@ -252,12 +247,10 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     }
     // Stopping the media doesn't give the device back: keep the target selected; the top-bar chip reopens the card.
     void this.remote.send(targetId, { action: 'stop' });
-    this.session.expanded.set(false);
   }
 
   disconnect(): void {
     this.remote.selectTarget(null);
-    this.session.expanded.set(false);
   }
 
   /** Reuse the target's own builder: a second list produced different rows, so the selection named a track the target lacked. */

@@ -1,11 +1,13 @@
-import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { PlayerControlsComponent } from './controls/player-controls';
 import type { ControlsVisibilityService } from './controls/controls-visibility';
 import { playerKeyAction } from './player-keymap';
 
 export interface KeyboardHost {
   chrome: ControlsVisibilityService;
-  engine(): PlaybackEngine | null;
+  /** The engine, or the output playing elsewhere: what the seek and play keys read. */
+  /** False while another output plays: the controls are the whole screen, so Escape leaves. */
+  canHideControls(): boolean;
+  playhead(): { paused: boolean; currentTime: number } | null;
   controls(): PlayerControlsComponent | undefined;
   isTv(): boolean;
   /** False for a non-host of a host-only party: play, pause and seek keys do nothing. */
@@ -31,8 +33,8 @@ export class KeyboardController {
 
   onKeyDown = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    const engine = this.host.engine();
-    if (!engine) return;
+    const playhead = this.host.playhead();
+    if (!playhead) return;
     const control = this.host.canControlPlayback();
 
     // Back keys must bubble to the window handler in `app.ts` so the player can be left.
@@ -87,12 +89,12 @@ export class KeyboardController {
       if (!control) return;
       if (
         media === 'toggle' ||
-        (media === 'play' && engine.paused) ||
-        (media === 'pause' && !engine.paused)
+        (media === 'play' && playhead.paused) ||
+        (media === 'pause' && !playhead.paused)
       ) {
         this.host.onTogglePlay();
-      } else if (media === 'forward') this.host.onSeek(engine.currentTime + 10);
-      else if (media === 'rewind') this.host.onSeek(engine.currentTime - 10);
+      } else if (media === 'forward') this.host.onSeek(playhead.currentTime + 10);
+      else if (media === 'rewind') this.host.onSeek(playhead.currentTime - 10);
       this.host.chrome.show();
       return;
     }
@@ -138,22 +140,22 @@ export class KeyboardController {
       case 'seekBack':
         if (!arrowSeekAllowed || !control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime - 10);
+        this.host.onSeek(playhead.currentTime - 10);
         break;
       case 'seekForward':
         if (!arrowSeekAllowed || !control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime + 10);
+        this.host.onSeek(playhead.currentTime + 10);
         break;
       case 'seekBack30':
         if (!control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime - 30);
+        this.host.onSeek(playhead.currentTime - 30);
         break;
       case 'seekForward30':
         if (!control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime + 30);
+        this.host.onSeek(playhead.currentTime + 30);
         break;
       case 'fullscreen':
         e.preventDefault();
@@ -175,7 +177,7 @@ export class KeyboardController {
         break;
       case 'escape':
         e.preventDefault();
-        if (this.host.chrome.visible()) {
+        if (this.host.chrome.visible() && this.host.canHideControls()) {
           this.host.chrome.hide();
           return; // skip the trailing chrome.show()
         }

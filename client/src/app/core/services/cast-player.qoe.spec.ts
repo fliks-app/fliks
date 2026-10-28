@@ -141,7 +141,6 @@ describe('CastPlayerService reporting without the player page', () => {
       streamingApi: { stopSession: vi.fn(() => (order.push('stop'), Promise.resolve())) },
       setLiveSession: vi.fn(),
       hasMedia: { set: vi.fn() },
-      session: { expanded: { set: vi.fn() } },
       mediaFileId: { set: vi.fn() },
       spriteUrl: { set: vi.fn() },
       spriteMetadata: { set: vi.fn() },

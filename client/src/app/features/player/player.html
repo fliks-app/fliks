@@ -4,19 +4,17 @@
   class="party-shell"
   [attr.data-party-dock]="partyPanelShown() ? party.dock() : null"
   [class.in-party]="partyCtl.active()"
-  [class.hidden]="castScreenUp()"
   [class.keyboard-open]="keyboardOverlay.height() > 0"
   [style.--keyboard-h.px]="keyboardOverlay.height()"
 >
-<!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
+<!-- The player screen; another output's poster replaces the video while it plays elsewhere. -->
 <div
   #playerContainer
   appDefaultFocus="[data-default-focus]"
   class="player-container"
   [class.closing]="closing()"
-  [class.player-hide-cursor]="!chrome.visible()"
+  [class.player-hide-cursor]="!chrome.visible() && !elsewhere()"
   [class.native-player]="!!nativeEngine"
-  [class.hidden]="!session.isLocal()"
   (mousemove)="chrome.onPointerMove()"
   (wheel)="chrome.wakeFromPointerGesture()"
   (click)="chrome.wakeFromPointerGesture()"
@@ -86,6 +84,40 @@
     </div>
   }
 
+  <!-- Playback is on another device: dimmed poster, where it plays and the way to stop it, above the controls' tap zone. -->
+  @if (elsewhere(); as o) {
+    <div class="absolute inset-0 z-1 bg-black pointer-events-none">
+      @if (o.fanartUrl()) {
+        <img [src]="o.fanartUrl()!" alt="" class="absolute inset-0 w-full h-full object-cover opacity-40" />
+      }
+    </div>
+    <div class="absolute inset-x-0 top-[18dvh] z-[45] flex flex-col items-center gap-3 px-6 text-center text-white/80 pointer-events-none">
+      <svg lucideCast class="h-12 w-12"></svg>
+      <p class="text-base">{{ 'player.playing_on' | translate: { name: session.deviceName() } }}</p>
+      @if (o.targetOffline()) {
+        <p class="text-sm text-white/60">{{ 'remote.offline_message' | translate }}</p>
+      } @else if (o.isStarting()) {
+        <p class="text-sm text-white/60">{{ 'remote.starting_message' | translate }}</p>
+      } @else if (o.isIdle()) {
+        <p class="text-sm text-white/60">{{ 'remote.idle_message' | translate }}</p>
+      } @else if (o.autoplayBlocked()) {
+        <p class="text-sm text-white/60">{{ 'remote.autoplay_blocked' | translate }}</p>
+      }
+      <div class="flex flex-wrap justify-center gap-1 pointer-events-auto">
+        @if (o.targetOffline()) {
+          <button type="button" class="btn btn-primary btn-sm" (click)="o.disconnect()">{{ 'remote.play_here_instead' | translate }}</button>
+        } @else {
+          @if (!o.isIdle()) {
+            <button type="button" class="btn btn-ghost btn-sm text-white" (click)="onStopOutput(o)">{{ 'remote.stop_playback' | translate }}</button>
+          }
+          @if (o.canStopControlling) {
+            <button type="button" class="btn btn-ghost btn-sm text-white" (click)="o.disconnect()">{{ 'remote.stop_controlling' | translate }}</button>
+          }
+        }
+      </div>
+    </div>
+  }
+
   <app-player-error-overlay
     [error]="error()"
     [diagnostics]="errorDiagnostics()"
@@ -94,7 +126,7 @@
     (back)="onBack()"
   />
 
-  @if (spinnerVisible()) {
+  @if (view().spinner) {
     <div class="loading-overlay absolute inset-0 flex flex-col items-center justify-center gap-3 z-50 pointer-events-none">
       <span class="loading loading-spinner loading-lg text-white"></span>
     </div>
@@ -151,27 +183,29 @@
   @if (!inPipMode()) {
   <app-player-controls
     (interacted)="chrome.onInteraction()"
-    [visible]="chrome.visible() && !subs.syncHidesControls()"
+    [visible]="!!elsewhere() || (chrome.visible() && !subs.syncHidesControls())"
     [reactionsOnly]="chrome.reactionsOnly()"
     [seekOsd]="chrome.seekOsd()"
-    [paused]="uiPaused()"
-    [spinner]="spinnerVisible()"
-    [videoStarted]="videoStarted()"
-    [currentTime]="currentTime()"
-    [duration]="duration()"
+    [paused]="view().paused"
+    [spinner]="view().spinner"
+    [videoStarted]="view().videoStarted"
+    [currentTime]="view().currentTime"
+    [duration]="view().duration"
     [bufferedEnd]="bufferedEnd()"
-    [volume]="volume()"
-    [muted]="muted()"
+    [volume]="view().volume"
+    [muted]="view().muted"
+    [canSetVolume]="view().canSetVolume"
+    [local]="!elsewhere()"
     [playbackRate]="playbackRate()"
-    [mediaTitle]="mediaTitle()"
+    [mediaTitle]="view().mediaTitle"
     [logoUrl]="mediaLogoUrl()"
-    [episodeTitle]="displayEpisodeTitle()"
-    [hasNext]="queueCtl.upNext() !== null"
+    [episodeTitle]="view().episodeTitle"
+    [hasNext]="view().hasNext"
     [nextLabelKey]="queueCtl.nextLabelKey()"
-    [queueItems]="preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
+    [queueItems]="elsewhere() || preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
     [queueIndex]="queueCtl.queueIndex()"
     (selectQueueItem)="queueCtl.playQueueItem($event)"
-    [activeQualityLabel]="activeQualityLabel()"
+    [activeQualityLabel]="view().activeQualityLabel"
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
@@ -187,13 +221,13 @@
     [canLockOrientation]="screen.canLock"
     [orientationLocked]="screen.locked()"
     (toggleOrientationLock)="screen.toggleLock()"
-    [availableSubtitles]="subs.availableSubtitles()"
-    [availableQualities]="availableQualities()"
-    [activeSubtitleId]="subs.activeSubtitleId()"
-    [activeQualityId]="activeQualityId()"
-    [availableAudioTracks]="availableAudioTracks()"
-    [activeAudioTrackId]="activeAudioTrackId()"
-    (selectSubtitle)="subs.selectById($event)"
+    [availableSubtitles]="view().subtitles"
+    [availableQualities]="view().qualities"
+    [activeSubtitleId]="view().activeSubtitleId"
+    [activeQualityId]="view().activeQualityId"
+    [availableAudioTracks]="view().audioTracks"
+    [activeAudioTrackId]="view().activeAudioTrackId"
+    (selectSubtitle)="onPickSubtitle($event)"
     (selectQuality)="onSelectQualityById($event)"
     (selectAudioTrack)="onSelectAudioTrack($event)"
     [statsVisible]="statsVisible()"
@@ -205,23 +239,23 @@
     (back)="onBack()"
     [pipAvailable]="pipAvailable()"
     [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv()"
-    [castConnected]="castService.isConnected() || airPlay.videoActive()"
+    [castConnected]="!!elsewhere() || airPlay.videoActive()"
     [airPlayConnected]="airPlay.routeActive() || airPlay.videoActive()"
     [castConnecting]="castService.connecting()"
     (pickDevice)="onPickDevice($event)"
-    [spriteUrl]="spriteUrl()"
-    [spriteMetadata]="spriteMetadata()"
+    [spriteUrl]="view().spriteUrl"
+    [spriteMetadata]="view().spriteMetadata"
     [chapters]="chapters()"
     [introMarker]="introMarker()"
     [outroMarker]="outroMarker()"
     [edlRanges]="edlRanges()"
-    [showSkipIntro]="cues.skipIntroVisible() || cues.commercialCueVisible()"
+    [showSkipIntro]="!!view().skipCueLabelKey"
     [skipCueKey]="cues.skipCueKey()"
-    [skipCueLabel]="cues.commercialCueVisible() ? 'player.edl.skip_commercial' : 'player.skip_intro'"
-    [showNextCue]="cues.nextEpisodeVisible()"
+    [skipCueLabel]="view().skipCueLabelKey ?? 'player.skip_intro'"
+    [showNextCue]="!elsewhere() && cues.nextEpisodeVisible()"
     [cueDurationMs]="cues.cueRevealMs"
-    (skipIntro)="cues.onSkipCue()"
-    (next)="queueCtl.advance()"
+    (skipIntro)="elsewhere() ? elsewhere()!.skip() : cues.onSkipCue()"
+    (next)="onNext()"
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"

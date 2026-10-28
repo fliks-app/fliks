@@ -14,7 +14,7 @@ describe('KeyboardController layers', () => {
   function controller(): KeyboardController {
     const host = {
       chrome,
-      engine: () => ({ currentTime: 10, paused: false }),
+      playhead: () => ({ currentTime: 10, paused: false }),
       controls: () => undefined,
       isTv: () => false,
       canControlPlayback: () => true,
@@ -88,6 +88,19 @@ describe('KeyboardController layers', () => {
     reactions = false;
     controller().onKeyDown(press('ArrowDown'));
     expect(openReactions).not.toHaveBeenCalled();
+    expect(chrome.visible()).toBe(true);
+  });
+
+  it('leaves on the first Escape while another output plays', () => {
+    chrome.show();
+    const onBack = vi.fn();
+    const host = {
+      chrome, playhead: () => ({ currentTime: 0, paused: true }), controls: () => undefined, isTv: () => false,
+      canControlPlayback: () => true, playbackRate: () => 1, reactionsAvailable: () => false,
+      canHideControls: () => false, onBack,
+    } as unknown as KeyboardHost;
+    new KeyboardController(host).onKeyDown(press('Escape'));
+    expect(onBack).toHaveBeenCalled();
     expect(chrome.visible()).toBe(true);
   });
 

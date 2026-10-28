@@ -28,7 +28,7 @@
 
     <!-- Right -->
     <div class="flex items-center" [class]="isMobileTouch() ? 'gap-1' : 'gap-1.5'">
-      @if (!isMobileTouch() && !isTv()) {
+      @if (canSetVolume() && !isTv() && (!isMobileTouch() || !local())) {
         <input
           type="range"
           class="range range-xs w-28 opacity-70 hover:opacity-100"
@@ -49,7 +49,7 @@
           }
         </button>
       }
-      @if (canLockOrientation()) {
+      @if (local() && canLockOrientation()) {
         <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="(orientationLocked() ? 'player.orientation_unlock' : 'player.orientation_lock') | translate" [attr.aria-pressed]="orientationLocked()" (click)="toggleOrientationLock.emit()">
           @if (orientationLocked()) {
             <svg lucideLock [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
@@ -59,7 +59,7 @@
         </button>
       }
       <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
-      @if (!isTv() && pipAvailable()) {
+      @if (local() && !isTv() && pipAvailable()) {
         <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
           <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
         </button>
@@ -179,7 +179,7 @@
               <svg lucideHeadphones class="h-5 w-5"></svg>
             </button>
           }
-          @if (speedOptions().length > 1 && !partyActive()) {
+          @if (local() && speedOptions().length > 1 && !partyActive()) {
             <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
           }
           <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
@@ -273,7 +273,7 @@
           </div>
         }
         <!-- Speed dropdown -->
-        @if (speedOptions().length > 1 && !partyActive()) {
+        @if (local() && speedOptions().length > 1 && !partyActive()) {
           <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
             <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
             <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 mb-2">
@@ -422,14 +422,16 @@
           <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
         </button>
       }
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleFillScreen.emit()">
-        <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
-        @if (fillScreen()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-      </button>
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleStats.emit(); closeSheet()">
-        <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
-        @if (statsVisible()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-      </button>
+      @if (local()) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleFillScreen.emit()">
+          <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
+          @if (fillScreen()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+        </button>
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleStats.emit(); closeSheet()">
+          <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
+          @if (statsVisible()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+        </button>
+      }
       @if (partyActive()) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openReactionSettings.emit(); closeSheet()">
           <svg lucideSmilePlus class="h-5 w-5 text-white/40 shrink-0"></svg>
@@ -507,16 +509,18 @@
             <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
           </button>
         }
-        <!-- Fill screen -->
-        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleFillScreen.emit()">
-          <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
-          @if (fillScreen()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-        </button>
-        <!-- Stats -->
-        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
-          <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
-          @if (statsVisible()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
-        </button>
+        @if (local()) {
+          <!-- Fill screen -->
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleFillScreen.emit()">
+            <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
+            @if (fillScreen()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+          </button>
+          <!-- Stats -->
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
+            <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
+            @if (statsVisible()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+          </button>
+        }
         @if (partyActive()) {
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openReactionSettings.emit(); closeDropdown($event)">
             <svg lucideSmilePlus class="h-4 w-4 text-white/40 shrink-0"></svg>
@@ -715,7 +719,7 @@
 
 <!-- Fullscreen toggle shared by the mobile row (sm) and desktop row (md); hidden on native, where the immersive plugin already fullscreens. -->
 <ng-template #fullscreenBtn let-size>
-  @if (!isNative() || isDesktop()) {
+  @if (local() && (!isNative() || isDesktop())) {
     @let isSm = size === 'sm';
     <button
       type="button"

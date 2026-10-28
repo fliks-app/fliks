@@ -168,13 +168,11 @@ export class CastPlaybackTarget implements PlaybackOutput {
     if (this.party.active()) return this.disconnect();
     this.cast.stop();
     this.cp.clear();
-    this.session.expanded.set(false);
   }
 
   /** Leave the device. Ends the Cast session, which stops the receiver with it. */
   disconnect(): void {
     this.cast.disconnect();
     this.cp.clear();
-    this.session.expanded.set(false);
   }
 }

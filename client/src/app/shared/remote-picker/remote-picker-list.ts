@@ -169,10 +169,11 @@ export class RemotePickerListComponent {
       this.castService.requestSession();
     } else {
       this.remote.selectTarget(row.id);
-      // Only hand off to the control card when there is already something to
-      // control; picking an idle device would otherwise land on a dead end.
+      // Only open the player when there is already something to control.
       const playing = this.remote.targets().find((t) => t.targetId === row.id)?.nowPlaying;
-      if (playing) this.session.expanded.set(true);
+      if (playing?.mediaFileId && playing.mediaId) {
+        this.session.openPlayer({ fileId: playing.mediaFileId, mediaId: playing.mediaId, episodeId: playing.episodeId ?? undefined });
+      }
     }
   }
 

@@ -220,6 +220,7 @@
       "VideoBitrateNotSupported": "Bitrate zu hoch",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision Profil 7 nicht unterstützt"
     },
+    "playing_on": "Wiedergabe auf {{name}}",
     "airplay_playing_on": "Wiedergabe auf {{name}}",
     "airplay_playing": "Wiedergabe über AirPlay",
     "error_airplay_unsupported": "Dieses AirPlay-Gerät kann dieses Video nicht abspielen.",
@@ -3074,6 +3075,7 @@
     "chromecast_row": "Chromecast…",
     "airplay_row": "AirPlay",
     "airplay_connected": "Verbunden",
+    "open_player": "Player öffnen",
     "disconnect_row": "Trennen",
     "owned_by": "Gerät von {{username}}",
     "error_cast_select_failed": "Verbindung zu diesem Chromecast fehlgeschlagen.",

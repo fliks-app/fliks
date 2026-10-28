@@ -4,7 +4,6 @@ import { filter, take } from 'rxjs';
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { DismissableStackService } from './dismissable-stack.service';
 import { NavbarService } from './navbar.service';
-import { PlaybackSession } from './playback/playback-session';
 import { setSwipeBackActive } from '../../shared/utils/view-transition';
 
 interface BackGesturePlugin {
@@ -34,7 +33,6 @@ export class BackGestureService {
   private readonly router = inject(Router);
   private readonly navbar = inject(NavbarService);
   private readonly dismissStack = inject(DismissableStackService);
-  private readonly session = inject(PlaybackSession);
 
   private readonly available = Capacitor.getPlatform() === 'ios';
   private readonly url = signal(this.router.url);
@@ -51,8 +49,7 @@ export class BackGestureService {
     const enabled =
       this.navbar.canGoBack() &&
       !UNSWIPEABLE.some((prefix) => url.startsWith(prefix)) &&
-      !this.dismissStack.hasAny() &&
-      !this.session.expanded();
+      !this.dismissStack.hasAny();
     if (!this.available || enabled === this.enabled) return;
     this.enabled = enabled;
     void BackGesture.setEnabled({ enabled }).catch(() => {});

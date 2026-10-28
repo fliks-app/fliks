@@ -18,6 +18,7 @@ import { PlaybackSession } from './playback-session';
 function target() {
   return {
     isConnected: signal(false),
+    item: vi.fn(() => ({ mediaId: 0, episodeId: undefined as number | undefined })),
     togglePlayPause: vi.fn(),
     seek: vi.fn(),
     playNext: vi.fn(),
@@ -42,7 +43,7 @@ function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
 function setup() {
   const cast = target();
   const remote = target();
-  const party = { active: signal(false) };
+  const party = { active: signal(false), party: signal<{ id: number } | null>(null) };
   const castSvc = {
     isConnected: cast.isConnected,
     connecting: signal(false),
@@ -59,6 +60,7 @@ function setup() {
   };
   const castPlayer = {
     hasMedia: vi.fn(() => false),
+    mediaFileId: signal(0),
     startCast: vi.fn(),
     reloadCastStream: vi.fn(async () => {}),
     resolveStartSubtitle: vi.fn(async () => ({ id: 'auto' })),
@@ -67,7 +69,7 @@ function setup() {
     quickStart: vi.fn(async () => {}),
   };
   const device = { isTv: signal(false) };
-  const router = { navigate: vi.fn(async () => true) };
+  const router = { navigate: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
   TestBed.configureTestingModule({
     providers: [
@@ -165,7 +167,7 @@ describe('PlaybackSession', () => {
   });
 
   describe('moveTo', () => {
-    it('hands the local item to a connected receiver and leaves the player', async () => {
+    it('hands the local item to a connected receiver and keeps the player route', async () => {
       const { session, cast, local, castPlayer, streaming } = setup();
       session.attachLocal(local);
       cast.isConnected.set(true);
@@ -174,8 +176,7 @@ describe('PlaybackSession', () => {
       expect(castPlayer.startCast).toHaveBeenCalledWith(expect.objectContaining({ mediaFileId: 7, activeSubtitleId: 'sub-2', activeAudioStreamIndex: 1 }));
       expect(castPlayer.reloadCastStream).toHaveBeenCalledWith(120, true, '1080p');
       expect(streaming.stopSession).toHaveBeenCalledWith('sid-local');
-      expect(session.expanded()).toBe(true);
-      expect(local.disconnect).toHaveBeenCalled();
+      expect(local.disconnect).not.toHaveBeenCalled();
     });
 
     it('connects a picked device first, then hands off', async () => {
@@ -209,15 +210,6 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120 });
-      expect(local.disconnect).toHaveBeenCalled();
-    });
-
-    it('stays on the player route in a party', async () => {
-      const { session, party, local, remoteSvc } = setup();
-      session.attachLocal(local);
-      party.active.set(true);
-      await session.moveTo('remote', 'dev-9');
-      expect(remoteSvc.send).toHaveBeenCalled();
       expect(local.disconnect).not.toHaveBeenCalled();
     });
 
@@ -290,11 +282,20 @@ describe('PlaybackSession', () => {
       expect(castPlayer.quickStart).not.toHaveBeenCalled();
     });
 
-    it('loads on the receiver without opening the player', async () => {
+    it('loads on the receiver, then opens the player on it', async () => {
       const { session, cast, router, castPlayer } = setup();
       cast.isConnected.set(true);
       expect(await session.play(item)).toBe('cast');
-      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ mediaFileId: 7, expand: true }));
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ mediaFileId: 7 }));
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], { queryParams: { mediaId: 3, episodeId: 9 } });
+      expect(session.claimOpened(7)).toBe(true);
+      expect(session.claimOpened(7)).toBe(false);
+    });
+
+    it('loads without opening the player when asked not to', async () => {
+      const { session, cast, router } = setup();
+      cast.isConnected.set(true);
+      await session.play(item, { expand: false });
       expect(router.navigate).not.toHaveBeenCalled();
     });
 
@@ -305,6 +306,30 @@ describe('PlaybackSession', () => {
       remoteSvc.selectedTargetId.set('dev-9');
       expect(await session.play({ ...item, positionSeconds: 30 })).toBe('remote');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', expect.objectContaining({ action: 'load', mediaFileId: 7, positionSeconds: 30 }));
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());
+    });
+  });
+
+  describe('openPlayer', () => {
+    it('opens the route on what the receiver plays, with the party', () => {
+      const { session, cast, party, router, castPlayer } = setup();
+      cast.isConnected.set(true);
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      castPlayer.mediaFileId.set(7);
+      party.party.set({ id: 5 });
+      session.openPlayer();
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], { queryParams: { mediaId: 3, episodeId: 9, party: 5 } });
+    });
+
+    it('does nothing while the output is idle or the player is already open', () => {
+      const { session, cast, router, castPlayer } = setup();
+      cast.isConnected.set(true);
+      session.openPlayer();
+      expect(router.navigate).not.toHaveBeenCalled();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      castPlayer.mediaFileId.set(7);
+      router.url = '/watch/7';
+      session.openPlayer();
       expect(router.navigate).not.toHaveBeenCalled();
     });
   });

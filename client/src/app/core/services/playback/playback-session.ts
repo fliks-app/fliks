@@ -8,6 +8,7 @@ import { CastService } from '../cast.service';
 import { DeviceService } from '../device.service';
 import { PartyService } from '../party/party.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
+import { parseDeviceLabel } from '../../utils/format-device-label';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
 import { launchTracksToWire, RemoteService } from '../remote.service';
 import { ToastService } from '../toast.service';
@@ -35,7 +36,7 @@ export interface PlayOptions {
   fromStart?: boolean;
   /** Extra player query params (e.g. `playlistId`). */
   query?: Record<string, number>;
-  /** Open the cast card once the item is sent. */
+  /** Open the player route on the item once it is sent to another output (default true). */
   expand?: boolean;
 }
 
@@ -51,23 +52,24 @@ export type PlaybackCommand =
 /** Takes a command for the active party; false when it did not. */
 export type PartyRouter = (c: PlaybackCommand) => boolean;
 
-/** Owns where playback is happening: which output is active, whether its card is open, and where transport commands go. */
+/** Owns where playback is happening: which output is active and where transport commands go. */
 @Injectable({ providedIn: 'root' })
 export class PlaybackSession {
-  // Resolved on first use, so injecting the session (for `expanded`) pulls in neither the targets nor the party.
+  // Resolved on first use, so injecting the session pulls in neither the targets nor the party.
   private readonly injector = inject(Injector);
   private readonly party = () => this.injector.get(PartyService);
   private readonly castSvc = () => this.injector.get(CastService);
   private readonly castPlayer = () => this.injector.get(CastPlayerService);
   private readonly remoteSvc = () => this.injector.get(RemoteService);
+  private readonly router = () => this.injector.get(Router);
 
   private readonly local = signal<LocalOutput | null>(null);
   private moving: Promise<boolean> | null = null;
   private wasCasting = false;
   private partyRouter: PartyRouter | null = null;
+  /** File the output already holds, set by whoever opens the player route on it. */
+  private opened = 0;
 
-  /** Whether `app-cast-overlay` shows its card. */
-  readonly expanded = signal(false);
   readonly partyActive = computed(() => this.party().active());
 
   /** The remote target while remoting, the cast receiver while connected, else the registered local output. */
@@ -85,6 +87,19 @@ export class PlaybackSession {
         : 'local',
   );
   readonly isLocal = computed(() => this.kind() === 'local');
+
+  /** Name of the device playing, null while local. */
+  readonly deviceName = computed<string | null>(() => {
+    const kind = this.kind();
+    const translate = this.injector.get(TranslateService);
+    if (kind === 'cast') {
+      return this.castSvc().castDevices().find((d) => d.connected)?.name ?? 'Chromecast';
+    }
+    if (kind !== 'remote') return null;
+    const t = this.remoteSvc().selectedTarget();
+    const label = t && parseDeviceLabel(t.userAgent, t.systemName, t.deviceName);
+    return label ? translate.instant(label.key, label.params) : null;
+  });
 
   constructor() {
     // The one place a connect that nobody asked for (Android resume, the top-bar chip) lands.
@@ -155,7 +170,6 @@ export class PlaybackSession {
     const startAt = opts.fromStart ? 0 : undefined;
     if (kind === 'remote') {
       const remote = this.remoteSvc();
-      this.expanded.set(opts.expand ?? true);
       void remote.send(remote.selectedTargetId()!, {
         action: 'load',
         mediaId: item.mediaId,
@@ -176,20 +190,48 @@ export class PlaybackSession {
         streamInfo: item.streamInfo,
         startTime: startAt,
         tracks: item.tracks,
-        expand: opts.expand ?? true,
       });
     } else {
       const query: Record<string, number> = { mediaId: item.mediaId, ...opts.query };
       if (item.episodeId) query['episodeId'] = item.episodeId;
       if (opts.fromStart) query['t'] = 0;
       // Router state lets the player paint the backdrop on its first tick; `stillUrl` wins over `fanartUrl`.
-      void this.injector.get(Router).navigate(['/watch', item.fileId], {
+      void this.router().navigate(['/watch', item.fileId], {
         queryParams: query,
         state: { fanartUrl: item.fanartUrl ?? null, stillUrl: item.stillUrl ?? null, tracks: item.tracks ?? null },
       });
     }
+    if (kind !== 'local' && (opts.expand ?? true)) this.openPlayer(item);
     return kind;
   }
+
+  /** Opens the player route on what the active output plays, without reloading it; nothing to open while the output is idle. */
+  openPlayer(item?: { fileId: number; mediaId: number; episodeId?: number }): void {
+    const target = item ?? this.playing();
+    if (!target?.fileId || this.router().url.startsWith('/watch')) return;
+    this.opened = target.fileId;
+    const query: Record<string, number> = { mediaId: target.mediaId };
+    if (target.episodeId) query['episodeId'] = target.episodeId;
+    const party = this.party().party();
+    if (party) query['party'] = party.id;
+    void this.router().navigate(['/watch', target.fileId], { queryParams: query });
+  }
+
+  /** The player route asks whether the output was already opened on this file; true once, so a reload loads normally. */
+  claimOpened(fileId: number): boolean {
+    const held = this.opened === fileId;
+    this.opened = 0;
+    return held;
+  }
+
+  /** What the cast receiver or remote target is playing, with the file the route needs. */
+  readonly playing = computed<{ fileId: number; mediaId: number; episodeId?: number } | null>(() => {
+    const kind = this.kind();
+    if (kind === 'local') return null;
+    const { mediaId, episodeId } = this.output()!.item();
+    const fileId = kind === 'cast' ? this.castPlayer().mediaFileId() : (this.remoteSvc().targetState()?.mediaFileId ?? 0);
+    return fileId && mediaId ? { fileId, mediaId, episodeId } : null;
+  });
 
   private async toCast(deviceId?: string): Promise<boolean> {
     const cast = this.castSvc();
@@ -209,7 +251,6 @@ export class PlaybackSession {
     await cp.reloadCastStream(handoff.position, true, handoff.cast.activeQualityId);
     const sid = handoff.localSessionId;
     if (sid && sid !== cp.liveSessionId()) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
-    this.leaveLocal(local);
     return true;
   }
 
@@ -227,7 +268,6 @@ export class PlaybackSession {
       episodeId: handoff.cast.episodeId,
       positionSeconds: Math.floor(handoff.position),
     });
-    this.leaveLocal(local);
     return true;
   }
 
@@ -243,12 +283,6 @@ export class PlaybackSession {
     }
     await local.resume(position);
     return true;
-  }
-
-  /** A party keeps the player route, which hosts its panel and reactions; otherwise the player steps aside. */
-  private leaveLocal(local: LocalOutput): void {
-    this.expanded.set(true);
-    if (!this.party().active()) local.disconnect();
   }
 
   private async connectCast(deviceId?: string): Promise<boolean> {

@@ -25,7 +25,7 @@ import { RemoteService } from '../../core/services/remote.service';
 import { backTarget } from './back-target';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { LocalPlaybackOutput } from './local-playback-output';
-import type { CastStart, LocalHandoff } from '../../core/services/playback/playback-output';
+import type { CastStart, LocalHandoff, PlaybackOutput } from '../../core/services/playback/playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -102,11 +102,12 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 
-import { LucideAirplay, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
+import { LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
+import { type ControlsModel, outputModel } from './controls/controls-model';
 import { CopyFallbackController } from './copy-fallback-controller';
 import { RecoveryController } from './recovery-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
@@ -131,7 +132,7 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
+  imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
@@ -274,8 +275,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private detachAirPlay: () => void = () => {};
   private readonly castPlayerService = inject(CastPlayerService);
   protected readonly session = inject(PlaybackSession);
-  /** The cast screen covers the player: the shell, which stays mounted to run a party, must not take its taps. */
-  protected readonly castScreenUp = computed(() => !this.session.isLocal() && this.session.expanded());
   private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -380,6 +379,38 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.frozenSince() > 0 ||
         (!this.videoStarted() && !this.error())),
   );
+  /** Everything the controls read of the playing output: the cast or remote output, else the engine's own signals. */
+  protected readonly view = computed<ControlsModel>(() => {
+    const o = this.session.isLocal() ? null : this.session.output();
+    if (o) return outputModel(o);
+    return {
+      paused: this.uiPaused(),
+      spinner: this.spinnerVisible(),
+      videoStarted: this.videoStarted(),
+      currentTime: this.currentTime(),
+      duration: this.duration(),
+      volume: this.volume(),
+      muted: this.muted(),
+      canSetVolume: true,
+      mediaTitle: this.mediaTitle(),
+      episodeTitle: this.displayEpisodeTitle(),
+      hasNext: this.queueCtl.upNext() !== null,
+      subtitles: this.subs.availableSubtitles(),
+      audioTracks: this.availableAudioTracks(),
+      qualities: this.availableQualities(),
+      activeSubtitleId: this.subs.activeSubtitleId(),
+      activeAudioTrackId: this.activeAudioTrackId(),
+      activeQualityId: this.activeQualityId(),
+      activeQualityLabel: this.activeQualityLabel(),
+      spriteUrl: this.spriteUrl(),
+      spriteMetadata: this.spriteMetadata(),
+      skipCueLabelKey: this.cues.commercialCueVisible()
+        ? 'player.edl.skip_commercial'
+        : this.cues.skipIntroVisible()
+          ? 'player.skip_intro'
+          : null,
+    };
+  });
   readonly playbackMode = this.state.playbackMode;
   readonly hwAccel = this.state.hwAccel;
   readonly activeQualityId = this.qualityManager.activeQualityId;
@@ -405,7 +436,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  would otherwise retract it before the playhead landed. */
   private readonly _chromePins = (this.chrome.configure({
     pinned: computed(
-      () => this.uiPaused() || this.buffering() || this.seekDragging() || this.state.seekLocked(),
+      () => this.uiPaused() || this.buffering() || this.seekDragging() || this.state.seekLocked() || !this.session.isLocal(),
     ),
   }), null);
   private readonly copyFallback = inject(CopyFallbackController);
@@ -574,7 +605,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private readonly keyboard = new KeyboardController({
     chrome: this.chrome,
-    engine: () => this.engine,
+    playhead: () => this.engine ?? this.outputPlayhead(),
+    canHideControls: () => !this.elsewhere(),
     controls: () => this.controls(),
     isTv: () => this.device.isTv(),
     canControlPlayback: () => this.party.canControl(),
@@ -1699,7 +1731,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.partyCtl.active()) this.partyCtl.resync();
   }
 
+  private outputPlayhead(): { paused: boolean; currentTime: number } | null {
+    const o = this.elsewhere();
+    return o && { paused: o.paused(), currentTime: o.position() };
+  }
+
+  /** The cast receiver or remote target while playback is there, else null. */
+  protected elsewhere(): PlaybackOutput | null {
+    return this.session.isLocal() ? null : this.session.output();
+  }
+
+  protected onNext(): void {
+    if (!this.session.command({ type: 'next' })) void this.queueCtl.advance();
+  }
+
+  /** Stopping on a cast ends the session's media, so there is nothing left to show here. */
+  protected onStopOutput(o: PlaybackOutput): void {
+    o.stopPlayback();
+    if (!o.hasMedia()) this.onBack();
+  }
+
   onTogglePlay() {
+    if (this.elsewhere()) {
+      this.session.command({ type: 'toggle' });
+      return;
+    }
     if (!this.engine) return;
     if (!this.subs.subtitleSyncOpen() && this.session.command({ type: 'toggle' })) return;
     // Coalesce rapid taps: a second toggle inside this window is dropped so play()/pause() can't interleave
@@ -2119,6 +2175,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onVolumeChange(vol: number) {
+    const other = this.elsewhere();
+    if (other) return other.setVolume(vol);
     if (!this.engine) return;
     // Dragging sets the level and lifts a mute; state signals follow the engine's `volumechange` event.
     this.engine.volume = vol;
@@ -2126,6 +2184,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onToggleMute() {
+    const other = this.elsewhere();
+    if (other) return other.toggleMute();
     if (!this.engine) return;
     // Toggle audible/silent, not the raw mute flag: when silent (muted or level 0) a click restores sound,
     // bumping level 0 to full so the button never looks stuck.
@@ -2328,6 +2388,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onTogglePip() {
+    if (!this.session.isLocal()) return;
     if (this.isNative) {
       Pip.enter().catch(() => {});
       return;
@@ -2930,6 +2991,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** The route opened while another output plays: no engine. The route's item goes there when it differs. */
   private async openOnOutput(resumeTime: number | undefined): Promise<void> {
+    if (this.session.claimOpened(this.mediaFileId)) return;
     const cur = this.session.output()?.item();
     if (cur && cur.mediaId === this.mediaId && cur.episodeId === this.episodeId) return;
     const media = await this.mediaService.getOne(this.mediaId).catch(() => null);
@@ -3168,7 +3230,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** A viewer's audio pick: remembered for the title, then applied. */
+  onPickSubtitle(id: string | null): void {
+    const o = this.elsewhere();
+    if (o) o.selectSubtitle(o.availableSubtitles().find((x) => x.id === id) ?? null);
+    else void this.subs.selectById(id);
+  }
+
   async onSelectAudioTrack(trackId: string) {
+    const o = this.elsewhere();
+    if (o) {
+      o.selectAudio(o.availableAudioTracks().find((x) => x.id === trackId) ?? null);
+      return;
+    }
     this.chrome.resetHideTimer();
     if (!this.isAudioPlayable(trackId)) return;
     this.trackManager.saveAudioSelection(
@@ -3224,6 +3297,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected get syncMediaFileId() { return this.mediaFileId; }
 
   protected onTapOverlay() {
+    if (this.elsewhere()) return;
     if (this.subs.syncHidesControls()) this.onTogglePlay();
     else this.chrome.toggle();
   }
@@ -3277,7 +3351,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     // TV remote Return and desktop Escape close a visible controls bar first, then exit on the next press;
     // phones and tablets exit directly (touch users dismiss controls by tapping the video).
-    if ((this.device.isTv() || this.device.isDesktop()) && this.chrome.visible()) {
+    if ((this.device.isTv() || this.device.isDesktop()) && this.chrome.visible() && !this.elsewhere()) {
       this.chrome.hide();
       return;
     }
@@ -3347,6 +3421,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   async onSelectQualityById(id: string) {
+    const o = this.elsewhere();
+    if (o) {
+      const pick = o.availableQualities().find((q) => q.id === id);
+      if (pick) o.selectQuality(pick);
+      return;
+    }
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     // Re-selecting the active rung is a no-op: reloadStream() would still kill + re-mint the session for no
