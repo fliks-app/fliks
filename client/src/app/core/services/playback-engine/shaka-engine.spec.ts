@@ -23,6 +23,7 @@ const player = vi.hoisted(() => {
     addTextTrackAsync: vi.fn(),
     load: vi.fn(),
     destroy: vi.fn(),
+    retryStreaming: vi.fn(),
   };
   /** Drops calls, queued `Once` values and per-test overrides, then reinstalls the defaults. */
   const reset = () => {
@@ -269,5 +270,36 @@ describe('ShakaEngine buffering bridge', () => {
     video.dispatchEvent(new Event('pause'));
     video.dispatchEvent(new Event('play'));
     expect(states).toEqual(['buffering', 'paused', 'playing', 'buffering']);
+  });
+});
+
+describe('ShakaEngine streaming network errors', () => {
+  const fire = (event: string, detail?: unknown) => {
+    for (const [name, handler] of player.addEventListener.mock.calls) {
+      if (name === event) handler({ detail });
+    }
+  };
+
+  it('retries streaming on a transient network error instead of failing, then gives up', async () => {
+    const engine = await initEngine();
+    const errors = vi.fn();
+    engine.on('error', errors);
+    player.retryStreaming.mockReturnValue(true);
+    const failure = { category: 1, code: 1002, severity: 2 };
+    for (let i = 0; i < 10; i++) fire('error', failure);
+    expect(player.retryStreaming).toHaveBeenCalledTimes(10);
+    expect(errors).not.toHaveBeenCalled();
+    fire('error', failure);
+    expect(errors).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails at once on a 4xx', async () => {
+    const engine = await initEngine();
+    const errors = vi.fn();
+    engine.on('error', errors);
+    player.retryStreaming.mockReturnValue(true);
+    fire('error', { category: 1, code: 1001, severity: 2, data: ['url', 404] });
+    expect(player.retryStreaming).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledTimes(1);
   });
 });

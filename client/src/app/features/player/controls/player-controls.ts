@@ -263,6 +263,10 @@ export class PlayerControlsComponent {
   readonly seekableStart = input(0);
   readonly seekableEnd = input(0);
   readonly volume = input(1);
+  /** False when the output has no per-stream level, so the slider is hidden. */
+  readonly canSetVolume = input(true);
+  /** The video plays on this device: only then do PiP, fullscreen, fill, stats, speed and orientation lock apply. */
+  readonly local = input(true);
   readonly muted = input(false);
   /** Effective slider position: drops to 0 while muted, so the thumb reflects
    *  what's actually audible; the retained level returns on unmute. */

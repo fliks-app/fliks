@@ -8,6 +8,9 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { MediaService } from './api/media.service';
 import { PlaybackQueueService } from './playback-queue.service';
 import { RemoteService } from './remote.service';
+import { PartyService } from './party/party.service';
+import { CastPlaybackTarget } from './cast-playback-target';
+import { RemotePlaybackTarget } from './remote-playback-target';
 
 describe('PlayableMediaService.play', () => {
   afterEach(() => TestBed.resetTestingModule());
@@ -19,9 +22,9 @@ describe('PlayableMediaService.play', () => {
     TestBed.configureTestingModule({
       providers: [
         PlayableMediaService,
-        { provide: Router, useValue: { navigate } },
+        { provide: Router, useValue: { navigate, url: '/' } },
         { provide: CastService, useValue: { isConnected: () => !!over.cast } },
-        { provide: CastPlayerService, useValue: { quickStart, expanded: { set: vi.fn() } } },
+        { provide: CastPlayerService, useValue: { quickStart } },
         { provide: StreamingApiService, useValue: {} },
         {
           provide: MediaService,
@@ -29,6 +32,9 @@ describe('PlayableMediaService.play', () => {
         },
         { provide: PlaybackQueueService, useValue: { clear: vi.fn() } },
         { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, send } },
+        { provide: PartyService, useValue: { party: () => null, active: () => false } },
+        { provide: CastPlaybackTarget, useValue: { isConnected: () => !!over.cast } },
+        { provide: RemotePlaybackTarget, useValue: { isConnected: () => !!over.target } },
       ],
     });
     return { service: TestBed.inject(PlayableMediaService), navigate, quickStart, send };

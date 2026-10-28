@@ -1,3 +1,4 @@
+import type { PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -16,6 +17,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
+import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { TizenEngine } from '../../core/services/playback-engine/tizen-engine';
@@ -253,13 +255,13 @@ function createHarness(opts: {
           play: vi.fn(),
         },
       },
-      { provide: CastPlaybackTarget, useValue: { partyIntercept: null } },
+      { provide: CastPlaybackTarget, useValue: { isConnected: () => false } },
+      { provide: RemotePlaybackTarget, useValue: { isConnected: () => false } },
       {
         provide: CastPlayerService,
         useValue: {
           liveSessionId: () => undefined,
           qoeSample: () => null,
-          expanded: { set: vi.fn() },
           getCastDeviceProfile: () => DEVICE_PROFILE,
           reloadCastStream: vi.fn(),
           startCast: vi.fn(),
@@ -947,6 +949,16 @@ describe('PlayerComponent loading spinner', () => {
 
     // The media is ready and paused; the play button under the spinner is the
     // real state, and a spinner over it reads as a stuck load.
+    expect(h.component.spinnerVisible()).toBe(false);
+  });
+
+  it('drops the spinner once playback fails mid-buffering', () => {
+    const h = ready();
+    h.state.buffering.set(true);
+    expect(h.component.spinnerVisible()).toBe(true);
+
+    h.state.error.set({ userMessage: 'x', source: 'session', code: 0 } as PlaybackError);
+
     expect(h.component.spinnerVisible()).toBe(false);
   });
 
@@ -2724,7 +2736,7 @@ describe('PlayerComponent cast session picks', () => {
         };
         return true;
       });
-      return { run: () => h.component.resumeLocalAfterCast(30), seen: () => seen };
+      return { run: () => h.component.resumeLocal(30), seen: () => seen };
     }
 
     it('reloads on the audio and the burn-in picked on the receiver', async () => {
@@ -2758,39 +2770,26 @@ describe('PlayerComponent cast session picks', () => {
     });
   });
 
-  it('starts a cast opened on an already-connected receiver on the subtitle the local rules pick', async () => {
-    const { h, cp } = casting();
-    h.component.subs.availableSubtitles.set([castSub('ext-5'), castSub('ext-6')]);
-    cp['resolveStartSubtitle'].mockResolvedValue(castSub('ext-6'));
+  it('hands the local session id over so the session can stop it once the cast stream is up', async () => {
+    const { h } = casting();
+    (h.component as unknown as { playbackInfo: { sessionId: string } }).playbackInfo = { sessionId: 'local-sid' };
     h.component.engine.unload = vi.fn(async () => {});
 
-    await h.component.completePostLoadSetup(0);
+    const handoff = await h.component.releaseForHandoff();
 
-    expect(cp['startCast']).toHaveBeenCalledTimes(1);
-    expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: 'ext-6' });
-    h.fixture.destroy();
-  });
-
-  it('stops the local session once the cast stream is up', async () => {
-    const { h, cp } = casting();
-    (h.component as unknown as { playbackInfo: { sessionId: string } }).playbackInfo = { sessionId: 'local-sid' };
-    h.streamingApi.stopSession.mockClear();
-
-    await h.component.startCastFromPlayer(10);
-
-    expect(cp['reloadCastStream']).toHaveBeenCalled();
-    expect((h.streamingApi.stopSession.mock.calls as unknown[][]).map((c) => c[0])).toEqual(['local-sid']);
+    expect(handoff).toMatchObject({ localSessionId: 'local-sid' });
+    expect(h.component.engine.unload).toHaveBeenCalled();
   });
 
   it('hands a local Off over to the cast as Off', async () => {
-    const { h, cp } = casting();
+    const { h } = casting();
     h.component.subs.availableSubtitles.set([castSub('ext-5')]);
     h.component.subs.activeSubtitleId.set(null);
 
-    await h.component.startCastFromPlayer(10);
+    const start = h.component.castStart();
 
-    expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: null });
-    expect(cp['startCast'].mock.calls[0][0].subtitles).toEqual(h.component.subs.availableSubtitles());
+    expect(start).toMatchObject({ activeSubtitleId: null });
+    expect(start.subtitles).toEqual(h.component.subs.availableSubtitles());
   });
 });
 
@@ -3141,16 +3140,13 @@ describe('PlayerComponent negotiation entry points', () => {
     expect([call[2], call[3]]).toEqual([undefined, undefined]);
   });
 
-  it('leaves the cast ladder to the cast service: no playback-info of its own, local rung handed over', async () => {
+  it('hands the local rung to the cast without a playback-info of its own', () => {
     const h = createHarness();
-    const cp = TestBed.inject(CastPlayerService) as any;
     h.component.activeQualityId.set('720p');
     h.streamingApi.getPlaybackInfo.mockClear();
 
-    await h.component.startCastFromPlayer(10);
-
+    expect(h.component.castStart()).toMatchObject({ activeQualityId: '720p' });
     expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-    expect(cp.reloadCastStream).toHaveBeenCalledWith(10, true, '720p');
   });
 });
 

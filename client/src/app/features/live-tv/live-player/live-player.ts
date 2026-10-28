@@ -14,7 +14,6 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Immersive } from '../../../core/plugins/immersive.plugin';
 import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
@@ -54,7 +53,8 @@ import {
   type PlayerStats,
 } from '../../player/overlay/player-stats-overlay';
 import { programmeProgressPercent } from '../programme-progress';
-import { Orientation, releasePlayerOrientation } from '../../../core/plugins/orientation.plugin';
+import { PlayerScreen } from '../../player/player-screen';
+import { playerKeyAction, type MediaKeyAction } from '../../player/player-keymap';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 
 /** Same native plugins as the VOD player (player.ts), duplicated rather than shared. */
@@ -111,12 +111,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     this.isDesktopNative,
     this.isIosNative,
   );
-  /** Orientation.lock() (native iOS) has no Android counterpart — same gate as player.ts. */
-  readonly canLockOrientation = this.isIosNative;
-  readonly orientationLocked = signal(false);
-  private readonly landscapeOnOpen =
-    this.serverConfig.isNative && !this.device.isTv() && inject(PlayerSettingsService).get().landscapeOnOpen;
-  private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
+  protected readonly screen = new PlayerScreen({
+    native: this.serverConfig.isNative,
+    landscapeOnOpen: !this.device.isTv() && inject(PlayerSettingsService).get().landscapeOnOpen,
+    immersiveInPortrait: () => !this.paused() && !this.chrome.visible(),
+  });
   private readonly surfaceKind = engineSurfaceKind({
     tvPlatform: this.device.tvPlatform(),
     isDesktopNative: this.device.desktopPlatform() === 'electron',
@@ -219,20 +218,6 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   readonly isNative = this.serverConfig.isNative;
   readonly pipAvailable = computed(() => !this.device.isTv() && !this.serverConfig.isNative);
 
-  // Immersive mode: landscape=always, portrait=only while playing with controls hidden.
-  private readonly immersiveEffect = effect(() => {
-    if (!this.isNative) return;
-    const shouldBeImmersive = this.isLandscape() || (!this.paused() && !this.chrome.visible());
-    if (shouldBeImmersive) {
-      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
-      document.body.classList.add('immersive');
-    } else {
-      Immersive.exit().catch(() => {});
-      document.body.classList.remove('immersive');
-      Immersive.setLightStatusBar({ light: false }).catch(() => {});
-    }
-  });
-
   readonly currentEntry = computed<OnNowEntry | null>(
     () => this.channels().find((e) => e.channel.id === this.currentChannelId()) ?? null,
   );
@@ -270,21 +255,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     window.addEventListener('pagehide', this.releaseOnUnload);
     window.addEventListener('app:playerBack', this.onPlayerBackEvent);
     this.refreshTimer = setInterval(() => void this.refreshChannels(), CHANNEL_REFRESH_MS);
-    if (this.isNative) {
-      screen.orientation?.addEventListener('change', this.onOrientationChange);
-      if (this.landscapeOnOpen) releasePlayerOrientation(true);
-    }
-  }
-
-  private readonly onOrientationChange = (): void => {
-    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
-  };
-
-  onToggleOrientationLock(): void {
-    const locked = !this.orientationLocked();
-    this.orientationLocked.set(locked);
-    if (locked) Orientation.lock().catch(() => {});
-    else releasePlayerOrientation(this.landscapeOnOpen);
+    this.screen.open();
   }
 
   /** Hardware back and desktop Escape arrive via app.ts for anything under /watch; same ladder as on-demand: panel, bar, out. */
@@ -323,12 +294,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     void this.teardownSession();
     void this.engine?.destroy();
     releaseEngineSurface();
-    if (this.isNative) {
-      screen.orientation?.removeEventListener('change', this.onOrientationChange);
-      Orientation.unlock().catch(() => {});
-      Immersive.exit().catch(() => {});
-      document.body.classList.remove('immersive');
-    }
+    this.screen.close();
   }
 
   private async bootstrap(): Promise<void> {
@@ -661,6 +627,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private readonly onKeydownCapture = (event: KeyboardEvent): void => this.onKeydown(event);
 
   onKeydown(event: KeyboardEvent): void {
+    const mapped = playerKeyAction(event);
+    if (mapped?.kind === 'media') {
+      this.onMediaKey(mapped.action, event);
+      return;
+    }
     const action = liveKeyAction(event.key, {
       visible: this.chrome.visible(),
       guideOpen: this.miniGuideOpen(),
@@ -693,6 +664,22 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       default:
         return;
     }
+  }
+
+  private onMediaKey(action: MediaKeyAction, event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (action === 'stop') {
+      this.goBack();
+      return;
+    }
+    const engine = this.engine;
+    if (!engine) return;
+    if (action === 'toggle' || (action === 'play' && engine.paused) || (action === 'pause' && !engine.paused)) {
+      this.togglePlay();
+    } else if (action === 'forward') this.onSeek(this.dvrPosition() + 10);
+    else if (action === 'rewind') this.onSeek(this.dvrPosition() - 10);
+    this.chrome.show();
   }
 
   toggleStats(): void {

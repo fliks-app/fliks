@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS, driftAction, driftProfile, groupPosition } from './party-sync';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS, driftAction, driftProfile, groupPosition } from './party-drift';
 
 const opts = { rateSupported: true, msSinceSeek: 60_000, seekLocked: false };
 

@@ -15,7 +15,7 @@ import { PartyService } from '../../core/services/party/party.service';
 import { SseService } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
 import { formatTime } from '../../core/utils/player.utils';
-import { groupPosition } from '../player/party-sync';
+import { groupPosition } from '../../core/services/party/party-drift';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
@@ -126,6 +126,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       ? episodeLabel({ seasonNumber: found.season.seasonNumber, episodeNumber: found.episode.episodeNumber, episodeTitle: found.episode.title })
       : '';
   });
+  /** This device is in the party's room, in the lobby or watching. */
+  protected readonly inParty = computed(() => this.party.active() && this.party.party()?.id === this.id);
   protected readonly joined = computed(() => this.party.lobby() && this.party.party()?.id === this.id);
   /** The full snapshot, which a non-member's preview is not. */
   protected readonly hostView = computed<PartyDto | null>(() => {
@@ -151,7 +153,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   });
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
-    const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
+    const members = this.inParty() ? this.party.members() : (v?.live?.members ?? []);
     return v ? partyPeople(v.host, v.guests ?? [], members, this.voice.speaking()) : [];
   });
   /** Added by the host or joined with the link: free to quit the party for good. */
@@ -337,6 +339,11 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (!pick) return;
     const dto = await runBusy(this.busy, () => this.api.choose(this.id, pick.id));
     if (dto) this.apply(dto);
+  }
+
+  /** A member who closed the player leaves the room from here; the host ends it instead. */
+  protected leaveRoom(): void {
+    void this.party.leaveOrEnd();
   }
 
   protected async quit(): Promise<void> {

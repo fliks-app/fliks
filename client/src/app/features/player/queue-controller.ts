@@ -6,7 +6,6 @@ import { MediaService } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { CastService } from '../../core/services/cast.service';
-import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { NotificationLike } from '../../core/services/notification-like';
@@ -15,6 +14,7 @@ import { PlayerStateService } from '../../core/services/player-state.service';
 import { PlaybackQueueService, type QueueItem } from '../../core/services/playback-queue.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { PartyService } from '../../core/services/party/party.service';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
@@ -42,10 +42,10 @@ export interface QueueHost {
 @Injectable()
 export class QueueController {
   private readonly queue = inject(PlaybackQueueService);
+  private readonly session = inject(PlaybackSession);
   private readonly state = inject(PlayerStateService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly castService = inject(CastService);
-  private readonly castPlayer = inject(CastPlayerService);
   private readonly device = inject(DeviceService);
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
@@ -114,9 +114,6 @@ export class QueueController {
 
   /** Guards {@link advance} against re-entry while a switch resolves. */
   private advancing = false;
-
-  /** Set by the party controller: in a party the server owns what plays next. Returns true when it took the call. */
-  interceptAdvance: ((auto: boolean) => boolean) | null = null;
 
   attach(host: QueueHost): void {
     this.host = host;
@@ -193,7 +190,11 @@ export class QueueController {
   /** Plays {@link upNext} in place, skipping playlist items whose file is unavailable.
    *  Offline and Cast remount instead: their source is not a re-negotiable local stream. */
   async advance(auto = false): Promise<void> {
-    if (this.interceptAdvance?.(auto)) return;
+    // In a party the server owns what plays next: only a manual press asks it.
+    if (this.session.partyActive()) {
+      if (!auto) this.session.command({ type: 'next' });
+      return;
+    }
     // Don't move the queue cursor while a quality/audio reload is still settling.
     if (this.advancing || this.host.reloadingStream()) return;
     if (!this.upNext()) {
@@ -250,26 +251,38 @@ export class QueueController {
       return false;
     }
     if (this.state.ended()) await this.markCurrentComplete();
-    if (this.castService.isConnected()) {
-      // A remount would close the player, which leaves the party: switch the receiver in place.
+    if (!this.session.isLocal()) {
+      // A remount would close the player: switch the output in place.
       const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
-      await this.castPlayer.quickStart({
-        mediaFileId,
-        mediaId: item.mediaId,
-        episodeId: item.episodeId ?? undefined,
-        title: media?.title ?? '',
-        fanartUrl: media?.fanartUrl ?? null,
-        startTime: 0,
-      });
+      await this.session.play(
+        {
+          fileId: mediaFileId,
+          mediaId: item.mediaId,
+          episodeId: item.episodeId ?? undefined,
+          title: media?.title ?? '',
+          fanartUrl: media?.fanartUrl ?? null,
+        },
+        { fromStart: true, expand: false },
+      );
       return true;
     }
     await this.loadItem(queueItem, mediaFileId);
     return true;
   }
 
+  /** The previous queue item, or the party's. */
+  async playPrevious(): Promise<void> {
+    if (this.session.partyActive()) this.session.command({ type: 'prev' });
+    else await this.playQueueItem(this.queue.index() - 1);
+  }
+
   /** Jumps to a queue item the user picked: unlike {@link advance} it does not mark the
    *  current item watched and does not skip. */
   async playQueueItem(index: number): Promise<void> {
+    if (this.session.partyActive()) {
+      this.session.command({ type: 'item', index });
+      return;
+    }
     if (this.advancing || this.host.reloadingStream() || this.host.preRollActive()) return;
     if (index === this.queue.index()) return; // already playing it
     const item = this.queue.items()[index];

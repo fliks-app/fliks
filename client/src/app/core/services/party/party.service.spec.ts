@@ -321,6 +321,18 @@ describe('PartyService lobby', () => {
     expect(svc.unread()).toBe(1);
   });
 
+  it('floats chat and reactions, not system messages, even with the chat panel open', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(dto(1));
+    svc.setPanelOpen(true);
+    const seen: unknown[] = [];
+    svc.floated.subscribe((f) => seen.push(f.kind));
+    events.next(message(50));
+    events.next({ type: 'party.message', partyId: 7, rev: 51, message: { id: 51, userId: null, username: null, text: '', system: { kind: 'joined', by: 'b', args: {} }, sentAtMs: 0 } } as PartyEvent);
+    events.next({ type: 'party.reaction', partyId: 7, userId: 2, username: 'b', emoji: '🔥' } as PartyEvent);
+    expect(seen).toEqual(['chat', 'reaction']);
+  });
+
   it('keeps voice joined across start', async () => {
     vi.stubGlobal('RTCPeerConnection', class { close() {} });
     const { svc, api } = setup();

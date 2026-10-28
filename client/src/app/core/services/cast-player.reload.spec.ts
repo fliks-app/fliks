@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { signal } from '@angular/core';
 import { CastPlayerService } from './cast-player.service';
 
 type Info = { sessionId: string; qualities: never[] };
@@ -10,7 +11,7 @@ function harness(infos: Promise<Info>[]) {
   const next = [...infos];
   Object.assign(svc, {
     reloadGen: 0,
-    reloading: false,
+    reloading: signal(false),
     mediaFileId: () => 1,
     liveSessionId: () => live,
     activeAudioStreamIndex: () => undefined,
@@ -45,7 +46,7 @@ describe('cast reload single-flight', () => {
     release({ sessionId: 'a', qualities: [] });
     await first;
     expect(order).toEqual(['load:b', 'stop:old', 'stop:a']);
-    expect((svc as unknown as { reloading: boolean }).reloading).toBe(false);
+    expect(svc.reloading()).toBe(false);
   });
 
   it('skips the heartbeat recovery while a reload runs', async () => {
@@ -54,7 +55,7 @@ describe('cast reload single-flight', () => {
       mediaFileId: () => 1, mediaId: () => 2, episodeId: () => undefined, liveSessionId: () => 's',
       qoeSample: () => null, cast: { currentTime: () => 30, duration: () => 100, isPaused: () => false },
       streamingApi: { updatePlaybackState: vi.fn(async () => ({ sessionLost: true })) },
-      qoeReporter: { flush: vi.fn() }, reloading: true, reloadCastStream,
+      qoeReporter: { flush: vi.fn() }, reloading: signal(true), reloadCastStream,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (CastPlayerService.prototype as any).saveCastPosition.call(self);

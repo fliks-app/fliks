@@ -452,6 +452,10 @@ export class RemoteService {
     this.selectedRow.set(null);
     this.clearOffline();
     this.expectedMediaFileId = null;
+    // Reports from a deselected target are dropped, so its pending ack can never land.
+    this.pendingCmdId = null;
+    this.pendingAction.set(null);
+    if (this.ackTimer) clearTimeout(this.ackTimer);
     try {
       if (targetId) localStorage.setItem(SELECTED_TARGET_KEY, targetId);
       else localStorage.removeItem(SELECTED_TARGET_KEY);

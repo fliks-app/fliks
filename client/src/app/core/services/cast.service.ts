@@ -114,7 +114,8 @@ interface NativeCastPlugin {
   requestSession(): Promise<void>;
   /** Native-only device enumeration + selection backing the unified picker
    *  (`shared/remote-picker`): the web Cast SDK has no equivalent. */
-  getCastDevices(): Promise<{ devices: CastDevice[] }>;
+  /** `browse`: the picker is showing the list, so Android scans actively for a while. */
+  getCastDevices(opts?: { browse?: boolean }): Promise<{ devices: CastDevice[] }>;
   selectCastDevice(opts: { id: string }): Promise<void>;
   loadMedia(opts: NativeCastLoadOpts): Promise<void>;
   play(): Promise<void>;
@@ -128,6 +129,8 @@ interface NativeCastPlugin {
    *  volume, not the phone's — the OS volume keys already do the latter. */
   setVolume(opts: { level: number }): Promise<void>;
   setMuted(opts: { muted: boolean }): Promise<void>;
+  /** A JSON string on the Fliks namespace to the connected receiver. */
+  sendMessage?(opts: { namespace: string; message: string }): Promise<void>;
 }
 
 /** One row of native discovery. `connected` marks the device this sender is
@@ -551,10 +554,10 @@ export class CastService implements OnDestroy {
   }
 
   /** Web has no enumeration API, so this resolves empty and the picker falls back to `requestSession()`. */
-  async getCastDevices(): Promise<CastDevice[]> {
+  async getCastDevices(opts?: { browse?: boolean }): Promise<CastDevice[]> {
     if (!this.hasCastBridge) return [];
     try {
-      const { devices } = await this.bridge.getCastDevices();
+      const { devices } = await this.bridge.getCastDevices(opts);
       this.castDevices.set(devices);
       return devices;
     } catch (err) {
@@ -710,6 +713,18 @@ export class CastService implements OnDestroy {
     if (!this.remotePlayer || !this.remotePlayerController) return;
     this.remotePlayer.volumeLevel = v;
     this.remotePlayerController.setVolumeLevel();
+  }
+
+  /** A message on the Fliks namespace to the receiver; dropped when nothing is connected. */
+  sendFliks(msg: object): void {
+    const message = JSON.stringify(msg);
+    if (this.hasCastBridge) {
+      void this.bridge.sendMessage?.({ namespace: FLIKS_CAST_NAMESPACE, message }).catch(() => {});
+      return;
+    }
+    try {
+      void Promise.resolve(cast.framework.CastContext.getInstance().getCurrentSession?.()?.sendMessage(FLIKS_CAST_NAMESPACE, message)).catch(() => {});
+    } catch { /* no session */ }
   }
 
   setMuted(muted: boolean) {

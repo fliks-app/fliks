@@ -25,21 +25,22 @@
 }
 
 @for (row of pickerRows(); track row.kind + row.id) {
+  <!-- Lucide owns the icon's class attribute: a [class.x] toggle on it is overwritten, so the accent goes through [class]. -->
+  @let iconClass = row.connected ? 'h-5 w-5 shrink-0 text-info' : 'h-5 w-5 shrink-0';
   <button type="button" class="dropdown-item text-white" (click)="selectRow(row)">
     @if (row.icon === 'cast') {
-      <!-- Accented only for the device actually being cast to: on every row it
-           read as a state the list does not have. -->
-      <svg lucideCast class="h-5 w-5 shrink-0" [class.text-info]="row.connected"></svg>
+      <!-- Accented only for the device in use: on every row it read as a state the list does not have. -->
+      <svg lucideCast [class]="iconClass"></svg>
     } @else if (row.icon === 'airplay') {
-      <svg lucideAirplay class="h-5 w-5 shrink-0" [class.text-info]="row.connected"></svg>
+      <svg lucideAirplay [class]="iconClass"></svg>
     } @else if (row.icon === 'tv') {
-      <svg lucideTv class="h-5 w-5 shrink-0"></svg>
+      <svg lucideTv [class]="iconClass"></svg>
     } @else if (row.icon === 'tablet') {
-      <svg lucideTablet class="h-5 w-5 shrink-0"></svg>
+      <svg lucideTablet [class]="iconClass"></svg>
     } @else if (row.icon === 'phone') {
-      <svg lucideSmartphone class="h-5 w-5 shrink-0"></svg>
+      <svg lucideSmartphone [class]="iconClass"></svg>
     } @else {
-      <svg lucideMonitor class="h-5 w-5 shrink-0"></svg>
+      <svg lucideMonitor [class]="iconClass"></svg>
     }
     <span class="flex flex-col items-start min-w-0 flex-1">
       <span class="truncate w-full text-left">{{ row.label }}</span>

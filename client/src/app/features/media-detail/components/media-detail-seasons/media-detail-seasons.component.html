@@ -357,7 +357,7 @@
         }
       </ul>
       @if (selectMode()) {
-        <div class="sticky bottom-[var(--chrome-bottom,0px)] z-30 bg-base-200 border border-base-300 p-2 flex items-center gap-1 shadow-lg rounded-lg">
+        <div class="sticky bottom-[var(--chrome-bottom-total,0px)] z-30 bg-base-200 border border-base-300 p-2 flex items-center gap-1 shadow-lg rounded-lg">
           <button type="button" class="btn btn-sm btn-ghost btn-circle" [attr.aria-label]="'library.bulk_cancel' | translate" (click)="toggleSelectMode()">
             <svg lucideX class="h-4 w-4"></svg>
           </button>

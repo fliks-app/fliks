@@ -16,6 +16,15 @@ import { normalizeLangCode } from '../../utils/language.utils';
 import type { TimeRange } from '../../utils/edl-policy';
 import { MuteGate } from './mute-gate';
 
+const MAX_NETWORK_RETRIES = 10;
+const NETWORK_RETRY_DELAY_S = 2;
+
+/** A 4xx won't heal on retry; Shaka's BAD_HTTP_STATUS carries the status in data[1]. */
+function isClientHttpError(e: shaka.util.Error): boolean {
+  const status = e.code === 1001 ? Number(e.data?.[1]) : 0;
+  return status >= 400 && status < 500;
+}
+
 /** Shaka implementation of PlaybackEngine; plain TypeScript with no Angular dependencies. */
 export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngine {
 
@@ -28,6 +37,9 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   /** Set after the 410 filter emits `sessionExpired`; suppresses the bridged `error` for one tick so no fatal overlay shows during recovery. */
   private sessionExpiredInFlight = false;
+
+  /** Consecutive streaming retries since the last appended segment. */
+  private networkRetries = 0;
 
   /** The user's own mute; `video.muted` is this OR the EDL gate. */
   private userMuted = false;
@@ -166,6 +178,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.startPaused = false;
     this.shakaBuffering = false;
     this.sessionExpiredInFlight = false;
+    this.networkRetries = 0;
     this.sideloadedTextTracks.clear();
     this.loading = this.player.load(url, startTime, mimeType);
     await this.loading;
@@ -580,6 +593,8 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   private bridgeShakaEvents(): void {
     // Shaka holds playback at its rebuffering goal without a DOM waiting/stalled event.
+    this.addShakaListener('segmentappended', () => { this.networkRetries = 0; });
+
     this.addShakaListener('buffering', (ev) => {
       const { buffering } = ev as unknown as { buffering: boolean };
       const video = this.video;
@@ -598,6 +613,13 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       const detail = (ev as unknown as { detail?: shaka.util.Error }).detail;
       if (this.sessionExpiredInFlight) {
         // 410 recovery is taking over; no error overlay before the reload.
+        return;
+      }
+      // VOD streaming stops on a network failure while the buffer still plays: retry before failing the session.
+      if (detail?.category === 1 && !isClientHttpError(detail)
+        && this.networkRetries < MAX_NETWORK_RETRIES && this.player?.retryStreaming(NETWORK_RETRY_DELAY_S)) {
+        this.networkRetries++;
+        console.warn('[Shaka] network error, retrying streaming', detail.code, this.networkRetries);
         return;
       }
       console.error('[Shaka] Player error:', detail?.code, detail?.category, detail?.message, detail?.data);

@@ -1,11 +1,13 @@
-import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { PlayerControlsComponent } from './controls/player-controls';
 import type { ControlsVisibilityService } from './controls/controls-visibility';
-import { mediaKeyAction } from './media-keys';
+import { playerKeyAction } from './player-keymap';
 
 export interface KeyboardHost {
   chrome: ControlsVisibilityService;
-  engine(): PlaybackEngine | null;
+  /** The engine, or the output playing elsewhere: what the seek and play keys read. */
+  /** False while another output plays: the controls are the whole screen, so Escape leaves. */
+  canHideControls(): boolean;
+  playhead(): { paused: boolean; currentTime: number } | null;
   controls(): PlayerControlsComponent | undefined;
   isTv(): boolean;
   /** False for a non-host of a host-only party: play, pause and seek keys do nothing. */
@@ -31,8 +33,8 @@ export class KeyboardController {
 
   onKeyDown = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    const engine = this.host.engine();
-    if (!engine) return;
+    const playhead = this.host.playhead();
+    if (!playhead) return;
     const control = this.host.canControlPlayback();
 
     // Back keys must bubble to the window handler in `app.ts` so the player can be left.
@@ -75,8 +77,9 @@ export class KeyboardController {
       if (reactions && floatingKey) chrome.resetHideTimer();
     }
 
-    const media = mediaKeyAction({ key: e.key, keyCode: tizenKeyCode });
-    if (media) {
+    const mapped = playerKeyAction({ key: e.key, keyCode: tizenKeyCode });
+    if (mapped?.kind === 'media') {
+      const media = mapped.action;
       e.preventDefault();
       e.stopPropagation();
       if (media === 'stop') {
@@ -86,12 +89,12 @@ export class KeyboardController {
       if (!control) return;
       if (
         media === 'toggle' ||
-        (media === 'play' && engine.paused) ||
-        (media === 'pause' && !engine.paused)
+        (media === 'play' && playhead.paused) ||
+        (media === 'pause' && !playhead.paused)
       ) {
         this.host.onTogglePlay();
-      } else if (media === 'forward') this.host.onSeek(engine.currentTime + 10);
-      else if (media === 'rewind') this.host.onSeek(engine.currentTime - 10);
+      } else if (media === 'forward') this.host.onSeek(playhead.currentTime + 10);
+      else if (media === 'rewind') this.host.onSeek(playhead.currentTime - 10);
       this.host.chrome.show();
       return;
     }
@@ -127,70 +130,69 @@ export class KeyboardController {
     // The seekbar and D-pad navigation own ArrowLeft/Right unless nothing has focus.
     const arrowSeekAllowed = !activeEl || activeEl === document.body;
 
-    switch (e.key) {
-      case ' ':
-      case 'k':
+    switch (mapped?.kind === 'shortcut' ? mapped.command : null) {
+      case 'togglePlay':
         // Always playback, never a press of the focused button: that is Enter's job.
         e.preventDefault();
         if (control) this.host.onTogglePlay();
         break;
       // The trailing chrome.show() restarts the countdown, so the first-frame effect can't snap the bar shut.
-      case 'ArrowLeft':
+      case 'seekBack':
         if (!arrowSeekAllowed || !control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime - 10);
+        this.host.onSeek(playhead.currentTime - 10);
         break;
-      case 'ArrowRight':
+      case 'seekForward':
         if (!arrowSeekAllowed || !control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime + 10);
+        this.host.onSeek(playhead.currentTime + 10);
         break;
-      case 'j':
+      case 'seekBack30':
         if (!control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime - 30);
+        this.host.onSeek(playhead.currentTime - 30);
         break;
-      case 'l':
+      case 'seekForward30':
         if (!control) break;
         e.preventDefault();
-        this.host.onSeek(engine.currentTime + 30);
+        this.host.onSeek(playhead.currentTime + 30);
         break;
-      case 'f':
+      case 'fullscreen':
         e.preventDefault();
         this.host.onToggleFullscreen();
         break;
-      case 'm':
+      case 'mute':
         e.preventDefault();
         this.host.onToggleMute();
         break;
-      case 'p':
+      case 'pip':
         e.preventDefault();
         this.host.onTogglePip();
         break;
-      case 's':
+      case 'stats':
         e.preventDefault();
         if (e.shiftKey) {
           this.host.toggleStats();
         }
         break;
-      case 'Escape':
+      case 'escape':
         e.preventDefault();
-        if (this.host.chrome.visible()) {
+        if (this.host.chrome.visible() && this.host.canHideControls()) {
           this.host.chrome.hide();
           return; // skip the trailing chrome.show()
         }
         this.host.onBack();
         break;
-      case '<':
+      case 'slower':
         e.preventDefault();
         this.host.onSpeedChange(Math.max(0.25, this.host.playbackRate() - 0.25));
         break;
-      case '>':
+      case 'faster':
         e.preventDefault();
         this.host.onSpeedChange(Math.min(2, this.host.playbackRate() + 0.25));
         break;
-      case ',':
-      case '.':
+      case 'framePrev':
+      case 'frameNext':
         if (!control) break;
         e.preventDefault();
         this.host.stepFrame(e.key === '.' ? 1 : -1);

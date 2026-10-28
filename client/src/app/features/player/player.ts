@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
@@ -23,7 +24,9 @@ import type { PreRollItem } from '@fliks/plugin-ui';
 import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { backTarget } from './back-target';
-import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { LocalPlaybackOutput } from './local-playback-output';
+import type { CastStart, LocalHandoff, PlaybackOutput } from '../../core/services/playback/playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -36,8 +39,6 @@ import {
   CastPlayerService,
   CastAudioOption,
   buildCastAudioOptions,
-  buildCastQualityOptions,
-  castBurnInId,
 } from '../../core/services/cast-player.service';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -54,7 +55,6 @@ import {
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
   type AudioStreamChoice,
 } from '../../core/services/player-settings.service';
-import { Immersive } from '../../core/plugins/immersive.plugin';
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
@@ -70,7 +70,7 @@ import { NativeEngine } from '../../core/services/playback-engine/native-engine'
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
-import { Orientation, releasePlayerOrientation } from '../../core/plugins/orientation.plugin';
+import { PlayerScreen } from './player-screen';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
@@ -103,11 +103,12 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 
-import { LucideAirplay, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
+import { LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
+import { type ControlsModel, outputModel } from './controls/controls-model';
 import { CopyFallbackController } from './copy-fallback-controller';
 import { RecoveryController } from './recovery-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
@@ -115,7 +116,7 @@ import { EdlController } from './edl-controller';
 import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
-import { PartyController } from './party-controller';
+import { PartySync } from '../../core/services/party/party-sync';
 import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
 import { ReactionsService } from '../../core/services/party/reactions.service';
@@ -132,10 +133,10 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
+  imports: [TranslatePipe, ResolveUrlPipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
-  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, PartyController, SubtitleController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -274,6 +275,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly airPlay = inject(AirPlayService);
   private detachAirPlay: () => void = () => {};
   private readonly castPlayerService = inject(CastPlayerService);
+  protected readonly session = inject(PlaybackSession);
+  private readonly pipWired = signal(false);
+  /** Leaving the app auto-enters PiP only while the picture is local: a cast has nothing to shrink. */
+  private readonly pipAutoEffect = effect(() => {
+    if (this.pipWired()) Pip.setAutoEnter({ enabled: this.session.isLocal() }).catch(() => {});
+  });
   private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -372,12 +379,45 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly spinnerVisible = computed(
     () =>
       !this.autoplayBlocked() &&
+      !this.error() &&
       (this.loading() ||
         this.buffering() ||
         // Shaka can hold a starved playhead without ever reporting `buffering`.
         this.frozenSince() > 0 ||
-        (!this.videoStarted() && !this.error())),
+        !this.videoStarted()),
   );
+  /** Everything the controls read of the playing output: the cast or remote output, else the engine's own signals. */
+  protected readonly view = computed<ControlsModel>(() => {
+    const o = this.session.isLocal() ? null : this.session.output();
+    if (o) return outputModel(o);
+    return {
+      paused: this.uiPaused(),
+      spinner: this.spinnerVisible(),
+      videoStarted: this.videoStarted(),
+      currentTime: this.currentTime(),
+      duration: this.duration(),
+      volume: this.volume(),
+      muted: this.muted(),
+      canSetVolume: true,
+      mediaTitle: this.mediaTitle(),
+      episodeTitle: this.displayEpisodeTitle(),
+      hasNext: this.queueCtl.upNext() !== null,
+      subtitles: this.subs.availableSubtitles(),
+      audioTracks: this.availableAudioTracks(),
+      qualities: this.availableQualities(),
+      activeSubtitleId: this.subs.activeSubtitleId(),
+      activeAudioTrackId: this.activeAudioTrackId(),
+      activeQualityId: this.activeQualityId(),
+      activeQualityLabel: this.activeQualityLabel(),
+      spriteUrl: this.spriteUrl(),
+      spriteMetadata: this.spriteMetadata(),
+      skipCueLabelKey: this.cues.commercialCueVisible()
+        ? 'player.edl.skip_commercial'
+        : this.cues.skipIntroVisible()
+          ? 'player.skip_intro'
+          : null,
+    };
+  });
   readonly playbackMode = this.state.playbackMode;
   readonly hwAccel = this.state.hwAccel;
   readonly activeQualityId = this.qualityManager.activeQualityId;
@@ -403,7 +443,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  would otherwise retract it before the playhead landed. */
   private readonly _chromePins = (this.chrome.configure({
     pinned: computed(
-      () => this.uiPaused() || this.buffering() || this.seekDragging() || this.state.seekLocked(),
+      () => this.uiPaused() || this.buffering() || this.seekDragging() || this.state.seekLocked() || !this.session.isLocal(),
     ),
   }), null);
   private readonly copyFallback = inject(CopyFallbackController);
@@ -493,11 +533,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected readonly partyDialog = signal<'party' | 'reactions' | null>(null);
   protected readonly partyPanelShown = computed(() => this.partyCtl.active() && this.party.panelOpen() && !this.inPipMode());
   readonly pipAvailable = signal(true);
-  readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
-  readonly orientationLocked = signal(false);
-  private readonly landscapeOnOpen =
-    this.serverConfig.isNative && !this.device.isTv() && this.playerSettings.get().landscapeOnOpen;
-  private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
+  protected readonly screen = new PlayerScreen({
+    native: this.serverConfig.isNative,
+    landscapeOnOpen: !this.device.isTv() && this.playerSettings.get().landscapeOnOpen,
+    immersiveInPortrait: () => !this.paused() && !this.chrome.visible(),
+    suspended: () => this.inPipMode(),
+    casting: () => !this.session.isLocal(),
+    onRotate: () => {
+      if (this.isNativeEngine() && this.engine) this.applyNativeSubtitleStyle();
+    },
+  });
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
   /** Whether {@link applyVideoCrop} last handed mpv a crop; the overlay reads
@@ -565,31 +610,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Set while the closing animation runs, on the platforms that play it here. */
   readonly closing = signal(false);
 
-  // Sync local playback with Cast connection state
-  private wasCasting = false;
-  private readonly castSyncEffect = effect(() => {
-    const casting = this.castService.isConnected();
-    if (casting && !this.wasCasting) {
-      // Just connected — mute/pause local engine
-      try {
-        if (this.engine && !this.isNativeEngine()) {
-          void this.pausePlayback();
-          this.engine.muted = true;
-        }
-      } catch { /* engine may not be ready yet */ }
-    } else if (!casting && this.wasCasting) {
-      // Just disconnected — reload local engine and resume at Cast position
-      const castPos = this.castService.currentTime();
-      void this.resumeLocalAfterCast(castPos).then(() => {
-        if (this.partyCtl.active()) this.partyCtl.resync();
-      });
-    }
-    this.wasCasting = casting;
-  });
-
   private readonly keyboard = new KeyboardController({
     chrome: this.chrome,
-    engine: () => this.engine,
+    playhead: () => this.engine ?? this.outputPlayhead(),
+    canHideControls: () => !this.elsewhere(),
     controls: () => this.controls(),
     isTv: () => this.device.isTv(),
     canControlPlayback: () => this.party.canControl(),
@@ -641,41 +665,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     () => this.partyCtl.active() && this.party.reactionsEnabled() && this.reactions.enabled() && this.reactions.dock(),
   );
   protected readonly keyboardOverlay = inject(KeyboardOverlayService);
-  protected readonly partyCtl = inject(PartyController);
-  private readonly _partyAttach = (this.partyCtl.attach({
+  protected readonly partyCtl = inject(PartySync);
+  private readonly detachParty = this.partyCtl.attach({
     engine: () => this.engine,
-    mediaId: () => this.mediaId,
-    episodeId: () => this.episodeId,
-    seekTo: (t) => this.seekInternal(t),
+    urlPartyId: () => +this.route.snapshot.queryParams['party'] || 0,
+    openItem: (item) => this.queueCtl.openPartyItem(item),
     showControls: () => this.chrome.show(),
-    pausePlayback: () => this.pausePlayback(),
-    playLocal: () => {
-      this.state.paused.set(false);
-      this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
-    },
     releasePlayback: () => {
       if (!this.loadedPaused) return;
       this.loadedPaused = false;
       // Before the post-load step it plays by itself; after it, nothing else will.
       if (this.postLoadDone) void this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     },
-    position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
     onBack: () => this.onBack(),
-  }), null);
-
-  // Immersive mode: landscape=always, portrait=only while playing with controls hidden
-  private readonly immersiveEffect = effect(() => {
-    if (!this.isNative || this.inPipMode()) return;
-    const landscape = this.isLandscape();
-    const shouldBeImmersive = landscape || (!this.paused() && !this.chrome.visible());
-    if (shouldBeImmersive) {
-      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
-      document.body.classList.add('immersive');
-    } else {
-      Immersive.exit().catch(() => {});
-      document.body.classList.remove('immersive');
-      Immersive.setLightStatusBar({ light: false }).catch(() => {});
-    }
   });
 
   // Sync play/pause state to PiP action button
@@ -816,6 +818,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly mediaLogoUrl = signal<string | null>(null);
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
+  /** The backdrop fades in once decoded, not on insertion. */
+  protected readonly backdropLoaded = signal<string | null>(null);
 
   /** Low-quality `fanartUrl` for the backdrop LQIP layer; only our `/api/images/...` URLs support
    *  `?size=thumb`. */
@@ -1071,11 +1075,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.recovery.clearEpisode();
     this.firstLoadSetupDone = false;
 
-    // On native: listen to orientation changes (immersive handled by effect)
-    if (this.isNative) {
-      screen.orientation?.addEventListener('change', this.onOrientationChange);
-      if (this.landscapeOnOpen) releasePlayerOrientation(true);
-    }
+    this.screen.open();
 
     this.webCrop.init();
     const video = this.videoEl()?.nativeElement;
@@ -1109,6 +1109,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.queue.clear();
     }
 
+    if (this.session.isLocal()) {
+      const completed = await this.startLocal(resumeTime);
+      // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and its removals would miss the
+      // listeners registered below.
+      if (!completed || this.destroyed) return;
+    } else {
+      await this.openOnOutput(resumeTime);
+      this.state.loading.set(false);
+      if (this.destroyed) return;
+    }
+    this.registerListeners();
+  }
+
+  /** Opens the local engine on the route's item, at `resumeTime` when given; false when the launch did not run to its end. */
+  private async startLocal(resumeTime: number | undefined): Promise<boolean> {
+    const qp = this.route.snapshot.queryParams;
+    this.firstLoadSettled = new Promise<void>((resolve) => (this.settleFirstLoad = resolve));
     // Hoisted so the catch can anchor a remux fallback at the resume point.
     let startTime: number | undefined = resumeTime ?? undefined;
 
@@ -1127,7 +1144,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.setError(this.translate.instant('player.offline_not_found'), {
           source: 'session',
         });
-        return;
+        return false;
       }
       if (offlineCheck) {
         this.isOfflinePlayback = true;
@@ -1252,7 +1269,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (this.isTizen || this.isWebOs) {
           await this.launchTv(startTime);
         } else if (this.isDesktopNative || this.isNative) {
-          if (!(await this.launchNative(startTime, mode))) return;
+          if (!(await this.launchNative(startTime, mode))) return false;
         } else {
           await this.launchShaka(startTime, mode);
         }
@@ -1261,14 +1278,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.firstLoadPending = false;
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.firstLoadSetupDone = true;
-      await this.completePostLoadSetup(resumeTime);
+      await this.completePostLoadSetup();
 
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const recovered = () => {
         if (this.firstLoadSetupDone) return;
         this.firstLoadSetupDone = true;
-        return this.completePostLoadSetup(resumeTime);
+        return this.completePostLoadSetup();
       };
       if (!this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, recovered)) {
         const userMessage = this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
@@ -1302,12 +1319,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } finally {
       this.state.loading.set(false);
       this.firstLoadPending = false;
+      this.settleFirstLoad();
     }
+    return true;
+  }
 
-    // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and
-    // its removals would miss the listeners registered below.
-    if (this.destroyed) return;
-
+  private registerListeners(): void {
     // Keyboard shortcuts
     document.addEventListener('keydown', this.keyboard.onKeyDown);
 
@@ -1322,7 +1339,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       Pip.isAvailable().then(({ available }) => this.pipAvailable.set(available)).catch(() => this.pipAvailable.set(false));
       window.addEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.addEventListener('pipAction', this.onPipAction as EventListener);
-      Pip.setAutoEnter({ enabled: true }).catch(() => {});
+      this.pipWired.set(true);
       // Leaving the app (Home, PiP, lock) may be followed by a kill: save the position now.
       void CapApp.addListener('pause', () => void this.savePosition(true)).then((h) => {
         if (this.destroyed) void h.remove();
@@ -1349,7 +1366,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.detachAirPlay();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remote.dispose();
-    this.partyCtl.dispose();
+    this.detachParty();
+    this.detachLocalOutput();
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
@@ -1384,11 +1402,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     window.removeEventListener('pagehide', this.onBeforeUnload);
     document.removeEventListener('visibilitychange', this.onTvVisibility);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
+    this.screen.close();
     if (this.isNative) {
-      screen.orientation?.removeEventListener('change', this.onOrientationChange);
-      Orientation.unlock().catch(() => {});
-      Immersive.exit().catch(() => {});
-      document.body.classList.remove('immersive');
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
       window.removeEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.removeEventListener('pipAction', this.onPipAction as EventListener);
@@ -1563,7 +1578,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         };
         engine.onNext = () => void this.queueCtl.advance();
         engine.onPrevious = () =>
-          void (this.partyCtl.active() ? this.partyCtl.requestPrevious() : this.queueCtl.playQueueItem(this.queue.index() - 1));
+          void this.queueCtl.playPrevious();
         engine.onStop = () => this.onBack();
         engine.onToggleLike = () => void this.queueCtl.notificationLike.toggle();
       }
@@ -1725,9 +1740,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.partyCtl.active()) this.partyCtl.resync();
   }
 
+  private outputPlayhead(): { paused: boolean; currentTime: number } | null {
+    const o = this.elsewhere();
+    return o && { paused: o.paused(), currentTime: o.position() };
+  }
+
+  /** The cast receiver or remote target while playback is there, else null. */
+  protected elsewhere(): PlaybackOutput | null {
+    return this.session.isLocal() ? null : this.session.output();
+  }
+
+  protected onNext(): void {
+    if (!this.session.command({ type: 'next' })) void this.queueCtl.advance();
+  }
+
+  /** Stopping on a cast ends the session's media, so there is nothing left to show here. */
+  protected onStopOutput(o: PlaybackOutput): void {
+    o.stopPlayback();
+    if (!o.hasMedia()) this.onBack();
+  }
+
   onTogglePlay() {
+    if (this.elsewhere()) {
+      this.session.command({ type: 'toggle' });
+      return;
+    }
     if (!this.engine) return;
-    if (!this.subs.subtitleSyncOpen() && this.partyCtl.togglePlay()) return;
+    if (!this.subs.subtitleSyncOpen() && this.session.command({ type: 'toggle' })) return;
     // Coalesce rapid taps: a second toggle inside this window is dropped so play()/pause() can't interleave
     // with an in-flight MSE append and desync A/V.
     const now = Date.now();
@@ -1776,7 +1815,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeek(time: number) {
-    if (this.partyCtl.seek(time)) return;
+    if (this.session.command({ type: 'seek', at: time })) return;
     const dur = this.duration();
     if (!dur) {
       // Clamping to Math.min(time, 0) would jump to the start and report
@@ -1944,6 +1983,49 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     hasEngine: () => !!this.engine,
     seek: (t) => this.seekInternal(t),
   });
+  private readonly detachLocalOutput = this.session.attachLocal(
+    new LocalPlaybackOutput(
+      {
+        engine: () => this.engine,
+        mediaId: () => this.mediaId,
+        episodeId: () => this.episodeId,
+        seekTo: (t) => this.seekInternal(t),
+        pausePlayback: () => this.pausePlayback(),
+        playLocal: () => {
+          this.state.paused.set(false);
+          this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+        },
+        position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
+        mediaTitle: this.mediaTitle,
+        episodeTitle: this.episodeTitle,
+        fanartUrl: this.fanartUrl,
+        spriteUrl: this.spriteUrl,
+        spriteMetadata: this.spriteMetadata,
+        subtitles: this.subs.availableSubtitles,
+        audioTracks: this.availableAudioTracks,
+        qualities: this.qualityManager.availableQualities,
+        activeSubtitleId: this.subs.activeSubtitleId,
+        activeAudioTrackId: this.activeAudioTrackId,
+        activeQualityId: this.activeQualityId,
+        skipCue: computed(() => {
+          if (this.cues.commercialCueVisible()) return { labelKey: 'player.edl.skip_commercial' };
+          return this.cues.skipIntroVisible() ? { labelKey: 'player.skip_intro' } : null;
+        }),
+        canPlayNext: computed(() => this.queueCtl.upNext() !== null),
+        skip: () => this.cues.onSkipCue(),
+        playNext: () => void this.queueCtl.advance(),
+        selectSubtitle: (id) => void this.subs.selectById(id),
+        selectAudio: (id) => void this.onSelectAudioTrack(id),
+        selectQuality: (id) => void this.onSelectQualityById(id),
+        onBack: () => this.onBack(),
+        release: () => this.releaseForHandoff(),
+        stepAside: () => this.stepAside(),
+        resume: (position) => this.resumeLocal(position),
+      },
+      this.state,
+    ),
+  );
+
   private readonly cueTimerPauseEffect = effect(() => this.cues.syncTimers());
   private readonly skipIntroCueEffect = effect(() => this.cues.syncIntroCue());
   private readonly commercialCueEffect = effect(() => this.cues.syncCommercialCue());
@@ -2102,6 +2184,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onVolumeChange(vol: number) {
+    const other = this.elsewhere();
+    if (other) return other.setVolume(vol);
     if (!this.engine) return;
     // Dragging sets the level and lifts a mute; state signals follow the engine's `volumechange` event.
     this.engine.volume = vol;
@@ -2109,6 +2193,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onToggleMute() {
+    const other = this.elsewhere();
+    if (other) return other.toggleMute();
     if (!this.engine) return;
     // Toggle audible/silent, not the raw mute flag: when silent (muted or level 0) a click restores sound,
     // bumping level 0 to full so the button never looks stuck.
@@ -2311,6 +2397,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onTogglePip() {
+    if (!this.session.isLocal()) return;
     if (this.isNative) {
       Pip.enter().catch(() => {});
       return;
@@ -2324,15 +2411,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  onToggleOrientationLock() {
-    const locked = !this.orientationLocked();
-    this.orientationLocked.set(locked);
-    if (locked) Orientation.lock().catch(() => {});
-    else releasePlayerOrientation(this.landscapeOnOpen);
-  }
-
-  /** A destination picked from the player's own list takes over the running
-   *  playback at its current position, then the player steps aside. */
+  /** A destination picked from the player's own list takes over the running playback at its current position. */
   async onPickDevice(row: PickerRow): Promise<void> {
     // AirPlay reroutes this very playback: nothing to hand off. Synchronous,
     // Safari only opens its picker inside the click.
@@ -2340,71 +2419,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.airPlay.showPicker();
       return;
     }
-    if (row.kind === 'remote') {
-      this.handOffToRemote(row.id);
-      return;
-    }
-    await this.castHandoff(() =>
-      row.kind === 'cast'
-        ? void this.castService.selectCastDevice(row.id).catch((err) => {
-            console.warn('[player] selectCastDevice failed', row.id, err);
-            this.toast.error(this.translate.instant('remote.error_cast_select_failed'));
-          })
-        : this.castService.requestSession(),
-    );
-  }
-
-  /** Send the running file to a remote target at the current position and hand
-   *  the controls to the cast overlay, which lives outside the player route. */
-  private handOffToRemote(targetId: string): void {
-    const position = Math.floor(this.engine?.currentTime ?? 0);
-    void this.pausePlayback();
-    this.remoteService.selectTarget(targetId);
-    void this.remoteService.send(targetId, {
-      action: 'load',
-      mediaId: this.mediaId,
-      mediaFileId: this.mediaFileId,
-      episodeId: this.episodeId,
-      positionSeconds: position,
-    });
-    remoteOverlayOpen.set(true);
-    this.onBack();
-  }
-
-  private async castHandoff(connect: () => void): Promise<void> {
-    // startCastFromPlayer builds from this.mediaFileId — drop straight to the
-    // main item first so a Cast connect can never cast the trailer.
-    if (this.preRollActive()) {
-      this.preRollRest = [];
-      await this.advancePreRoll();
-    }
-
-    const wasPlaying = this.engine && !this.engine.paused;
-    const currentPos = this.engine?.currentTime ?? 0;
-    void this.pausePlayback();
-
-    connect();
-
-    // Wait for connection (poll for up to 30s)
-    for (let i = 0; i < 60; i++) {
-      if (this.castService.isConnected()) break;
-      if (!this.castService.connecting()) break;
-      await new Promise(r => setTimeout(r, 500));
-    }
-
-    if (!this.castService.isConnected()) {
-      if (wasPlaying && this.engine) this.engine.play().catch(() => {});
-      return;
-    }
-
-    // Connected — hand off to Cast
-    if (this.engine) this.engine.muted = true;
-    if (this.engine) await this.engine.unload();
-    await this.startCastFromPlayer(currentPos);
-    this.castPlayerService.expanded.set(true);
-    // Closing the player leaves the party: it stays mounted behind the cast overlay.
-    if (this.partyCtl.active()) this.partyCtl.resync();
-    else this.onBack();
+    if (row.kind === 'local') await this.session.moveTo('local');
+    else await this.session.moveTo(row.kind === 'remote' ? 'remote' : 'cast', row.kind === 'cast-web' ? undefined : row.id);
   }
 
   onDisconnectCast() {
@@ -2412,15 +2428,48 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.castPlayerService.clear();
   }
 
-  /** Push current player state to the CastPlayerService and start streaming.
-   *  `subtitleId` is the subtitle the cast starts on: the local pick unless the caller has none. */
-  private async startCastFromPlayer(
-    position?: number,
-    subtitleId: string | null = this.subs.activeSubtitleId(),
-  ) {
-    const localSid = this.playbackInfo?.sessionId;
+  /** Settles when the first launch ends (loaded or failed), so a handoff never races the engine it would unload. */
+  private firstLoadSettled: Promise<void> = Promise.resolve();
+  private settleFirstLoad: () => void = () => {};
+  private trackSetup: Promise<void> = Promise.resolve();
 
-    this.castPlayerService.startCast({
+  /** Moving off this device: the engine falls silent and unloads, and what the target needs is handed over. */
+  private async releaseForHandoff(): Promise<LocalHandoff | null> {
+    const resolveSubtitle = !this.firstLoadSetupDone;
+    await this.firstLoadSettled;
+    await this.trackSetup.catch(() => {});
+    const engine = this.engine;
+    if (!engine || !this.mediaId) return null;
+    // The cast must start on the main item, never on a trailer.
+    if (this.preRollActive()) {
+      this.preRollRest = [];
+      await this.advancePreRoll();
+    }
+    // The picture leaves: the phone turns freely.
+    this.screen.releaseForCast();
+    const position = engine.currentTime;
+    await this.pausePlayback();
+    engine.muted = true;
+    await engine.unload();
+    return {
+      position,
+      cast: this.castStart(),
+      resolveSubtitle,
+      audioLanguage: this.targetAudioLanguage(),
+      localSessionId: this.playbackInfo?.sessionId,
+    };
+  }
+
+  /** Another output already plays: this engine pauses and mutes, whichever kind it is. */
+  private stepAside(): void {
+    this.screen.releaseForCast();
+    void this.pausePlayback();
+    if (this.engine) this.engine.muted = true;
+  }
+
+  /** What a receiver needs to describe the running media: the local picks are what it starts on. */
+  private castStart(): CastStart {
+    return {
       mediaFileId: this.mediaFileId,
       mediaId: this.mediaId,
       episodeId: this.episodeId,
@@ -2432,15 +2481,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       qualities: [],
       audioTracks: this.castAudioOptions(),
       activeQualityId: this.activeQualityId(),
-      activeSubtitleId: subtitleId,
+      activeSubtitleId: this.subs.activeSubtitleId(),
       activeAudioStreamIndex: this.activeAudioStreamIndex,
       playbackId: this.qoe.playbackId,
-    });
-    // The cast ladder comes from the cast profile's own playback-info, not the browser one (HEVC remux).
-    await this.castPlayerService.reloadCastStream(position, true, this.activeQualityId());
-    if (localSid && localSid !== this.castPlayerService.liveSessionId()) {
-      void this.streamingApi.stopSession(localSid).catch(() => {});
-    }
+    };
   }
 
   /** Resolve the `startQuality` wire value: the explicit rung id, or in 'auto' the top rung when the engine has
@@ -2695,12 +2739,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** One-time setup after the first successful load (tracks, Cast/autoplay,
    *  intervals, seeked listener, sprites), whether the load or its copy fallback succeeded. */
-  private async completePostLoadSetup(resumeTime: number | undefined): Promise<void> {
+  private async completePostLoadSetup(): Promise<void> {
     // A fallback can settle after ngOnDestroy; its intervals would never be cleared.
     if (this.destroyed || !this.engine) return;
     this.postLoadDone = true;
     // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
-    const trackSetupPromise = (async () => {
+    const trackSetupPromise = this.trackSetup = (async () => {
       if (this.isOfflinePlayback) {
         // Offline: load pre-downloaded subtitles from local storage (no API)
         await this.loadOfflineSubtitles();
@@ -2716,22 +2760,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     })();
     trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
 
-    // If Cast is already connected, send to Cast
-    if (this.castService.isConnected() && !this.isNativeEngine()) {
-      // Let the subtitle list settle before handing off, so Cast gets the
-      // full list instead of whatever raced ahead of it.
-      await trackSetupPromise.catch(() => {});
-      await this.pausePlayback();
-      this.engine!.muted = true;
-      await this.engine!.unload();
-      const startPos = resumeTime ?? this.engine!.currentTime;
-      // The local auto-select was refused while casting: the cast starts on what it would have picked.
-      const startSubtitle = await this.castPlayerService.resolveStartSubtitle(
-        this.subs.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
-      );
-      await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
-      if (this.partyCtl.active()) this.partyCtl.resync();
-    } else if ((!this.isNativeEngine() || this.isDesktopNative || this.openedPaused) && !this.loadedPaused) {
+    if ((!this.isNativeEngine() || this.isDesktopNative || this.openedPaused) && !this.loadedPaused) {
       this.engine!.play().catch(() => {
         // No user gesture on a remotely started device: the browser refuses autoplay. Reported so a controller
         // can tell why the device is paused (its own play button is refused too).
@@ -2950,21 +2979,44 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Reload the local engine and resume after Cast disconnect. The pre-cast LiveSession was GC'd, so mint a
-   *  fresh sid: reusing `playbackInfo?.sessionId` would race the heartbeat fallback and flash a reload. */
-  private async resumeLocalAfterCast(castPos: number) {
+  /** Back on this device at `position`: reload the engine, or open it for the first time when the route started
+   *  on another output. The pre-handoff LiveSession was GC'd, so mint a fresh sid rather than reuse
+   *  `playbackInfo?.sessionId`, which would race the heartbeat fallback and flash a reload. */
+  private async resumeLocal(position: number): Promise<void> {
     if (this.destroyed) return;
+    this.screen.applyLandscapeOnOpen();
     this.adoptCastSelection();
     try {
-      await this.refreshSidAndReload(castPos, {
-        preservePause: false,
-        unmute: true,
-      });
+      if (!this.engine) {
+        this.state.loading.set(true);
+        await this.startLocal(position);
+      } else {
+        await this.refreshSidAndReload(position, { preservePause: false, unmute: true });
+      }
     } catch (e) {
-      // No retry path after a Cast disconnect — surface a terminal error
-      // instead of leaving the local player silently dead.
+      // No retry path after a handoff: surface a terminal error instead of a silently dead player.
       this.state.failWith(e);
     }
+  }
+
+  /** The route opened while another output plays: no engine. The route's item goes there when it differs. */
+  private async openOnOutput(resumeTime: number | undefined): Promise<void> {
+    if (this.session.claimOpened(this.mediaFileId)) return;
+    const cur = this.session.output()?.item();
+    if (cur && cur.mediaId === this.mediaId && cur.episodeId === this.episodeId) return;
+    const media = await this.mediaService.getOne(this.mediaId).catch(() => null);
+    await this.session.play(
+      {
+        fileId: this.mediaFileId,
+        mediaId: this.mediaId,
+        episodeId: this.episodeId,
+        title: media?.title ?? '',
+        fanartUrl: media?.fanartUrl ?? null,
+        positionSeconds: resumeTime,
+        tracks: this.launchTracks ?? undefined,
+      },
+      { fromStart: resumeTime === 0 },
+    );
   }
 
   /** The reload that follows a cast negotiates from the player's own picks, so the ones
@@ -3188,7 +3240,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** A viewer's audio pick: remembered for the title, then applied. */
+  onPickSubtitle(id: string | null): void {
+    const o = this.elsewhere();
+    if (o) o.selectSubtitle(o.availableSubtitles().find((x) => x.id === id) ?? null);
+    else void this.subs.selectById(id);
+  }
+
   async onSelectAudioTrack(trackId: string) {
+    const o = this.elsewhere();
+    if (o) {
+      o.selectAudio(o.availableAudioTracks().find((x) => x.id === trackId) ?? null);
+      return;
+    }
     this.chrome.resetHideTimer();
     if (!this.isAudioPlayable(trackId)) return;
     this.trackManager.saveAudioSelection(
@@ -3244,6 +3307,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected get syncMediaFileId() { return this.mediaFileId; }
 
   protected onTapOverlay() {
+    if (this.elsewhere()) return;
     if (this.subs.syncHidesControls()) this.onTogglePlay();
     else this.chrome.toggle();
   }
@@ -3297,7 +3361,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     // TV remote Return and desktop Escape close a visible controls bar first, then exit on the next press;
     // phones and tablets exit directly (touch users dismiss controls by tapping the video).
-    if ((this.device.isTv() || this.device.isDesktop()) && this.chrome.visible()) {
+    if ((this.device.isTv() || this.device.isDesktop()) && this.chrome.visible() && !this.elsewhere()) {
       this.chrome.hide();
       return;
     }
@@ -3313,19 +3377,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const action = (e as CustomEvent).detail?.action;
     if (action === 'togglePlayback') {
       this.onTogglePlay();
-    }
-  };
-
-  private onOrientationChange = () => {
-    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
-    // iOS WKWebView sometimes doesn't reflow fixed-position elements after
-    // rotation, leaving the player UI oversized. Force a layout recalc.
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    document.documentElement.style.setProperty('--vh', `${window.innerHeight}px`);
-    // Native subtitle bottom margin is a % of video height — reapply after
-    // orientation change so the value is recalculated against the new dimensions.
-    if (this.isNativeEngine() && this.engine) {
-      this.applyNativeSubtitleStyle();
     }
   };
 
@@ -3380,6 +3431,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   async onSelectQualityById(id: string) {
+    const o = this.elsewhere();
+    if (o) {
+      const pick = o.availableQualities().find((q) => q.id === id);
+      if (pick) o.selectQuality(pick);
+      return;
+    }
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     // Re-selecting the active rung is a no-op: reloadStream() would still kill + re-mint the session for no
@@ -3582,6 +3639,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     // mediaFileId is the pre-roll's while mediaId still names the film — an
     // escaped write here would stamp the film's row with the trailer's position.
+    // The remote device reports its own progress.
+    if (this.session.kind() === 'remote') return;
     if (!this.mediaId || this.preRollActive()) {
       console.warn('[player] savePosition: no active media or pre-roll in progress, skipping');
       return;

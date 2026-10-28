@@ -11,6 +11,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { buildCastAudioOptions, CastPlayerService } from './cast-player.service';
+import { PlaybackSession } from './playback/playback-session';
 import { PlayerSettingsService } from './player-settings.service';
 import { ServerConfigService } from './server-config.service';
 import { ToastService } from './toast.service';
@@ -374,26 +375,6 @@ describe('cast quick start', () => {
     });
     const [row] = h.svc.availableSubtitles();
     expect([row.head, row.sub]).toEqual([row.language, '']);
-  });
-
-  it('opens the overlay before the receiver answers the LOAD', async () => {
-    const h = setup();
-    h.subtitlesApi.getForMedia.mockResolvedValue(rows(21));
-    let answer!: () => void;
-    h.cast.loadMedia.mockImplementation(() => new Promise<void>((r) => (answer = r)));
-    const started = h.svc.quickStart({
-      mediaFileId: MEDIA_FILE_ID,
-      mediaId: MEDIA_ID,
-      title: 't',
-      streamInfo: { audio: [{ language: 'en' }] },
-      startTime: 0,
-      expand: true,
-    });
-    await vi.waitFor(() => expect(h.cast.loadMedia).toHaveBeenCalled());
-
-    expect(h.svc.expanded()).toBe(true);
-    answer();
-    await started;
   });
 
   it('starts without subtitles when the rules pick none', async () => {

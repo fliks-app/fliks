@@ -106,6 +106,8 @@
         }
         @if (guest()) {
           <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="quit()">{{ 'party.leave' | translate }}</button>
+        } @else if (phase() === 'live' && inParty() && !canHost()) {
+          <button type="button" class="btn btn-ghost" (click)="leaveRoom()">{{ 'party.leave' | translate }}</button>
         }
         @if (view()?.inviteToken && !device.isTv()) {
           <button type="button" class="btn btn-ghost gap-2" (click)="copy()">

@@ -222,6 +222,13 @@ export class PlayerSession {
       setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
     });
     this.frameWin.on('closed', () => this.destroy());
+    // Quit closes every window from Electron's own loop, and destroy() tearing the siblings down
+    // inside it frees a window that loop still holds: close ours first, window-all-closed then quits.
+    app.on('before-quit', (e) => {
+      if (this.destroyed || this.frameWin.isDestroyed()) return;
+      e.preventDefault();
+      this.frameWin.close();
+    });
 
     // Shape + position the overlays BEFORE awaiting the (slow) Angular load, so
     // the corners are rounded from the first painted frame instead of showing

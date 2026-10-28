@@ -49,8 +49,8 @@
     [isDesktop]="isDesktopNative"
     [pipAvailable]="pipAvailable()"
     [statsVisible]="statsVisible()"
-    [canLockOrientation]="canLockOrientation"
-    [orientationLocked]="orientationLocked()"
+    [canLockOrientation]="screen.canLock"
+    [orientationLocked]="screen.locked()"
     (interacted)="chrome.onInteraction()"
     (togglePlay)="togglePlay()"
     (tapOverlay)="chrome.toggle()"
@@ -61,7 +61,7 @@
     (toggleFullscreen)="onToggleFullscreen()"
     (togglePip)="onTogglePip()"
     (toggleStats)="toggleStats()"
-    (toggleOrientationLock)="onToggleOrientationLock()"
+    (toggleOrientationLock)="screen.toggleLock()"
     (back)="goBack()"
   />
 

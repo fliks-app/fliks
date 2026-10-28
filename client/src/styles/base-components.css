@@ -118,7 +118,7 @@ html.vt-player-close body.tv main.page-enter {
 /* `<main>` reserves the fixed chrome's space on every route, computed once in
    layout.ts and exposed as CSS vars. */
 app-layout main {
-  padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
+  padding-block: var(--chrome-top, 0px) var(--chrome-bottom-total, 0px);
 }
 /* Hero pages run fanart under the navbar. A class (toggled synchronously by NavbarService) rather than a `--chrome-top` term:
    iOS 18.7 WebKit never re-lays out a cached subtree for a late parent padding change. */

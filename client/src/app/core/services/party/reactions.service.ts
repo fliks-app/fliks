@@ -32,6 +32,7 @@ export class ReactionsService {
   private readonly animations = computed(
     () => new Map(Object.entries(this.catalog()?.animations ?? {}).map(([e, url]) => [e, this.serverConfig.resolveUrl(url)])),
   );
+  private readonly animationPaths = computed(() => new Map(Object.entries(this.catalog()?.animations ?? {})));
 
   /** Master switch: off hides the dock and the reactions rising over the video. */
   readonly enabled = signal(readFlag(ENABLED_KEY, true));
@@ -56,6 +57,11 @@ export class ReactionsService {
 
   animation(emoji: string): string | null {
     return this.animations().get(emoji) ?? null;
+  }
+
+  /** The server-relative path of the animated asset, for a host the caller picks (the cast receiver's). */
+  animationPath(emoji: string): string | null {
+    return this.animationPaths().get(emoji) ?? null;
   }
 
   /** False when the change is refused (bar full, or last emoji). */

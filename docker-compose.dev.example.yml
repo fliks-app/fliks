@@ -90,8 +90,10 @@ services:
     command: npm run start:docker
     ports:
       - '4500:4500'
+    # Own build cache: a host `ng build` from a different node_modules must not share it.
     tmpfs:
       - /src/client/node_modules
+      - /src/client/.angular
     volumes:
       - ./client:/src/client
 

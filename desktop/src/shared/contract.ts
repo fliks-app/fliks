@@ -408,6 +408,7 @@ export const CAST_IPC = {
   disconnect: 'cast:disconnect',
   setVolume: 'cast:setVolume',
   setMuted: 'cast:setMuted',
+  sendMessage: 'cast:sendMessage',
   setActiveSubtitle: 'cast:setActiveSubtitle',
   setActiveAudioLanguage: 'cast:setActiveAudioLanguage',
   /** main → renderer (discriminated by DesktopCastEvent.type). */
@@ -431,5 +432,6 @@ export interface FliksCastApi {
   setActiveAudioLanguage(opts: { language: string; name: string }): Promise<{ success: boolean }>;
   setVolume(opts: { level: number }): Promise<void>;
   setMuted(opts: { muted: boolean }): Promise<void>;
+  sendMessage(opts: { namespace: string; message: string }): Promise<void>;
   on(handler: (event: DesktopCastEvent) => void): () => void;
 }

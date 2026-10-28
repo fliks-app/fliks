@@ -59,6 +59,10 @@ export type PartyCreateTarget = { title: string } & (
   | { mediaId?: undefined; playlistId?: undefined }
 );
 
+export type PartyFloated =
+  | { kind: 'reaction'; emoji: string; username: string }
+  | { kind: 'chat'; message: PartyMessage };
+
 export type PartyCloseReason = 'host_ended' | 'expired' | 'kicked';
 
 /** Why a refused rejoin means the party is gone for this device; null for a failure worth retrying later. */
@@ -120,6 +124,9 @@ export class PartyService {
   readonly startSkipped = new Subject<PartyDto>();
   /** A rejoin after a dropped stream or a server restart landed: what the server held about this device is fresh again. */
   readonly rejoined = new Subject<void>();
+
+  /** Every reaction and chat message to float over the video, whatever the chat panel shows (the cast relay's feed). */
+  readonly floated = new Subject<PartyFloated>();
 
   /** Set to open the create dialog mounted in the layout. */
   readonly createRequest = signal<PartyCreateTarget | null>(null);
@@ -590,6 +597,7 @@ export class PartyService {
   private onMessage(m: PartyMessage): void {
     if (this.messages().some((x) => x.id === m.id)) return;
     this.messages.update((l) => [...l, m].slice(-MAX_MESSAGES));
+    if (!m.system) this.floated.next({ kind: 'chat', message: m });
     if (this.panelOpen() || this.lobby() || m.system) return;
     this.unread.update((n) => n + 1);
     this.bubbles.update((l) => [...l, m].slice(-3));
@@ -597,6 +605,7 @@ export class PartyService {
   }
 
   private onReaction(emoji: string, username: string): void {
+    this.floated.next({ kind: 'reaction', emoji, username });
     const key = this.nextKey++;
     const reaction: FloatingReaction = { key, emoji, username, left: 10 + Math.random() * 80 };
     this.reactions.update((l) => [...l, reaction].slice(-12));

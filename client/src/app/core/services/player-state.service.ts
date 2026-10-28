@@ -247,15 +247,20 @@ export class PlayerStateService {
   }
 
   private reloads = 0;
+  /** An engine reload is in flight: the engine's state is the old stream's, not yet the one being loaded. */
+  readonly reloading = signal(false);
 
   /** Brackets an engine reload: the old stream's tail and the teardown report `playing`/`idle`/`paused`, none of
    *  them the viewer's choice, so the spinner holds, past the end of the load too, until playback resumes. Returns
    *  the end callback. */
   beginReload(): () => void {
     this.reloads++;
+    this.reloading.set(true);
     this.buffering.set(true);
     return () => {
-      if (--this.reloads === 0) this.buffering.set(!this.paused());
+      if (--this.reloads > 0) return;
+      this.reloading.set(false);
+      this.buffering.set(!this.paused());
     };
   }
 

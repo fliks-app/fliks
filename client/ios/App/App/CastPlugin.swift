@@ -24,6 +24,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         CAPPluginMethod(name: "setActiveSubtitle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setVolume", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMuted", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
     ]
 
     var sessionManager: GCKSessionManager?
@@ -224,14 +225,17 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     /// Lets the web layer render its own device list instead of the native chooser dialog.
     @objc func getCastDevices(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
             let dm = GCKCastContext.sharedInstance().discoveryManager
+            let session = self?.currentSession
+            let connectedId = session?.connectionState == .connected ? session?.device.deviceID : nil
             var devices: [[String: Any]] = []
             for i in 0..<dm.deviceCount {
                 let device = dm.device(at: i)
                 var entry: [String: Any] = [
                     "id": device.deviceID,
-                    "name": device.friendlyName ?? device.deviceID
+                    "name": device.friendlyName ?? device.deviceID,
+                    "connected": device.deviceID == connectedId
                 ]
                 if let modelName = device.modelName {
                     entry["modelName"] = modelName
@@ -423,6 +427,21 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             let muted = call.getBool("muted") ?? false
             self?.currentSession?.setDeviceMuted(muted)
             call.resolve()
+        }
+    }
+
+    @objc func sendMessage(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let message = call.getString("message"), let channel = self?.fliksChannel, channel.isConnected else {
+                call.reject("No Cast channel")
+                return
+            }
+            var error: GCKError?
+            if channel.sendTextMessage(message, error: &error) {
+                call.resolve()
+            } else {
+                call.reject(error?.localizedDescription ?? "sendMessage failed")
+            }
         }
     }
 

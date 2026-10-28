@@ -7,15 +7,14 @@
   [class.keyboard-open]="keyboardOverlay.height() > 0"
   [style.--keyboard-h.px]="keyboardOverlay.height()"
 >
-<!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
+<!-- The player screen; another output's poster replaces the video while it plays elsewhere. -->
 <div
   #playerContainer
   appDefaultFocus="[data-default-focus]"
   class="player-container"
   [class.closing]="closing()"
-  [class.player-hide-cursor]="!chrome.visible()"
+  [class.player-hide-cursor]="!chrome.visible() && !elsewhere()"
   [class.native-player]="!!nativeEngine"
-  [class.hidden]="castService.isConnected()"
   (mousemove)="chrome.onPointerMove()"
   (wheel)="chrome.wakeFromPointerGesture()"
   (click)="chrome.wakeFromPointerGesture()"
@@ -85,6 +84,44 @@
     </div>
   }
 
+  <!-- Playback is on another device: dimmed poster, where it plays and the way to stop it, above the controls' tap zone. -->
+  @if (elsewhere(); as o) {
+    <div class="absolute inset-0 z-1 bg-black pointer-events-none">
+      <!-- The route's own backdrop when it loaded; a remote device reports a server-relative poster path. -->
+      @let backdrop = fanartUrl() || (o.fanartUrl() | resolveUrl);
+      @if (backdrop) {
+        <img [src]="backdrop" alt="" (load)="backdropLoaded.set(backdrop)"
+          class="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
+          [class.opacity-0]="backdropLoaded() !== backdrop" [class.opacity-40]="backdropLoaded() === backdrop" />
+      }
+    </div>
+    <!-- The middle row leaves the center controls' height free: the status sits above them, the stop button below. -->
+    <div class="absolute inset-0 z-[45] grid grid-rows-[1fr_auto_1fr] justify-items-center px-6 text-center text-white/80 pointer-events-none">
+      <div class="self-end flex flex-col items-center gap-3 pb-2 landscape:gap-2 landscape:pb-0">
+        <svg lucideCast class="h-12 w-12 landscape:h-10 landscape:w-10"></svg>
+        <p class="text-base">{{ 'player.playing_on' | translate: { name: session.deviceName() } }}</p>
+        <!-- Always laid out: a status line coming and going would shift the layout. -->
+        <p class="min-h-5 text-sm text-white/60">
+          @if (o.targetOffline()) {
+            {{ 'remote.offline_message' | translate }}
+          } @else if (o.isStarting()) {
+            {{ 'remote.connecting_message' | translate }}
+          } @else if (o.isIdle()) {
+            {{ 'remote.idle_message' | translate }}
+          } @else if (o.autoplayBlocked()) {
+            {{ 'remote.autoplay_blocked' | translate }}
+          }
+        </p>
+      </div>
+      <div class="h-24 landscape:h-20"></div>
+      <div class="self-start pt-2">
+        @if (!o.targetOffline() && !o.isIdle()) {
+          <button type="button" class="btn btn-ghost btn-sm text-white pointer-events-auto" (click)="onStopOutput(o)">{{ 'remote.stop_playback' | translate }}</button>
+        }
+      </div>
+    </div>
+  }
+
   <app-player-error-overlay
     [error]="error()"
     [diagnostics]="errorDiagnostics()"
@@ -93,7 +130,7 @@
     (back)="onBack()"
   />
 
-  @if (spinnerVisible()) {
+  @if (view().spinner) {
     <div class="loading-overlay absolute inset-0 flex flex-col items-center justify-center gap-3 z-50 pointer-events-none">
       <span class="loading loading-spinner loading-lg text-white"></span>
     </div>
@@ -150,27 +187,29 @@
   @if (!inPipMode()) {
   <app-player-controls
     (interacted)="chrome.onInteraction()"
-    [visible]="chrome.visible() && !subs.syncHidesControls()"
+    [visible]="!!elsewhere() || (chrome.visible() && !subs.syncHidesControls())"
     [reactionsOnly]="chrome.reactionsOnly()"
     [seekOsd]="chrome.seekOsd()"
-    [paused]="uiPaused()"
-    [spinner]="spinnerVisible()"
-    [videoStarted]="videoStarted()"
-    [currentTime]="currentTime()"
-    [duration]="duration()"
+    [paused]="view().paused"
+    [spinner]="view().spinner"
+    [videoStarted]="view().videoStarted"
+    [currentTime]="view().currentTime"
+    [duration]="view().duration"
     [bufferedEnd]="bufferedEnd()"
-    [volume]="volume()"
-    [muted]="muted()"
+    [volume]="view().volume"
+    [muted]="view().muted"
+    [canSetVolume]="view().canSetVolume"
+    [local]="!elsewhere()"
     [playbackRate]="playbackRate()"
-    [mediaTitle]="mediaTitle()"
+    [mediaTitle]="view().mediaTitle"
     [logoUrl]="mediaLogoUrl()"
-    [episodeTitle]="displayEpisodeTitle()"
-    [hasNext]="queueCtl.upNext() !== null"
+    [episodeTitle]="view().episodeTitle"
+    [hasNext]="view().hasNext"
     [nextLabelKey]="queueCtl.nextLabelKey()"
-    [queueItems]="preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
+    [queueItems]="elsewhere() || preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
     [queueIndex]="queueCtl.queueIndex()"
-    (selectQueueItem)="partyCtl.active() ? partyCtl.requestQueueItem($event) : queueCtl.playQueueItem($event)"
-    [activeQualityLabel]="activeQualityLabel()"
+    (selectQueueItem)="queueCtl.playQueueItem($event)"
+    [activeQualityLabel]="view().activeQualityLabel"
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
@@ -183,16 +222,16 @@
     (toggleFullscreen)="onToggleFullscreen()"
     [fullscreen]="fullscreen()"
     (togglePip)="onTogglePip()"
-    [canLockOrientation]="canLockOrientation"
-    [orientationLocked]="orientationLocked()"
-    (toggleOrientationLock)="onToggleOrientationLock()"
-    [availableSubtitles]="subs.availableSubtitles()"
-    [availableQualities]="availableQualities()"
-    [activeSubtitleId]="subs.activeSubtitleId()"
-    [activeQualityId]="activeQualityId()"
-    [availableAudioTracks]="availableAudioTracks()"
-    [activeAudioTrackId]="activeAudioTrackId()"
-    (selectSubtitle)="subs.selectById($event)"
+    [canLockOrientation]="screen.canLock"
+    [orientationLocked]="screen.locked()"
+    (toggleOrientationLock)="screen.toggleLock()"
+    [availableSubtitles]="view().subtitles"
+    [availableQualities]="view().qualities"
+    [activeSubtitleId]="view().activeSubtitleId"
+    [activeQualityId]="view().activeQualityId"
+    [availableAudioTracks]="view().audioTracks"
+    [activeAudioTrackId]="view().activeAudioTrackId"
+    (selectSubtitle)="onPickSubtitle($event)"
     (selectQuality)="onSelectQualityById($event)"
     (selectAudioTrack)="onSelectAudioTrack($event)"
     [statsVisible]="statsVisible()"
@@ -204,23 +243,23 @@
     (back)="onBack()"
     [pipAvailable]="pipAvailable()"
     [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv()"
-    [castConnected]="castService.isConnected() || airPlay.videoActive()"
+    [castConnected]="!!elsewhere() || airPlay.videoActive()"
     [airPlayConnected]="airPlay.routeActive() || airPlay.videoActive()"
     [castConnecting]="castService.connecting()"
     (pickDevice)="onPickDevice($event)"
-    [spriteUrl]="spriteUrl()"
-    [spriteMetadata]="spriteMetadata()"
+    [spriteUrl]="view().spriteUrl"
+    [spriteMetadata]="view().spriteMetadata"
     [chapters]="chapters()"
     [introMarker]="introMarker()"
     [outroMarker]="outroMarker()"
     [edlRanges]="edlRanges()"
-    [showSkipIntro]="cues.skipIntroVisible() || cues.commercialCueVisible()"
+    [showSkipIntro]="!!view().skipCueLabelKey"
     [skipCueKey]="cues.skipCueKey()"
-    [skipCueLabel]="cues.commercialCueVisible() ? 'player.edl.skip_commercial' : 'player.skip_intro'"
-    [showNextCue]="cues.nextEpisodeVisible()"
+    [skipCueLabel]="view().skipCueLabelKey ?? 'player.skip_intro'"
+    [showNextCue]="!elsewhere() && cues.nextEpisodeVisible()"
     [cueDurationMs]="cues.cueRevealMs"
-    (skipIntro)="cues.onSkipCue()"
-    (next)="queueCtl.advance()"
+    (skipIntro)="elsewhere() ? elsewhere()!.skip() : cues.onSkipCue()"
+    (next)="onNext()"
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"

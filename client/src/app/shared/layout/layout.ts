@@ -45,6 +45,7 @@ import { RecommendModalComponent } from '../components/recommend-modal/recommend
 import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
+import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
@@ -58,7 +59,7 @@ import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
-import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePickerComponent } from '../remote-picker/remote-picker';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
 import {
@@ -88,6 +89,7 @@ const PAIRING_TTL_MS = 600_000;
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
     LucideCloudOff, LucideDownload, LucideRotateCw,
     RemotePickerComponent,
+    CastOverlayComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
     RecommendModalComponent,
@@ -149,6 +151,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly tv = inject(TvService);
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
+  private readonly session = inject(PlaybackSession);
   readonly appUpdate = inject(AppUpdateService);
   private readonly updateModal = viewChild(AppUpdateModalComponent);
   private readonly title = inject(Title);
@@ -201,6 +204,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     const dock = this.navbar.phoneDock() ? '4rem + env(safe-area-inset-bottom, 0px)' : '0px';
     return `calc(${dock} + 1rem)`;
   });
+  /** `chromeBottom` plus the cast mini-bar (3.5rem, borders, 0.5rem gap) while it shows: what content and sticky bars clear. */
+  readonly chromeBottomTotal = computed(() =>
+    !this.device.isTv() && !this.session.isLocal() ? `calc(${this.chromeBottom()} + 4.25rem)` : this.chromeBottom(),
+  );
 
   // Android status bar icons: the app is dark-only, so light=false always.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
@@ -534,14 +541,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     setTimeout(() => this.retrying.set(false), 10_000);
   }
 
-  toggleCastOverlay() {
-    this.castPlayer.expanded.update(v => !v);
-  }
-
-  /** Mirrors `toggleCastOverlay`: the chip shown once a remote target is
-   *  already selected opens its control card, not the device picker. */
-  toggleRemoteControlOverlay(): void {
-    remoteOverlayOpen.update(v => !v);
+  /** The chip of a cast or an already selected remote target opens the player on it, not the device picker. */
+  openCastPlayer() {
+    this.session.openPlayer();
   }
 
   formatDevice(

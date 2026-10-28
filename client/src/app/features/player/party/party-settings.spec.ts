@@ -7,7 +7,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { VoiceService } from '../../../core/services/party/voice.service';
-import { PartyController } from '../party-controller';
+import { PartySync } from '../../../core/services/party/party-sync';
 import { PartySettingsComponent } from './party-settings';
 
 function setup(isHost: boolean, confirmed = true) {
@@ -20,7 +20,7 @@ function setup(isHost: boolean, confirmed = true) {
       { provide: PartyService, useValue: party },
       { provide: VoiceService, useValue: { supported: false, duck: signal(false) } },
       { provide: KeyboardOverlayService, useValue: { height: signal(0) } },
-      { provide: PartyController, useValue: { resync: vi.fn() } },
+      { provide: PartySync, useValue: { resync: vi.fn() } },
       { provide: ConfirmationService, useValue: confirm },
       provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
     ],

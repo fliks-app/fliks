@@ -8,7 +8,7 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PartyService } from '../../../core/services/party/party.service';
-import { PartyController } from '../party-controller';
+import { PartySync } from '../../../core/services/party/party-sync';
 import type { PartySwitches } from '../../../core/services/api/party-api.service';
 import { PartyHostSwitchesComponent, switchesPatch } from './party-host-switches';
 
@@ -25,7 +25,7 @@ export class PartySettingsComponent {
   protected readonly keyboard = inject(KeyboardOverlayService);
   private readonly confirm = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
-  private readonly controller = inject(PartyController);
+  private readonly controller = inject(PartySync);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   /** The player mounts the dialog to open it and drops it on close. */
   readonly closed = output<void>();

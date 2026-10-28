@@ -9,6 +9,7 @@ import { PlayerStateService } from '../../core/services/player-state.service';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { parseAudioIndex } from '../../core/utils/player.utils';
 import { ControlsVisibilityService } from './controls/controls-visibility';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { QueueController } from './queue-controller';
 
 export interface RemoteHost {
@@ -40,6 +41,7 @@ export class RemoteController {
   private readonly state = inject(PlayerStateService);
   private readonly chrome = inject(ControlsVisibilityService);
   private readonly queueCtl = inject(QueueController);
+  private readonly session = inject(PlaybackSession);
   private host!: RemoteHost;
   private sub: Subscription | null = null;
 
@@ -122,8 +124,7 @@ export class RemoteController {
         this.chrome.show();
         break;
       case 'playpause':
-        if (casting) this.castService.togglePlayPause();
-        else this.host.onTogglePlay();
+        if (!this.session.command({ type: 'toggle' })) this.host.onTogglePlay();
         this.chrome.show();
         break;
       case 'seek':
@@ -131,15 +132,12 @@ export class RemoteController {
           console.warn('[remote] seek command missing positionSeconds', cmd.cmdId);
           return;
         }
-        if (casting) {
-          this.castService.seek(cmd.positionSeconds);
-        } else {
-          if (!this.host.duration()) {
-            console.warn('[remote] dropping seek received before duration is known', cmd.cmdId);
-            return;
-          }
-          this.host.onSeek(cmd.positionSeconds);
+        if (this.session.command({ type: 'seek', at: cmd.positionSeconds })) break;
+        if (!this.host.duration()) {
+          console.warn('[remote] dropping seek received before duration is known', cmd.cmdId);
+          return;
         }
+        this.host.onSeek(cmd.positionSeconds);
         break;
       case 'volume':
         if (cmd.level === undefined) {

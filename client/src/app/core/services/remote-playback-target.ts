@@ -10,14 +10,12 @@ import { MediaService } from './api/media.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
-import { PlaybackOption, PlaybackTarget } from './playback-target';
-
-/** Whether `app-cast-overlay` shows the remote-target card; set by the remote picker (`shared/remote-picker`) after picking a target. */
-export const remoteOverlayOpen = signal(false);
+import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 
 /** Drives the cast-overlay UI from a remote target; track lists come from the played file's streamInfo, fetched once the target reports playback. */
 @Injectable({ providedIn: 'root' })
-export class RemotePlaybackTarget implements PlaybackTarget {
+export class RemotePlaybackTarget implements PlaybackOutput {
   private readonly remote = inject(RemoteService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly markersApi = inject(MarkersApiService);
@@ -26,14 +24,23 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
 
-  readonly currentTime = this.remote.interpolatedPosition;
+  readonly position = this.remote.interpolatedPosition;
   readonly duration = computed(() => this.remote.targetState()?.durationSeconds ?? 0);
   readonly isConnected = this.remote.isRemoting;
   /** A selected target is present even with nothing playing: releasing it is
    *  an explicit action, not a side effect of stopping the media. */
   readonly hasMedia = computed(() => this.remote.isRemoting());
   /** Only a real pause, never buffering: a play icon on a buffering target invites a press that would stop it. */
-  readonly isPaused = computed(() => this.remote.targetState()?.state === 'paused');
+  readonly uiPaused = computed(() => this.remote.targetState()?.state === 'paused');
+  readonly paused = this.uiPaused;
+  readonly ended = computed(() => false);
+  readonly seekLocked = computed(() => false);
+  readonly ready = computed(() => this.duration() > 0);
+  readonly item = computed(() => ({
+    mediaId: this.remote.targetState()?.mediaId ?? 0,
+    episodeId: this.remote.targetState()?.episodeId ?? undefined,
+  }));
+  readonly sync: PlaybackSync = { slackS: CAST_DRIFT_IGNORE_S, drift: { ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS } };
   /** Also while the target rebuilds its stream for a quality change: the card
    *  keeps its poster and position and simply reads as loading. */
   readonly buffering = computed(
@@ -67,7 +74,6 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       sub: q.lowBandwidth ? this.translate.instant('player.low_bandwidth') : undefined,
     })),
   );
-  readonly expanded = remoteOverlayOpen;
 
   private readonly audioOptions = signal<CastAudioOption[]>([]);
   private readonly subtitleOptions = signal<PlaybackOption[]>([]);
@@ -80,9 +86,6 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     effect(() => {
       const targetId = this.remote.selectedTargetId();
       untracked(() => {
-        // Every release path funnels through here, so the card cannot be left
-        // open over a device that is no longer ours to control.
-        if (!targetId) remoteOverlayOpen.set(false);
         this.tracksLoadedForKey = null;
         this.audioOptions.set([]);
         this.subtitleOptions.set([]);
@@ -116,6 +119,16 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     }
     this.remote.pinVolume(level);
     this.remote.sendCoalesced(targetId, { action: 'volume', level });
+  }
+
+  play(): void {
+    const targetId = this.remote.selectedTargetId();
+    if (targetId) void this.remote.send(targetId, { action: 'play' });
+  }
+
+  pause(): Promise<void> {
+    const targetId = this.remote.selectedTargetId();
+    return targetId ? this.remote.send(targetId, { action: 'pause' }) : Promise.resolve();
   }
 
   togglePlayPause(): void {
@@ -193,7 +206,6 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   readonly autoplayBlocked = computed(
     () => this.remote.targetState()?.autoplayBlocked ?? false,
   );
-  readonly canStopControlling = true;
 
   skip(): void {
     const targetId = this.remote.selectedTargetId();
@@ -234,12 +246,10 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     }
     // Stopping the media doesn't give the device back: keep the target selected; the top-bar chip reopens the card.
     void this.remote.send(targetId, { action: 'stop' });
-    remoteOverlayOpen.set(false);
   }
 
   disconnect(): void {
     this.remote.selectTarget(null);
-    remoteOverlayOpen.set(false);
   }
 
   /** Reuse the target's own builder: a second list produced different rows, so the selection named a track the target lacked. */

@@ -163,6 +163,17 @@ describe('PlayerStateService startup transport', () => {
 });
 
 describe('PlayerStateService engine reload', () => {
+  it('flags the reload until its last bracket closes', () => {
+    const { service } = setup();
+    const end1 = service.beginReload();
+    const end2 = service.beginReload();
+    expect(service.reloading()).toBe(true);
+    end1();
+    expect(service.reloading()).toBe(true);
+    end2();
+    expect(service.reloading()).toBe(false);
+  });
+
   it('keeps the viewer playing and the spinner on through the teardown', () => {
     const { service, state, fire } = setup();
     state('playing');

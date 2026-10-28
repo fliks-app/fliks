@@ -360,8 +360,6 @@ export class CastPlayerService {
 
   /** Whether a Cast session is actively playing media (not just connected). */
   readonly hasMedia = signal(false);
-  /** Whether the Cast overlay card is expanded. */
-  readonly expanded = signal(false);
   /** Server-side session id of the Cast stream, heartbeated instead of the sender's local sid while casting. */
   readonly liveSessionId = signal<string | null>(null);
   /** The viewing being cast; kept from the local player that handed it over. */
@@ -511,7 +509,6 @@ export class CastPlayerService {
     this.setLiveSession(null);
     this.playbackId = null;
     this.hasMedia.set(false);
-    this.expanded.set(false);
     this.mediaFileId.set(0);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
@@ -573,10 +570,10 @@ export class CastPlayerService {
   private recovering = false;
   /** Latest reload wins: an older one aborts after its playback-info; `reloading` mutes the other recoveries. */
   private reloadGen = 0;
-  private reloading = false;
+  readonly reloading = signal(false);
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia() || this.recovering || this.reloading) return;
+    if (!this.hasMedia() || this.recovering || this.reloading()) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -600,11 +597,11 @@ export class CastPlayerService {
   /** Stops the old ffmpeg session once the new LOAD resolves; transcoding.service only auto-replaces on quality change. */
   async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
     const gen = ++this.reloadGen;
-    this.reloading = true;
+    this.reloading.set(true);
     try {
       await this.reload(gen, positionOverride, autoplay, snapQualityId);
     } finally {
-      if (gen === this.reloadGen) this.reloading = false;
+      if (gen === this.reloadGen) this.reloading.set(false);
     }
   }
 
@@ -917,7 +914,7 @@ export class CastPlayerService {
       });
       // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
       if (sid) void this.qoeReporter.flush(sid);
-      if (response?.sessionLost && !this.reloading) {
+      if (response?.sessionLost && !this.reloading()) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
         this.recordRecovery(pos, 'session_lost');
       }
@@ -1004,8 +1001,6 @@ export class CastPlayerService {
     streamInfo?: any;
     startTime?: number;
     tracks?: LaunchTracks;
-    /** Open the overlay once the cast state is set, without waiting for the receiver's LOAD. */
-    expand?: boolean;
   }) {
     // Phase 1: fetches independent of streamInfo run in parallel; `original` audio needs the media payload's language.
     const needsMediaFetch =
@@ -1096,7 +1091,6 @@ export class CastPlayerService {
       activeSubtitleId: startSubtitle?.id ?? null,
       activeAudioStreamIndex: audioIndex,
     });
-    if (opts.expand) this.expanded.set(true);
 
     if (!(await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, true))) {
       // Nothing is playing: drop the dead overlay (and its transcode) so a new cast starts clean.

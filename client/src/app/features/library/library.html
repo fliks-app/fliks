@@ -399,7 +399,7 @@
     }
 
     @if (bulkMode() && selectedIds().size > 0) {
-      <div class="sticky bottom-[var(--chrome-bottom,0px)] z-20 bg-base-200 border border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-lg">
+      <div class="sticky bottom-[var(--chrome-bottom-total,0px)] z-20 bg-base-200 border border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-lg">
         <span class="font-semibold text-sm">{{ (selectedIds().size === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedIds().size } }}</span>
         <select
           appTvSelect

@@ -6,7 +6,8 @@ import { Immersive } from './core/plugins/immersive.plugin';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
-import { CastPlayerService } from './core/services/cast-player.service';
+import { PartySync } from './core/services/party/party-sync';
+import { CastPartyRelayService } from './core/services/party/cast-party-relay.service';
 import { SseService } from './core/services/sse.service';
 import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
@@ -27,9 +28,7 @@ import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
 import { RemoteService } from './core/services/remote.service';
-import { remoteOverlayOpen } from './core/services/remote-playback-target';
-import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
-import { TIZEN_MEDIA_KEYS } from './features/player/media-keys';
+import { TIZEN_MEDIA_KEYS } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -37,13 +36,12 @@ import { TranslateService } from '@ngx-translate/core';
   selector: 'app-root',
   imports: [
     BackgroundComponent,
-    RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, CastOverlayComponent],
+    RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent],
   templateUrl: './app.html',
 })
 export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly tvKeyboard = inject(TvKeyboardDeferralService);
-  private readonly castPlayer = inject(CastPlayerService);
   private readonly sse = inject(SseService);
   private readonly remoteNotification = inject(RemoteNotificationService);
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
@@ -67,6 +65,9 @@ export class App implements OnInit, OnDestroy {
   /** Injected so a command aimed at this device is honoured wherever the user
    *  is in the app: including the player route, which sits outside the layout. */
   private readonly remote = inject(RemoteService);
+  /** Injected so party reactions reach the Chromecast from any page. */
+  private readonly castPartyRelay = inject(CastPartyRelayService);
+  private readonly partySync = inject(PartySync);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private backButtonListener?: { remove: () => Promise<void> };
@@ -243,16 +244,6 @@ export class App implements OnInit, OnDestroy {
     const active = document.activeElement as HTMLElement | null;
     if (active?.tagName === 'SELECT') {
       active.blur();
-      return;
-    }
-    // The playback overlay is one component driven by whichever target is
-    // active, so back has to close either one.
-    if (this.castPlayer.expanded()) {
-      this.castPlayer.expanded.set(false);
-      return;
-    }
-    if (remoteOverlayOpen()) {
-      remoteOverlayOpen.set(false);
       return;
     }
     // Close the topmost bottom sheet, dialog or other dismissable layer before navigating.

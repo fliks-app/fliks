@@ -185,7 +185,7 @@
             (click)="onLikeClick($event)"
             [attr.aria-label]="(liked() ? 'likes.unlike' : 'likes.like') | translate"
           >
-            <svg lucideHeart class="h-3.5 w-3.5" [strokeWidth]="2" [class.text-error]="liked()" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+            <svg lucideHeart [class]="liked() ? 'h-3.5 w-3.5 text-error' : 'h-3.5 w-3.5'" [strokeWidth]="2" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           </button>
         }
         @if (cardActions().length) {
