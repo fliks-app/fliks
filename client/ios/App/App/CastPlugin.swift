@@ -433,11 +433,11 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                 call.reject("No Cast channel")
                 return
             }
-            do {
-                try channel.sendTextMessage(message)
+            var error: GCKError?
+            if channel.sendTextMessage(message, error: &error) {
                 call.resolve()
-            } catch {
-                call.reject(error.localizedDescription)
+            } else {
+                call.reject(error?.localizedDescription ?? "sendMessage failed")
             }
         }
     }
