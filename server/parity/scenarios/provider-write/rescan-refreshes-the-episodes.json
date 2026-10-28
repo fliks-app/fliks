@@ -83,7 +83,7 @@
               "osdbHash": null,
               "quality": "DVD",
               "relativePath": "Season 01/Rescan Show - S01E01.mkv",
-              "size": 27380,
+              "size": 27383,
               "streamInfo": {
                 "audio": [
                   {
@@ -95,15 +95,15 @@
                     "language": "und",
                     "profile": "LC",
                     "sampleRate": 44100,
-                    "startTimeSeconds": -0.023,
+                    "startTimeSeconds": 0,
                     "streamIndex": 1
                   }
                 ],
                 "chapters": [],
                 "durationSeconds": 2.023,
-                "formatBitRate": 108274,
+                "formatBitRate": 108286,
                 "formatName": "matroska,webm",
-                "formatStartSeconds": -0.023,
+                "formatStartSeconds": 0,
                 "schemaVersion": 2,
                 "subtitles": [],
                 "video": [
