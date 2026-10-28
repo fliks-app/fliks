@@ -67,6 +67,8 @@ export class PlaybackSession {
   private moving: Promise<boolean> | null = null;
   private wasCasting = false;
   private wasAway = false;
+  /** Set by `stopControlling`: that return to this device is deliberate and must not resume it. */
+  private releasing = false;
   private watchReturns: EffectRef | null = null;
   /** Where the cast or remote output last was: once it is gone, its own position reads nothing. */
   private awayPosition = 0;
@@ -121,6 +123,10 @@ export class PlaybackSession {
   attachLocal(o: LocalOutput): () => void {
     this.watchReturns ??= this.watchReturnsToLocal();
     this.local.set(o);
+    if (this.takeBackOnAttach) {
+      this.takeBackOnAttach = false;
+      void this.moveTo('local');
+    }
     return () => this.local.update((cur) => (cur === o ? null : cur));
   }
 
@@ -152,6 +158,23 @@ export class PlaybackSession {
     }
   }
 
+  private takeBackOnAttach = false;
+
+  /** Brings playback back here; with no player mounted it opens one first, and an idle output is just released. */
+  takeBack(): void {
+    if (this.isLocal()) return;
+    if (this.local()) {
+      void this.moveTo('local');
+    } else if (this.playing()) {
+      this.takeBackOnAttach = true;
+      this.openPlayer();
+    } else if (this.kind() === 'remote') {
+      this.remoteSvc().selectTarget(null);
+    } else {
+      this.castSvc().disconnect();
+    }
+  }
+
   /** The only handoff between outputs. False when refused (TV, nothing to hand over) or failed. */
   moveTo(kind: OutputKind, deviceId?: string): Promise<boolean> {
     if (this.injector.get(DeviceService).isTv()) return Promise.resolve(false);
@@ -173,6 +196,14 @@ export class PlaybackSession {
       .finally(() => (this.moving = null));
     this.moving = settled;
     return settled;
+  }
+
+  /** Lets go of the remote device without taking the playback back: it plays on alone and the player closes. */
+  stopControlling(): void {
+    if (this.kind() !== 'remote') return;
+    this.releasing = true;
+    this.remoteSvc().selectTarget(null);
+    this.local()?.disconnect();
   }
 
   /** Opens an item on the active output: loaded there without a local engine, else the player route. */
@@ -325,8 +356,11 @@ export class PlaybackSession {
     const from = this.output();
     if (!local || !from || from === local) return false;
     const position = from.position();
-    if (this.kind() === 'remote') this.remoteSvc().selectTarget(null);
-    else {
+    if (this.kind() === 'remote') {
+      // Only one device plays: the one left behind closes its player.
+      from.stopPlayback();
+      this.remoteSvc().selectTarget(null);
+    } else {
       this.castSvc().disconnect();
       this.castPlayer().clear();
     }
@@ -391,8 +425,10 @@ export class PlaybackSession {
   }
 
   private onBackToLocal(): void {
+    const releasing = this.releasing;
+    this.releasing = false;
     const local = this.local();
-    if (!local || this.moving) return;
+    if (!local || this.moving || releasing) return;
     void local.resume(this.awayPosition);
   }
 }

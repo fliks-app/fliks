@@ -64,7 +64,6 @@ export class LocalPlaybackOutput implements LocalOutput {
   readonly canSetVolume = computed(() => true);
   readonly isIdle = computed(() => false);
   readonly targetOffline = computed(() => false);
-  readonly canStopControlling = false;
   readonly uiPaused: PlaybackOutput['uiPaused'];
   readonly buffering: PlaybackOutput['buffering'];
   readonly ended: PlaybackOutput['ended'];

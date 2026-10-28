@@ -206,7 +206,6 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   readonly autoplayBlocked = computed(
     () => this.remote.targetState()?.autoplayBlocked ?? false,
   );
-  readonly canStopControlling = true;
 
   skip(): void {
     const targetId = this.remote.selectedTargetId();

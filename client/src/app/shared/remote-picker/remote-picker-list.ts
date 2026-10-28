@@ -16,12 +16,13 @@ import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { DeviceService } from '../../core/services/device.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
 
 const LAST_USED_KEY = 'fliks.remote.lastUsedPickerRow';
 
 export interface PickerRow {
-  kind: 'remote' | 'cast' | 'cast-web' | 'airplay';
+  kind: 'local' | 'remote' | 'cast' | 'cast-web' | 'airplay';
   id: string;
   icon: 'tv' | 'tablet' | 'phone' | 'monitor' | 'cast' | 'airplay';
   label: string;
@@ -52,6 +53,7 @@ export class RemotePickerListComponent {
   private readonly airPlay = inject(AirPlayService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly session = inject(PlaybackSession);
+  private readonly device = inject(DeviceService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -66,6 +68,14 @@ export class RemotePickerListComponent {
 
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
+    rows.push({
+      kind: 'local',
+      id: 'local',
+      icon: this.device.isTouch() ? 'phone' : 'monitor',
+      label: this.translate.instant('remote.this_device'),
+      subtitle: null,
+      connected: this.session.isLocal(),
+    });
     if (!this.enumerates) {
       const connected = this.castService.isConnected();
       rows.push({
@@ -103,21 +113,26 @@ export class RemotePickerListComponent {
         connected: active,
       });
     }
+    const selected = this.remote.selectedTargetId();
     for (const t of this.remote.targets()) {
+      const connected = t.targetId === selected;
       rows.push({
         kind: 'remote',
         id: t.targetId,
         icon: this.iconForRemote(t),
         label: this.deviceLabel(t),
-        subtitle: t.ownerUsername
-          ? this.translate.instant('remote.owned_by', { username: t.ownerUsername })
-          : null,
+        subtitle: connected
+          ? this.translate.instant('remote.stop_controlling')
+          : t.ownerUsername
+            ? this.translate.instant('remote.owned_by', { username: t.ownerUsername })
+            : null,
+        connected,
       });
     }
     // AirPlay, then Cast devices, then remote targets, last-used first inside
     // each group. The sort is stable, so rows that tie keep discovery order.
     const last = this.lastUsedId();
-    const group = (r: PickerRow) => (r.kind === 'airplay' ? 0 : r.kind === 'remote' ? 2 : 1);
+    const group = (r: PickerRow) => (r.kind === 'local' ? -1 : r.kind === 'airplay' ? 0 : r.kind === 'remote' ? 2 : 1);
     const recent = (r: PickerRow) => (r.id === last ? 0 : 1);
     rows.sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
     return rows;
@@ -144,10 +159,14 @@ export class RemotePickerListComponent {
       else this.airPlay.showPicker();
       return;
     }
-    // Pressing the device already being cast to is the only way out of a Cast
-    // session: the control card can stop the media but never leaves the device.
+    if (row.kind === 'local') {
+      if (!row.connected) this.session.takeBack();
+      return;
+    }
+    // Pressing the device in use is the way out of it: a Cast session ends, a remote device plays on alone.
     if (row.connected) {
-      this.castTarget.disconnect();
+      if (row.kind === 'remote') this.session.stopControlling();
+      else this.castTarget.disconnect();
       return;
     }
     this.setLastUsed(row.id);

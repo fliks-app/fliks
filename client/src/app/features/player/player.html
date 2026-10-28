@@ -90,31 +90,33 @@
       <!-- The route's own backdrop when it loaded; a remote device reports a server-relative poster path. -->
       @let backdrop = fanartUrl() || (o.fanartUrl() | resolveUrl);
       @if (backdrop) {
-        <img [src]="backdrop" alt="" class="absolute inset-0 w-full h-full object-cover opacity-40" />
+        <img [src]="backdrop" alt="" (load)="backdropLoaded.set(backdrop)"
+          class="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
+          [class.opacity-0]="backdropLoaded() !== backdrop" [class.opacity-40]="backdropLoaded() === backdrop" />
       }
     </div>
-    <div class="absolute inset-x-0 top-[18dvh] z-[45] flex flex-col items-center gap-3 px-6 text-center text-white/80 pointer-events-none">
-      <svg lucideCast class="h-12 w-12"></svg>
-      <p class="text-base">{{ 'player.playing_on' | translate: { name: session.deviceName() } }}</p>
-      @if (o.targetOffline()) {
-        <p class="text-sm text-white/60">{{ 'remote.offline_message' | translate }}</p>
-      } @else if (o.isStarting()) {
-        <p class="text-sm text-white/60">{{ 'remote.starting_message' | translate }}</p>
-      } @else if (o.isIdle()) {
-        <p class="text-sm text-white/60">{{ 'remote.idle_message' | translate }}</p>
-      } @else if (o.autoplayBlocked()) {
-        <p class="text-sm text-white/60">{{ 'remote.autoplay_blocked' | translate }}</p>
-      }
-      <div class="flex flex-wrap justify-center gap-1 pointer-events-auto">
-        @if (o.targetOffline()) {
-          <button type="button" class="btn btn-primary btn-sm" (click)="o.disconnect()">{{ 'remote.play_here_instead' | translate }}</button>
-        } @else {
-          @if (!o.isIdle()) {
-            <button type="button" class="btn btn-ghost btn-sm text-white" (click)="onStopOutput(o)">{{ 'remote.stop_playback' | translate }}</button>
+    <!-- The middle row leaves the center controls' height free: the status sits above them, the stop button below. -->
+    <div class="absolute inset-0 z-[45] grid grid-rows-[1fr_auto_1fr] justify-items-center px-6 text-center text-white/80 pointer-events-none">
+      <div class="self-end flex flex-col items-center gap-3 pb-2 landscape:gap-2 landscape:pb-0">
+        <svg lucideCast class="h-12 w-12 landscape:h-10 landscape:w-10"></svg>
+        <p class="text-base">{{ 'player.playing_on' | translate: { name: session.deviceName() } }}</p>
+        <!-- Always laid out: a status line coming and going would shift the layout. -->
+        <p class="min-h-5 text-sm text-white/60">
+          @if (o.targetOffline()) {
+            {{ 'remote.offline_message' | translate }}
+          } @else if (o.isStarting()) {
+            {{ 'remote.connecting_message' | translate }}
+          } @else if (o.isIdle()) {
+            {{ 'remote.idle_message' | translate }}
+          } @else if (o.autoplayBlocked()) {
+            {{ 'remote.autoplay_blocked' | translate }}
           }
-          @if (o.canStopControlling) {
-            <button type="button" class="btn btn-ghost btn-sm text-white" (click)="o.disconnect()">{{ 'remote.stop_controlling' | translate }}</button>
-          }
+        </p>
+      </div>
+      <div class="h-24 landscape:h-20"></div>
+      <div class="self-start pt-2">
+        @if (!o.targetOffline() && !o.isIdle()) {
+          <button type="button" class="btn btn-ghost btn-sm text-white pointer-events-auto" (click)="onStopOutput(o)">{{ 'remote.stop_playback' | translate }}</button>
         }
       </div>
     </div>

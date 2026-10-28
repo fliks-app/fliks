@@ -105,7 +105,6 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly targetOffline = computed(() => false);
   /** A receiver is started by the sender's own gesture, so this cannot arise. */
   readonly autoplayBlocked = computed(() => false);
-  readonly canStopControlling = false;
 
   skip(): void {
     console.warn('[cast-playback-target] no skip cue on a Cast session');

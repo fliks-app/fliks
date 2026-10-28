@@ -73,8 +73,6 @@ export interface PlaybackOutput {
   readonly targetOffline: Signal<boolean>;
   /** The output cannot start on its own: only a gesture on that device will. */
   readonly autoplayBlocked: Signal<boolean>;
-  /** Hand the output back without touching its playback; false where there is nothing to hand back to. */
-  readonly canStopControlling: boolean;
 
   /** Moves the playhead on this output only: never echoes to a party. */
   seek(time: number): void;

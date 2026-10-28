@@ -24,6 +24,7 @@ function target() {
     playNext: vi.fn(),
     position: vi.fn(() => 42),
     pause: vi.fn(async () => {}),
+    stopPlayback: vi.fn(),
     disconnect: vi.fn(),
     mediaTitle: vi.fn(() => 'Title'),
     episodeTitle: vi.fn(() => 'Ep'),
@@ -241,6 +242,53 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('local')).toBe(true);
       expect(castSvc.disconnect).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(42);
+    });
+
+    it('stops the remote device before taking the playback back', async () => {
+      const { session, remote, remoteSvc, local } = setup();
+      session.attachLocal(local);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      expect(await session.moveTo('local')).toBe(true);
+      expect(remote.stopPlayback).toHaveBeenCalled();
+      expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
+      expect(local.resume).toHaveBeenCalledWith(42);
+    });
+
+    it('opens the player first when taking back with none mounted, then resumes once it attaches', async () => {
+      const { session, remote, local, router } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      remote.isConnected.set(true);
+      TestBed.tick();
+      session.takeBack();
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], { queryParams: { mediaId: 3, episodeId: 9 } });
+      session.attachLocal(local);
+      await Promise.resolve();
+      expect(remote.stopPlayback).toHaveBeenCalled();
+      await vi.waitFor(() => expect(local.resume).toHaveBeenCalledWith(42));
+    });
+
+    it('releases an idle remote device when taking back with nothing to resume', () => {
+      const { session, remote, remoteSvc, router } = setup();
+      remote.isConnected.set(true);
+      TestBed.tick();
+      session.takeBack();
+      expect(router.navigate).not.toHaveBeenCalled();
+      expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
+    });
+
+    it('lets the remote device play on alone when control stops, without resuming here', () => {
+      const { session, remote, remoteSvc, local } = setup();
+      session.attachLocal(local);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      session.stopControlling();
+      remote.isConnected.set(false);
+      TestBed.tick();
+      expect(remote.stopPlayback).not.toHaveBeenCalled();
+      expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
+      expect(local.disconnect).toHaveBeenCalled();
+      expect(local.resume).not.toHaveBeenCalled();
     });
   });
 

@@ -817,6 +817,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly mediaLogoUrl = signal<string | null>(null);
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
+  /** The backdrop fades in once decoded, not on insertion. */
+  protected readonly backdropLoaded = signal<string | null>(null);
 
   /** Low-quality `fanartUrl` for the backdrop LQIP layer; only our `/api/images/...` URLs support
    *  `?size=thumb`. */
@@ -2416,7 +2418,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.airPlay.showPicker();
       return;
     }
-    await this.session.moveTo(row.kind === 'remote' ? 'remote' : 'cast', row.kind === 'cast-web' ? undefined : row.id);
+    if (row.kind === 'local') await this.session.moveTo('local');
+    else await this.session.moveTo(row.kind === 'remote' ? 'remote' : 'cast', row.kind === 'cast-web' ? undefined : row.id);
   }
 
   onDisconnectCast() {
