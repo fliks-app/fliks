@@ -269,7 +269,7 @@ async fn run(
         start_at_s: Some(position),
         pinned: q.download,
         burn_in: burn_in.map(|b| b.spec),
-        source_version: held.version,
+        source_version: held.version.clone(),
         subtitle_renditions: renditions,
         replaces: None,
     };
@@ -301,7 +301,7 @@ async fn run(
         (&client, &tags),
         position,
     );
-    rescan_hint(st, &open, &file);
+    rescan_hint(st, &open, &file, held.version);
     if let (false, Some(media)) = (q.download, file.media_id)
         && let Err(e) = db::mark_started(
             &st.db,
@@ -455,11 +455,31 @@ async fn side_reads(
     (markers, pre_roll, edl)
 }
 
-/// The engine's hints: a stale probe is re-probed (which chains the scan), else a missing scan is made.
-fn rescan_hint(st: &AppState, open: &OpenSessionResponse, file: &ResolvedFile) {
+/// The engine's hints: the scan a remux open ran is kept; a stale probe is re-probed (which chains
+/// the scan), else a missing scan is made.
+fn rescan_hint(
+    st: &AppState,
+    open: &OpenSessionResponse,
+    file: &ResolvedFile,
+    version: Option<String>,
+) {
+    if let (Some(scan), Some(version)) = (&open.scan, version) {
+        let prior = file
+            .info
+            .as_ref()
+            .and_then(|i| i.timestamp_break_seconds.flatten());
+        scan::keep(
+            st,
+            file.id,
+            file.absolute.clone(),
+            version,
+            scan.clone(),
+            prior,
+        );
+    }
     if open.hints.probe_stale {
         scan::spawn_stale_reprobe(st.clone(), file.id, file.absolute.clone());
-    } else if open.hints.scan_missing {
+    } else if open.hints.scan_missing && open.scan.is_none() {
         let (st, path, info, id) = (
             st.clone(),
             file.absolute.clone(),
