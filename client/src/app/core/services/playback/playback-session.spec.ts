@@ -69,6 +69,7 @@ function setup() {
   };
   const castPlayer = {
     hasMedia: vi.fn(() => false),
+    reloading: vi.fn(() => false),
     mediaFileId: signal(0),
     startCast: vi.fn(),
     reloadCastStream: vi.fn(async () => {}),

@@ -31,7 +31,10 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly ended = this.cast.ended;
   readonly seekLocked = computed(() => false);
   readonly position = this.cast.currentTime;
-  readonly ready = computed(() => this.cast.isConnected() && this.cp.hasMedia() && this.cast.duration() > 0);
+  /** Not while a LOAD is in flight: a party applied to the old media would be undone when the new one starts. */
+  readonly ready = computed(
+    () => this.cast.isConnected() && this.cp.hasMedia() && !this.cp.reloading() && this.cast.duration() > 0,
+  );
   readonly item = computed(() => ({ mediaId: this.cp.mediaId(), episodeId: this.cp.episodeId() }));
   readonly sync: PlaybackSync = { slackS: CAST_DRIFT_IGNORE_S, drift: { ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS } };
   readonly muted = this.cast.muted;

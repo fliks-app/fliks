@@ -12,7 +12,7 @@ import { PlayerSettingsService } from './player-settings.service';
 function setup(autoPlayNext = true, partyActive = false) {
   const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), duration: signal(0), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
   const quickStart = vi.fn(async () => {});
-  const cp = { mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), availableQualities: signal([]), quickStart };
+  const cp = { mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
   const media = {
     id: 1,
     type: 'series',

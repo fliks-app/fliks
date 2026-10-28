@@ -570,10 +570,10 @@ export class CastPlayerService {
   private recovering = false;
   /** Latest reload wins: an older one aborts after its playback-info; `reloading` mutes the other recoveries. */
   private reloadGen = 0;
-  private reloading = false;
+  readonly reloading = signal(false);
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia() || this.recovering || this.reloading) return;
+    if (!this.hasMedia() || this.recovering || this.reloading()) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -597,11 +597,11 @@ export class CastPlayerService {
   /** Stops the old ffmpeg session once the new LOAD resolves; transcoding.service only auto-replaces on quality change. */
   async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
     const gen = ++this.reloadGen;
-    this.reloading = true;
+    this.reloading.set(true);
     try {
       await this.reload(gen, positionOverride, autoplay, snapQualityId);
     } finally {
-      if (gen === this.reloadGen) this.reloading = false;
+      if (gen === this.reloadGen) this.reloading.set(false);
     }
   }
 
@@ -914,7 +914,7 @@ export class CastPlayerService {
       });
       // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
       if (sid) void this.qoeReporter.flush(sid);
-      if (response?.sessionLost && !this.reloading) {
+      if (response?.sessionLost && !this.reloading()) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
         this.recordRecovery(pos, 'session_lost');
       }

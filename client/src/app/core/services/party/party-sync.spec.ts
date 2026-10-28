@@ -69,7 +69,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PlaybackQueueService, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
-      { provide: CastPlayerService, useValue: { hasMedia: signal(true), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]) } },
+      { provide: CastPlayerService, useValue: { hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false) } },
       { provide: MediaService, useValue: {} },

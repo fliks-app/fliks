@@ -94,6 +94,7 @@ describe('CastPlayerService reporting without the player page', () => {
       serverConfig: { resolveUrl: (p: string) => p },
       streamingApi: { updatePlaybackState: vi.fn(async () => response) },
       reloadCastStream: vi.fn(async () => {}),
+      reloading: () => false,
       recordRecovery: proto.recordRecovery,
       recoveries: 0,
       playbackId: 'pb',
