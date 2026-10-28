@@ -377,6 +377,9 @@ async fn refresh_existing(
             let id = r.id as u32;
             tokio::spawn(async move { st.engine.invalidate(id).await });
         }
+        if !unchanged || r.mtime_ms != mtime {
+            crate::stream::spawn_scan(st, r.id, abs.clone(), Some(p.info.clone()));
+        }
     }
     link_rows(&st.db, &links).await?;
     set_ends(&st.db, &ends).await?;

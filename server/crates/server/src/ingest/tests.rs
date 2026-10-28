@@ -420,6 +420,23 @@ async fn library_delete_keeps_the_tree(pool: PgPool) {
     assert_eq!(count(&c, "SELECT count(*) FROM libraries").await, 0);
 }
 
+/// The `Scan` jobs submitted so far, once `want` of them arrived or 5 s passed (they are detached).
+async fn scans(c: &Ctx, want: usize) -> usize {
+    let n = || {
+        let jobs = c.fake.seen("POST", "/v1/jobs");
+        jobs.iter()
+            .filter(|j| j.body["kind"]["type"] == "Scan")
+            .count()
+    };
+    for _ in 0..50 {
+        if n() >= want {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    n()
+}
+
 async fn rescan(c: &Ctx, id: i32) -> Result<super::rescan::Counts, crate::http::AppError> {
     let g = c.st.ingest.media.lock(id).await;
     super::rescan::rescan_files(&c.st, &g, id).await
@@ -536,15 +553,15 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
     let probes = |c: &Ctx| c.fake.seen("POST", "/v1/probe").len();
     let first = rescan(&c, a).await.unwrap();
     assert_eq!(
-        (first.updated, probes(&c)),
-        (1, 2),
-        "unstamped row: probe + embedded detection"
+        (first.updated, probes(&c), scans(&c, 1).await),
+        (1, 2, 1),
+        "unstamped row: probe + embedded detection, and the new bytes' scan"
     );
     let second = rescan(&c, a).await.unwrap();
     assert_eq!(
-        (second.updated, probes(&c)),
-        (0, 2),
-        "stamped and unchanged: no probe"
+        (second.updated, probes(&c), scans(&c, 2).await),
+        (0, 2, 1),
+        "stamped and unchanged: no probe, no scan"
     );
     sqlx::query(r#"UPDATE media_files SET "mtimeMs" = 0"#)
         .execute(&c.st.db)
@@ -552,9 +569,9 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
         .unwrap();
     let third = rescan(&c, a).await.unwrap();
     assert_eq!(
-        (third.updated, probes(&c)),
-        (1, 4),
-        "a moved mtime probes again"
+        (third.updated, probes(&c), scans(&c, 2).await),
+        (1, 4, 2),
+        "a moved mtime probes and scans again"
     );
 }
 
@@ -667,6 +684,11 @@ async fn relink_transfer_copy_then_move(pool: PgPool) {
     let files: Vec<String> = tree(&lib).into_iter().map(|(p, _)| p).collect();
     assert!(files.iter().any(|p| p.ends_with(".en.srt")), "{files:?}");
     assert!(!c.fake.seen("POST", "/v1/probe").is_empty());
+    assert_eq!(
+        scans(&c, 1).await,
+        1,
+        "scanned at import, not after the settle"
+    );
 
     let series = c.dir.join("series");
     let sl = library(&c, "S", &series, r#"["series"]"#).await;

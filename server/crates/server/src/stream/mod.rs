@@ -22,6 +22,7 @@ pub use routes::{
     __path_delete_session, __path_edl, __path_effective_settings, __path_gpus, __path_hw_accel,
     __path_qualities, __path_tonemap_algos,
 };
+pub(crate) use scan::spawn_scan;
 pub use system::{
     __path_command, __path_purge_all, __path_purge_file, __path_stats, __path_streams,
 };

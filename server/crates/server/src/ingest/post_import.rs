@@ -213,7 +213,8 @@ pub async fn file_path(
     Ok(resolved.map(|p| (p, info)))
 }
 
-/// `finalizeImportedFile` (rule 50): crop and the OpenSubtitles hash from one engine probe.
+/// `finalizeImportedFile` (rule 50): crop and the OpenSubtitles hash from one engine probe, then
+/// the source scan while the new bytes are still in the page cache.
 async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     let Some((path, info)) = file_path(st, id).await.map_err(|e| e.to_string())? else {
         return Err("no contained path".into());
@@ -234,7 +235,8 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     sqlx::query!(
         r#"UPDATE media_files SET "streamInfo" = COALESCE($2, "streamInfo"), "osdbHash" = $3, "osdbBytesize" = $4 WHERE id = $1"#,
         id,
-        info.map(|i| serde_json::to_value(&i))
+        info.as_ref()
+            .map(serde_json::to_value)
             .transpose()
             .map_err(|e| e.to_string())?,
         hash,
@@ -243,6 +245,7 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
+    crate::stream::spawn_scan(st, id, path, info);
     Ok(())
 }
 
@@ -267,7 +270,7 @@ impl Settle {
     }
 }
 
-/// After a rescan that added nothing the sources are scanned right away.
+/// Every file of the media without a scan of its current bytes gets one (a manual rescan).
 pub async fn scan_sources(st: &AppState, media_id: i32) {
     let ids = sqlx::query_scalar!(
         r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
@@ -287,7 +290,6 @@ async fn settled(st: &AppState, media_id: i32) {
     let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
     // One batch at a time, so a season pack does not queue every media's jobs at once.
     let _turn = st.ingest.settle.1.lock().await;
-    scan_sources(st, media_id).await;
     if super::setting_on(&st.db, "sprites_auto_generate_on_import")
         .await
         .unwrap_or(true)

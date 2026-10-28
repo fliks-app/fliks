@@ -58,7 +58,7 @@ Only `detectSeries` is called by the web client today (`client/src/app/features/
 
 ### D. Callers (function interface; the scheduler spec owns the callers)
 
-24. `markers::auto_detect_missing(state, media_id)` ← post-import queue after its 60 s settle, the import-queue idle wait (5 min ceiling), the source scans and the sprite pass (errors logged as `marker detection failed`); `markers::list_seasons_for_scan(state, only_missing, media_id: Option)` and `markers::run_detection_inline(state, season_id, subject: Option)` ← core trigger-only commands `DetectMarkers` (all seasons) / `DetectMissingMarkers` (`onlyMissing`) (the loop, its `task.progress` events and the pre-registered pending activity rows `IntroDetection:<seasonId>` belong to that spec). No other module calls `MarkersService`.
+24. `markers::auto_detect_missing(state, media_id)` ← post-import queue after its 60 s settle, the import-queue idle wait (5 min ceiling) and the sprite pass (errors logged as `marker detection failed`); `markers::list_seasons_for_scan(state, only_missing, media_id: Option)` and `markers::run_detection_inline(state, season_id, subject: Option)` ← core trigger-only commands `DetectMarkers` (all seasons) / `DetectMissingMarkers` (`onlyMissing`) (the loop, its `task.progress` events and the pre-registered pending activity rows `IntroDetection:<seasonId>` belong to that spec). No other module calls `MarkersService`.
 
 ### E. Atomic writes and input limits
 

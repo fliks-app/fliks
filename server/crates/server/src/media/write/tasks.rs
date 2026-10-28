@@ -72,9 +72,8 @@ pub async fn rescan(
                 }
                 if c.added > 0 {
                     st2.ingest.settle.schedule(&st2, id);
-                } else {
-                    post_import::scan_sources(&st2, id).await;
                 }
+                post_import::scan_sources(&st2, id).await;
             }
             Err(e) => {
                 tracing::error!("Rescan of media #{id} failed: {e:?}");

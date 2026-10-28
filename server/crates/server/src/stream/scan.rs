@@ -133,6 +133,14 @@ async fn store_clock_break(
     Ok(())
 }
 
+/// `schedule_if_needed` at `normal` priority, detached: new bytes (an import, a changed file).
+pub fn spawn_scan(st: &AppState, id: i32, path: std::path::PathBuf, info: Option<MediaInfo>) {
+    let st = st.clone();
+    tokio::spawn(async move {
+        schedule_if_needed(&st, id, &path, info, JobPriority::Normal).await;
+    });
+}
+
 /// Scans the file unless its current version was; never fails. A scan already running for the file
 /// is not waited for (ponytail: callers only need it started).
 pub async fn schedule_if_needed(
