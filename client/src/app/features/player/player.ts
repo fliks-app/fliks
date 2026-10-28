@@ -275,6 +275,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private detachAirPlay: () => void = () => {};
   private readonly castPlayerService = inject(CastPlayerService);
   protected readonly session = inject(PlaybackSession);
+  private readonly pipWired = signal(false);
+  /** Leaving the app auto-enters PiP only while the picture is local: a cast has nothing to shrink. */
+  private readonly pipAutoEffect = effect(() => {
+    if (this.pipWired()) Pip.setAutoEnter({ enabled: this.session.isLocal() }).catch(() => {});
+  });
   private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -1330,7 +1335,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       Pip.isAvailable().then(({ available }) => this.pipAvailable.set(available)).catch(() => this.pipAvailable.set(false));
       window.addEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.addEventListener('pipAction', this.onPipAction as EventListener);
-      Pip.setAutoEnter({ enabled: true }).catch(() => {});
+      this.pipWired.set(true);
       // Leaving the app (Home, PiP, lock) may be followed by a kill: save the position now.
       void CapApp.addListener('pause', () => void this.savePosition(true)).then((h) => {
         if (this.destroyed) void h.remove();
