@@ -1,4 +1,4 @@
-import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
+import { EffectRef, Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { StreamingApiService } from '../api/streaming-api.service';
@@ -66,6 +66,10 @@ export class PlaybackSession {
   private readonly local = signal<LocalOutput | null>(null);
   private moving: Promise<boolean> | null = null;
   private wasCasting = false;
+  private wasAway = false;
+  private watchReturns: EffectRef | null = null;
+  /** Where the cast or remote output last was: once it is gone, its own position reads nothing. */
+  private awayPosition = 0;
   private partyRouter: PartyRouter | null = null;
   /** File the output already holds, set by whoever opens the player route on it. */
   private opened = 0;
@@ -109,13 +113,13 @@ export class PlaybackSession {
         if (casting === this.wasCasting) return;
         this.wasCasting = casting;
         if (casting) this.onCastConnected();
-        else this.onCastDisconnected();
       });
     });
   }
 
   /** The player registers its local output on init; the returned disposer only detaches that output. */
   attachLocal(o: LocalOutput): () => void {
+    this.watchReturns ??= this.watchReturnsToLocal();
     this.local.set(o);
     return () => this.local.update((cur) => (cur === o ? null : cur));
   }
@@ -323,9 +327,27 @@ export class PlaybackSession {
     else void this.moveTo('cast');
   }
 
-  private onCastDisconnected(): void {
+  /** Any way back to this device that `moveTo` did not take (receiver lost, "stop controlling", the mini-bar's
+   *  close) restarts the local player where the other output was. Created on first attach: it reads the targets. */
+  private watchReturnsToLocal() {
+    return effect(
+      () => {
+        const away = this.kind() !== 'local';
+        const o = this.output();
+        if (away && o) this.awayPosition = o.position() || this.awayPosition;
+        untracked(() => {
+          if (away === this.wasAway) return;
+          this.wasAway = away;
+          if (!away) this.onBackToLocal();
+        });
+      },
+      { injector: this.injector },
+    );
+  }
+
+  private onBackToLocal(): void {
     const local = this.local();
     if (!local || this.moving) return;
-    void local.resume(this.castSvc().currentTime());
+    void local.resume(this.awayPosition);
   }
 }

@@ -268,7 +268,18 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       cast.isConnected.set(false);
       TestBed.tick();
-      expect(local.resume).toHaveBeenCalledWith(55);
+      expect(local.resume).toHaveBeenCalledWith(42);
+    });
+
+    it('resumes the engine where the remote device was when control stops outside moveTo', () => {
+      const { session, remote, local } = setup();
+      session.attachLocal(local);
+      TestBed.tick();
+      remote.isConnected.set(true);
+      TestBed.tick();
+      remote.isConnected.set(false);
+      TestBed.tick();
+      expect(local.resume).toHaveBeenCalledWith(42);
     });
   });
 
