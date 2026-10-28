@@ -30,7 +30,7 @@ describe('getCastDeviceProfile video side', () => {
 
   it('lists h264 only when a v2 receiver reports nothing else', () => {
     const p = profile({ audioCodecs, videoCodecs: ['h264'], v: 2 });
-    expect(p.directPlayProfiles[0].videoCodecs).toEqual(['h264', 'avc1']);
+    expect(p.directPlayProfiles[0].videoCodecs).toEqual(['h264', 'avc1', 'avc3']);
     expect(p.supportsHdr).toBe(false);
   });
 
