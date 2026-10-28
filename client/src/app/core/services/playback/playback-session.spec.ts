@@ -23,6 +23,13 @@ function target() {
     seek: vi.fn(),
     playNext: vi.fn(),
     position: vi.fn(() => 42),
+    pause: vi.fn(async () => {}),
+    disconnect: vi.fn(),
+    mediaTitle: vi.fn(() => 'Title'),
+    episodeTitle: vi.fn(() => 'Ep'),
+    fanartUrl: vi.fn(() => '/f.jpg'),
+    activeAudioTrackId: vi.fn(() => 'audio-2' as string | null),
+    activeSubtitleId: vi.fn(() => 'sub-5' as string | null),
   };
 }
 
@@ -55,6 +62,7 @@ function setup() {
   const remoteSvc = {
     isRemoting: remote.isConnected,
     selectedTargetId: signal<string | null>(null),
+    targetState: signal<{ mediaFileId: number } | null>({ mediaFileId: 7 }),
     selectTarget: vi.fn(),
     send: vi.fn(async () => {}),
   };
@@ -233,6 +241,52 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('local')).toBe(true);
       expect(castSvc.disconnect).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(42);
+    });
+  });
+
+  describe('moveTo between cast and remote', () => {
+    const tracks = { fileId: 7, audioStreamIndex: 2, subtitleId: 'sub-5' };
+
+    it('carries the remote item to the receiver without starting the engine', async () => {
+      const { session, cast, remote, local, castSvc, castPlayer, remoteSvc } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      session.attachLocal(local);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      castSvc.selectCastDevice.mockImplementation(async () => cast.isConnected.set(true));
+      expect(await session.moveTo('cast', 'cc-1')).toBe(true);
+      expect(remote.pause).toHaveBeenCalled();
+      expect(remote.disconnect).toHaveBeenCalled();
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaFileId: 7, mediaId: 3, episodeId: 9, startTime: 42, tracks }),
+      );
+      expect(local.release).not.toHaveBeenCalled();
+      remote.isConnected.set(false);
+      TestBed.tick();
+      expect(local.resume).not.toHaveBeenCalled();
+      expect(remoteSvc.send).not.toHaveBeenCalled();
+    });
+
+    it('carries the receiver item to a remote device without starting the engine', async () => {
+      const { session, cast, local, remoteSvc, castPlayer, remote } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      castPlayer.mediaFileId.set(7);
+      castPlayer.hasMedia.mockReturnValue(true);
+      session.attachLocal(local);
+      cast.isConnected.set(true);
+      TestBed.tick();
+      expect(await session.moveTo('remote', 'dev-9')).toBe(true);
+      expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
+      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', {
+        action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 42,
+        trackId: 'audio-2', subtitleId: 'sub-5',
+      });
+      expect(cast.disconnect).toHaveBeenCalled();
+      cast.isConnected.set(false);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      expect(local.resume).not.toHaveBeenCalled();
+      expect(local.release).not.toHaveBeenCalled();
     });
   });
 

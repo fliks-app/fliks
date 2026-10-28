@@ -156,8 +156,15 @@ export class PlaybackSession {
   moveTo(kind: OutputKind, deviceId?: string): Promise<boolean> {
     if (this.injector.get(DeviceService).isTv()) return Promise.resolve(false);
     if (this.moving) return this.moving;
+    const from = this.kind();
     const run =
-      kind === 'local' ? this.toLocal() : kind === 'cast' ? this.toCast(deviceId) : this.toRemote(deviceId);
+      kind === 'local'
+        ? this.toLocal()
+        : from !== 'local' && from !== kind
+          ? this.switchAway(kind, deviceId)
+          : kind === 'cast'
+            ? this.toCast(deviceId)
+            : this.toRemote(deviceId);
     const settled = run
       .catch((err) => {
         console.error('[playback-session] moveTo failed', kind, err);
@@ -271,6 +278,44 @@ export class PlaybackSession {
       mediaFileId: handoff.cast.mediaFileId,
       episodeId: handoff.cast.episodeId,
       positionSeconds: Math.floor(handoff.position),
+    });
+    return true;
+  }
+
+  /** Cast and remote swap without the local engine starting in between. */
+  private async switchAway(kind: 'cast' | 'remote', deviceId?: string): Promise<boolean> {
+    const from = this.output();
+    const cur = this.playing();
+    if (!from || !cur || (kind === 'remote' && !deviceId)) return false;
+    const position = from.position();
+    const audio = /^audio-(\d+)$/.exec(from.activeAudioTrackId() ?? '');
+    const tracks: LaunchTracks = {
+      fileId: cur.fileId,
+      audioStreamIndex: audio ? Number(audio[1]) : undefined,
+      subtitleId: from.activeSubtitleId(),
+    };
+    const title = from.mediaTitle();
+    const episodeTitle = from.episodeTitle() || undefined;
+    const fanartUrl = from.fanartUrl();
+    if (kind === 'cast') {
+      if (!(await this.connectCast(deviceId))) return false;
+      await from.pause();
+      from.disconnect();
+      await this.castPlayer().quickStart({
+        mediaFileId: cur.fileId, mediaId: cur.mediaId, episodeId: cur.episodeId, title, episodeTitle, fanartUrl, startTime: position, tracks,
+      });
+      return true;
+    }
+    const remote = this.remoteSvc();
+    from.disconnect();
+    remote.selectTarget(deviceId!);
+    void remote.send(deviceId!, {
+      action: 'load',
+      mediaId: cur.mediaId,
+      mediaFileId: cur.fileId,
+      episodeId: cur.episodeId,
+      positionSeconds: Math.floor(position),
+      ...launchTracksToWire(tracks),
     });
     return true;
   }
