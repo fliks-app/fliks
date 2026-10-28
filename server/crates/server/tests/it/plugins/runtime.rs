@@ -298,13 +298,19 @@ async fn scheduled_calls() {
         body(&rt.http(r, false).await.unwrap())
     };
     assert_eq!(call("again:a", "0", "\"first\"").await["ok"], Value::Null);
+    // The ring holds seconds of a parallel suite's logs and a busy key is pushed back 3 s:
+    // the first delivery is counted while waiting, before it can be evicted.
+    let mut first = 0;
     until(
         "the re-scheduled call",
         Duration::from_secs(10),
-        async || logs("scheduled again:a attempt 1 payload \"second\"") == 1,
+        async || {
+            first = first.max(logs("scheduled again:a attempt 1 payload \"first\""));
+            logs("scheduled again:a attempt 1 payload \"second\"") == 1
+        },
     )
     .await;
-    assert_eq!(logs("scheduled again:a attempt 1 payload \"first\""), 1);
+    assert_eq!(first, 1);
     call("dedupe", "60000", "\"one\"").await;
     call("dedupe", "60000", "\"two\"").await;
     let rows: Vec<(String, i32)> = sqlx::query_as(
