@@ -12,7 +12,7 @@ import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
 import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
 import { PlaybackSession } from './playback/playback-session';
-import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from '../../features/player/party-sync';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 
 /** Drives the cast-overlay UI from a remote target; track lists come from the played file's streamInfo, fetched once the target reports playback. */
 @Injectable({ providedIn: 'root' })

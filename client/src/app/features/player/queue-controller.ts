@@ -252,7 +252,7 @@ export class QueueController {
     }
     if (this.state.ended()) await this.markCurrentComplete();
     if (!this.session.isLocal()) {
-      // A remount would close the player, which leaves the party: switch the output in place.
+      // A remount would close the player: switch the output in place.
       const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
       await this.session.play(
         {

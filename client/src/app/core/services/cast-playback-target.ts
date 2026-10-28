@@ -6,7 +6,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
 import { PlaybackSession } from './playback/playback-session';
 import { PartyService } from './party/party.service';
-import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from '../../features/player/party-sync';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 import { MediaService } from './api/media.service';
 import { PlayerSettingsService } from './player-settings.service';
 import { QueueItem } from './playback-queue.service';

@@ -114,7 +114,7 @@ import { EdlController } from './edl-controller';
 import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
-import { PartyController } from './party-controller';
+import { PartySync } from '../../core/services/party/party-sync';
 import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
 import { ReactionsService } from '../../core/services/party/reactions.service';
@@ -134,7 +134,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
   imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
-  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, PartyController, SubtitleController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -626,9 +626,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     () => this.partyCtl.active() && this.party.reactionsEnabled() && this.reactions.enabled() && this.reactions.dock(),
   );
   protected readonly keyboardOverlay = inject(KeyboardOverlayService);
-  protected readonly partyCtl = inject(PartyController);
-  private readonly _partyAttach = (this.partyCtl.attach({
+  protected readonly partyCtl = inject(PartySync);
+  private readonly detachParty = this.partyCtl.attach({
     engine: () => this.engine,
+    urlPartyId: () => +this.route.snapshot.queryParams['party'] || 0,
+    openItem: (item) => this.queueCtl.openPartyItem(item),
     showControls: () => this.chrome.show(),
     releasePlayback: () => {
       if (!this.loadedPaused) return;
@@ -637,7 +639,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.postLoadDone) void this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     },
     onBack: () => this.onBack(),
-  }), null);
+  });
 
   // Sync play/pause state to PiP action button
   private readonly pipPlaybackEffect = effect(() => {
@@ -1323,7 +1325,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.detachAirPlay();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remote.dispose();
-    this.partyCtl.dispose();
+    this.detachParty();
     this.detachLocalOutput();
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });

@@ -245,7 +245,7 @@ export class PlaybackSession {
     return true;
   }
 
-  /** A party stays on the player route, which keeps its sync alive; otherwise the player steps aside. */
+  /** A party keeps the player route, which hosts its panel and reactions; otherwise the player steps aside. */
   private leaveLocal(local: LocalOutput): void {
     this.expanded.set(true);
     if (!this.party().active()) local.disconnect();

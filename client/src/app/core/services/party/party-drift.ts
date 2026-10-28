@@ -1,4 +1,4 @@
-import type { PartyAnchor, PartyPlayState } from '../../core/services/api/party-api.service';
+import type { PartyAnchor, PartyPlayState } from '../api/party-api.service';
 
 /** Drift under this is inaudible and left alone. */
 export const DRIFT_IGNORE_S = 0.5;
