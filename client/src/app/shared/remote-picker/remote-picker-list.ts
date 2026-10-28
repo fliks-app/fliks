@@ -147,7 +147,7 @@ export class RemotePickerListComponent {
   /** Re-read both sources. Neither pushes a full listing on its own. */
   refresh(): void {
     void this.remote.refreshTargets();
-    if (this.enumerates) void this.castService.getCastDevices();
+    if (this.enumerates) void this.castService.getCastDevices({ browse: true });
   }
 
   selectRow(row: PickerRow): void {

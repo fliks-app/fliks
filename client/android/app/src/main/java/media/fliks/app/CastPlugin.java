@@ -74,6 +74,14 @@ public class CastPlugin extends Plugin {
     /** A connected session went through this process, so its end is a real stop. */
     private boolean live = false;
     private static final long HUNT_MS = 60_000;
+    /** The picker lists devices: scan actively, as the system chooser does, until BROWSE_MS after its last listing.
+     *  Selecting a route found only by passive discovery makes Play Services drop it and fall back to the phone. */
+    private boolean browsing = false;
+    private static final long BROWSE_MS = 30_000;
+    private final Runnable endBrowse = () -> {
+        browsing = false;
+        if (routeDiscoveryActive) addRouteCallback();
+    };
 
     /** Cast session updates stay on the main thread: some Play Services versions call these off the UI thread. */
     private final SessionManagerListener<CastSession> sessionListener = new SessionManagerListener<CastSession>() {
@@ -455,13 +463,21 @@ public class CastPlugin extends Plugin {
     /** Re-adding the callback only updates its flags. */
     private void addRouteCallback() {
         int flags = MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY
-            | (hunting ? MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN : 0);
+            | (hunting || browsing ? MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN : 0);
         router().addCallback(buildCastSelector(), routeCallback, flags);
     }
 
     private void setHunting(boolean on) {
         if (hunting == on) return;
         hunting = on;
+        if (routeDiscoveryActive) addRouteCallback();
+    }
+
+    private void browse() {
+        mainHandler.removeCallbacks(endBrowse);
+        mainHandler.postDelayed(endBrowse, BROWSE_MS);
+        if (browsing) return;
+        browsing = true;
         if (routeDiscoveryActive) addRouteCallback();
     }
 
@@ -525,6 +541,7 @@ public class CastPlugin extends Plugin {
     @PluginMethod()
     public void getCastDevices(PluginCall call) {
         runOnMainThread(() -> {
+            if (call.getBoolean("browse", false)) browse();
             MediaRouteSelector selector = buildCastSelector();
             MediaRouter router = router();
             // Which row the caller is already casting to: the selected route, and

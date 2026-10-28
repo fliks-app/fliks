@@ -114,7 +114,8 @@ interface NativeCastPlugin {
   requestSession(): Promise<void>;
   /** Native-only device enumeration + selection backing the unified picker
    *  (`shared/remote-picker`): the web Cast SDK has no equivalent. */
-  getCastDevices(): Promise<{ devices: CastDevice[] }>;
+  /** `browse`: the picker is showing the list, so Android scans actively for a while. */
+  getCastDevices(opts?: { browse?: boolean }): Promise<{ devices: CastDevice[] }>;
   selectCastDevice(opts: { id: string }): Promise<void>;
   loadMedia(opts: NativeCastLoadOpts): Promise<void>;
   play(): Promise<void>;
@@ -553,10 +554,10 @@ export class CastService implements OnDestroy {
   }
 
   /** Web has no enumeration API, so this resolves empty and the picker falls back to `requestSession()`. */
-  async getCastDevices(): Promise<CastDevice[]> {
+  async getCastDevices(opts?: { browse?: boolean }): Promise<CastDevice[]> {
     if (!this.hasCastBridge) return [];
     try {
-      const { devices } = await this.bridge.getCastDevices();
+      const { devices } = await this.bridge.getCastDevices(opts);
       this.castDevices.set(devices);
       return devices;
     } catch (err) {
