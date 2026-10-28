@@ -50,6 +50,17 @@ interface NativeVideoCaps {
   /** The NativePlayer plugin implements `setCrop`; absent on builds without it. */
   cropsBlackBars?: boolean;
 }
+
+/** Sample entries a raw MP4 may carry beyond its codec's own (`avc1`, `hvc1`, `av01`), and the
+ *  codec strings probing them. */
+const EXTRA_SAMPLE_ENTRIES: ReadonlyArray<[codec: string, entry: string, probes: string[]]> = [
+  ['h264', 'avc3', ['avc3.640028']],
+  ['hevc', 'hev1', ['hev1.1.6.L120.B0']],
+  ['hevc', 'dvh1', ['dvh1.05.06', 'dvh1.08.06']],
+  ['hevc', 'dvhe', ['dvhe.05.06', 'dvhe.08.06']],
+  ['av1', 'dav1', ['dav1.10.06']],
+];
+
 interface VideoCapabilitiesPlugin {
   getSupported(): Promise<NativeVideoCaps>;
 }
@@ -345,7 +356,7 @@ export class BrowserDeviceProfileService {
       this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
       this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')
     ) {
-      videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
+      videoCodecs.push('hevc', 'h265', 'hvc1');
       const maxLevel = this.probeHevcLevel(video, hasMSE);
       const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.2.4.L120.B0') ? 10 : 8;
       codecConditions.push({
@@ -402,7 +413,7 @@ export class BrowserDeviceProfileService {
             ...this.nativeResCondition(nv, 'h264'),
           });
         } else if (c === 'hevc') {
-          videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
+          videoCodecs.push('hevc', 'h265', 'hvc1');
           codecConditions.push({
             codec: 'hevc',
             profiles: nv.hevcMain10 ? ['main', 'main 10'] : ['main'],
@@ -427,7 +438,7 @@ export class BrowserDeviceProfileService {
       !videoCodecs.includes('hevc') &&
       (tvPlatform !== 'tizen' || tizenSupportsHevc() !== false)
     ) {
-      videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
+      videoCodecs.push('hevc', 'h265', 'hvc1');
       codecConditions.push({
         codec: 'hevc',
         profiles: ['main', 'main 10'],
@@ -514,7 +525,7 @@ export class BrowserDeviceProfileService {
       containers.push('mp4', 'mkv', 'webm', 'mov', 'ts', 'm4v', 'avi', 'flv', 'm2ts', 'mts', 'mpg', 'mpeg', 'wmv', 'ogm');
       videoCodecs.length = 0;
       videoCodecs.push(
-        'h264', 'avc1', 'hevc', 'h265', 'hvc1', 'hev1',
+        'h264', 'avc1', 'hevc', 'h265', 'hvc1',
         'av1', 'vp9', 'vp8', 'mpeg1video', 'mpeg2video', 'mpeg4', 'msmpeg4v3', 'vc1', 'wmv3', 'theora',
       );
       codecConditions.length = 0;
@@ -529,6 +540,21 @@ export class BrowserDeviceProfileService {
       );
       audioCodecs = ['aac', 'ac3', 'eac3', 'opus', 'flac', 'alac', 'mp3', 'dts', 'truehd', 'vorbis', 'mp2', 'pcm_s16le', 'pcm_s24le', 'pcm_bluray'];
       maxAudioChannels = Math.max(maxAudioChannels, 8);
+    }
+
+    // The file's own demuxer reads these, not MSE (Apple refuses `hev1`): WebKit and browsers
+    // answer canPlayType; mpv, Media3 and the TVs (no usable probe) take them all.
+    const takesEveryEntry =
+      this.device.isDesktopNative() ||
+      isTv ||
+      (Capacitor.getPlatform() === 'android' && !!this.nativeVideo?.videoCodecs.length);
+    for (const [codec, entry, probes] of EXTRA_SAMPLE_ENTRIES) {
+      if (
+        videoCodecs.includes(codec) &&
+        (takesEveryEntry || probes.some((c) => video.canPlayType(`video/mp4; codecs="${c}"`)))
+      ) {
+        videoCodecs.push(entry);
+      }
     }
 
     // --- HDR support ---

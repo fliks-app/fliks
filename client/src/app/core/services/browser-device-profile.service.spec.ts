@@ -516,3 +516,31 @@ describe('BrowserDeviceProfileService: Android TV audio passthrough', () => {
     expect(plain.audioChannelsByCodec).toEqual({ aac: 8, ac3: 6 });
   });
 });
+
+describe('BrowserDeviceProfileService, extra sample entries', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  it('claims only the entries the browser demuxer accepts', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation((type: string) =>
+      /avc3|hev1|dvhe/.test(type) ? '' : 'probably',
+    );
+    const device = { isTv: () => false, tvPlatform: () => null, isDesktopNative: () => false };
+    const profile = configure(device as DeviceService).getProfile();
+    const codecs = profile.directPlayProfiles[0].videoCodecs;
+    expect(codecs).toEqual(expect.arrayContaining(['avc1', 'hvc1', 'dvh1', 'dav1']));
+    expect(codecs).not.toEqual(expect.arrayContaining(['avc3']));
+    expect(codecs).not.toEqual(expect.arrayContaining(['hev1']));
+    expect(codecs).not.toEqual(expect.arrayContaining(['dvhe']));
+  });
+
+  it('claims every entry on the desktop shell, mpv demuxes them all', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
+    const device = { isTv: () => false, tvPlatform: () => null, isDesktopNative: () => true };
+    const profile = configure(device as DeviceService).getProfile();
+    const codecs = profile.directPlayProfiles[0].videoCodecs;
+    expect(codecs).toEqual(expect.arrayContaining(['avc3', 'hev1', 'dvh1', 'dvhe', 'dav1']));
+  });
+});

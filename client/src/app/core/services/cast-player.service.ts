@@ -228,7 +228,9 @@ export class CastPlayerService {
   private receiverVideo(caps: CastDeviceCapabilities | null) {
     const none = { videoCodecs: [] as string[], codecConditions: [] as CodecCondition[], hdrCapable: false };
     if (!caps || (caps.v ?? 1) < RECEIVER_CAPS_VERSION || !caps.videoCodecs.includes('h264')) return none;
-    const videoCodecs = ['h264', 'avc1'];
+    // The receiver's Chromium demuxer takes in-band entries (`avc3`, `hev1`), not Dolby Vision
+    // ones without a DV decoder.
+    const videoCodecs = ['h264', 'avc1', 'avc3'];
     const codecConditions: CodecCondition[] = [
       { codec: 'h264', maxLevel: 41, profiles: ['baseline', 'constrained baseline', 'main', 'high'], maxBitDepth: 8 },
     ];

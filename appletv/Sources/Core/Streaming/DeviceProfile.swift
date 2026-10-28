@@ -97,7 +97,22 @@ enum DeviceProfileBuilder {
         var codecs = ["h264"]
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) { codecs.append("hevc") }
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) { codecs.append("av1") }
-        return codecs
+        return codecs + probeSampleEntries(codecs)
+    }
+
+    // Sample entries beyond each codec's own, as AVFoundation answers for a raw file (it refuses `hev1`).
+    private static func probeSampleEntries(_ codecs: [String]) -> [String] {
+        let probes: [(codec: String, entry: String, strings: [String])] = [
+            ("h264", "avc3", ["avc3.640028"]),
+            ("hevc", "hev1", ["hev1.1.6.L120.B0"]),
+            ("hevc", "dvh1", ["dvh1.05.06", "dvh1.08.06"]),
+            ("hevc", "dvhe", ["dvhe.05.06", "dvhe.08.06"]),
+            ("av1", "dav1", ["dav1.10.06"]),
+        ]
+        return probes.filter { p in
+            codecs.contains(p.codec)
+                && p.strings.contains { AVURLAsset.isPlayableExtendedMIMEType("video/mp4; codecs=\"\($0)\"") }
+        }.map(\.entry)
     }
 
     // System-decodable audio formats mapped to backend codec names; AAC floored.
