@@ -899,7 +899,8 @@ public class CastPlugin extends Plugin {
                     } else {
                         if (state != MediaStatus.PLAYER_STATE_IDLE) errorReported = false;
                         double time = client.getApproximateStreamPosition() / 1000.0;
-                        double duration = client.getStreamDuration() / 1000.0;
+                        // MediaInfo.UNKNOWN_DURATION (-1) until the receiver has loaded the media.
+                        double duration = Math.max(0, client.getStreamDuration()) / 1000.0;
                         boolean paused = client.isPaused();
                         boolean buffering = state == MediaStatus.PLAYER_STATE_BUFFERING
                             || state == MediaStatus.PLAYER_STATE_LOADING;
