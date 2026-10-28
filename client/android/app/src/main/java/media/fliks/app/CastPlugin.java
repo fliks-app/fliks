@@ -64,6 +64,7 @@ public class CastPlugin extends Plugin {
     /** True between the user picking a device and the session starting/failing. */
     private volatile boolean sessionPending = false;
     private boolean routeDiscoveryActive = false;
+    private MediaRouter mediaRouter;
 
     /** A dead process left a cast behind and CAF is not resuming it: join the receiver by hand. */
     private boolean rejoinArmed = false;
@@ -130,7 +131,7 @@ public class CastPlugin extends Plugin {
                 if (hunting && hasSavedCast()) {
                     Log.d(TAG, "rejoin armed after resume failure");
                     rejoinArmed = true;
-                    MediaRouter router = MediaRouter.getInstance(getContext());
+                    MediaRouter router = router();
                     for (MediaRouter.RouteInfo route : router.getRoutes()) tryRejoin(router, route);
                 }
             });
@@ -294,7 +295,7 @@ public class CastPlugin extends Plugin {
      *  points, which stay hidden while nothing can be cast to. */
     private boolean hasCastRoute() {
         MediaRouteSelector selector = buildCastSelector();
-        for (MediaRouter.RouteInfo route : MediaRouter.getInstance(getContext()).getRoutes()) {
+        for (MediaRouter.RouteInfo route : router().getRoutes()) {
             if (!route.isDefaultOrBluetooth() && route.matchesSelector(selector)) return true;
         }
         return false;
@@ -393,7 +394,7 @@ public class CastPlugin extends Plugin {
                     .putString("sessionId", castSession.getSessionId())
                     .putString("deviceId", castSession.getCastDevice().getDeviceId())
                     .putString("routeStatus", String.valueOf(
-                        MediaRouter.getInstance(getContext()).getSelectedRoute().getDescription()))
+                        router().getSelectedRoute().getDescription()))
                     .putString("state", state.toString())
                     .apply();
             }
@@ -437,6 +438,12 @@ public class CastPlugin extends Plugin {
             .build();
     }
 
+    /** MediaRouter holds its instances weakly: an unreferenced one is collected with routeCallback, discovery included. */
+    private MediaRouter router() {
+        if (mediaRouter == null) mediaRouter = MediaRouter.getInstance(getContext());
+        return mediaRouter;
+    }
+
     /** CALLBACK_FLAG_REQUEST_DISCOVERY makes the router discover at all: without it no provider scans
      *  and getRoutes() holds only the default route. */
     private void startRouteDiscovery() {
@@ -449,7 +456,7 @@ public class CastPlugin extends Plugin {
     private void addRouteCallback() {
         int flags = MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY
             | (hunting ? MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN : 0);
-        MediaRouter.getInstance(getContext()).addCallback(buildCastSelector(), routeCallback, flags);
+        router().addCallback(buildCastSelector(), routeCallback, flags);
     }
 
     private void setHunting(boolean on) {
@@ -460,7 +467,7 @@ public class CastPlugin extends Plugin {
 
     private void stopRouteDiscovery() {
         if (!routeDiscoveryActive) return;
-        MediaRouter.getInstance(getContext()).removeCallback(routeCallback);
+        router().removeCallback(routeCallback);
         routeDiscoveryActive = false;
     }
 
@@ -519,7 +526,7 @@ public class CastPlugin extends Plugin {
     public void getCastDevices(PluginCall call) {
         runOnMainThread(() -> {
             MediaRouteSelector selector = buildCastSelector();
-            MediaRouter router = MediaRouter.getInstance(getContext());
+            MediaRouter router = router();
             // Which row the caller is already casting to: the selected route, and
             // only while a session actually stands behind it.
             String connectedId = castSession != null && castSession.isConnected()
@@ -547,7 +554,7 @@ public class CastPlugin extends Plugin {
     public void selectCastDevice(PluginCall call) {
         runOnMainThread(() -> {
             String id = call.getString("id");
-            MediaRouter router = MediaRouter.getInstance(getContext());
+            MediaRouter router = router();
             MediaRouter.RouteInfo target = null;
             for (MediaRouter.RouteInfo route : router.getRoutes()) {
                 if (route.getId().equals(id)) {
@@ -922,6 +929,6 @@ public class CastPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         if (castSession != null) unlistenReceiver(castSession);
-        MediaRouter.getInstance(getContext()).removeCallback(routeCallback);
+        router().removeCallback(routeCallback);
     }
 }
