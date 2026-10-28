@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
@@ -132,7 +133,7 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
+  imports: [TranslatePipe, ResolveUrlPipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],

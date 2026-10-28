@@ -87,8 +87,10 @@
   <!-- Playback is on another device: dimmed poster, where it plays and the way to stop it, above the controls' tap zone. -->
   @if (elsewhere(); as o) {
     <div class="absolute inset-0 z-1 bg-black pointer-events-none">
-      @if (o.fanartUrl()) {
-        <img [src]="o.fanartUrl()!" alt="" class="absolute inset-0 w-full h-full object-cover opacity-40" />
+      <!-- The route's own backdrop when it loaded; a remote device reports a server-relative poster path. -->
+      @let backdrop = fanartUrl() || (o.fanartUrl() | resolveUrl);
+      @if (backdrop) {
+        <img [src]="backdrop" alt="" class="absolute inset-0 w-full h-full object-cover opacity-40" />
       }
     </div>
     <div class="absolute inset-x-0 top-[18dvh] z-[45] flex flex-col items-center gap-3 px-6 text-center text-white/80 pointer-events-none">
