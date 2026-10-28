@@ -1,3 +1,4 @@
+import type { PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -948,6 +949,16 @@ describe('PlayerComponent loading spinner', () => {
 
     // The media is ready and paused; the play button under the spinner is the
     // real state, and a spinner over it reads as a stuck load.
+    expect(h.component.spinnerVisible()).toBe(false);
+  });
+
+  it('drops the spinner once playback fails mid-buffering', () => {
+    const h = ready();
+    h.state.buffering.set(true);
+    expect(h.component.spinnerVisible()).toBe(true);
+
+    h.state.error.set({ userMessage: 'x', source: 'session', code: 0 } as PlaybackError);
+
     expect(h.component.spinnerVisible()).toBe(false);
   });
 

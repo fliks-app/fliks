@@ -379,11 +379,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly spinnerVisible = computed(
     () =>
       !this.autoplayBlocked() &&
+      !this.error() &&
       (this.loading() ||
         this.buffering() ||
         // Shaka can hold a starved playhead without ever reporting `buffering`.
         this.frozenSince() > 0 ||
-        (!this.videoStarted() && !this.error())),
+        !this.videoStarted()),
   );
   /** Everything the controls read of the playing output: the cast or remote output, else the engine's own signals. */
   protected readonly view = computed<ControlsModel>(() => {
