@@ -57,7 +57,8 @@ export class LocalPlaybackOutput implements LocalOutput {
 
   readonly isConnected = computed(() => true);
   readonly hasMedia = computed(() => true);
-  readonly ready = () => !!this.host.engine() && this.state.videoStarted();
+  /** Not while reloading: a party applied to the old stream would be undone when the new one starts. */
+  readonly ready = () => !!this.host.engine() && this.state.videoStarted() && !this.state.reloading();
   readonly item = () => ({ mediaId: this.host.mediaId(), episodeId: this.host.episodeId() });
   readonly paused = () => this.host.engine()?.paused === true;
   readonly position = () => this.host.position();
