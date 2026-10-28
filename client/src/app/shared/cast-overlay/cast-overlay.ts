@@ -1,173 +1,29 @@
-import {
-  Component,
-  HostListener,
-  computed,
-  inject,
-} from '@angular/core';
-import { formatTime } from '../../core/utils/player.utils';
-import { RemoteService } from '../../core/services/remote.service';
-import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
-import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
-import { PlaybackOption } from '../../core/services/playback/playback-output';
+import { Component, computed, inject } from '@angular/core';
+import { TranslatePipe } from '@ngx-translate/core';
+import { LucidePause, LucidePlay, LucideX } from '@lucide/angular';
+import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
-import { AppSettingsService } from '../../core/services/app-settings.service';
-import { SeekbarComponent } from '../components/seekbar/seekbar';
-import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { DropdownMenuComponent } from '../components/dropdown-menu';
-import { DropdownOptionComponent } from '../components/dropdown-option/dropdown-option';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import {
-  LucideCast,
-  LucidePause,
-  LucidePlay,
-  LucideRotateCcw,
-  LucideRotateCw,
-  LucideSkipForward,
-  LucideSquare,
-  LucideVolume2,
-  LucideVolumeX,
-  LucideX,
-} from '@lucide/angular';
+import { CachedSrcDirective } from '../directives/cached-src.directive';
 
-/** One labelled track/quality picker in the control row. */
-interface PickerRow {
-  kind: 'audio' | 'subtitle' | 'quality';
-  labelKey: string;
-  /** What the trigger shows, like the media-detail selectors. */
-  active: string;
-  options: PlaybackOption[];
-  activeId: string | null;
-  /** Subtitles alone offer an explicit "off" row above the list. */
-  offRow: boolean;
-}
-
-/** The single playback-control surface, driving the active target (Chromecast or remote) through the same UI. */
+/** Bar over the page while playback is on another device; the player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [
-    LucideCast,
-    LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
-    LucideSkipForward, LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
-    SeekbarComponent,
-    CachedSrcDirective,
-    ResolveUrlPipe,
-    DropdownMenuComponent,
-    DropdownOptionComponent,
-    TranslatePipe,
-  ],
+  imports: [LucidePause, LucidePlay, LucideX, CachedSrcDirective, ResolveUrlPipe, TranslatePipe],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {
-  private readonly remote = inject(RemoteService);
-  private readonly appSettings = inject(AppSettingsService);
-  private readonly castTarget = inject(CastPlaybackTarget);
-  private readonly remoteTarget = inject(RemotePlaybackTarget);
   protected readonly session = inject(PlaybackSession);
+  private readonly device = inject(DeviceService);
 
-  get t() {
-    return this.remote.isRemoting() ? this.remoteTarget : this.castTarget;
+  /** The cast or remote output; null on a TV, which never casts, and while playing locally. */
+  protected readonly output = computed(() => (this.device.isTv() || this.session.isLocal() ? null : this.session.output()));
+
+  protected open(): void {
+    this.session.openPlayer();
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape() {
-    if (this.session.expanded()) this.session.expanded.set(false);
-  }
-
-  toggle() {
-    this.session.expanded.update(v => !v);
-  }
-
-  /** In a party the transport buttons are intents, otherwise they act on the receiver. */
-  protected togglePlay() {
+  protected togglePlay(): void {
     this.session.command({ type: 'toggle' });
-  }
-
-  protected seek(at: number) {
-    this.session.command({ type: 'seek', at });
-  }
-
-  protected next() {
-    this.session.command({ type: 'next' });
-  }
-
-  private readonly translate = inject(TranslateService);
-
-  readonly formatTime = formatTime;
-
-  /** The trigger shows the current choice, like the media-detail selectors. */
-  protected activeAudioLabel(): string {
-    const id = this.t.activeAudioTrackId();
-    const o = this.t.availableAudioTracks().find((x) => x.id === id);
-    return o?.head || o?.label || '';
-  }
-
-  protected activeSubtitleLabel(): string {
-    const id = this.t.activeSubtitleId();
-    if (!id) return this.translate.instant('player.off');
-    const o = this.t.availableSubtitles().find((x) => x.id === id);
-    return o?.head || o?.label || '';
-  }
-
-  protected activeQualityLabel(): string {
-    const id = this.t.activeQualityId();
-    return this.t.availableQualities().find((o) => o.id === id)?.label ?? id;
-  }
-
-  /** Built as data so a file with one audio track leaves no hole and each panel's anchor follows the picker's actual position. */
-  protected readonly pickers = computed<PickerRow[]>(() => {
-    const t = this.t;
-    const rows: PickerRow[] = [];
-    if (t.availableAudioTracks().length > 1) {
-      rows.push({
-        kind: 'audio',
-        labelKey: 'player.audio',
-        active: this.activeAudioLabel(),
-        options: this.appSettings.sortTracks(t.availableAudioTracks()),
-        activeId: t.activeAudioTrackId(),
-        offRow: false,
-      });
-    }
-    if (t.availableSubtitles().length) {
-      rows.push({
-        kind: 'subtitle',
-        labelKey: 'player.subtitles',
-        active: this.activeSubtitleLabel(),
-        options: this.appSettings.sortTracks(t.availableSubtitles()),
-        activeId: t.activeSubtitleId(),
-        offRow: true,
-      });
-    }
-    if (t.availableQualities().length > 1) {
-      rows.push({
-        kind: 'quality',
-        labelKey: 'player.quality',
-        active: this.activeQualityLabel(),
-        options: t.availableQualities(),
-        activeId: t.activeQualityId(),
-        offRow: false,
-      });
-    }
-    return rows;
-  });
-
-  /** Only the rightmost list opens leftwards: the panel has a 240px floor, so
-   *  anchoring it the other way pushed it outside the card. */
-  protected placementFor(index: number): 'top-start' | 'top-end' {
-    return index === this.pickers().length - 1 ? 'top-end' : 'top-start';
-  }
-
-  protected pick(row: PickerRow, option: PlaybackOption | null) {
-    if (row.kind === 'audio') this.t.selectAudio(option);
-    else if (row.kind === 'subtitle') this.t.selectSubtitle(option);
-    else if (option) this.t.selectQuality(option);
-  }
-
-  stopPlayback() {
-    this.t.stopPlayback();
-  }
-
-  disconnect() {
-    this.t.disconnect();
   }
 }

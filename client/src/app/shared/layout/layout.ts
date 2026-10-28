@@ -45,6 +45,7 @@ import { RecommendModalComponent } from '../components/recommend-modal/recommend
 import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
+import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
@@ -88,6 +89,7 @@ const PAIRING_TTL_MS = 600_000;
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
     LucideCloudOff, LucideDownload, LucideRotateCw,
     RemotePickerComponent,
+    CastOverlayComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
     RecommendModalComponent,
@@ -535,9 +537,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     setTimeout(() => this.retrying.set(false), 10_000);
   }
 
-  /** The chip of a cast or an already selected remote target opens its control card, not the device picker. */
-  toggleCastOverlay() {
-    this.session.expanded.update(v => !v);
+  /** The chip of a cast or an already selected remote target opens the player on it, not the device picker. */
+  openCastPlayer() {
+    this.session.openPlayer();
   }
 
   formatDevice(
