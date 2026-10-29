@@ -9,6 +9,7 @@
     "start": "npm run cast-app-id && ng serve",
     "start:docker": "npm run cast-app-id && ng serve --configuration docker --host 0.0.0.0 --port 4500 --poll 2000",
     "build": "ng build",
+    "build:dev": "npm run cast-app-id && ng build --configuration development",
     "watch": "npm run cast-app-id && ng build --watch --configuration development",
     "test": "ng test",
     "cap:sync": "npx cap sync android",

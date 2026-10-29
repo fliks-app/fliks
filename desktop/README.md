@@ -55,7 +55,7 @@ cd native && ../node_modules/.bin/node-gyp rebuild \
 npm run build            # → dist/main/index.cjs, dist/preload/index.cjs
 
 # 3. Angular client (from repo root) + copy to a writable dir
-cd ../client && npx ng build --configuration=development && cd ../desktop
+cd ../client && npm run build:dev && cd ../desktop
 rm -rf /tmp/fliks-verify/browser && mkdir -p /tmp/fliks-verify/browser \
   && cp -r ../client/dist/client/browser/. /tmp/fliks-verify/browser/
 

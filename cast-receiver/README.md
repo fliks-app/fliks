@@ -95,7 +95,7 @@ Test receiver changes without touching the prod app (`66BF4DAE`):
 3. Dev builds pick it up, release builds always use the prod app:
    - Web dev server: `npm run start`, `start:docker` or `watch` in `client/` (they run
      `npm run cast-app-id` first; the dev container reads `.env.local` through `env_file`).
-   - Desktop test builds: `npm run cast-app-id && npx ng build --configuration=development` in `client/`.
+   - Desktop test builds: `npm run build:dev` in `client/`. A direct `ng serve` or `ng build -c development` fails until `npm run cast-app-id` has generated the file.
    - Android: `debug` builds only (`build.gradle` injects it as `cast_receiver_app_id`).
    - iOS: run `npm run cast-app-id` in `client/`, then build the Debug configuration.
 

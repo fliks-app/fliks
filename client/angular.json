@@ -80,6 +80,11 @@
               "extractLicenses": false,
               "sourceMap": true
             },
+            "test": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
             "tizen": {
               "baseHref": "./",
               "polyfills": ["src/tv-polyfills.ts"],
@@ -135,6 +140,7 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
+            "buildTarget": "client:build:test",
             "runnerConfig": true
           }
         }
