@@ -96,7 +96,7 @@ services:
     # Own build cache: a host `ng build` from a different node_modules must not share it.
     tmpfs:
       - /src/client/node_modules
-      - /src/client/.angular
+      - /src/client/.angular:mode=1777
     volumes:
       - ./client:/src/client
 
