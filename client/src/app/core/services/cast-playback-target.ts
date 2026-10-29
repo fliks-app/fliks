@@ -121,7 +121,8 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly canSetVolume = computed(() => true);
   readonly skipCue = computed<{ labelKey: string } | null>(() => null);
   readonly isStarting = computed(() => false);
-  readonly isIdle = computed(() => false);
+  /** Connected with nothing loaded, e.g. after a stop: the bar names no media. */
+  readonly isIdle = computed(() => this.cast.isConnected() && !this.cp.hasMedia());
   readonly targetOffline = computed(() => false);
   /** A receiver is started by the sender's own gesture, so this cannot arise. */
   readonly autoplayBlocked = computed(() => false);

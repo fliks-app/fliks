@@ -49,6 +49,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     playbackError$: new Subject<{ position?: number }>(),
     receiverError$: new Subject<object>(),
     saveResumeState: vi.fn(),
+    clearResumeState: vi.fn(),
     setActiveSubtitle: vi.fn(async () => {}),
     setActiveAudioLanguage: vi.fn(async () => false),
     setCastStreamBase: vi.fn(),
@@ -307,6 +308,20 @@ describe('cast picks handed back to a player that outlives the session', () => {
     svc.clear();
     expect(svc.selectionFor(MEDIA_FILE_ID)).toEqual({ subtitleId: 'ext-11', audioStreamIndex: 1 });
     expect(svc.selectionFor(MEDIA_FILE_ID + 1)).toBeNull();
+  });
+});
+
+describe('cast stop', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('forgets the media and its resume state so no bar or reloaded renderer shows it', () => {
+    const { svc, cast } = setup();
+    svc.startCast({ ...base, subtitles: [], activeSubtitleId: null, mediaTitle: 'Show', episodeTitle: 'S01E02' });
+    svc.clear();
+    expect(svc.mediaTitle()).toBe('');
+    expect(svc.episodeTitle()).toBe('');
+    expect(svc.mediaId()).toBe(0);
+    expect(cast.clearResumeState).toHaveBeenCalled();
   });
 });
 

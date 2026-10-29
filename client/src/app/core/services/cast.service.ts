@@ -264,6 +264,12 @@ export class CastService implements OnDestroy {
 
   // ---- Initialization ----
 
+  /** A stopped or cleared session must not be re-adopted by a reloaded renderer. */
+  clearResumeState(): void {
+    this.resumedState.set(null);
+    if (this.hasCastBridge) void this.bridge.setResumeState?.({ state: null }).catch(() => {});
+  }
+
   saveResumeState(state: unknown): void {
     if (this.hasCastBridge) void this.bridge.setResumeState?.({ state }).catch(() => {});
   }

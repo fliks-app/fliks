@@ -522,7 +522,13 @@ export class CastPlayerService {
     this.setLiveSession(null);
     this.playbackId = null;
     this.hasMedia.set(false);
+    this.cast.clearResumeState();
     this.mediaFileId.set(0);
+    this.mediaId.set(0);
+    this.episodeId.set(undefined);
+    this.mediaTitle.set('');
+    this.episodeTitle.set('');
+    this.fanartUrl.set(null);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
   }

@@ -65,6 +65,17 @@ describe('CastPlaybackTarget auto-next', () => {
   });
 });
 
+describe('CastPlaybackTarget after a stop', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('is idle while connected with nothing loaded', () => {
+    const { cp, target } = setup();
+    expect(target.isIdle()).toBe(false);
+    cp.hasMedia.set(false);
+    expect(target.isIdle()).toBe(true);
+  });
+});
+
 describe('CastPlaybackTarget as a party output', () => {
   afterEach(() => TestBed.resetTestingModule());
 

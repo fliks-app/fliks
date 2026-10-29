@@ -236,4 +236,5 @@ test('initializeResult hands the saved state back only while a session is live',
   const state = { mediaFileId: 53 };
   assert.deepEqual(initializeResult(true, true, state), { available: true, connected: true, resume: state });
   assert.equal(initializeResult(true, false, state).resume, undefined);
+  assert.equal(initializeResult(true, true, null).resume, undefined);
 });
