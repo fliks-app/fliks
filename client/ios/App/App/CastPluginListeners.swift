@@ -137,13 +137,14 @@ extension CastPlugin {
         let time = client.approximateStreamPosition()
         let duration = status.mediaInformation?.streamDuration ?? 0
         let paused = status.playerState == .paused
+        let buffering = status.playerState == .buffering
         // Device (receiver) volume lives on the session, not media status —
         // read it each tick so external changes mirror back into the slider.
         let volume = currentSession?.currentDeviceVolume ?? 1
         let muted = currentSession?.currentDeviceMuted ?? false
 
         let ended = status.playerState == .idle && status.idleReason == .finished
-        emitMediaUpdate(time: time, duration: duration, paused: paused, volume: volume, muted: muted, ended: ended)
+        emitMediaUpdate(time: time, duration: duration, paused: paused, buffering: buffering, volume: volume, muted: muted, ended: ended)
     }
 
     // MARK: - Helpers
@@ -166,8 +167,9 @@ extension CastPlugin {
         }
     }
 
-    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, volume: Float, muted: Bool, ended: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), volume: \(volume), muted: \(muted), ended: \(ended) } }));"
+    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, buffering: Bool, volume: Float, muted: Bool, ended: Bool) {
+        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), buffering: \(buffering), ended: \(ended) } }));"
+            + "window.dispatchEvent(new CustomEvent('castDeviceUpdate', { detail: { volume: \(volume), muted: \(muted) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }

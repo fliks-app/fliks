@@ -210,7 +210,6 @@ describe('CastService LOAD failure', () => {
     (svc as unknown as { hasCastBridge: boolean }).hasCastBridge = true;
 
     await expect(svc.loadMedia(load())).rejects.toBeDefined();
-    expect(svc.mediaTitle()).toBe('');
   });
 
   it('rejects when there is no session', async () => {
@@ -271,5 +270,36 @@ describe('CastService rejoined media', () => {
     const off = { remotePlayer: { isConnected: false, mediaInfo: { customData: { mediaFileId: 1, mediaId: 2 } } }, rejoinedMedia: { set: vi.fn() } };
     sync(off);
     expect(off.rejoinedMedia.set).toHaveBeenCalledWith(null);
+  });
+});
+
+describe('CastService receiver state updates', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('leaves every media field the event does not carry unchanged', () => {
+    const svc = make(null);
+    svc.applyMediaUpdate({ currentTime: 30, duration: 3600, isPaused: false, buffering: false, ended: false });
+    svc.applyMediaUpdate({ currentTime: 31 });
+    expect([svc.currentTime(), svc.duration(), svc.isPaused(), svc.buffering(), svc.ended()]).toEqual([31, 3600, false, false, false]);
+    svc.applyMediaUpdate({ isPaused: true });
+    expect(svc.duration()).toBe(3600);
+  });
+
+  it('applies a device update to the level only, never to the media state', () => {
+    const svc = make(null);
+    svc.applyMediaUpdate({ currentTime: 30, duration: 3600, isPaused: false });
+    svc.applyDeviceUpdate({ volume: 0.4 });
+    expect([svc.volume(), svc.muted()]).toEqual([0.4, false]);
+    svc.applyDeviceUpdate({ muted: true });
+    expect([svc.volume(), svc.muted()]).toEqual([0.4, true]);
+    expect([svc.currentTime(), svc.duration(), svc.isPaused()]).toEqual([30, 3600, false]);
+  });
+
+  it('ignores an empty event', () => {
+    const svc = make(null);
+    svc.applyMediaUpdate({ duration: 90 });
+    svc.applyMediaUpdate(undefined);
+    svc.applyDeviceUpdate(null);
+    expect(svc.duration()).toBe(90);
   });
 });

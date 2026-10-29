@@ -368,6 +368,10 @@ export interface DesktopCastMediaUpdate {
   isPaused?: boolean;
   buffering?: boolean;
   ended?: boolean;
+}
+
+/** The receiver device's own output level, sent apart from the media state. */
+export interface DesktopCastDeviceUpdate {
   volume?: number;
   muted?: boolean;
 }
@@ -383,9 +387,10 @@ export interface DesktopCastEvent {
     | 'castStateChanged'
     | 'castPickerDismissed'
     | 'castMediaUpdate'
+    | 'castDeviceUpdate'
     | 'castError'
     | 'castReceiverMessage';
-  detail: DesktopCastMediaUpdate & {
+  detail: DesktopCastMediaUpdate & DesktopCastDeviceUpdate & {
     namespace?: string;
     message?: string;
     available?: boolean;
