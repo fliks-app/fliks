@@ -2712,8 +2712,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.paused.set(engine.paused);
       if (engine.paused) this.state.buffering.set(false);
     };
-    // Pausing an engine that opened paused fires no event: settle the state from the engine.
-    if (wasPaused) engine.pause().then(settle, settle);
+    if (wasPaused) void this.pausePlayback();
     else engine.play().catch(settle);
   }
 
@@ -2753,7 +2752,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         void this.savePosition(true);
       });
     } else if (this.loadedPaused) {
-      this.state.paused.set(this.engine!.paused);
+      // Opened paused: no pause event ends the launch the transport shows as playing.
+      void this.pausePlayback();
     }
 
     // Hide controls after autoplay starts
