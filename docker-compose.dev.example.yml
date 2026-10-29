@@ -88,6 +88,9 @@ services:
     working_dir: /src/client
     user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'
     command: npm run start:docker
+    env_file:
+      - path: .env.local
+        required: false
     ports:
       - '4500:4500'
     # Own build cache: a host `ng build` from a different node_modules must not share it.

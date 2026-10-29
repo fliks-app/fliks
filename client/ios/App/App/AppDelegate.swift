@@ -24,8 +24,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         UNUserNotificationCenter.current().delegate = self
 
         // Initialize Google Cast SDK early (required for device discovery)
+        let castAppId = Bundle.main.object(forInfoDictionaryKey: "FliksCastAppId") as? String ?? "66BF4DAE"
         let castOptions = GCKCastOptions(discoveryCriteria:
-            GCKDiscoveryCriteria(applicationID: "66BF4DAE"))
+            GCKDiscoveryCriteria(applicationID: castAppId))
         castOptions.disableDiscoveryAutostart = false
         // Session resumption at launch needs the device found before any Cast button is tapped.
         castOptions.startDiscoveryAfterFirstTapOnCastButton = false

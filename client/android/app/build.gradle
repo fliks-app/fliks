@@ -1,5 +1,10 @@
 apply plugin: 'com.android.application'
 
+// Dev-only Cast receiver app ID from the repo's .env.local; release keeps the strings.xml one.
+def castAppId = file('../../../.env.local').with {
+    it.exists() ? it.readLines().findResult { l -> l.startsWith('FLIKS_CAST_APP_ID=') ? l.substring(18).trim().replaceAll(/^(['"])(.*)\1$/, '$2') : null } : null
+}
+
 android {
     namespace "media.fliks.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -38,6 +43,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            if (castAppId) {
+                resValue "string", "cast_receiver_app_id", castAppId
+            }
+        }
         release {
             minifyEnabled true
             shrinkResources true

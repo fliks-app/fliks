@@ -31,10 +31,12 @@
 	</dict>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>FliksCastAppId</key>
+	<string>$(FLIKS_CAST_APP_ID)</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_googlecast._tcp</string>
-		<string>_66BF4DAE._googlecast._tcp</string>
+		<string>_$(FLIKS_CAST_APP_ID)._googlecast._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Fliks uses the camera to take your profile picture.</string>

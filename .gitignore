@@ -105,3 +105,9 @@ __pycache__/
 # Fetched by deploy-cast-receiver.yml
 cast-receiver/emoji/
 cast-receiver/fonts/
+
+# Dev-only Cast app ID override and what is generated from it
+!.env.local.example
+.env.local
+client/src/environments/cast-app-id.generated.ts
+client/ios/App/App/Local.xcconfig
