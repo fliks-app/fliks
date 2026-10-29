@@ -27,7 +27,9 @@ struct PartySchedulePicker: View {
             Picker("", selection: day) {
                 ForEach(Self.days(), id: \.self) { Text(Self.dayLabel($0)).tag($0) }
             }
+            .pickerStyle(.menu)
             Picker("", selection: hour) { ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) } }
+                .pickerStyle(.menu)
             Text(":")
             Picker("", selection: minute) { ForEach([0, 15, 30, 45], id: \.self) { Text(String(format: "%02d", $0)).tag($0) } }
         }

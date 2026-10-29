@@ -12,7 +12,8 @@ import Foundation
     func refresh() async {
         struct Reply: Decodable { let version: String }
         let reply: Reply? = try? await APIClient.shared.get("/api/system/version")
-        value = reply?.version
+        // A failed fetch keeps the last known version: nil would hide every 5.2 feature until the next success.
+        if let reply { value = reply.version }
     }
 
     /// A `-dev` server runs the newest code; an unknown version supports nothing new.
