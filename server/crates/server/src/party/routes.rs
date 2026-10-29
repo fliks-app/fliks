@@ -1379,7 +1379,7 @@ pub async fn signal(
         .act(id, |l| {
             (
                 l.room
-                    .signal_target(a.user.id, &b.device_id, &b.to, now_ms()),
+                    .signal_target(a.user.id, &b.device_id, &b.to, b.to_user_id, now_ms()),
                 vec![],
             )
         })

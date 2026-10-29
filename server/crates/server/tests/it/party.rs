@@ -870,7 +870,7 @@ async fn a_signal_reaches_only_its_target_and_both_sides_need_voice(pool: PgPool
         let (s, _) = c.call("POST", &uri, t, Some(json!({"deviceId": d}))).await;
         assert_eq!(s, 200);
     }
-    let sig = json!({"deviceId": "da", "to": "db", "kind": "offer", "data": {"sdp": "x"}});
+    let sig = json!({"deviceId": "da", "to": "db", "toUserId": bob, "kind": "offer", "data": {"sdp": "x"}});
     let url = format!("/api/parties/{id}/signal");
     let (s, e) = c.call("POST", &url, &a, Some(sig.clone())).await;
     assert_eq!((s, msg(&e)), (409, Some("party.error_voice_not_joined")));
@@ -899,6 +899,9 @@ async fn a_signal_reaches_only_its_target_and_both_sides_need_voice(pool: PgPool
         ]
     );
 
+    let wrong = json!({"deviceId": "da", "to": "db", "toUserId": carol, "kind": "offer", "data": {}});
+    let (s, e) = c.call("POST", &url, &a, Some(wrong)).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_voice_not_joined")));
     let (s, _) = c.call("POST", &url, &a, Some(sig)).await;
     assert_eq!(s, 204);
     let got = signals(&mut sb).await;
@@ -913,7 +916,7 @@ async fn a_signal_reaches_only_its_target_and_both_sides_need_voice(pool: PgPool
     assert!(signals(&mut sk).await.is_empty());
 
     let big =
-        json!({"deviceId": "da", "to": "db", "kind": "ice", "data": {"x": "y".repeat(17_000)}});
+        json!({"deviceId": "da", "to": "db", "toUserId": bob, "kind": "ice", "data": {"x": "y".repeat(17_000)}});
     let (s, _) = c.call("POST", &url, &a, Some(big)).await;
     assert_eq!(s, 400);
 }

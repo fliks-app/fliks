@@ -211,6 +211,7 @@ pub enum SignalKind {
 pub struct SignalIn {
     pub device_id: String,
     pub to: String,
+    pub to_user_id: i32,
     pub kind: SignalKind,
     pub data: serde_json::Value,
 }

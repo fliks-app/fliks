@@ -25,6 +25,7 @@ const RATE_WINDOW_MS: i64 = 10_000;
 const MAX_MESSAGES: usize = 5;
 const MAX_REACTIONS: usize = 10;
 const MAX_SIGNALS: usize = 60;
+const MAX_RTT_MS: i64 = 5_000;
 
 /// Noto's asset name for an emoji: its codepoints in lowercase hex, joined by `_`.
 pub fn noto_code(emoji: &str) -> String {
@@ -658,13 +659,14 @@ impl Room {
         user_id: i32,
         device_id: &str,
         to: &str,
+        to_user: i32,
         now: i64,
     ) -> Result<(i32, String), Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
         let target = self
             .members
             .iter()
-            .find(|m| m.device_id == to && m.voice.is_some())
+            .find(|m| m.device_id == to && m.user_id == to_user && m.voice.is_some())
             .map(|m| (m.user_id, m.connection_id.clone()));
         let target = target.filter(|_| self.members[i].voice.is_some());
         let target = target.ok_or(Error::VoiceNotJoined)?;
@@ -1210,7 +1212,7 @@ impl Live {
         let m = &mut room.members[i];
         m.last_seen_ms = now;
         if let Some(r) = rtt_ms {
-            m.rtt_ms = r.max(0);
+            m.rtt_ms = r.clamp(0, MAX_RTT_MS);
         }
         let new = match status {
             MemberStatus::Ready if waiting.is_some() && !near => m.status,
@@ -1939,32 +1941,36 @@ mod tests {
     fn signals_need_voice_on_both_sides_and_are_rate_limited() {
         let mut l = party();
         assert_eq!(
-            l.room.signal_target(1, "d1", "d2", 0),
+            l.room.signal_target(1, "d1", "d2", 2, 0),
             Err(Error::VoiceNotJoined)
         );
         voice(&mut l, 1, "d1", true).unwrap();
         assert_eq!(
-            l.room.signal_target(1, "d1", "d2", 0),
+            l.room.signal_target(1, "d1", "d2", 2, 0),
             Err(Error::VoiceNotJoined)
         );
         voice(&mut l, 2, "d2", true).unwrap();
-        assert_eq!(l.room.signal_target(1, "d1", "d2", 0), Ok((2, "c2".into())));
+        assert_eq!(l.room.signal_target(1, "d1", "d2", 2, 0), Ok((2, "c2".into())));
         assert_eq!(
-            l.room.signal_target(1, "d1", "nope", 0),
+            l.room.signal_target(1, "d1", "nope", 2, 0),
             Err(Error::VoiceNotJoined)
         );
         let rev = l.room.rev;
         for _ in 1..MAX_SIGNALS {
-            l.room.signal_target(1, "d1", "d2", 1).unwrap();
+            l.room.signal_target(1, "d1", "d2", 2, 1).unwrap();
         }
         assert_eq!(
-            l.room.signal_target(1, "d1", "d2", 2),
+            l.room.signal_target(1, "d1", "d2", 2, 2),
             Err(Error::RateLimited)
         );
         assert!(
             l.room
-                .signal_target(1, "d1", "d2", RATE_WINDOW_MS + 1)
+                .signal_target(1, "d1", "d2", 2, RATE_WINDOW_MS + 1)
                 .is_ok()
+        );
+        assert_eq!(
+            l.room.signal_target(1, "d1", "d2", 1, RATE_WINDOW_MS + 2),
+            Err(Error::VoiceNotJoined)
         );
         assert_eq!(l.room.rev, rev);
     }
