@@ -599,4 +599,6 @@ struct RemoteCommand: Codable {
     let mediaFileId: Int?
     let mediaId: Int?
     let episodeId: Int?
+    /// `load` only: the sender was paused, so the player opens paused. Absent means play.
+    let paused: Bool?
 }

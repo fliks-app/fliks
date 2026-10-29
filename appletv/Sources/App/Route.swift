@@ -20,6 +20,6 @@ enum Route: Hashable {
     case settings
 
     // `episodeId` is nil for a movie; `startAt` is the resume position in
-    // seconds (0 = from start).
-    case player(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double)
+    // seconds (0 = from start); `startPaused` opens it paused (a paused remote handoff).
+    case player(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, startPaused: Bool = false)
 }
