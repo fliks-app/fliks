@@ -1,5 +1,5 @@
 # electron-builder config. Produces one installer per OS from the same Electron
-# app: macOS .dmg, Windows NSIS .exe, Linux .deb, AppImage and snap.
+# app: macOS .dmg, Windows NSIS .exe, Linux .deb (+ AppImage).
 #
 # What gets shipped (see desktop/src/main/index.ts for the runtime lookups this
 # layout has to satisfy):
@@ -106,7 +106,7 @@ linux:
   desktop:
     entry:
       StartupWMClass: fliks
-  target: [AppImage, deb, snap]
+  target: [AppImage, deb]
   category: AudioVideo
 # deb runtime deps live at the ROOT (DebOptions), not under `linux`. The addon
 # links the bundled SDL3 and GL, and dlopen's libmpv; SDL3 dlopens EGL, X11 and
@@ -136,24 +136,3 @@ deb:
     - libsecret-1-0
     - libgl1
     - libegl1
-# The gnome extension supplies GL/EGL (mesa-2404) and every libmpv dependency but the bundled
-# libXpresent; it can't build on the host, hence LXD.
-snapcraft:
-  base: core24
-  publish:
-    provider: snapStore
-    channels: [stable]
-  core24:
-    useLXD: true
-    summary: Stream your Fliks media library
-    description: >-
-      Fliks is a native desktop client for your personal Fliks media server. Connect to your
-      server and stream your movies and shows with mpv-powered playback.
-    plugs:
-      - default
-      - browser-support
-      - network-bind # cast discovery binds mDNS port 5353
-      - screen-inhibit-control
-      - audio-record # watch party voice chat
-    # Its bus name defaults to the snap's: org.mpris.MediaPlayer2.fliks, the one mpris.ts owns.
-    slots: [mpris]

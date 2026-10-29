@@ -77,7 +77,7 @@ jobs:
             artifact_glob: |
               desktop/release/*.deb
               desktop/release/*.AppImage
-              desktop/release/*.snap
+              desktop/*.snap
               desktop/release/latest-linux.yml
           - os: macos-latest
             label: dmg
@@ -157,15 +157,6 @@ jobs:
             cmake libwayland-dev libxkbcommon-dev libdbus-1-dev \
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev \
             libxrender-dev libxss-dev apt-utils
-
-      # electron-builder packs the snap with `snapcraft --use-lxd` (see snapcraft: in electron-builder.yml).
-      - name: Set up LXD (Linux)
-        if: runner.os == 'Linux'
-        uses: canonical/setup-lxd@8c6a87bfb56aa48f3fb9b830baa18562d8bfd4ee # v1
-
-      - name: Install snapcraft (Linux)
-        if: runner.os == 'Linux'
-        run: sudo snap install snapcraft --classic
 
       # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
       # libmpv headers the addon compiles against + the dylib the vendor script
@@ -334,7 +325,6 @@ jobs:
           APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPSTORE_API_KEY_ID || '' }}
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPSTORE_API_ISSUER_ID || '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ runner.os == 'Linux' && secrets.SNAPCRAFT_STORE_CREDENTIALS || '' }}
         run: |
           # Windows publishes through Velopack below.
           if [[ "$RUNNER_OS" != Windows && ( "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
@@ -345,10 +335,24 @@ jobs:
           version=${{ steps.version.outputs.version }}
           # release-please marks a suffixed version as a pre-release; electron-builder skips a type mismatch.
           [[ "$version" == *-* ]] && type=prerelease || type=release
-          # Only a stable v* release reaches the snap's stable channel.
-          [[ "$GITHUB_REF" == refs/tags/v* && "$type" == release ]] && channel=stable || channel=beta
-          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type" \
-            -c.snapcraft.publish.channels="$channel"
+          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type"
+
+      - name: Build the snap (Linux)
+        if: runner.os == 'Linux'
+        id: snap
+        uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79 # v1.3.0
+        with:
+          path: desktop
+
+      - name: Publish the snap (Linux)
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
+        uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1.2.0
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.snap.outputs.snap }}
+          # Only a stable v* release reaches the stable channel.
+          release: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(steps.version.outputs.version, '-') && 'stable' || 'beta' }}
 
       # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
       - name: Publish the APT repository (Linux)

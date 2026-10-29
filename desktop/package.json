@@ -16,7 +16,7 @@
     "start": "npm run build && electron .",
     "dev:linux": "bash scripts/dev-linux.sh",
     "dist": "electron-builder",
-    "dist:linux": "electron-builder --linux AppImage deb snap",
+    "dist:linux": "electron-builder --linux AppImage deb",
     "dist:mac": "electron-builder --mac dmg zip",
     "dist:win": "electron-builder --win dir"
   },
