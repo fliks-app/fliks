@@ -583,7 +583,14 @@ struct RemoteRegisterResponse: Codable {
 /// A pending command polled from the server. Absolute/state-setting, never a
 /// delta: see `RemoteControlService`. Field set mirrors the `remote.command`
 /// SSE payload other clients receive over the wire.
-struct RemoteCommand: Codable {
+/// The sender's audio and subtitle picks on a remote `load`: `subtitleSent` tells an explicit Off (nil id) from no pick.
+struct LaunchTracks: Hashable {
+    let audioId: String?
+    let subtitleId: String?
+    let subtitleSent: Bool
+}
+
+struct RemoteCommand: Decodable {
     let cmdId: String
     /// Unix epoch milliseconds: matches the rest of this codebase's JS-origin timestamps.
     let expiresAt: Double
@@ -601,4 +608,33 @@ struct RemoteCommand: Codable {
     let episodeId: Int?
     /// `load` only: the sender was paused, so the player opens paused. Absent means play.
     let paused: Bool?
+    /// The key was sent: a nil `subtitleId` is then an explicit Off rather than no pick.
+    let subtitleIdSent: Bool
+
+    var launchTracks: LaunchTracks {
+        LaunchTracks(audioId: trackId, subtitleId: subtitleId, subtitleSent: subtitleIdSent)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cmdId, expiresAt, action, positionSeconds, level, muted, trackId, subtitleId, qualityId
+        case mediaFileId, mediaId, episodeId, paused
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cmdId = try c.decode(String.self, forKey: .cmdId)
+        expiresAt = try c.decode(Double.self, forKey: .expiresAt)
+        action = try c.decode(String.self, forKey: .action)
+        positionSeconds = try c.decodeIfPresent(Double.self, forKey: .positionSeconds)
+        level = try c.decodeIfPresent(Double.self, forKey: .level)
+        muted = try c.decodeIfPresent(Bool.self, forKey: .muted)
+        trackId = try c.decodeIfPresent(String.self, forKey: .trackId)
+        subtitleId = try c.decodeIfPresent(String.self, forKey: .subtitleId)
+        subtitleIdSent = c.contains(.subtitleId)
+        qualityId = try c.decodeIfPresent(String.self, forKey: .qualityId)
+        mediaFileId = try c.decodeIfPresent(Int.self, forKey: .mediaFileId)
+        mediaId = try c.decodeIfPresent(Int.self, forKey: .mediaId)
+        episodeId = try c.decodeIfPresent(Int.self, forKey: .episodeId)
+        paused = try c.decodeIfPresent(Bool.self, forKey: .paused)
+    }
 }

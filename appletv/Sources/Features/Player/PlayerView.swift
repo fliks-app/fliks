@@ -12,6 +12,7 @@ struct PlayerView: View {
     let episodeId: Int?
     let startAt: Double
     var startPaused = false
+    var launch: LaunchTracks?
     /// Called when the user dismisses a terminal error card.
     var onExit: () -> Void
 
@@ -89,7 +90,7 @@ struct PlayerView: View {
             do {
                 try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
                                            startAt: startAt, autoplay: !inParty && !startPaused,
-                                           prerollPaused: startPaused && !inParty)
+                                           prerollPaused: startPaused && !inParty, launch: inParty ? nil : launch)
                 if inParty {
                     party.onClosed = { _ in onExit() }
                     let controller = PartyController(player: coordinator)

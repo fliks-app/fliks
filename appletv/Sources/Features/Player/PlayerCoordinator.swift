@@ -105,8 +105,9 @@ import UIKit
     // MARK: - Load / reload / teardown
 
     func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true,
-              prerollPaused: Bool = false) async throws {
+              prerollPaused: Bool = false, launch: LaunchTracks? = nil) async throws {
         prerollOnReady = prerollPaused
+        launchTracks = launch
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
@@ -273,6 +274,8 @@ import UIKit
     /// Opened paused outside a party, which prerolls on its own: preroll once ready and at the start position,
     /// since a seek cancels a preroll.
     private var prerollOnReady = false
+    /// A remote handoff's picks: they win over the preferences for this item's first selection.
+    private var launchTracks: LaunchTracks?
     private var initialSeekPending = false
     private func prerollIfOpenedPaused() {
         guard prerollOnReady, !initialSeekPending, player?.currentItem?.status == .readyToPlay else { return }
@@ -459,7 +462,12 @@ import UIKit
         }
         Task {
             let group = try? await item.asset.loadMediaSelectionGroup(for: .audible)
-            if player?.currentItem === item { audibleGroup = group }
+            guard player?.currentItem === item else { return }
+            audibleGroup = group
+            if let id = launchTracks?.audioId, let group, let option = matchOption(id, in: group) {
+                item.select(option, in: group)
+                lastAudio = currentAudioTrackIndex()
+            }
         }
         if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
         timeJumpObserver = NotificationCenter.default.addObserver(
@@ -805,6 +813,7 @@ import UIKit
         let settings = AppSettingsStore.shared
         let mode = settings.subtitleMode
         player.appliesMediaSelectionCriteriaAutomatically = mode != "off" && restoring == nil
+            && launchTracks?.subtitleSent != true
 
         Task {
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible),
@@ -823,6 +832,11 @@ import UIKit
                 return
             case nil:
                 break
+            }
+            if let launch = launchTracks, launch.subtitleSent {
+                item.select(launch.subtitleId.flatMap { matchOption($0, in: group) }, in: group)
+                lastLegible = currentLegibleChoice()
+                return
             }
             if case .text(let index)? = playback.subtitlePick, group.options.indices.contains(index) {
                 item.select(group.options[index], in: group)
