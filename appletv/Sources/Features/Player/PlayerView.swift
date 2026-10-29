@@ -88,7 +88,8 @@ struct PlayerView: View {
             partyBound = inParty
             do {
                 try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
-                                           startAt: startAt, autoplay: !inParty && !startPaused)
+                                           startAt: startAt, autoplay: !inParty && !startPaused,
+                                           prerollPaused: startPaused && !inParty)
                 if inParty {
                     party.onClosed = { _ in onExit() }
                     let controller = PartyController(player: coordinator)

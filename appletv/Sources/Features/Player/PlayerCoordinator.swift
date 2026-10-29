@@ -103,7 +103,9 @@ import UIKit
 
     // MARK: - Load / reload / teardown
 
-    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true) async throws {
+    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true,
+              prerollPaused: Bool = false) async throws {
+        prerollOnReady = prerollPaused
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
@@ -250,8 +252,21 @@ import UIKit
     var isBuffering: Bool { player?.timeControlStatus == .waitingToPlayAtSpecifiedRate }
     var currentItemIds: (mediaId: Int, episodeId: Int?) { (mediaId, episodeId) }
 
-    /// Loads the media pipeline without playing, so a paused party shows its first frame and AVKit drops its spinner.
-    func partyPreroll() async { _ = await player?.preroll(atRate: 1) }
+    /// Loads the media pipeline without playing, so a paused player shows its first frame and AVKit drops its spinner.
+    func preroll() async {
+        guard let player, player.status == .readyToPlay, player.rate == 0 else { return }
+        _ = await player.preroll(atRate: 1)
+    }
+
+    /// Opened paused outside a party, which prerolls on its own: preroll once ready and at the start position,
+    /// since a seek cancels a preroll.
+    private var prerollOnReady = false
+    private var initialSeekPending = false
+    private func prerollIfOpenedPaused() {
+        guard prerollOnReady, !initialSeekPending, player?.currentItem?.status == .readyToPlay else { return }
+        prerollOnReady = false
+        Task { await preroll() }
+    }
 
     func partyPlay() { player?.play() }
     func partyPause() { player?.pause() }
@@ -373,10 +388,18 @@ import UIKit
 
     private func attachObservers(to player: AVPlayer, item: AVPlayerItem, initialSeek: Double, exact: Bool) {
         if initialSeek > 0 {
+            initialSeekPending = true
+            let landed: (Bool) -> Void = { [weak self] _ in
+                Task { @MainActor in
+                    self?.initialSeekPending = false
+                    self?.prerollIfOpenedPaused()
+                }
+            }
             if exact {
-                player.seek(to: Self.seekTime(initialSeek), toleranceBefore: .zero, toleranceAfter: .zero)
+                player.seek(to: Self.seekTime(initialSeek), toleranceBefore: .zero, toleranceAfter: .zero,
+                            completionHandler: landed)
             } else {
-                player.seek(to: Self.seekTime(initialSeek))
+                player.seek(to: Self.seekTime(initialSeek), completionHandler: landed)
             }
         }
         // A periodic time observer stops while the picture is frozen; the watchdog and heartbeat must not.
@@ -476,6 +499,7 @@ import UIKit
             trackingSelection = true
             lastAudio = currentAudioTrackIndex()
             lastLegible = currentLegibleChoice()
+            prerollIfOpenedPaused()
         }
         selectionDidChange() // backup for a missed notification
 
