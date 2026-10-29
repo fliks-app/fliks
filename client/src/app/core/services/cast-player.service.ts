@@ -1039,6 +1039,8 @@ export class CastPlayerService {
     streamInfo?: any;
     startTime?: number;
     tracks?: LaunchTracks;
+    /** False loads the receiver paused. */
+    autoplay?: boolean;
     /** Already loaded by the caller: skips the fetch. */
     media?: Media;
   }) {
@@ -1121,7 +1123,7 @@ export class CastPlayerService {
       activeAudioStreamIndex: audioIndex,
     });
 
-    if (!(await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, true))) {
+    if (!(await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, opts.autoplay ?? true))) {
       // Nothing is playing: drop the dead overlay (and its transcode) so a new cast starts clean.
       this.clear();
     }

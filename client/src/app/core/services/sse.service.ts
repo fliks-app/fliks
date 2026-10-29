@@ -52,6 +52,7 @@ export interface RemoteCommand {
   trackId?: string;
   subtitleId?: string | null;
   qualityId?: string;
+  paused?: boolean;
 }
 
 export interface RemoteState {

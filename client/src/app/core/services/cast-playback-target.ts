@@ -3,7 +3,7 @@ import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
 import { inIntroRange, parseAudioIndex } from '../utils/player.utils';
 import { TranslateService } from '@ngx-translate/core';
-import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
+import { PlaybackOption, PlaybackOutput, PlaybackSnapshot, PlaybackSync } from './playback/playback-output';
 import { PlaybackSession } from './playback/playback-session';
 import { PartyService } from './party/party.service';
 import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
@@ -33,6 +33,17 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly ended = this.cast.ended;
   readonly seekLocked = computed(() => false);
   readonly position = this.cast.currentTime;
+  snapshot(): PlaybackSnapshot | null {
+    const fileId = this.cp.mediaFileId();
+    const { mediaId, episodeId } = this.item();
+    if (!fileId || !mediaId) return null;
+    return {
+      item: { fileId, mediaId, episodeId },
+      position: this.position(),
+      paused: this.paused(),
+      tracks: { fileId, audioStreamIndex: this.cp.activeAudioStreamIndex(), subtitleId: this.cp.activeSubtitleId() },
+    };
+  }
   /** Not while a LOAD is in flight: a party applied to the old media would be undone when the new one starts. */
   readonly ready = computed(
     () => this.cast.isConnected() && this.cp.hasMedia() && !this.cp.reloading() && this.cast.duration() > 0,

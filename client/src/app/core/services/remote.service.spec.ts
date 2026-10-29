@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteService, type RemoteTarget } from './remote.service';
+import { RemoteService, snapshotFromWire, snapshotToWire, type RemoteTarget } from './remote.service';
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
@@ -309,7 +309,7 @@ describe('RemoteService applyLoad', () => {
     });
 
     await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
-    expect(navigateSpy).toHaveBeenCalledWith(['/watch', 42], { queryParams: { t: 0 }, replaceUrl: false });
+    expect(navigateSpy).toHaveBeenCalledWith(['/watch', 42], expect.objectContaining({ queryParams: { t: 0 }, replaceUrl: false }));
   });
 
   async function loadedWith(extra: Partial<RemoteCommand>) {
@@ -324,16 +324,39 @@ describe('RemoteService applyLoad', () => {
 
   it('hands the sender\'s picks to the player as a launch intent bound to the loaded file', async () => {
     const extras = await loadedWith({ trackId: 'audio-2', subtitleId: 'ext-5' });
-    expect(extras?.state).toEqual({ tracks: { fileId: 42, audioStreamIndex: 2, subtitleId: 'ext-5' } });
+    expect(extras?.state).toMatchObject({ snapshot: { tracks: { fileId: 42, audioStreamIndex: 2, subtitleId: 'ext-5' } } });
   });
 
   it('keeps an explicit Off, and leaves the audio to the rules when only the subtitle was picked', async () => {
     const extras = await loadedWith({ subtitleId: null });
-    expect(extras?.state).toEqual({ tracks: { fileId: 42, audioStreamIndex: undefined, subtitleId: null } });
+    expect(extras?.state).toMatchObject({ snapshot: { tracks: { fileId: 42, audioStreamIndex: undefined, subtitleId: null } } });
   });
 
-  it('opens with no launch intent when the sender picked nothing', async () => {
-    expect((await loadedWith({}))?.state).toBeUndefined();
+  it('hands the whole snapshot, pause included, to the player', async () => {
+    const extras = await loadedWith({ paused: true, mediaId: 7, episodeId: 3, positionSeconds: 12 });
+    expect(extras?.state).toEqual({
+      snapshot: {
+        item: { fileId: 42, mediaId: 7, episodeId: 3 },
+        position: 12,
+        paused: true,
+        tracks: { fileId: 42, audioStreamIndex: undefined, subtitleId: undefined },
+      },
+    });
+  });
+
+  it('opens playing when the sender did not pause', async () => {
+    expect(((await loadedWith({}))?.state as any).snapshot.paused).toBe(false);
+  });
+
+  it('round-trips a snapshot through the wire', () => {
+    const snapshot = {
+      item: { fileId: 42, mediaId: 7, episodeId: 3 },
+      position: 12,
+      paused: true,
+      tracks: { fileId: 42, audioStreamIndex: 2, subtitleId: null },
+    };
+    const { action: _a, ...wire } = snapshotToWire(snapshot);
+    expect(snapshotFromWire({ ...loadCmd(), ...wire } as RemoteCommand)).toEqual(snapshot);
   });
 });
 

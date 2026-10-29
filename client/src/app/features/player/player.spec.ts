@@ -270,6 +270,8 @@ function createHarness(opts: {
           clear: vi.fn(),
           adoptSurvivingSession: vi.fn(async () => {}),
           selectionFor: vi.fn(() => null),
+          activeAudioStreamIndex: () => undefined,
+          activeSubtitleId: () => null,
           resolveStartSubtitle: vi.fn(async () => null),
         },
       },
@@ -2101,6 +2103,24 @@ describe('PlayerComponent startup', () => {
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
   });
 
+  it('opens the first load paused when the route was launched paused', async () => {
+    const h = createHarness();
+    const tracks = { fileId: MAIN_FILE_ID, audioStreamIndex: 2, subtitleId: 'ext-5' };
+    const snapshot = { item: { fileId: MAIN_FILE_ID, mediaId: MEDIA_ID }, position: 0, paused: true, tracks };
+    (TestBed.inject(Router) as any).getCurrentNavigation = () => ({ extras: { state: { snapshot } } });
+    let armed: unknown;
+    let picks: unknown;
+    h.component.startLocal = vi.fn(async () => {
+      armed = h.component.resumePaused;
+      picks = h.component.launchTracks;
+      return true;
+    });
+    await h.component.ngAfterViewInit();
+    expect(armed).toBe(true);
+    expect(picks).toEqual(tracks);
+    expect(h.component.resumePaused).toBe(false);
+  });
+
   describe('pre-roll first', () => {
     const launch = (h: ReturnType<typeof createHarness>, query: Record<string, string> = {}) => {
       (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID), ...query };
@@ -2732,14 +2752,15 @@ describe('PlayerComponent cast session picks', () => {
       picked: { subtitleId: string | null; audioStreamIndex: number | undefined } | null,
       subs: unknown[],
     ) {
-      const { h, cp } = casting();
-      cp['selectionFor'].mockReturnValue(picked);
+      const { h } = casting();
       h.component.subs.availableSubtitles.set(subs);
       h.component.activeAudioStreamIndex = 0;
       h.component.subs.activeBurnInId = 99;
       h.component.subs.activeSubtitleId.set('ext-1');
       let seen: unknown;
-      h.component.refreshSidAndReload = vi.fn(async () => {
+      let opts: unknown;
+      h.component.refreshSidAndReload = vi.fn(async (_p: number, o: unknown) => {
+        opts = o;
         seen = {
           audio: h.component.activeAudioStreamIndex,
           burnIn: h.component.subs.activeBurnInId,
@@ -2747,7 +2768,12 @@ describe('PlayerComponent cast session picks', () => {
         };
         return true;
       });
-      return { run: () => h.component.resumeLocal(30), seen: () => seen };
+      return { h, run: (paused = false) => h.component.resumeLocal({
+          item: { fileId: MAIN_FILE_ID, mediaId: MEDIA_ID },
+          position: 30,
+          paused,
+          tracks: { fileId: picked ? MAIN_FILE_ID : MAIN_FILE_ID + 1, ...picked },
+        }), seen: () => seen, opts: () => opts };
     }
 
     it('reloads on the audio and the burn-in picked on the receiver', async () => {
@@ -2757,6 +2783,42 @@ describe('PlayerComponent cast session picks', () => {
       );
       await r.run();
       expect(r.seen()).toEqual({ audio: 2, burnIn: 4, subtitle: 'emb-4' });
+    });
+
+    it('reloads paused when the receiver was paused', async () => {
+      const r = resumeWith(null, []);
+      await r.run(true);
+      expect(r.opts()).toEqual(expect.objectContaining({ paused: true }));
+    });
+
+    it('opens the first load paused when the receiver was paused', async () => {
+      const r = resumeWith(null, []);
+      const c = r.h.component;
+      c.engine = undefined;
+      let armed: unknown;
+      c.startLocal = vi.fn(async () => {
+        armed = c.resumePaused;
+        return true;
+      });
+      await r.run(true);
+      expect(armed).toBe(true);
+      expect(c.resumePaused).toBe(false);
+    });
+
+    it('shows paused after re-pausing an engine that fired no event', () => {
+      const c = createHarness().component;
+      c.engine = { paused: true, pause: vi.fn(async () => {}), play: vi.fn(), destroy: vi.fn(async () => {}) };
+      c.state.paused.set(false);
+      c.state.startingPlayback.set(true);
+      c.restorePlayState(true);
+      expect(c.state.uiPaused()).toBe(true);
+    });
+
+    it('skips the post-load play of an engine that cannot open paused', () => {
+      const c = createHarness().component;
+      c.resumePaused = true;
+      c.armStartPaused({});
+      expect(c.loadedPaused).toBe(true);
     });
 
     it('shows a bitmap pick the local engine renders itself without burning it in', async () => {

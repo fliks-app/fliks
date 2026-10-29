@@ -10,7 +10,7 @@ import { MediaService } from './api/media.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
-import { NO_TIMELINE, PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
+import { NO_TIMELINE, PlaybackOption, PlaybackOutput, PlaybackSnapshot, PlaybackSync } from './playback/playback-output';
 import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 
 /** Drives the cast-overlay UI from a remote target; track lists come from the played file's streamInfo, fetched once the target reports playback. */
@@ -40,6 +40,16 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     mediaId: this.remote.targetState()?.mediaId ?? 0,
     episodeId: this.remote.targetState()?.episodeId ?? undefined,
   }));
+  snapshot(): PlaybackSnapshot | null {
+    const s = this.remote.targetState();
+    if (!s?.mediaId || !s.mediaFileId) return null;
+    return {
+      item: { fileId: s.mediaFileId, mediaId: s.mediaId, episodeId: s.episodeId ?? undefined },
+      position: this.position(),
+      paused: this.paused(),
+      tracks: { fileId: s.mediaFileId, audioStreamIndex: s.audioTrackIndex ?? undefined, subtitleId: s.subtitleId ?? null },
+    };
+  }
   readonly sync: PlaybackSync = { slackS: CAST_DRIFT_IGNORE_S, drift: { ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS } };
   /** Also while the target rebuilds its stream for a quality change: the card
    *  keeps its poster and position and simply reads as loading. */

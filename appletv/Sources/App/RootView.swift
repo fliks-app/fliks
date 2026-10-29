@@ -32,12 +32,12 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, _ in updateRemotePolling() }
             .onAppear {
-                RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt in
+                RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt, startPaused in
                     // Same "reset then push" the auth-state transition above uses -
                     // a remote `load` always replaces whatever is on screen.
                     path = NavigationPath()
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
-                                              episodeId: episodeId, startAt: startAt))
+                                              episodeId: episodeId, startAt: startAt, startPaused: startPaused))
                 }
                 party.onOpenLobby = { _ in path.append(Route.partyLobby) }
                 party.onGoHome = { path = NavigationPath() }
@@ -157,9 +157,10 @@ struct RootView: View {
                             },
                             onSelectEpisode: { path.append(Route.episodeDetail(mediaId: mediaId, episodeId: $0)) }
                         )
-                    case let .player(mediaFileId, mediaId, episodeId, startAt):
+                    case let .player(mediaFileId, mediaId, episodeId, startAt, startPaused):
                         PlayerView(
                             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt,
+                            startPaused: startPaused,
                             onExit: { if !path.isEmpty { path.removeLast() } }
                         )
                     case .search:

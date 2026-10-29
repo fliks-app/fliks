@@ -71,7 +71,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PlaybackQueueService, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
-      { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]) } },
+      { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]), activeAudioStreamIndex: signal(undefined), activeSubtitleId: signal(null) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false) } },
       { provide: MediaService, useValue: {} },

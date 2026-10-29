@@ -10,6 +10,7 @@ import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
+import type { PlaybackSnapshot } from './playback/playback-output';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -41,6 +42,7 @@ export type RemoteCommandInput = {
   trackId?: string;
   subtitleId?: string | null;
   qualityId?: string;
+  paused?: boolean;
 };
 
 /** A `load`'s track picks ride the `trackId` / `subtitleId` fields: absent means no pick, a
@@ -52,12 +54,32 @@ export function launchTracksToWire(tracks: LaunchTracks | null): Pick<RemoteComm
   };
 }
 
-function launchTracksFromWire(cmd: RemoteCommand, fileId: number): LaunchTracks | null {
-  if (cmd.trackId === undefined && cmd.subtitleId === undefined) return null;
+/** The `load` that hands a snapshot to another device; `snapshotFromWire` is its inverse. */
+export function snapshotToWire(s: PlaybackSnapshot): RemoteCommandInput {
   return {
-    fileId,
-    audioStreamIndex: cmd.trackId !== undefined ? parseAudioIndex(cmd.trackId) : undefined,
-    subtitleId: cmd.subtitleId,
+    action: 'load',
+    mediaId: s.item.mediaId,
+    mediaFileId: s.item.fileId,
+    episodeId: s.item.episodeId,
+    positionSeconds: Math.floor(s.position),
+    // Sent only when set: a server without the field rejects it (deny_unknown_fields).
+    ...(s.paused && { paused: true }),
+    ...launchTracksToWire(s.tracks),
+  };
+}
+
+export function snapshotFromWire(cmd: RemoteCommand): PlaybackSnapshot | null {
+  const fileId = cmd.mediaFileId;
+  if (!fileId) return null;
+  return {
+    item: { fileId, mediaId: cmd.mediaId ?? 0, episodeId: cmd.episodeId },
+    position: cmd.positionSeconds ?? 0,
+    paused: cmd.paused === true,
+    tracks: {
+      fileId,
+      audioStreamIndex: cmd.trackId !== undefined ? parseAudioIndex(cmd.trackId) : undefined,
+      subtitleId: cmd.subtitleId,
+    },
   };
 }
 
@@ -340,11 +362,10 @@ export class RemoteService {
     // Only an on-screen player needs the bounce to remount; elsewhere it would flash the home page.
     const overPlayer = this.router.url.startsWith('/watch');
     if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
-    const tracks = launchTracksFromWire(cmd, cmd.mediaFileId);
     await this.router.navigate(['/watch', cmd.mediaFileId], {
       queryParams,
       replaceUrl: overPlayer,
-      ...(tracks && { state: { tracks } }),
+      state: { snapshot: snapshotFromWire(cmd) },
     });
   }
 
