@@ -211,14 +211,39 @@ pub async fn guide_url(source: &super::model::Source) -> Result<(String, bool), 
         })
 }
 
-/// `true` when `url` is not on the host the admin configured as `source_url`.
+/// `true` when `url` comes from a remote provider: not on the admin's host, and the source itself is
+/// neither admin content (an upload or local path) nor an internal host (a LAN tuner).
 pub(super) fn provider_chosen(source_url: &str, url: &str) -> bool {
-    let host = |u: &str| {
-        Url::parse(u)
-            .ok()
-            .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
+    let Some(source) = Url::parse(source_url)
+        .ok()
+        .filter(|u| matches!(u.scheme(), "http" | "https"))
+    else {
+        return false;
     };
-    host(url).is_none_or(|g| host(source_url) != Some(g))
+    if is_internal_host(&source) {
+        return false;
+    }
+    let host = |u: &Url| u.host_str().map(str::to_ascii_lowercase);
+    Url::parse(url)
+        .ok()
+        .and_then(|u| host(&u))
+        .is_none_or(|g| host(&source) != Some(g))
+}
+
+fn is_internal_host(u: &Url) -> bool {
+    use fliks_domain::net::{Class, classify};
+    match u.host() {
+        Some(url::Host::Ipv4(ip)) => classify(ip.into()) != Class::Public,
+        Some(url::Host::Ipv6(ip)) => classify(ip.into()) != Class::Public,
+        Some(url::Host::Domain(d)) => {
+            let d = d.trim_end_matches('.').to_ascii_lowercase();
+            !d.contains('.')
+                || [".local", ".lan", ".internal", ".localhost"]
+                    .iter()
+                    .any(|t| d.ends_with(t))
+        }
+        None => true,
+    }
 }
 
 /// `true` for a URL the DTO accepts as a location: http or https with a host.
@@ -233,17 +258,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_guide_url_on_another_host_than_the_source_is_provider_chosen() {
+    fn only_a_remote_providers_urls_off_its_host_are_provider_chosen() {
+        let remote = "https://provider.example/p.m3u";
         assert!(!provider_chosen(
-            "http://tuner.lan/p.m3u",
-            "http://TUNER.lan:8080/g.xml"
+            remote,
+            "https://PROVIDER.example:8080/g.xml"
         ));
-        assert!(provider_chosen(
+        assert!(provider_chosen(remote, "http://169.254.169.254/g.xml"));
+        assert!(provider_chosen(remote, "not a url"));
+        for admin in [
+            "/media/list.m3u",
             "http://tuner.lan/p.m3u",
-            "http://169.254.169.254/g.xml"
-        ));
-        assert!(provider_chosen("http://tuner.lan/p.m3u", "not a url"));
-        assert!(provider_chosen("/media/list.m3u", "http://127.0.0.1/g.xml"));
+            "http://hdhomerun.local/lineup.m3u",
+            "http://hdhr/lineup.m3u",
+            "http://192.168.1.2/p.m3u",
+            "http://[fd00::2]/p.m3u",
+            "http://localhost/p.m3u",
+        ] {
+            assert!(
+                !provider_chosen(admin, "http://192.168.1.50:5004/a"),
+                "{admin}"
+            );
+            assert!(!provider_chosen(admin, "udp://@239.0.0.1:1234"), "{admin}");
+        }
     }
 
     #[test]
