@@ -324,6 +324,49 @@ body.playing .spinner.show {
   opacity: 1;
 }
 
+/* Pause glyph while paused, a short play flash on resume; where the spinner sits. */
+.state-icon {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 110;
+  width: 12vh;
+  height: 12vh;
+  margin: -6vh 0 0 -6vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 250ms ease-out;
+}
+
+.state-icon svg {
+  width: 8vh;
+  height: 8vh;
+  filter: drop-shadow(0 0.3vh 0.8vh rgba(0, 0, 0, 0.6));
+}
+
+.state-icon .i-pause,
+.state-icon.paused .i-play {
+  display: none;
+}
+
+.state-icon.paused .i-pause {
+  display: block;
+}
+
+body.playing .state-icon.show {
+  opacity: 1;
+}
+
+/* The spinner takes the spot at once. */
+.state-icon.instant {
+  opacity: 0 !important;
+  transition: none;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
