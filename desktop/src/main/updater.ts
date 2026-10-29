@@ -165,9 +165,9 @@ export function setupUpdater(): void {
   ipcMain.handle(UPDATE_IPC.getCapability, () => capability());
   ipcMain.handle(UPDATE_IPC.openReleases, () => shell.openExternal(RELEASES_URL));
 
-  // Opted out: register no-op channels (so renderer calls resolve) and never
-  // contact GitHub. The check reports "up to date", so no update button shows.
-  if (updateCheckDisabled()) {
+  // Opted out, or a snap (snapd refreshes it): register no-op channels (so renderer calls
+  // resolve) and never contact GitHub. The check reports "up to date", so no update button shows.
+  if (updateCheckDisabled() || process.env.SNAP) {
     ipcMain.handle(UPDATE_IPC.check, () => broadcast({ state: 'not-available' }));
     ipcMain.handle(UPDATE_IPC.install, () => shell.openExternal(RELEASES_URL));
     return;
