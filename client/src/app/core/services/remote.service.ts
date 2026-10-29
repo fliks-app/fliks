@@ -62,7 +62,8 @@ export function snapshotToWire(s: PlaybackSnapshot): RemoteCommandInput {
     mediaFileId: s.item.fileId,
     episodeId: s.item.episodeId,
     positionSeconds: Math.floor(s.position),
-    paused: s.paused,
+    // Sent only when set: a server without the field rejects it (deny_unknown_fields).
+    ...(s.paused && { paused: true }),
     ...launchTracksToWire(s.tracks),
   };
 }

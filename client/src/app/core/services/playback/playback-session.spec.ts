@@ -265,7 +265,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
       expect(streaming.stopSession).toHaveBeenCalledWith('sid-local');
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
-      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120, paused: false, trackId: 'audio-1', subtitleId: 'sub-2' });
+      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120, trackId: 'audio-1', subtitleId: 'sub-2' });
       expect(local.disconnect).not.toHaveBeenCalled();
     });
 
@@ -424,7 +424,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', {
-        action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 42, paused: false,
+        action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 42,
         trackId: 'audio-2', subtitleId: 'sub-5',
       });
       expect(cast.disconnect).toHaveBeenCalled();
