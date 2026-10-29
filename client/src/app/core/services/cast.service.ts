@@ -179,6 +179,8 @@ export class CastService implements OnDestroy {
   readonly resumedState = signal<unknown>(null);
   /** Web: the LOAD `customData` of the media already on the receiver, e.g. an auto-joined session after a tab reload. */
   readonly rejoinedMedia = signal<Record<string, unknown> | null>(null);
+  /** Resolves once a native or desktop bridge has reported a session that outlived the renderer. */
+  readonly settled: Promise<void> = Promise.resolve();
   /** Write only via {@link beginConnecting} / {@link endConnecting}: the trigger is disabled while set, so a lost outcome would wedge the picker. */
   readonly connecting = signal(false);
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -244,7 +246,7 @@ export class CastService implements OnDestroy {
       window.dispatchEvent(new CustomEvent(event.name, { detail: event.detail })),
     );
     if (this.hasCastBridge) {
-      this.initNative();
+      this.settled = this.initNative();
     } else {
       this.initWeb();
     }

@@ -42,7 +42,8 @@ const STREAMINFO_ONLY = sub({ id: 'emb-9', language: 'de' });
 function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption | null } = {}) {
   const cast = {
     isConnected: signal(true),
-    resumedState: signal(null),
+    resumedState: signal<unknown>(null),
+    settled: Promise.resolve(),
     rejoinedMedia: signal<Record<string, unknown> | null>(null),
     receiverQoe: signal(null),
     playbackError$: new Subject<{ position?: number }>(),
@@ -195,6 +196,18 @@ describe('cast rejoin after a tab reload', () => {
     expect(svc.hasMedia()).toBe(true);
     expect(svc.mediaFileId()).toBe(7);
     expect(svc.liveSessionId()).toBe('sid-1');
+  });
+});
+
+describe('cast session that outlived the renderer', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('is restored before the player route decides to launch locally', async () => {
+    const { svc, cast } = setup();
+    cast.resumedState.set({ mediaFileId: 9, mediaId: 3, activeSubtitleId: null, availableSubtitles: [] });
+    await svc.adoptSurvivingSession();
+    expect(svc.hasMedia()).toBe(true);
+    expect(svc.mediaFileId()).toBe(9);
   });
 });
 

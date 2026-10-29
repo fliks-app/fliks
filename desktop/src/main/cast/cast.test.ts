@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { absorb, buildQuery, collect, parseRecords, parseTxt } from './mdns.ts';
 import { decodeMessage, encodeFrame, splitFrames } from './protocol.ts';
-import { mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent } from './status.ts';
+import { initializeResult, mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent } from './status.ts';
 
 test('CastMessage survives an encode/decode round trip', () => {
   const msg = {
@@ -232,4 +232,10 @@ test('a Fliks namespace message is forwarded verbatim, others are not', () => {
     detail: { namespace: 'urn:x-cast:media.fliks.app', message: JSON.stringify(data) },
   });
   assert.equal(receiverMessageEvent('urn:x-cast:com.google.cast.media', data), null);
+});
+
+test('initializeResult hands the saved state back only while a session is live', () => {
+  const state = { mediaFileId: 53 };
+  assert.deepEqual(initializeResult(true, true, state), { available: true, connected: true, resume: state });
+  assert.equal(initializeResult(true, false, state).resume, undefined);
 });
