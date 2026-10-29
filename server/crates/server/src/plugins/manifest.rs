@@ -177,12 +177,38 @@ fn route_array(v: &Value) -> bool {
 /// Rule 3 ceiling of `memoryMb`.
 const MEMORY_MB_MAX: f64 = 1024.0;
 
+/// Rule 3 `database.secrets`: `{table, column, jsonPath?}` entries, `jsonPath` dotted object keys with `*` for array elements.
+fn secrets_shaped(db: &Value) -> bool {
+    let name = |v: &Value| v.as_str().is_some_and(|s| !s.is_empty());
+    let path = |v: &Value| {
+        v.as_str().is_some_and(|p| {
+            let segs: Vec<&str> = p.split('.').collect();
+            segs.iter().all(|s| !s.is_empty()) && segs.last() != Some(&"*")
+        })
+    };
+    match db.get("secrets") {
+        None => true,
+        Some(a) => a.as_array().is_some_and(|a| {
+            a.iter().all(|e| {
+                e.as_object().is_some_and(|o| {
+                    o.keys()
+                        .all(|k| ["table", "column", "jsonPath"].contains(&k.as_str()))
+                        && name(&e["table"])
+                        && name(&e["column"])
+                        && o.get("jsonPath").is_none_or(path)
+                })
+            })
+        }),
+    }
+}
+
 fn process_fields(j: &Value) -> bool {
     j["runtime"] == "wasm"
         && j["memoryMb"].as_f64().is_some_and(|m| m <= MEMORY_MB_MAX)
         && string_record(&j["files"])
         && j["database"].is_object()
         && j["database"]["schema"].is_boolean()
+        && secrets_shaped(&j["database"])
         && j["database"]["coreRefs"]
             .as_array()
             .is_some_and(|a| a.iter().all(Value::is_string))

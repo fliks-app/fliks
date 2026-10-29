@@ -95,10 +95,77 @@ fn body(rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>) -> Body 
 }
 
 /// The `tables` object of an export, a chunk at a time; `Err` when the client is gone.
+/// A manifest `database.secrets` entry: a whole column, or a path of object keys inside a JSON one.
+pub(super) struct TableSecret {
+    table: String,
+    column: String,
+    path: Vec<String>,
+}
+
+pub(super) fn table_secrets(manifest: &Value) -> Vec<TableSecret> {
+    manifest["database"]["secrets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            Some(TableSecret {
+                table: e["table"].as_str()?.to_owned(),
+                column: e["column"].as_str()?.to_owned(),
+                path: e["jsonPath"]
+                    .as_str()
+                    .map(|p| p.split('.').map(str::to_owned).collect())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+/// Drops the key at `path`; a `*` segment walks every element of an array.
+fn mask_json(v: &mut Value, path: &[String]) {
+    let Some((k, rest)) = path.split_first() else {
+        return;
+    };
+    match v {
+        Value::Array(a) if k == "*" => a.iter_mut().for_each(|e| mask_json(e, rest)),
+        Value::Object(o) if rest.is_empty() => {
+            o.remove(k);
+        }
+        Value::Object(o) => {
+            if let Some(c) = o.get_mut(k) {
+                mask_json(c, rest);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn mask_row(row: &mut Value, secrets: &[&TableSecret]) {
+    for sec in secrets {
+        let Some(cell) = row.get_mut(&sec.column) else {
+            continue;
+        };
+        if sec.path.is_empty() {
+            *cell = Value::Null;
+        } else if let Value::String(text) = cell {
+            // A text column holding JSON: re-serialised masked, or nulled when it does not parse.
+            *cell = match serde_json::from_str::<Value>(text) {
+                Ok(mut inner) => {
+                    mask_json(&mut inner, &sec.path);
+                    Value::String(inner.to_string())
+                }
+                Err(_) => Value::Null,
+            };
+        } else {
+            mask_json(cell, &sec.path);
+        }
+    }
+}
+
 async fn write_tables(
     tx: &mut PgConnection,
     s: &str,
     names: &[String],
+    secrets: &[TableSecret],
     head: String,
     out: &Out,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -123,7 +190,9 @@ async fn write_tables(
         let sql = format!("SELECT to_jsonb(r) FROM {}.{} r{order}", quote(s), quote(t));
         let mut rows = sqlx::query_scalar::<_, Value>(sqlx::AssertSqlSafe(sql)).fetch(&mut *tx);
         let mut first = true;
-        while let Some(row) = rows.try_next().await? {
+        let masks: Vec<&TableSecret> = secrets.iter().filter(|x| &x.table == t).collect();
+        while let Some(mut row) = rows.try_next().await? {
+            mask_row(&mut row, &masks);
             if !first {
                 buf.push(b',');
             }
@@ -241,9 +310,31 @@ impl Plugins {
         let s = schema(id);
         let mut names = tables(&mut tx, &s).await.map_err(internal)?;
         names.sort();
+        let secrets = if include_secrets {
+            vec![]
+        } else {
+            table_secrets(&pkg.manifest)
+        };
+        for sec in &secrets {
+            let known = names.contains(&sec.table)
+                && columns(&mut tx, &s, &sec.table)
+                    .await
+                    .map_err(internal)?
+                    .contains(&sec.column);
+            if !known {
+                return Err(ie(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PLUGIN_SECRETS_UNKNOWN_COLUMN",
+                    format!(
+                        "the manifest declares secret {}.{}, which the schema does not have",
+                        sec.table, sec.column
+                    ),
+                ));
+            }
+        }
         tokio::spawn(async move {
             let _lock = lock;
-            if let Err(e) = write_tables(&mut tx, &s, &names, head, &out).await {
+            if let Err(e) = write_tables(&mut tx, &s, &names, &secrets, head, &out).await {
                 let _ = out.send(Err(std::io::Error::other(e.to_string()))).await;
             }
         });
@@ -517,6 +608,35 @@ mod tests {
                 .as_object()
                 .unwrap()
                 .contains_key("plugin.p.apiKey")
+        );
+    }
+
+    #[test]
+    fn table_secrets_are_masked_by_column_and_json_path() {
+        let m = json!({"database": {"schema": true, "coreRefs": [], "secrets": [
+            {"table": "src", "column": "settings", "jsonPath": "apiKey"},
+            {"table": "src", "column": "auth", "jsonPath": "creds.*.token"},
+            {"table": "src", "column": "pw"},
+        ]}});
+        let all = table_secrets(&m);
+        let refs: Vec<&TableSecret> = all.iter().collect();
+        let mut row = json!({
+            "id": 1, "pw": "x",
+            "settings": {"apiKey": "k", "url": "u"},
+            "auth": "{\"creds\":[{\"token\":\"t\",\"n\":1}]}",
+        });
+        mask_row(&mut row, &refs);
+        assert_eq!(
+            row,
+            json!({"id": 1, "pw": null, "settings": {"url": "u"},
+                "auth": "{\"creds\":[{\"n\":1}]}"})
+        );
+        let mut bad = json!({"auth": "not json", "settings": null, "pw": null});
+        mask_row(&mut bad, &refs);
+        assert_eq!(
+            bad["auth"],
+            Value::Null,
+            "an unparsable JSON text fails closed"
         );
     }
 }
