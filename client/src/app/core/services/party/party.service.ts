@@ -30,6 +30,7 @@ import { isUnreachable } from '../../interceptors/error.interceptor';
 import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { ServerConfigService } from '../server-config.service';
+import { mediaQuerySignal } from '../../utils/viewport';
 import { ClockService } from './clock.service';
 import { ReactionsService } from './reactions.service';
 
@@ -134,6 +135,8 @@ export class PartyService {
   readonly lobby = computed(() => this.party()?.status === 'scheduled' && this.joined());
 
   readonly active = computed(() => this.party() !== null && this.joined());
+  /** A film plays for the party: false in the lobby, where nothing drives the player yet. */
+  readonly drives = computed(() => this.active() && this.live() !== null);
   readonly item = computed(() => this.live()?.item ?? this.party()?.item ?? null);
   readonly policy = computed(() => this.party()?.policy ?? 'everyone');
   readonly reactionsEnabled = computed(() => this.party()?.reactionsEnabled ?? true);
@@ -146,7 +149,7 @@ export class PartyService {
   readonly canControl = computed(() => this.isHost() || this.policy() === 'everyone');
 
   /** Panel placement: beside the video, under it (phone portrait), over it (phone landscape) or the TV column. */
-  readonly portrait = signal(true);
+  readonly portrait = mediaQuerySignal('(orientation: portrait)');
   readonly dock = computed<'right' | 'bottom' | 'drawer' | 'tv'>(() => {
     if (this.device.isTv()) return 'tv';
     if (this.device.isPhone()) return this.portrait() ? 'bottom' : 'drawer';
@@ -167,11 +170,6 @@ export class PartyService {
 
   constructor() {
     void Share.canShare().then((r) => this.canShare.set(r.value), () => undefined);
-    if (typeof matchMedia === 'function') {
-      const mq = matchMedia('(orientation: portrait)');
-      this.portrait.set(mq.matches);
-      mq.addEventListener('change', (e) => this.portrait.set(e.matches));
-    }
     this.sse.partyEvents.subscribe((e) => this.onEvent(e));
     // The stream dropped: the server marked us away, so a fresh join rebinds the connection and returns the snapshot.
     effect(() => {
@@ -250,6 +248,7 @@ export class PartyService {
 
   /** Join: the player for a live party, the page (lobby) for a scheduled one. `quiet` leaves a refusal to the caller. */
   async enter(id: number, token?: string, quiet = false): Promise<void> {
+    if (this.party() && this.party()!.id !== id) await this.leave();
     const dto = await this.api.join(id, this.deviceId(), token, quiet);
     this.adopt(dto);
     if (dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
@@ -308,15 +307,19 @@ export class PartyService {
     if (this.party()?.id === id) this.onClosed('host_ended');
   }
 
+  /** Asks the host to end the party for everyone (`cancel` for one that is not live yet). */
+  confirmEnd(name: string, kind: 'end' | 'cancel' = 'end'): Promise<boolean> {
+    return this.confirmation.confirm({
+      title: this.translate.instant(`party.${kind}_title`),
+      message: this.translate.instant(`party.${kind}_message`, { name }),
+      variant: 'danger',
+    });
+  }
+
   /** The explicit leave action: the host ends the party for everyone after a confirmation, a member just leaves. False when declined. */
   async leaveOrEnd(): Promise<boolean> {
     if (this.isHost()) {
-      const ok = await this.confirmation.confirm({
-        title: this.translate.instant('party.leave_host_title'),
-        message: this.translate.instant('party.leave_host_message', { name: this.party()?.name }),
-        confirmLabel: this.translate.instant('party.leave_host_confirm'),
-        variant: 'danger',
-      });
+      const ok = await this.confirmEnd(this.party()?.name ?? '');
       if (ok) await this.end();
       return ok;
     }
@@ -458,6 +461,7 @@ export class PartyService {
     const seen = this.proposalEvents;
     try {
       const dto = await this.api.get(id, true);
+      if (this.party()?.id !== id) return;
       this.applySnapshot(dto, { proposals: seen === this.proposalEvents });
       if (wasLobby && dto.status === 'live' && dto.item) await this.followStart(dto);
     } catch {
@@ -480,8 +484,8 @@ export class PartyService {
     try {
       const wasLobby = this.lobby();
       const dto = await this.api.join(id, this.deviceId(), undefined, true);
-      // A restarted server counts revisions and messages from scratch.
-      this.lastRev = 0;
+      if (this.party()?.id !== id) return;
+      // The snapshot's chat replaces ours: messages sent while the stream was down are only in it.
       this.messages.set([]);
       this.applySnapshot(dto);
       this.needsRejoin.set(false);
@@ -707,8 +711,6 @@ export class PartyService {
       return void this.rejoin();
     }
     const body = err.error as { message?: unknown; id?: number; usernames?: string[] } | null;
-    // `previous` on the first item changes nothing.
-    if (err.status === 409 && body?.message === 'party.error_queue_start') return;
     if (err.status === 409 && (body?.message === 'party.error_stale' || typeof body?.id === 'number')) {
       if (typeof body?.id === 'number') this.applySnapshot(body as unknown as PartyDto);
       return;

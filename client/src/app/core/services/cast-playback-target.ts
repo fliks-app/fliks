@@ -139,7 +139,7 @@ export class CastPlaybackTarget implements PlaybackOutput {
   private readonly endedEffect = effect(() => {
     if (!this.cast.ended()) return;
     untracked(() => {
-      if (this.party.active() || !this.playerSettings.settings().autoPlayNext || !this.canPlayNext()) return;
+      if (this.party.drives() || !this.playerSettings.settings().autoPlayNext || !this.canPlayNext()) return;
       this.playNext();
     });
   });
@@ -167,7 +167,7 @@ export class CastPlaybackTarget implements PlaybackOutput {
    *  top-bar chip is how you come back to it. */
   stopPlayback(): void {
     // The receiver must keep a stream for the party to drive: stopping leaves the cast instead.
-    if (this.party.active()) return this.disconnect();
+    if (this.party.drives()) return this.disconnect();
     this.cast.stop();
     this.cp.clear();
   }

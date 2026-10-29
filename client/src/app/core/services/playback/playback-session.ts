@@ -76,7 +76,7 @@ export class PlaybackSession {
   /** File the output already holds, set by whoever opens the player route on it. */
   private opened = 0;
 
-  readonly partyActive = computed(() => this.party().active());
+  readonly partyActive = computed(() => this.party().drives());
 
   /** The remote target while remoting, the cast receiver while connected, else the registered local output. */
   readonly output = computed<PlaybackOutput | null>(() => {
@@ -254,8 +254,8 @@ export class PlaybackSession {
     this.opened = target.fileId;
     const query: Record<string, number> = { mediaId: target.mediaId };
     if (target.episodeId) query['episodeId'] = target.episodeId;
-    const party = this.party().party();
-    if (party) query['party'] = party.id;
+    const party = this.party();
+    if (party.drives()) query['party'] = party.party()!.id;
     void this.router().navigate(['/watch', target.fileId], { queryParams: query });
   }
 

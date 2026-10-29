@@ -51,7 +51,7 @@ function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
 function setup() {
   const cast = target();
   const remote = target();
-  const party = { active: signal(false), party: signal<{ id: number } | null>(null) };
+  const party = { drives: signal(false), party: signal<{ id: number } | null>(null) };
   const castSvc = {
     isConnected: cast.isConnected,
     connecting: signal(false),
@@ -154,18 +154,18 @@ describe('PlaybackSession', () => {
     cast.isConnected.set(true);
     const router = vi.fn(() => true);
     session.setPartyRouter(router);
-    party.active.set(true);
+    party.drives.set(true);
     expect(session.command({ type: 'seek', at: 5 })).toBe(true);
     expect(router).toHaveBeenCalledWith({ type: 'seek', at: 5 });
     expect(cast.seek).not.toHaveBeenCalled();
-    party.active.set(false);
+    party.drives.set(false);
     session.command({ type: 'seek', at: 6 });
     expect(cast.seek).toHaveBeenCalledWith(6);
   });
 
   it('keeps a newer party router when an older one is disposed', () => {
     const { session, party } = setup();
-    party.active.set(true);
+    party.drives.set(true);
     const older = vi.fn(() => true);
     const newer = vi.fn(() => true);
     const disposeOlder = session.setPartyRouter(older);
@@ -431,8 +431,19 @@ describe('PlaybackSession', () => {
       cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       castPlayer.mediaFileId.set(7);
       party.party.set({ id: 5 });
+      party.drives.set(true);
       session.openPlayer();
       expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], { queryParams: { mediaId: 3, episodeId: 9, party: 5 } });
+    });
+
+    it('leaves the party out of the route while it is only in its lobby', () => {
+      const { session, cast, party, router, castPlayer } = setup();
+      cast.isConnected.set(true);
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      castPlayer.mediaFileId.set(7);
+      party.party.set({ id: 5 });
+      session.openPlayer();
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], { queryParams: { mediaId: 3, episodeId: 9 } });
     });
 
     it('does nothing while the output is idle or the player is already open', () => {

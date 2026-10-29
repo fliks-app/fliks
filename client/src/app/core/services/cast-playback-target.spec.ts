@@ -27,7 +27,7 @@ function setup(autoPlayNext = true, partyActive = false) {
       { provide: CastPlayerService, useValue: cp },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },
-      { provide: PartyService, useValue: { active: signal(partyActive) } },
+      { provide: PartyService, useValue: { drives: signal(partyActive) } },
       { provide: PlayerSettingsService, useValue: { settings: () => ({ autoPlayNext }) } },
     ],
   });

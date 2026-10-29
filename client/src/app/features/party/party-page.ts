@@ -343,7 +343,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
 
   /** A member who closed the player leaves the room from here; the host ends it instead. */
   protected leaveRoom(): void {
-    void this.party.leaveOrEnd();
+    void this.party.leave();
   }
 
   protected async quit(): Promise<void> {
@@ -356,18 +356,13 @@ export class PartyPageComponent implements OnInit, OnDestroy {
 
   protected apply(dto: PartyDto): void {
     this.loaded.set(dto);
-    if (this.joined()) this.party.applySnapshot(dto);
+    if (this.party.party()?.id === this.id) this.party.applySnapshot(dto);
   }
 
   protected async end(): Promise<void> {
     const h = this.head()!;
     const key = h.status === 'live' ? 'end' : 'cancel';
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant(`party.${key}_title`),
-      message: this.translate.instant(`party.${key}_message`, { name: h.name }),
-      variant: 'danger',
-    });
-    if (!ok) return;
+    if (!(await this.party.confirmEnd(h.name, key))) return;
     // Joined, the service closes the party and its `closed` takes the page home.
     if (this.joined()) return void runBusy(this.busy, () => this.party.end());
     if ((await runBusy(this.busy, () => this.api.end(this.id))) === null) return;
