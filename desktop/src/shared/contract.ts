@@ -423,7 +423,7 @@ export const CAST_IPC = {
 
 /** Exposed on `window.fliksCast` by the preload bridge. */
 export interface FliksCastApi {
-  initialize(opts: { appId: string }): Promise<{ available: boolean; connected?: boolean; resume?: unknown }>;
+  initialize(opts: { appId: string }): Promise<{ available: boolean; connected?: boolean; resume?: unknown; device?: { volume?: number; muted?: boolean } }>;
   isConnected(): Promise<{ connected: boolean }>;
   setResumeState(opts: { state: unknown }): Promise<void>;
   requestSession(): Promise<void>;

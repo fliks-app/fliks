@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { clearRecord, loadRecord, resumeDecision, resumeFromMedia, saveRecord } from './resume.ts';
 import { absorb, buildQuery, collect, parseRecords, parseTxt } from './mdns.ts';
 import { decodeMessage, encodeFrame, splitFrames } from './protocol.ts';
 import { initializeResult, mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent, receiverStatusEvent } from './status.ts';
@@ -244,6 +248,8 @@ test('initializeResult hands the saved state back only while a session is live',
   const state = { mediaFileId: 53 };
   assert.deepEqual(initializeResult(true, true, state), { available: true, connected: true, resume: state });
   assert.equal(initializeResult(true, false, state).resume, undefined);
+  assert.deepEqual(initializeResult(true, true, state, { volume: 0.4, muted: false }).device, { volume: 0.4, muted: false });
+  assert.equal('device' in initializeResult(true, false, state, { volume: 1 }), false);
   assert.equal(initializeResult(true, true, null).resume, undefined);
 });
 
@@ -275,4 +281,39 @@ test('receiver cue text is a hint until a remote key has been seen', () => {
   assert.equal(cueText(cues, 'intro', true), 'Skip intro');
   assert.equal(cueText(cues, 'next', false), 'Next from device');
   assert.equal(cueText(cues, 'next', true), 'Next');
+});
+
+const record = { deviceId: 'd1', host: '10.0.0.5', port: 8009, appId: 'APP', sessionId: 'S1', resume: { mediaFileId: 7, mediaId: 3 } };
+
+test('the session record round-trips through userData and clears', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'cast-rec-'));
+  try {
+    assert.equal(loadRecord(dir), null);
+    saveRecord(dir, record);
+    assert.deepEqual(loadRecord(dir), record);
+    clearRecord(dir);
+    assert.equal(loadRecord(dir), null);
+    clearRecord(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resumeDecision joins only our app with the same session id', () => {
+  const app = (appId: string, sessionId: string) => ({ appId, sessionId, transportId: `t-${sessionId}` });
+  assert.deepEqual(resumeDecision(record, { applications: [app('APP', 'S1')] }), { transportId: 't-S1' });
+  assert.equal(resumeDecision(record, { applications: [app('APP', 'S2')] }), null);
+  assert.equal(resumeDecision(record, { applications: [app('OTHER', 'S1')] }), null);
+  assert.equal(resumeDecision(record, { applications: [] }), null);
+  assert.equal(resumeDecision(record, undefined), null);
+});
+
+test('resumeFromMedia keeps the saved state only for the item the receiver still plays', () => {
+  const playing = (customData: unknown, playerState = 'PLAYING') => ({ playerState, media: { customData } });
+  assert.equal(resumeFromMedia(record.resume, playing({ mediaFileId: 7, mediaId: 3 })), record.resume);
+  assert.equal(resumeFromMedia(record.resume, playing({ mediaFileId: 8, mediaId: 3 })), undefined);
+  assert.equal(resumeFromMedia(record.resume, playing({ mediaFileId: 7, mediaId: 3 }, 'IDLE')), undefined);
+  assert.equal(resumeFromMedia(record.resume, playing(undefined)), undefined);
+  assert.equal(resumeFromMedia(record.resume, undefined), undefined);
+  assert.equal(resumeFromMedia(undefined, playing({ mediaFileId: 7, mediaId: 3 })), undefined);
 });

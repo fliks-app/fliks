@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { CAST_IPC } from '../../shared/contract';
 import type {
   DesktopCastDevice,
@@ -17,6 +17,14 @@ import {
   type CastTrack,
 } from './status';
 import {
+  clearRecord,
+  loadRecord,
+  resumeDecision,
+  resumeFromMedia,
+  saveRecord,
+  type SessionRecord,
+} from './resume';
+import {
   CastChannel,
   NS_MEDIA,
   NS_RECEIVER,
@@ -27,6 +35,10 @@ import {
  *  polled to keep the renderer's seekbar moving — the same job the web SDK's
  *  RemotePlayer does for itself. 1Hz is what a cast progress bar needs. */
 const STATUS_POLL_MS = 1_000;
+/** Bound on re-joining the last session at launch; a missing TV must not hold the app back. */
+const RESUME_TIMEOUT_MS = 4_000;
+/** Share of that budget spent on the recorded address before trying the mDNS one. */
+const RECORDED_ADDRESS_MS = 1_500;
 
 function broadcast(event: DesktopCastEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -54,15 +66,107 @@ class CastSender {
   /** Renderer-owned player state, kept so a reloaded renderer can re-adopt the live session. */
   private resumeState: unknown;
   private poll: ReturnType<typeof setInterval> | null = null;
+  private deviceLevel: { volume?: number; muted?: boolean } | undefined;
+  private host = '';
+  private port = 0;
+  private resuming: Promise<void> | null = null;
 
-  initialize(appId: string): { available: boolean } {
+  async initialize(appId: string): Promise<{ available: boolean }> {
     this.appId = appId;
     this.discovery.start();
-    return initializeResult(this.devices.length > 0, this.isConnected(), this.resumeState);
+    if (!this.isConnected()) await this.resumeLastSession();
+    return initializeResult(this.devices.length > 0, this.isConnected(), this.resumeState, this.deviceLevel);
   }
 
   setResumeState(state: unknown): void {
-    this.resumeState = state;
+    this.resumeState = state ?? undefined;
+    this.persist();
+  }
+
+  private persist(): void {
+    if (!this.isConnected() || !this.deviceId) return;
+    saveRecord(app.getPath('userData'), {
+      deviceId: this.deviceId,
+      host: this.host,
+      port: this.port,
+      appId: this.appId,
+      sessionId: this.sessionId,
+      resume: this.resumeState,
+    });
+  }
+
+  private forget(): void {
+    clearRecord(app.getPath('userData'));
+  }
+
+  /** Re-join the session the previous run left on its Chromecast; never launches the receiver. */
+  private resumeLastSession(): Promise<void> {
+    this.resuming ??= this.tryResume().finally(() => {
+      this.resuming = null;
+    });
+    return this.resuming;
+  }
+
+  private async tryResume(): Promise<void> {
+    const record = loadRecord(app.getPath('userData'));
+    if (!record || record.appId !== this.appId) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('cast resume timed out')), RESUME_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([this.rejoin(record), timeout]);
+    } catch (e) {
+      console.warn('[cast] session not resumed:', (e as Error).message);
+      this.teardown();
+      this.forget();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** The recorded address first, briefly; if it fails (the DHCP lease moved), the device mDNS finds under the same id. */
+  private async connectRecorded(record: SessionRecord): Promise<{ channel: CastChannel; host: string; port: number }> {
+    let channel = this.openChannel();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const slow = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('recorded address unreachable')), RECORDED_ADDRESS_MS);
+    });
+    try {
+      await Promise.race([channel.connect(record.host, record.port), slow]);
+      return { channel, host: record.host, port: record.port };
+    } catch (e) {
+      for (let i = 0; i < 20; i++) {
+        const found = this.devices.find((d) => d.id === record.deviceId);
+        if (found && (found.host !== record.host || found.port !== record.port)) {
+          channel = this.openChannel();
+          await channel.connect(found.host, found.port);
+          return { channel, host: found.host, port: found.port };
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async rejoin(record: SessionRecord): Promise<void> {
+    const { channel, host, port } = await this.connectRecorded(record);
+    const status = await channel.request(NS_RECEIVER, PLATFORM_RECEIVER, { type: 'GET_STATUS' });
+    const join = resumeDecision(record, status['status'] as Record<string, unknown> | undefined);
+    if (!join) throw new Error('the session is gone');
+    this.adoptReceiverStatus(status);
+    this.deviceId = record.deviceId;
+    this.host = host;
+    this.port = port;
+    channel.virtualConnect(join.transportId);
+    const media = await channel.request(NS_MEDIA, join.transportId, { type: 'GET_STATUS' });
+    const statuses = (media['status'] ?? []) as Record<string, unknown>[];
+    this.resumeState = resumeFromMedia(record.resume, statuses[0]);
+    this.startPolling();
+    broadcast({ name: 'castStateChanged', detail: { connected: true } });
+    broadcast({ name: 'castDevicesChanged', detail: {} });
   }
 
   listDevices(): DesktopCastDevice[] {
@@ -91,17 +195,8 @@ class CastSender {
   async select(id: string): Promise<void> {
     const device = this.devices.find((d) => d.id === id);
     if (!device) throw new Error(`unknown cast device: ${id}`);
-    this.teardown();
-
-    const channel = new CastChannel();
-    this.channel = channel;
-    channel.on('message', (ns: string, data: Record<string, unknown>) =>
-      this.onMessage(ns, data),
-    );
-    channel.on('close', () => {
-      if (this.channel === channel) this.teardown();
-    });
-
+    this.forget();
+    const channel = this.openChannel();
     await channel.connect(device.host, device.port);
     const status = await channel.request(NS_RECEIVER, PLATFORM_RECEIVER, {
       type: 'LAUNCH',
@@ -112,10 +207,26 @@ class CastSender {
       throw new Error('receiver did not launch the Fliks app');
     }
     this.deviceId = device.id;
+    this.host = device.host;
+    this.port = device.port;
     channel.virtualConnect(this.transportId);
+    this.persist();
     this.startPolling();
     broadcast({ name: 'castStateChanged', detail: { connected: true } });
     broadcast({ name: 'castDevicesChanged', detail: {} });
+  }
+
+  private openChannel(): CastChannel {
+    this.teardown();
+    const channel = new CastChannel();
+    this.channel = channel;
+    channel.on('message', (ns: string, data: Record<string, unknown>) =>
+      this.onMessage(ns, data),
+    );
+    channel.on('close', () => {
+      if (this.channel === channel) this.teardown();
+    });
+    return channel;
   }
 
   /** Pull our app's transport out of a RECEIVER_STATUS. Returns false when the
@@ -123,7 +234,10 @@ class CastSender {
   private adoptReceiverStatus(message: Record<string, unknown>): boolean {
     const status = message['status'] as Record<string, unknown> | undefined;
     const device = receiverStatusEvent(status);
-    if (device) broadcast(device);
+    if (device) {
+      this.deviceLevel = device.detail;
+      broadcast(device);
+    }
     const apps = (status?.['applications'] ?? []) as Record<string, unknown>[];
     const app = apps.find((a) => a['appId'] === this.appId);
     if (!app) return false;
@@ -140,6 +254,7 @@ class CastSender {
       // over even though the TCP channel is still up.
       if (this.transportId && !apps.some((a) => a['appId'] === this.appId)) {
         this.teardown();
+        this.forget();
         return;
       }
       this.adoptReceiverStatus(data);
@@ -280,6 +395,7 @@ class CastSender {
       });
     }
     this.teardown();
+    this.forget();
   }
 
   private teardown(): void {
@@ -297,6 +413,7 @@ class CastSender {
     this.activeTrackIds = [];
     this.media = undefined;
     this.resumeState = undefined;
+    this.deviceLevel = undefined;
     if (wasConnected) {
       broadcast({ name: 'castStateChanged', detail: { connected: false } });
       broadcast({ name: 'castDevicesChanged', detail: {} });
