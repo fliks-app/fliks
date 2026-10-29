@@ -3,7 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { MarkersApiService } from './api/markers-api.service';
 import { TrackManagerService } from './track-manager.service';
-import { inIntroRange, inOutroRange, type TimeMarker } from '../utils/player.utils';
+import { inIntroRange, inOutroRange, parseAudioIndex, type TimeMarker } from '../utils/player.utils';
 import { RemoteService } from './remote.service';
 import { buildCastAudioOptions, CastAudioOption } from './cast-player.service';
 import { MediaService } from './api/media.service';
@@ -176,6 +176,22 @@ export class RemotePlaybackTarget implements PlaybackOutput {
       return;
     }
     void this.remote.send(targetId, { action: 'quality', qualityId: quality.id });
+  }
+
+  selectAudioById(trackId: string): Promise<void> {
+    this.selectAudio(this.audioOptions()[parseAudioIndex(trackId)] ?? null);
+    return Promise.resolve();
+  }
+
+  selectSubtitleById(id: string | null): Promise<void> {
+    this.selectSubtitle(id === null ? null : (this.availableSubtitles().find((s) => s.id === id) ?? null));
+    return Promise.resolve();
+  }
+
+  selectQualityById(id: string): Promise<void> {
+    const pick = this.availableQualities().find((q) => q.id === id);
+    if (pick) this.selectQuality(pick);
+    return Promise.resolve();
   }
 
   private readonly introMarker = signal<TimeMarker | null>(null);

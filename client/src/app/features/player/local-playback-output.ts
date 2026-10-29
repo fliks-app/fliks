@@ -2,7 +2,7 @@ import { computed, Signal } from '@angular/core';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput } from '../../core/services/playback/playback-output';
 import type { PlayerStateService } from '../../core/services/player-state.service';
-import type { SpriteMetadata } from '../../core/utils/player.utils';
+import { parseAudioIndex, type SpriteMetadata } from '../../core/utils/player.utils';
 
 /** Closest a seek may land to the target before it is skipped: a nearer one would only restart a transcode. */
 const SEEK_SLACK_S = 0.25;
@@ -32,9 +32,9 @@ export interface LocalOutputHost {
   canPlayNext: Signal<boolean>;
   skip(): void;
   playNext(): void;
-  selectSubtitle(id: string | null): void;
-  selectAudio(id: string): void;
-  selectQuality(id: string): void;
+  selectSubtitle(id: string | null): Promise<void>;
+  selectAudio(id: string): Promise<void>;
+  selectQuality(id: string): Promise<void>;
   onBack(): void;
   release(): Promise<LocalHandoff | null>;
   stepAside(): void;
@@ -128,9 +128,24 @@ export class LocalPlaybackOutput implements LocalOutput {
     const engine = this.host.engine();
     if (engine) engine.muted = !engine.muted;
   };
-  selectSubtitle = (sub: PlaybackOption | null) => this.host.selectSubtitle(sub?.id ?? null);
-  selectAudio = (track: PlaybackOption | null) => track && this.host.selectAudio(track.id);
-  selectQuality = (quality: PlaybackOption) => this.host.selectQuality(quality.id);
+  selectSubtitle = (sub: PlaybackOption | null) => void this.host.selectSubtitle(sub?.id ?? null);
+  selectAudio = (track: PlaybackOption | null) => void (track && this.host.selectAudio(track.id));
+  selectQuality = (quality: PlaybackOption) => void this.host.selectQuality(quality.id);
+  selectSubtitleById = (id: string | null) => this.host.selectSubtitle(id);
+  selectQualityById = (id: string) => this.host.selectQuality(id);
+  selectAudioById = async (trackId: string) => {
+    const idx = parseAudioIndex(trackId);
+    const local = Number.isFinite(idx) ? this.host.audioTracks()[idx]?.id : undefined;
+    if (!local) {
+      console.warn('[remote] no local audio track at index', trackId);
+      return;
+    }
+    try {
+      await this.host.selectAudio(local);
+    } catch (err: unknown) {
+      console.warn('[remote] audio switch failed', trackId, err);
+    }
+  };
   skip = () => this.host.skip();
   playNext = () => this.host.playNext();
   release = () => this.host.release();

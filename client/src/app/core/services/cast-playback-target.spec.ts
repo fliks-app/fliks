@@ -12,7 +12,7 @@ import { PlayerSettingsService } from './player-settings.service';
 function setup(autoPlayNext = true, partyActive = false) {
   const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), duration: signal(0), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
   const quickStart = vi.fn(async () => {});
-  const cp = { mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
+  const cp = { changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
   const media = {
     id: 1,
     type: 'series',
@@ -32,7 +32,7 @@ function setup(autoPlayNext = true, partyActive = false) {
     ],
   });
   const target = TestBed.inject(CastPlaybackTarget);
-  return { cast, target, quickStart };
+  return { cast, cp, target, quickStart };
 }
 
 describe('CastPlaybackTarget auto-next', () => {
@@ -97,5 +97,31 @@ describe('CastPlaybackTarget as a party output', () => {
     expect(cast.play).toHaveBeenCalled();
     expect(cast.pause).toHaveBeenCalled();
     expect(target.sync.rate).toBeUndefined();
+  });
+});
+
+describe('CastPlaybackTarget id-based picks', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('resolves an audio id to its index and awaits the receiver', async () => {
+    const { cp, target } = setup();
+    await target.selectAudioById('shaka-3');
+    expect(cp.changeAudio).toHaveBeenCalledWith(3);
+  });
+
+  it('refuses an audio id without an index', async () => {
+    const { cp, target } = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await target.selectAudioById('track');
+    expect(cp.changeAudio).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('passes subtitle and quality ids straight to the cast player', async () => {
+    const { cp, target } = setup();
+    await target.selectSubtitleById(null);
+    await target.selectQualityById('720p');
+    expect(cp.selectSubtitle).toHaveBeenCalledWith(null);
+    expect(cp.changeQuality).toHaveBeenCalledWith('720p');
   });
 });
