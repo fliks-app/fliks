@@ -100,7 +100,7 @@
             "videoProfile": "high",
             "width": 160
           },
-          "startAtSeconds": 0,
+          "startAtSeconds": 1200,
           "tonemapping": false,
           "transcodeReasons": [],
           "videoCopyStream": true
@@ -152,13 +152,13 @@
               "hwDecoder": null,
               "lastStall": null,
               "reasons": [
-                "qoe.reason.too_little_data"
+                "qoe.reason.healthy"
               ],
               "stallCount": 0,
               "stallMs": 0,
               "transcodeSpeed": null,
               "variantBitrate": null,
-              "verdict": "unknown"
+              "verdict": "ok"
             },
             "quality": "original",
             "systemName": null,
@@ -167,7 +167,8 @@
             "videoBitrate": null,
             "videoCodec": "H264",
             "videoReasons": [],
-            "videoResolution": "144p"
+            "videoResolution": "144p",
+            "download": false
           }
         ],
         "status": 200

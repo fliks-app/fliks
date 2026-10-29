@@ -29,7 +29,8 @@
             "features": [
               "deviceProfileExtensions",
               "hlsSubtitleRequest",
-              "muxedAudioRendition"
+              "muxedAudioRendition",
+              "sessionReplaces"
             ],
             "hiddenLibraryIds": [],
             "hideSpoilers": false,

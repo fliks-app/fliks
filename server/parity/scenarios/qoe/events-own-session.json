@@ -96,7 +96,8 @@
           },
           "tonemapping": false,
           "transcodeReasons": [],
-          "videoCopyStream": true
+          "videoCopyStream": true,
+          "startAtSeconds": 1200
         },
         "status": 201
       },

@@ -112,7 +112,8 @@
           },
           "tonemapping": false,
           "transcodeReasons": [],
-          "videoCopyStream": true
+          "videoCopyStream": true,
+          "startAtSeconds": 1200
         },
         "status": 201
       },
@@ -187,10 +188,10 @@
               "playMethod": "directplay",
               "playbackConfidence": "low",
               "playbackId": "pb-1",
-              "playbackVerdict": "unknown",
+              "playbackVerdict": "ok",
               "quality": null,
               "reasons": [
-                "qoe.reason.too_little_data"
+                "qoe.reason.healthy"
               ],
               "recoveryReloads": 0,
               "stallCount": 0,
@@ -198,7 +199,7 @@
               "systemName": null,
               "transcodeReasons": [],
               "userId": 2,
-              "verdict": "unknown",
+              "verdict": "ok",
               "videoCodec": null,
               "watchedMs": 0,
               "width": null
@@ -265,10 +266,10 @@
           "playMethod": "directplay",
           "playbackConfidence": "low",
           "playbackId": "pb-1",
-          "playbackVerdict": "unknown",
+          "playbackVerdict": "ok",
           "quality": null,
           "reasons": [
-            "qoe.reason.too_little_data"
+            "qoe.reason.healthy"
           ],
           "recoveryReloads": 0,
           "sessions": [
@@ -310,10 +311,10 @@
               "playMethod": "directplay",
               "playbackConfidence": "low",
               "playbackId": "pb-1",
-              "playbackVerdict": "unknown",
+              "playbackVerdict": "ok",
               "quality": null,
               "reasons": [
-                "qoe.reason.too_little_data"
+                "qoe.reason.healthy"
               ],
               "recoveryReloads": 0,
               "sampleCount": 0,
@@ -334,7 +335,7 @@
               "transcodeReasons": [],
               "unrecoveredError": false,
               "userId": 2,
-              "verdict": "unknown",
+              "verdict": "ok",
               "videoCodec": null,
               "watchedMs": 0,
               "width": null
@@ -345,7 +346,7 @@
           "systemName": null,
           "transcodeReasons": [],
           "userId": 2,
-          "verdict": "unknown",
+          "verdict": "ok",
           "videoCodec": null,
           "watchedMs": 0,
           "width": null
@@ -368,16 +369,15 @@
               "sessions": 1,
               "stallSessions": 0,
               "systemName": null,
-              "topVerdict": "unknown"
+              "topVerdict": "ok"
             }
           ],
           "byVerdict": {
             "device": 0,
             "error": 0,
             "network": 0,
-            "ok": 0,
-            "server": 0,
-            "unknown": 1
+            "ok": 1,
+            "server": 0
           }
         },
         "status": 200

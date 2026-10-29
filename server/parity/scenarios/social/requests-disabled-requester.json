@@ -69,7 +69,9 @@
           "movieQuotaLimit": 0,
           "permissions": [
             "media.read",
-            "users.manage"
+            "users.manage",
+            "parties.create",
+            "parties.read_public"
           ],
           "profileVisibility": "private",
           "quotaPeriodDays": 7,

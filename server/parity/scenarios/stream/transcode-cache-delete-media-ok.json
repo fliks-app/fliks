@@ -1,4 +1,7 @@
 {
+  "capture": {
+    "sid": "$.steps[1].body.sessionId"
+  },
   "engine": "up",
   "ignore": [
     "$.bytes"
@@ -8,6 +11,55 @@
   "steps": [
     {
       "as": "admin",
+      "method": "DELETE",
+      "path": "/api/system/transcode-cache",
+      "ignoreBody": true,
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "as": "user",
+      "method": "POST",
+      "path": "/api/stream/1/playback-info?startAt=1&audioStreamIndex=0&startQuality=144p",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "supportsDirectPlay": false,
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "hevc"
+            ]
+          }
+        ]
+      },
+      "ignoreBody": true,
+      "expect": {
+        "status": 201
+      },
+      "note": "builds its own entry: a pinned rung pre-starts a transcode at 1 s (the seeded resume, 1200 s, is past the file), whose directory outlives the session"
+    },
+    {
+      "as": "user",
+      "method": "DELETE",
+      "path": "/api/stream/sessions/{sid}",
+      "expect": {
+        "status": 204
+      }
+    },
+    {
+      "as": "admin",
+      "method": "DELETE",
+      "path": "/api/system/transcode-cache/1?userId=2",
+      "retryMs": 10000,
       "expect": {
         "body": {
           "bytes": 0,
@@ -15,9 +67,7 @@
           "ok": true
         },
         "status": 200
-      },
-      "method": "DELETE",
-      "path": "/api/system/transcode-cache/1?userId=2"
+      }
     }
   ]
 }

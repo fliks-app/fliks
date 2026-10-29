@@ -83,7 +83,10 @@
               "subtitles.manage",
               "settings.access",
               "users.manage",
-              "roles.manage"
+              "roles.manage",
+              "parties.create",
+              "parties.read_public",
+              "parties.manage"
             ]
           },
           {
@@ -94,7 +97,9 @@
             "name": "Manager",
             "permissions": [
               "media.read",
-              "users.manage"
+              "users.manage",
+              "parties.create",
+              "parties.read_public"
             ]
           },
           {
@@ -105,7 +110,9 @@
             "name": "Readonly",
             "permissions": [
               "media.read",
-              "livetv.read"
+              "livetv.read",
+              "parties.create",
+              "parties.read_public"
             ]
           },
           {
@@ -153,7 +160,9 @@
             "permissions": [
               "media.read",
               "livetv.read",
-              "requests.create"
+              "requests.create",
+              "parties.create",
+              "parties.read_public"
             ]
           }
         ],
