@@ -3594,6 +3594,13 @@ describe('PlayerComponent review fixes', () => {
     });
   });
 
+  it('leaves the local seek lock alone while dragging over another output', () => {
+    const h = createHarness();
+    h.component.session.isLocal = () => false;
+    h.component.onSeekDragChange(true);
+    expect(h.state.seekLocked()).toBe(false);
+  });
+
   it('keyboard seeks read the output while casting, not the unloaded engine', () => {
     const h = createHarness();
     h.component.elsewhere = () => ({ paused: () => false, position: () => 600 });

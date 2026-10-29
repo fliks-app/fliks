@@ -1834,8 +1834,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.seekDragging.set(dragging);
     if (dragging) {
       // Freeze the engine→state mirror while dragging so `timeUpdate` doesn't push the bar back under the
-      // user's finger; the drag pins the controls open through the chrome pin.
-      this.state.seekLocked.set(true);
+      // user's finger. Local only: another output takes the seek, and nothing here would release the lock.
+      if (this.session.isLocal()) this.state.seekLocked.set(true);
       // A hidden seekbar kept the focus and took the arrow before the page handler: raise the seek OSD here.
       if (!this.chrome.visible()) this.chrome.show(true);
     } else {
