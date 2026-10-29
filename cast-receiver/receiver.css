@@ -361,6 +361,12 @@ body.playing .state-icon.show {
   opacity: 1;
 }
 
+/* The spinner takes the spot at once. */
+.state-icon.instant {
+  opacity: 0 !important;
+  transition: none;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

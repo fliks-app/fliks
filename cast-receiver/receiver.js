@@ -161,6 +161,22 @@ function qoeLoaded() {
 playerManager.addEventListener(EventType.LOAD_START, qoeReset);
 playerManager.addEventListener(EventType.PLAYING, () => { qoe.played = true; qoe.seeking = false; });
 const SEEK_GRACE_MS = 2000;
+
+// The Cast OS video plane presents a new frame only while playing: after a seek in pause, play one muted frame.
+let framePresenting = false;
+playerManager.addEventListener(EventType.SEEKED, () => {
+  const v = findMediaElement();
+  if (!v || !v.paused || framePresenting) return;
+  framePresenting = true;
+  const muted = v.muted;
+  v.muted = true;
+  const done = () => {
+    v.pause();
+    v.muted = muted;
+    framePresenting = false;
+  };
+  v.play().then(() => (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(done) : setTimeout(done, 50)), done);
+});
 playerManager.addEventListener(EventType.SEEKING, () => { qoe.seeking = true; qoe.lastSeekAt = Date.now(); });
 playerManager.addEventListener(EventType.SEEKED, () => { qoe.lastSeekAt = Date.now(); });
 playerManager.addEventListener(EventType.BUFFERING, (event) => {
@@ -446,8 +462,9 @@ const stateIconEl = document.getElementById('state-icon');
 let iconState = null;
 let iconTimer = 0;
 
-function renderStateIcon(st) {
-  if (st === iconState) return;
+function renderStateIcon(st, spinning) {
+  stateIconEl.classList.toggle('instant', spinning);
+  if (st === iconState || framePresenting) return;
   const resumed = iconState === BarState.PAUSED && st === BarState.PLAYING;
   iconState = st;
   clearTimeout(iconTimer);
@@ -458,8 +475,9 @@ function renderStateIcon(st) {
 
 function renderBar() {
   const st = playerData.state;
-  renderStateIcon(st);
-  spinnerEl.classList.toggle('show', st === BarState.LOADING || st === BarState.BUFFERING);
+  const spinning = st === BarState.LOADING || st === BarState.BUFFERING;
+  renderStateIcon(st, spinning);
+  spinnerEl.classList.toggle('show', spinning);
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
   const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
   barEl.classList.toggle('show', show);
