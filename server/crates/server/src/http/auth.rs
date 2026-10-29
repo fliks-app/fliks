@@ -270,6 +270,14 @@ pub fn logout_token(headers: &HeaderMap) -> Option<String> {
 
 /// `Ok(None)`: no token. Any failure after a token is present is 401.
 async fn authenticate(parts: &Parts, state: &AppState) -> Result<Option<Authed>, AppError> {
+    Ok(authenticate_bound(parts, state).await?.map(|(a, _)| a))
+}
+
+/// `authenticate` plus the media file the token is bound to (`mf`).
+async fn authenticate_bound(
+    parts: &Parts,
+    state: &AppState,
+) -> Result<Option<(Authed, Option<u32>)>, AppError> {
     let Some(token) = token_of(parts) else {
         return Ok(None);
     };
@@ -281,7 +289,7 @@ async fn authenticate(parts: &Parts, state: &AppState) -> Result<Option<Authed>,
     let (user, role) = load_enabled(&state.db, claims.sub)
         .await?
         .ok_or_else(unauthorized)?;
-    Ok(Some(Authed::new(user, role, claims.scope)))
+    Ok(Some((Authed::new(user, role, claims.scope), claims.mf)))
 }
 
 async fn required<S>(parts: &Parts, state: &S) -> Result<Authed, AppError>
@@ -326,7 +334,9 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
-        let auth = required(parts, state).await?;
+        let (auth, mf) = authenticate_bound(parts, &AppState::from_ref(state))
+            .await?
+            .ok_or_else(unauthorized)?;
         let Some(scope) = auth.scope else {
             return Ok(Self {
                 auth,
@@ -334,10 +344,8 @@ where
             });
         };
         let bound_file = (scope == TokenScope::Stream)
-            .then(|| token_of(parts))
+            .then_some(mf)
             .flatten()
-            .and_then(|t| AppState::from_ref(state).jwt.verify(&t))
-            .and_then(|c| c.mf)
             .ok_or_else(unauthorized)?;
         Ok(Self {
             auth,

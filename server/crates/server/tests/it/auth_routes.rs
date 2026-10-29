@@ -126,6 +126,13 @@ async fn login_and_refresh_rotate(pool: PgPool) {
     );
     let (s, _, _) = bad(json!({"username": "", "password": "x", "extra": 1})).await;
     assert_eq!(s, 400);
+    let long = "u".repeat(256);
+    let (s, _, e) = bad(json!({"username": long, "password": "x"})).await;
+    assert_eq!(s, 400);
+    assert_eq!(
+        e["message"],
+        json!(["username must be shorter than or equal to 255 characters"])
+    );
 
     let rt = b["refreshToken"].as_str().unwrap();
     let (s, h, r) = call(
@@ -553,19 +560,22 @@ async fn users_public_modes(pool: PgPool) {
         }
     };
     // Unset and "everyone": public callers see the roster.
-    assert_eq!(picker(&c, "203.0.113.9", None).await, roster);
+    assert_eq!(picker(&c, "8.8.8.8", None).await, roster);
     mode("everyone").await;
-    assert_eq!(picker(&c, "203.0.113.9", None).await, roster);
+    assert_eq!(picker(&c, "8.8.8.8", None).await, roster);
     mode("lan").await;
     assert_eq!(picker(&c, "192.168.1.20", None).await, roster);
     assert_eq!(picker(&c, "127.0.0.1", Some("10.0.0.5")).await, roster);
-    assert_eq!(picker(&c, "203.0.113.9", None).await, json!([]));
+    assert_eq!(picker(&c, "8.8.8.8", None).await, json!([]));
     // A forged private entry or a public hop in the chain keeps the caller out.
-    assert_eq!(picker(&c, "10.0.0.2", Some("203.0.113.9")).await, json!([]));
+    assert_eq!(picker(&c, "10.0.0.2", Some("8.8.8.8")).await, json!([]));
+    assert_eq!(picker(&c, "8.8.8.8", Some("192.168.1.20")).await, json!([]));
+    // A public client behind a private proxy chain is public; CGNAT (Tailscale) counts as local.
     assert_eq!(
-        picker(&c, "203.0.113.9", Some("192.168.1.20")).await,
+        picker(&c, "172.18.0.2", Some("8.8.8.8, 10.0.0.1")).await,
         json!([])
     );
+    assert_eq!(picker(&c, "100.100.1.1", None).await, roster);
     mode("hidden").await;
     assert_eq!(picker(&c, "192.168.1.20", None).await, json!([]));
 }

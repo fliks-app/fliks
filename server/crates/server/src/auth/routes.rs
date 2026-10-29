@@ -19,12 +19,15 @@ use axum::{
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    net::{Class, classify},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::net::{IpAddr, SocketAddr};
 
-const BCRYPT_COST: u32 = 12;
+const MAX_USERNAME: usize = 255;
 const SERVER_TYPES: [&str; 4] = ["local", "jellyfin", "emby", "plex"];
 
 pub fn router() -> Router<AppState> {
@@ -143,37 +146,28 @@ pub(crate) struct LoginDto {
     server_type: Option<String>,
 }
 
-/// The address the gateway appended to `X-Forwarded-For` (its last entry, the one a client cannot
-/// forge), else the socket peer.
-fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> String {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.rsplit(',').next())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map_or_else(
-            || peer.map(|a| a.ip().to_string()).unwrap_or_default(),
-            str::to_owned,
-        )
-}
-
-/// True when the peer and every address in `X-Forwarded-For` are private or loopback, so a
-/// forged header or a public hop anywhere in the chain keeps the request out.
-fn is_lan(headers: &HeaderMap, peer: Option<&SocketAddr>) -> bool {
-    let local = |ip: IpAddr| match ip.to_canonical() {
-        IpAddr::V4(v) => v.is_private() || v.is_loopback() || v.is_link_local(),
-        IpAddr::V6(v) => v.is_loopback() || v.is_unique_local() || v.is_unicast_link_local(),
-    };
-    let hops = headers
+/// The client address (`auth.md` rule 63): `X-Forwarded-For` entries then the socket peer, walked
+/// from the right past private hops (trusted proxies) to the first public one.
+fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> Option<IpAddr> {
+    let hops: Vec<IpAddr> = headers
         .get_all("x-forwarded-for")
         .iter()
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(','))
-        .map(str::trim)
-        .filter(|v| !v.is_empty());
-    let hops_ok = hops.into_iter().all(|h| h.parse().is_ok_and(local));
-    hops_ok && peer.is_some_and(|a| local(a.ip()))
+        .filter_map(|h| h.trim().parse::<IpAddr>().ok())
+        .map(|ip| ip.to_canonical())
+        .collect();
+    let peer = peer.map(|a| a.ip().to_canonical());
+    hops.iter()
+        .copied()
+        .chain(peer)
+        .rev()
+        .find(|ip| classify(*ip) == Class::Public)
+        .or_else(|| hops.last().copied().or(peer))
+}
+
+fn is_lan(headers: &HeaderMap, peer: Option<&SocketAddr>) -> bool {
+    client_ip(headers, peer).is_some_and(|ip| classify(ip) != Class::Public)
 }
 
 #[utoipa::path(post, path = "/api/auth/login", responses((status = 200)))]
@@ -185,6 +179,11 @@ pub(crate) async fn login(
 ) -> Result<Response, AppError> {
     let mut errs = vec![];
     non_empty(&mut errs, "username", &dto.username);
+    if dto.username.len() > MAX_USERNAME {
+        errs.push(format!(
+            "username must be shorter than or equal to {MAX_USERNAME} characters"
+        ));
+    }
     non_empty(&mut errs, "password", &dto.password);
     if dto
         .server_type
@@ -203,16 +202,13 @@ pub(crate) async fn login(
         )));
     }
     let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
-    if st.login_throttle.blocked(&ip, &dto.username) {
+    if !st.login_throttle.attempt(ip, &dto.username) {
         return Err(AppError::with_message(
             StatusCode::TOO_MANY_REQUESTS,
             "Too many failed login attempts, try again later",
         ));
     }
-    let invalid = || {
-        st.login_throttle.fail(&ip, &dto.username);
-        AppError::unauthorized("Invalid credentials")
-    };
+    let invalid = || AppError::unauthorized("Invalid credentials");
     let row = sqlx::query!(
         r#"SELECT id, "passwordHash" AS hash, enabled FROM users WHERE username = $1"#,
         dto.username
@@ -229,7 +225,7 @@ pub(crate) async fn login(
     if !ok {
         return Err(invalid());
     }
-    st.login_throttle.clear(&ip, &dto.username);
+    st.login_throttle.clear(ip, &dto.username);
     if !row.enabled {
         return Err(AppError::unauthorized("Account disabled"));
     }
@@ -386,10 +382,7 @@ pub(crate) async fn register(
             .fetch_optional(&st.db)
             .await?;
     let password = dto.password;
-    let hash = tokio::task::spawn_blocking(move || bcrypt::hash(password, BCRYPT_COST))
-        .await
-        .map_err(|_| internal())?
-        .map_err(|_| internal())?;
+    let hash = super::hash_password(password).await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO users (username, email, "passwordHash", "roleId", "isAdmin", "mediaServerType")
            VALUES ($1, $2, $3, $4, false, 'local') RETURNING id"#,
@@ -418,10 +411,13 @@ pub(crate) struct SetupDto {
 
 #[utoipa::path(get, path = "/api/auth/setup", responses((status = 200)))]
 pub(crate) async fn setup_status(State(st): State<AppState>) -> Result<Json<Value>, AppError> {
-    let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
-        .fetch_one(&st.db)
-        .await?;
-    Ok(Json(json!({ "required": empty })))
+    Ok(Json(json!({ "required": users_empty(&st.db).await? })))
+}
+
+async fn users_empty(db: impl sqlx::PgExecutor<'_>) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
+        .fetch_one(db)
+        .await
 }
 
 /// First-boot admin: allowed only while `users` is empty, serialised by an advisory lock.
@@ -436,25 +432,16 @@ pub(crate) async fn setup(
         errs.push("password must be longer than or equal to 8 characters".into());
     }
     check(errs)?;
-    if !setup_status(State(st.clone())).await?.0["required"]
-        .as_bool()
-        .unwrap_or(false)
-    {
+    if !users_empty(&st.db).await? {
         return Err(AppError::conflict("Setup already completed"));
     }
     let password = dto.password;
-    let hash = tokio::task::spawn_blocking(move || bcrypt::hash(password, BCRYPT_COST))
-        .await
-        .map_err(|_| internal())?
-        .map_err(|_| internal())?;
+    let hash = super::hash_password(password).await?;
     let mut tx = st.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('first_admin_setup'))")
         .execute(&mut *tx)
         .await?;
-    let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
-        .fetch_one(&mut *tx)
-        .await?;
-    if !empty {
+    if !users_empty(&mut *tx).await? {
         return Err(AppError::conflict("Setup already completed"));
     }
     sqlx::query!(
@@ -773,4 +760,53 @@ pub(crate) async fn pairing_cancel(
         },
     );
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ip(xff: &[&str], peer: &str) -> Option<IpAddr> {
+        let mut h = HeaderMap::new();
+        for x in xff {
+            h.append("x-forwarded-for", x.parse().unwrap());
+        }
+        client_ip(&h, Some(&format!("{peer}:1").parse().unwrap()))
+    }
+
+    #[test]
+    fn the_client_is_the_first_public_hop_from_the_right() {
+        let want = Some("8.8.8.8".parse().unwrap());
+        assert_eq!(ip(&[], "8.8.8.8"), want);
+        assert_eq!(ip(&["8.8.8.8"], "172.18.0.2"), want, "docker gateway");
+        assert_eq!(
+            ip(&["8.8.8.8, 10.0.0.1"], "127.0.0.1"),
+            want,
+            "lan proxy chain"
+        );
+        assert_eq!(
+            ip(&["1.1.1.1", "8.8.8.8"], "10.0.0.1"),
+            want,
+            "forged left entry"
+        );
+        assert_eq!(
+            ip(&["1.1.1.1"], "8.8.8.8"),
+            want,
+            "forged entry, public peer"
+        );
+        assert_eq!(ip(&["::ffff:8.8.8.8"], "10.0.0.1"), want);
+    }
+
+    #[test]
+    fn a_lan_client_is_the_nearest_reported_hop() {
+        assert_eq!(
+            ip(&["192.168.1.7"], "127.0.0.1"),
+            Some("192.168.1.7".parse().unwrap())
+        );
+        assert_eq!(ip(&[], "192.168.1.7"), Some("192.168.1.7".parse().unwrap()));
+        assert_eq!(
+            ip(&["garbage"], "10.0.0.1"),
+            Some("10.0.0.1".parse().unwrap())
+        );
+    }
 }
