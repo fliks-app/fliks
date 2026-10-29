@@ -309,11 +309,29 @@ public class CastPlugin extends Plugin {
         return false;
     }
 
+    private static final String[] RECEIVER_MEDIA_KEYS =
+        {"mediaId", "mediaFileId", "episodeId", "sid", "userId", "playbackId", "intro", "outro"};
+
+    /** The Fliks ids of the media the receiver plays, whoever loaded it; "{}" for media from another app. */
+    private static String receiverMediaJson(MediaInfo info) {
+        JSONObject src = info.getCustomData();
+        JSONObject out = new JSONObject();
+        if (src != null) {
+            for (String key : RECEIVER_MEDIA_KEYS) {
+                if (src.has(key)) {
+                    try { out.put(key, src.get(key)); } catch (org.json.JSONException ignored) { }
+                }
+            }
+        }
+        return out.toString();
+    }
+
     private void notifyJSTime(double time, double duration, boolean paused, boolean buffering,
-                             double volume, boolean muted, boolean ended) {
+                             double volume, boolean muted, boolean ended, boolean interrupted, String receiverMedia) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
             + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
-            + ", buffering: " + buffering + ", ended: " + ended
+            + ", buffering: " + buffering + ", ended: " + ended + ", interrupted: " + interrupted
+            + (receiverMedia != null ? ", customData: " + receiverMedia : "")
             + " } }));"
             + "window.dispatchEvent(new CustomEvent('castDeviceUpdate', { detail: { "
             + "volume: " + volume + ", muted: " + muted + " } }));";
@@ -928,7 +946,11 @@ public class CastPlugin extends Plugin {
                         boolean muted = castSession.isMute();
                         boolean ended = state == MediaStatus.PLAYER_STATE_IDLE
                             && status.getIdleReason() == MediaStatus.IDLE_REASON_FINISHED;
-                        notifyJSTime(time, duration, paused, buffering, volume, muted, ended);
+                        boolean interrupted = state == MediaStatus.PLAYER_STATE_IDLE
+                            && status.getIdleReason() == MediaStatus.IDLE_REASON_INTERRUPTED;
+                        MediaInfo info = client.getMediaInfo();
+                        notifyJSTime(time, duration, paused, buffering, volume, muted, ended, interrupted,
+                            info != null ? receiverMediaJson(info) : null);
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {

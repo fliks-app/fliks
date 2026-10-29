@@ -11,6 +11,15 @@ export interface CastTrack {
   language?: string;
 }
 
+/** The LOAD customData keys the renderer needs to tell whose media plays and to rejoin it. */
+const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid', 'userId', 'playbackId', 'intro', 'outro'];
+
+function receiverMediaIds(media: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!media) return undefined;
+  const data = (media['customData'] ?? {}) as Record<string, unknown>;
+  return Object.fromEntries(RECEIVER_MEDIA_KEYS.filter((k) => k in data).map((k) => [k, data[k]]));
+}
+
 /** Translate one MEDIA_STATUS entry. `duration` rides the `media` block, which
  *  the receiver only sends on the first status after a LOAD, so the caller
  *  keeps the last one it saw. */
@@ -34,6 +43,8 @@ export function mediaStatusEvent(
       isPaused: playerState === 'PAUSED',
       buffering: playerState === 'BUFFERING',
       ended: playerState === 'IDLE' && status['idleReason'] === 'FINISHED',
+      interrupted: playerState === 'IDLE' && status['idleReason'] === 'INTERRUPTED',
+      customData: receiverMediaIds(media),
     },
   };
 }

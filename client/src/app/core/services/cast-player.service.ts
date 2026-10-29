@@ -451,7 +451,7 @@ export class CastPlayerService {
       mediaId: d['mediaId'] as number,
       episodeId: typeof d['episodeId'] === 'number' ? d['episodeId'] : undefined,
       playbackMode: 'transcode',
-      liveSessionId: typeof d['sid'] === 'string' ? d['sid'] : null,
+      liveSessionId: typeof d['sid'] === 'string' && !this.controlOnly() ? d['sid'] : null,
       playbackId: typeof d['playbackId'] === 'string' ? d['playbackId'] : null,
       availableSubtitles: [],
       availableQualities: [],
@@ -475,6 +475,22 @@ export class CastPlayerService {
     if (state && !this.hasMedia()) this.restore(state);
   }
 
+  /** The receiver plays a session another user's sender loaded: this sender is a remote control and makes no
+   *  server-side session call for it. */
+  readonly controlOnly = computed(() => {
+    const owner = this.cast.receiverMedia()?.['userId'];
+    return typeof owner === 'number' && owner !== this.authService.user()?.id;
+  });
+
+  private followReceiver(data: Record<string, unknown> | null): void {
+    if (!data || !this.cast.isConnected() || this.reloading()) return;
+    if (typeof data['mediaFileId'] !== 'number' || typeof data['mediaId'] !== 'number') {
+      if (this.hasMedia()) this.clear();
+    } else if (!this.hasMedia() || data['mediaFileId'] !== this.mediaFileId()) {
+      this.restore(this.stateFromReceiver(data));
+    }
+  }
+
   private restore(s: CastResumeState): void {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
@@ -492,7 +508,7 @@ export class CastPlayerService {
     this.activeBurnInId = s.activeBurnInId;
     this.timeline.set(s.timeline ?? NO_TIMELINE);
     this.hasMedia.set(true);
-    this.startPositionSaving();
+    if (!this.controlOnly()) this.startPositionSaving();
     this.loadSpriteMetadata(s.mediaFileId);
   }
 
@@ -546,10 +562,10 @@ export class CastPlayerService {
       this.cast.resumedState();
       untracked(() => this.adoptResumed());
     });
-    // Web auto-join after a tab reload: the receiver still plays, rebuild from its LOAD customData.
+    // The receiver is the source of truth: a tab reload rejoins its media, another sender's LOAD replaces ours.
     effect(() => {
-      const data = this.cast.rejoinedMedia();
-      if (data && !untracked(this.hasMedia)) untracked(() => this.restore(this.stateFromReceiver(data)));
+      const data = this.cast.receiverMedia();
+      untracked(() => this.followReceiver(data));
     });
     // The native side keeps this across a reload or process restart, so the session can be
     // taken over as it was left without reloading the receiver.
@@ -564,8 +580,8 @@ export class CastPlayerService {
       }
     });
     // Recoverable receiver error (session GC'd, 410 on next segment): reload a fresh stream and resume.
-    this.cast.playbackError$.subscribe(({ position }) => {
-      void this.recoverFromCastError(position);
+    this.cast.playbackError$.subscribe(({ position, mediaFileId }) => {
+      if (mediaFileId == null || mediaFileId === this.mediaFileId()) void this.recoverFromCastError(position);
     });
     this.cast.receiverError$.subscribe((e) => {
       const sid = this.liveSessionId();
@@ -583,7 +599,7 @@ export class CastPlayerService {
   readonly reloading = signal(false);
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia() || this.recovering || this.reloading()) return;
+    if (!this.hasMedia() || this.recovering || this.reloading() || this.controlOnly() || !this.cast.receiverPlays(this.mediaFileId())) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -735,6 +751,7 @@ export class CastPlayerService {
       mediaFileId: mfId,
       playbackId: this.playbackId ?? undefined,
       sid: pi.sessionId,
+      userId: this.authService.user()?.id,
       autoSkipCommercials: this.authService.user()?.edlAutoSkipCommercials !== false,
       intro: pi.markers?.intro,
       outro: pi.markers?.outro,
@@ -906,7 +923,7 @@ export class CastPlayerService {
   private async saveCastPosition() {
     const mfId = this.mediaFileId();
     const mId = this.mediaId();
-    if (!mfId || !mId) return;
+    if (!mfId || !mId || this.controlOnly() || !this.cast.receiverPlays(mfId)) return;
     const pos = this.cast.currentTime();
     const dur = this.cast.duration();
     if (!pos || pos < 1) return;

@@ -368,6 +368,10 @@ export interface DesktopCastMediaUpdate {
   isPaused?: boolean;
   buffering?: boolean;
   ended?: boolean;
+  /** The media was replaced by another sender's LOAD. */
+  interrupted?: boolean;
+  /** The Fliks ids of the media the receiver plays; `{}` for media from another app. */
+  customData?: Record<string, unknown>;
 }
 
 /** The receiver device's own output level, sent apart from the media state. */

@@ -206,7 +206,7 @@
     [episodeTitle]="view().episodeTitle"
     [hasNext]="view().hasNext"
     [nextLabelKey]="queueCtl.nextLabelKey()"
-    [queueItems]="elsewhere() || preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
+    [queueItems]="session.kind() === 'remote' || preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
     [queueIndex]="queueCtl.queueIndex()"
     (selectQueueItem)="queueCtl.playQueueItem($event)"
     [activeQualityLabel]="view().activeQualityLabel"

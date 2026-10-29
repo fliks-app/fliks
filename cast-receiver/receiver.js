@@ -86,6 +86,7 @@ playerManager.addEventListener(
         httpStatus: httpStatus,
         reason: event ? event.reason : undefined,
         mediaTitle: info && info.metadata ? info.metadata.title : undefined,
+        mediaFileId: info && info.customData ? info.customData.mediaFileId : undefined,
       });
     } catch (e) {
       console.warn('[fliks-cast] error forward failed', e);
