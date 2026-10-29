@@ -12,7 +12,6 @@ import { readStored, writeStored } from '../../core/services/party/local-flag';
 import { AUTO_COVER, PartyCoverPickerComponent, coverChoice, coverValid, type CoverDraft } from './party-cover-picker';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
 
-/** `datetime-local` value (local time, minutes) for a date. */
 const SWITCHES_KEY = 'fliks.partySwitches';
 const DEFAULT_SWITCHES: PartySwitches = { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, public: false };
 
@@ -25,6 +24,7 @@ function storedSwitches(): PartySwitches {
   }
 }
 
+/** `datetime-local` value (local time, minutes) for a date. */
 export function toLocalInput(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;

@@ -128,7 +128,7 @@ export class PartyProgrammeComponent {
   protected move(index: number, by: -1 | 1): void {
     const next = [...this.items()];
     const to = index + by;
-    if (to < 0 || to >= next.length) return;
+    if (this.busy() || to < 0 || to >= next.length) return;
     [next[index], next[to]] = [next[to], next[index]];
     void this.save(next, true);
     this.focusRow(to, by < 0 ? 'up' : 'down');
@@ -140,6 +140,7 @@ export class PartyProgrammeComponent {
 
   /** Back to the proposals: the proposal kept its votes, only the programme row goes. */
   protected unaccept(index: number): void {
+    if (this.busy()) return;
     const next = this.items().filter((_, i) => i !== index);
     void this.save(next, true);
     this.focusRow(Math.min(index, next.length - 1), 'remove');
@@ -155,7 +156,7 @@ export class PartyProgrammeComponent {
       confirmLabel: this.translate.instant('party.programme_remove'),
       variant: 'danger',
     });
-    if (!ok) return;
+    if (!ok || this.busy()) return;
     const next = this.items().filter((_, i) => i !== index);
     void this.save(next, true);
     this.focusRow(Math.min(index, next.length - 1), 'remove');

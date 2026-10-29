@@ -17,6 +17,8 @@ export class ControlsVisibilityService {
   /** Reduced to the seekbar, raised by an arrow-key seek. Survives a hide so
    *  the full bar does not remount during the fade-out. */
   readonly seekOsd = signal(false);
+  /** A press the bar must outlive (push-to-talk): the countdown waits for the release. */
+  readonly holding = signal(false);
   /** A dropdown or bottom sheet inside the controls is open. */
   private readonly panelOpen = signal(false);
 
@@ -92,7 +94,7 @@ export class ControlsVisibilityService {
 
   private readonly autoHide = effect((onCleanup) => {
     const reactions = this.reactionsOnly();
-    if (!reactions && (!this.visible() || this.pinned() || this.panelOpen())) return;
+    if (this.holding() || (!reactions && (!this.visible() || this.pinned() || this.panelOpen()))) return;
     this.activity();
     const delay = this.device.isTv() ? HIDE_DELAY_TV_MS : HIDE_DELAY_MS;
     const id = setTimeout(() => this.hide(), delay);

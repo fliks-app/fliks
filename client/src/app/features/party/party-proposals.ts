@@ -160,7 +160,7 @@ export class PartyProposalsComponent {
     }
     this.focused = { id: p.id, value };
     const next = this.myVote(p) === value ? null : value;
-    await runBusy(this.busy, () => this.api.vote(this.partyId(), p.id, next));
+    await this.api.vote(this.partyId(), p.id, next).catch(() => undefined);
     this.restoreFocus();
   }
 

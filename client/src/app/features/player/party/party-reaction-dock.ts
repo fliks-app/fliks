@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideMic, LucideMicOff } from '@lucide/angular';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { VoiceService } from '../../../core/services/party/voice.service';
+import { ControlsVisibilityService } from '../controls/controls-visibility';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 const POP_MS = 220;
@@ -24,9 +25,15 @@ export class PartyReactionDockComponent {
   private readonly party = inject(PartyService);
   protected readonly reactions = inject(ReactionsService);
   protected readonly voice = inject(VoiceService);
+  private readonly chrome = inject(ControlsVisibilityService);
   private holdTimer?: ReturnType<typeof setTimeout>;
   private held = false;
   private heldFromMuted = false;
+  private readonly release = () => this.micUp(false);
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.micUp(false));
+  }
 
   protected send(emoji: string, event: Event): void {
     this.party.react(emoji);
@@ -38,6 +45,10 @@ export class PartyReactionDockComponent {
 
   protected micDown(): void {
     clearTimeout(this.holdTimer);
+    // The strip can unmount mid-press (controls hide), so the release is heard on the document.
+    this.chrome.holding.set(true);
+    document.addEventListener('pointerup', this.release);
+    document.addEventListener('pointercancel', this.release);
     this.holdTimer = setTimeout(() => {
       this.held = true;
       this.heldFromMuted = this.voice.muted();
@@ -48,6 +59,9 @@ export class PartyReactionDockComponent {
   /** A pointer tap acts on release: Android sends no click after a long press. */
   protected micUp(released: boolean): void {
     clearTimeout(this.holdTimer);
+    this.chrome.holding.set(false);
+    document.removeEventListener('pointerup', this.release);
+    document.removeEventListener('pointercancel', this.release);
     if (this.held) {
       this.held = false;
       if (this.heldFromMuted) void this.voice.setMuted(true);
