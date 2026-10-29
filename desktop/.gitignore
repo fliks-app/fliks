@@ -14,3 +14,5 @@ native/vendor/*
 # SDL3 headers and pkg-config from scripts/build-sdl3-linux.sh.
 native/.sdl3/
 *.log
+# snapcraft pack output (snap/snapcraft.yaml).
+/*.snap

@@ -1,0 +1,39 @@
+# Repackages the .deb electron-builder builds into release/ (desktop-release.yml).
+name: fliks
+base: core24
+adopt-info: fliks
+grade: stable
+confinement: strict
+icon: build/icons/512x512.png
+
+parts:
+  fliks:
+    plugin: nil
+    source: release
+    override-build: |
+      deb=$(ls Fliks-Client-*.deb)
+      dpkg-deb -x "$deb" "$CRAFT_PART_INSTALL"
+      craftctl set version="$(dpkg-deb -f "$deb" Version)"
+    parse-info: [usr/share/metainfo/media.fliks.desktop.metainfo.xml]
+    # The APT source: snapd updates the snap.
+    prime: [-etc]
+
+apps:
+  fliks:
+    # Chromium's sandbox needs browser-support's allow-sandbox, which the store reserves for browsers.
+    command: opt/Fliks/fliks --no-sandbox
+    desktop: usr/share/applications/fliks.desktop
+    extensions: [gnome]
+    environment:
+      # Chromium and libappindicator need a TMPDIR the confinement lets them read back.
+      TMPDIR: $XDG_RUNTIME_DIR
+    plugs:
+      - browser-support
+      - home
+      - network
+      - network-bind # cast discovery binds mDNS port 5353
+      - audio-playback
+      - audio-record # watch party voice chat
+      - screen-inhibit-control
+    # Its bus name defaults to the snap's: org.mpris.MediaPlayer2.fliks, the one mpris.ts owns.
+    slots: [mpris]
