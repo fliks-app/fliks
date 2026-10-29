@@ -381,7 +381,7 @@ impl Ctx<'_> {
             && let Some(version) = crate::stream::version_of(&dest).await
         {
             let prior = probed.info.timestamp_break_seconds.flatten();
-            crate::stream::keep_scan(self.st, file_id, dest, version, scan, prior);
+            crate::stream::keep_scan(self.st, file_id, &dest, &version, &scan, prior).await;
         }
         Ok(Placed::Imported(Imported {
             file_id,
