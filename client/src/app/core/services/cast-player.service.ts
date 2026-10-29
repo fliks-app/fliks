@@ -469,6 +469,17 @@ export class CastPlayerService {
     };
   }
 
+  /** Restores the session a native or desktop sender kept alive; the player route awaits this before it launches locally. */
+  async adoptSurvivingSession(): Promise<void> {
+    await this.cast.settled;
+    this.adoptResumed();
+  }
+
+  private adoptResumed(): void {
+    const state = this.cast.resumedState() as CastResumeState | null;
+    if (state && !this.hasMedia()) this.restore(state);
+  }
+
   private restore(s: CastResumeState): void {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
@@ -535,8 +546,8 @@ export class CastPlayerService {
       }
     });
     effect(() => {
-      const state = this.cast.resumedState() as CastResumeState | null;
-      if (state && !untracked(this.hasMedia)) untracked(() => this.restore(state));
+      this.cast.resumedState();
+      untracked(() => this.adoptResumed());
     });
     // Web auto-join after a tab reload: the receiver still plays, rebuild from its LOAD customData.
     effect(() => {

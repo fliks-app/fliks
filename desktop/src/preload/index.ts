@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld('fliksDownloader', downloader);
 const cast: FliksCastApi = {
   initialize: (opts: { appId: string }) => ipcRenderer.invoke(CAST_IPC.initialize, opts.appId),
   isConnected: () => ipcRenderer.invoke(CAST_IPC.isConnected),
+  setResumeState: (opts: { state: unknown }) => ipcRenderer.invoke(CAST_IPC.setResumeState, opts.state),
   requestSession: () => ipcRenderer.invoke(CAST_IPC.requestSession),
   getCastDevices: async () => ({ devices: await ipcRenderer.invoke(CAST_IPC.getDevices) }),
   selectCastDevice: (opts: { id: string }) => ipcRenderer.invoke(CAST_IPC.selectDevice, opts.id),

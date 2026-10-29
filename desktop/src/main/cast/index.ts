@@ -7,6 +7,7 @@ import type {
 } from '../../shared/contract';
 import { CastDiscovery, type DiscoveredDevice } from './mdns';
 import {
+  initializeResult,
   mediaStatusEvent,
   mergeActiveTracks,
   NS_FLIKS,
@@ -49,12 +50,18 @@ class CastSender {
   private tracks: CastTrack[] = [];
   private media: Record<string, unknown> | undefined;
   private activeTrackIds: number[] = [];
+  /** Renderer-owned player state, kept so a reloaded renderer can re-adopt the live session. */
+  private resumeState: unknown;
   private poll: ReturnType<typeof setInterval> | null = null;
 
   initialize(appId: string): { available: boolean } {
     this.appId = appId;
     this.discovery.start();
-    return { available: this.devices.length > 0 };
+    return initializeResult(this.devices.length > 0, this.isConnected(), this.resumeState);
+  }
+
+  setResumeState(state: unknown): void {
+    this.resumeState = state;
   }
 
   listDevices(): DesktopCastDevice[] {
@@ -293,6 +300,7 @@ class CastSender {
     this.tracks = [];
     this.activeTrackIds = [];
     this.media = undefined;
+    this.resumeState = undefined;
     if (wasConnected) {
       broadcast({ name: 'castStateChanged', detail: { connected: false } });
       broadcast({ name: 'castDevicesChanged', detail: {} });
@@ -303,6 +311,7 @@ class CastSender {
 export function registerCastIpc(): void {
   const sender = new CastSender();
   ipcMain.handle(CAST_IPC.initialize, (_e, appId: string) => sender.initialize(appId));
+  ipcMain.handle(CAST_IPC.setResumeState, (_e, state: unknown) => sender.setResumeState(state));
   ipcMain.handle(CAST_IPC.isConnected, () => ({ connected: sender.isConnected() }));
   ipcMain.handle(CAST_IPC.getDevices, () => {
     sender.refresh();

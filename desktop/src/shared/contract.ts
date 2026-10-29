@@ -397,6 +397,7 @@ export interface DesktopCastEvent {
 export const CAST_IPC = {
   initialize: 'cast:initialize',
   isConnected: 'cast:isConnected',
+  setResumeState: 'cast:setResumeState',
   requestSession: 'cast:requestSession',
   getDevices: 'cast:getDevices',
   selectDevice: 'cast:selectDevice',
@@ -417,8 +418,9 @@ export const CAST_IPC = {
 
 /** Exposed on `window.fliksCast` by the preload bridge. */
 export interface FliksCastApi {
-  initialize(opts: { appId: string }): Promise<{ available: boolean }>;
+  initialize(opts: { appId: string }): Promise<{ available: boolean; connected?: boolean; resume?: unknown }>;
   isConnected(): Promise<{ connected: boolean }>;
+  setResumeState(opts: { state: unknown }): Promise<void>;
   requestSession(): Promise<void>;
   getCastDevices(): Promise<{ devices: DesktopCastDevice[] }>;
   selectCastDevice(opts: { id: string }): Promise<void>;

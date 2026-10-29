@@ -81,3 +81,8 @@ export function receiverMessageEvent(ns: string, data: Record<string, unknown>):
   if (ns !== NS_FLIKS) return null;
   return { name: 'castReceiverMessage', detail: { namespace: ns, message: JSON.stringify(data) } };
 }
+
+/** What a renderer that boots while a session is live gets back: the resume state it saved, if any. */
+export function initializeResult(available: boolean, connected: boolean, resume: unknown) {
+  return { available, connected, resume: connected ? resume : undefined };
+}
