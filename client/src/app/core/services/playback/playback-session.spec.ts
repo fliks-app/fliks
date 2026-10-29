@@ -24,6 +24,7 @@ function target() {
     seek: vi.fn(),
     playNext: vi.fn(),
     position: vi.fn(() => 42),
+    paused: vi.fn(() => false),
     pause: vi.fn(async () => {}),
     stopPlayback: vi.fn(),
     disconnect: vi.fn(),
@@ -254,7 +255,18 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       expect(await session.moveTo('local')).toBe(true);
       expect(castSvc.disconnect).toHaveBeenCalled();
-      expect(local.resume).toHaveBeenCalledWith(42);
+      expect(local.resume).toHaveBeenCalledWith(42, false);
+    });
+
+    it('takes the playback back paused when the cast was paused', async () => {
+      const { session, cast, local, castPlayer } = setup();
+      castPlayer.hasMedia.mockReturnValue(true);
+      cast.paused.mockReturnValue(true);
+      session.attachLocal(local);
+      cast.isConnected.set(true);
+      TestBed.tick();
+      await session.moveTo('local');
+      expect(local.resume).toHaveBeenCalledWith(42, true);
     });
 
     it('stops the remote device before taking the playback back', async () => {
@@ -265,7 +277,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('local')).toBe(true);
       expect(remote.stopPlayback).toHaveBeenCalled();
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
-      expect(local.resume).toHaveBeenCalledWith(42);
+      expect(local.resume).toHaveBeenCalledWith(42, false);
     });
 
     it('opens the player first when taking back with none mounted, then resumes once it attaches', async () => {
@@ -278,7 +290,7 @@ describe('PlaybackSession', () => {
       session.attachLocal(local);
       await Promise.resolve();
       expect(remote.stopPlayback).toHaveBeenCalled();
-      await vi.waitFor(() => expect(local.resume).toHaveBeenCalledWith(42));
+      await vi.waitFor(() => expect(local.resume).toHaveBeenCalledWith(42, false));
       expect(local.resume).toHaveBeenCalledTimes(1);
     });
 
@@ -395,7 +407,20 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       cast.isConnected.set(false);
       TestBed.tick();
-      expect(local.resume).toHaveBeenCalledWith(42);
+      expect(local.resume).toHaveBeenCalledWith(42, false);
+    });
+
+    it('resumes paused when the receiver was paused as the session ends', () => {
+      const { session, cast, local, castPlayer } = setup();
+      castPlayer.hasMedia.mockReturnValue(true);
+      cast.paused.mockReturnValue(true);
+      session.attachLocal(local);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      cast.isConnected.set(false);
+      TestBed.tick();
+      expect(local.resume).toHaveBeenCalledWith(42, true);
     });
 
     it('resumes the engine where the remote device was when control stops outside moveTo', () => {
@@ -406,7 +431,7 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       remote.isConnected.set(false);
       TestBed.tick();
-      expect(local.resume).toHaveBeenCalledWith(42);
+      expect(local.resume).toHaveBeenCalledWith(42, false);
     });
   });
 

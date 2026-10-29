@@ -36,7 +36,7 @@ export interface LocalOutputHost {
   onBack(): void;
   release(): Promise<LocalHandoff | null>;
   stepAside(): void;
-  resume(position: number): Promise<void>;
+  resume(position: number, paused: boolean): Promise<void>;
 }
 
 /** This device's player engine as a playback output. */
@@ -144,7 +144,7 @@ export class LocalPlaybackOutput implements LocalOutput {
   playNext = () => this.host.playNext();
   release = () => this.host.release();
   stepAside = () => this.host.stepAside();
-  resume = (position: number) => this.host.resume(position);
+  resume = (position: number, paused: boolean) => this.host.resume(position, paused);
   stopPlayback = () => this.host.onBack();
   disconnect = () => this.host.onBack();
 }

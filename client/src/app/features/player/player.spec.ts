@@ -2739,7 +2739,9 @@ describe('PlayerComponent cast session picks', () => {
       h.component.subs.activeBurnInId = 99;
       h.component.subs.activeSubtitleId.set('ext-1');
       let seen: unknown;
-      h.component.refreshSidAndReload = vi.fn(async () => {
+      let opts: unknown;
+      h.component.refreshSidAndReload = vi.fn(async (_p: number, o: unknown) => {
+        opts = o;
         seen = {
           audio: h.component.activeAudioStreamIndex,
           burnIn: h.component.subs.activeBurnInId,
@@ -2747,7 +2749,7 @@ describe('PlayerComponent cast session picks', () => {
         };
         return true;
       });
-      return { run: () => h.component.resumeLocal(30), seen: () => seen };
+      return { h, run: (paused = false) => h.component.resumeLocal(30, paused), seen: () => seen, opts: () => opts };
     }
 
     it('reloads on the audio and the burn-in picked on the receiver', async () => {
@@ -2757,6 +2759,26 @@ describe('PlayerComponent cast session picks', () => {
       );
       await r.run();
       expect(r.seen()).toEqual({ audio: 2, burnIn: 4, subtitle: 'emb-4' });
+    });
+
+    it('reloads paused when the receiver was paused', async () => {
+      const r = resumeWith(null, []);
+      await r.run(true);
+      expect(r.opts()).toEqual(expect.objectContaining({ paused: true }));
+    });
+
+    it('opens the first load paused when the receiver was paused', async () => {
+      const r = resumeWith(null, []);
+      const c = r.h.component;
+      c.engine = undefined;
+      let armed: unknown;
+      c.startLocal = vi.fn(async () => {
+        armed = c.resumePaused;
+        return true;
+      });
+      await r.run(true);
+      expect(armed).toBe(true);
+      expect(c.resumePaused).toBe(false);
     });
 
     it('shows a bitmap pick the local engine renders itself without burning it in', async () => {

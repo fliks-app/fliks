@@ -74,6 +74,7 @@ export class PlaybackSession {
   private watchReturns: EffectRef | null = null;
   /** Where the cast or remote output last was: once it is gone, its own position reads nothing. */
   private awayPosition = 0;
+  private awayPaused = false;
   private partyRouter: PartyRouter | null = null;
   /** File the output already holds, set by whoever opens the player route on it. */
   private opened = 0;
@@ -362,6 +363,7 @@ export class PlaybackSession {
     const from = this.output();
     if (!local || !from || from === local) return false;
     const position = from.position();
+    const paused = from.paused();
     if (this.kind() === 'remote') {
       // Only one device plays: the one left behind closes its player.
       from.stopPlayback();
@@ -370,7 +372,7 @@ export class PlaybackSession {
       this.castSvc().disconnect();
       this.castPlayer().clear();
     }
-    await local.resume(position);
+    await local.resume(position, paused);
     return true;
   }
 
@@ -419,7 +421,10 @@ export class PlaybackSession {
       () => {
         const away = this.kind() !== 'local';
         const o = this.output();
-        if (away && o) this.awayPosition = o.position() || this.awayPosition;
+        if (away && o) {
+          this.awayPosition = o.position() || this.awayPosition;
+          this.awayPaused = o.paused();
+        }
         untracked(() => {
           if (away === this.wasAway) return;
           this.wasAway = away;
@@ -435,6 +440,6 @@ export class PlaybackSession {
     this.releasing = false;
     const local = this.local();
     if (!local || this.moving || releasing) return;
-    void local.resume(this.awayPosition);
+    void local.resume(this.awayPosition, this.awayPaused);
   }
 }

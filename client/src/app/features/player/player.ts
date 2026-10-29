@@ -1626,10 +1626,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The engine itself was opened paused: a native engine then needs an explicit `play()` once released. */
   private openedPaused = false;
 
+  /** Playback came back from another output that was paused: the next load opens paused. */
+  private resumePaused = false;
+
   /** Engines that can open paused do so for a party that is not playing; the others autoplay and the party pauses them. */
   private armStartPaused(engine: PlaybackEngine): void {
     if (engine.startPaused === undefined) return;
-    engine.startPaused = this.loadedPaused = this.openedPaused = this.partyCtl.startsPaused();
+    engine.startPaused = this.loadedPaused = this.openedPaused = this.partyCtl.startsPaused() || this.resumePaused;
   }
 
   /** Shared wiring for the transparent-overlay native engines (ExoPlayer/AVPlayer, Electron mpv): bind state,
@@ -2036,7 +2039,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       onBack: () => this.onBack(),
       release: () => this.releaseForHandoff(),
       stepAside: () => this.stepAside(),
-      resume: (position) => this.resumeLocal(position),
+      resume: (position, paused) => this.resumeLocal(position, paused),
     },
     this.state,
   );
@@ -2674,7 +2677,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  `pos` with the new sid. False when the remux fallback took the reload over. */
   private async refreshSidAndReload(
     pos: number,
-    opts: { preservePause: boolean; unmute: boolean },
+    opts: { preservePause: boolean; unmute: boolean; paused?: boolean },
   ): Promise<boolean> {
     if (!this.engine || !this.mediaFileId) return true;
     try {
@@ -2958,8 +2961,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Back on this device at `position`: reload the engine, or open it for the first time when the route started
    *  on another output. The pre-handoff LiveSession was GC'd, so mint a fresh sid rather than reuse
    *  `playbackInfo?.sessionId`, which would race the heartbeat fallback and flash a reload. */
-  private async resumeLocal(position: number): Promise<void> {
+  private async resumeLocal(position: number, paused = false): Promise<void> {
     if (this.destroyed) return;
+    this.resumePaused = paused;
     this.screen.applyLandscapeOnOpen();
     this.adoptCastSelection();
     const adopted = this.itemAdopted;
@@ -2968,12 +2972,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!this.engine) {
         this.state.loading.set(true);
         await this.startLocal(position);
-      } else if (await this.refreshSidAndReload(position, { preservePause: false, unmute: true }) && adopted) {
+      } else if (await this.refreshSidAndReload(position, { preservePause: false, unmute: true, paused }) && adopted) {
         await this.completeEpisodeSwitchSetup();
       }
     } catch (e) {
       // No retry path after a handoff: surface a terminal error instead of a silently dead player.
       if (!this.destroyed) this.state.failWith(e);
+    } finally {
+      this.resumePaused = false;
     }
   }
 
@@ -3580,7 +3586,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  `restart` (user switch) also stops the native surface first, else the session is refreshed behind a live one. Throws on failure, after releasing the unreplaced session. */
   private async reloadAt(
     pos: number,
-    opts: { preservePause: boolean; unmute: boolean; restart: boolean },
+    opts: { preservePause: boolean; unmute: boolean; restart: boolean; paused?: boolean },
   ): Promise<void> {
     const engine = this.engine!;
     const at = this.reloadStartAt(pos) ?? 0;
@@ -3589,7 +3595,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     let replace: { replaces?: string } = {};
     try {
       // Capture the viewer's play/pause intent before the teardown: a switch must not resume a paused player.
-      const wasPaused = opts.preservePause ? this.pauseIntent() : false;
+      const wasPaused = opts.paused ?? (opts.preservePause ? this.pauseIntent() : false);
       if (opts.restart && this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
       // Only this device's session goes; multi-device viewers on the same file stay alive.
       replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);

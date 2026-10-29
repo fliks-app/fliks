@@ -132,6 +132,6 @@ export interface LocalOutput extends PlaybackOutput {
   release(): Promise<LocalHandoff | null>;
   /** Pause and mute without unloading: another output already plays. */
   stepAside(): void;
-  /** Load again, or for the first time, at `position`. */
-  resume(position: number): Promise<void>;
+  /** Load again, or for the first time, at `position`, left paused when `paused`. */
+  resume(position: number, paused: boolean): Promise<void>;
 }
