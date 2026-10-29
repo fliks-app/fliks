@@ -166,8 +166,16 @@ test('a playing status becomes a media update, without the stream volume', () =>
       isPaused: false,
       buffering: false,
       ended: false,
+      customData: {},
     },
   });
+});
+
+test('a status forwards only the Fliks ids of the media the receiver plays', () => {
+  const media = { duration: 60, customData: { mediaId: 3, mediaFileId: 7, episodeId: 5, sid: 's', edl: [1, 2, 3] } };
+  const detail = mediaStatusEvent({ playerState: 'PLAYING' }, media).detail as { customData?: unknown };
+  assert.deepEqual(detail.customData, { mediaId: 3, mediaFileId: 7, episodeId: 5, sid: 's' });
+  assert.equal((mediaStatusEvent({ playerState: 'PLAYING' }, undefined).detail as { customData?: unknown }).customData, undefined);
 });
 
 test('a volume change is a device event that carries no media field', () => {

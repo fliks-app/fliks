@@ -53,7 +53,7 @@ describe('cast reload single-flight', () => {
     const reloadCastStream = vi.fn();
     const self = {
       mediaFileId: () => 1, mediaId: () => 2, episodeId: () => undefined, liveSessionId: () => 's',
-      qoeSample: () => null, cast: { currentTime: () => 30, duration: () => 100, isPaused: () => false },
+      qoeSample: () => null, cast: { receiverPlays: () => true, currentTime: () => 30, duration: () => 100, isPaused: () => false },
       streamingApi: { updatePlaybackState: vi.fn(async () => ({ sessionLost: true })) },
       qoeReporter: { flush: vi.fn() }, reloading: signal(true), reloadCastStream,
     };

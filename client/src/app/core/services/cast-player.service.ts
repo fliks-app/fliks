@@ -475,6 +475,15 @@ export class CastPlayerService {
     if (state && !this.hasMedia()) this.restore(state);
   }
 
+  private followReceiver(data: Record<string, unknown> | null): void {
+    if (!data || !this.cast.isConnected() || this.reloading()) return;
+    if (typeof data['mediaFileId'] !== 'number' || typeof data['mediaId'] !== 'number') {
+      if (this.hasMedia()) this.clear();
+    } else if (!this.hasMedia() || data['mediaFileId'] !== this.mediaFileId()) {
+      this.restore(this.stateFromReceiver(data));
+    }
+  }
+
   private restore(s: CastResumeState): void {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
@@ -546,10 +555,10 @@ export class CastPlayerService {
       this.cast.resumedState();
       untracked(() => this.adoptResumed());
     });
-    // Web auto-join after a tab reload: the receiver still plays, rebuild from its LOAD customData.
+    // The receiver is the source of truth: a tab reload rejoins its media, another sender's LOAD replaces ours.
     effect(() => {
-      const data = this.cast.rejoinedMedia();
-      if (data && !untracked(this.hasMedia)) untracked(() => this.restore(this.stateFromReceiver(data)));
+      const data = this.cast.receiverMedia();
+      untracked(() => this.followReceiver(data));
     });
     // The native side keeps this across a reload or process restart, so the session can be
     // taken over as it was left without reloading the receiver.
@@ -583,7 +592,7 @@ export class CastPlayerService {
   readonly reloading = signal(false);
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia() || this.recovering || this.reloading()) return;
+    if (!this.hasMedia() || this.recovering || this.reloading() || !this.cast.receiverPlays(this.mediaFileId())) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -906,7 +915,7 @@ export class CastPlayerService {
   private async saveCastPosition() {
     const mfId = this.mediaFileId();
     const mId = this.mediaId();
-    if (!mfId || !mId) return;
+    if (!mfId || !mId || !this.cast.receiverPlays(mfId)) return;
     const pos = this.cast.currentTime();
     const dur = this.cast.duration();
     if (!pos || pos < 1) return;

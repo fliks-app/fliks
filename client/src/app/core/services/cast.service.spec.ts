@@ -253,23 +253,34 @@ describe('CastService receiver messages', () => {
   });
 });
 
-describe('CastService rejoined media', () => {
-  const sync = (self: object) => (CastService.prototype as any).syncRejoinedMedia.call(self);
+describe('CastService receiver media', () => {
+  const sync = (self: object) => (CastService.prototype as any).syncReceiverMedia.call(self);
+  const web = (isConnected: boolean, mediaInfo: unknown) => ({ remotePlayer: { isConnected, mediaInfo }, receiverMedia: { set: vi.fn() } });
 
   it('exposes the receiver customData of a connected web session', () => {
     const data = { mediaFileId: 7, mediaId: 3 };
-    const self = { remotePlayer: { isConnected: true, mediaInfo: { customData: data } }, rejoinedMedia: { set: vi.fn() } };
+    const self = web(true, { customData: data });
     sync(self);
-    expect(self.rejoinedMedia.set).toHaveBeenCalledWith(data);
+    expect(self.receiverMedia.set).toHaveBeenCalledWith(data);
   });
 
-  it('ignores foreign media and a disconnected player', () => {
-    const foreign = { remotePlayer: { isConnected: true, mediaInfo: { customData: {} } }, rejoinedMedia: { set: vi.fn() } };
+  it('reports media without customData as foreign, and nothing when disconnected', () => {
+    const foreign = web(true, {});
     sync(foreign);
-    expect(foreign.rejoinedMedia.set).toHaveBeenCalledWith(null);
-    const off = { remotePlayer: { isConnected: false, mediaInfo: { customData: { mediaFileId: 1, mediaId: 2 } } }, rejoinedMedia: { set: vi.fn() } };
+    expect(foreign.receiverMedia.set).toHaveBeenCalledWith({});
+    const off = web(false, { customData: { mediaFileId: 1, mediaId: 2 } });
     sync(off);
-    expect(off.rejoinedMedia.set).toHaveBeenCalledWith(null);
+    expect(off.receiverMedia.set).toHaveBeenCalledWith(null);
+  });
+
+  it('takes the customData of a native media update and tells whose media plays', () => {
+    const svc = make(null);
+    expect(svc.receiverPlays(7)).toBe(true);
+    svc.applyMediaUpdate({ customData: { mediaId: 3, mediaFileId: 7 } });
+    expect(svc.receiverPlays(7)).toBe(true);
+    expect(svc.receiverPlays(8)).toBe(false);
+    svc.applyMediaUpdate({ customData: {} });
+    expect(svc.receiverPlays(7)).toBe(false);
   });
 });
 

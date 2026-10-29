@@ -85,6 +85,12 @@ final class PositionHeartbeat {
         self.body = body
     }
 
+    /// False when the receiver plays another file than the one `body` names: its clock is not that file's.
+    func ownsFile(_ customData: Any?) -> Bool {
+        let playing = (customData as? [String: Any])?["mediaFileId"] as? NSNumber
+        return playing != nil && playing == body["mediaFileId"] as? NSNumber
+    }
+
     func clear() {
         url = nil
         body = [:]

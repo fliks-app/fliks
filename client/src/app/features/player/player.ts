@@ -3697,6 +3697,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     let dur: number;
 
     if (this.castService.isConnected()) {
+      if (!this.castService.receiverPlays(this.mediaFileId)) return;
       pos = this.castService.currentTime();
       dur = this.castService.duration() || this.duration();
     } else if (this.state.seekLocked()) {

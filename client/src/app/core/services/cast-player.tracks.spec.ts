@@ -42,13 +42,18 @@ const STREAMINFO_ONLY = sub({ id: 'emb-9', language: 'de' });
 function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption | null } = {}) {
   const cast = {
     isConnected: signal(true),
+    receiverPlays(id: number) {
+      const m = this.receiverMedia();
+      return !m || m['mediaFileId'] === id;
+    },
     resumedState: signal<unknown>(null),
     settled: Promise.resolve(),
-    rejoinedMedia: signal<Record<string, unknown> | null>(null),
+    receiverMedia: signal<Record<string, unknown> | null>(null),
     receiverQoe: signal(null),
     playbackError$: new Subject<{ position?: number }>(),
     receiverError$: new Subject<object>(),
     saveResumeState: vi.fn(),
+    saveHeartbeat: vi.fn(),
     clearResumeState: vi.fn(),
     setActiveSubtitle: vi.fn(async () => {}),
     setActiveAudioLanguage: vi.fn(async () => false),
@@ -106,7 +111,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: StreamingApiService, useValue: streamingApi },
       { provide: SubtitlesApiService, useValue: subtitlesApi },
       { provide: AppSettingsService, useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => true } },
-      { provide: AuthService, useValue: { getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }), user: () => ({}) } },
+      { provide: AuthService, useValue: { ensureStreamToken: async () => 'st', getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }), user: () => ({}) } },
       { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
       { provide: PlayerSettingsService, useValue: playerSettings },
       { provide: TrackManagerService, useValue: trackManager },
@@ -190,11 +195,51 @@ describe('cast rejoin after a tab reload', () => {
     const { svc, cast } = setup();
     TestBed.tick();
     expect(svc.hasMedia()).toBe(false);
-    cast.rejoinedMedia.set({ mediaFileId: 7, mediaId: 3, episodeId: 5, sid: 'sid-1', playbackId: 'pb', title: 'T' });
+    cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, episodeId: 5, sid: 'sid-1', playbackId: 'pb', title: 'T' });
     TestBed.tick();
     expect(svc.hasMedia()).toBe(true);
     expect(svc.mediaFileId()).toBe(7);
     expect(svc.liveSessionId()).toBe('sid-1');
+  });
+});
+
+describe('another sender loads on the receiver', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const ours = { mediaId: 3, mediaFileId: 7, sid: 'a' };
+
+  it('adopts the item the receiver now plays', () => {
+    const { svc, cast } = setup();
+    svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
+    cast.receiverMedia.set(ours);
+    TestBed.tick();
+    cast.receiverMedia.set({ mediaId: 4, mediaFileId: 9, episodeId: 2, sid: 'b' });
+    TestBed.tick();
+    expect(svc.mediaFileId()).toBe(9);
+    expect(svc.mediaId()).toBe(4);
+    expect(svc.episodeId()).toBe(2);
+  });
+
+  it('stops mirroring media from another app', () => {
+    const { svc, cast } = setup();
+    svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
+    cast.receiverMedia.set({});
+    TestBed.tick();
+    expect(svc.hasMedia()).toBe(false);
+    expect(svc.mediaFileId()).toBe(0);
+  });
+
+  it('saves nothing while the receiver plays another file', async () => {
+    const { svc, cast, streamingApi } = setup();
+    const save = streamingApi.updatePlaybackState;
+    cast.currentTime = () => 120;
+    svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
+    cast.receiverMedia.set({ mediaId: 4, mediaFileId: 9 });
+    await (svc as any).saveCastPosition();
+    expect(save).not.toHaveBeenCalled();
+    cast.receiverMedia.set(ours);
+    await (svc as any).saveCastPosition();
+    expect(save).toHaveBeenCalledTimes(1);
   });
 });
 

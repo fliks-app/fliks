@@ -173,6 +173,12 @@ const CAST_SEEK_CONVERGE_TOL = 1.5;
 /** A receiver can ignore the LOAD's `activeTrackIds` while it is still publishing its tracks. */
 const CAST_TEXT_REAPPLY_MS = 1500;
 
+const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid'];
+
+function sameReceiverMedia(a: Record<string, unknown> | null, b: Record<string, unknown> | null): boolean {
+  return a === b || (!!a && !!b && RECEIVER_MEDIA_KEYS.every((k) => a[k] === b[k]));
+}
+
 @Injectable({ providedIn: 'root' })
 export class CastService implements OnDestroy {
   /** A receiver is reachable right now, not merely "the SDK loaded": the Cast
@@ -182,8 +188,9 @@ export class CastService implements OnDestroy {
   /** Set when a session survived a WebView reload or a process restart: the state
    *  the player saved with {@link saveResumeState}. */
   readonly resumedState = signal<unknown>(null);
-  /** Web: the LOAD `customData` of the media already on the receiver, e.g. an auto-joined session after a tab reload. */
-  readonly rejoinedMedia = signal<Record<string, unknown> | null>(null);
+  /** The LOAD `customData` of the media the receiver reports, whoever loaded it: `{}` for media without any
+   *  (another app), null until a status says. */
+  readonly receiverMedia = signal<Record<string, unknown> | null>(null, { equal: sameReceiverMedia });
   /** Resolves once a native or desktop bridge has reported a session that outlived the renderer. */
   readonly settled: Promise<void> = Promise.resolve();
   /** Write only via {@link beginConnecting} / {@link endConnecting}: the trigger is disabled while set, so a lost outcome would wedge the picker. */
@@ -259,7 +266,8 @@ export class CastService implements OnDestroy {
   }
 
   /** Media state from the sender: a field the event does not carry keeps its value. */
-  applyMediaUpdate(d: { currentTime?: number; duration?: number; isPaused?: boolean; buffering?: boolean; ended?: boolean } | null | undefined): void {
+  applyMediaUpdate(d: { currentTime?: number; duration?: number; isPaused?: boolean; buffering?: boolean; ended?: boolean; customData?: Record<string, unknown> } | null | undefined): void {
+    if (d?.customData) this.receiverMedia.set(d.customData);
     if (d?.currentTime != null) this.mirrorReceiverTime(d.currentTime);
     if (d?.duration != null) this.duration.set(d.duration);
     if (d?.isPaused != null) this.isPaused.set(d.isPaused);
@@ -315,6 +323,7 @@ export class CastService implements OnDestroy {
         this.isConnected.set(connected);
         if (connected) this.endConnecting();
         else {
+          this.receiverMedia.set(null);
           this.buffering.set(false);
           this.receiverQoe.set(null);
         }
@@ -396,7 +405,7 @@ export class CastService implements OnDestroy {
       );
       this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.MEDIA_INFO_CHANGED,
-        () => this.syncRejoinedMedia(),
+        () => this.syncReceiverMedia(),
       );
       this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.CURRENT_TIME_CHANGED,
@@ -463,13 +472,18 @@ export class CastService implements OnDestroy {
       this.errorListenerSessionId = null;
       this.receiverQoe.set(null);
     }
-    this.syncRejoinedMedia();
+    this.syncReceiverMedia();
   }
 
-  private syncRejoinedMedia() {
-    const data = this.remotePlayer?.isConnected ? this.remotePlayer.mediaInfo?.customData : null;
-    const ours = typeof data?.mediaFileId === 'number' && typeof data?.mediaId === 'number';
-    this.rejoinedMedia.set(ours ? data : null);
+  private syncReceiverMedia() {
+    const info = this.remotePlayer?.isConnected ? this.remotePlayer.mediaInfo : null;
+    this.receiverMedia.set(info ? (info.customData ?? {}) : null);
+  }
+
+  /** False when the receiver reports media other than `mediaFileId`: its clock is not that item's. */
+  receiverPlays(mediaFileId: number): boolean {
+    const m = this.receiverMedia();
+    return !m || m['mediaFileId'] === mediaFileId;
   }
 
   /** Guards against re-adding on the same session so a reconnect doesn't stack listeners and double-toast. */

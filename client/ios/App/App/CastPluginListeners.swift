@@ -110,7 +110,7 @@ extension CastPlugin {
         stopHeartbeat()
         heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             guard let client = self?.currentSession?.remoteMediaClient, let status = client.mediaStatus,
-                  status.playerState != .idle else { return }
+                  status.playerState != .idle, self?.heartbeat.ownsFile(status.mediaInformation?.customData) == true else { return }
             let duration = status.mediaInformation?.streamDuration ?? 0
             let state = status.playerState == .playing ? "playing" : "paused"
             self?.heartbeat.send(position: client.approximateStreamPosition(), duration: duration, state: state)
@@ -144,7 +144,16 @@ extension CastPlugin {
         let muted = currentSession?.currentDeviceMuted ?? false
 
         let ended = status.playerState == .idle && status.idleReason == .finished
-        emitMediaUpdate(time: time, duration: duration, paused: paused, buffering: buffering, volume: volume, muted: muted, ended: ended)
+        let receiverMedia = status.mediaInformation.map { Self.receiverMediaIds($0.customData) }
+        emitMediaUpdate(time: time, duration: duration, paused: paused, buffering: buffering, volume: volume, muted: muted, ended: ended, receiverMedia: receiverMedia)
+    }
+
+    private static let receiverMediaKeys = ["mediaId", "mediaFileId", "episodeId", "sid", "playbackId", "intro", "outro"]
+
+    /// The Fliks ids of the media the receiver plays, whoever loaded it; empty for media from another app.
+    static func receiverMediaIds(_ customData: Any?) -> [String: Any] {
+        let data = customData as? [String: Any] ?? [:]
+        return data.filter { receiverMediaKeys.contains($0.key) }
     }
 
     // MARK: - Helpers
@@ -167,8 +176,12 @@ extension CastPlugin {
         }
     }
 
-    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, buffering: Bool, volume: Float, muted: Bool, ended: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), buffering: \(buffering), ended: \(ended) } }));"
+    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, buffering: Bool, volume: Float, muted: Bool, ended: Bool, receiverMedia: [String: Any]?) {
+        let customData = receiverMedia
+            .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            .flatMap { String(data: $0, encoding: .utf8) }
+            .map { ", customData: \($0)" } ?? ""
+        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), buffering: \(buffering), ended: \(ended)\(customData) } }));"
             + "window.dispatchEvent(new CustomEvent('castDeviceUpdate', { detail: { volume: \(volume), muted: \(muted) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)

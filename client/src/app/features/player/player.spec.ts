@@ -245,6 +245,7 @@ function createHarness(opts: {
         provide: CastService,
         useValue: {
           isConnected: () => false,
+          receiverPlays: () => true,
           isAvailable: () => false,
           connecting: () => false,
           currentTime: () => 0,
