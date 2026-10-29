@@ -31,7 +31,7 @@ pub struct Counts {
 }
 
 /// Bumped when a probe stores something new, so unchanged files are probed again once.
-const PROBE_VERSION: i32 = 1;
+const PROBE_VERSION: i32 = 2;
 
 struct Row {
     id: i32,
