@@ -48,15 +48,6 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   );
   readonly volume = computed(() => this.remote.targetState()?.volume ?? 1);
   readonly muted = computed(() => this.remote.targetState()?.muted ?? false);
-  readonly mediaTitle = computed(() => this.remote.targetState()?.mediaTitle ?? '');
-  readonly fanartUrl = computed(
-    () =>
-      this.remote.targetState()?.posterUrl ??
-      this.remote.selectedTarget()?.nowPlaying?.posterUrl ??
-      null,
-  );
-  /** RemoteNowPlaying carries no episode label. */
-  readonly episodeTitle = computed(() => this.remote.targetState()?.episodeLabel ?? '');
   readonly activeQualityId = computed(() => this.remote.targetState()?.quality ?? 'auto');
   readonly activeAudioTrackId = computed(() => {
     const idx = this.remote.targetState()?.audioTrackIndex;

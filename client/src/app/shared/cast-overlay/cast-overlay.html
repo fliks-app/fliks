@@ -4,13 +4,13 @@
     <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left disabled:cursor-default"
             [disabled]="!session.playing()" [attr.aria-label]="'remote.open_player' | translate" (click)="open()">
       <div class="skeleton h-12 w-12 shrink-0 overflow-hidden rounded-lg">
-        @if (o.fanartUrl()) {
-          <img [cachedSrc]="o.fanartUrl()! | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
+        @if (artwork(); as art) {
+          <img [cachedSrc]="art | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
         }
       </div>
       <span class="min-w-0">
         <span class="block truncate text-sm font-semibold">
-          {{ o.isIdle() ? ('remote.idle_message' | translate) : o.mediaTitle() }}
+          {{ o.isIdle() ? ('remote.idle_message' | translate) : session.nowPlaying()?.title }}
         </span>
         <span class="block truncate text-xs text-base-content/60">{{ session.deviceName() }}</span>
       </span>

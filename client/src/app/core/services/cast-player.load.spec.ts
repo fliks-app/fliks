@@ -19,8 +19,9 @@ function make(loadMedia: ReturnType<typeof vi.fn>, connected = true) {
   svc['liveSessionId'] = signal<string | null>(null);
   svc['availableSubtitles'] = signal([]);
   svc['timeline'] = signal({ intro: null, outro: null, chapters: [], edl: [] });
-  for (const k of ['activeSubtitleId', 'fanartUrl']) svc[k] = signal(null);
-  for (const k of ['mediaTitle', 'episodeTitle']) svc[k] = signal('t');
+  svc['activeSubtitleId'] = signal(null);
+  svc['nowPlaying'] = { load: async () => ({ title: 't', episodeLabel: '', fanartUrl: null, posterUrl: null }) };
+  svc['serverConfig'] = { resolveUrl: (u: string) => u };
   for (const k of ['mediaId', 'episodeId']) svc[k] = signal(1);
   const run = () =>
     (svc as unknown as Priv).dispatchLoad(1, { playMethod: 'Transcode', playUrl: 'p' }, 0, 'q', { token: 'k', streamBaseUrl: 'b' }, true);

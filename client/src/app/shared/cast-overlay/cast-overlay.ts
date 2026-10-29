@@ -16,6 +16,11 @@ export class CastOverlayComponent {
   protected readonly session = inject(PlaybackSession);
   private readonly device = inject(DeviceService);
 
+  protected readonly artwork = computed(() => {
+    const meta = this.session.nowPlaying();
+    return meta?.fanartUrl ?? meta?.posterUrl ?? null;
+  });
+
   /** The cast or remote output; null on a TV, which never casts, and while playing locally. */
   protected readonly output = computed(() => (this.device.isTv() || this.session.isLocal() ? null : this.session.output()));
 

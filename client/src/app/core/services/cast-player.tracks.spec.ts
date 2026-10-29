@@ -5,7 +5,7 @@ import { Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppSettingsService } from './app-settings.service';
 import { AuthService } from './auth.service';
-import { MediaService } from './api/media.service';
+import { Media, MediaService } from './api/media.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { CastService } from './cast.service';
@@ -53,7 +53,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     setActiveSubtitle: vi.fn(async () => {}),
     setActiveAudioLanguage: vi.fn(async () => false),
     setCastStreamBase: vi.fn(),
-    loadMedia: vi.fn(async () => {}),
+    loadMedia: vi.fn(async (..._a: unknown[]) => {}),
     currentTime: () => 0,
     duration: () => 0,
     isPaused: () => false,
@@ -96,7 +96,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
   };
   const subtitlesApi = { getForMedia: vi.fn(async () => [] as unknown[]) };
 
-  const mediaService = { getOne: vi.fn(async (): Promise<unknown> => null) };
+  const mediaService = { getOne: vi.fn(async (): Promise<unknown> => ({ id: MEDIA_ID, title: 'Show', files: [] })) };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -121,9 +121,6 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
 const base = {
   mediaFileId: MEDIA_FILE_ID,
   mediaId: MEDIA_ID,
-  mediaTitle: 't',
-  episodeTitle: '',
-  fanartUrl: null,
   playbackMode: 'transcode' as const,
   qualities: [],
   audioTracks: [],
@@ -317,10 +314,8 @@ describe('cast stop', () => {
 
   it('forgets the media and its resume state so no bar or reloaded renderer shows it', () => {
     const { svc, cast } = setup();
-    svc.startCast({ ...base, subtitles: [], activeSubtitleId: null, mediaTitle: 'Show', episodeTitle: 'S01E02' });
+    svc.startCast({ ...base, subtitles: [], activeSubtitleId: null });
     svc.clear();
-    expect(svc.mediaTitle()).toBe('');
-    expect(svc.episodeTitle()).toBe('');
     expect(svc.mediaId()).toBe(0);
     expect(cast.clearResumeState).toHaveBeenCalled();
   });
@@ -347,7 +342,6 @@ describe('cast quick start', () => {
     await h.svc.quickStart({
       mediaFileId: MEDIA_FILE_ID,
       mediaId: MEDIA_ID,
-      title: 't',
       streamInfo: { audio: [{ language: 'en' }, { language: 'fr' }] },
       startTime: 0,
     });
@@ -358,17 +352,24 @@ describe('cast quick start', () => {
     expect(priv(h.svc).activeBurnInId).toBe(21);
   });
 
-  it('labels an episode like the player header, whatever the caller passed', async () => {
+  it('sends the media title, episode label and artwork read from the media, whatever the caller passed', async () => {
     const h = setup();
     h.mediaService.getOne.mockResolvedValue({
-      files: [], seasons: [{ seasonNumber: 1, episodes: [{ id: 10, episodeNumber: 2, title: 'Pilot' }] }],
+      id: MEDIA_ID, title: 'Show', fanartUrl: '/f.jpg', posterUrl: '/p.jpg', files: [],
+      seasons: [{ seasonNumber: 1, episodes: [{ id: 10, episodeNumber: 2, title: 'Pilot' }] }],
     });
-    const startCast = vi.spyOn(h.svc, 'startCast');
     await h.svc.quickStart({
-      mediaFileId: MEDIA_FILE_ID, mediaId: MEDIA_ID, episodeId: 10, title: 't', episodeTitle: 'Pilot',
-      streamInfo: { audio: [] }, startTime: 0,
+      mediaFileId: MEDIA_FILE_ID, mediaId: MEDIA_ID, episodeId: 10, streamInfo: { audio: [] }, startTime: 0,
     });
-    expect(startCast.mock.calls[0][0].episodeTitle).toBe('S1:E2 - Pilot');
+    expect(h.cast.loadMedia.mock.calls[0][0]).toMatchObject({ title: 'Show', subtitle: 'S1:E2 - Pilot', posterUrl: '/f.jpg' });
+  });
+
+  it('reads an already loaded media without fetching it', async () => {
+    const h = setup();
+    const media = { id: MEDIA_ID, title: 'Loaded', files: [] } as unknown as Media;
+    await h.svc.quickStart({ mediaFileId: MEDIA_FILE_ID, mediaId: MEDIA_ID, media, streamInfo: { audio: [] }, startTime: 0 });
+    expect(h.mediaService.getOne).not.toHaveBeenCalled();
+    expect(h.cast.loadMedia.mock.calls[0][0]).toMatchObject({ title: 'Loaded' });
   });
 
   describe('with the picks made on the detail page', () => {
@@ -376,7 +377,6 @@ describe('cast quick start', () => {
       h.svc.quickStart({
         mediaFileId: MEDIA_FILE_ID,
         mediaId: MEDIA_ID,
-        title: 't',
         streamInfo: { audio: [{ language: 'en' }, { language: 'fr' }] },
         startTime: 0,
         tracks,
@@ -411,7 +411,6 @@ describe('cast quick start', () => {
     await h.svc.quickStart({
       mediaFileId: MEDIA_FILE_ID,
       mediaId: MEDIA_ID,
-      title: 't',
       streamInfo: { audio: [{ language: 'en' }] },
       startTime: 0,
     });
@@ -425,7 +424,6 @@ describe('cast quick start', () => {
     await h.svc.quickStart({
       mediaFileId: MEDIA_FILE_ID,
       mediaId: MEDIA_ID,
-      title: 't',
       streamInfo: { audio: [{ language: 'en' }] },
       startTime: 0,
     });

@@ -7,6 +7,8 @@ import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
 import { DeviceService } from '../device.service';
 import { PartyService } from '../party/party.service';
+import { NowPlayingMetadataService } from './now-playing-metadata.service';
+import type { Media } from '../api/media.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { parseDeviceLabel } from '../../utils/format-device-label';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
@@ -16,15 +18,15 @@ import type { LocalOutput, PlaybackOutput } from './playback-output';
 
 const CONNECT_WAIT_MS = 30_000;
 
-/** What `play` opens: a file, with what the cast card and the player's backdrop show before anything loads. */
+/** What `play` opens: the identity of a file. Display metadata comes from `NowPlayingMetadataService`. */
 export interface PlayItem {
   fileId: number;
   mediaId: number;
   episodeId?: number;
-  title: string;
-  episodeTitle?: string;
-  fanartUrl?: string | null;
-  stillUrl?: string | null;
+  /** The media when the caller already loaded it, so the output does not fetch it again. */
+  media?: Media;
+  /** Loading-screen backdrop of the local player, before its media has loaded. */
+  backdropUrl?: string | null;
   streamInfo?: any;
   /** Where the caller knows playback stopped; only a remote target uses it. */
   positionSeconds?: number;
@@ -93,6 +95,13 @@ export class PlaybackSession {
         : 'local',
   );
   readonly isLocal = computed(() => this.kind() === 'local');
+
+  /** Display metadata of what the cast or remote output plays; null while local or loading. */
+  readonly nowPlaying = inject(NowPlayingMetadataService).track(() => {
+    if (this.kind() === 'local') return null;
+    const { mediaId, episodeId } = this.output()!.item();
+    return mediaId ? { mediaId, episodeId } : null;
+  });
 
   /** Name of the device playing, null while local. */
   readonly deviceName = computed<string | null>(() => {
@@ -226,9 +235,7 @@ export class PlaybackSession {
         mediaFileId: item.fileId,
         mediaId: item.mediaId,
         episodeId: item.episodeId,
-        title: item.title,
-        episodeTitle: item.episodeTitle,
-        fanartUrl: item.fanartUrl ?? null,
+        media: item.media,
         streamInfo: item.streamInfo,
         startTime: startAt,
         tracks: item.tracks,
@@ -237,10 +244,10 @@ export class PlaybackSession {
       const query: Record<string, number> = { mediaId: item.mediaId, ...opts.query };
       if (item.episodeId) query['episodeId'] = item.episodeId;
       if (opts.fromStart) query['t'] = 0;
-      // Router state lets the player paint the backdrop on its first tick; `stillUrl` wins over `fanartUrl`.
+      // Router state lets the player paint the backdrop on its first tick.
       void this.router().navigate(['/watch', item.fileId], {
         queryParams: query,
-        state: { fanartUrl: item.fanartUrl ?? null, stillUrl: item.stillUrl ?? null, tracks: item.tracks ?? null },
+        state: { backdropUrl: item.backdropUrl ?? null, tracks: item.tracks ?? null },
       });
     }
     if (kind !== 'local' && (opts.expand ?? true)) this.openPlayer(item);
@@ -327,15 +334,12 @@ export class PlaybackSession {
       audioStreamIndex: audio ? Number(audio[1]) : undefined,
       subtitleId: from.activeSubtitleId(),
     };
-    const title = from.mediaTitle();
-    const episodeTitle = from.episodeTitle() || undefined;
-    const fanartUrl = from.fanartUrl();
     if (kind === 'cast') {
       if (!(await this.connectCast(deviceId))) return false;
       await from.pause();
       from.disconnect();
       await this.castPlayer().quickStart({
-        mediaFileId: cur.fileId, mediaId: cur.mediaId, episodeId: cur.episodeId, title, episodeTitle, fanartUrl, startTime: position, tracks,
+        mediaFileId: cur.fileId, mediaId: cur.mediaId, episodeId: cur.episodeId, startTime: position, tracks,
       });
       return true;
     }

@@ -17,9 +17,6 @@ export interface LocalOutputHost {
   pausePlayback(): Promise<void>;
   playLocal(): void;
   position(): number;
-  mediaTitle: Signal<string>;
-  episodeTitle: Signal<string>;
-  fanartUrl: Signal<string | null>;
   spriteUrl: Signal<string | null>;
   spriteMetadata: Signal<SpriteMetadata | null>;
   subtitles: Signal<PlaybackOption[]>;
@@ -73,9 +70,6 @@ export class LocalPlaybackOutput implements LocalOutput {
   readonly duration: PlaybackOutput['duration'];
   readonly muted: PlaybackOutput['muted'];
   readonly volume: PlaybackOutput['volume'];
-  readonly mediaTitle: PlaybackOutput['mediaTitle'];
-  readonly episodeTitle: PlaybackOutput['episodeTitle'];
-  readonly fanartUrl: PlaybackOutput['fanartUrl'];
   readonly spriteUrl: PlaybackOutput['spriteUrl'];
   readonly spriteMetadata: PlaybackOutput['spriteMetadata'];
   readonly availableSubtitles: PlaybackOutput['availableSubtitles'];
@@ -101,9 +95,6 @@ export class LocalPlaybackOutput implements LocalOutput {
     this.duration = state.duration;
     this.muted = state.muted;
     this.volume = state.volume;
-    this.mediaTitle = host.mediaTitle;
-    this.episodeTitle = host.episodeTitle;
-    this.fanartUrl = host.fanartUrl;
     this.spriteUrl = host.spriteUrl;
     this.spriteMetadata = host.spriteMetadata;
     this.availableSubtitles = host.subtitles;

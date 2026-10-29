@@ -488,9 +488,7 @@ export class MediaInfoHeaderComponent {
       fileId,
       mediaId: this.mediaId(),
       episodeId: resumeEpId ?? this.episodeId(),
-      title: this.title(),
-      episodeTitle: this.resumeEpisodeLabel() ?? this.episodeLabel() ?? undefined,
-      fanartUrl: this.fanartUrl() ?? this.posterUrl() ?? null,
+      backdropUrl: this.fanartUrl() ?? this.posterUrl() ?? null,
       streamInfo: file?.streamInfo,
       tracks: this.launchTracks(),
     }, fromStart);

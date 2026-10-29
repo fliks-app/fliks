@@ -613,8 +613,8 @@ export class HomeComponent implements OnInit, OnDestroy {
         fileId: file.id,
         mediaId: media.id,
         episodeId: file.episodeId ?? undefined,
-        title: media.title,
-        fanartUrl: media.fanartUrl ?? media.posterUrl ?? null,
+        media,
+        backdropUrl: media.fanartUrl ?? media.posterUrl ?? null,
         streamInfo: (file as any).streamInfo,
       }, false);
     } catch {
