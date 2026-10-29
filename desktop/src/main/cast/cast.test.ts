@@ -147,7 +147,7 @@ test('TXT rdata splits on the first "=" only', () => {
 
 // ── receiver status ──
 
-test('a playing status becomes a media update', () => {
+test('a playing status becomes a media update, without the stream volume', () => {
   const event = mediaStatusEvent(
     { playerState: 'PLAYING', currentTime: 42.5, volume: { level: 0.6, muted: false } },
     { duration: 3600 },
@@ -160,8 +160,6 @@ test('a playing status becomes a media update', () => {
       isPaused: false,
       buffering: false,
       ended: false,
-      volume: 0.6,
-      muted: false,
     },
   });
 });
