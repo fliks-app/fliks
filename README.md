@@ -165,10 +165,19 @@ full list of what it runs on.
 | **Android TV** | Play Store | Android 6 | |
 | **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 | works fully, not yet on Samsung Apps |
 | **LG TV (webOS)** | LG Content Store | webOS 7.0 | approved, on the store |
-| **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
+| **Desktop** | release assets, APT on Linux | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
 | **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
 | **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
 | **Nintendo Switch** | build the `.nro` from [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta**, native client with hardware decode |
+
+The Linux desktop client through APT (Ubuntu 24.04, Debian 13 and later):
+
+```bash
+sudo curl -fsSLo /etc/apt/sources.list.d/fliks.sources https://github.com/fliks-app/fliks/releases/download/apt/fliks.sources
+sudo apt update && sudo apt install fliks-desktop
+```
+
+A `.deb` installed from the release assets adds the same source, so `apt upgrade` keeps it up to date.
 
 ---
 

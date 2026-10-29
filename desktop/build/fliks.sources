@@ -1,0 +1,13 @@
+Types: deb
+URIs: https://github.com/fliks-app/fliks/releases/download/apt/
+Suites: /
+Signed-By:
+ -----BEGIN PGP PUBLIC KEY BLOCK-----
+ .
+ mDMEauOU4BYJKwYBBAHaRw8BAQdAmzDuTVj/R1SMXEJ/CP2tCNG9VhQ6v6uHulb2
+ RibOXb+0FEZsaWtzIEFQVCByZXBvc2l0b3J5iJAEExYKADgWIQRCkN5RpzoT1nZ6
+ zpkgt8IxsQ89GgUCauOU4AIbAwULCQgHAgYVCgkICwIEFgIDAQIeAQIXgAAKCRAg
+ t8IxsQ89Grx3AP96YXNeYbKyDG/b1zTJr7OeonKpUNliVXm0Z/rkIm638wEA3iad
+ imE0GyDtx4DgG8mGujJa+6oJl5jC5GqVbklOFgQ=
+ =LHEu
+ -----END PGP PUBLIC KEY BLOCK-----
