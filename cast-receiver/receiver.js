@@ -19,6 +19,7 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
+const { activeCue, cueText } = self.FliksCues;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -361,6 +362,40 @@ function prepareEdl(media, loadRequest) {
   }
 }
 
+// --- Skip cues ---------------------------------------------------------------
+// The sender sends the intro/credits ranges and whether a next episode exists. A remote's keys
+// may not reach a Web Receiver, so the cue is only a hint until a key event has actually been seen.
+
+const cueEl = document.getElementById('skip-cue');
+const cueState = { cues: null, fileId: null, sender: null, remoteKeys: false, shown: null };
+
+function refreshCue() {
+  const playing = document.body.classList.contains('playing');
+  const cue = playing ? activeCue(cueState.cues, cueState.fileId, playerManager.getCurrentTimeSec()) : null;
+  cueState.shown = cue;
+  cueEl.classList.toggle('show', !!cue);
+  cueEl.classList.toggle('actionable', !!cue && cueState.remoteKeys);
+  if (cue) cueEl.textContent = cueText(cueState.cues, cue, cueState.remoteKeys);
+}
+setInterval(refreshCue, 500);
+
+document.addEventListener('keydown', (e) => {
+  const first = !cueState.remoteKeys;
+  cueState.remoteKeys = true;
+  if (first || cueState.shown === null || (e.key !== 'Enter' && e.keyCode !== 13)) return refreshCue();
+  e.preventDefault();
+  if (cueState.shown === 'intro') playerManager.seek(cueState.cues.intro.endSeconds);
+  else context.sendCustomMessage(FLIKS_NAMESPACE, cueState.sender || undefined, { kind: 'next_episode' });
+  cueEl.classList.remove('show');
+});
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || msg.kind !== 'cues') return;
+  cueState.cues = msg;
+  refreshCue();
+});
+
 // --- Subtitle styling baked into every load -----------------------------
 //
 // Senders may still override per-load via MediaInformation.textTrackStyle;
@@ -379,6 +414,8 @@ playerManager.setMessageInterceptor(
     const media = loadRequest.media;
     if (media) {
       prepareEdl(media, loadRequest);
+      cueState.fileId = media.customData ? media.customData.mediaFileId ?? null : null;
+      cueState.sender = loadRequest.senderId || null;
       // Tell CAF the segments are fMP4 so Shaka picks the right HLS
       // demuxer up-front instead of probing seg-0 with the TS parser
       // (which fails silently on init.mp4 + .m4s output).

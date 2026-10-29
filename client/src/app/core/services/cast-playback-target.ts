@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
-import { parseAudioIndex } from '../utils/player.utils';
+import { inIntroRange, parseAudioIndex } from '../utils/player.utils';
 import { TranslateService } from '@ngx-translate/core';
 import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
 import { PlaybackSession } from './playback/playback-session';
@@ -117,9 +117,11 @@ export class CastPlaybackTarget implements PlaybackOutput {
     return this.cp.changeQuality(id);
   }
 
-  // Marker-driven skipping is not wired into the Cast sender today.
   readonly canSetVolume = computed(() => true);
-  readonly skipCue = computed<{ labelKey: string } | null>(() => null);
+  readonly timeline = this.cp.timeline;
+  readonly skipCue = computed<{ labelKey: string } | null>(() =>
+    inIntroRange(this.cp.timeline().intro, this.cast.currentTime()) ? { labelKey: 'player.skip_intro' } : null,
+  );
   readonly isStarting = computed(() => false);
   /** Connected with nothing loaded, e.g. after a stop: the bar names no media. */
   readonly isIdle = computed(() => this.cast.isConnected() && !this.cp.hasMedia());
@@ -128,7 +130,8 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly autoplayBlocked = computed(() => false);
 
   skip(): void {
-    console.warn('[cast-playback-target] no skip cue on a Cast session');
+    const intro = this.cp.timeline().intro;
+    if (intro) this.cast.seek(intro.endSeconds);
   }
 
   /** Resolved ahead of the press: offering a next episode that turns out not to
@@ -160,6 +163,30 @@ export class CastPlaybackTarget implements PlaybackOutput {
       if (this.party.drives() || !this.playerSettings.settings().autoPlayNext || !this.canPlayNext()) return;
       this.playNext();
     });
+  });
+
+  /** The receiver skips and picks the next episode itself; it needs the ranges and whether one follows. */
+  private readonly cuesEffect = effect(() => {
+    if (!this.cast.isConnected() || !this.cp.hasMedia()) return;
+    const { intro, outro } = this.cp.timeline();
+    const next = this.nextItem();
+    this.cast.sendFliks({
+      kind: 'cues',
+      fileId: this.cp.mediaFileId(),
+      intro,
+      outro,
+      hasNext: next !== null,
+      labels: {
+        intro: this.translate.instant('player.skip_intro'),
+        next: this.translate.instant(next?.episodeId != null ? 'player.next_episode' : 'player.play_next'),
+        introHint: this.translate.instant('cast.receiver.intro_hint'),
+        nextHint: this.translate.instant('cast.receiver.next_hint'),
+      },
+    });
+  });
+
+  private readonly nextRequest = this.cast.nextRequested$.subscribe(() => {
+    if (this.canPlayNext()) this.playNext();
   });
 
   playNext(): void {

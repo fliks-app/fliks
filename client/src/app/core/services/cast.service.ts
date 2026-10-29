@@ -69,6 +69,9 @@ export interface CastMediaInfo {
   edlLabels?: { cut: string; commercial: string };
   /** False: the receiver never skips commercials. Absent means true. */
   autoSkipCommercials?: boolean;
+  /** Intro and credits ranges, kept in `customData` so a rejoining sender rebuilds its cues. */
+  intro?: { startSeconds: number; endSeconds: number };
+  outro?: { startSeconds: number; endSeconds: number };
 }
 
 interface NativeCastLoadOpts {
@@ -218,6 +221,8 @@ export class CastService implements OnDestroy {
   /** A receiver failure a fresh stream may fix; `position` is the playhead to resume from. */
   readonly playbackError$ = new Subject<{ position?: number }>();
   /** Every `player_error` the receiver reports, for QoE. */
+  /** The viewer chose the next episode with the TV remote; the sender owns the queue. */
+  readonly nextRequested$ = new Subject<void>();
   readonly receiverError$ = new Subject<{ code?: number; category: string; message?: string }>();
 
   /** Native Cast sender (Capacitor plugin or Electron main); without one we drive the Cast Web SDK in a browser. */
@@ -476,7 +481,11 @@ export class CastService implements OnDestroy {
   /** One receiver message on the Fliks namespace, from the web SDK or a native sender. */
   private handleReceiverMessage(raw: string) {
     try {
-      const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe;
+      const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe | { kind: 'next_episode' };
+      if (payload?.kind === 'next_episode') {
+        this.nextRequested$.next();
+        return;
+      }
       if (payload?.kind === 'qoe') {
         if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now(), sid: payload.sid });
         return;
@@ -618,6 +627,8 @@ export class CastService implements OnDestroy {
       edl: info.edl,
       edlLabels: info.edl ? info.edlLabels : undefined,
       autoSkipCommercials: info.edl ? info.autoSkipCommercials : undefined,
+      intro: info.intro,
+      outro: info.outro,
     };
 
     const subtitleStyle = this.castSettings.get().subtitleStyle;

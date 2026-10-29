@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { absorb, buildQuery, collect, parseRecords, parseTxt } from './mdns.ts';
@@ -237,4 +239,34 @@ test('initializeResult hands the saved state back only while a session is live',
   assert.deepEqual(initializeResult(true, true, state), { available: true, connected: true, resume: state });
   assert.equal(initializeResult(true, false, state).resume, undefined);
   assert.equal(initializeResult(true, true, null).resume, undefined);
+});
+
+function loadCues() {
+  const ctx: { self: Record<string, any> } = { self: {} };
+  vm.runInNewContext(readFileSync(new URL('../../../../cast-receiver/cues.js', import.meta.url), 'utf8'), ctx);
+  return ctx.self['FliksCues'] as {
+    activeCue(c: unknown, fileId: number, t: number): string | null;
+    cueText(c: unknown, cue: string, remoteKeys: boolean): string;
+  };
+}
+
+test('receiver cues: intro, then next episode only when one follows, only for the loaded file', () => {
+  const { activeCue } = loadCues();
+  const cues = { fileId: 7, intro: { startSeconds: 10, endSeconds: 70 }, outro: { startSeconds: 900, endSeconds: 1000 }, hasNext: true };
+  assert.equal(activeCue(cues, 7, 5), null);
+  assert.equal(activeCue(cues, 7, 30), 'intro');
+  assert.equal(activeCue(cues, 7, 69.5), null);
+  assert.equal(activeCue(cues, 7, 950), 'next');
+  assert.equal(activeCue({ ...cues, hasNext: false }, 7, 950), null);
+  assert.equal(activeCue(cues, 8, 30), null);
+  assert.equal(activeCue(null, 7, 30), null);
+});
+
+test('receiver cue text is a hint until a remote key has been seen', () => {
+  const { cueText } = loadCues();
+  const cues = { labels: { intro: 'Skip intro', introHint: 'From your device', next: 'Next', nextHint: 'Next from device' } };
+  assert.equal(cueText(cues, 'intro', false), 'From your device');
+  assert.equal(cueText(cues, 'intro', true), 'Skip intro');
+  assert.equal(cueText(cues, 'next', false), 'Next from device');
+  assert.equal(cueText(cues, 'next', true), 'Next');
 });

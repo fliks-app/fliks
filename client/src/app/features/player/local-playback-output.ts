@@ -1,6 +1,6 @@
 import { computed, Signal } from '@angular/core';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
-import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput } from '../../core/services/playback/playback-output';
+import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput, PlaybackTimeline } from '../../core/services/playback/playback-output';
 import type { PlayerStateService } from '../../core/services/player-state.service';
 import { parseAudioIndex, type SpriteMetadata } from '../../core/utils/player.utils';
 
@@ -28,6 +28,7 @@ export interface LocalOutputHost {
   activeSubtitleId: Signal<string | null>;
   activeAudioTrackId: Signal<string | null>;
   activeQualityId: Signal<string>;
+  timeline: Signal<PlaybackTimeline>;
   skipCue: Signal<{ labelKey: string } | null>;
   canPlayNext: Signal<boolean>;
   skip(): void;
@@ -83,6 +84,7 @@ export class LocalPlaybackOutput implements LocalOutput {
   readonly activeSubtitleId: PlaybackOutput['activeSubtitleId'];
   readonly activeAudioTrackId: PlaybackOutput['activeAudioTrackId'];
   readonly activeQualityId: PlaybackOutput['activeQualityId'];
+  readonly timeline: PlaybackOutput['timeline'];
   readonly skipCue: PlaybackOutput['skipCue'];
   readonly canPlayNext: PlaybackOutput['canPlayNext'];
   readonly isStarting: PlaybackOutput['isStarting'];
@@ -110,6 +112,7 @@ export class LocalPlaybackOutput implements LocalOutput {
     this.activeSubtitleId = host.activeSubtitleId;
     this.activeAudioTrackId = host.activeAudioTrackId;
     this.activeQualityId = host.activeQualityId;
+    this.timeline = host.timeline;
     this.skipCue = host.skipCue;
     this.canPlayNext = host.canPlayNext;
     this.isStarting = state.startingPlayback;

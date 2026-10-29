@@ -96,6 +96,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
   };
   const subtitlesApi = { getForMedia: vi.fn(async () => [] as unknown[]) };
 
+  const mediaService = { getOne: vi.fn(async (): Promise<unknown> => null) };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -109,12 +110,12 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
       { provide: PlayerSettingsService, useValue: playerSettings },
       { provide: TrackManagerService, useValue: trackManager },
-      { provide: MediaService, useValue: { getOne: vi.fn(async () => null) } },
+      { provide: MediaService, useValue: mediaService },
       { provide: ToastService, useValue: { error: vi.fn() } },
     ],
   });
   const svc = TestBed.inject(CastPlayerService);
-  return { svc, cast, trackManager, streamingApi, subtitlesApi, playerSettings };
+  return { svc, cast, trackManager, streamingApi, subtitlesApi, playerSettings, mediaService };
 }
 
 const base = {
@@ -355,6 +356,19 @@ describe('cast quick start', () => {
     expect(startCast.mock.calls[0][0]).toMatchObject({ activeSubtitleId: 'ext-21', activeAudioStreamIndex: 1 });
     expect(h.streamingApi.getPlaybackInfo.mock.calls[0][2]).toBe(21);
     expect(priv(h.svc).activeBurnInId).toBe(21);
+  });
+
+  it('labels an episode like the player header, whatever the caller passed', async () => {
+    const h = setup();
+    h.mediaService.getOne.mockResolvedValue({
+      files: [], seasons: [{ seasonNumber: 1, episodes: [{ id: 10, episodeNumber: 2, title: 'Pilot' }] }],
+    });
+    const startCast = vi.spyOn(h.svc, 'startCast');
+    await h.svc.quickStart({
+      mediaFileId: MEDIA_FILE_ID, mediaId: MEDIA_ID, episodeId: 10, title: 't', episodeTitle: 'Pilot',
+      streamInfo: { audio: [] }, startTime: 0,
+    });
+    expect(startCast.mock.calls[0][0].episodeTitle).toBe('S1:E2 - Pilot');
   });
 
   describe('with the picks made on the detail page', () => {
