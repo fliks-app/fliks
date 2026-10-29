@@ -3577,6 +3577,17 @@
         }
       }
     },
+    "/api/plugins/sources/{id}/catalog/{pluginId}/logo": {
+      "get": {
+        "tags": [],
+        "operationId": "sources_catalog_logo",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/plugins/sources/{id}/inspect": {
       "post": {
         "tags": [],
