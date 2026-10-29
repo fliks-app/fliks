@@ -172,6 +172,13 @@ describe('RemoteService stop handling', () => {
     }
   });
 
+  it('takes a picked target the listing shows idle as idle at once', () => {
+    const { service } = setup();
+    service.targets.set([{ targetId: 'tv#2', nowPlaying: null } as never]);
+    service.selectTarget('tv#2');
+    expect(service.awaitingFirstReport()).toBe(false);
+  });
+
   it('stops ticking once a silent target leaves the grace window', () => {
     vi.useFakeTimers();
     try {
