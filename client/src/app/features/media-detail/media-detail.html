@@ -457,7 +457,7 @@
           @for (c of cast(); track c.id) {
             <a
               [routerLink]="['/persons', c.person.id]"
-              (pointerup)="armSlide()"
+              (click)="armSlide()"
               data-no-focus-ring
               class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group"
             >

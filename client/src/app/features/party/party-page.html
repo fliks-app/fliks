@@ -19,7 +19,7 @@
         @let label = episode() ? title + ' · ' + episode() : title;
         <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
           @if (mediaLink(); as link) {
-            <a [routerLink]="link" (pointerup)="armSlide()" class="hover:underline rounded">{{ label }}</a>
+            <a [routerLink]="link" (click)="armSlide()" class="hover:underline rounded">{{ label }}</a>
           } @else {
             {{ label }}
           }
