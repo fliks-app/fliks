@@ -9,11 +9,12 @@ host under `macos/`). Linux is the current dev platform.
 ```
 Electron main
   ├─ OSR BrowserWindow (offscreen, transparent)  → built Angular app, painted to a BGRA bitmap
-  └─ native addon (SDL2 + GLES 3.2)              → the single visible window:
+  └─ native addon (SDL3 + GL 4.3)                → the single visible window:
         mpv video (libmpv render API → GL FBO)  composited under  the Angular UI bitmap
 ```
 
-- `native/compositor/addon.cc` — owns the visible SDL/GLES window; runs mpv via
+- `native/compositor/addon.cc` — owns the visible SDL/GL window, its title bar and rounded
+  corners; runs mpv via
   the **render API**, uploads the UI bitmap as a GL texture, composites the two,
   and forwards SDL input + mpv events to the main process (N-API).
 - `src/main/index.ts` — Electron main: the offscreen UI window, loads the addon,
@@ -35,8 +36,10 @@ overlay. mpv runs from a self-contained static **libmpv**, so on Linux HDR is
 System packages (Debian/Ubuntu) — for compiling the native addon:
 ```bash
 sudo apt install -y build-essential python3 pkg-config \
-  libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
+  libsdl3-dev libgl1-mesa-dev libegl1-mesa-dev libmpv-dev
 ```
+Ubuntu 24.04 has no `libsdl3-dev`: build it with `scripts/build-sdl3-linux.sh` and export the
+`PKG_CONFIG_PATH` it prints.
 Node packages (Node ≥ 20):
 ```bash
 npm install

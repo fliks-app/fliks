@@ -32,11 +32,13 @@ app.setName('Fliks');
 
 // Linux uses the software OSR compositor (Chromium's GPU process can't init in
 // that path, and a GPU-composited OSR window never recovers from a GPU-process
-// crash), forced onto X11/XWayland. macOS/Windows use a normal GPU window with
-// mpv embedded natively, so they keep hardware acceleration.
+// crash). macOS/Windows use a normal GPU window with mpv embedded natively, so
+// they keep hardware acceleration.
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch('ozone-platform', 'x11');
+  // The offscreen page has no Wayland surface, so it never gets the focus a Wayland
+  // clipboard read or write needs. XWayland keeps it working wherever there is one.
+  if (process.env.DISPLAY) app.commandLine.appendSwitch('ozone-platform', 'x11');
 }
 // A second instance would open the same Chromium profile, whose Local Storage
 // is already locked: it boots with no server and no session.
@@ -71,7 +73,7 @@ app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
 const WIDTH = 1280;
 const HEIGHT = 800;
 
-// The native compositor addon (single SDL/GLES window: mpv video + OSR UI).
+// The native compositor addon (single SDL/GL window: mpv video + OSR UI).
 // Loaded via a real require so esbuild leaves the .node resolution to runtime.
 const nativeRequire = createRequire(__filename);
 
@@ -92,7 +94,7 @@ function windowIcon(): string | undefined {
 
 // The VISIBLE window is the native SDL compositor (the BrowserWindow above is
 // offscreen), so the dock/taskbar icon comes from SDL_SetWindowIcon in the
-// addon — not the BrowserWindow. SDL2's core loader reads BMP only, so the
+// addon — not the BrowserWindow. SDL's core loader reads BMP only, so the
 // addon takes a .bmp. Empty string → addon keeps no icon (rather than crash).
 function compositorIcon(): string {
   const candidate = path.join(app.getAppPath(), 'build', 'icon.bmp');
@@ -443,6 +445,12 @@ app.whenReady().then(async () => {
     log: appendLog,
   });
 
+  // The page renders at the window's pixel size, zoomed by the display scale. Zoom is
+  // per origin, so the first app navigation needs it again.
+  let zoom = 1;
+  const applyZoom = () => uiWin?.webContents.setZoomFactor(zoom);
+  uiWin.webContents.on('did-navigate', applyZoom);
+
   // SDL input (the addon owns the visible window) → the offscreen webContents.
   addon.onInput((json) => {
     let i: any;
@@ -452,16 +460,22 @@ app.whenReady().then(async () => {
       return;
     }
     if (!uiWin || uiWin.isDestroyed()) return;
-    // Keep the OSR render size == the compositor window size so SDL input
-    // coords map 1:1 to the offscreen webContents.
     if (i.kind === 'resize') {
-      if (i.w > 0 && i.h > 0) uiWin.setContentSize(i.w, i.h);
+      if (i.w > 0 && i.h > 0 && i.zoom > 0) {
+        zoom = i.zoom;
+        uiWin.setContentSize(i.w, i.h);
+        applyZoom();
+      }
       return;
     }
     inputCounts[i.kind] = (inputCounts[i.kind] || 0) + 1;
     if (inputCounts[i.kind] === 1 || (i.kind === 'move' && inputCounts.move % 60 === 0))
       console.log('[input]', i.kind, 'x=', i.x, 'y=', i.y, 'count=', inputCounts[i.kind]);
     const wc = uiWin.webContents;
+    if (i.kind === 'leave') {
+      wc.sendInputEvent({ type: 'mouseLeave', x: 0, y: 0 } as any);
+      return;
+    }
     if (i.kind !== 'move' && i.kind !== 'wheel') wc.focus();
     if (i.kind === 'move') wc.sendInputEvent({ type: 'mouseMove', x: i.x, y: i.y } as any);
     else if (i.kind === 'button') {
@@ -482,8 +496,8 @@ app.whenReady().then(async () => {
         type: 'mouseWheel',
         x: i.x,
         y: i.y,
-        deltaX: i.dx * WHEEL_PIXELS_PER_NOTCH,
-        deltaY: i.dy * WHEEL_PIXELS_PER_NOTCH,
+        deltaX: i.dx * WHEEL_PIXELS_PER_NOTCH * zoom,
+        deltaY: i.dy * WHEEL_PIXELS_PER_NOTCH * zoom,
         canScroll: true,
       } as any);
     else if (i.kind === 'text') wc.sendInputEvent({ type: 'char', keyCode: i.text } as any);

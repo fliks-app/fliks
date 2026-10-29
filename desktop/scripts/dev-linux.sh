@@ -3,7 +3,7 @@
 # Build + launch the Fliks Linux desktop client (Electron + embedded mpv).
 #
 # Rebuilds the Angular client and the desktop main/preload bundle, kills any
-# running instance, then relaunches Electron under XWayland. See
+# running instance, then relaunches Electron. See
 # desktop/CLAUDE.md for the architecture and first-time prerequisites
 # (vendored libmpv, native compositor addon, system build deps).
 #
@@ -85,7 +85,8 @@ if pgrep -x electron >/dev/null; then
 fi
 
 cd "$ROOT/desktop"
-# DISPLAY=:0 forces XWayland — the OSR compositor doesn't run on native Wayland.
+# DISPLAY keeps Electron on XWayland for the clipboard (see src/main/index.ts); the window is
+# native Wayland either way.
 # env -u: a terminal inside an Electron host (VS Code) exports
 # ELECTRON_RUN_AS_NODE=1, which makes the binary run the app as plain node.
 # FLIKS_DEBUG_PORT=9223 exposes the UI page over CDP for inspection.
