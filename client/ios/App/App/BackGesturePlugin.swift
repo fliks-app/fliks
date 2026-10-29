@@ -64,6 +64,9 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
     private var width: CGFloat = 1
     /// Set once the slide is over and the overlay is only waiting on the page.
     private var awaitingSettle = false
+    /// Nothing left to wait for once the slide lands: the page settled, or the
+    /// user is already scrolling it under the snapshot.
+    private var holdReleased = false
     /// Uncovers the WebView even if JS never reports, so a stalled navigation
     /// cannot leave the page hidden.
     private var settleFallback: DispatchWorkItem?
@@ -116,7 +119,18 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
         // slides. Edge pans fail immediately away from the edge, so the wait
         // costs nothing anywhere else on screen.
         bridge?.webView?.scrollView.panGestureRecognizer.require(toFail: pan)
+        bridge?.webView?.scrollView.panGestureRecognizer.addTarget(self, action: #selector(pageScrolled(_:)))
         recognizer = pan
+    }
+
+    /// Touches reach the WebView through the overlay, so a scroll would move the
+    /// live page under a still of it.
+    @objc private func pageScrolled(_ pan: UIPanGestureRecognizer) {
+        if pan.state == .began, backdrop != nil { releaseHold() }
+    }
+
+    private func releaseHold() {
+        if awaitingSettle { teardown() } else { holdReleased = true }
     }
 
     @objc private func dropSnapshots() {
@@ -130,7 +144,7 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
     @objc func settled(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            if self.awaitingSettle { self.teardown() }
+            self.releaseHold()
             call.resolve()
         }
     }
@@ -324,7 +338,7 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
             self.apply(translation: target)
         } completion: { [weak self] _ in
             guard let self else { return }
-            guard commit else {
+            guard commit, !self.holdReleased else {
                 self.teardown()
                 return
             }
@@ -343,6 +357,7 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
         watchdog?.cancel()
         watchdog = nil
         awaitingSettle = false
+        holdReleased = false
         settleFallback?.cancel()
         settleFallback = nil
         snapshot?.removeFromSuperview()
