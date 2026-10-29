@@ -751,12 +751,6 @@ async fn relink_transfer_copy_then_move(pool: PgPool) {
     assert!(files.iter().any(|p| p.ends_with(".en.srt")), "{files:?}");
     assert!(!c.fake.seen("POST", "/v1/probe").is_empty());
     assert_eq!(scans(&c, 1).await, 1, "one scan, carried over to the copy");
-    for _ in 0..50 {
-        if count(&c, "SELECT count(*) FROM media_file_scans").await == 1 {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
     assert_eq!(count(&c, "SELECT count(*) FROM media_file_scans").await, 1);
 
     let series = c.dir.join("series");

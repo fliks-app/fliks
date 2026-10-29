@@ -232,6 +232,20 @@ pub async fn version_of(path: &Path) -> Option<String> {
     Stat::of(path).await.ok().map(|s| s.version())
 }
 
+/// Stores the scan of bytes already read, `version` being the file's when it was read.
+pub async fn keep_now(
+    st: &AppState,
+    id: i32,
+    path: &Path,
+    version: &str,
+    scan: &SourceScan,
+    prior: Option<f64>,
+) {
+    if let Err(e) = store(st, id, path, version, scan, prior).await {
+        tracing::warn!("Keeping the scan of \"{}\" failed: {e}", label(path));
+    }
+}
+
 /// Keeps the scan a remux open ran (`OpenSessionResponse.scan`), detached; `version` is the
 /// file's at the lookup before that open.
 pub fn keep(
@@ -243,11 +257,7 @@ pub fn keep(
     prior: Option<f64>,
 ) {
     let st = st.clone();
-    tokio::spawn(async move {
-        if let Err(e) = store(&st, id, &path, &version, &scan, prior).await {
-            tracing::warn!("Keeping the scan of \"{}\" failed: {e}", label(&path));
-        }
-    });
+    tokio::spawn(async move { keep_now(&st, id, &path, &version, &scan, prior).await });
 }
 
 /// Stores `scan` of the bytes at `version`; false when the file changed since (the scan is dropped).
