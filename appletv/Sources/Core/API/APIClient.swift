@@ -117,8 +117,8 @@ final class APIClient {
         try await request(path, method: "POST", query: [:], body: nil)
     }
 
-    func post<B: Encodable>(_ path: String, body: B) async throws {
-        try await requestVoid(path, method: "POST", body: try JSONEncoder.fliks.encode(body))
+    func post<B: Encodable>(_ path: String, body: B, headers: [String: String] = [:]) async throws {
+        try await requestVoid(path, method: "POST", body: try JSONEncoder.fliks.encode(body), headers: headers)
     }
 
     func post(_ path: String) async throws {
@@ -163,8 +163,10 @@ final class APIClient {
         }
     }
 
-    private func requestVoid(_ path: String, method: String, body: Data?, isRetry: Bool = false) async throws {
-        _ = try await raw(path, method: method, query: [:], body: body, headers: [:], isRetry: isRetry)
+    private func requestVoid(
+        _ path: String, method: String, body: Data?, headers: [String: String] = [:], isRetry: Bool = false
+    ) async throws {
+        _ = try await raw(path, method: method, query: [:], body: body, headers: headers, isRetry: isRetry)
     }
 
     private func raw(
@@ -208,7 +210,8 @@ final class APIClient {
             throw APIError.transport("non-HTTP response")
         }
 
-        if http.statusCode == 401, !isRefreshCall, !isRetry, refreshTokens != nil {
+        // A logout's 401 means the session is already dead: nothing to refresh.
+        if http.statusCode == 401, !isRefreshCall, !path.hasSuffix("/auth/logout"), !isRetry, refreshTokens != nil {
             try await refreshOnce()
             return try await raw(path, method: method, query: query, body: body, headers: headers, isRetry: true)
         }
