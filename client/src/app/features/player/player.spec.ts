@@ -2783,7 +2783,7 @@ describe('PlayerComponent cast session picks', () => {
 
     it('settles the paused state after re-pausing an engine that fired no event', async () => {
       const c = createHarness().component;
-      c.engine = { paused: true, pause: vi.fn(async () => {}), play: vi.fn() };
+      c.engine = { paused: true, pause: vi.fn(async () => {}), play: vi.fn(), destroy: vi.fn(async () => {}) };
       c.state.paused.set(false);
       c.restorePlayState(true);
       await vi.waitFor(() => expect(c.state.paused()).toBe(true));
