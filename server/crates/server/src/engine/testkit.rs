@@ -98,13 +98,14 @@ pub struct Fake {
 }
 
 pub const FEATURES: [&str; 3] = ["probe", "capabilities", "decide"];
-pub const RUNTIME: [&str; 6] = [
+pub const RUNTIME: [&str; 7] = [
     "probe",
     "capabilities",
     "decide",
     "sessions",
     "serve",
     "events",
+    "session-replaces",
 ];
 
 pub fn hello_body(features: &[&str], instance: &str) -> Value {

@@ -188,6 +188,16 @@ async fn run(
 ) -> Result<Value, AppError> {
     check_engine(st)?;
     let mut file = resolve_file(st, Some(a), id).await?;
+    let (position, early_pre_roll) = tokio::join!(start_position(st, a, &q, &file), async {
+        match q.pre_roll_first {
+            true => Some(ask_pre_roll(st, a, &file).await),
+            false => None,
+        }
+    });
+    let position = position?;
+    if let Some(items) = defers_open(early_pre_roll.as_ref(), position) {
+        return Ok(json!({"deferred": true, "preRoll": items}));
+    }
     let burn_in = match q.burn_in_subtitle_id.filter(|n| *n != 0) {
         None => None,
         Some(sub) => match i32::try_from(sub) {
@@ -199,22 +209,11 @@ async fn run(
         },
     };
     let mut info = file.info.take();
-    let (settings, held, position, early_pre_roll) = tokio::join!(
+    let (settings, held) = tokio::join!(
         crate::engine::load_streaming(&st.db),
         scan::lookup(st, file.id, &file.absolute, info.as_mut()),
-        start_position(st, a, &q, &file),
-        async {
-            match q.pre_roll_first {
-                true => Some(ask_pre_roll(st, a, &file).await),
-                false => None,
-            }
-        },
     );
     hardware::apply(st, &settings?, false);
-    let position = position?;
-    if let Some(items) = defers_open(early_pre_roll.as_ref(), position) {
-        return Ok(json!({"deferred": true, "preRoll": items}));
-    }
     file.info = info;
     let renditions = if device.supports_hls_subtitles == Some(true) {
         Some(burn_in::renditions(st, &file).await)
@@ -271,7 +270,7 @@ async fn run(
         burn_in: burn_in.map(|b| b.spec),
         source_version: held.version.clone(),
         subtitle_renditions: renditions,
-        replaces: None,
+        replaces: q.replaces,
     };
     let fps = file
         .info
@@ -280,7 +279,22 @@ async fn run(
         .and_then(|v| v.frame_rate.as_deref())
         .and_then(parse_source_fps);
     let (open, (markers, pre_roll, edl)) = tokio::join!(
-        st.engine.open_session(&request, q.replaces.as_deref()),
+        async {
+            let open = st.engine.open_session(&request).await?;
+            if let (false, Some(media)) = (q.download, file.media_id)
+                && let Err(e) = db::mark_started(
+                    &st.db,
+                    a.user.id,
+                    media,
+                    file.id,
+                    file.episode_id.filter(|e| *e != 0),
+                )
+                .await
+            {
+                tracing::warn!("Failed to mark session started: {e}");
+            }
+            Ok::<_, EngineError>(open)
+        },
         side_reads(st, a, &file, fps, early_pre_roll)
     );
     let open = match open {
@@ -302,18 +316,6 @@ async fn run(
         position,
     );
     rescan_hint(st, &open, &file, held.version);
-    if let (false, Some(media)) = (q.download, file.media_id)
-        && let Err(e) = db::mark_started(
-            &st.db,
-            a.user.id,
-            media,
-            file.id,
-            file.episode_id.filter(|e| *e != 0),
-        )
-        .await
-    {
-        tracing::warn!("Failed to mark session started: {e}");
-    }
     Ok(assemble(&open, &file, position, markers, pre_roll, edl))
 }
 
