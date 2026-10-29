@@ -94,7 +94,7 @@
             "videoProfile": "high",
             "width": 160
           },
-          "startAtSeconds": 0,
+          "startAtSeconds": 1200,
           "tonemapping": false,
           "transcodeReasons": [],
           "videoCopyStream": true

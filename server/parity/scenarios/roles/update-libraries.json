@@ -41,7 +41,9 @@
           "name": "Readonly",
           "permissions": [
             "media.read",
-            "livetv.read"
+            "livetv.read",
+            "parties.create",
+            "parties.read_public"
           ]
         },
         "status": 200
@@ -79,7 +81,9 @@
           "name": "Readonly",
           "permissions": [
             "media.read",
-            "livetv.read"
+            "livetv.read",
+            "parties.create",
+            "parties.read_public"
           ]
         },
         "status": 200

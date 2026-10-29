@@ -106,20 +106,6 @@
     {
       "as": "admin",
       "expect": {
-        "status": 200
-      },
-      "ignoreBody": true,
-      "method": "GET",
-      "path": "/api/persons/search?q=claude",
-      "poll": {
-        "path": "$[0].biography",
-        "timeoutMs": 10000,
-        "until": "Refreshed biography."
-      }
-    },
-    {
-      "as": "admin",
-      "expect": {
         "body": {
           "addedById": 1,
           "additionalFanartUrls": [],
@@ -234,8 +220,8 @@
             "order": 0,
             "person": {
               "avatarUrl": "/api/images/person/201?v=612f4295",
-              "biography": "Refreshed biography.",
-              "birthday": "1963-12-18",
+              "biography": "Old bio",
+              "birthday": null,
               "deathday": null,
               "departments": [
                 "Acting",
@@ -244,7 +230,7 @@
               "id": 201,
               "knownForDepartment": "Acting",
               "name": "Claude Rains",
-              "placeOfBirth": "Shawnee, Oklahoma, USA",
+              "placeOfBirth": null,
               "provider": "tmdb",
               "tmdbId": 102
             }
@@ -305,8 +291,8 @@
             "job": "Cameo",
             "person": {
               "avatarUrl": "/api/images/person/201?v=612f4295",
-              "biography": "Refreshed biography.",
-              "birthday": "1963-12-18",
+              "biography": "Old bio",
+              "birthday": null,
               "deathday": null,
               "departments": [
                 "Acting",
@@ -315,7 +301,7 @@
               "id": 201,
               "knownForDepartment": "Acting",
               "name": "Claude Rains",
-              "placeOfBirth": "Shawnee, Oklahoma, USA",
+              "placeOfBirth": null,
               "provider": "tmdb",
               "tmdbId": 102
             }

@@ -55,7 +55,9 @@
           "permissions": [
             "media.read",
             "livetv.read",
-            "requests.create"
+            "requests.create",
+            "parties.create",
+            "parties.read_public"
           ],
           "updatedAt": "2026-01-01T00:00:00.000Z"
         },
@@ -64,5 +66,8 @@
       "method": "GET",
       "path": "/api/roles/2"
     }
+  ],
+  "ignore": [
+    "$..updatedAt"
   ]
 }

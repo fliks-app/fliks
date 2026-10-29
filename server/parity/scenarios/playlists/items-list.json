@@ -104,7 +104,9 @@
           "movieQuotaLimit": 0,
           "permissions": [
             "media.read",
-            "livetv.read"
+            "livetv.read",
+            "parties.create",
+            "parties.read_public"
           ],
           "profileVisibility": "public",
           "quotaPeriodDays": 7,

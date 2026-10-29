@@ -37,7 +37,9 @@
           "permissions": [
             "media.read",
             "livetv.read",
-            "requests.create"
+            "requests.create",
+            "parties.create",
+            "parties.read_public"
           ],
           "profileVisibility": "public",
           "quotaPeriodDays": 7,
@@ -88,7 +90,9 @@
           "permissions": [
             "media.read",
             "livetv.read",
-            "requests.create"
+            "requests.create",
+            "parties.create",
+            "parties.read_public"
           ],
           "profileVisibility": "public",
           "quotaPeriodDays": 7,
@@ -163,7 +167,9 @@
           "permissions": [
             "media.read",
             "livetv.read",
-            "requests.create"
+            "requests.create",
+            "parties.create",
+            "parties.read_public"
           ],
           "profileVisibility": "private",
           "quotaPeriodDays": 7,

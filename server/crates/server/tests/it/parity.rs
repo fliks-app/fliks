@@ -882,9 +882,14 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
 
 /// Logs every actor of the current database in; seeds beyond `base` add actors (noread, settings,
 /// validator) and a missing one only matters to the scenarios that use it.
-async fn login_all(http: &Client, target: &str) -> HashMap<String, String> {
+/// The seed's actors only: logging in a user it lacks counts a failed login toward the throttle.
+async fn login_all(http: &Client, target: &str, db: &str) -> HashMap<String, String> {
+    let users = psql(&["-d", db, "-At", "-c", "SELECT username FROM users"], None);
     let mut tokens = HashMap::new();
-    for a in ACTORS {
+    for a in ACTORS
+        .into_iter()
+        .filter(|a| users.lines().any(|u| u == *a))
+    {
         let r = http
             .post(format!("{target}/api/auth/login"))
             .json(&json!({ "username": a, "password": format!("{a}-pass") }))
@@ -892,11 +897,10 @@ async fn login_all(http: &Client, target: &str) -> HashMap<String, String> {
             .await
             .unwrap_or_else(|e| panic!("login {a}: {e}"));
         let v: Value = r.json().await.unwrap_or_default();
-        match v["accessToken"].as_str() {
-            Some(t) => tokens.insert(a.to_string(), t.to_string()),
-            None if matches!(a, "noread" | "settings" | "validator") => None,
-            None => panic!("login {a}: {v}"),
-        };
+        let t = v["accessToken"]
+            .as_str()
+            .unwrap_or_else(|| panic!("login {a}: {v}"));
+        tokens.insert(a.to_string(), t.to_string());
     }
     tokens
 }
@@ -943,7 +947,7 @@ async fn parity() {
     }
     reset_db(&db, &template(&base_tpl, seeds.last().expect("seed")));
     let mut ctx = Ctx {
-        tokens: login_all(&http, &target).await,
+        tokens: login_all(&http, &target, &db).await,
         http,
         target,
     };
@@ -961,7 +965,7 @@ async fn parity() {
         await_idle(&ctx, &db, false).await;
         reset_db(&db, &template(&base_tpl, seed));
         if seed != logged_in {
-            ctx.tokens = login_all(&ctx.http, &ctx.target).await;
+            ctx.tokens = login_all(&ctx.http, &ctx.target, &db).await;
             logged_in = seed.to_owned();
             // the logins wrote refresh tokens: start the scenario from the pristine seed again
             reset_db(&db, &template(&base_tpl, seed));

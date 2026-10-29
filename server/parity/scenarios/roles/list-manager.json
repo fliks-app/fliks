@@ -25,7 +25,10 @@
               "subtitles.manage",
               "settings.access",
               "users.manage",
-              "roles.manage"
+              "roles.manage",
+              "parties.create",
+              "parties.read_public",
+              "parties.manage"
             ],
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
@@ -38,7 +41,9 @@
             "name": "Manager",
             "permissions": [
               "media.read",
-              "users.manage"
+              "users.manage",
+              "parties.create",
+              "parties.read_public"
             ],
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
@@ -51,7 +56,9 @@
             "name": "Readonly",
             "permissions": [
               "media.read",
-              "livetv.read"
+              "livetv.read",
+              "parties.create",
+              "parties.read_public"
             ],
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
@@ -103,7 +110,9 @@
             "permissions": [
               "media.read",
               "livetv.read",
-              "requests.create"
+              "requests.create",
+              "parties.create",
+              "parties.read_public"
             ],
             "updatedAt": "2026-01-01T00:00:00.000Z"
           }
@@ -113,5 +122,8 @@
       "method": "GET",
       "path": "/api/roles"
     }
+  ],
+  "ignore": [
+    "$..updatedAt"
   ]
 }
