@@ -415,7 +415,7 @@ if (barPlayer && barPlayer.shadowRoot) {
   hide.textContent =
     'tv-overlay { display: none !important; }' +
     'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; }' +
-    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(-15vh); }';
+    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(-6vh); }';
   barPlayer.shadowRoot.appendChild(hide);
 }
 
