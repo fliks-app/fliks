@@ -200,6 +200,38 @@ async fn scan(st: &AppState, id: i32, path: &Path, info: MediaInfo, priority: Jo
     }
 }
 
+/// Scans bytes that have no row yet as urgent work, waiting at most `wait` (the job is then
+/// cancelled); `None` when it fails or is late. Also returns the version of the bytes read.
+pub async fn scan_now(
+    st: &AppState,
+    path: &Path,
+    info: &MediaInfo,
+    wait: Duration,
+) -> Option<(SourceScan, String)> {
+    let before = Stat::of(path).await.ok()?.version();
+    let req = JobRequest {
+        kind: fliks_engine_core::api::JobKind::Scan { info: info.clone() },
+        media: MediaRef {
+            media_file_id: 0,
+            path: path.to_string_lossy().into_owned(),
+        },
+        priority: Some(JobPriority::High),
+        force: false,
+    };
+    let id = st.engine.submit_job(&req).await.ok()?;
+    let done = tokio::time::timeout(wait, st.engine.wait_job(id.clone(), &req, None)).await;
+    let Ok(Ok(JobResult::Scan { scan })) = done else {
+        let _ = st.engine.cancel_job(&id).await;
+        return None;
+    };
+    (Stat::of(path).await.ok()?.version() == before).then_some((scan, before))
+}
+
+/// `"<size>-<mtimeMs>"` of the bytes at `path`.
+pub async fn version_of(path: &Path) -> Option<String> {
+    Stat::of(path).await.ok().map(|s| s.version())
+}
+
 /// Keeps the scan a remux open ran (`OpenSessionResponse.scan`), detached; `version` is the
 /// file's at the lookup before that open.
 pub fn keep(
