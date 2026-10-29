@@ -72,12 +72,14 @@ struct PlaylistDetailView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(resolving)
 
-                Button {
-                    party.openCreate(PartyCreateTarget(name: playlist?.name ?? "", playlistId: playlistId))
-                } label: {
-                    Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                if party.canCreate {
+                    Button {
+                        party.openCreate(PartyCreateTarget(name: playlist?.name ?? "", playlistId: playlistId))
+                    } label: {
+                        Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
         }
         .focusSection()

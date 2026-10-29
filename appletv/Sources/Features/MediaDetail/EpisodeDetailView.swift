@@ -127,7 +127,7 @@ struct EpisodeDetailView: View {
                     }
                     .buttonStyle(.bordered)
                     .accessibilityLabel(isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched"))
-                    if let fileId {
+                    if let fileId, party.canCreate {
                         Button {
                             party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId, mediaFileId: fileId, episodeId: episode.id))
                         } label: {

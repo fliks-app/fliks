@@ -90,9 +90,10 @@ struct ResolvedHomeSection: Identifiable {
     /// built-ins (default visible) in their canonical position, add one
     /// zone per library (default hidden — opt-in), and drop entries for
     /// libraries that no longer exist.
-    func resolve(libraries: [Library], requestsAllowed: Bool) -> [ResolvedHomeSection] {
+    func resolve(libraries: [Library], requestsAllowed: Bool, partiesSupported: Bool) -> [ResolvedHomeSection] {
+        let builtins = Self.builtinOrder.filter { partiesSupported || $0 != "watch-parties" }
         let libName = Dictionary(uniqueKeysWithValues: libraries.map { ($0.id, $0.name) })
-        var available = Set(Self.builtinOrder)
+        var available = Set(builtins)
         if requestsAllowed { available.insert("requests-recent") }
         for lib in libraries { available.insert("\(Self.libraryRecentPrefix)\(lib.id)") }
 
@@ -107,11 +108,11 @@ struct ResolvedHomeSection: Identifiable {
             merged.insert(HomeSectionPref(key: "received-recommendations", visible: true), at: 0)
             seen.insert("received-recommendations")
         }
-        if !seen.contains("watch-parties") {
+        if partiesSupported, !seen.contains("watch-parties") {
             merged.insert(HomeSectionPref(key: "watch-parties", visible: true), at: 0)
             seen.insert("watch-parties")
         }
-        for key in Self.builtinOrder where !seen.contains(key) {
+        for key in builtins where !seen.contains(key) {
             merged.append(HomeSectionPref(key: key, visible: true))
             seen.insert(key)
         }

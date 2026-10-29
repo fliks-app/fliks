@@ -108,5 +108,6 @@
   "party.tv_leave_host_confirm": "Salir y terminar",
   "party.tv_votes_one": "{{count}} voto",
   "party.tv_votes_other": "{{count}} votos",
-  "party.tv_proposals_empty": "Aún no hay propuestas. Los invitados proponen películas desde la web o la app móvil."
+  "party.tv_proposals_empty": "Aún no hay propuestas. Los invitados proponen películas desde la web o la app móvil.",
+  "media_picker.back": "Atrás"
 }

@@ -3,10 +3,13 @@ import SwiftUI
 /// The host's programme editor: reorder, remove and add (episodes in bulk). Every change is the whole list sent back.
 struct PartyProgrammeView: View {
     @Environment(PartyService.self) private var service
-    @State private var items: [PartyItem] = []
+    /// Nil until the programme was read: an edit sends the whole list, so a failed read must not be editable.
+    @State private var loaded: [PartyItem]?
     @State private var adding = false
     @State private var busy = false
     @State private var removing: Int?
+
+    private var items: [PartyItem] { loaded ?? [] }
 
     var body: some View {
         Group {
@@ -16,7 +19,11 @@ struct PartyProgrammeView: View {
                 PartySheetPage(title: tr("party.programme")) {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
-                            if items.isEmpty { Text(tr("party.programme_empty_host")).foregroundStyle(.secondary) }
+                            if loaded == nil {
+                                Text(tr("error.generic")).foregroundStyle(.secondary)
+                            } else if items.isEmpty {
+                                Text(tr("party.programme_empty_host")).foregroundStyle(.secondary)
+                            }
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                                 row(index, item)
                             }
@@ -27,7 +34,11 @@ struct PartyProgrammeView: View {
                     .focusSection()
                 } bar: {
                     HStack(spacing: 30) {
-                        Button(tr("party.programme_add")) { adding = true }.buttonStyle(.borderedProminent)
+                        if loaded == nil {
+                            Button(tr("common.retry")) { Task { loaded = await service.fetchQueue() } }.buttonStyle(.borderedProminent)
+                        } else {
+                            Button(tr("party.programme_add")) { adding = true }.buttonStyle(.borderedProminent)
+                        }
                         Button(tr("party.tv_close")) { service.sheet = nil }.buttonStyle(.bordered)
                     }
                     .frame(maxWidth: .infinity)
@@ -44,7 +55,7 @@ struct PartyProgrammeView: View {
         } message: {
             Text(trp("party.programme_remove_message", ["title": removing.flatMap { items.indices.contains($0) ? items[$0].itemName : nil } ?? ""]))
         }
-        .task { items = await service.fetchQueue() }
+        .task { loaded = await service.fetchQueue() }
     }
 
     private func row(_ index: Int, _ item: PartyItem) -> some View {
@@ -93,11 +104,11 @@ struct PartyProgrammeView: View {
 
     /// The list follows at once; the server's answer (titles, artwork) replaces it.
     private func save(_ next: [PartyItem]) {
-        items = next
+        loaded = next
         busy = true
         Task {
-            _ = await service.setProgramme(next)
-            items = await service.fetchQueue()
+            let saved = await service.setProgramme(next)
+            loaded = await service.fetchQueue() ?? (saved ? next : nil)
             busy = false
         }
     }

@@ -130,7 +130,7 @@ struct MediaDetailView: View {
                 .buttonStyle(.bordered)
                 .accessibilityLabel(watchedLabel(media))
 
-                if let target {
+                if let target, party.canCreate {
                     Button(action: {
                         party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId,
                                                            mediaFileId: target.mediaFileId, episodeId: target.episodeId))

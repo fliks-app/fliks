@@ -115,7 +115,14 @@ private struct WatchPartiesRow: View {
     }
 
     var body: some View {
-        Rail(title: tr("party.rail_title"), items: [Entry.new] + service.homeParties.map(Entry.party)) { entry in
+        let entries = (service.canCreate ? [Entry.new] : []) + service.homeParties.map(Entry.party)
+        if !entries.isEmpty {
+            rail(entries)
+        }
+    }
+
+    private func rail(_ entries: [Entry]) -> some View {
+        Rail(title: tr("party.rail_title"), items: entries) { entry in
             switch entry {
             case .new:
                 VStack(alignment: .leading, spacing: 10) {

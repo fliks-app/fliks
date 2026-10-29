@@ -32,8 +32,11 @@ struct HomeView: View {
     }
 
     private var sections: [ResolvedHomeSection] {
-        homeSettings.resolve(libraries: librariesState.items, requestsAllowed: requestsAllowed)
+        homeSettings.resolve(libraries: librariesState.items, requestsAllowed: requestsAllowed,
+                             partiesSupported: party.partiesSupported)
     }
+
+    private var partiesShown: Bool { sections.contains { $0.type == .watchParties && $0.visible } }
 
     var body: some View {
         ScrollView {
@@ -55,10 +58,11 @@ struct HomeView: View {
             .padding(.vertical, 48)
         }
         .task { await loadLibraries() }
+        .task { await ServerVersion.shared.refresh() }
         // Fetched here, not in the row: an empty rail renders nothing, so a task on it would never run. The
         // stream is only open inside a party, hence the timer instead of `party.updated`.
-        .task(id: refresh.tick) {
-            while !Task.isCancelled {
+        .task(id: "\(refresh.tick)-\(partiesShown)") {
+            while partiesShown, !Task.isCancelled {
                 await party.refreshHomeParties()
                 try? await Task.sleep(for: .seconds(15))
             }

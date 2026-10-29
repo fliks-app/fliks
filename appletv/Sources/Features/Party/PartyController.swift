@@ -103,12 +103,7 @@ final class PartyController {
     }
 
     private func open(_ item: PartyItem, _ gen: Int) async -> Bool {
-        var fileId = item.mediaFileId
-        if fileId == nil {
-            let media: Media? = try? await APIClient.shared.get("/api/media/\(item.mediaId)")
-            fileId = media?.fileId(episodeId: item.episodeId)
-        }
-        if let fileId, await player.openItem(mediaFileId: fileId, mediaId: item.mediaId, episodeId: item.episodeId, play: false) {
+        if let fileId = await party.fileId(for: item), await player.openItem(mediaFileId: fileId, mediaId: item.mediaId, episodeId: item.episodeId, play: false) {
             return gen == generation
         }
         // This device cannot open it: the group must not wait on us.

@@ -233,6 +233,7 @@ import UIKit
         player?.pause()
         player = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        SoundManager.useAmbientSession()
         if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
     }
 
@@ -482,8 +483,7 @@ import UIKit
         let seeked = lastTickTime >= 0 && abs(time - lastTickTime) > 1.5
         lastTickTime = time
 
-        let settings = AppSettingsStore.shared
-        if let intro = playback.info?.markers?.intro, settings.autoSkipIntro, !autoSkippedIntro,
+        if let intro = playback.info?.markers?.intro, autoSkipIntro, !autoSkippedIntro,
            time >= intro.startSeconds, time < intro.endSeconds {
             autoSkippedIntro = true
             player?.seek(to: CMTime(seconds: intro.endSeconds, preferredTimescale: 600))
@@ -494,10 +494,14 @@ import UIKit
         updateQualityMenu()
     }
 
+    /// A party seeks for everyone: skips stay a button there, never automatic.
+    private var autoSkipIntro: Bool { AppSettingsStore.shared.autoSkipIntro && !partyDriven }
+    private var autoSkipCommercials: Bool { edlPolicy.autoSkipCommercials && !partyDriven }
+
     /// Reveals the cue on entering the intro window (or seeking inside it), fills its progress
     /// over `skipIntroRevealSeconds`, then retracts; a seek restarts the timer.
     private func updateSkipIntro(time: Double, seeked: Bool) {
-        guard let intro = playback.info?.markers?.intro, !AppSettingsStore.shared.autoSkipIntro,
+        guard let intro = playback.info?.markers?.intro, !autoSkipIntro,
               time >= intro.startSeconds, time < intro.endSeconds else {
             skipIntroArmed = false
             showSkipIntro = false
@@ -587,7 +591,8 @@ import UIKit
     /// Skips or ends at `position` when a range covers it, then re-gates the mute.
     private func enforceEdl(at position: Double) {
         guard let player else { return }
-        switch edlPolicy.resolve(position, duration: edlDuration(), skipped: &skippedCommercials) {
+        let resolution: EdlPolicy.Resolution = partyDriven ? .none : edlPolicy.resolve(position, duration: edlDuration(), skipped: &skippedCommercials)
+        switch resolution {
         case .seek(let to, let action):
             showEdlNotice(action)
             showSkipCommercial = false
@@ -611,7 +616,7 @@ import UIKit
     }
 
     private func updateSkipCommercial(at t: Double, seeked: Bool = false) {
-        guard !edlPolicy.autoSkipCommercials,
+        guard !autoSkipCommercials,
               let o = edlPolicy.commercialOrdinal(at: t, skipped: skippedCommercials) else {
             skipCommercialOrdinal = nil
             if showSkipCommercial { showSkipCommercial = false }

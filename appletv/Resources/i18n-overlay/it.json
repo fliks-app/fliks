@@ -105,5 +105,6 @@
   "party.tv_leave_host_confirm": "Esci e termina",
   "party.tv_votes_one": "{{count}} voto",
   "party.tv_votes_other": "{{count}} voti",
-  "party.tv_proposals_empty": "Nessuna proposta. Gli ospiti propongono film dal web o dall'app mobile."
+  "party.tv_proposals_empty": "Nessuna proposta. Gli ospiti propongono film dal web o dall'app mobile.",
+  "media_picker.back": "Indietro"
 }

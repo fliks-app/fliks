@@ -19,6 +19,7 @@ struct RootView: View {
 
     var body: some View {
         content
+            .overlay(alignment: .bottom) { PartyNotice() }
             .task {
                 if server.isConfigured { await auth.bootstrap() }
             }

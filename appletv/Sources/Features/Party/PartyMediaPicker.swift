@@ -10,6 +10,7 @@ struct PartyPick: Equatable {
 /// with `multi` (the programme) for how many: one, until the end of the season, the season, or several.
 struct PartyMediaPicker: View {
     var multi = false
+    var propose = false
     var onPick: ([PartyPick]) -> Void
     var onCancel: () -> Void
 
@@ -42,7 +43,7 @@ struct PartyMediaPicker: View {
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
-        PartySheetPage(title: series?.title ?? tr("media_picker.title")) {
+        PartySheetPage(title: series?.title ?? tr(propose ? "media_picker.title_propose" : "media_picker.title_add")) {
             if let series { episodes(of: series) } else { search }
         } bar: {
             HStack(spacing: 30) {

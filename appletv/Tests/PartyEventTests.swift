@@ -110,6 +110,17 @@ final class PartyEventTests: XCTestCase {
         XCTAssertEqual(PartyProposal.sorted([proposal(1, 1), proposal(2, 3), proposal(3, 3), proposal(4, 0)]).map(\.id), [2, 3, 1, 4])
     }
 
+    func testProposalsRankFewestDownvotesAmongEqualUpvotes() {
+        func proposal(_ id: Int, up: Int, down: Int) -> PartyProposal {
+            let item = try! JSONDecoder.fliks.decode(PartyItem.self, from: Data(hiddenItem.utf8))
+            return PartyProposal(id: id, item: item, proposedBy: 1, upvoterIds: Array(0..<up), downvoterIds: Array(0..<down))
+        }
+        let list = [proposal(1, up: 3, down: 2), proposal(2, up: 3, down: 0), proposal(3, up: 1, down: 0)]
+        XCTAssertEqual(PartyProposal.sorted(list).map(\.id), [2, 1, 3])
+        XCTAssertEqual(PartyProposal.top(list)?.id, 2)
+        XCTAssertNil(PartyProposal.top([proposal(1, up: 2, down: 1), proposal(2, up: 2, down: 1)]))
+    }
+
     func testSnapshotCarriesItsProposals() throws {
         let json = #"{"id":5,"name":"Night","status":"scheduled","scheduledAt":null,"host":{"userId":1,"username":"a"},"item":null,"playlist":null,"memberCount":1,"proposals":[{"id":2,"item":\#(item),"proposedBy":1,"upvoterIds":[1],"downvoterIds":[]}],"live":{"rev":4,"playback":null,"members":[],"messages":[]}}"#
         let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))

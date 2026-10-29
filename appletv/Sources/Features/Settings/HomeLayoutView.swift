@@ -9,6 +9,7 @@ import SwiftUI
 struct HomeLayoutView: View {
     @Environment(HomeSettingsStore.self) private var homeSettings
     @Environment(AuthService.self) private var auth
+    @Environment(PartyService.self) private var party
     @State private var libraries: [Library] = []
     @State private var hiddenLibraryIds: Set<Int> = []
     @State private var rows: [ResolvedHomeSection] = []
@@ -103,7 +104,8 @@ struct HomeLayoutView: View {
 
     private func rebuild() {
         let visibleLibraries = libraries.filter { !hiddenLibraryIds.contains($0.id) }
-        rows = homeSettings.resolve(libraries: visibleLibraries, requestsAllowed: requestsAllowed)
+        rows = homeSettings.resolve(libraries: visibleLibraries, requestsAllowed: requestsAllowed,
+                                  partiesSupported: party.partiesSupported)
     }
 
     private func move(_ index: Int, by delta: Int) {

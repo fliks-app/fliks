@@ -90,10 +90,26 @@ import Foundation
     func setPreview(_ dto: Party?) { preview = dto }
 
     var item: PartyItem? { live?.item ?? party?.item }
-    /// The programme has a head, or a suggestion the start can take (a masked one cannot be played).
-    var canStart: Bool { party?.item != nil || proposals.contains { !$0.item.hidden } }
+    /// Suggestions the programme does not hold yet.
+    var openProposals: [PartyProposal] {
+        proposals.filter { p in !queue.contains { $0.mediaId == p.item.mediaId && $0.episodeId == p.item.episodeId } }
+    }
+    /// Tied for the top vote with nothing chosen: the server refuses a start until the host picks one.
+    var voteTied: Bool { party?.item == nil && PartyProposal.best(proposals).count > 1 }
+    /// The programme has a head, or a clear top suggestion (a masked one cannot be played).
+    var canStart: Bool {
+        party?.item != nil || PartyProposal.top(proposals).map { !$0.item.hidden } == true
+    }
 
     // MARK: - Entry points
+
+    /// The server knows watch parties (5.2.0), like the web client's `supported()`.
+    var partiesSupported: Bool { ServerVersion.shared.supports("5.2.0") }
+    /// Admins and holders of `parties.create`, like the web client's `canCreate()`.
+    var canCreate: Bool {
+        guard partiesSupported, let user = AuthService.shared.currentUser else { return false }
+        return user.isAdmin || user.permissions.contains("parties.create")
+    }
 
     func openCreate(_ target: PartyCreateTarget = PartyCreateTarget()) {
         createTarget = target
@@ -134,10 +150,17 @@ import Foundation
         }
     }
 
-    /// The programme in its order, for a party that is not joined.
-    func fetchQueue() async -> [PartyItem] {
-        guard let id = managed?.id else { return [] }
-        return (try? await APIClient.shared.get("/api/parties/\(id)/queue")) ?? []
+    /// The programme in its order, for a party that is not joined; nil when it could not be read.
+    func fetchQueue() async -> [PartyItem]? {
+        guard let id = managed?.id else { return nil }
+        return try? await APIClient.shared.get("/api/parties/\(id)/queue")
+    }
+
+    /// The file a party item plays: the one it names, else the media's own.
+    func fileId(for item: PartyItem) async -> Int? {
+        if let id = item.mediaFileId { return id }
+        let media: Media? = try? await APIClient.shared.get("/api/media/\(item.mediaId)")
+        return media?.fileId(episodeId: item.episodeId)
     }
 
     func removeProposal(_ proposalId: Int) async {
@@ -339,8 +362,21 @@ import Foundation
     }
 
     func reload() async {
-        if party != nil { return await refetch() }
-        if let id = preview?.id, let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)") { preview = dto }
+        if let id = managed?.id { await reload(id: id) }
+    }
+
+    /// Refreshes a party the viewer may not have joined; false once it is gone (deleted or ended).
+    @discardableResult
+    func reload(id: Int) async -> Bool {
+        if party?.id == id { await refetch(); return true }
+        do {
+            let dto: Party = try await APIClient.shared.get("/api/parties/\(id)")
+            if dto.status == "ended" { return false }
+            preview = dto
+        } catch APIError.badStatus(404, _) {
+            return false
+        } catch {}
+        return true
     }
 
     private func applyManaged(_ dto: Party) {
@@ -472,12 +508,7 @@ import Foundation
     }
 
     private func openPlayer(_ item: PartyItem) async {
-        var fileId = item.mediaFileId
-        if fileId == nil {
-            let media: Media? = try? await APIClient.shared.get("/api/media/\(item.mediaId)")
-            fileId = media?.fileId(episodeId: item.episodeId)
-        }
-        guard let fileId else {
+        guard let fileId = await fileId(for: item) else {
             show(tr("player.next_unavailable"))
             await leave()
             return
