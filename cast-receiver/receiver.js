@@ -452,6 +452,7 @@ function renderBar() {
   // An episode leads with its own label (`subtitle`), the series name under it, as the CAF overlay does.
   barTitle.textContent = playerData.subtitle || playerData.title || '';
   barSubtitle.textContent = playerData.subtitle ? playerData.title || '' : '';
+  barTitle.classList.toggle('small', !!playerData.subtitle);
   barElapsed.textContent = formatClock(time);
   barTotal.textContent = duration ? formatClock(duration) : '';
   barPlayed.style.width = pct(time);
