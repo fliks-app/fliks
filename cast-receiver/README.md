@@ -76,20 +76,23 @@ The deploy workflow adds two gitignored folders; recreate them locally with the 
 `cp -r server/public/emoji cast-receiver/emoji`, and Noto's `NotoColorEmoji.ttf` (CBDT, v2.051)
 in `cast-receiver/fonts/` (the Cast OS ships no emoji font and its Chrome can't read COLRv1).
 
-The Chromecast can't load `localhost`. To iterate on `cast-receiver/`
-without re-deploying:
+An unpublished app may load its receiver over plain HTTP from your LAN, so no tunnel is needed:
 
-- Serve over a tunnel (`cloudflared tunnel`, `ngrok`, etc.) on HTTPS.
-- In Cast Console, edit the receiver URL to your tunnel URL.
-- Cast → check the receiver's debug overlay (`Receiver → Connect` in
-  Chrome DevTools at `chrome://inspect`).
+- Serve the folder: `cd cast-receiver && python3 -m http.server 8099 --bind 0.0.0.0`.
+- Its Cast Console URL is `http://<your machine's LAN IP>:8099/` (the Chromecast can't load
+  `localhost`). Give the machine a fixed address (DHCP reservation): when the IP changes, the
+  console URL must be edited again.
+- After editing the URL in the console, reboot the Chromecast: it keeps loading the old URL
+  otherwise (an error page on the TV, no request in the server log).
+- After editing receiver files, disconnect and cast again: a new session reloads the page.
+- Debug it with Chrome DevTools at `http://<chromecast IP>:9222`.
 
 ## Developing the receiver
 
 Test receiver changes without touching the prod app (`66BF4DAE`):
 
 1. In the Cast Developer Console, create your own **unpublished** Custom Receiver whose URL is your
-   tunnel to the local `cast-receiver/` (see Local dev), and register your Chromecast under it.
+   local `cast-receiver/` server (see Local dev), and register your Chromecast under it.
 2. Put its ID in `.env.local` at the repo root (gitignored; template in `.env.local.example`):
    `FLIKS_CAST_APP_ID=<your_app_id>`.
 3. Dev builds pick it up, release builds always use the prod app:
