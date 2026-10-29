@@ -1,5 +1,12 @@
 import dbus, { defineInterface, Variant } from 'dbus-native';
-import type { DesktopMediaMetadata, DesktopPositionInfo } from '../shared/contract';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type { NowPlayingAddon, NowPlayingNative } from './now-playing';
+
+type NowPlayingInfo = Parameters<NowPlayingNative['setNowPlaying']>[0];
 
 const BUS_NAME = 'org.mpris.MediaPlayer2.fliks';
 const OBJECT_PATH = '/org/mpris/MediaPlayer2';
@@ -26,101 +33,104 @@ const createRoot = () => defineInterface({
   },
 });
 
-/** The OS extrapolates the position from the rate: only a jump past this needs a Seeked. */
-const DRIFT_SECONDS = 3;
-
-/** MPRIS on the session bus, so the desktop's media keys and flyout reach Fliks. `onKey` gets the
- *  media key the action stands for, the same one the player's keyboard handler already maps; `onSeek`
- *  a position in seconds the page should seek to. */
-export class Mpris {
+/** MPRIS on the session bus, with the shape of a NowPlaying native backend: the desktop's media keys
+ *  and flyout reach Fliks through onRemoteCommand. The session is owned from the first push to the clear. */
+export class Mpris implements NowPlayingAddon {
   private bus: ReturnType<typeof dbus.sessionBus> | null = null;
   private player: ReturnType<typeof defineInterface> | null = null;
   private owned = false;
+  private queue: Promise<void> = Promise.resolve();
+  private onCommand: (name: string, position?: number) => void = () => {};
 
   private status: Status = 'Stopped';
   private metadata: Record<string, Variant> = {};
   private rate = 1;
-  private positionUs = 0;
   private lengthUs = 0;
+  private elapsed = 0;
+  private pushedAt = Date.now();
+  private artFile: string | null = null;
 
-  private meta: DesktopMediaMetadata | null = null;
-  private seconds = 0;
-  private lastAt = Date.now();
+  onRemoteCommand(cb: (name: string, position?: number) => void): void {
+    this.onCommand = cb;
+  }
 
-  constructor(
-    private readonly onKey: (name: string) => void,
-    private readonly onSeek: (seconds: number) => void,
-  ) {}
+  setNowPlaying(info: NowPlayingInfo): void {
+    this.enqueue(() => this.publish(info));
+  }
 
-  /** Publishes the session on first use; null withdraws it. */
-  async setMetadata(meta: DesktopMediaMetadata | null): Promise<void> {
-    if (!meta) return this.withdraw();
+  clearNowPlaying(): void {
+    this.enqueue(() => this.withdraw());
+  }
+
+  /** Pushes are ordered: the bus is asynchronous and a stale publish must not follow a clear. */
+  private enqueue(op: () => Promise<void>): void {
+    this.queue = this.queue.then(op).catch((e) => console.error('[mpris] unavailable', e));
+  }
+
+  private async publish(info: NowPlayingInfo): Promise<void> {
     await this.ensureOwned();
-    this.meta = meta;
-    this.publishMetadata();
+    const status: Status = info.playing ? 'Playing' : 'Paused';
+    const unchanged = status === this.status && info.rate === this.rate;
+    const props: Record<string, unknown> = {};
+    if (!unchanged) {
+      this.status = status;
+      this.rate = info.rate;
+      props.PlaybackStatus = status;
+      props.Rate = info.rate;
+    }
+    this.elapsed = info.elapsed;
+    this.pushedAt = Date.now();
+    this.lengthUs = micros(info.duration);
+    if (info.artwork) this.writeArtwork(info.artwork);
+    const m: Record<string, Variant> = {
+      'mpris:trackid': new Variant('o', TRACK_ID),
+      'xesam:title': new Variant('s', info.title),
+    };
+    if (info.artist) m['xesam:artist'] = new Variant('as', [info.artist]);
+    if (this.artFile) m['mpris:artUrl'] = new Variant('s', pathToFileURL(this.artFile).href);
+    if (this.lengthUs > 0) m['mpris:length'] = new Variant('x', BigInt(this.lengthUs));
+    this.metadata = m;
+    props.Metadata = m;
+    this.bus?.emitPropertiesChanged(OBJECT_PATH, PLAYER_IFACE, props, []);
+    // A push with no status change means the position jumped past the OS's extrapolation.
+    if (unchanged) this.player?.emit.Seeked(BigInt(micros(info.elapsed)));
   }
 
-  setStatus(status: Status): void {
-    if (this.status === status) return;
-    this.status = status;
-    this.changed({ PlaybackStatus: status });
-  }
-
-  setRate(rate: number): void {
-    if (this.rate === rate) return;
-    this.rate = rate;
-    this.changed({ Rate: rate });
-  }
-
-  /** Clients read Position on demand; Seeked tells them when it jumped past their extrapolation. */
-  setPosition({ position, duration }: DesktopPositionInfo): void {
-    const playing = this.status === 'Playing';
-    const expected = this.seconds + (playing ? ((Date.now() - this.lastAt) / 1000) * this.rate : 0);
-    const jumped = Math.abs(position - expected) > DRIFT_SECONDS;
-    this.seconds = position;
-    this.lastAt = Date.now();
-    this.positionUs = micros(position);
-    if (jumped && this.owned) this.player?.emit.Seeked(BigInt(this.positionUs));
-    if (micros(duration) !== this.lengthUs) {
-      this.lengthUs = micros(duration);
-      if (this.meta && this.owned) this.publishMetadata();
+  /** The desktop fetches the artwork itself: hand it a file named by its content. */
+  private writeArtwork(bytes: Buffer): void {
+    const file = path.join(os.tmpdir(), `fliks-artwork-${createHash('sha1').update(bytes).digest('hex')}`);
+    if (file !== this.artFile) {
+      fs.writeFileSync(file, bytes);
+      this.dropArtwork();
+      this.artFile = file;
     }
   }
 
-  private changed(props: Record<string, unknown>): void {
-    if (this.owned) this.bus?.emitPropertiesChanged(OBJECT_PATH, PLAYER_IFACE, props, []);
+  private dropArtwork(): void {
+    if (this.artFile) fs.rmSync(this.artFile, { force: true });
+    this.artFile = null;
   }
 
-  private publishMetadata(): void {
-    const meta = this.meta;
-    if (!meta) return;
-    const m: Record<string, Variant> = {
-      'mpris:trackid': new Variant('o', TRACK_ID),
-      'xesam:title': new Variant('s', meta.title),
-    };
-    if (meta.artist) m['xesam:artist'] = new Variant('as', [meta.artist]);
-    if (meta.artworkUrl) m['mpris:artUrl'] = new Variant('s', meta.artworkUrl);
-    if (this.lengthUs > 0) m['mpris:length'] = new Variant('x', BigInt(this.lengthUs));
-    this.metadata = m;
-    this.changed({ Metadata: m });
+  private positionUs(): number {
+    const ahead = this.status === 'Playing' ? ((Date.now() - this.pushedAt) / 1000) * this.rate : 0;
+    return micros(this.elapsed + ahead);
   }
 
   private createPlayer() {
-    const key = (name: string) => () => this.onKey(name);
+    const key = (name: string) => () => this.onCommand(name);
     // Both seeks go through the page, not mpv: a transcode seek has to renegotiate.
     const target = (us: number) =>
-      this.onSeek(Math.max(0, Math.min(us, this.lengthUs || Infinity)) / 1e6);
+      this.onCommand('seek', Math.max(0, Math.min(us, this.lengthUs || Infinity)) / 1e6);
     return defineInterface({
       name: PLAYER_IFACE,
       methods: {
-        // Electron key codes have no play-only or pause-only key: toggle only when the state differs.
-        Play: () => { if (this.status !== 'Playing') this.onKey('MediaPlayPause'); },
-        Pause: () => { if (this.status === 'Playing') this.onKey('MediaPlayPause'); },
-        PlayPause: key('MediaPlayPause'),
-        Stop: key('MediaStop'),
-        Next: key('MediaNextTrack'),
-        Previous: key('MediaPreviousTrack'),
-        Seek: { in: { offset: 'x' }, handler: ({ offset }) => target(this.positionUs + Number(offset)) },
+        Play: key('play'),
+        Pause: key('pause'),
+        PlayPause: key('toggle'),
+        Stop: key('stop'),
+        Next: key('next'),
+        Previous: key('previous'),
+        Seek: { in: { offset: 'x' }, handler: ({ offset }) => target(this.positionUs() + Number(offset)) },
         SetPosition: {
           in: { trackId: 'o', position: 'x' },
           handler: ({ trackId, position }) => { if (trackId === TRACK_ID) target(Number(position)); },
@@ -132,7 +142,7 @@ export class Mpris {
         Rate: live('d', () => this.rate),
         MinimumRate: readOnly('d', 0.25),
         MaximumRate: readOnly('d', 2),
-        Position: live('x', () => BigInt(this.positionUs)),
+        Position: live('x', () => BigInt(this.positionUs())),
         CanGoNext: readOnly('b', true),
         CanGoPrevious: readOnly('b', true),
         CanPlay: readOnly('b', true),
@@ -162,8 +172,8 @@ export class Mpris {
     this.owned = false;
     this.status = 'Stopped';
     this.metadata = {};
-    this.meta = null;
     this.lengthUs = 0;
+    this.dropArtwork();
     const bus = this.bus;
     this.bus = null;
     this.player = null;

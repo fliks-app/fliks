@@ -2,8 +2,6 @@ import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { createHash } from 'node:crypto';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
@@ -16,6 +14,8 @@ import { IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/con
 import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
 import { forwardPlayerEvents } from './window/forward-events';
 import { registerPlayerIpc } from './ipc';
+import type { NowPlayingAddon } from './now-playing';
+import type { PlayerBackend } from './mpv/player-backend';
 import { toElectronKey } from './keymap';
 import { watchRendererCrash } from './renderer-recovery';
 
@@ -190,58 +190,6 @@ function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
 }
 
-/** Feeds MPRIS from the player and the page's metadata; returns what withdraws the session. */
-function startMpris(player: LinuxCompositorPlayer): () => void {
-  let mpris: import('./mpris').Mpris | null = null;
-  let artwork: string | null = null;
-  let rate = 1;
-  setOsPlaybackRate = (r) => {
-    rate = r;
-    mpris?.setRate(r);
-  };
-  const withdraw = () => {
-    if (artwork) fs.rm(artwork, { force: true }, () => {});
-    artwork = null;
-    void mpris?.setMetadata(null);
-  };
-  setOsMediaSession = async (meta) => {
-    if (!meta) return withdraw();
-    try {
-      if (!mpris) {
-        const { Mpris } = await import('./mpris');
-        mpris = new Mpris((keyCode) => {
-          for (const type of ['keyDown', 'keyUp'] as const)
-            uiWin?.webContents.sendInputEvent({ type, keyCode } as any);
-        }, (position) => send({ type: 'seekRequest', payload: { position } }));
-        mpris.setRate(rate);
-        player.on('timeUpdate', (p) => mpris?.setPosition(p));
-        player.on('stateChanged', ({ state }) => {
-          if (state === 'playing') mpris?.setStatus('Playing');
-          else if (state === 'paused') mpris?.setStatus('Paused');
-          else if (state === 'ended' || state === 'idle' || state === 'error') mpris?.setStatus('Stopped');
-        });
-      }
-      const artworkUrl = meta.artworkUrl ? await cacheArtwork(meta.artworkUrl) : undefined;
-      if (artwork) fs.rm(artwork, { force: true }, () => {});
-      artwork = artworkUrl ? fileURLToPath(artworkUrl) : null;
-      await mpris.setMetadata({ ...meta, artworkUrl });
-    } catch (e) {
-      console.error('[mpris] unavailable', e);
-    }
-  };
-  return withdraw;
-}
-
-/** The OS fetches artwork itself, without the page's session: hand it a local copy. */
-async function cacheArtwork(url: string): Promise<string | undefined> {
-  if (!uiWin || uiWin.isDestroyed()) return undefined;
-  const res = await uiWin.webContents.session.fetch(url);
-  if (!res.ok) return undefined;
-  const file = path.join(os.tmpdir(), `fliks-artwork-${createHash('sha1').update(url).digest('hex')}`);
-  fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-  return pathToFileURL(file).href;
-}
-
 function rendererUrl(haveApp: boolean): string {
   return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
 }
@@ -264,18 +212,20 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
     preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
     iconPath: windowIcon(),
   });
-  await startNowPlaying(session).catch((e) => console.error('[now-playing] unavailable', e));
+  try {
+    const { loadMacAddon } = await import('./mpv/mac-mpv-player');
+    const { loadSmtcAddon } = await import('./smtc-win');
+    const addon = process.platform === 'darwin' ? loadMacAddon() : loadSmtcAddon(session.windowHandle);
+    session.onStop = await startNowPlaying(session.player, session.uiContents, addon);
+  } catch (e) {
+    console.error('[now-playing] unavailable', e);
+  }
 }
 
-/** Feeds macOS Now Playing / Windows SMTC from the player and the page's metadata, and routes its remote commands to the page as media keys. */
-async function startNowPlaying(session: import('./window/player-session').PlayerSession): Promise<void> {
-  const { NowPlaying } = await import('./now-playing');
-  const addon =
-    process.platform === 'darwin'
-      ? (await import('./mpv/mac-mpv-player')).loadMacAddon()
-      : (await import('./smtc-win')).loadSmtcAddon(session.windowHandle);
+/** Feeds the OS media session (MPRIS, macOS Now Playing, Windows SMTC) from the player and the page's metadata, and routes its remote commands to the page as media keys. Returns what withdraws the session. */
+async function startNowPlaying(player: PlayerBackend, uiContents: Electron.WebContents, addon: NowPlayingAddon): Promise<() => void> {
+  const { NowPlaying, mediaSessionSetter } = await import('./now-playing');
   const nowPlaying = new NowPlaying(addon);
-  const { player, uiContents } = session;
   let playing = false;
   player.on('stateChanged', ({ state }) => {
     playing = state === 'playing';
@@ -295,14 +245,17 @@ async function startNowPlaying(session: import('./window/player-session').Player
     if (name === 'play' ? !playing : name === 'pause' ? playing : true) press(KEYS[name] ?? 'MediaPlayPause');
   });
   setOsPlaybackRate = (rate) => nowPlaying.setRate(rate);
-  setOsMediaSession = async (meta) => {
+  // The OS fetches artwork without the page's session: the bytes come from here.
+  const publish = mediaSessionSetter(nowPlaying, async (url) => {
     try {
-      const res = meta?.artworkUrl ? await uiContents.session.fetch(meta.artworkUrl) : null;
-      nowPlaying.setMetadata(meta, res?.ok ? Buffer.from(await res.arrayBuffer()) : undefined);
+      const res = await uiContents.session.fetch(url);
+      return res.ok ? Buffer.from(await res.arrayBuffer()) : undefined;
     } catch (e) {
-      console.error('[now-playing] unavailable', e);
+      console.error('[now-playing] artwork', e);
     }
-  };
+  });
+  setOsMediaSession = publish;
+  return () => void publish(null);
 }
 
 // Fallback for any platform without a playback backend (not Linux/Windows/macOS,
@@ -351,12 +304,19 @@ app.whenReady().then(async () => {
     deviceName: deviceName(),
   }));
 
-  ipcMain.handle(IPC.openCalendarEvent, async (_e, ics: string, fileName: string) => {
+  // The renderer's file name is ignored: the OS runs whatever extension it is given.
+  ipcMain.handle(IPC.openCalendarEvent, async (_e, ics: unknown) => {
+    if (typeof ics !== 'string' || ics.length > 1_000_000) throw new Error('invalid calendar event');
     const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'fliks-cal-'));
-    const file = path.join(dir, path.basename(fileName));
-    await fs.promises.writeFile(file, ics);
-    const err = await shell.openPath(file);
-    if (err) throw new Error(err);
+    const file = path.join(dir, 'event.ics');
+    try {
+      await fs.promises.writeFile(file, ics);
+      const err = await shell.openPath(file);
+      if (err) throw new Error(err);
+    } finally {
+      // The handler has to read the file shortly after openPath resolves.
+      setTimeout(() => fs.rm(dir, { recursive: true, force: true }, () => {}), 60_000).unref();
+    }
   });
 
   ipcMain.handle(IPC.setMediaSession, (_e, meta: DesktopMediaMetadata | null) => setOsMediaSession?.(meta));
@@ -467,7 +427,13 @@ app.whenReady().then(async () => {
   });
   forwardPlayerEvents(player, send);
   await player.start();
-  const stopOsMediaSession = startMpris(player);
+  let stopOsMediaSession = () => {};
+  try {
+    const { Mpris } = await import('./mpris');
+    stopOsMediaSession = await startNowPlaying(player, uiWin.webContents, new Mpris());
+  } catch (e) {
+    console.error('[mpris] unavailable', e);
+  }
   watchRendererCrash(uiWin.webContents, {
     appUrl: rendererUrl(haveApp),
     stopPlayback: async () => {

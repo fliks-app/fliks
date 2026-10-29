@@ -35,7 +35,6 @@ export function toElectronKey(name: string, mod: number): ElectronKey | null {
   const keyCode = NAMED[name] ?? (name.length === 1 ? name.toLowerCase() : name);
   // Names such as "Keypad 5" or "Caps Lock" are not key codes Electron knows.
   if (keyCode.length > 1 && !/^(F\d{1,2}|[A-Z][A-Za-z]+)$/.test(keyCode)) return null;
-  if (keyCode.includes(' ')) return null;
   const modifiers: string[] = [];
   if (mod & KMOD_SHIFT) modifiers.push('shift');
   if (mod & KMOD_CTRL) modifiers.push('control');
