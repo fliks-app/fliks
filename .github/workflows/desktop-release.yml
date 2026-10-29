@@ -163,9 +163,11 @@ jobs:
         if: runner.os == 'Linux'
         uses: canonical/setup-lxd@8c6a87bfb56aa48f3fb9b830baa18562d8bfd4ee # v1
 
+      # 8.x: electron-builder 26 maps the app's desktop file to meta/gui/, which snapcraft 9 no
+      # longer resolves; electron-builder 27 drops that mapping.
       - name: Install snapcraft (Linux)
         if: runner.os == 'Linux'
-        run: sudo snap install snapcraft --classic
+        run: sudo snap install snapcraft --classic --channel=8.x/stable
 
       # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
       # libmpv headers the addon compiles against + the dylib the vendor script
