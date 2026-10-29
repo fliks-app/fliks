@@ -109,11 +109,11 @@ linux:
   target: [AppImage, deb]
   category: AudioVideo
 # deb runtime deps live at the ROOT (DebOptions), not under `linux`. The addon
-# links SDL2/GLES/EGL and dlopen's libmpv. Only FFmpeg is static inside that
-# libmpv; the rest of its DT_NEEDED closure that Ubuntu doesn't ship by default
-# is bundled next to it with RUNPATH=$ORIGIN (scripts/vendor-libmpv-linux.sh),
-# because four of those SONAMEs are noble-only and no `depends:` entry could
-# satisfy them on a later Ubuntu.
+# links the bundled SDL3 and GL, and dlopen's libmpv; SDL3 dlopens EGL, X11 and
+# Wayland. Only FFmpeg is static inside that libmpv; the rest of its DT_NEEDED
+# closure that Ubuntu doesn't ship by default is bundled next to it with
+# RUNPATH=$ORIGIN (scripts/vendor-libmpv-linux.sh), because four of those SONAMEs
+# are noble-only and no `depends:` entry could satisfy them on a later Ubuntu.
 deb:
   # Ship the AppStream metainfo so the App Center / GNOME Software shows the
   # proper name (Fliks), publisher (Clément Delestre) and icon instead of the
@@ -121,7 +121,16 @@ deb:
   # absolute install path (source is relative to electron-builder's project dir).
   fpm:
     - "build/media.fliks.desktop.metainfo.xml=/usr/share/metainfo/media.fliks.desktop.metainfo.xml"
+  # Replaces electron-builder's defaults, so Electron's own (libgtk-3-0 onwards) are listed too.
   depends:
-    - libsdl2-2.0-0
-    - libgles2
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - libgl1
     - libegl1

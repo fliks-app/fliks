@@ -1,6 +1,6 @@
 // fliks_compositor — native single-window GL compositor (Electron+mpv, Option C).
 //
-// One SDL2/GL window. mpv (self-contained libmpv, plain dlopen — FFmpeg
+// One SDL3/GL window. mpv (self-contained libmpv, plain dlopen — FFmpeg
 // statically linked + symbols hidden, so no clash with Electron's libffmpeg)
 // renders video via the RENDER API into a GL FBO; the Electron OSR UI bitmap is
 // uploaded to a GL texture; both are composited (video then UI, premult-alpha)
@@ -10,7 +10,7 @@
 #define _GNU_SOURCE 1
 #include <napi.h>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 // Desktop GL, not GLES: mpv drops RA_CAP_COMPUTE on any GLES context (ra_gl.c
 // disables it unconditionally), which costs HDR peak detection. Mesa's libGL
 // exports the 2.0+ entry points, so glext's prototypes are enough, no loader.
@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -124,6 +125,7 @@ struct GlState {
   std::thread eventThread;
 
   GLuint program = 0;
+  GLuint chrome = 0;
   GLuint vao = 0;
   GLuint uiTex = 0;
   GLuint videoTex = 0;
@@ -167,6 +169,57 @@ out vec4 frag;
 void main() {
   vec4 c = texture(u_tex, v_uv);
   frag = (u_bgra == 1) ? c.bgra : c;
+}
+)";
+
+// The title bar (u_bar > 0) or, over the whole window, the alpha of its rounded corners.
+const char* kChromeFrag = R"(#version 430 core
+uniform vec2 u_win;
+uniform float u_pt;
+uniform float u_bar;
+uniform float u_radius;
+uniform vec3 u_btn;
+uniform int u_hover;
+uniform int u_pressed;
+uniform int u_maximized;
+out vec4 frag;
+
+float box(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + r;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+float seg(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+}
+
+void main() {
+  vec2 p = vec2(gl_FragCoord.x, u_win.y - gl_FragCoord.y);
+  if (u_bar == 0.0) {
+    frag = vec4(0.0, 0.0, 0.0, clamp(0.5 - box(p - u_win * 0.5, u_win * 0.5, u_radius), 0.0, 1.0));
+    return;
+  }
+  vec3 c = vec3(0.114, 0.137, 0.165);  // the client's base-100
+  for (int i = 0; i < 3; i++) {
+    vec2 center = vec2(u_win.x / u_pt - u_btn.z - u_btn.x * (float(i) + 0.5) - u_btn.y * float(i),
+                       u_bar / u_pt * 0.5);
+    vec2 q = p / u_pt - center;
+    float disc = clamp(0.5 - (length(q) - u_btn.x * 0.5) * u_pt, 0.0, 1.0);
+    c = mix(c, vec3(1.0), disc * (i == u_pressed ? 0.24 : i == u_hover ? 0.16 : 0.08));
+    float d;
+    if (i == 0) {
+      d = min(seg(q, vec2(-4.0), vec2(4.0)), seg(q, vec2(-4.0, 4.0), vec2(4.0, -4.0)));
+    } else if (i == 2) {
+      d = seg(q, vec2(-4.0, 3.5), vec2(4.0, 3.5));
+    } else if (u_maximized == 0) {
+      d = abs(box(q, vec2(4.0), 1.0));
+    } else {
+      float front = box(q - vec2(-1.5, 1.5), vec2(3.0), 0.5);
+      d = min(abs(front), front < 0.0 ? 1e9 : abs(box(q - vec2(1.5, -1.5), vec2(3.0), 0.5)));
+    }
+    c = mix(c, vec3(0.93), clamp(0.5 - (d - 0.75) * u_pt, 0.0, 1.0));
+  }
+  frag = vec4(c, 1.0);
 }
 )";
 
@@ -226,6 +279,7 @@ void DrawTex(GlState* s, GLuint tex, float flipY, int bgra) {
 
 void InitGl(GlState* s) {
   s->program = LinkProgram(kVert, kFrag);
+  s->chrome = LinkProgram(kVert, kChromeFrag);
   glGenVertexArrays(1, &s->vao);
   glGenTextures(1, &s->uiTex);
   glBindTexture(GL_TEXTURE_2D, s->uiTex);
@@ -235,7 +289,7 @@ void InitGl(GlState* s) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
-void* GetProc(void*, const char* name) { return SDL_GL_GetProcAddress(name); }
+void* GetProc(void*, const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); }
 void OnMpvUpdate(void*) { /* continuous render loop polls rc_update */ }
 
 void MpvRenderInit(GlState* s) {
@@ -260,20 +314,93 @@ void MpvRenderInit(GlState* s) {
 }
 
 // Indexed by the shape ids main/index.ts maps Chromium's cursor names onto.
-const SDL_SystemCursor kCursors[] = {SDL_SYSTEM_CURSOR_ARROW, SDL_SYSTEM_CURSOR_HAND,
-                                     SDL_SYSTEM_CURSOR_IBEAM, SDL_SYSTEM_CURSOR_SIZEALL};
+const SDL_SystemCursor kCursors[] = {SDL_SYSTEM_CURSOR_DEFAULT, SDL_SYSTEM_CURSOR_POINTER,
+                                     SDL_SYSTEM_CURSOR_TEXT, SDL_SYSTEM_CURSOR_MOVE};
 constexpr int kCursorCount = static_cast<int>(sizeof(kCursors) / sizeof(kCursors[0]));
+
+// Window chrome in points, scaled by the display scale. Buttons run right to left:
+// close, maximize, minimize.
+constexpr float kBarHeight = 40, kButtonSize = 24, kButtonGap = 10, kButtonMargin = 8;
+constexpr float kCornerRadius = 12, kResizeBorder = 6;
+constexpr int kButtonCount = 3;
+
+// Sizes in window units, the unit of SDL's mouse and hit-test coordinates.
+struct Chrome {
+  float pt = 1;  // window units per point
+  float w = 0, h = 0, bar = 0;
+  bool fullscreen = false, maximized = false;
+};
+
+Chrome ChromeOf(SDL_Window* win) {
+  Chrome c;
+  int w, h;
+  SDL_GetWindowSize(win, &w, &h);
+  c.w = static_cast<float>(w);
+  c.h = static_cast<float>(h);
+  const float density = SDL_GetWindowPixelDensity(win);
+  const float scale = SDL_GetWindowDisplayScale(win);
+  c.pt = (scale > 0 ? scale : 1) / (density > 0 ? density : 1);
+  const SDL_WindowFlags f = SDL_GetWindowFlags(win);
+  c.fullscreen = f & SDL_WINDOW_FULLSCREEN;
+  c.maximized = f & SDL_WINDOW_MAXIMIZED;
+  c.bar = c.fullscreen ? 0 : kBarHeight * c.pt;
+  return c;
+}
+
+int ButtonAt(const Chrome& c, float x, float y) {
+  if (y >= c.bar) return -1;
+  for (int i = 0; i < kButtonCount; i++) {
+    const float cx = c.w - (kButtonMargin + kButtonSize * (i + 0.5f) + kButtonGap * i) * c.pt;
+    if (std::abs(x - cx) <= (kButtonSize + kButtonGap) * c.pt / 2) return i;
+  }
+  return -1;
+}
+
+SDL_HitTestResult HitTest(SDL_Window* win, const SDL_Point* p, void*) {
+  const Chrome c = ChromeOf(win);
+  if (c.fullscreen) return SDL_HITTEST_NORMAL;
+  if (!c.maximized) {
+    const float edge = kResizeBorder * c.pt, corner = kCornerRadius * c.pt;
+    const float x = static_cast<float>(p->x), y = static_cast<float>(p->y);
+    const bool left = x < edge, right = x >= c.w - edge, top = y < edge, bottom = y >= c.h - edge;
+    const bool nearLeft = x < corner, nearRight = x >= c.w - corner;
+    const bool nearTop = y < corner, nearBottom = y >= c.h - corner;
+    if ((top && nearLeft) || (left && nearTop)) return SDL_HITTEST_RESIZE_TOPLEFT;
+    if ((top && nearRight) || (right && nearTop)) return SDL_HITTEST_RESIZE_TOPRIGHT;
+    if ((bottom && nearLeft) || (left && nearBottom)) return SDL_HITTEST_RESIZE_BOTTOMLEFT;
+    if ((bottom && nearRight) || (right && nearBottom)) return SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+    if (top) return SDL_HITTEST_RESIZE_TOP;
+    if (bottom) return SDL_HITTEST_RESIZE_BOTTOM;
+    if (left) return SDL_HITTEST_RESIZE_LEFT;
+    if (right) return SDL_HITTEST_RESIZE_RIGHT;
+  }
+  return p->y < c.bar && ButtonAt(c, p->x, p->y) < 0 ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+}
+
+void DrawChrome(GlState* s, int w, int h, float pt, float bar, float radius, int hover, int pressed,
+                bool maximized) {
+  glUseProgram(s->chrome);
+  glUniform2f(glGetUniformLocation(s->chrome, "u_win"), w, h);
+  glUniform1f(glGetUniformLocation(s->chrome, "u_pt"), pt);
+  glUniform1f(glGetUniformLocation(s->chrome, "u_bar"), bar);
+  glUniform1f(glGetUniformLocation(s->chrome, "u_radius"), radius);
+  glUniform3f(glGetUniformLocation(s->chrome, "u_btn"), kButtonSize, kButtonGap, kButtonMargin);
+  glUniform1i(glGetUniformLocation(s->chrome, "u_hover"), hover);
+  glUniform1i(glGetUniformLocation(s->chrome, "u_pressed"), pressed);
+  glUniform1i(glGetUniformLocation(s->chrome, "u_maximized"), maximized ? 1 : 0);
+  glBindVertexArray(s->vao);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+}
 
 void RenderThreadMain(GlState* s) {
   SDL_Cursor* cursorCache[kCursorCount] = {};
-  // Name the X11 WM_CLASS so the window isn't grouped under "electron" (argv0).
-  // GNOME/Ubuntu key the dock entry on this; default to "fliks" but let an
-  // explicit launch-time SDL_VIDEO_X11_WMCLASS win (overwrite=0).
-  setenv("SDL_VIDEO_X11_WMCLASS", "fliks", 0);
+  // The X11 WM_CLASS / Wayland app_id the dock matches to fliks.desktop, not "electron"
+  // (argv0). An SDL_APP_ID set at launch wins.
+  SDL_SetHint(SDL_HINT_APP_ID, "fliks");
   // Without this SDL swallows the click that refocuses the window, so the first
   // click back into the app lands on nothing and everything needs clicking twice.
   SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+  if (!SDL_Init(SDL_INIT_VIDEO)) {
     fprintf(stderr, "[compositor] SDL_Init failed: %s\n", SDL_GetError());
     return;
   }
@@ -283,20 +410,24 @@ void RenderThreadMain(GlState* s) {
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  s->window = SDL_CreateWindow(
-      s->title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, s->width,
-      s->height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN);
+  SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+  // GNOME draws no frame around a Wayland window, so this one draws its own title bar
+  // and rounds its corners through the alpha channel.
+  s->window = SDL_CreateWindow(s->title.c_str(), s->width, s->height,
+                               SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
+                                   SDL_WINDOW_BORDERLESS | SDL_WINDOW_TRANSPARENT);
   if (!s->window) {
     fprintf(stderr, "[compositor] SDL_CreateWindow failed: %s\n", SDL_GetError());
     SDL_Quit();
     return;
   }
+  SDL_SetWindowHitTest(s->window, HitTest, nullptr);
   // Window icon (the dock/taskbar uses this when no .desktop matches). Loaded
-  // from a BMP so SDL2's core loader suffices — no SDL_image dependency.
+  // from a BMP so SDL's core loader suffices — no SDL_image dependency.
   if (!s->iconPath.empty()) {
     if (SDL_Surface* icon = SDL_LoadBMP(s->iconPath.c_str())) {
       SDL_SetWindowIcon(s->window, icon);
-      SDL_FreeSurface(icon);
+      SDL_DestroySurface(icon);
     } else {
       fprintf(stderr, "[compositor] icon load failed (%s): %s\n",
               s->iconPath.c_str(), SDL_GetError());
@@ -305,33 +436,82 @@ void RenderThreadMain(GlState* s) {
   s->gl = SDL_GL_CreateContext(s->window);
   SDL_GL_MakeCurrent(s->window, s->gl);
   SDL_GL_SetSwapInterval(1);
-  fprintf(stderr, "[compositor] GL %s | %s\n", glGetString(GL_VERSION), glGetString(GL_RENDERER));
-  SDL_StartTextInput();
+  fprintf(stderr, "[compositor] GL %s | %s | %s\n", glGetString(GL_VERSION), glGetString(GL_RENDERER),
+          SDL_GetCurrentVideoDriver());
+  SDL_StartTextInput(s->window);
   InitGl(s);
   MpvRenderInit(s);
 
   auto emitInput = [](const std::string& j) {
     if (g_inputReady.load()) g_inputTsfn.BlockingCall(new std::string(j));
   };
+  auto close = [s] {
+    // Only the main process can quit Electron; without this the closed
+    // window leaves it running and a relaunch shares the same profile.
+    if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string("{\"type\":\"closed\"}"));
+    s->run.store(false);
+  };
   char ib[256];
   int lastW = -1, lastH = -1;
+  float lastZoom = -1;
+  int hover = -1, pressed = -1;
+  // A release goes where its press went, so a drag across the title bar edge stays whole.
+  SDL_MouseButtonFlags barButtons = 0, pageButtons = 0;
+  bool onPage = false;
 
   while (s->run.load(std::memory_order_acquire)) {
+    const Chrome c = ChromeOf(s->window);
+    const float density = SDL_GetWindowPixelDensity(s->window);
+    // Window units → pixels of the page, which starts under the title bar.
+    auto px = [&](float x) { return static_cast<int>(std::lround(x * density)); };
+    auto py = [&](float y) { return static_cast<int>(std::lround((y - c.bar) * density)); };
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
       switch (ev.type) {
-        case SDL_QUIT:
-          // Only the main process can quit Electron; without this the closed
-          // window leaves it running and a relaunch shares the same profile.
-          if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string("{\"type\":\"closed\"}"));
-          s->run.store(false);
+        case SDL_EVENT_QUIT:
+          close();
           break;
-        case SDL_MOUSEMOTION:
-          snprintf(ib, sizeof(ib), "{\"kind\":\"move\",\"x\":%d,\"y\":%d}", ev.motion.x, ev.motion.y);
+        case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+          hover = -1;
+          if (onPage) emitInput("{\"kind\":\"leave\"}");
+          onPage = false;
+          break;
+        case SDL_EVENT_MOUSE_MOTION:
+          hover = ButtonAt(c, ev.motion.x, ev.motion.y);
+          if (!pageButtons && ev.motion.y < c.bar) {
+            if (onPage) emitInput("{\"kind\":\"leave\"}");
+            onPage = false;
+            break;
+          }
+          onPage = true;
+          snprintf(ib, sizeof(ib), "{\"kind\":\"move\",\"x\":%d,\"y\":%d}", px(ev.motion.x), py(ev.motion.y));
           emitInput(ib);
           break;
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP: {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
+          const bool down = ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+          const SDL_MouseButtonFlags mask = SDL_BUTTON_MASK(ev.button.button);
+          const bool inBar = down ? ev.button.y < c.bar : (barButtons & mask) != 0;
+          if (down) {
+            (inBar ? barButtons : pageButtons) |= mask;
+          } else {
+            barButtons &= ~mask;
+            pageButtons &= ~mask;
+          }
+          if (inBar) {
+            const int b = ButtonAt(c, ev.button.x, ev.button.y);
+            if (ev.button.button == SDL_BUTTON_LEFT && down) {
+              pressed = b;
+            } else if (ev.button.button == SDL_BUTTON_LEFT) {
+              if (b == 0 && pressed == 0) close();
+              if (b == 1 && pressed == 1) c.maximized ? SDL_RestoreWindow(s->window) : SDL_MaximizeWindow(s->window);
+              if (b == 2 && pressed == 2) SDL_MinimizeWindow(s->window);
+              pressed = -1;
+            } else if (ev.button.button == SDL_BUTTON_RIGHT && down && b < 0) {
+              SDL_ShowWindowSystemMenu(s->window, static_cast<int>(ev.button.x), static_cast<int>(ev.button.y));
+            }
+            break;
+          }
           // Thumb buttons are navigation, not clicks; the main process turns
           // them into history moves rather than forwarding them to the page.
           const char* btn = ev.button.button == SDL_BUTTON_RIGHT    ? "right"
@@ -341,34 +521,31 @@ void RenderThreadMain(GlState* s) {
                                                                     : "left";
           snprintf(ib, sizeof(ib),
                    "{\"kind\":\"button\",\"down\":%s,\"x\":%d,\"y\":%d,\"button\":\"%s\",\"clicks\":%d}",
-                   ev.type == SDL_MOUSEBUTTONDOWN ? "true" : "false", ev.button.x, ev.button.y, btn,
-                   ev.button.clicks);
+                   down ? "true" : "false", px(ev.button.x), py(ev.button.y), btn, ev.button.clicks);
           emitInput(ib);
           break;
         }
-        case SDL_MOUSEWHEEL: {
-          int mx, my;
-          SDL_GetMouseState(&mx, &my);
-          snprintf(ib, sizeof(ib), "{\"kind\":\"wheel\",\"x\":%d,\"y\":%d,\"dx\":%d,\"dy\":%d}", mx,
-                   my, ev.wheel.x, ev.wheel.y);
+        case SDL_EVENT_MOUSE_WHEEL:
+          if (ev.wheel.mouse_y < c.bar) break;
+          snprintf(ib, sizeof(ib), "{\"kind\":\"wheel\",\"x\":%d,\"y\":%d,\"dx\":%.3f,\"dy\":%.3f}",
+                   px(ev.wheel.mouse_x), py(ev.wheel.mouse_y), ev.wheel.x, ev.wheel.y);
           emitInput(ib);
           break;
-        }
-        case SDL_KEYDOWN:
-        case SDL_KEYUP: {
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP: {
           snprintf(ib, sizeof(ib), "{\"kind\":\"key\",\"down\":%s,\"key\":\"%s\",\"mod\":%d}",
-                   ev.type == SDL_KEYDOWN ? "true" : "false", SDL_GetKeyName(ev.key.keysym.sym),
-                   (int)ev.key.keysym.mod);
+                   ev.type == SDL_EVENT_KEY_DOWN ? "true" : "false", SDL_GetKeyName(ev.key.key),
+                   (int)ev.key.mod);
           emitInput(ib);
           break;
         }
-        case SDL_TEXTINPUT: {
+        case SDL_EVENT_TEXT_INPUT: {
           // escape the text minimally for JSON
           std::string t = ev.text.text;
           std::string esc;
-          for (char c : t) {
-            if (c == '"' || c == '\\') esc += '\\';
-            esc += c;
+          for (char ch : t) {
+            if (ch == '"' || ch == '\\') esc += '\\';
+            esc += ch;
           }
           emitInput("{\"kind\":\"text\",\"text\":\"" + esc + "\"}");
           break;
@@ -378,12 +555,11 @@ void RenderThreadMain(GlState* s) {
       }
     }
     int fs = s->fsRequest.exchange(-1, std::memory_order_acq_rel);
-    if (fs >= 0)
-      SDL_SetWindowFullscreen(s->window, fs == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    if (fs >= 0) SDL_SetWindowFullscreen(s->window, fs == 1);
     // The page's CSS cursor only covers the offscreen bitmap; the pointer the
     // user sees belongs to this window.
     int cur = s->cursorRequest.exchange(-1, std::memory_order_acq_rel);
-    if (cur >= 0) SDL_ShowCursor(cur == 1 ? SDL_ENABLE : SDL_DISABLE);
+    if (cur >= 0) cur == 1 ? SDL_ShowCursor() : SDL_HideCursor();
     // Chromium resolves the CSS cursor for the page; only this window can show
     // it. Built on demand and kept, since a shape recurs on every hover.
     int shape = s->cursorShape.exchange(-1, std::memory_order_acq_rel);
@@ -392,20 +568,25 @@ void RenderThreadMain(GlState* s) {
       if (cursorCache[shape]) SDL_SetCursor(cursorCache[shape]);
     }
 
+    // The page renders in pixels and is zoomed by the display scale back to its CSS size.
     int w, h;
-    SDL_GL_GetDrawableSize(s->window, &w, &h);
-    if (w != lastW || h != lastH) {
+    SDL_GetWindowSizeInPixels(s->window, &w, &h);
+    const int barPx = static_cast<int>(std::lround(c.bar * density));
+    const int pageH = std::max(1, h - barPx);
+    const float zoom = c.pt * density;
+    if (w != lastW || pageH != lastH || zoom != lastZoom) {
       lastW = w;
-      lastH = h;
-      snprintf(ib, sizeof(ib), "{\"kind\":\"resize\",\"w\":%d,\"h\":%d}", w, h);
+      lastH = pageH;
+      lastZoom = zoom;
+      snprintf(ib, sizeof(ib), "{\"kind\":\"resize\",\"w\":%d,\"h\":%d,\"zoom\":%.4f}", w, pageH, zoom);
       emitInput(ib);
     }
-    EnsureVideoFbo(s, w, h);
+    EnsureVideoFbo(s, w, pageH);
 
     if (s->mpvGl) {
       uint64_t flags = M::rc_update(s->mpvGl);
       if (flags & MPV_RENDER_UPDATE_FRAME) {
-        mpv_opengl_fbo fbo{static_cast<int>(s->videoFbo), w, h, 0};
+        mpv_opengl_fbo fbo{static_cast<int>(s->videoFbo), w, pageH, 0};
         mpv_render_param rp[] = {
             {MPV_RENDER_PARAM_OPENGL_FBO, &fbo},
             {static_cast<mpv_render_param_type>(0), nullptr},
@@ -441,6 +622,7 @@ void RenderThreadMain(GlState* s) {
     glViewport(0, 0, w, h);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    glViewport(0, 0, w, pageH);
     glDisable(GL_BLEND);
     DrawTex(s, s->videoTex, /*flipY=*/1.0f, /*bgra=*/0);  // mpv render-API FBO is top-down
     if (s->uiW > 0) {
@@ -449,6 +631,17 @@ void RenderThreadMain(GlState* s) {
       DrawTex(s, s->uiTex, /*flipY=*/1.0f, /*bgra=*/1);
       glDisable(GL_BLEND);
     }
+    if (barPx > 0) {
+      glViewport(0, pageH, w, barPx);
+      DrawChrome(s, w, h, zoom, barPx, 0, hover, pressed, c.maximized);
+    }
+    // Sets the alpha of every pixel: the page leaves it below 1 wherever it is see-through.
+    glViewport(0, 0, w, h);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_ZERO, GL_SRC_ALPHA, GL_ONE, GL_ZERO);
+    const bool square = c.maximized || c.fullscreen;
+    DrawChrome(s, w, h, zoom, 0, square ? 0 : kCornerRadius * zoom, -1, -1, false);
+    glDisable(GL_BLEND);
     SDL_GL_SwapWindow(s->window);
     if (s->mpvGl) M::rc_report_swap(s->mpvGl);
   }
@@ -457,7 +650,7 @@ void RenderThreadMain(GlState* s) {
     M::rc_free(s->mpvGl);  // free render context ON the render thread
     s->mpvGl = nullptr;
   }
-  SDL_GL_DeleteContext(s->gl);
+  SDL_GL_DestroyContext(s->gl);
   SDL_DestroyWindow(s->window);
   SDL_Quit();
   s->gl = nullptr;

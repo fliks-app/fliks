@@ -1,8 +1,8 @@
 {
   # One native unit per desktop OS, selected by top-level conditions so the
   # wrong-OS target (and its toolchain probes) never even resolve:
-  #   - linux → fliks_compositor: SDL2 + desktop GL self-compositor (pkg-config).
-  #     Its `<!@(pkg-config sdl2 …)` would FAIL at gyp time on macOS, hence the
+  #   - linux → fliks_compositor: SDL3 + desktop GL self-compositor (pkg-config).
+  #     Its `<!@(pkg-config sdl3 …)` would FAIL at gyp time on macOS, hence the
   #     condition gate rather than a per-target no-op.
   #   - mac   → fliks_player_mac: in-process libmpv rendering offscreen via GL
   #     into an IOSurface, blit-copied by Metal into a CAMetalLayer on the
@@ -20,12 +20,14 @@
           ],
           "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include_dir\")",
-            "<!@(pkg-config --cflags-only-I sdl2 gl egl mpv | sed 's/-I//g')"
+            "<!@(pkg-config --cflags-only-I sdl3 gl egl mpv | sed 's/-I//g')"
           ],
           "libraries": [
-            "<!@(pkg-config --libs sdl2 gl egl)",
+            "<!@(pkg-config --libs sdl3 gl egl)",
             "-ldl"
           ],
+          # The release bundles libSDL3 in native/vendor: Ubuntu 24.04 ships none.
+          "ldflags": [ "-Wl,-rpath,'$$ORIGIN/../../vendor'" ],
           "cflags_cc": [ "-std=c++17", "-fexceptions" ],
           "defines": [ "NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS" ]
         }

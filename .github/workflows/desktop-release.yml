@@ -9,7 +9,7 @@
 #
 # Build = three units assembled by electron-builder:
 #   1. native C++ compositor addon (desktop/native) — node-gyp rebuild against
-#      the Electron 45 ABI, linked to libmpv + SDL2 + GLES/EGL.
+#      the Electron 45 ABI, linked to libmpv + SDL3 + GL/EGL.
 #   2. esbuild main/preload bundle  (cd desktop && npm run build).
 #   3. the Angular client           (cd client && npx ng build), staged into
 #      desktop/web so electron-builder ships it at resources/web.
@@ -28,7 +28,7 @@
 # The tag must never start with `v`; every `v*`/`desktop-v*` tag trigger in
 # this repo's workflows would otherwise fire on it.
 #
-# The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
+# The native compositor addon (SDL3 + GL/EGL) is LINUX-ONLY by design — it is
 # the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
 # natively instead (--wid into a child NSView/HWND, see desktop/src/main/window/
 # backends), so they do NOT build the compositor. macOS builds the in-process
@@ -141,9 +141,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron45-
 
-      # Linux-only: build deps for the native compositor addon (SDL2 + GL/EGL
-      # + libmpv headers). macOS/Windows don't build the compositor (they embed mpv
-      # natively), so they need no extra build deps here.
+      # Linux-only: build deps for the native compositor addon (SDL3 + GL/EGL
+      # + libmpv headers) and for the SDL3 it bundles. macOS/Windows don't build
+      # the compositor (they embed mpv natively), so they need no extra build deps here.
       - name: Install Linux build deps
         if: runner.os == 'Linux'
         # libmpv-dev's recommends and man-db's index rebuild after each package took ~7 minutes.
@@ -152,7 +152,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential python3 pkg-config patchelf \
-            libsdl2-dev libgl1-mesa-dev libegl1-mesa-dev libmpv-dev
+            libgl1-mesa-dev libegl1-mesa-dev libmpv-dev \
+            cmake libwayland-dev libxkbcommon-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev \
+            libxrender-dev libxss-dev
 
       # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
       # libmpv headers the addon compiles against + the dylib the vendor script
@@ -185,6 +188,13 @@ jobs:
         shell: bash
         run: bash desktop/scripts/verify-libmpv-linux.sh
 
+      - name: Build SDL3 (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash desktop/scripts/build-sdl3-linux.sh
+          echo "PKG_CONFIG_PATH=$PWD/desktop/native/.sdl3/lib/pkgconfig" >> "$GITHUB_ENV"
+
       # From a Fliks-owned release (MPV_VENDOR_TAG): zhongfly/mpv-winbuild prunes its
       # releases after about a month. Refresh the pin per the checklist at the top.
       - name: Vendor mpv (Windows)
@@ -214,7 +224,7 @@ jobs:
         run: bash desktop/scripts/verify-libmpv-mac.sh
 
       # ── Build the native compositor addon against the Electron 45 ABI ──
-      # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
+      # Linux-only: SDL3 + GL/EGL OSR compositor (the Mutter/X11 model). macOS
       # and Windows embed mpv natively (--wid) and have their own addons below.
       - name: Build native addon
         if: runner.os == 'Linux'

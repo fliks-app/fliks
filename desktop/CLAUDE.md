@@ -8,8 +8,10 @@ it is NOT the menu-bar server host under `macos/`.
 
 - **Electron** loads the Angular client **offscreen** (`offscreen: true,
   transparent: true`) and paints it to a BGRA bitmap.
-- A **native N-API addon** (`native/compositor/addon.cc`, SDL2 + GL 4.3 core) owns
-  the single visible window. It composites **mpv video** (rendered into a GL FBO
+- A **native N-API addon** (`native/compositor/addon.cc`, SDL3 + GL 4.3 core) owns
+  the single visible window, borderless: it draws its own title bar and rounds its
+  corners through the alpha channel (GNOME draws no frame for Wayland clients, and
+  libdecor's GTK plugin refuses a non-main thread). It composites **mpv video** (rendered into a GL FBO
   via libmpv's render API) under the **Angular UI bitmap**.
 - Embedded **mpv** comes from a self-contained static **libmpv** (render API).
 - ⚠️ **Three mpv backends — know which one you're debugging.**
@@ -67,11 +69,13 @@ System packages (Debian/Ubuntu) — the C++ addon compiles against these via
 `pkg-config` and node-gyp needs a C++17 toolchain:
 ```bash
 sudo apt install -y build-essential python3 pkg-config \
-  libsdl2-dev libgl1-mesa-dev libegl1-mesa-dev libmpv-dev
+  libsdl3-dev libgl1-mesa-dev libegl1-mesa-dev libmpv-dev
 ```
 - `build-essential` + `python3` → node-gyp.
-- `pkg-config` + `libsdl2-dev` + `libgl1-mesa-dev` + `libegl1-mesa-dev` →
-  the addon links SDL2 / desktop GL / EGL. Desktop GL, not GLES: mpv drops
+- `pkg-config` + `libsdl3-dev` + `libgl1-mesa-dev` + `libegl1-mesa-dev` →
+  the addon links SDL3 / desktop GL / EGL. Ubuntu 24.04 has no SDL3: the release
+  builds it with `scripts/build-sdl3-linux.sh` and ships `native/vendor/libSDL3.so.0`,
+  found through the addon's RUNPATH. Desktop GL, not GLES: mpv drops
   compute shaders on any GLES context, and they drive its HDR peak detection.
 - `libmpv-dev` → addon **compiles** against mpv's headers (`client.h`,
   `render_gl.h`). Runtime uses the vendored self-contained libmpv below, not the

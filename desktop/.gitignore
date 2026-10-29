@@ -11,4 +11,6 @@ vendor/
 !native/vendor/
 native/vendor/*
 !native/vendor/libmpv.so.2
+# SDL3 headers and pkg-config from scripts/build-sdl3-linux.sh.
+native/.sdl3/
 *.log
