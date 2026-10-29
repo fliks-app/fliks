@@ -75,5 +75,5 @@ test('a withdrawal or newer metadata drops an artwork fetch still in flight', as
   pending[1]!(Buffer.from('b'));
   await Promise.all([b, c]);
   assert.equal(calls.length, 1);
-  assert.equal((calls[0] as { title: string }).title, 'C');
+  assert.equal((calls[0] as any).title, 'C');
 });
