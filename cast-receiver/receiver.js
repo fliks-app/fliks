@@ -411,7 +411,11 @@ const barBands = barEl.querySelector('.bar-bands');
 const barPlayer = document.querySelector('cast-media-player');
 if (barPlayer && barPlayer.shadowRoot) {
   const hide = document.createElement('style');
-  hide.textContent = 'tv-overlay { display: none !important; }';
+  // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
+  hide.textContent =
+    'tv-overlay { display: none !important; }' +
+    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; }' +
+    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(-15vh); }';
   barPlayer.shadowRoot.appendChild(hide);
 }
 
@@ -438,32 +442,6 @@ let barBandsKey = '';
 
 const spinnerEl = document.getElementById('spinner');
 
-// Lines from the bottom a cue sits on while the bar shows; `auto` lets the browser place it.
-const SUBS_LIFTED_LINE = -4;
-let subsLifted = false;
-
-function placeCues(cues) {
-  for (const c of Array.from(cues || [])) c.line = subsLifted ? SUBS_LIFTED_LINE : 'auto';
-}
-
-// Cues of a segmented track arrive while playing, after the bar may have lifted the others.
-function watchTracks(v) {
-  if (v.fliksTracksWatched) return;
-  v.fliksTracksWatched = true;
-  const hook = (t) => t.addEventListener('cuechange', () => subsLifted && placeCues(t.activeCues));
-  Array.from(v.textTracks).forEach(hook);
-  v.textTracks.addEventListener('addtrack', (e) => hook(e.track));
-}
-
-function liftSubtitles(on) {
-  if (on === subsLifted) return;
-  subsLifted = on;
-  const v = findMediaElement();
-  if (!v) return;
-  watchTracks(v);
-  for (const t of Array.from(v.textTracks)) if (t.mode === 'showing') placeCues(t.cues);
-}
-
 function renderBar() {
   const st = playerData.state;
   spinnerEl.classList.toggle('show', st === BarState.LOADING || st === BarState.BUFFERING);
@@ -471,7 +449,7 @@ function renderBar() {
   const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
   barEl.classList.toggle('show', show);
   document.body.classList.toggle('bar-on', show);
-  liftSubtitles(show);
+  if (barPlayer) barPlayer.classList.toggle('bar-on', show);
   if (!show) return;
   const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
   const time = playerData.currentTime || 0;
