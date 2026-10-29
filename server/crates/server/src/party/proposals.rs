@@ -377,10 +377,20 @@ async fn set_vote(
     let me = a.user.id;
     let row = open_row(st, id, me).await?;
     let (_, item) = proposal(st, id, pid).await?;
-    match value {
+    if !st
+        .parties
+        .proposal_ok(me, now_ms(), RATE_WINDOW_MS, MAX_PER_WINDOW)
+    {
+        return Err(fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            "party.error_rate_limited",
+        ));
+    }
+    let done = match value {
         Some(value) => sqlx::query(
             r#"INSERT INTO watch_party_votes ("proposalId", "userId", "value") VALUES ($1, $2, $3)
-                   ON CONFLICT ("proposalId", "userId") DO UPDATE SET "value" = $3"#,
+                   ON CONFLICT ("proposalId", "userId") DO UPDATE SET "value" = $3
+                   WHERE watch_party_votes."value" <> $3"#,
         )
         .bind(pid)
         .bind(me)
@@ -397,6 +407,9 @@ async fn set_vote(
             .await?
         }
     };
+    if done.rows_affected() == 0 {
+        return Ok(StatusCode::NO_CONTENT);
+    }
     announce(st, &row).await?;
     if let Some(value) = value {
         note(

@@ -1,6 +1,6 @@
 use super::{
     cover::{self, Cover, CoverDto},
-    db::{self, Row},
+    db::{self, Row, can_open},
     dto::*,
     queue as steps,
     registry::{
@@ -12,7 +12,7 @@ use crate::{
     events::SseEvent,
     http::{
         AppError,
-        auth::{Authed, SessionAuthed, load_enabled},
+        auth::{Authed, SessionAuthed},
         validate::{PathParams, ValidJson},
     },
     images::upload,
@@ -29,7 +29,7 @@ use axum::{
 };
 use chrono::Utc;
 use fliks_domain::{
-    acl::{Action, Permissions, Subject},
+    acl::{Action, Subject},
     js::now_ms,
     party::{
         ANIMATED_REACTIONS, CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent,
@@ -156,21 +156,10 @@ async fn media_ok(st: &AppState, user: &Authed, media: i32) -> Result<bool, AppE
     }
 }
 
-/// The libraries another user can open, loaded like a request would; `None` for a user who is
-/// disabled or gone.
+/// The libraries another user can open; `None` for a user who is disabled or gone.
 pub(super) async fn user_libraries(st: &AppState, user: i32) -> Result<Option<Vec<i32>>, AppError> {
-    let Some((u, role)) = load_enabled(&st.db, user).await? else {
+    let Some(authed) = Authed::load(&st.db, user).await? else {
         return Ok(None);
-    };
-    let perms = Permissions::from(
-        role.as_ref().map_or(&[][..], |r| &r.permissions),
-        u.is_admin,
-    );
-    let authed = Authed {
-        user: u,
-        role,
-        perms,
-        scope: None,
     };
     Ok(Some(accessible_library_ids(&st.db, &authed).await?))
 }
@@ -249,7 +238,7 @@ pub(super) fn host_of(st: &AppState, row: &Row) -> i32 {
     if row.status == "scheduled" {
         return row.owner_id;
     }
-    st.parties.brief(row.id).map_or(row.owner_id, |b| b.host_id)
+    st.parties.brief(row.id).map_or(row.host(), |b| b.host_id)
 }
 
 /// The host, or a Manage Party holder.
@@ -290,7 +279,7 @@ async fn summaries_with(
     }
     let hosts: Vec<i32> = rows
         .iter()
-        .map(|(r, b)| b.as_ref().map_or(r.owner_id, |b| b.host_id))
+        .map(|(r, b)| b.as_ref().map_or(r.host(), |b| b.host_id))
         .collect();
     let names = db::usernames(&st.db, &hosts).await?;
     let playlist_ids: Vec<i32> = rows.iter().filter_map(|(r, _)| r.playlist_id).collect();
@@ -341,7 +330,7 @@ async fn summaries_with(
 /// and the switches, no guests, members, messages or anchor.
 pub(super) async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
     if row.status != "ended" {
-        registry::ensure(st, row, false).await?;
+        registry::ensure(st, row).await?;
     }
     let view = st.parties.view(row.id);
     let brief = view.as_ref().map(Brief::of);
@@ -443,10 +432,7 @@ pub(super) async fn conceal_items(
     let libraries = db::media_libraries(&st.db, &medias).await?;
     let allowed = user_libraries(st, viewer).await?.unwrap_or_default();
     for item in items.iter_mut() {
-        if libraries
-            .get(&item.media_id)
-            .is_none_or(|lib| !allowed.contains(lib))
-        {
+        if !can_open(&libraries, &allowed, item.media_id) {
             item.title = String::new();
             item.poster_url = None;
             item.fanart_url = None;
@@ -607,7 +593,7 @@ pub async fn list(
     let public = a.perms.can(Action::Read, &Subject::Party);
     let rows = db::listed(&st.db, a.user.id, public, manages(&a)).await?;
     for row in rows.iter().filter(|r| r.status == "live") {
-        registry::ensure(&st, row, false).await?;
+        registry::ensure(&st, row).await?;
     }
     let mut sums = summaries(&st, &rows).await?;
     conceal(&st, a.user.id, &mut sums).await?;
@@ -656,22 +642,41 @@ pub async fn patch(
     PathParams(id): PathParams<i32>,
     ValidJson(b): ValidJson<Patch>,
 ) -> R<Json<PartyDto>> {
-    let me = a.user.id;
-    let mut row = row_of(&st, id).await?;
+    let row = row_of(&st, id).await?;
     access_as(&st, &row, &a, None).await?;
     require_host_or_manager(&st, &row, &a)?;
     require_open(&row)?;
-    if let Some(cover) = b.cover {
-        change_cover(&st, &a, &mut row, cover, None).await?;
+    let name = b.name.as_deref().map(valid_name).transpose()?;
+    let row = apply_patch(&st, &a, id, &b, name).await?;
+    Ok(Json(dto(&st, &row, a.user.id, true).await?))
+}
+
+/// The patch under the party's gate, on the row as it is now: every field is checked before the
+/// first write, and two patches cannot overwrite each other's columns.
+async fn apply_patch(
+    st: &AppState,
+    a: &Authed,
+    id: i32,
+    b: &Patch,
+    name: Option<String>,
+) -> R<Row> {
+    let _held = hold(st, id).await;
+    let mut row = row_of(st, id).await?;
+    require_open(&row)?;
+    require_host_or_manager(st, &row, a)?;
+    if b.scheduled_at.is_some() && row.status != "scheduled" {
+        return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
+    }
+    if let Some(Some(cover)) = &b.cover {
+        check_cover(st, id, cover).await?;
+    }
+    if let Some(cover) = &b.cover {
+        change_cover_held(st, a, &mut row, cover.clone(), None).await?;
     }
     let was_public = row.public;
     let was_scheduled = row.scheduled_at;
-    let name = b.name.as_deref().map(valid_name).transpose()?;
     let renamed = name.as_ref().is_some_and(|n| *n != row.name);
     if let Some(at) = b.scheduled_at {
-        if row.status != "scheduled" {
-            return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
-        }
         row.scheduled_at = Some(at.max(Utc::now()));
         st.parties.forget_notice(id);
     }
@@ -709,8 +714,8 @@ pub async fn patch(
         || b.link_sharing.is_some()
         || b.public.is_some()
     {
-        registry::ensure(&st, &row, false).await?;
-        mutate(&st, id, |l| {
+        registry::ensure_held(st, &row).await?;
+        mutate_held(st, id, |l| {
             (
                 (),
                 l.room.set_settings(
@@ -731,8 +736,8 @@ pub async fn patch(
     }
     if b.scheduled_at.is_some() && row.scheduled_at != was_scheduled {
         let at = row.scheduled_at.map(fliks_domain::js::iso);
-        registry::note(
-            &st,
+        registry::note_held(
+            st,
             &row,
             "rescheduled",
             &a.user.username,
@@ -740,38 +745,52 @@ pub async fn patch(
         )
         .await?;
     }
-    if regenerate {
-        db::clear_kicked(&st.db, id).await?;
-        let gone = db::drop_link_guests(&st.db, id, host_of(&st, &row)).await?;
-        super::proposals::forget_users(&st, &row, &gone).await?;
-        mutate(&st, id, |l| {
-            let fx = gone
-                .iter()
-                .filter_map(|u| l.kick(*u, &a.user.username, now_ms()).ok())
-                .flatten()
-                .collect();
-            ((), fx)
-        })
-        .await;
-        st.hub.emit_to_users(
-            &gone,
-            SseEvent::PartyUpdated {
-                party_id: id.into(),
-            },
-        );
+    let went_private = was_public && !row.public;
+    if regenerate || went_private {
+        revoke_guests(st, a, &row, regenerate).await?;
     }
     if b.scheduled_at.is_some() && starting_due(&row) {
-        registry::announce_lobby(&st, &row).await?;
+        registry::announce_lobby(st, &row).await?;
     }
     if b.scheduled_at.is_some() || renamed || row.public != was_public {
-        notify_updated(&st, &row).await?;
+        notify_updated(st, &row).await?;
     }
-    if was_public && !row.public {
+    if went_private {
         st.hub.emit(SseEvent::PartyUpdated {
             party_id: id.into(),
         });
     }
-    Ok(Json(dto(&st, &row, me, true).await?))
+    Ok(row)
+}
+
+/// Drops the guests a new token (`link`, `public`) or a private party (`public`) no longer admits,
+/// except the live host, from the room too.
+async fn revoke_guests(st: &AppState, a: &Authed, row: &Row, regenerate: bool) -> R<()> {
+    let id = row.id;
+    let sources: &[&str] = if regenerate {
+        db::clear_kicked(&st.db, id).await?;
+        &["link", "public"]
+    } else {
+        &["public"]
+    };
+    let gone = db::drop_guests(&st.db, id, sources, host_of(st, row)).await?;
+    super::proposals::forget_users(st, row, &gone).await?;
+    mutate_held(st, id, |l| {
+        let fx = gone
+            .iter()
+            .filter_map(|u| l.kick(*u, &a.user.username, now_ms()).ok())
+            .flatten()
+            .collect();
+        ((), fx)
+    })
+    .await;
+    st.hub.emit_to_users(
+        &gone,
+        SseEvent::PartyUpdated {
+            party_id: id.into(),
+        },
+    );
+    Ok(())
 }
 
 #[utoipa::path(delete, path = "/api/parties/{id}", responses((status = 204)))]
@@ -786,7 +805,7 @@ pub async fn end(
     if row.status != "ended" {
         registry::end(
             &st,
-            &row,
+            id,
             CloseReason::HostEnded,
             Some(a.user.username.clone()),
         )
@@ -806,7 +825,9 @@ pub async fn join(
     let row = row_of(&st, id).await?;
     let how = access_as(&st, &row, &a, b.token.as_deref()).await?;
     require_open(&row)?;
-    registry::ensure(&st, &row, false).await?;
+    if !registry::ensure(&st, &row).await? {
+        return Err(fail(StatusCode::CONFLICT, "party.error_ended"));
+    }
     let item = st
         .parties
         .brief(id)
@@ -840,38 +861,59 @@ pub async fn join(
     Ok(Json(dto(&st, &row, me, true).await?))
 }
 
-/// Sets the cover (`jpeg`: the upload that becomes it) or resets it (`None`), under the party's gate.
-/// `false` when it was already so.
-async fn write_cover(
+/// A cover a client may set must fit the programme as it is now.
+async fn check_cover(st: &AppState, id: i32, cover: &Cover) -> R<()> {
+    let programme: Vec<Item> = db::programme_rows(&st.db, id)
+        .await?
+        .into_iter()
+        .map(|r| r.item)
+        .collect();
+    cover.check(&programme)?;
+    Ok(())
+}
+
+/// Sets the cover (`jpeg`: the upload that becomes it) or resets it (`None`); the caller holds the
+/// party's gate. `false` when it was already so.
+async fn write_cover_held(
     st: &AppState,
     row: &mut Row,
     cover: Option<Cover>,
     jpeg: Option<&[u8]>,
 ) -> R<bool> {
     let id = row.id;
-    let _held = hold(st, id).await;
     *row = row_of(st, id).await?;
     require_open(row)?;
     if jpeg.is_none() && row.cover.as_deref() == cover.as_ref() {
         return Ok(false);
     }
     if let (Some(c), None) = (&cover, jpeg) {
-        let programme: Vec<Item> = db::programme_rows(&st.db, id)
-            .await?
-            .into_iter()
-            .map(|r| r.item)
-            .collect();
-        c.check(&programme)?;
+        check_cover(st, id, c).await?;
     }
-    if let Some(bytes) = jpeg {
-        upload::write(cover::DIR, id, bytes).await?;
+    let stem = cover.as_ref().and_then(|c| c.upload_stem(id));
+    if let (Some(bytes), Some(stem)) = (jpeg, &stem) {
+        upload::write(cover::DIR, stem, bytes).await?;
     }
     db::set_cover(&st.db, id, cover.as_ref()).await?;
-    if jpeg.is_none() && matches!(row.cover.as_deref(), Some(Cover::Upload { .. })) {
-        upload::remove(cover::DIR, id).await;
+    let old = row.cover.as_deref().and_then(|c| c.upload_stem(id));
+    if let Some(old) = old.filter(|o| Some(o) != stem.as_ref()) {
+        upload::remove(cover::DIR, old).await;
     }
     row.cover = cover.map(Into::into);
     Ok(true)
+}
+
+async fn change_cover_held(
+    st: &AppState,
+    a: &Authed,
+    row: &mut Row,
+    cover: Option<Cover>,
+    jpeg: Option<&[u8]>,
+) -> R<()> {
+    if write_cover_held(st, row, cover, jpeg).await? {
+        registry::note_held(st, row, "cover_changed", &a.user.username, json!({})).await?;
+        notify_updated(st, row).await?;
+    }
+    Ok(())
 }
 
 async fn change_cover(
@@ -881,11 +923,8 @@ async fn change_cover(
     cover: Option<Cover>,
     jpeg: Option<&[u8]>,
 ) -> R<()> {
-    if write_cover(st, row, cover, jpeg).await? {
-        registry::note(st, row, "cover_changed", &a.user.username, json!({})).await?;
-        notify_updated(st, row).await?;
-    }
-    Ok(())
+    let _held = hold(st, row.id).await;
+    change_cover_held(st, a, row, cover, jpeg).await
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/cover", responses((status = 200)))]
@@ -901,7 +940,15 @@ pub async fn set_cover(
     require_open(&row)?;
     let bytes = upload::read_image(multipart, "Cover").await?;
     let v = Utc::now().timestamp_millis();
-    change_cover(&st, &a, &mut row, Some(Cover::Upload { v }), Some(&bytes)).await?;
+    let key = Some(db::new_token());
+    change_cover(
+        &st,
+        &a,
+        &mut row,
+        Some(Cover::Upload { v, key }),
+        Some(&bytes),
+    )
+    .await?;
     Ok(Json(dto(&st, &row, a.user.id, true).await?))
 }
 
@@ -960,8 +1007,7 @@ pub(super) enum Edit {
     Append(Item),
 }
 
-/// The one path that writes the programme (`select`, `programme`, a chosen proposal, a start on the
-/// top vote), before and during the party, under the party's gate so edits and their events keep
+/// The one path that writes the programme, under the party's gate so edits and their events keep
 /// their order.
 pub(super) async fn edit_programme(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
     let _held = hold(st, row.id).await;
@@ -988,9 +1034,8 @@ fn programme_note(current: &[db::QueueRow], items: &[Item]) -> Option<(&'static 
     (!same_order).then(|| ("programme_reordered", json!({})))
 }
 
-/// `edit_programme` for a caller that holds the gate. Before the start the head is what the start
-/// plays and every member is told it, so it must be open to all of them like the items added; the
-/// items already there are left alone (a member who cannot open one is skipped).
+/// `edit_programme` for a caller that holds the gate; the items added, and the head before the
+/// start, must be open to every member.
 async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
     let id = row.id;
     *row = row_of(st, id).await?;
@@ -1034,7 +1079,7 @@ async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()
     let head = items.first().cloned();
     // An append is `choose` (which posts `proposal_chosen`) or the start on the top vote.
     let note = replaced.then(|| programme_note(&current, &items)).flatten();
-    registry::ensure(st, row, false).await?;
+    registry::ensure_held(st, row).await?;
     mutate_held(st, id, |l| {
         let mut fx = l.programme(head);
         if let Some((kind, args)) = note {
@@ -1078,7 +1123,7 @@ async fn go_live(st: &AppState, a: &Authed, id: i32) -> R<()> {
     if row.status != "scheduled" {
         return Ok(());
     }
-    registry::ensure(st, &row, false).await?;
+    registry::ensure_held(st, &row).await?;
     if row.item().is_none() {
         let top = super::proposals::top(&st.db, id).await?;
         let item = top.ok_or_else(|| machine_err(PartyErr::NoItem))?;
@@ -1138,9 +1183,8 @@ pub(super) async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
     Ok(row)
 }
 
-/// Items a party is about to take (`setItem`, `select`, a programme edit): each belongs to its media
-/// and every current member can open them all, else 409 `party.error_member_no_access` naming
-/// those who cannot.
+/// Each item belongs to its media and every current member can open them, else 409
+/// `party.error_member_no_access` naming those who cannot.
 async fn vet_items(st: &AppState, id: i32, items: &[Item]) -> R<()> {
     for it in items {
         check_item(st, it).await?;
@@ -1157,11 +1201,9 @@ async fn vet_items(st: &AppState, id: i32, items: &[Item]) -> R<()> {
             continue;
         }
         checked.push(m.user_id);
-        let open = user_libraries(st, m.user_id).await?.is_some_and(|ids| {
-            medias
-                .iter()
-                .all(|media| libraries.get(media).is_some_and(|l| ids.contains(l)))
-        });
+        let open = user_libraries(st, m.user_id)
+            .await?
+            .is_some_and(|ids| medias.iter().all(|m| can_open(&libraries, &ids, *m)));
         if !open {
             denied.push(m.username.clone());
         }
@@ -1189,7 +1231,9 @@ pub async fn intent(
     if row.status != "live" {
         return Err(not_live());
     }
-    registry::ensure(&st, &row, false).await?;
+    if !registry::ensure(&st, &row).await? {
+        return Err(not_live());
+    }
     let item: Option<Item> = b.item.map(Into::into);
     if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
         vet_items(&st, id, std::slice::from_ref(it)).await?;
@@ -1434,24 +1478,22 @@ pub async fn kick(
 ) -> R<StatusCode> {
     let row = member_row(&st, id, a.user.id).await?;
     require_host(&st, &row, a.user.id)?;
-    if user == row.owner_id {
+    let _held = hold(&st, id).await;
+    if user == row.owner_id || user == host_of(&st, &row) {
         return Err(machine_err(PartyErr::Invalid("host")));
     }
-    let live = mutate(&st, id, |l| {
+    // A guest who is not connected is kicked too; only a user who is neither is a 404.
+    if !st.parties.has_user(id, user) && !db::is_invitee(&st.db, id, user).await? {
+        return Err(not_found());
+    }
+    db::kick_guest(&st.db, id, user).await?;
+    mutate_held(&st, id, |l| {
         match l.kick(user, &a.user.username, now_ms()) {
-            Ok(e) => (Ok(()), e),
-            Err(e) => (Err(e), vec![]),
+            Ok(e) => ((), e),
+            Err(_) => ((), vec![]),
         }
     })
     .await;
-    match live {
-        Some(Ok(())) => {}
-        // Not connected right now: a guest still loses access, a stranger is a 404.
-        Some(Err(PartyErr::NotMember)) | None if db::is_invitee(&st.db, id, user).await? => {}
-        Some(Err(e)) => return Err(target_err(e)),
-        None => return Err(not_found()),
-    }
-    db::kick_guest(&st.db, id, user).await?;
     super::proposals::forget_users(&st, &row, &[user]).await?;
     notify_updated(&st, &row).await?;
     st.hub.emit_to_users(
@@ -1480,9 +1522,19 @@ pub async fn transfer(
 ) -> R<StatusCode> {
     let row = member_row(&st, id, a.user.id).await?;
     require_host(&st, &row, a.user.id)?;
-    run(&st, id, |l| l.transfer(user, &a.user.username, now_ms()))
-        .await?
-        .map_err(target_err)?;
+    let _held = hold(&st, id).await;
+    let (res, delivery) = st
+        .parties
+        .act(id, |l| match l.transfer(user, &a.user.username, now_ms()) {
+            Ok(e) => (Ok(()), e),
+            Err(e) => (Err(e), vec![]),
+        })
+        .ok_or_else(not_live)?;
+    res.map_err(target_err)?;
+    if let Err(err) = db::set_host(&st.db, id, user).await {
+        tracing::warn!(error = %err, party = id, "party host not saved");
+    }
+    registry::deliver(&st, id, delivery).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1528,6 +1580,7 @@ pub async fn quit(
 ) -> R<StatusCode> {
     let me = a.user.id;
     let row = row_of(&st, id).await?;
+    require_open(&row)?;
     if host_of(&st, &row) == me || row.owner_id == me {
         return Err(machine_err(PartyErr::Invalid("host")));
     }
@@ -1535,8 +1588,9 @@ pub async fn quit(
         return Err(not_found());
     }
     super::proposals::forget_users(&st, &row, &[me]).await?;
-    registry::ensure(&st, &row, false).await?;
-    mutate(&st, id, |l| {
+    let _held = hold(&st, id).await;
+    registry::ensure_held(&st, &row).await?;
+    mutate_held(&st, id, |l| {
         let devices: Vec<String> = l
             .room
             .members

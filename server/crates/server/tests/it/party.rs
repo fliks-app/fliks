@@ -899,7 +899,8 @@ async fn a_signal_reaches_only_its_target_and_both_sides_need_voice(pool: PgPool
         ]
     );
 
-    let wrong = json!({"deviceId": "da", "to": "db", "toUserId": carol, "kind": "offer", "data": {}});
+    let wrong =
+        json!({"deviceId": "da", "to": "db", "toUserId": carol, "kind": "offer", "data": {}});
     let (s, e) = c.call("POST", &url, &a, Some(wrong)).await;
     assert_eq!((s, msg(&e)), (409, Some("party.error_voice_not_joined")));
     let (s, _) = c.call("POST", &url, &a, Some(sig)).await;
@@ -915,8 +916,7 @@ async fn a_signal_reaches_only_its_target_and_both_sides_need_voice(pool: PgPool
     assert!(signals(&mut sa).await.is_empty());
     assert!(signals(&mut sk).await.is_empty());
 
-    let big =
-        json!({"deviceId": "da", "to": "db", "toUserId": bob, "kind": "ice", "data": {"x": "y".repeat(17_000)}});
+    let big = json!({"deviceId": "da", "to": "db", "toUserId": bob, "kind": "ice", "data": {"x": "y".repeat(17_000)}});
     let (s, _) = c.call("POST", &url, &a, Some(big)).await;
     assert_eq!(s, 400);
 }
@@ -3173,11 +3173,12 @@ async fn a_public_party_is_listed_and_joinable_only_with_read_public(pool: PgPoo
         .await;
     assert_eq!((s, p["public"].clone()), (200, json!(false)));
     let (_, list) = c.call("GET", "/api/parties", &viewer, None).await;
-    assert_eq!(
-        list.as_array().unwrap().len(),
-        1,
-        "still a guest after the join"
+    assert!(
+        list.as_array().unwrap().is_empty(),
+        "a public guest leaves with the party's openness"
     );
+    let (s, _) = c.call("GET", &path, &viewer, None).await;
+    assert_eq!(s, 404);
 }
 
 #[sqlx::test(migrations = false)]
@@ -3268,6 +3269,16 @@ fn picture(format: image::ImageFormat) -> Vec<u8> {
         .write_to(&mut out, format)
         .unwrap();
     out.into_inner()
+}
+
+fn with_exif(jpeg: &[u8]) -> Vec<u8> {
+    let exif = b"Exif\0\0GPS-secret";
+    let mut out = jpeg[..2].to_vec();
+    out.extend_from_slice(&[0xff, 0xe1]);
+    out.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+    out.extend_from_slice(exif);
+    out.extend_from_slice(&jpeg[2..]);
+    out
 }
 
 async fn put_cover(c: &Ctx, tok: &str, id: i64, mime: &str, data: &[u8]) -> (u16, Value) {
@@ -3423,7 +3434,11 @@ async fn an_uploaded_cover_is_deleted_on_reset_replacement_end_and_account_remov
         create(a.clone()).await,
         create(o.clone()).await,
     );
-    let file = |id: i64| dir.join(format!("{id}.jpg"));
+    let file = |p: &Value| {
+        let url = p["cover"]["url"].as_str().unwrap();
+        let key = url.rsplit('/').next().unwrap().split('?').next().unwrap();
+        dir.join(format!("{key}.jpg"))
+    };
 
     let jpeg = picture(image::ImageFormat::Jpeg);
     for junk in [&b"x"[..], b"<svg xmlns='http://www.w3.org/2000/svg'/>"] {
@@ -3438,7 +3453,8 @@ async fn an_uploaded_cover_is_deleted_on_reset_replacement_end_and_account_remov
     )
     .await;
     assert_eq!(s, 200, "a PNG is accepted");
-    let stored = std::fs::read(file(first)).unwrap();
+    let png_file = file(&p);
+    let stored = std::fs::read(&png_file).unwrap();
     assert!(stored.starts_with(&[0xff, 0xd8]), "and stored as a JPEG");
     let (s, p2) = put_cover(
         &c,
@@ -3449,23 +3465,36 @@ async fn an_uploaded_cover_is_deleted_on_reset_replacement_end_and_account_remov
     )
     .await;
     assert_eq!(s, 200, "a WebP too");
-    let _ = p;
-    let (s, p) = put_cover(&c, &a, first, "image/jpeg", &jpeg).await;
-    assert_eq!(s, 200);
-    let _ = p2;
-    let url = p["cover"]["url"].as_str().unwrap();
     assert!(
-        url.starts_with(&format!("/api/images/party/{first}?v=")),
-        "{url}"
+        !png_file.exists(),
+        "a replacement removes the previous file"
     );
-    assert_eq!(std::fs::read(file(first)).unwrap(), jpeg);
+    let webp_file = file(&p2);
+    assert!(webp_file.exists());
+    let tagged = with_exif(&jpeg);
+    assert!(tagged.windows(4).any(|w| w == b"Exif"));
+    let (s, p) = put_cover(&c, &a, first, "image/jpeg", &tagged).await;
+    assert_eq!(s, 200);
+    let url = p["cover"]["url"].as_str().unwrap();
+    let key = url.strip_prefix("/api/images/party/").unwrap();
+    let key = key.split('?').next().unwrap();
+    assert_eq!(key.len(), 22, "{url}");
+    assert!(!url.contains(&format!("party/{first}?")), "{url}");
+    let stored = std::fs::read(file(&p)).unwrap();
+    assert!(stored.starts_with(&[0xff, 0xd8]));
+    assert!(
+        !stored.windows(4).any(|w| w == b"Exif"),
+        "a JPEG is re-encoded, its metadata dropped"
+    );
+    let upload_file = file(&p);
     let (s, p) = c
         .call("DELETE", &format!("/api/parties/{first}/cover"), &a, None)
         .await;
     assert_eq!((s, &p["cover"]), (200, &Value::Null));
-    assert!(!file(first).exists());
+    assert!(!upload_file.exists());
 
-    put_cover(&c, &a, second, "image/jpeg", &jpeg).await;
+    let (_, p) = put_cover(&c, &a, second, "image/jpeg", &jpeg).await;
+    let second_file = file(&p);
     let (s, p) = c
         .call(
             "PATCH",
@@ -3475,21 +3504,23 @@ async fn an_uploaded_cover_is_deleted_on_reset_replacement_end_and_account_remov
         )
         .await;
     assert_eq!((s, &p["cover"]["kind"]), (200, &json!("item")));
-    assert!(!file(second).exists(), "an item cover replaces the upload");
+    assert!(!second_file.exists(), "an item cover replaces the upload");
 
-    put_cover(&c, &a, second, "image/jpeg", &jpeg).await;
+    let (_, p) = put_cover(&c, &a, second, "image/jpeg", &jpeg).await;
+    let second_file = file(&p);
     let (s, _) = c
         .call("DELETE", &format!("/api/parties/{second}"), &a, None)
         .await;
     assert_eq!(s, 204);
-    assert!(!file(second).exists(), "an ended party keeps no upload");
+    assert!(!second_file.exists(), "an ended party keeps no upload");
     let (_, p) = c
         .call("GET", &format!("/api/parties/{second}"), &a, None)
         .await;
     assert_eq!(p["cover"], Value::Null);
 
-    put_cover(&c, &o, third, "image/jpeg", &jpeg).await;
-    assert!(file(third).exists());
+    let (_, p) = put_cover(&c, &o, third, "image/jpeg", &jpeg).await;
+    let third_file = file(&p);
+    assert!(third_file.exists());
     let users = users::router().with_state(c.st.clone());
     let (_, admin) = c.user_with("admin", false, &["users.manage"]).await;
     let res = users
@@ -3503,7 +3534,7 @@ async fn an_uploaded_cover_is_deleted_on_reset_replacement_end_and_account_remov
         .unwrap();
     assert_eq!(res.status().as_u16(), 200);
     assert!(
-        !file(third).exists(),
+        !third_file.exists(),
         "the owner's account takes the file along"
     );
 }
@@ -3535,4 +3566,152 @@ async fn choosing_an_episode_proposal_fills_an_empty_programme_and_starts_on_it(
     let (s, p) = c.call("POST", &format!("{url}/start"), &a, None).await;
     assert_eq!(s, 200, "{p}");
     assert_eq!(p["item"]["episodeId"], 3);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_repeated_vote_posts_once_and_votes_are_rate_limited(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 2).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+    let (_, l) = propose(&c, &url, &a, 2).await;
+    let pid = proposal_of(&l, 2)["id"].as_i64().unwrap();
+    let vote = format!("{url}/proposals/{pid}/vote");
+    for _ in 0..3 {
+        let (s, _) = c.call("PUT", &vote, &b, Some(json!({"value": 1}))).await;
+        assert_eq!(s, 204);
+    }
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    let voted = systems(&p).into_iter().filter(|s| s.0 == "voted").count();
+    assert_eq!(voted, 1, "a vote that changes nothing posts nothing");
+    let mut last = 204;
+    for _ in 0..12 {
+        last = c.call("DELETE", &vote, &b, None).await.0;
+    }
+    assert_eq!(last, 429);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_patch_with_a_bad_field_writes_nothing_and_a_new_token_revokes_public_guests(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let (_, h) = c.user("host", true).await;
+    let (viewer_id, viewer) = c.user_with("viewer", true, &["parties.read_public"]).await;
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &h,
+            Some(json!({"name": "n", "mediaId": 1, "public": true})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    let id = p["id"].as_i64().unwrap();
+    let path = format!("/api/parties/{id}");
+    let cover = json!({"kind": "item", "mediaId": 1});
+    let (s, _) = c
+        .call(
+            "PATCH",
+            &path,
+            &h,
+            Some(json!({"name": "", "cover": cover.clone()})),
+        )
+        .await;
+    assert_eq!(s, 400);
+    let (s, _) = c.call("POST", &format!("{path}/start"), &h, None).await;
+    assert_eq!(s, 200);
+    let (s, _) = c
+        .call(
+            "PATCH",
+            &path,
+            &h,
+            Some(json!({"scheduledAt": "2999-01-01T00:00:00Z", "cover": cover})),
+        )
+        .await;
+    assert_eq!(s, 409, "a start date on a party that has started");
+    let (_, p) = c.call("GET", &path, &h, None).await;
+    assert_eq!(
+        (p["name"].clone(), p["cover"].clone()),
+        (json!("n"), Value::Null)
+    );
+
+    let _conn = c.connect(viewer_id, "d1");
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{path}/join"),
+            &viewer,
+            Some(json!({"deviceId": "d1"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let (s, _) = c
+        .call("PATCH", &path, &h, Some(json!({"regenerateToken": true})))
+        .await;
+    assert_eq!(s, 200);
+    let (_, p) = c.call("GET", &path, &h, None).await;
+    assert_eq!(p["guests"], json!([]));
+    assert_eq!(p["live"]["members"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_transferred_host_role_survives_a_restart(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let url = format!("/api/parties/{id}");
+    let _ca = c.connect(alice, "da");
+    let _cb = c.connect(bob, "db");
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let body = Some(json!({"deviceId": d}));
+        c.call("POST", &format!("{url}/join"), t, body).await;
+    }
+    let (s, _) = c
+        .call("POST", &format!("{url}/members/{bob}/host"), &a, None)
+        .await;
+    assert_eq!(s, 204);
+    let mut st = c.st.clone();
+    st.parties = party::Parties::default();
+    party::boot(&st).await.unwrap();
+    assert_eq!(st.parties.view(id as i32).unwrap().host_id, bob);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_ended_party_gets_no_machine_back_from_a_quit(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let url = format!("/api/parties/{id}");
+    let (s, _) = c.call("DELETE", &url, &a, None).await;
+    assert_eq!(s, 204);
+    let (s, e) = c.call("POST", &format!("{url}/quit"), &b, None).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_ended")));
+    assert!(c.st.parties.view(id as i32).is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn removing_the_playing_media_ends_the_party_for_its_members(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "da");
+    let mut sa = c.stream(&a, "da#tab").await;
+    let id = party_with(&c, &a, vec![]).await;
+    let url = format!("/api/parties/{id}");
+    let body = Some(json!({"deviceId": "da"}));
+    c.call("POST", &format!("{url}/join"), &a, body).await;
+    let guard = c.st.ingest.media.lock(1).await;
+    fliks_server::media::write::remove_media(&c.st, &guard, 1)
+        .await
+        .unwrap();
+    drop(guard);
+    let closed = events_of(&mut sa, "party.closed").await;
+    assert_eq!(closed.len(), 1);
+    assert!(c.st.parties.view(id as i32).is_none());
 }

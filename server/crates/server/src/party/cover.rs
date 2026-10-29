@@ -33,9 +33,12 @@ pub enum Cover {
     Mosaic {
         items: Vec<Ref>,
     },
-    /// `v`: the upload time in ms, the cache-busting version of its URL.
+    /// `v`: the upload time in ms, the cache-busting version of its URL; `key`: the unguessable
+    /// file name, absent on a cover stored before keys (named by the party id).
     Upload {
         v: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
     },
 }
 
@@ -45,6 +48,14 @@ impl Cover {
             Self::Item(r) => slice::from_ref(r),
             Self::Mosaic { items } => items,
             Self::Upload { .. } => &[],
+        }
+    }
+
+    /// The upload's file name under `DIR`.
+    pub fn upload_stem(&self, party: i32) -> Option<String> {
+        match self {
+            Self::Upload { key, .. } => Some(key.clone().unwrap_or_else(|| party.to_string())),
+            _ => None,
         }
     }
 
@@ -95,8 +106,11 @@ impl Cover {
             Self::Mosaic { items } => CoverDto::Mosaic {
                 items: resolved.take(items.len()).collect(),
             },
-            Self::Upload { v } => CoverDto::Upload {
-                url: format!("/api/images/party/{party}?v={v}"),
+            Self::Upload { v, .. } => CoverDto::Upload {
+                url: format!(
+                    "/api/images/party/{}?v={v}",
+                    self.upload_stem(party).unwrap_or_default()
+                ),
             },
         }
     }
@@ -120,14 +134,19 @@ impl CoverDto {
     }
 }
 
-/// The parties `user` owns that have an uploaded cover, whose rows go with the account.
-pub async fn owned_uploads(db: &PgPool, user: i32) -> sqlx::Result<Vec<i32>> {
-    sqlx::query_scalar(
-        r#"SELECT id FROM watch_parties WHERE "ownerId" = $1 AND cover->>'kind' = 'upload'"#,
+/// The file names of the uploaded covers of the parties `user` owns, whose rows go with the account.
+pub async fn owned_uploads(db: &PgPool, user: i32) -> sqlx::Result<Vec<String>> {
+    let rows: Vec<(i32, Option<String>)> = sqlx::query_as(
+        r#"SELECT id, cover->>'key' FROM watch_parties
+           WHERE "ownerId" = $1 AND cover->>'kind' = 'upload'"#,
     )
     .bind(user)
     .fetch_all(db)
-    .await
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, key)| key.unwrap_or_else(|| id.to_string()))
+        .collect())
 }
 
 #[cfg(test)]
@@ -164,8 +183,8 @@ mod tests {
         assert_eq!(kept(&[9]), None);
         assert_eq!(Cover::Item(r(1)).prune(&[]), None);
         assert_eq!(
-            Cover::Upload { v: 1 }.prune(&[]),
-            Some(Cover::Upload { v: 1 })
+            Cover::Upload { v: 1, key: None }.prune(&[]),
+            Some(Cover::Upload { v: 1, key: None })
         );
     }
 
@@ -185,6 +204,17 @@ mod tests {
         assert!(!ok(Cover::Mosaic {
             items: (1..=5).map(r).collect()
         }));
-        assert!(!ok(Cover::Upload { v: 1 }));
+        assert!(!ok(Cover::Upload { v: 1, key: None }));
+    }
+
+    #[test]
+    fn an_upload_is_named_by_its_key_else_by_the_party() {
+        let up = |key: Option<&str>| Cover::Upload {
+            v: 1,
+            key: key.map(Into::into),
+        };
+        assert_eq!(up(Some("k")).upload_stem(7).as_deref(), Some("k"));
+        assert_eq!(up(None).upload_stem(7).as_deref(), Some("7"));
+        assert_eq!(Cover::Mosaic { items: vec![] }.upload_stem(7), None);
     }
 }

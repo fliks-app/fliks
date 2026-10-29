@@ -17,6 +17,14 @@ pub fn canonical_id(id: &str) -> bool {
         .is_ok_and(|n| n >= 0 && n.to_string() == id)
 }
 
+/// The unguessable file name of an uploaded party cover (`db::new_token`).
+pub fn upload_key(id: &str) -> bool {
+    id.len() == 22
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 /// Only the variants the server writes.
 pub fn media_variant(v: &str) -> bool {
     matches!(v, "poster" | "fanart" | "logo")
@@ -62,7 +70,8 @@ pub fn disk_path(
         "episode" => flat("episodes"),
         "season" => flat("seasons"),
         "user" => flat("users"),
-        "party" => flat("parties"),
+        "party" => (canonical_id(id) || upload_key(id))
+            .then(|| dir("parties").join(format!("{id}{suffix}.jpg"))),
         "livetv" => canonical_id(id).then(|| dir("livetv").join(format!("{id}{suffix}.png"))),
         _ => None,
     }
@@ -282,6 +291,13 @@ mod tests {
             p("party", "2", None, "full"),
             Some("/d/parties/2.jpg".into())
         );
+        let key = "AbCdEfGhIjKlMnOpQrSt-_";
+        assert_eq!(
+            p("party", key, None, "full"),
+            Some(format!("/d/parties/{key}.jpg").into())
+        );
+        assert_eq!(p("party", "AbCdEfGhIjKlMnOpQrSt-.", None, "full"), None);
+        assert_eq!(p("party", "short", None, "full"), None);
         assert_eq!(
             p("livetv", "1", None, "thumb"),
             Some("/d/livetv/1-thumb.png".into())

@@ -26,6 +26,7 @@ const MAX_MESSAGES: usize = 5;
 const MAX_REACTIONS: usize = 10;
 const MAX_SIGNALS: usize = 60;
 const MAX_RTT_MS: i64 = 5_000;
+const MAX_VOICE_CALLS: usize = 10;
 
 /// Noto's asset name for an emoji: its codepoints in lowercase hex, joined by `_`.
 pub fn noto_code(emoji: &str) -> String {
@@ -334,6 +335,7 @@ enum Limit {
     Message,
     Reaction,
     Signal,
+    Voice,
 }
 
 fn by_of(m: &Member) -> By {
@@ -611,6 +613,7 @@ impl Room {
             Limit::Message => MAX_MESSAGES,
             Limit::Reaction => MAX_REACTIONS,
             Limit::Signal => MAX_SIGNALS,
+            Limit::Voice => MAX_VOICE_CALLS,
         };
         let q = self.limits.entry((user, device.into(), kind)).or_default();
         while q.front().is_some_and(|t| now - t >= RATE_WINDOW_MS) {
@@ -633,6 +636,9 @@ impl Room {
         now: i64,
     ) -> Result<Vec<Effect>, Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        if !self.rate_ok(user_id, device_id, Limit::Voice, now) {
+            return Err(Error::RateLimited);
+        }
         let was = self.members[i].voice.is_some();
         let count = self
             .members
@@ -1938,6 +1944,31 @@ mod tests {
     }
 
     #[test]
+    fn voice_calls_are_rate_limited() {
+        let mut l = party();
+        for _ in 0..MAX_VOICE_CALLS {
+            voice(&mut l, 1, "d1", true).unwrap();
+        }
+        assert_eq!(voice(&mut l, 1, "d1", false), Err(Error::RateLimited));
+        assert!(
+            l.room
+                .set_voice(1, "d1", false, false, RATE_WINDOW_MS + 1)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_reported_rtt_is_capped() {
+        let mut l = party();
+        l.status(2, "d2", MemberStatus::Ready, 0.0, Some(i64::MAX), 0)
+            .unwrap();
+        assert_eq!(l.room.members[1].rtt_ms, MAX_RTT_MS);
+        l.status(2, "d2", MemberStatus::Ready, 0.0, Some(-5), 0)
+            .unwrap();
+        assert_eq!(l.room.members[1].rtt_ms, 0);
+    }
+
+    #[test]
     fn signals_need_voice_on_both_sides_and_are_rate_limited() {
         let mut l = party();
         assert_eq!(
@@ -1950,7 +1981,10 @@ mod tests {
             Err(Error::VoiceNotJoined)
         );
         voice(&mut l, 2, "d2", true).unwrap();
-        assert_eq!(l.room.signal_target(1, "d1", "d2", 2, 0), Ok((2, "c2".into())));
+        assert_eq!(
+            l.room.signal_target(1, "d1", "d2", 2, 0),
+            Ok((2, "c2".into()))
+        );
         assert_eq!(
             l.room.signal_target(1, "d1", "nope", 2, 0),
             Err(Error::VoiceNotJoined)
