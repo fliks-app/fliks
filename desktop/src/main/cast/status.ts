@@ -12,7 +12,7 @@ export interface CastTrack {
 }
 
 /** The LOAD customData keys the renderer needs to tell whose media plays and to rejoin it. */
-const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid', 'playbackId', 'intro', 'outro'];
+const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid', 'userId', 'playbackId', 'intro', 'outro'];
 
 function receiverMediaIds(media: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!media) return undefined;

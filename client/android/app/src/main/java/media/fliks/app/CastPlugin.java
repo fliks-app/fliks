@@ -310,7 +310,7 @@ public class CastPlugin extends Plugin {
     }
 
     private static final String[] RECEIVER_MEDIA_KEYS =
-        {"mediaId", "mediaFileId", "episodeId", "sid", "playbackId", "intro", "outro"};
+        {"mediaId", "mediaFileId", "episodeId", "sid", "userId", "playbackId", "intro", "outro"};
 
     /** The Fliks ids of the media the receiver plays, whoever loaded it; "{}" for media from another app. */
     private static String receiverMediaJson(MediaInfo info) {

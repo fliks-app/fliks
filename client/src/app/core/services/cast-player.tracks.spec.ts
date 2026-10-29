@@ -112,7 +112,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: StreamingApiService, useValue: streamingApi },
       { provide: SubtitlesApiService, useValue: subtitlesApi },
       { provide: AppSettingsService, useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => true } },
-      { provide: AuthService, useValue: { ensureStreamToken: async () => 'st', getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }), user: () => ({}) } },
+      { provide: AuthService, useValue: { ensureStreamToken: async () => 'st', getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }), user: () => ({ id: 1 }) } },
       { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
       { provide: PlayerSettingsService, useValue: playerSettings },
       { provide: TrackManagerService, useValue: trackManager },
@@ -266,6 +266,36 @@ describe('another sender takes the receiver while this one plays', () => {
     expect(svc.mediaFileId()).toBe(26);
     const saved = streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number }][];
     expect(saved.map((c) => c[1].mediaFileId)).toEqual([26]);
+  });
+});
+
+describe('a session another user loaded', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('is mirrored as a remote control: no heartbeat, QoE, recovery or session stop', async () => {
+    const { svc, cast, streamingApi } = setup();
+    cast.currentTime = () => 205;
+    cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b', userId: 2 });
+    TestBed.tick();
+    expect(svc.hasMedia()).toBe(true);
+    expect(svc.liveSessionId()).toBeNull();
+    await (svc as any).saveCastPosition();
+    cast.playbackError$.next({});
+    svc.clear();
+    expect(streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+    expect(streamingApi.stopSession).not.toHaveBeenCalled();
+    expect(cast.loadMedia).not.toHaveBeenCalled();
+    expect(cast.saveHeartbeat).not.toHaveBeenCalled();
+  });
+
+  it('still saves a session this user loaded', async () => {
+    const { svc, cast, streamingApi } = setup();
+    cast.currentTime = () => 205;
+    cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b', userId: 1 });
+    TestBed.tick();
+    await (svc as any).saveCastPosition();
+    expect(svc.liveSessionId()).toBe('b');
+    expect(streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1);
   });
 });
 

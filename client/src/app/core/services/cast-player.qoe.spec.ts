@@ -89,6 +89,7 @@ describe('CastPlayerService reporting without the player page', () => {
       episodeId: () => undefined,
       liveSessionId: () => 's',
       qoeSample: () => null,
+      controlOnly: () => false,
       cast: { receiverPlays: () => true, currentTime: () => 30, duration: () => 100, isPaused: () => false, saveHeartbeat: vi.fn() },
       authService: { accessToken: 'tok', ensureStreamToken: vi.fn(async () => 'st') },
       serverConfig: { resolveUrl: (p: string) => p },

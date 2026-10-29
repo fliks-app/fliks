@@ -262,6 +262,7 @@ function createHarness(opts: {
         provide: CastPlayerService,
         useValue: {
           liveSessionId: () => undefined,
+          controlOnly: () => false,
           qoeSample: () => null,
           getCastDeviceProfile: () => DEVICE_PROFILE,
           reloadCastStream: vi.fn(),
@@ -2717,6 +2718,13 @@ describe('PlayerComponent cast session picks', () => {
       MEDIA_ID,
       expect.objectContaining({ audioTrackIndex: 2, subtitleId: 'ext-5' }),
     );
+  });
+
+  it('makes no session call for a stream another user loaded', async () => {
+    const { h, cp } = casting();
+    (cp as unknown as Record<string, unknown>)['controlOnly'] = () => true;
+    await h.component.savePosition(true);
+    expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
   });
 
   describe('when the session ends and the player stays', () => {

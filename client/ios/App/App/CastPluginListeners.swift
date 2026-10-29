@@ -149,7 +149,7 @@ extension CastPlugin {
         emitMediaUpdate(time: time, duration: duration, paused: paused, buffering: buffering, volume: volume, muted: muted, ended: ended, interrupted: interrupted, receiverMedia: receiverMedia)
     }
 
-    private static let receiverMediaKeys = ["mediaId", "mediaFileId", "episodeId", "sid", "playbackId", "intro", "outro"]
+    private static let receiverMediaKeys = ["mediaId", "mediaFileId", "episodeId", "sid", "userId", "playbackId", "intro", "outro"]
 
     /// The Fliks ids of the media the receiver plays, whoever loaded it; empty for media from another app.
     static func receiverMediaIds(_ customData: Any?) -> [String: Any] {

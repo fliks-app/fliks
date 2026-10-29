@@ -67,6 +67,8 @@ export interface CastMediaInfo {
   playbackId?: string;
   /** Live-session id of this load; the receiver echoes it in each qoe message. */
   sid?: string;
+  /** Owner of the load's session: another sender adopting the media must not call the server for it. */
+  userId?: number;
   /** Translated notice texts the receiver shows when it skips. */
   edlLabels?: { cut: string; commercial: string };
   /** False: the receiver never skips commercials. Absent means true. */
@@ -175,7 +177,7 @@ const CAST_SEEK_CONVERGE_TOL = 1.5;
 /** A receiver can ignore the LOAD's `activeTrackIds` while it is still publishing its tracks. */
 const CAST_TEXT_REAPPLY_MS = 1500;
 
-const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid'];
+const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid', 'userId'];
 
 function sameReceiverMedia(a: Record<string, unknown> | null, b: Record<string, unknown> | null): boolean {
   return a === b || (!!a && !!b && RECEIVER_MEDIA_KEYS.every((k) => a[k] === b[k]));
@@ -657,6 +659,7 @@ export class CastService implements OnDestroy {
       mediaFileId: info.mediaFileId,
       playbackId: info.playbackId,
       sid: info.sid,
+      userId: info.userId,
       edl: info.edl,
       edlLabels: info.edl ? info.edlLabels : undefined,
       autoSkipCommercials: info.edl ? info.autoSkipCommercials : undefined,
