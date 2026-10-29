@@ -327,7 +327,7 @@ export class QueueController {
     }
 
     const canReloadInPlace =
-      this.host.hasEngine() && !this.host.isOfflinePlayback() && !this.castService.isConnected();
+      this.host.hasEngine() && !this.host.isOfflinePlayback() && this.session.isLocal();
     if (canReloadInPlace) {
       // Match the incoming item's backdrop during the brief reload (the episode
       // still, else the media fanart) so it's not the outgoing frame.

@@ -215,9 +215,10 @@ describe('PlaybackSession', () => {
     });
 
     it('sends the item to a remote device at the released position', async () => {
-      const { session, local, remoteSvc } = setup();
+      const { session, local, remoteSvc, streaming } = setup();
       session.attachLocal(local);
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
+      expect(streaming.stopSession).toHaveBeenCalledWith('sid-local');
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120 });
       expect(local.disconnect).not.toHaveBeenCalled();
@@ -267,6 +268,18 @@ describe('PlaybackSession', () => {
       await Promise.resolve();
       expect(remote.stopPlayback).toHaveBeenCalled();
       await vi.waitFor(() => expect(local.resume).toHaveBeenCalledWith(42));
+      expect(local.resume).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resume a local output that was detached when the receiver is lost', () => {
+      const { session, remote, local } = setup();
+      const detach = session.attachLocal(local);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      detach();
+      remote.isConnected.set(false);
+      TestBed.tick();
+      expect(local.resume).not.toHaveBeenCalled();
     });
 
     it('releases an idle remote device when taking back with nothing to resume', () => {

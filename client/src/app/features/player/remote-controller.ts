@@ -5,8 +5,6 @@ import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { SseService, type RemoteCommand } from '../../core/services/sse.service';
-import { PlayerStateService } from '../../core/services/player-state.service';
-import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { parseAudioIndex } from '../../core/utils/player.utils';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
@@ -15,9 +13,7 @@ import { QueueController } from './queue-controller';
 export interface RemoteHost {
   mediaFileId(): number;
   activeSessionId(): string | undefined;
-  engine(): PlaybackEngine | null;
   duration(): number;
-  pausePlayback(): Promise<void>;
   onBack(): void;
   onTogglePlay(): void;
   onSeek(time: number): void;
@@ -38,7 +34,6 @@ export class RemoteController {
   private readonly remoteService = inject(RemoteService);
   private readonly castService = inject(CastService);
   private readonly castPlayerService = inject(CastPlayerService);
-  private readonly state = inject(PlayerStateService);
   private readonly chrome = inject(ControlsVisibilityService);
   private readonly queueCtl = inject(QueueController);
   private readonly session = inject(PlaybackSession);
@@ -89,36 +84,24 @@ export class RemoteController {
       return;
     }
 
-    const engine = this.host.engine();
-    if (this.castService.isConnected()) {
-      if (cmd.action === 'pause') this.castService.pause();
-      else if (cmd.action === 'play') this.castService.play();
-      else if (cmd.action === 'stop') { this.castService.disconnect(); this.host.onBack(); }
-    } else if (engine) {
-      if (cmd.action === 'pause') void this.host.pausePlayback();
-      else if (cmd.action === 'play') engine.play().catch(() => {});
-      else if (cmd.action === 'stop') this.host.onBack();
+    const output = this.session.output();
+    if (cmd.action === 'pause') void output?.pause();
+    else if (cmd.action === 'play') output?.play();
+    else if (cmd.action === 'stop') {
+      if (this.castService.isConnected()) this.castService.disconnect();
+      this.host.onBack();
     }
   }
 
   async applyRemoteCommand(cmd: RemoteCommand): Promise<void> {
     const casting = this.castService.isConnected();
-    const engine = this.host.engine();
+    const output = this.session.output();
     switch (cmd.action) {
       case 'play':
-        if (casting) {
-          this.castService.play();
-        } else if (engine) {
-          this.state.paused.set(false);
-          engine.play().catch(() => this.state.paused.set(this.host.engine()?.paused ?? true));
-        }
+        output?.play();
         break;
       case 'pause':
-        if (casting) {
-          this.castService.pause();
-        } else if (engine) {
-          void this.host.pausePlayback();
-        }
+        void output?.pause();
         // A remote pause is a remote viewer stepping in, so surface the controls
         // the way a local pause does rather than freezing on a bare frame.
         this.chrome.show();
@@ -144,16 +127,14 @@ export class RemoteController {
           console.warn('[remote] volume command missing level', cmd.cmdId);
           return;
         }
-        if (casting) this.castService.setVolume(cmd.level);
-        else if (engine) engine.volume = cmd.level;
+        output?.setVolume(cmd.level);
         break;
       case 'mute':
         if (cmd.muted === undefined) {
           console.warn('[remote] mute command missing muted flag', cmd.cmdId);
           return;
         }
-        if (casting) this.castService.setMuted(cmd.muted);
-        else if (engine) engine.muted = cmd.muted;
+        if (output && output.muted() !== cmd.muted) output.toggleMute();
         break;
       case 'next':
         if (!this.queueCtl.upNext()) {
