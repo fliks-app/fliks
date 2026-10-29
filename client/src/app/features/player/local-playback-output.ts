@@ -1,6 +1,6 @@
 import { computed, Signal } from '@angular/core';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
-import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput, PlaybackTimeline } from '../../core/services/playback/playback-output';
+import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput, PlaybackSnapshot, PlaybackTimeline } from '../../core/services/playback/playback-output';
 import type { PlayerStateService } from '../../core/services/player-state.service';
 import { parseAudioIndex, type SpriteMetadata } from '../../core/utils/player.utils';
 
@@ -17,6 +17,7 @@ export interface LocalOutputHost {
   pausePlayback(): Promise<void>;
   playLocal(): void;
   position(): number;
+  snapshot(): PlaybackSnapshot | null;
   spriteUrl: Signal<string | null>;
   spriteMetadata: Signal<SpriteMetadata | null>;
   subtitles: Signal<PlaybackOption[]>;
@@ -36,7 +37,7 @@ export interface LocalOutputHost {
   onBack(): void;
   release(): Promise<LocalHandoff | null>;
   stepAside(): void;
-  resume(position: number, paused: boolean): Promise<void>;
+  resume(snapshot: PlaybackSnapshot): Promise<void>;
 }
 
 /** This device's player engine as a playback output. */
@@ -60,6 +61,7 @@ export class LocalPlaybackOutput implements LocalOutput {
   readonly item = () => ({ mediaId: this.host.mediaId(), episodeId: this.host.episodeId() });
   readonly paused = () => this.host.engine()?.paused === true;
   readonly position = () => this.host.position();
+  readonly snapshot = () => this.host.snapshot();
   readonly canSetVolume = computed(() => true);
   readonly isIdle = computed(() => false);
   readonly targetOffline = computed(() => false);
@@ -144,7 +146,7 @@ export class LocalPlaybackOutput implements LocalOutput {
   playNext = () => this.host.playNext();
   release = () => this.host.release();
   stepAside = () => this.host.stepAside();
-  resume = (position: number, paused: boolean) => this.host.resume(position, paused);
+  resume = (snapshot: PlaybackSnapshot) => this.host.resume(snapshot);
   stopPlayback = () => this.host.onBack();
   disconnect = () => this.host.onBack();
 }

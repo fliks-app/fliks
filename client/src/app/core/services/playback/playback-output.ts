@@ -3,6 +3,7 @@ import { SpriteMetadata, TimeMarker } from '../../utils/player.utils';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { CastPlayerService } from '../cast-player.service';
 import type { CastSubtitleStyle } from '../cast-settings.service';
+import type { LaunchTracks } from '../track-manager.service';
 
 /** Minimal shape the playback surfaces need for a track/quality row. */
 export interface PlaybackOption {
@@ -37,6 +38,14 @@ export interface PlaybackTimeline {
 
 export const NO_TIMELINE: PlaybackTimeline = { intro: null, outro: null, chapters: [], edl: [] };
 
+/** Everything an output hands to the next one; every field is required so a handoff cannot drop one. */
+export interface PlaybackSnapshot {
+  item: { fileId: number; mediaId: number; episodeId?: number };
+  position: number;
+  paused: boolean;
+  tracks: LaunchTracks;
+}
+
 /** Something that plays (this device's engine, a Chromecast session or another Fliks device): what the controls show and what the party sync drives. */
 export interface PlaybackOutput {
   readonly sync: PlaybackSync;
@@ -50,6 +59,8 @@ export interface PlaybackOutput {
   /** The identity of what plays; display metadata comes from `NowPlayingMetadataService`. */
   readonly item: () => { mediaId: number; episodeId: number | undefined };
   readonly paused: () => boolean;
+  /** What a handoff carries; null while nothing is open. */
+  snapshot(): PlaybackSnapshot | null;
   /** What the play control shows: differs from `paused` while a launch is in flight. */
   readonly uiPaused: Signal<boolean>;
   readonly buffering: Signal<boolean>;
@@ -117,9 +128,7 @@ export type CastStart = Parameters<CastPlayerService['startCast']>[0];
 
 /** What a local output gives up when playback leaves this device. */
 export interface LocalHandoff {
-  position: number;
-  /** The viewer had paused: the next output opens paused. */
-  paused: boolean;
+  snapshot: PlaybackSnapshot;
   cast: CastStart;
   /** The first load had not settled, so the subtitle pick may have been refused: the receiver resolves its own. */
   resolveSubtitle: boolean;
@@ -134,6 +143,6 @@ export interface LocalOutput extends PlaybackOutput {
   release(): Promise<LocalHandoff | null>;
   /** Pause and mute without unloading: another output already plays. */
   stepAside(): void;
-  /** Load again, or for the first time, at `position`, left paused when `paused`. */
-  resume(position: number, paused: boolean): Promise<void>;
+  /** Load again, or for the first time, where the snapshot says. */
+  resume(snapshot: PlaybackSnapshot): Promise<void>;
 }

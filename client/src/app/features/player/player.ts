@@ -25,7 +25,7 @@ import { RemoteService } from '../../core/services/remote.service';
 import { backTarget } from './back-target';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { LocalPlaybackOutput } from './local-playback-output';
-import type { CastStart, LocalHandoff, PlaybackOutput } from '../../core/services/playback/playback-output';
+import type { CastStart, LocalHandoff, PlaybackOutput, PlaybackSnapshot } from '../../core/services/playback/playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -1106,8 +1106,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (video) this.detachAirPlay = this.airPlay.attachVideo(video);
 
     // Eager backdrop from router state, set before any await so the loading screen renders on the first tick.
-    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { backdropUrl?: string | null; tracks?: LaunchTracks | null } | null;
-    this.launchTracks = navState?.tracks ?? null;
+    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { backdropUrl?: string | null; tracks?: LaunchTracks | null; snapshot?: PlaybackSnapshot | null } | null;
+    const launch = navState?.snapshot;
+    this.launchTracks = launch?.tracks ?? navState?.tracks ?? null;
     if (navState?.backdropUrl) this.showBackdrop(navState.backdropUrl);
 
     const qp = this.route.snapshot.queryParams;
@@ -1133,7 +1134,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.destroyed) return;
     if (this.session.isLocal()) {
       this.attachLocalOutput();
-      const completed = await this.startLocal(resumeTime);
+      const completed = await this.openLocal({ position: resumeTime, paused: launch?.paused ?? false, tracks: this.launchTracks }, false);
       // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and its removals would miss the
       // listeners registered below.
       if (!completed || this.destroyed) return;
@@ -2043,7 +2044,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       onBack: () => this.onBack(),
       release: () => this.releaseForHandoff(),
       stepAside: () => this.stepAside(),
-      resume: (position, paused) => this.resumeLocal(position, paused),
+      snapshot: () => this.snapshot(),
+      resume: (snapshot) => this.resumeLocal(snapshot),
     },
     this.state,
   );
@@ -2434,18 +2436,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     // The picture leaves: the phone turns freely.
     this.screen.releaseForCast();
-    const position = engine.currentTime;
-    const paused = this.pauseIntent();
+    const snapshot = this.snapshot()!;
     await this.pausePlayback();
     engine.muted = true;
     await engine.unload();
     return {
-      position,
-      paused,
+      snapshot,
       cast: this.castStart(),
       resolveSubtitle,
       audioLanguage: this.targetAudioLanguage(),
       localSessionId: this.playbackInfo?.sessionId,
+    };
+  }
+
+  /** What a handoff carries: the engine's position, the viewer's pause intent and the picks on screen. */
+  private snapshot(): PlaybackSnapshot | null {
+    if (!this.engine || !this.mediaId) return null;
+    return {
+      item: { fileId: this.mediaFileId, mediaId: this.mediaId, episodeId: this.episodeId },
+      position: this.engine.currentTime,
+      paused: this.pauseIntent(),
+      tracks: { fileId: this.mediaFileId, audioStreamIndex: this.activeAudioStreamIndex, subtitleId: this.subs.activeSubtitleId() },
     };
   }
 
@@ -2970,23 +2981,36 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Back on this device at `position`: reload the engine, or open it for the first time when the route started
    *  on another output. The pre-handoff LiveSession was GC'd, so mint a fresh sid rather than reuse
    *  `playbackInfo?.sessionId`, which would race the heartbeat fallback and flash a reload. */
-  private async resumeLocal(position: number, paused = false): Promise<void> {
+  private async resumeLocal(s: PlaybackSnapshot): Promise<void> {
     if (this.destroyed) return;
-    this.resumePaused = paused;
     this.screen.applyLandscapeOnOpen();
-    this.adoptCastSelection();
     const adopted = this.itemAdopted;
     this.itemAdopted = false;
+    const reload = !!this.engine;
     try {
-      if (!this.engine) {
-        this.state.loading.set(true);
-        await this.startLocal(position);
-      } else if (await this.refreshSidAndReload(position, { preservePause: false, unmute: true, paused }) && adopted) {
+      if (!reload) this.state.loading.set(true);
+      if (await this.openLocal(s, reload) && reload && adopted) {
         await this.completeEpisodeSwitchSetup();
       }
     } catch (e) {
       // No retry path after a handoff: surface a terminal error instead of a silently dead player.
       if (!this.destroyed) this.state.failWith(e);
+    }
+  }
+
+  /** The one way this device's engine opens: the first launch and every hand-back apply position, pause and picks here. */
+  private async openLocal(
+    { position, paused, tracks }: { position: number | undefined; paused: boolean; tracks: LaunchTracks | null },
+    reload: boolean,
+  ): Promise<boolean> {
+    this.resumePaused = paused;
+    try {
+      if (!reload) {
+        this.launchTracks = tracks;
+        return await this.startLocal(position);
+      }
+      this.adoptTracks(tracks);
+      return await this.refreshSidAndReload(position ?? 0, { preservePause: false, unmute: true, paused });
     } finally {
       this.resumePaused = false;
     }
@@ -3057,12 +3081,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     void this.router.navigate(['/watch', item.fileId], { queryParams, replaceUrl: true });
   }
 
-  /** The reload that follows a cast negotiates from the player's own picks, so the ones
-   *  made on the receiver are moved over first, mapped to what this device can do with them. */
-  private adoptCastSelection(): void {
-    const picked = this.castPlayerService.selectionFor(this.mediaFileId);
+  /** A reload negotiates from the player's own picks, so the ones made on the other output are moved over
+   *  first, mapped to what this device can do with them. */
+  private adoptTracks(tracks: LaunchTracks | null): void {
+    const picked = launchPickFor(tracks, this.mediaFileId);
     if (!picked) return;
     if (picked.audioStreamIndex != null) this.activeAudioStreamIndex = picked.audioStreamIndex;
+    if (picked.subtitleId === undefined) return;
     const sub = this.subs.availableSubtitles().find((s) => s.id === picked.subtitleId);
     this.subs.activeSubtitleId.set(sub?.id ?? null);
     this.subs.activeBurnInId = sub?.burnIn ? (sub.subtitleDbId ?? null) : null;

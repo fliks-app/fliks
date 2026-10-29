@@ -270,6 +270,8 @@ function createHarness(opts: {
           clear: vi.fn(),
           adoptSurvivingSession: vi.fn(async () => {}),
           selectionFor: vi.fn(() => null),
+          activeAudioStreamIndex: () => undefined,
+          activeSubtitleId: () => null,
           resolveStartSubtitle: vi.fn(async () => null),
         },
       },
@@ -2101,6 +2103,24 @@ describe('PlayerComponent startup', () => {
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
   });
 
+  it('opens the first load paused when the route was launched paused', async () => {
+    const h = createHarness();
+    const tracks = { fileId: MAIN_FILE_ID, audioStreamIndex: 2, subtitleId: 'ext-5' };
+    const snapshot = { item: { fileId: MAIN_FILE_ID, mediaId: MEDIA_ID }, position: 0, paused: true, tracks };
+    (TestBed.inject(Router) as any).getCurrentNavigation = () => ({ extras: { state: { snapshot } } });
+    let armed: unknown;
+    let picks: unknown;
+    h.component.startLocal = vi.fn(async () => {
+      armed = h.component.resumePaused;
+      picks = h.component.launchTracks;
+      return true;
+    });
+    await h.component.ngAfterViewInit();
+    expect(armed).toBe(true);
+    expect(picks).toEqual(tracks);
+    expect(h.component.resumePaused).toBe(false);
+  });
+
   describe('pre-roll first', () => {
     const launch = (h: ReturnType<typeof createHarness>, query: Record<string, string> = {}) => {
       (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID), ...query };
@@ -2732,8 +2752,7 @@ describe('PlayerComponent cast session picks', () => {
       picked: { subtitleId: string | null; audioStreamIndex: number | undefined } | null,
       subs: unknown[],
     ) {
-      const { h, cp } = casting();
-      cp['selectionFor'].mockReturnValue(picked);
+      const { h } = casting();
       h.component.subs.availableSubtitles.set(subs);
       h.component.activeAudioStreamIndex = 0;
       h.component.subs.activeBurnInId = 99;
@@ -2749,7 +2768,12 @@ describe('PlayerComponent cast session picks', () => {
         };
         return true;
       });
-      return { h, run: (paused = false) => h.component.resumeLocal(30, paused), seen: () => seen, opts: () => opts };
+      return { h, run: (paused = false) => h.component.resumeLocal({
+          item: { fileId: MAIN_FILE_ID, mediaId: MEDIA_ID },
+          position: 30,
+          paused,
+          tracks: { fileId: picked ? MAIN_FILE_ID : MAIN_FILE_ID + 1, ...picked },
+        }), seen: () => seen, opts: () => opts };
     }
 
     it('reloads on the audio and the burn-in picked on the receiver', async () => {

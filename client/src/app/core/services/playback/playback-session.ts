@@ -12,9 +12,9 @@ import type { Media } from '../api/media.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { parseDeviceLabel } from '../../utils/format-device-label';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
-import { launchTracksToWire, RemoteService } from '../remote.service';
+import { launchTracksToWire, RemoteService, snapshotToWire } from '../remote.service';
 import { ToastService } from '../toast.service';
-import type { LocalOutput, PlaybackOutput } from './playback-output';
+import type { LocalOutput, PlaybackOutput, PlaybackSnapshot } from './playback-output';
 
 const CONNECT_WAIT_MS = 30_000;
 
@@ -72,9 +72,8 @@ export class PlaybackSession {
   /** Set by `stopControlling`: that return to this device is deliberate and must not resume it. */
   private releasing = false;
   private watchReturns: EffectRef | null = null;
-  /** Where the cast or remote output last was: once it is gone, its own position reads nothing. */
-  private awayPosition = 0;
-  private awayPaused = false;
+  /** What the cast or remote output last held: once it is gone, its own position reads nothing. */
+  private awaySnapshot: PlaybackSnapshot | null = null;
   private partyRouter: PartyRouter | null = null;
   /** File the output already holds, set by whoever opens the player route on it. */
   private opened = 0;
@@ -298,7 +297,8 @@ export class PlaybackSession {
     }
     cp.startCast(handoff.cast);
     // The cast ladder comes from the cast profile's own playback-info, not the browser one.
-    await cp.reloadCastStream(handoff.position, !handoff.paused, handoff.cast.activeQualityId);
+    const { position, paused } = handoff.snapshot;
+    await cp.reloadCastStream(position, !paused, handoff.cast.activeQualityId);
     const sid = handoff.localSessionId;
     if (sid && sid !== cp.liveSessionId()) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
     return true;
@@ -311,13 +311,7 @@ export class PlaybackSession {
     if (!handoff) return false;
     const remote = this.remoteSvc();
     remote.selectTarget(targetId);
-    void remote.send(targetId, {
-      action: 'load',
-      mediaId: handoff.cast.mediaId,
-      mediaFileId: handoff.cast.mediaFileId,
-      episodeId: handoff.cast.episodeId,
-      positionSeconds: Math.floor(handoff.position),
-    });
+    void remote.send(targetId, snapshotToWire(handoff.snapshot));
     const sid = handoff.localSessionId;
     if (sid) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
     return true;
@@ -326,35 +320,26 @@ export class PlaybackSession {
   /** Cast and remote swap without the local engine starting in between. */
   private async switchAway(kind: 'cast' | 'remote', deviceId?: string): Promise<boolean> {
     const from = this.output();
-    const cur = this.playing();
-    if (!from || !cur || (kind === 'remote' && !deviceId)) return false;
-    const position = from.position();
-    const audio = /^audio-(\d+)$/.exec(from.activeAudioTrackId() ?? '');
-    const tracks: LaunchTracks = {
-      fileId: cur.fileId,
-      audioStreamIndex: audio ? Number(audio[1]) : undefined,
-      subtitleId: from.activeSubtitleId(),
-    };
+    const snap = from?.snapshot();
+    if (!from || !snap || (kind === 'remote' && !deviceId)) return false;
     if (kind === 'cast') {
       if (!(await this.connectCast(deviceId))) return false;
       await from.pause();
       from.disconnect();
       await this.castPlayer().quickStart({
-        mediaFileId: cur.fileId, mediaId: cur.mediaId, episodeId: cur.episodeId, startTime: position, tracks,
+        mediaFileId: snap.item.fileId,
+        mediaId: snap.item.mediaId,
+        episodeId: snap.item.episodeId,
+        startTime: snap.position,
+        tracks: snap.tracks,
+        autoplay: !snap.paused,
       });
       return true;
     }
     const remote = this.remoteSvc();
     from.disconnect();
     remote.selectTarget(deviceId!);
-    void remote.send(deviceId!, {
-      action: 'load',
-      mediaId: cur.mediaId,
-      mediaFileId: cur.fileId,
-      episodeId: cur.episodeId,
-      positionSeconds: Math.floor(position),
-      ...launchTracksToWire(tracks),
-    });
+    void remote.send(deviceId!, snapshotToWire(snap));
     return true;
   }
 
@@ -362,8 +347,8 @@ export class PlaybackSession {
     const local = this.local();
     const from = this.output();
     if (!local || !from || from === local) return false;
-    const position = from.position();
-    const paused = from.paused();
+    const snap = from.snapshot() ?? this.awaySnapshot;
+    if (!snap) return false;
     if (this.kind() === 'remote') {
       // Only one device plays: the one left behind closes its player.
       from.stopPlayback();
@@ -372,7 +357,7 @@ export class PlaybackSession {
       this.castSvc().disconnect();
       this.castPlayer().clear();
     }
-    await local.resume(position, paused);
+    await local.resume(snap);
     return true;
   }
 
@@ -422,8 +407,8 @@ export class PlaybackSession {
         const away = this.kind() !== 'local';
         const o = this.output();
         if (away && o) {
-          this.awayPosition = o.position() || this.awayPosition;
-          this.awayPaused = o.paused();
+          const s = o.snapshot();
+          if (s) this.awaySnapshot = { ...s, position: s.position || this.awaySnapshot?.position || 0 };
         }
         untracked(() => {
           if (away === this.wasAway) return;
@@ -438,8 +423,10 @@ export class PlaybackSession {
   private onBackToLocal(): void {
     const releasing = this.releasing;
     this.releasing = false;
+    const snap = this.awaySnapshot;
+    this.awaySnapshot = null;
     const local = this.local();
-    if (!local || this.moving || releasing) return;
-    void local.resume(this.awayPosition, this.awayPaused);
+    if (!local || !snap || this.moving || releasing) return;
+    void local.resume(snap);
   }
 }

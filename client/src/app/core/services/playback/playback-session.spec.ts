@@ -13,11 +13,11 @@ import { PartyService } from '../party/party.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { ToastService } from '../toast.service';
-import type { LocalHandoff, LocalOutput } from './playback-output';
+import type { LocalHandoff, LocalOutput, PlaybackSnapshot } from './playback-output';
 import { PlaybackSession } from './playback-session';
 
 function target() {
-  return {
+  const t = {
     isConnected: signal(false),
     item: vi.fn(() => ({ mediaId: 0, episodeId: undefined as number | undefined })),
     togglePlayPause: vi.fn(),
@@ -30,13 +30,28 @@ function target() {
     disconnect: vi.fn(),
     activeAudioTrackId: vi.fn(() => 'audio-2' as string | null),
     activeSubtitleId: vi.fn(() => 'sub-5' as string | null),
+    snapshot: vi.fn((): PlaybackSnapshot | null => {
+      const { mediaId, episodeId } = t.item();
+      if (!mediaId) return null;
+      return {
+        item: { fileId: 7, mediaId, episodeId },
+        position: t.position(),
+        paused: t.paused(),
+        tracks: { fileId: 7, audioStreamIndex: 2, subtitleId: t.activeSubtitleId() },
+      };
+    }),
   };
+  return t;
 }
 
 function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
   return {
-    position: 120,
-    paused: false,
+    snapshot: {
+      item: { fileId: 7, mediaId: 3, episodeId: 9 },
+      position: 120,
+      paused: false,
+      tracks: { fileId: 7, audioStreamIndex: 1, subtitleId: 'sub-2' },
+    },
     resolveSubtitle: false,
     localSessionId: 'sid-local',
     cast: {
@@ -204,11 +219,19 @@ describe('PlaybackSession', () => {
 
     it('starts the receiver paused when the local player was paused', async () => {
       const { session, cast, local, castPlayer } = setup();
-      vi.mocked(local.release).mockResolvedValue(handoff({ paused: true }));
+      vi.mocked(local.release).mockResolvedValue(handoff({ snapshot: { ...handoff().snapshot, paused: true } }));
       session.attachLocal(local);
       cast.isConnected.set(true);
       await session.moveTo('cast');
       expect(castPlayer.reloadCastStream).toHaveBeenCalledWith(120, false, '1080p');
+    });
+
+    it('sends the pause to a remote device when the local player was paused', async () => {
+      const { session, local, remoteSvc } = setup();
+      vi.mocked(local.release).mockResolvedValue(handoff({ snapshot: { ...handoff().snapshot, paused: true } }));
+      session.attachLocal(local);
+      await session.moveTo('remote', 'dev-9');
+      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', expect.objectContaining({ action: 'load', paused: true }));
     });
 
     it('connects a picked device first, then hands off', async () => {
@@ -242,7 +265,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
       expect(streaming.stopSession).toHaveBeenCalledWith('sid-local');
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
-      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120 });
+      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120, paused: false, trackId: 'audio-1', subtitleId: 'sub-2' });
       expect(local.disconnect).not.toHaveBeenCalled();
     });
 
@@ -259,35 +282,38 @@ describe('PlaybackSession', () => {
 
     it('reloads the engine at the receiver position when coming back', async () => {
       const { session, cast, local, castSvc, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       castPlayer.hasMedia.mockReturnValue(true);
       session.attachLocal(local);
       cast.isConnected.set(true);
       TestBed.tick();
       expect(await session.moveTo('local')).toBe(true);
       expect(castSvc.disconnect).toHaveBeenCalled();
-      expect(local.resume).toHaveBeenCalledWith(42, false);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
     it('takes the playback back paused when the cast was paused', async () => {
       const { session, cast, local, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       castPlayer.hasMedia.mockReturnValue(true);
       cast.paused.mockReturnValue(true);
       session.attachLocal(local);
       cast.isConnected.set(true);
       TestBed.tick();
       await session.moveTo('local');
-      expect(local.resume).toHaveBeenCalledWith(42, true);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: true }));
     });
 
     it('stops the remote device before taking the playback back', async () => {
       const { session, remote, remoteSvc, local } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       session.attachLocal(local);
       remote.isConnected.set(true);
       TestBed.tick();
       expect(await session.moveTo('local')).toBe(true);
       expect(remote.stopPlayback).toHaveBeenCalled();
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
-      expect(local.resume).toHaveBeenCalledWith(42, false);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
     it('opens the player first when taking back with none mounted, then resumes once it attaches', async () => {
@@ -300,7 +326,7 @@ describe('PlaybackSession', () => {
       session.attachLocal(local);
       await Promise.resolve();
       expect(remote.stopPlayback).toHaveBeenCalled();
-      await vi.waitFor(() => expect(local.resume).toHaveBeenCalledWith(42, false));
+      await vi.waitFor(() => expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false })));
       expect(local.resume).toHaveBeenCalledTimes(1);
     });
 
@@ -353,13 +379,38 @@ describe('PlaybackSession', () => {
       expect(remote.pause).toHaveBeenCalled();
       expect(remote.disconnect).toHaveBeenCalled();
       expect(castPlayer.quickStart).toHaveBeenCalledWith(
-        expect.objectContaining({ mediaFileId: 7, mediaId: 3, episodeId: 9, startTime: 42, tracks }),
+        expect.objectContaining({ mediaFileId: 7, mediaId: 3, episodeId: 9, startTime: 42, tracks, autoplay: true }),
       );
       expect(local.release).not.toHaveBeenCalled();
       remote.isConnected.set(false);
       TestBed.tick();
       expect(local.resume).not.toHaveBeenCalled();
       expect(remoteSvc.send).not.toHaveBeenCalled();
+    });
+
+    it('loads the receiver paused when the remote device was paused', async () => {
+      const { session, cast, remote, local, castSvc, castPlayer } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      remote.paused.mockReturnValue(true);
+      session.attachLocal(local);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      castSvc.selectCastDevice.mockImplementation(async () => cast.isConnected.set(true));
+      await session.moveTo('cast', 'cc-1');
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ autoplay: false }));
+    });
+
+    it('sends the pause of the receiver to a remote device', async () => {
+      const { session, cast, local, remoteSvc, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      cast.paused.mockReturnValue(true);
+      castPlayer.mediaFileId.set(7);
+      castPlayer.hasMedia.mockReturnValue(true);
+      session.attachLocal(local);
+      cast.isConnected.set(true);
+      TestBed.tick();
+      await session.moveTo('remote', 'dev-9');
+      expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', expect.objectContaining({ paused: true }));
     });
 
     it('carries the receiver item to a remote device without starting the engine', async () => {
@@ -373,7 +424,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', {
-        action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 42,
+        action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 42, paused: false,
         trackId: 'audio-2', subtitleId: 'sub-5',
       });
       expect(cast.disconnect).toHaveBeenCalled();
@@ -410,6 +461,7 @@ describe('PlaybackSession', () => {
 
     it('resumes the engine at the receiver position when the session ends', () => {
       const { session, cast, local, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       castPlayer.hasMedia.mockReturnValue(true);
       session.attachLocal(local);
       TestBed.tick();
@@ -417,11 +469,12 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       cast.isConnected.set(false);
       TestBed.tick();
-      expect(local.resume).toHaveBeenCalledWith(42, false);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
     it('resumes paused when the receiver was paused as the session ends', () => {
       const { session, cast, local, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       castPlayer.hasMedia.mockReturnValue(true);
       cast.paused.mockReturnValue(true);
       session.attachLocal(local);
@@ -430,18 +483,19 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       cast.isConnected.set(false);
       TestBed.tick();
-      expect(local.resume).toHaveBeenCalledWith(42, true);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: true }));
     });
 
     it('resumes the engine where the remote device was when control stops outside moveTo', () => {
       const { session, remote, local } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       session.attachLocal(local);
       TestBed.tick();
       remote.isConnected.set(true);
       TestBed.tick();
       remote.isConnected.set(false);
       TestBed.tick();
-      expect(local.resume).toHaveBeenCalledWith(42, false);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
   });
 
