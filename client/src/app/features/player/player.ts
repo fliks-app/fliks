@@ -2435,11 +2435,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // The picture leaves: the phone turns freely.
     this.screen.releaseForCast();
     const position = engine.currentTime;
+    const paused = this.pauseIntent();
     await this.pausePlayback();
     engine.muted = true;
     await engine.unload();
     return {
       position,
+      paused,
       cast: this.castStart(),
       resolveSubtitle,
       audioLanguage: this.targetAudioLanguage(),

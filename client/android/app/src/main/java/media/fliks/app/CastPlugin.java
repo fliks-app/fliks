@@ -691,7 +691,7 @@ public class CastPlugin extends Plugin {
 
         MediaLoadRequestData.Builder requestBuilder = new MediaLoadRequestData.Builder()
             .setMediaInfo(mediaInfo)
-            .setAutoplay(true)
+            .setAutoplay(call.getBoolean("autoplay", true))
             .setCurrentTime((long) (currentTime * 1000));
 
         if (activeTrackId != null && activeTrackId > 0) {

@@ -298,7 +298,7 @@ export class PlaybackSession {
     }
     cp.startCast(handoff.cast);
     // The cast ladder comes from the cast profile's own playback-info, not the browser one.
-    await cp.reloadCastStream(handoff.position, true, handoff.cast.activeQualityId);
+    await cp.reloadCastStream(handoff.position, !handoff.paused, handoff.cast.activeQualityId);
     const sid = handoff.localSessionId;
     if (sid && sid !== cp.liveSessionId()) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
     return true;

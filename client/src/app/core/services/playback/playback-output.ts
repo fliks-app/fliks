@@ -118,6 +118,8 @@ export type CastStart = Parameters<CastPlayerService['startCast']>[0];
 /** What a local output gives up when playback leaves this device. */
 export interface LocalHandoff {
   position: number;
+  /** The viewer had paused: the next output opens paused. */
+  paused: boolean;
   cast: CastStart;
   /** The first load had not settled, so the subtitle pick may have been refused: the receiver resolves its own. */
   resolveSubtitle: boolean;

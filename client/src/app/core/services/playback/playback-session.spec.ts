@@ -36,6 +36,7 @@ function target() {
 function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
   return {
     position: 120,
+    paused: false,
     resolveSubtitle: false,
     localSessionId: 'sid-local',
     cast: {
@@ -199,6 +200,15 @@ describe('PlaybackSession', () => {
       expect(castPlayer.reloadCastStream).toHaveBeenCalledWith(120, true, '1080p');
       expect(streaming.stopSession).toHaveBeenCalledWith('sid-local');
       expect(local.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('starts the receiver paused when the local player was paused', async () => {
+      const { session, cast, local, castPlayer } = setup();
+      vi.mocked(local.release).mockResolvedValue(handoff({ paused: true }));
+      session.attachLocal(local);
+      cast.isConnected.set(true);
+      await session.moveTo('cast');
+      expect(castPlayer.reloadCastStream).toHaveBeenCalledWith(120, false, '1080p');
     });
 
     it('connects a picked device first, then hands off', async () => {

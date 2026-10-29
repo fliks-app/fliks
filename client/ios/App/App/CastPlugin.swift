@@ -353,7 +353,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             let mediaInfo = builder.build()
 
             let loadOptions = GCKMediaLoadOptions()
-            loadOptions.autoplay = true
+            loadOptions.autoplay = call.getBool("autoplay") ?? true
             loadOptions.playPosition = currentTime
 
             if let activeId = activeTrackId, activeId > 0 {
