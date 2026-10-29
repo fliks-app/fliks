@@ -126,13 +126,14 @@ async fn boot_liveness_healthcheck_and_shutdown(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn rust_serves_the_spa_and_the_cast_receiver(pool: PgPool) {
+async fn rust_serves_the_spa_and_the_emoji(pool: PgPool) {
     let root = std::env::temp_dir().join(format!("fliks-topology-static-{}", std::process::id()));
     let (client, cast) = (root.join("client"), root.join("cast"));
     std::fs::create_dir_all(&client).unwrap();
     std::fs::create_dir_all(&cast).unwrap();
     std::fs::write(client.join("index.html"), "<html>spa</html>").unwrap();
-    std::fs::write(cast.join("cast-receiver.html"), "cast").unwrap();
+    std::fs::create_dir_all(cast.join("emoji")).unwrap();
+    std::fs::write(cast.join("emoji/1f525.webp"), "w").unwrap();
     let env = [
         ("SERVE_STATIC_PATH", client.as_path()),
         ("FLIKS_CAST_DIR", cast.as_path()),
@@ -144,10 +145,16 @@ async fn rust_serves_the_spa_and_the_cast_receiver(pool: PgPool) {
         (200, "<html>spa</html>".into())
     );
     assert_eq!(
+        get_text(&format!("{base}/api/emoji/1f525.webp"))
+            .await
+            .unwrap(),
+        (200, "w".into())
+    );
+    assert_eq!(
         get_text(&format!("{base}/cast/cast-receiver.html"))
             .await
             .unwrap(),
-        (200, "cast".into())
+        (200, "<html>spa</html>".into())
     );
     std::fs::remove_dir_all(root).ok();
 }

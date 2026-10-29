@@ -83,7 +83,7 @@ enum Paths {
 
     /// Built Angular client.
     static let clientDir         = resources.appendingPathComponent("client")
-    /// Cast receiver page, served at /cast (FLIKS_CAST_DIR).
+    /// Public assets (emoji), FLIKS_CAST_DIR.
     static let castDir           = resources.appendingPathComponent("cast")
 
     // MARK: - Development fallbacks

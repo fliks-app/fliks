@@ -87,7 +87,7 @@ Copy-Tree (Join-Path $repo 'server\public') (Join-Path $bundle 'cast')
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'client') | Out-Null
 Copy-Tree (Join-Path $repo 'client\dist\client\browser') (Join-Path $bundle 'client')
 
-foreach ($f in 'bin\fliks-engine.exe', 'bin\fliks-server.exe', 'cast\cast-receiver.html', 'client\index.html') {
+foreach ($f in 'bin\fliks-engine.exe', 'bin\fliks-server.exe', 'cast\emoji\1f525.webp', 'client\index.html') {
     if (-not (Test-Path (Join-Path $bundle $f))) { throw "bundle is missing $f" }
 }
 
