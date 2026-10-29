@@ -132,7 +132,7 @@ import UIKit
         attachObservers(to: p, item: item, initialSeek: initialSeek, exact: initialSeek != startAt)
         armEdl()
         applyPreferredSubtitle(to: item, player: p)
-        if autoplay { p.play() }
+        if autoplay { p.play() } else { p.pause() }
         RemoteControlService.shared.activeCoordinator = self
     }
 
@@ -252,10 +252,21 @@ import UIKit
     var isBuffering: Bool { player?.timeControlStatus == .waitingToPlayAtSpecifiedRate }
     var currentItemIds: (mediaId: Int, episodeId: Int?) { (mediaId, episodeId) }
 
-    /// Loads the media pipeline without playing, so a paused player shows its first frame and AVKit drops its spinner.
+    /// Loads the media pipeline without playing, so a paused player shows its first frame.
     func preroll() async {
         guard let player, player.status == .readyToPlay, player.rate == 0 else { return }
         _ = await player.preroll(atRate: 1)
+    }
+
+    /// AVKit keeps its spinner over a player that never played: a play and pause in one turn ends it with no frame
+    /// advancing, muted against an audio blip.
+    private func clearAVKitSpinner() {
+        guard let player, player.rate == 0 else { return }
+        let muted = player.isMuted
+        player.isMuted = true
+        player.play()
+        player.pause()
+        player.isMuted = muted
     }
 
     /// Opened paused outside a party, which prerolls on its own: preroll once ready and at the start position,
@@ -265,7 +276,10 @@ import UIKit
     private func prerollIfOpenedPaused() {
         guard prerollOnReady, !initialSeekPending, player?.currentItem?.status == .readyToPlay else { return }
         prerollOnReady = false
-        Task { await preroll() }
+        Task {
+            await preroll()
+            clearAVKitSpinner()
+        }
     }
 
     func partyPlay() { player?.play() }
