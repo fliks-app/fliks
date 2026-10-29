@@ -121,7 +121,7 @@ Sender sends, receiver reads:
 }
 ```
 
-`textTrackStyle.customData.bottomMargin` (vh, on the LOAD and on EDIT_TRACKS_INFO) lifts the subtitles; missing means 0.
+`textTrackStyle.customData.bottomMargin` (vh, on the LOAD and on EDIT_TRACKS_INFO) lifts the subtitles; missing means 5.
 
 Party floaters, relayed by a sender on `urn:x-cast:media.fliks.app` (the first sender to send
 one is followed until it disconnects). `img` is an absolute `http(s)` URL or null; the receiver

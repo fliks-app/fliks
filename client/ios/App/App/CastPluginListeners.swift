@@ -204,7 +204,7 @@ extension CastPlugin {
         let edge = mapShadow(shadow)
         style.edgeType = edge.type
         style.edgeColor = edge.color
-        style.customData = ["bottomMargin": spec?["bottomMargin"] as? Double ?? 0]
+        style.customData = ["bottomMargin": spec?["bottomMargin"] as? Double ?? 5]
         return style
     }
 

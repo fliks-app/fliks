@@ -41,7 +41,7 @@ export const DEFAULT_CAST_SUBTITLE_STYLE: CastSubtitleStyle = {
   color: 'white',
   shadow: 'drop',
   background: 'transparent',
-  bottomMargin: 0,
+  bottomMargin: 5,
 };
 
 const DEFAULTS: CastSettings = {

@@ -413,16 +413,18 @@ const barPlayer = document.querySelector('cast-media-player');
 if (barPlayer && barPlayer.shadowRoot) {
   const hide = document.createElement('style');
   // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
+  // Its cues already sit about 5vh up: that is the 5% margin, lower values move them down.
   hide.textContent =
     'tv-overlay { display: none !important; }' +
-    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; transform: translateY(calc(-1 * var(--sub-margin, 0vh))); }' +
-    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(calc(-1 * var(--sub-margin, 0vh) - 6vh)); }';
+    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; transform: translateY(calc(5vh - var(--sub-margin, 5vh))); }' +
+    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(calc(-1vh - var(--sub-margin, 5vh))); }';
   barPlayer.shadowRoot.appendChild(hide);
 }
 
 // Custom properties inherit into the shadow root, where the rules above read it.
 function setSubMargin(style) {
-  const vh = Number(style && style.customData && style.customData.bottomMargin) || 0;
+  const m = Number(style && style.customData && style.customData.bottomMargin);
+  const vh = Number.isFinite(m) ? m : 5;
   if (barPlayer) barPlayer.style.setProperty('--sub-margin', vh + 'vh');
 }
 

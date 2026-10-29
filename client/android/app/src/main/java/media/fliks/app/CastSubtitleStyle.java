@@ -27,7 +27,7 @@ final class CastSubtitleStyle {
         style.setEdgeType(edge[0]);
         style.setEdgeColor(edge[1]);
         try {
-            style.setCustomData(new JSONObject().put("bottomMargin", spec != null ? spec.optDouble("bottomMargin", 0) : 0));
+            style.setCustomData(new JSONObject().put("bottomMargin", spec != null ? spec.optDouble("bottomMargin", 5) : 5));
         } catch (JSONException ignored) {}
         return style;
     }
