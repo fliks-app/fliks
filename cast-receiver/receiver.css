@@ -27,13 +27,6 @@ html, body {
   overflow: hidden;
 }
 
-/* Brand the CAF UI: the played portion of the progress bar uses the
-   Fliks primary instead of CAF's default white/red. `--progress-color`
-   is the public CSS hook exposed by <cast-media-player>. */
-cast-media-player {
-  --progress-color: var(--fliks-primary);
-}
-
 /* Splash / idle screen. Sits above <cast-media-player>; CAF toggles
    `castReceiverState='idle' / 'launching'` on the body — we react to
    that in receiver.js by adding/removing the `.playing` class on body. */
@@ -198,4 +191,99 @@ body.playing .party-layer {
 .skip-cue.actionable {
   background: var(--fliks-primary);
   font-weight: 600;
+}
+
+/* Progress bar, mirroring the in-app seekbar: white fill, white/30 buffered, primary/45 intro, warning/45 credits. */
+.bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 120;
+  padding: 6vh 4% 4vh;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0));
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.bar.show {
+  opacity: 1;
+}
+
+.bar-title {
+  margin-bottom: 1.5vh;
+  font-size: 3.2vh;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+}
+
+.bar-time {
+  min-width: 7vh;
+  font-size: 2.8vh;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.bar-elapsed {
+  margin-right: 2vh;
+  text-align: right;
+}
+
+.bar-total {
+  margin-left: 2vh;
+}
+
+.bar-track {
+  position: relative;
+  flex: 1;
+  height: 1vh;
+  border-radius: 1vh;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.bar-buffered,
+.bar-played,
+.bar-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.bar-buffered {
+  left: 0;
+  width: 0;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.bar-played {
+  left: 0;
+  width: 0;
+  background: #fff;
+}
+
+.bar-band.intro {
+  background: rgba(122, 63, 242, 0.45);
+}
+
+.bar-band.outro {
+  background: rgba(251, 189, 35, 0.45);
+}
+
+/* Clear of the bar while it shows. */
+body.bar-on .skip-cue {
+  bottom: 22vh;
+}
+
+body.bar-on .party-reaction {
+  bottom: 22vh;
 }

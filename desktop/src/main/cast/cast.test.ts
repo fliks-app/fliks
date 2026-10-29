@@ -247,6 +247,7 @@ function loadCues() {
   return ctx.self['FliksCues'] as {
     activeCue(c: unknown, fileId: number, t: number): string | null;
     cueText(c: unknown, cue: string, remoteKeys: boolean): string;
+    bandGeometry(c: unknown, fileId: number, duration: number): { kind: string; left: number; width: number }[];
   };
 }
 
@@ -269,4 +270,19 @@ test('receiver cue text is a hint until a remote key has been seen', () => {
   assert.equal(cueText(cues, 'intro', true), 'Skip intro');
   assert.equal(cueText(cues, 'next', false), 'Next from device');
   assert.equal(cueText(cues, 'next', true), 'Next');
+});
+
+test('receiver bands: intro and credits as track percentages, clamped, only for the loaded file', () => {
+  const { bandGeometry } = loadCues();
+  const bands = (...a: Parameters<typeof bandGeometry>) => JSON.parse(JSON.stringify(bandGeometry(...a)));
+  const cues = { fileId: 7, intro: { startSeconds: 100, endSeconds: 200 }, outro: { startSeconds: 900, endSeconds: 1200 } };
+  assert.deepEqual(bands(cues, 7, 1000), [
+    { kind: 'intro', left: 10, width: 10 },
+    { kind: 'outro', left: 90, width: 10 },
+  ]);
+  assert.deepEqual(bands({ fileId: 7, intro: null, outro: null }, 7, 1000), []);
+  assert.deepEqual(bands(cues, 8, 1000), []);
+  assert.deepEqual(bands(cues, 7, 0), []);
+  assert.deepEqual(bands(cues, 7, Infinity), []);
+  assert.deepEqual(bands(null, 7, 1000), []);
 });
