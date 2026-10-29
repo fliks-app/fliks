@@ -2781,6 +2781,13 @@ describe('PlayerComponent cast session picks', () => {
       expect(c.resumePaused).toBe(false);
     });
 
+    it('skips the post-load play of an engine that cannot open paused', () => {
+      const c = createHarness().component;
+      c.resumePaused = true;
+      c.armStartPaused({});
+      expect(c.loadedPaused).toBe(true);
+    });
+
     it('shows a bitmap pick the local engine renders itself without burning it in', async () => {
       const r = resumeWith(
         { subtitleId: 'emb-4', audioStreamIndex: 0 },

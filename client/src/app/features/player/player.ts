@@ -1631,7 +1631,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Engines that can open paused do so for a party that is not playing; the others autoplay and the party pauses them. */
   private armStartPaused(engine: PlaybackEngine): void {
-    if (engine.startPaused === undefined) return;
+    if (engine.startPaused === undefined) {
+      // A hand-back from a paused output skips the post-load play instead.
+      this.loadedPaused = this.resumePaused;
+      return;
+    }
     engine.startPaused = this.loadedPaused = this.openedPaused = this.partyCtl.startsPaused() || this.resumePaused;
   }
 
