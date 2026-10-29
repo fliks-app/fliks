@@ -380,7 +380,7 @@ pub fn router(
         .route("/api/{*rest}", any(unowned))
         .nest("/api/emoji", static_files::emoji(cast_dir.join("emoji")))
         .method_not_allowed_fallback(unowned)
-        .fallback_service(static_files::router(client_dir, cast_dir));
+        .fallback_service(static_files::router(client_dir));
     let exempt = crate::plugins::routes::reads_own_body;
     layers::apply(local, cors_origin, BODY_LIMIT_BYTES, exempt)
 }

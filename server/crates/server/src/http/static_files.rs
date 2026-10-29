@@ -12,7 +12,6 @@ use axum::http::header::{
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
 use tower_http::services::{ServeDir, ServeFile};
 
 /// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
@@ -120,7 +119,7 @@ async fn long_cache(req: Request, next: Next) -> Response {
     res
 }
 
-/// The reaction artwork (`<cast dir>/emoji`), mounted by the app under `/api/emoji` like the other server assets.
+/// The reaction artwork (`<public dir>/emoji`), mounted by the app under `/api/emoji` like the other server assets.
 pub fn emoji(dir: PathBuf) -> Router {
     // A route, not a fallback: a nested fallback-only router registers nothing and `/api/{*rest}` wins.
     Router::new()
@@ -133,16 +132,9 @@ pub fn emoji(dir: PathBuf) -> Router {
         .layer(from_fn(cannot_404))
 }
 
-/// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
-pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
-    let cast = ServeDir::new(cast_dir).append_index_html_on_directories(false);
-    // The reaction artwork lives under the cast dir but is served at `/api/emoji` only.
-    let mut r = Router::new()
-        .route(
-            "/cast/emoji/{*file}",
-            get(|| async { StatusCode::NOT_FOUND }),
-        )
-        .nest_service("/cast", cast);
+/// The SPA at `/` (with `index.html` fallback) only when a client dir is set.
+pub fn router(client_dir: Option<PathBuf>) -> Router {
+    let mut r = Router::new();
     if let Some(dir) = client_dir {
         let spa = ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html")));
         r = r.fallback_service(
@@ -167,7 +159,6 @@ mod tests {
         std::fs::create_dir_all(&client).unwrap();
         std::fs::write(client.join("index.html"), "<html>spa</html>").unwrap();
         std::fs::write(client.join("app.js"), "x=1").unwrap();
-        std::fs::write(cast.join("receiver.html"), "cast").unwrap();
         (client, cast)
     }
 
@@ -197,9 +188,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serves_files_spa_cast_and_cannot_404() {
+    async fn serves_files_spa_emoji_and_cannot_404() {
         let (c, k) = dirs("serve");
-        let r = router(Some(c), k.clone());
+        let r = router(Some(c));
         let file = get(&r, "/app.js", None).await;
         assert_eq!(file.status(), 200);
         assert_eq!(file.headers()[CACHE_CONTROL], "public, max-age=0");
@@ -215,19 +206,11 @@ mod tests {
             "<html>spa</html>"
         );
         assert_eq!(text(get(&r, "/", None).await).await, "<html>spa</html>");
-        assert_eq!(
-            text(get(&r, "/cast/receiver.html", None).await).await,
-            "cast"
-        );
         std::fs::create_dir_all(k.join("emoji")).unwrap();
         std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
         let emoji = get(&emoji(k.join("emoji")), "/1f525.webp", None).await;
         assert_eq!(emoji.headers()[CACHE_CONTROL], "public, max-age=604800");
-        let hidden = get(&r, "/cast/emoji/1f525.webp", None).await;
-        assert_eq!(hidden.status(), 404);
-        let missing = get(&r, "/cast/nope.html", None).await;
-        assert_eq!(missing.status(), 404);
-        assert!(text(missing).await.contains("Cannot GET /cast/nope.html"));
+        assert_eq!(emoji.status(), 200);
         let post = send(&r, Request::post("/app.js?a=1"), None).await;
         assert_eq!(post.status(), 404);
         assert!(text(post).await.contains("Cannot POST /app.js?a=1"));
@@ -235,34 +218,26 @@ mod tests {
 
     #[tokio::test]
     async fn csp_on_the_spa_document_alone() {
-        let (c, k) = dirs("csp");
-        let r = router(Some(c), k);
+        let (c, _) = dirs("csp");
+        let r = router(Some(c));
         const H: &str = "content-security-policy";
         assert!(get(&r, "/", None).await.headers().contains_key(H));
         assert!(get(&r, "/some/route", None).await.headers().contains_key(H));
         assert!(!get(&r, "/app.js", None).await.headers().contains_key(H));
-        assert!(
-            !get(&r, "/cast/receiver.html", None)
-                .await
-                .headers()
-                .contains_key(H)
-        );
     }
 
     #[tokio::test]
-    async fn without_client_dir_only_cast() {
-        let (_, k) = dirs("nocli");
-        let r = router(None, k);
-        assert_eq!(get(&r, "/cast/receiver.html", None).await.status(), 200);
-        let miss = get(&r, "/", None).await;
+    async fn without_client_dir_everything_is_a_404() {
+        let r = router(None);
+        let miss = get(&r, "/cast/receiver.html", None).await;
         assert_eq!(miss.status(), 404);
-        assert!(text(miss).await.contains("Cannot GET /"));
+        assert!(text(miss).await.contains("Cannot GET /cast/receiver.html"));
     }
 
     #[tokio::test]
     async fn conditional_get_304() {
-        let (c, k) = dirs("etag");
-        let r = router(Some(c), k);
+        let (c, _) = dirs("etag");
+        let r = router(Some(c));
         let etag = get(&r, "/app.js", None).await.headers()[ETAG]
             .to_str()
             .unwrap()

@@ -73,7 +73,7 @@ FROM runtime-base AS runtime
 
 WORKDIR /app
 
-# Cast receiver page, served at /cast by fliks-server (default FLIKS_CAST_DIR=public)
+# Public assets (emoji), served by fliks-server (default FLIKS_CAST_DIR=public)
 COPY server/public ./public
 
 # Copy fliks-server, the process the engine forwards to

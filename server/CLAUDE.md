@@ -34,4 +34,4 @@ DB tests run against a throwaway PostgreSQL (`scripts/with-test-postgres.sh`), s
 
 ## Layout
 
-`migrations/` (sqlx; a 4.x database is adopted from its TypeORM ledger by `db/migrate.rs`), `parity/`, `fixtures/`, `public/` (cast receiver page), `docs/spec/`.
+`migrations/` (sqlx; a 4.x database is adopted from its TypeORM ledger by `db/migrate.rs`), `parity/`, `fixtures/`, `public/` (emoji assets), `docs/spec/`.

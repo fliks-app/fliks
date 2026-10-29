@@ -49,7 +49,7 @@ internal static class AppPaths
         Path.Combine(BaseDir, "client"),
         RepoRoot is null ? null : Path.Combine(RepoRoot, "client", "dist", "client", "browser"));
 
-    /// <summary>Cast receiver page, served at /cast (FLIKS_CAST_DIR).</summary>
+    /// <summary>Public assets (emoji), FLIKS_CAST_DIR.</summary>
     public static string CastDir => ResolveDir(
         Path.Combine(BaseDir, "cast"),
         RepoRoot is null ? null : Path.Combine(RepoRoot, "server", "public"));
