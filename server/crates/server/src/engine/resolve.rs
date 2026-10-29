@@ -106,9 +106,7 @@ pub async fn resolve(
         return Ok(Json(deny()));
     }
     // A file-bound stream token opens its own file only (sprites and subtitles are of that file too).
-    if let (Some(mf), ResolveMediaId::File(id)) = (file, &request.media_id)
-        && mf != *id
-    {
+    if file.is_some_and(|mf| request.media_id != ResolveMediaId::File(mf)) {
         return Ok(Json(deny()));
     }
     match locate(&st, &user, &perms, &raw, &request).await {

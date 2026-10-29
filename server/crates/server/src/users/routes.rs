@@ -22,7 +22,6 @@ use serde_json::Value;
 use sqlx::{PgPool, types::Json as Jsonb};
 
 const AVATAR_DIR: &str = "users";
-const BCRYPT_COST: u32 = 12;
 const MSG_ROLE_ASSIGN: &str = "Only users with roles.manage permission can assign a role";
 const MSG_ROLE_CHANGE: &str = "Only users with roles.manage permission can change a role";
 const MSG_MANAGED: &str =
@@ -48,13 +47,6 @@ fn forbidden() -> AppError {
 async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppError> {
     let ValidJson(dto) = ValidJson::<T>::from_request(req, &()).await?;
     Ok(dto)
-}
-
-async fn hash(password: String) -> Result<String, AppError> {
-    tokio::task::spawn_blocking(move || bcrypt::hash(password, BCRYPT_COST))
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?
-        .map_err(|e| AppError::internal(e.to_string()))
 }
 
 /// Engine revoke is fire-and-forget (rule 26).
@@ -115,7 +107,7 @@ pub async fn create(
                 .await?
         }
     };
-    let password = hash(dto.password).await?;
+    let password = crate::auth::hash_password(dto.password).await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO users (username, "passwordHash", email, "roleId", "isAdmin", enabled)
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"#,
@@ -203,7 +195,7 @@ pub async fn update(
         t.require_password_change = false;
     }
     let hashed = match dto.password.clone() {
-        Some(p) => Some(hash(p).await?),
+        Some(p) => Some(crate::auth::hash_password(p).await?),
         None => None,
     };
     merge_fields(&mut t, &dto);
@@ -444,7 +436,7 @@ mod tests {
     /// 4.x verifies only `$2a$`/`$2b$` hashes, so `$2b$` must keep being written.
     #[tokio::test]
     async fn bcrypt_matches_v4() {
-        let h = super::hash("pass".into()).await.unwrap();
+        let h = crate::auth::hash_password("pass".into()).await.unwrap();
         assert!(h.starts_with("$2b$12$") && bcrypt::verify("pass", &h).unwrap());
         let v4_hash = "$2b$12$uz0IJTjIwyn42EOSchUXwuIceXfuXd3h0I9fNbV7SQKT4VkmTuZly";
         assert!(bcrypt::verify("nest-pass", v4_hash).unwrap());
