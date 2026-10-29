@@ -223,7 +223,7 @@ test('changing the audio keeps the active subtitle alive', () => {
 });
 
 test('a style edit keeps the active audio and subtitle', () => {
-  const style = { fontGenericFamily: 'SANS_SERIF', fontScale: 1, foregroundColor: '#FFFFFFFF', backgroundColor: '#00000000', edgeType: 'NONE', edgeColor: '#00000000' };
+  const style = { fontGenericFamily: 'SANS_SERIF', fontScale: 1, foregroundColor: '#FFFFFFFF', backgroundColor: '#00000000', edgeType: 'NONE', edgeColor: '#00000000', customData: { bottomMargin: 10 } };
   assert.deepEqual(editTracksInfo(TRACKS, [2, 4], {}, style), {
     type: 'EDIT_TRACKS_INFO',
     activeTrackIds: [4, 2],

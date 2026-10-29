@@ -104,6 +104,8 @@ export interface CastTextTrackStyle {
   backgroundColor: string;
   edgeType: string;
   edgeColor: string;
+  /** Read by the receiver; the Cast protocol leaves this field to the app. */
+  customData: { bottomMargin: number };
 }
 
 interface NativeCastPlugin {
@@ -984,6 +986,7 @@ function buildCastTextTrackStyle(s: CastSubtitleStyle): CastTextTrackStyle {
     backgroundColor: SUB_BG_COLOR[s.background] ?? SUB_BG_COLOR['transparent'],
     edgeType: shadow.edge,
     edgeColor: shadow.color,
+    customData: { bottomMargin: s.bottomMargin },
   };
 }
 

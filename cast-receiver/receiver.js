@@ -415,9 +415,19 @@ if (barPlayer && barPlayer.shadowRoot) {
   // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
   hide.textContent =
     'tv-overlay { display: none !important; }' +
-    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; }' +
-    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(-6vh); }';
+    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; transform: translateY(var(--sub-y, 8vh)); }' +
+    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(var(--sub-y-bar, -6vh)); }';
   barPlayer.shadowRoot.appendChild(hide);
+}
+
+// Cast OS cues sit about 16vh up: shift them so a margin of m puts them m vh above the bottom, like
+// the local player, and 14vh higher while the bar shows. Custom properties reach the shadow root.
+function setSubMargin(style) {
+  const m = Number(style && style.customData && style.customData.bottomMargin);
+  const y = 13 - (Number.isFinite(m) ? m : 5);
+  if (!barPlayer) return;
+  barPlayer.style.setProperty('--sub-y', y + 'vh');
+  barPlayer.style.setProperty('--sub-y-bar', y - 14 + 'vh');
 }
 
 function formatClock(sec) {
@@ -505,6 +515,7 @@ playerManager.setMessageInterceptor(
         cast.framework.messages.HlsSegmentFormat.FMP4;
       media.hlsVideoSegmentFormat =
         cast.framework.messages.HlsVideoSegmentFormat.FMP4;
+      setSubMargin(media.textTrackStyle);
       if (!media.textTrackStyle) {
         const style = new cast.framework.messages.TextTrackStyle();
         style.fontGenericFamily =
@@ -518,6 +529,14 @@ playerManager.setMessageInterceptor(
       }
     }
     return loadRequest;
+  },
+);
+
+playerManager.setMessageInterceptor(
+  cast.framework.messages.MessageType.EDIT_TRACKS_INFO,
+  (request) => {
+    if (request.textTrackStyle) setSubMargin(request.textTrackStyle);
+    return request;
   },
 );
 

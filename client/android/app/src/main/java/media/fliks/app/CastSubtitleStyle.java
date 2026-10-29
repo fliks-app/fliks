@@ -2,6 +2,8 @@ package media.fliks.app;
 
 import com.getcapacitor.JSObject;
 import com.google.android.gms.cast.TextTrackStyle;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /** Maps the sender's subtitle presets onto the Cast SDK style. */
 final class CastSubtitleStyle {
@@ -24,6 +26,9 @@ final class CastSubtitleStyle {
         int[] edge = mapShadow(shadow);
         style.setEdgeType(edge[0]);
         style.setEdgeColor(edge[1]);
+        try {
+            style.setCustomData(new JSONObject().put("bottomMargin", spec != null ? spec.optDouble("bottomMargin", 5) : 5));
+        } catch (JSONException ignored) {}
         return style;
     }
 

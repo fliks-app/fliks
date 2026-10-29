@@ -344,6 +344,7 @@ export interface DesktopCastTextTrackStyle {
   backgroundColor: string;
   edgeType: string;
   edgeColor: string;
+  customData: { bottomMargin: number };
 }
 
 export interface DesktopCastLoadOptions {
