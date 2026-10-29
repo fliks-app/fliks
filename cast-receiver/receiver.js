@@ -161,45 +161,6 @@ function qoeLoaded() {
 playerManager.addEventListener(EventType.LOAD_START, qoeReset);
 playerManager.addEventListener(EventType.PLAYING, () => { qoe.played = true; qoe.seeking = false; });
 const SEEK_GRACE_MS = 2000;
-
-// The Cast OS video plane presents a frame only while playing: after a seek in pause, play muted for a moment.
-// A PLAY or SEEK request ends that moment first, so the sender's intent wins.
-const FRAME_PRESENT_MS = 150;
-let endFramePresent = null;
-playerManager.addEventListener(EventType.SEEKED, () => {
-  const v = findMediaElement();
-  if (!v || !v.paused || endFramePresent) return;
-  const muted = v.muted;
-  let ended = false;
-  const onPlaying = () => setTimeout(() => end(true), FRAME_PRESENT_MS);
-  const end = (pause) => {
-    if (ended) return;
-    ended = true;
-    clearTimeout(timer);
-    playerManager.removeEventListener(EventType.PLAYING, onPlaying);
-    if (endFramePresent === end) endFramePresent = null;
-    if (pause) playerManager.pause();
-    v.muted = muted;
-  };
-  // Playback can wait on buffering after the seek: give up rather than stay muted.
-  const timer = setTimeout(() => end(true), 5000);
-  endFramePresent = end;
-  v.muted = true;
-  playerManager.addEventListener(EventType.PLAYING, onPlaying);
-  playerManager.play();
-});
-// The player's own play() comes through here too, with requestId 0; only a sender's PLAY takes over.
-playerManager.setMessageInterceptor(cast.framework.messages.MessageType.PLAY, (request) => {
-  if (endFramePresent && request.requestId) endFramePresent(false);
-  return request;
-});
-playerManager.setMessageInterceptor(cast.framework.messages.MessageType.SEEK, (request) => {
-  if (endFramePresent) {
-    endFramePresent(true);
-    request.resumeState = cast.framework.messages.SeekResumeState.PLAYBACK_PAUSE;
-  }
-  return request;
-});
 playerManager.addEventListener(EventType.SEEKING, () => { qoe.seeking = true; qoe.lastSeekAt = Date.now(); });
 playerManager.addEventListener(EventType.SEEKED, () => { qoe.lastSeekAt = Date.now(); });
 playerManager.addEventListener(EventType.BUFFERING, (event) => {
@@ -487,7 +448,7 @@ let iconTimer = 0;
 
 function renderStateIcon(st, spinning) {
   stateIconEl.classList.toggle('instant', spinning);
-  if (st === iconState || endFramePresent) return;
+  if (st === iconState) return;
   const resumed = iconState === BarState.PAUSED && st === BarState.PLAYING;
   iconState = st;
   clearTimeout(iconTimer);
