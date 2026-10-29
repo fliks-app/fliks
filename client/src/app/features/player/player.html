@@ -244,6 +244,7 @@
     [pipAvailable]="pipAvailable()"
     [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv()"
     [castConnected]="!!elsewhere() || airPlay.videoActive()"
+    [styleOutput]="elsewhere()"
     [airPlayConnected]="airPlay.routeActive() || airPlay.videoActive()"
     [castConnecting]="castService.connecting()"
     (pickDevice)="onPickDevice($event)"

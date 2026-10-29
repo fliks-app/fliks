@@ -8,6 +8,7 @@ import { PlaybackSession } from './playback/playback-session';
 import { PartyService } from './party/party.service';
 import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 import { MediaService } from './api/media.service';
+import { CastSettingsService, CastSubtitleStyle } from './cast-settings.service';
 import { PlayerSettingsService } from './player-settings.service';
 import { QueueItem } from './playback-queue.service';
 import { resolveNextEpisodeItem } from '../../shared/utils/media-play.util';
@@ -20,6 +21,7 @@ export class CastPlaybackTarget implements PlaybackOutput {
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly castSettings = inject(CastSettingsService);
   private readonly session = inject(PlaybackSession);
   private readonly party = inject(PartyService);
 
@@ -56,6 +58,13 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly activeSubtitleId = this.cp.activeSubtitleId;
   readonly activeAudioTrackId = this.cp.activeAudioTrackId;
   readonly activeQualityId = this.cp.activeQualityId;
+
+  readonly subtitleStyle = computed(() => this.castSettings.settings().subtitleStyle);
+
+  setSubtitleStyle(style: CastSubtitleStyle): void {
+    this.castSettings.save({ ...this.castSettings.get(), subtitleStyle: style });
+    void this.cast.setTextTrackStyle(style);
+  }
 
   seek(time: number): void {
     this.cast.seek(time);

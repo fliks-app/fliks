@@ -8,7 +8,7 @@ import path from 'node:path';
 import { clearRecord, loadRecord, resumeDecision, resumeFromMedia, saveRecord } from './resume.ts';
 import { absorb, buildQuery, collect, parseRecords, parseTxt } from './mdns.ts';
 import { decodeMessage, encodeFrame, splitFrames } from './protocol.ts';
-import { initializeResult, mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent, receiverStatusEvent } from './status.ts';
+import { editTracksInfo, initializeResult, mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent, receiverStatusEvent } from './status.ts';
 
 test('CastMessage survives an encode/decode round trip', () => {
   const msg = {
@@ -220,6 +220,16 @@ test('changing the subtitle keeps the active audio alive', () => {
 
 test('changing the audio keeps the active subtitle alive', () => {
   assert.deepEqual(mergeActiveTracks(TRACKS, [2, 4], { audioId: 3 }), [3, 2]);
+});
+
+test('a style edit keeps the active audio and subtitle', () => {
+  const style = { fontGenericFamily: 'SANS_SERIF', fontScale: 1, foregroundColor: '#FFFFFFFF', backgroundColor: '#00000000', edgeType: 'NONE', edgeColor: '#00000000' };
+  assert.deepEqual(editTracksInfo(TRACKS, [2, 4], {}, style), {
+    type: 'EDIT_TRACKS_INFO',
+    activeTrackIds: [4, 2],
+    textTrackStyle: style,
+  });
+  assert.equal('textTrackStyle' in editTracksInfo(TRACKS, [2, 4], { textId: 1 }), false);
 });
 
 test('a null id disables that track type and nothing else', () => {

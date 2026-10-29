@@ -133,6 +133,8 @@ interface NativeCastPlugin {
   stop(): Promise<void>;
   disconnect(): Promise<void>;
   setActiveSubtitle(opts: { trackId: number }): Promise<void>;
+  /** Restyles the subtitles on the receiver's current media; both forms carry the same style. */
+  setTextTrackStyle(opts: { textTrackStyle: CastSubtitleStyle; castTextTrackStyle: CastTextTrackStyle }): Promise<void>;
   setActiveAudioLanguage(opts: { language: string; name: string }): Promise<{ success: boolean }>;
   /** Set the Cast device output level (0..1) / mute. Drives the receiver
    *  volume, not the phone's — the OS volume keys already do the latter. */
@@ -880,6 +882,18 @@ export class CastService implements OnDestroy {
     if (this.wantedTextTrackId === trackId) this.applyTextTrack(trackId);
   }
 
+  /** Restyles the subtitles of the media on the receiver without reloading it. */
+  async setTextTrackStyle(style: CastSubtitleStyle): Promise<void> {
+    await this.pendingLoad;
+    if (this.hasCastBridge) {
+      void this.bridge
+        .setTextTrackStyle({ textTrackStyle: style, castTextTrackStyle: buildCastTextTrackStyle(style) })
+        .catch(() => {});
+      return;
+    }
+    this.applyActiveTracks({}, this.buildWebTextTrackStyle(style));
+  }
+
   private applyTextTrack(trackId: number) {
     if (this.hasCastBridge) {
       void this.bridge.setActiveSubtitle({ trackId }).catch(() => {});
@@ -929,7 +943,7 @@ export class CastService implements OnDestroy {
   private applyActiveTracks(update: {
     audioId?: number | null;
     textId?: number | null;
-  }): boolean {
+  }, textTrackStyle?: unknown): boolean {
     const session = cast.framework.CastContext.getInstance().getCurrentSession?.();
     const media = session?.getMediaSession?.();
     if (!media?.media) return false;
@@ -944,7 +958,7 @@ export class CastService implements OnDestroy {
       ? activeOfType(chrome.cast.media.TrackType.TEXT)
       : update.textId;
     const newActive = [audioId, textId].filter((x): x is number => x != null);
-    const request = new chrome.cast.media.EditTracksInfoRequest(newActive);
+    const request = new chrome.cast.media.EditTracksInfoRequest(newActive, textTrackStyle);
     media.editTracksInfo(request, () => {}, () => {});
     return true;
   }

@@ -597,9 +597,7 @@
   @if (subtitlesPanel() === 'tracks') {
     <div class="relative mb-3 flex h-6 items-center justify-center">
       <div class="text-center text-white/60 text-sm font-medium">{{ 'player.subtitles' | translate }}</div>
-      <!-- Appearance is a local-render setting: while casting the receiver style
-           is fixed at LOAD time, so the entry point would be a dead end. -->
-      @if (!castConnected()) {
+      @if (appearanceEditable()) {
         <button
           type="button"
           data-panel-row="appearance"
@@ -650,7 +648,7 @@
         <span class="flex-1 text-left">{{ 'player.subtitle_sync.open' | translate }}</span>
       </button>
     }
-    @for (row of appearanceRows; track row.panel) {
+    @for (row of appearanceRows(); track row.panel) {
       <button [attr.data-panel-row]="row.panel" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="openSubtitlesPanel(row.panel)">
         <span class="flex-1 text-left">{{ row.labelKey | translate }}</span>
         @if (currentOption(row); as current) {

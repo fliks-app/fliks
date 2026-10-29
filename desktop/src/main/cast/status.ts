@@ -1,4 +1,4 @@
-import type { DesktopCastEvent } from '../../shared/contract';
+import type { DesktopCastEvent, DesktopCastTextTrackStyle } from '../../shared/contract';
 
 /** Pure mapping of the receiver's media bus onto the events the renderer
  *  consumes. Kept apart from the sender so it stays free of Electron and can
@@ -73,6 +73,17 @@ export function mergeActiveTracks(
   const audioId = update.audioId === undefined ? activeOfType('AUDIO') : update.audioId;
   const textId = update.textId === undefined ? activeOfType('TEXT') : update.textId;
   return [audioId, textId].filter((id): id is number => id != null);
+}
+
+/** The EDIT_TRACKS_INFO message: `textTrackStyle` restyles the current media, and the active ids always ride along so the selection survives it. */
+export function editTracksInfo(
+  tracks: CastTrack[],
+  active: number[],
+  update: { audioId?: number | null; textId?: number | null },
+  textTrackStyle?: DesktopCastTextTrackStyle,
+): { type: 'EDIT_TRACKS_INFO'; activeTrackIds: number[]; textTrackStyle?: DesktopCastTextTrackStyle } {
+  const activeTrackIds = mergeActiveTracks(tracks, active, update);
+  return { type: 'EDIT_TRACKS_INFO', activeTrackIds, ...(textTrackStyle && { textTrackStyle }) };
 }
 
 /** Match an audio rendition by its NAME: unique per rendition, and preserved verbatim from the

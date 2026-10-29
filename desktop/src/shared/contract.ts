@@ -421,6 +421,7 @@ export const CAST_IPC = {
   sendMessage: 'cast:sendMessage',
   setActiveSubtitle: 'cast:setActiveSubtitle',
   setActiveAudioLanguage: 'cast:setActiveAudioLanguage',
+  setTextTrackStyle: 'cast:setTextTrackStyle',
   /** main → renderer (discriminated by DesktopCastEvent.type). */
   event: 'cast:event',
 } as const;
@@ -441,6 +442,7 @@ export interface FliksCastApi {
   disconnect(): Promise<void>;
   setActiveSubtitle(opts: { trackId: number }): Promise<void>;
   setActiveAudioLanguage(opts: { language: string; name: string }): Promise<{ success: boolean }>;
+  setTextTrackStyle(opts: { castTextTrackStyle: DesktopCastTextTrackStyle }): Promise<void>;
   setVolume(opts: { level: number }): Promise<void>;
   setMuted(opts: { muted: boolean }): Promise<void>;
   sendMessage(opts: { namespace: string; message: string }): Promise<void>;

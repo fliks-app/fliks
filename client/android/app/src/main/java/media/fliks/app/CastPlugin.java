@@ -846,6 +846,16 @@ public class CastPlugin extends Plugin {
         });
     }
 
+    /** Restyles the subtitles of the media already on the receiver. */
+    @PluginMethod()
+    public void setTextTrackStyle(PluginCall call) {
+        runOnMainThread(() -> {
+            RemoteMediaClient client = getClient();
+            if (client != null) client.setTextTrackStyle(CastSubtitleStyle.build(call.getObject("textTrackStyle")));
+            call.resolve();
+        });
+    }
+
     /** Switches the receiver's audio rendition through setActiveMediaTracks (the receiver mirrors Shaka's HLS renditions as AUDIO tracks),
      *  no ffmpeg restart. Resolves {@code success: false} when no track matches, so the caller falls back to a reload. */
     @PluginMethod()

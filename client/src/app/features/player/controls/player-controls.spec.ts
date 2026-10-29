@@ -40,3 +40,29 @@ describe('PlayerControlsComponent surface clicks', () => {
     expect(calls).toEqual(['fullscreen']);
   });
 });
+
+describe('PlayerControlsComponent appearance target', () => {
+  const proto = PlayerControlsComponent.prototype;
+  const row = { panel: 'size', field: 'subtitleSize', styleKey: 'size', labelKey: 'k', options: [{ value: 'large', label: 'L' }] };
+  const style = { size: 'normal', color: 'white', shadow: 'drop', background: 'transparent' };
+  const make = (styled: unknown) => {
+    const patch = vi.fn();
+    const ctrl = { styled: () => styled, playerSettings: { patch, settings: () => ({ subtitleSize: 'small' }) } };
+    return { ctrl: ctrl as unknown as PlayerControlsComponent, patch };
+  };
+
+  it('edits the output style while casting, not the local settings', () => {
+    const out = { subtitleStyle: () => style, setSubtitleStyle: vi.fn() };
+    const { ctrl, patch } = make(out);
+    proto.setAppearance.call(ctrl, row as never, 'large');
+    expect(out.setSubtitleStyle).toHaveBeenCalledWith({ ...style, size: 'large' });
+    expect(patch).not.toHaveBeenCalled();
+    expect(proto.currentOption.call(ctrl, { ...row, options: [{ value: 'normal', label: 'N' }] } as never)?.label).toBe('N');
+  });
+
+  it('edits the local settings otherwise', () => {
+    const { ctrl, patch } = make(null);
+    proto.setAppearance.call(ctrl, row as never, 'large');
+    expect(patch).toHaveBeenCalledWith({ subtitleSize: 'large' });
+  });
+});

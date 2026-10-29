@@ -9,9 +9,10 @@ import { CastPlayerService } from './cast-player.service';
 import { MediaService } from './api/media.service';
 import { PartyService } from './party/party.service';
 import { PlayerSettingsService } from './player-settings.service';
+import { CastSettingsService } from './cast-settings.service';
 
 function setup(autoPlayNext = true, partyActive = false) {
-  const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), duration: signal(0), nextRequested$: new Subject<void>(), sendFliks: vi.fn(), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
+  const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), setTextTrackStyle: vi.fn(async () => {}), duration: signal(0), nextRequested$: new Subject<void>(), sendFliks: vi.fn(), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
   const quickStart = vi.fn(async () => {});
   const timeline = signal<{ intro: unknown; outro: unknown; chapters: unknown[]; edl: unknown[] }>({ intro: null, outro: null, chapters: [], edl: [] });
   const cp = { timeline, mediaFileId: signal(5), changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
@@ -22,6 +23,8 @@ function setup(autoPlayNext = true, partyActive = false) {
     seasons: [{ seasonNumber: 1, episodes: [{ id: 10, episodeNumber: 1 }, { id: 11, episodeNumber: 2 }] }],
     files: [{ id: 5, episodeId: 10 }, { id: 6, episodeId: 11 }],
   };
+  const castStyle = { size: 'normal', color: 'white', shadow: 'drop', background: 'transparent' };
+  const castSettings = { settings: signal({ subtitleStyle: castStyle, hdr: false }), get: () => castSettings.settings(), save: vi.fn((s) => castSettings.settings.set(s)) };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -30,11 +33,12 @@ function setup(autoPlayNext = true, partyActive = false) {
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },
       { provide: PartyService, useValue: { drives: signal(partyActive) } },
+      { provide: CastSettingsService, useValue: castSettings },
       { provide: PlayerSettingsService, useValue: { settings: () => ({ autoPlayNext }) } },
     ],
   });
   const target = TestBed.inject(CastPlaybackTarget);
-  return { cast, cp, target, quickStart, timeline };
+  return { cast, cp, target, quickStart, timeline, castSettings };
 }
 
 describe('CastPlaybackTarget auto-next', () => {
@@ -64,6 +68,19 @@ describe('CastPlaybackTarget auto-next', () => {
     party.cast.ended.set(true);
     TestBed.tick();
     expect(party.quickStart).not.toHaveBeenCalled();
+  });
+});
+
+describe('CastPlaybackTarget subtitle style', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('sends the style live and saves it to the cast settings', () => {
+    const { cast, castSettings, target } = setup();
+    const style = { size: 'large', color: 'yellow', shadow: 'none', background: 'semi' };
+    target.setSubtitleStyle(style);
+    expect(cast.setTextTrackStyle).toHaveBeenCalledWith(style);
+    expect(castSettings.save).toHaveBeenCalledWith(expect.objectContaining({ subtitleStyle: style, hdr: false }));
+    expect(target.subtitleStyle()).toEqual(style);
   });
 });
 
