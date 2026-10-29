@@ -121,6 +121,8 @@ deb:
   # absolute install path (source is relative to electron-builder's project dir).
   fpm:
     - "build/media.fliks.desktop.metainfo.xml=/usr/share/metainfo/media.fliks.desktop.metainfo.xml"
+    # The APT source (a conffile, as fpm marks all of /etc), so a hand-installed .deb updates with apt.
+    - "build/fliks.sources=/etc/apt/sources.list.d/fliks.sources"
   # Replaces electron-builder's defaults, so Electron's own (libgtk-3-0 onwards) are listed too.
   depends:
     - libgtk-3-0

@@ -155,7 +155,7 @@ jobs:
             libgl1-mesa-dev libegl1-mesa-dev libmpv-dev \
             cmake libwayland-dev libxkbcommon-dev libdbus-1-dev \
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev \
-            libxrender-dev libxss-dev
+            libxrender-dev libxss-dev apt-utils
 
       # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
       # libmpv headers the addon compiles against + the dylib the vendor script
@@ -335,6 +335,30 @@ jobs:
           # release-please marks a suffixed version as a pre-release; electron-builder skips a type mismatch.
           [[ "$version" == *-* ]] && type=prerelease || type=release
           npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type"
+
+      # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
+      - name: Publish the APT repository (Linux)
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/v') && !contains(steps.version.outputs.version, '-')
+        working-directory: desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          gpg --batch --import <<< "$APT_SIGNING_KEY"
+          mkdir apt && cp release/*.deb apt/ && cd apt
+          deb=$(ls *.deb)
+          apt-ftparchive packages . > Packages
+          gzip -9k Packages
+          apt-ftparchive release . > Release
+          gpg --batch --clearsign -o InRelease Release
+          gh release view apt > /dev/null 2>&1 || gh release create apt --prerelease --latest=false \
+            --title 'APT repository' --notes 'APT repository of the Linux desktop client, see the README.'
+          # The new .deb goes up before the index naming it; the old one goes once nothing names it.
+          gh release upload apt "$deb" --clobber
+          gh release upload apt Packages Packages.gz InRelease ../build/fliks.sources --clobber
+          gh release view apt --json assets --jq ".assets[].name | select(endswith(\".deb\") and . != \"$deb\")" \
+            | xargs -r -n1 gh release delete-asset apt -y
 
       # ── Windows: pack win-unpacked into the Velopack Setup.exe + update feed ──
       # Default `win` channel; the Windows server uses `win-server` in the same release.
