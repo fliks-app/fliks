@@ -194,6 +194,15 @@ describe('MediaPickerComponent', () => {
     expect(host.out).toEqual([[{ mediaId: 3, episodeId: null, title: 'Film' }]]);
   });
 
+  it('folds the open title back when the query changes', async () => {
+    await type('film');
+    await click(root.querySelector('.stub-card'));
+    expect(root.querySelector('[data-picker-detail]')).not.toBeNull();
+    await type('show');
+    expect(root.querySelector('[data-picker-detail]')).toBeNull();
+    expect(root.querySelectorAll('.stub-card').length).toBeGreaterThan(0);
+  });
+
   it('checks a taken movie and refuses to add it again', async () => {
     host.taken.set([{ mediaId: 3, episodeId: null }]);
     getOne.mockResolvedValue(movie);

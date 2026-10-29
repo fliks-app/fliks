@@ -474,6 +474,7 @@
     "col_note": "Notiz"
   },
   "nav": {
+    "user_menu": "Benutzermenü",
     "home": "Startseite",
     "my_profile": "Mein Profil",
     "statistics": "Statistiken",
@@ -736,8 +737,7 @@
     "password_hint": "Mindestens 8 Zeichen.",
     "confirm": "Passwort bestätigen",
     "mismatch": "Die Passwörter stimmen nicht überein.",
-    "submit": "Konto erstellen",
-    "error": "Das Konto konnte nicht erstellt werden."
+    "submit": "Konto erstellen"
   },
   "forced_password_change": {
     "title": "Neues Passwort erforderlich",
@@ -1992,9 +1992,9 @@
       "probe_path_help": "Nur für Verbindung testen; wird nicht gespeichert. Ein auf dieser Engine gespeichertes Mapping wird angewendet.",
       "gateway_mismatch": "Video wird weiterhin an {{url}} weitergeleitet. Starten Sie die NAS-Engine mit --engine-upstream auf die gespeicherte URL neu, oder leeren Sie dieses Feld, um die Prozess-URL zu behalten.",
       "status": "Verbindungsstatus",
-      "status_off": "Aus — nicht konfiguriert oder nicht verbunden",
-      "status_up": "Aktiv — Engine erreichbar",
-      "status_down": "Ausgefallen — Engine nicht erreichbar",
+      "status_off": "Aus: nicht konfiguriert oder nicht verbunden",
+      "status_up": "Aktiv: Engine erreichbar",
+      "status_down": "Ausgefallen: Engine nicht erreichbar",
       "status_down_message": "Die Streaming-Engine ist nicht erreichbar",
       "test": "Verbindung testen",
       "saved": "Remote-Engine-Einstellungen gespeichert",

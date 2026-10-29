@@ -474,6 +474,7 @@
     "col_note": "Note"
   },
   "nav": {
+    "user_menu": "Menu utilisateur",
     "home": "Accueil",
     "my_profile": "Mon profil",
     "statistics": "Statistiques",
@@ -736,8 +737,7 @@
     "password_hint": "8 caractères minimum.",
     "confirm": "Confirmer le mot de passe",
     "mismatch": "Les mots de passe ne correspondent pas.",
-    "submit": "Créer le compte",
-    "error": "Impossible de créer le compte."
+    "submit": "Créer le compte"
   },
   "forced_password_change": {
     "title": "Nouveau mot de passe requis",
@@ -1992,9 +1992,9 @@
       "probe_path_help": "Utilisé uniquement par Tester la connexion ; non enregistré. Un mapping déjà présent sur ce moteur est appliqué.",
       "gateway_mismatch": "La vidéo est toujours transmise vers {{url}}. Relancez le moteur du NAS avec --engine-upstream égal à l'URL enregistrée, ou videz cette URL pour garder celle du processus.",
       "status": "État de la connexion",
-      "status_off": "Arrêt — non configuré ou non connecté",
-      "status_up": "Actif — moteur joignable",
-      "status_down": "Injoignable — moteur inaccessible",
+      "status_off": "Arrêt: non configuré ou non connecté",
+      "status_up": "Actif: moteur joignable",
+      "status_down": "Injoignable: moteur inaccessible",
       "status_down_message": "Le moteur de streaming est injoignable",
       "test": "Tester la connexion",
       "saved": "Paramètres du moteur distant enregistrés",

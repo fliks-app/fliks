@@ -3,9 +3,8 @@ import { Directive, ElementRef, Injector, afterNextRender, booleanAttribute, inj
 const HELD_CLASS = 'reorder-held';
 const SLIDE_MS = 180;
 
-/** Keyboard (and D-pad) reordering for a horizontal list, next to the CDK drag-drop that only knows pointers.
- *  Enter on an item `[data-reorder-item]` picks it up, ←/→ move it, past the last one arms the trash (when `removable`),
- *  Enter drops (or removes over the trash). `exportAs: 'reorder'` exposes the state to the template. */
+/** Keyboard (and D-pad) reordering for a horizontal list: Enter on a `[data-reorder-item]` picks it up, arrows move it,
+ *  past the last one arms the trash (when `removable`), Enter drops or removes. `exportAs: 'reorder'` exposes the state. */
 @Directive({
   selector: '[appKeyboardReorder]',
   standalone: true,

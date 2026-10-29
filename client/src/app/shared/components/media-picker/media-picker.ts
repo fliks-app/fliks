@@ -185,6 +185,7 @@ export class MediaPickerComponent implements OnDestroy {
     const browsing = this.browsing();
     untracked(() => {
       clearTimeout(this.timer);
+      if (this.selected()) this.collapse();
       if (browsing) {
         this.searchSeq++;
         this.results.set([]);

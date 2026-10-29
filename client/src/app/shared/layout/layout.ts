@@ -318,27 +318,33 @@ export class LayoutComponent implements OnInit, OnDestroy {
       case 'request.declined':
         this.debouncedRefreshSidebarCounts();
         break;
-      // The SSE channel isn't per-user: a foreign request would 403 on approve.
-      case 'pairing.requested':
-        if (event['userId'] === this.auth.user()?.id) untracked(() => this.promptPairing(event));
-        break;
-      case 'pairing.cancelled': {
-        const toastId = this.pairingToasts.get(event['pairingId'] as string);
-        if (toastId !== undefined) this.toast.dismiss(toastId);
-        break;
-      }
     }
   });
+
+  /** The SSE channel isn't per-user: a foreign request would 403 on approve. */
+  private onPairingEvent(event: SseEvent): void {
+    if (event['userId'] !== this.auth.user()?.id) return;
+    if (event.type === 'pairing.requested') {
+      this.promptPairing(event);
+      return;
+    }
+    const pairingId = event['pairingId'] as string;
+    const toastId = this.pairingToasts.get(pairingId);
+    if (toastId !== undefined) this.toast.dismiss(toastId);
+    this.pairingToasts.delete(pairingId);
+  }
 
   private readonly pairingToasts = new Map<string, number>();
 
   private promptPairing(event: SseEvent) {
     const id = event['pairingId'] as string;
-    const settle = (call: (id: string) => Promise<void>, doneKey: string) => () =>
+    const settle = (call: (id: string) => Promise<void>, doneKey: string) => () => {
+      this.pairingToasts.delete(id);
       void call(id).then(
         () => this.toast.success(this.translate.instant(doneKey)),
         () => this.toast.error(this.translate.instant('pending_requests.action_error')),
       );
+    };
     const toastId = this.toast.info(
       this.translate.instant('pending_requests.requested_toast', { device: event['deviceName'] }),
       PAIRING_TTL_MS,
@@ -346,6 +352,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       { label: this.translate.instant('pending_requests.deny'), run: settle((i) => this.auth.pairingDeny(i), 'pending_requests.denied_toast') },
     );
     this.pairingToasts.set(id, toastId);
+    setTimeout(() => this.pairingToasts.delete(id), PAIRING_TTL_MS);
   }
 
   // The shell is instantiated once, so ngOnInit's boot fetch never repeats: a
@@ -366,6 +373,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }
     // DownloadManagerService is activated by injection (effect in constructor)
     this.pageScroller.changes().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(this.onScroll);
+    this.sse.pairingEvents.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((e) => this.onPairingEvent(e));
     if (this.isNative) {
       Keyboard.addListener('keyboardWillShow', () => this.keyboardOpen.set(true));
       Keyboard.addListener('keyboardWillHide', () => this.keyboardOpen.set(false));

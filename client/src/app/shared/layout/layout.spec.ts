@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, provideRouter } from '@angular/router';
 import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import {
   LucideMenu,
@@ -21,6 +21,7 @@ import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { AuthService } from '../../core/services/auth.service';
+import { ToastService } from '../../core/services/toast.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, type LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
@@ -68,6 +69,7 @@ interface Fixture {
   /** Overrides the SSE `lastEvent` signal — a real writable signal, needed so
    *  the component's `sseEffect` reacts to `.set()` calls made mid-test. */
   sseLastEvent?: ReturnType<typeof signal<SseEvent | null>>;
+  pairingEvents?: Subject<SseEvent>;
   /** Marks the active page as a hero (fanart) page. */
   isHeroPage?: boolean;
   away?: boolean;
@@ -129,6 +131,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: SseService,
         useValue: {
           lastEvent: f.sseLastEvent ?? (() => null),
+          pairingEvents: f.pairingEvents ?? new Subject<SseEvent>(),
           connectionId: () => null,
           connect: () => {},
           serverUnreachable: () => false, unreachableChip: () => false, connected: () => true,
@@ -545,6 +548,25 @@ describe('LayoutComponent sidebar counts — SSE debounce', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('LayoutComponent pairing requests', () => {
+  it('prompts for every request, even two in the same tick, and drops a cancelled one', async () => {
+    const pairingEvents = new Subject<SseEvent>();
+    await createFixture({ ...NON_ADMIN_NO_LIBRARIES, pairingEvents });
+    const toast = TestBed.inject(ToastService);
+    const info = vi.spyOn(toast, 'info').mockReturnValueOnce(11).mockReturnValueOnce(12);
+    const dismiss = vi.spyOn(toast, 'dismiss');
+    const mine = NON_ADMIN_NO_LIBRARIES.userId;
+
+    pairingEvents.next({ type: 'pairing.requested', userId: mine, pairingId: 'a', deviceName: 'TV' });
+    pairingEvents.next({ type: 'pairing.requested', userId: mine, pairingId: 'b', deviceName: 'Phone' });
+    pairingEvents.next({ type: 'pairing.requested', userId: mine + 1, pairingId: 'c', deviceName: 'Other' });
+    expect(info).toHaveBeenCalledTimes(2);
+
+    pairingEvents.next({ type: 'pairing.cancelled', userId: mine, pairingId: 'a' });
+    expect(dismiss).toHaveBeenCalledExactlyOnceWith(11);
   });
 });
 

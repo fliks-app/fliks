@@ -1,10 +1,10 @@
 import {
   Component,
   OnInit,
-  effect,
   inject,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PendingRequest } from '../../core/services/auth.service';
@@ -37,15 +37,9 @@ export class PendingRequestsComponent implements OnInit {
   /** pairingId currently being approved/denied — disables its buttons. */
   readonly busy = signal<string | null>(null);
 
-  /** Refreshes on `pairing.requested` for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
-  private readonly sseEffect = effect(() => {
-    const ev = this.sse.lastEvent();
-    if (ev?.type !== 'pairing.requested' && ev?.type !== 'pairing.cancelled') return;
-    const me = this.auth.user();
-    if (!me) return;
-    if (ev['userId'] === me.id) {
-      void this.refresh();
-    }
+  /** Refreshes on a pairing event for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
+  private readonly pairingSub = this.sse.pairingEvents.pipe(takeUntilDestroyed()).subscribe((ev) => {
+    if (ev['userId'] === this.auth.user()?.id) void this.refresh();
   });
 
   ngOnInit(): void {

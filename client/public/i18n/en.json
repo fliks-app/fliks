@@ -474,6 +474,7 @@
     "col_note": "Note"
   },
   "nav": {
+    "user_menu": "User menu",
     "home": "Home",
     "my_profile": "My profile",
     "statistics": "Statistics",
@@ -736,8 +737,7 @@
     "password_hint": "At least 8 characters.",
     "confirm": "Confirm password",
     "mismatch": "Passwords do not match.",
-    "submit": "Create account",
-    "error": "Unable to create the account."
+    "submit": "Create account"
   },
   "forced_password_change": {
     "title": "New password required",
@@ -1992,9 +1992,9 @@
       "probe_path_help": "Used only by Test connection; not saved. A mapping already on that engine is applied.",
       "gateway_mismatch": "Video is still forwarded to {{url}}. Restart the NAS engine with --engine-upstream set to the saved URL, or clear this URL to keep the process one.",
       "status": "Connection status",
-      "status_off": "Off — not configured or not connected",
-      "status_up": "Up — engine reachable",
-      "status_down": "Down — engine unreachable",
+      "status_off": "Off: not configured or not connected",
+      "status_up": "Up: engine reachable",
+      "status_down": "Down: engine unreachable",
       "status_down_message": "The streaming engine is unreachable",
       "test": "Test connection",
       "saved": "Remote engine settings saved",

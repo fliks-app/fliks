@@ -193,6 +193,8 @@ export class SseService implements OnDestroy {
   readonly stopped = new Subject<string>();
   /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
   readonly partyEvents = new Subject<PartyEvent>();
+  /** Pairing requests and cancellations, routed on their own Subject: two in one tick must both reach the approver. */
+  readonly pairingEvents = new Subject<SseEvent>();
   /** Own signal: fires every 10s per playing session for every device, and `lastEvent` is read by a dozen unrelated effects. */
   readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
@@ -378,6 +380,10 @@ export class SseService implements OnDestroy {
         }
         if (data.type.startsWith('party.')) {
           this.partyEvents.next(data as unknown as PartyEvent);
+          return;
+        }
+        if (data.type === 'pairing.requested' || data.type === 'pairing.cancelled') {
+          this.pairingEvents.next(data);
           return;
         }
         if (data.type === 'remote.state') {

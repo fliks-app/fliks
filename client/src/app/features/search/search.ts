@@ -512,8 +512,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.discoverSelectedGenres.set(new Set([genreId]));
   }
 
-  /** Map the panel sort to the local sortBy/sortOrder, or null for the default
-   *  (the panel default has no local column: the server then ranks by relevance). */
   /** Signature of the inputs that shape the local library query, so a re-run
    *  can be skipped when nothing changed and a stale revalidation ignored. */
   private filterSig(q: string, ct: string): string {
