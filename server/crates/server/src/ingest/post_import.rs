@@ -251,20 +251,21 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
 
 /// Per-media timers re-armed by each import of the media (rule 37).
 #[derive(Default)]
-pub struct Settle(
-    Mutex<HashMap<i32, tokio::task::AbortHandle>>,
-    tokio::sync::Mutex<()>,
-);
+pub struct Settle {
+    timers: Mutex<HashMap<i32, tokio::task::AbortHandle>>,
+    /// One settle runs at a time across all media.
+    turn: tokio::sync::Mutex<()>,
+}
 
 impl Settle {
     pub fn schedule(&self, st: &AppState, media_id: i32) {
         let st2 = st.clone();
         let h = tokio::spawn(async move {
             tokio::time::sleep(SETTLE).await;
-            st2.ingest.settle.0.lock_clean().remove(&media_id);
+            st2.ingest.settle.timers.lock_clean().remove(&media_id);
             settled(&st2, media_id).await;
         });
-        if let Some(old) = self.0.lock_clean().insert(media_id, h.abort_handle()) {
+        if let Some(old) = self.timers.lock_clean().insert(media_id, h.abort_handle()) {
             old.abort();
         }
     }
@@ -289,7 +290,7 @@ pub async fn scan_sources(st: &AppState, media_id: i32) {
 async fn settled(st: &AppState, media_id: i32) {
     let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
     // One batch at a time, so a season pack does not queue every media's jobs at once.
-    let _turn = st.ingest.settle.1.lock().await;
+    let _turn = st.ingest.settle.turn.lock().await;
     if super::setting_on(&st.db, "sprites_auto_generate_on_import")
         .await
         .unwrap_or(true)
