@@ -270,20 +270,6 @@ impl Ctx<'_> {
             None
         };
         let probed = probe(self.st, &src, false).await?;
-        let scanned = scan_source(self.st, &src, &probed.info).await;
-        if let Some((scan, _)) = &scanned
-            && let Some((end, declared)) = truncated(&probed.info, scan)
-        {
-            tracing::warn!(
-                "Refusing \"{}\": data ends at {end:.0}s of {declared:.0}s",
-                src.display()
-            );
-            return Ok(Placed::Error(format!(
-                "{name}: truncated file, its data ends at {} of the {} its container declares",
-                clock(end),
-                clock(declared)
-            )));
-        }
         let release = self.req.release_name.as_deref();
         let quality = probed
             .quality(release.unwrap_or(&name))
@@ -307,6 +293,7 @@ impl Ctx<'_> {
         .await
         .unwrap_or(false);
         let src_size = tokio::fs::metadata(&src).await.map_or(0, |m| m.len());
+        let mut unchanged_scan = None;
         if !at_dest {
             let same_size = self.req.replace_existing
                 && !self.req.force
@@ -329,6 +316,27 @@ impl Ctx<'_> {
                     "{name}: destination outside the library root"
                 )));
             }
+            let scanned = scan_source(self.st, &src, &probed.info).await;
+            if let Some((scan, _)) = &scanned
+                && let Some((end, declared)) = truncated(&probed.info, scan)
+            {
+                tracing::warn!(
+                    "Refusing \"{}\": data ends at {end:.0}s of {declared:.0}s",
+                    src.display()
+                );
+                return Ok(Placed::Error(format!(
+                    "{name}: truncated file, its data ends at {} of the {} its container declares",
+                    clock(end),
+                    clock(declared)
+                )));
+            }
+            // The scan describes bytes: it carries over to a copy of the same size.
+            unchanged_scan = match scanned {
+                Some((scan, v)) if crate::stream::version_of(&src).await.as_deref() == Some(&v) => {
+                    Some(scan)
+                }
+                _ => None,
+            };
             if let Err(e) = tokio::fs::create_dir_all(&dir).await {
                 return Err(format!("{name}: {e}"));
             }
@@ -368,8 +376,9 @@ impl Ctx<'_> {
             .await
             .map_or(src_size, |m| m.len()) as i64;
         let file_id = self.row(&rel, ep.as_ref(), size, &quality, &probed).await?;
-        if let Some((scan, version)) = scanned
-            && crate::stream::version_of(&dest).await.as_deref() == Some(version.as_str())
+        if let Some(scan) = unchanged_scan
+            && size as u64 == src_size
+            && let Some(version) = crate::stream::version_of(&dest).await
         {
             let prior = probed.info.timestamp_break_seconds.flatten();
             crate::stream::keep_scan(self.st, file_id, dest, version, scan, prior);

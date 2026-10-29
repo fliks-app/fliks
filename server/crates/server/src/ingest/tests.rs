@@ -709,6 +709,18 @@ async fn relink_in_place_is_contained(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn relink_transfer_copy_then_move(pool: PgPool) {
     let c = ctx(pool).await;
+    let scan =
+        json!({"type": "Scan", "scan": {"keyframes": [], "end": 2.0, "audioConfigChanges": {}}});
+    c.fake
+        .script("POST", "/v1/jobs", vec![ok(json!({"jobId": "j1"}))]);
+    c.fake.script(
+        "GET",
+        "/v1/jobs/j1",
+        vec![ok(json!({
+            "jobId": "j1", "kind": "Scan", "mediaFileId": 0, "priority": "high", "state": "done",
+            "pct": 100, "createdMs": 1, "result": scan,
+        }))],
+    );
     let lib = c.dir.join("movies");
     let l = library(&c, "M", &lib, r#"["movie"]"#).await;
     let src = c.dir.join("dl/Some.Movie.2010.1080p.mkv");
@@ -738,11 +750,14 @@ async fn relink_transfer_copy_then_move(pool: PgPool) {
     let files: Vec<String> = tree(&lib).into_iter().map(|(p, _)| p).collect();
     assert!(files.iter().any(|p| p.ends_with(".en.srt")), "{files:?}");
     assert!(!c.fake.seen("POST", "/v1/probe").is_empty());
-    assert_eq!(
-        scans(&c, 2).await,
-        2,
-        "the truncation check, then the import's own scan (the fake's failed, none kept)"
-    );
+    assert_eq!(scans(&c, 1).await, 1, "one scan, carried over to the copy");
+    for _ in 0..50 {
+        if count(&c, "SELECT count(*) FROM media_file_scans").await == 1 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(count(&c, "SELECT count(*) FROM media_file_scans").await, 1);
 
     let series = c.dir.join("series");
     let sl = library(&c, "S", &series, r#"["series"]"#).await;
