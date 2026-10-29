@@ -37,6 +37,8 @@ interface ReceiverPlayerError {
   mediaSubtitle?: string;
   mediaId?: number;
   episodeId?: number;
+  /** File the receiver was playing when it failed: a sender reacts only to errors of its own item. */
+  mediaFileId?: number;
 }
 
 import type { EdlWire } from '../utils/edl-policy';
@@ -191,6 +193,8 @@ export class CastService implements OnDestroy {
   /** The LOAD `customData` of the media the receiver reports, whoever loaded it: `{}` for media without any
    *  (another app), null until a status says. */
   readonly receiverMedia = signal<Record<string, unknown> | null>(null, { equal: sameReceiverMedia });
+  /** The receiver went IDLE because another LOAD replaced the media; ends with the next status that is not. */
+  private readonly replaced = signal(false);
   /** Resolves once a native or desktop bridge has reported a session that outlived the renderer. */
   readonly settled: Promise<void> = Promise.resolve();
   /** Write only via {@link beginConnecting} / {@link endConnecting}: the trigger is disabled while set, so a lost outcome would wedge the picker. */
@@ -227,7 +231,7 @@ export class CastService implements OnDestroy {
   private textReapplyTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** A receiver failure a fresh stream may fix; `position` is the playhead to resume from. */
-  readonly playbackError$ = new Subject<{ position?: number }>();
+  readonly playbackError$ = new Subject<{ position?: number; mediaFileId?: number }>();
   /** Every `player_error` the receiver reports, for QoE. */
   /** The viewer chose the next episode with the TV remote; the sender owns the queue. */
   readonly nextRequested$ = new Subject<void>();
@@ -266,8 +270,9 @@ export class CastService implements OnDestroy {
   }
 
   /** Media state from the sender: a field the event does not carry keeps its value. */
-  applyMediaUpdate(d: { currentTime?: number; duration?: number; isPaused?: boolean; buffering?: boolean; ended?: boolean; customData?: Record<string, unknown> } | null | undefined): void {
-    if (d?.customData) this.receiverMedia.set(d.customData);
+  applyMediaUpdate(d: { currentTime?: number; duration?: number; isPaused?: boolean; buffering?: boolean; ended?: boolean; interrupted?: boolean; customData?: Record<string, unknown> } | null | undefined): void {
+    if (d?.interrupted != null) this.replaced.set(d.interrupted);
+    if (d?.customData && !d.interrupted) this.receiverMedia.set(d.customData);
     if (d?.currentTime != null) this.mirrorReceiverTime(d.currentTime);
     if (d?.duration != null) this.duration.set(d.duration);
     if (d?.isPaused != null) this.isPaused.set(d.isPaused);
@@ -324,6 +329,7 @@ export class CastService implements OnDestroy {
         if (connected) this.endConnecting();
         else {
           this.receiverMedia.set(null);
+          this.replaced.set(false);
           this.buffering.set(false);
           this.receiverQoe.set(null);
         }
@@ -423,6 +429,10 @@ export class CastService implements OnDestroy {
         cast.framework.RemotePlayerEventType.PLAYER_STATE_CHANGED,
         () => {
           const state = this.remotePlayer.playerState;
+          this.replaced.set(
+            state === chrome.cast.media.PlayerState.IDLE &&
+              this.session?.getMediaSession?.()?.idleReason === chrome.cast.media.IdleReason.INTERRUPTED,
+          );
           this.buffering.set(state === chrome.cast.media.PlayerState.BUFFERING);
           this.ended.set(
             state === chrome.cast.media.PlayerState.IDLE &&
@@ -477,13 +487,14 @@ export class CastService implements OnDestroy {
 
   private syncReceiverMedia() {
     const info = this.remotePlayer?.isConnected ? this.remotePlayer.mediaInfo : null;
+    this.replaced.set(false);
     this.receiverMedia.set(info ? (info.customData ?? {}) : null);
   }
 
   /** False when the receiver reports media other than `mediaFileId`: its clock is not that item's. */
   receiverPlays(mediaFileId: number): boolean {
     const m = this.receiverMedia();
-    return !m || m['mediaFileId'] === mediaFileId;
+    return !this.replaced() && (!m || m['mediaFileId'] === mediaFileId);
   }
 
   /** Guards against re-adding on the same session so a reconnect doesn't stack listeners and double-toast. */
@@ -522,7 +533,7 @@ export class CastService implements OnDestroy {
       // A session-expiry / network failure is recoverable: re-establish
       // a fresh stream rather than just toasting a dead-end error.
       if (this.isRecoverableReceiverError(payload)) {
-        this.playbackError$.next({});
+        this.playbackError$.next({ mediaFileId: payload.mediaFileId });
       } else {
         this.handleReceiverError(payload);
       }

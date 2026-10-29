@@ -144,8 +144,9 @@ extension CastPlugin {
         let muted = currentSession?.currentDeviceMuted ?? false
 
         let ended = status.playerState == .idle && status.idleReason == .finished
+        let interrupted = status.playerState == .idle && status.idleReason == .interrupted
         let receiverMedia = status.mediaInformation.map { Self.receiverMediaIds($0.customData) }
-        emitMediaUpdate(time: time, duration: duration, paused: paused, buffering: buffering, volume: volume, muted: muted, ended: ended, receiverMedia: receiverMedia)
+        emitMediaUpdate(time: time, duration: duration, paused: paused, buffering: buffering, volume: volume, muted: muted, ended: ended, interrupted: interrupted, receiverMedia: receiverMedia)
     }
 
     private static let receiverMediaKeys = ["mediaId", "mediaFileId", "episodeId", "sid", "playbackId", "intro", "outro"]
@@ -176,12 +177,12 @@ extension CastPlugin {
         }
     }
 
-    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, buffering: Bool, volume: Float, muted: Bool, ended: Bool, receiverMedia: [String: Any]?) {
+    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, buffering: Bool, volume: Float, muted: Bool, ended: Bool, interrupted: Bool, receiverMedia: [String: Any]?) {
         let customData = receiverMedia
             .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
             .flatMap { String(data: $0, encoding: .utf8) }
             .map { ", customData: \($0)" } ?? ""
-        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), buffering: \(buffering), ended: \(ended)\(customData) } }));"
+        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), buffering: \(buffering), ended: \(ended), interrupted: \(interrupted)\(customData) } }));"
             + "window.dispatchEvent(new CustomEvent('castDeviceUpdate', { detail: { volume: \(volume), muted: \(muted) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)

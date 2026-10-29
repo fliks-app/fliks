@@ -43,6 +43,7 @@ export function mediaStatusEvent(
       isPaused: playerState === 'PAUSED',
       buffering: playerState === 'BUFFERING',
       ended: playerState === 'IDLE' && status['idleReason'] === 'FINISHED',
+      interrupted: playerState === 'IDLE' && status['idleReason'] === 'INTERRUPTED',
       customData: receiverMediaIds(media),
     },
   };

@@ -327,10 +327,10 @@ public class CastPlugin extends Plugin {
     }
 
     private void notifyJSTime(double time, double duration, boolean paused, boolean buffering,
-                             double volume, boolean muted, boolean ended, String receiverMedia) {
+                             double volume, boolean muted, boolean ended, boolean interrupted, String receiverMedia) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
             + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
-            + ", buffering: " + buffering + ", ended: " + ended
+            + ", buffering: " + buffering + ", ended: " + ended + ", interrupted: " + interrupted
             + (receiverMedia != null ? ", customData: " + receiverMedia : "")
             + " } }));"
             + "window.dispatchEvent(new CustomEvent('castDeviceUpdate', { detail: { "
@@ -946,8 +946,10 @@ public class CastPlugin extends Plugin {
                         boolean muted = castSession.isMute();
                         boolean ended = state == MediaStatus.PLAYER_STATE_IDLE
                             && status.getIdleReason() == MediaStatus.IDLE_REASON_FINISHED;
+                        boolean interrupted = state == MediaStatus.PLAYER_STATE_IDLE
+                            && status.getIdleReason() == MediaStatus.IDLE_REASON_INTERRUPTED;
                         MediaInfo info = client.getMediaInfo();
-                        notifyJSTime(time, duration, paused, buffering, volume, muted, ended,
+                        notifyJSTime(time, duration, paused, buffering, volume, muted, ended, interrupted,
                             info != null ? receiverMediaJson(info) : null);
                     }
                     pollHandler.postDelayed(this, 1000);

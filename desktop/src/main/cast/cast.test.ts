@@ -166,6 +166,7 @@ test('a playing status becomes a media update, without the stream volume', () =>
       isPaused: false,
       buffering: false,
       ended: false,
+      interrupted: false,
       customData: {},
     },
   });
@@ -190,6 +191,14 @@ test('IDLE/ERROR becomes a recoverable error carrying the playhead', () => {
     { duration: 3600 },
   );
   assert.deepEqual(event, { name: 'castError', detail: { position: 128 } });
+});
+
+test('IDLE/INTERRUPTED means another sender replaced the media, not an error', () => {
+  const event = mediaStatusEvent({ playerState: 'IDLE', idleReason: 'INTERRUPTED', currentTime: 90 }, { duration: 3600 });
+  assert.equal(event.name, 'castMediaUpdate');
+  const detail = event.detail as { interrupted?: boolean; ended?: boolean };
+  assert.equal(detail.interrupted, true);
+  assert.equal(detail.ended, false);
 });
 
 test('IDLE without an error reason is an ordinary update, not a failure', () => {

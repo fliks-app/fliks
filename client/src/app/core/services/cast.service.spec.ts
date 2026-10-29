@@ -255,7 +255,7 @@ describe('CastService receiver messages', () => {
 
 describe('CastService receiver media', () => {
   const sync = (self: object) => (CastService.prototype as any).syncReceiverMedia.call(self);
-  const web = (isConnected: boolean, mediaInfo: unknown) => ({ remotePlayer: { isConnected, mediaInfo }, receiverMedia: { set: vi.fn() } });
+  const web = (isConnected: boolean, mediaInfo: unknown) => ({ remotePlayer: { isConnected, mediaInfo }, receiverMedia: { set: vi.fn() }, replaced: { set: vi.fn() } });
 
   it('exposes the receiver customData of a connected web session', () => {
     const data = { mediaFileId: 7, mediaId: 3 };
@@ -281,6 +281,15 @@ describe('CastService receiver media', () => {
     expect(svc.receiverPlays(8)).toBe(false);
     svc.applyMediaUpdate({ customData: {} });
     expect(svc.receiverPlays(7)).toBe(false);
+  });
+
+  it('does not trust the old media once another LOAD interrupted it', () => {
+    const svc = make(null);
+    svc.applyMediaUpdate({ customData: { mediaId: 3, mediaFileId: 7 } });
+    svc.applyMediaUpdate({ interrupted: true, customData: { mediaId: 3, mediaFileId: 7 } });
+    expect(svc.receiverPlays(7)).toBe(false);
+    svc.applyMediaUpdate({ interrupted: false, customData: { mediaId: 3, mediaFileId: 7, sid: 'n' } });
+    expect(svc.receiverPlays(7)).toBe(true);
   });
 });
 

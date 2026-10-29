@@ -42,15 +42,16 @@ const STREAMINFO_ONLY = sub({ id: 'emb-9', language: 'de' });
 function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption | null } = {}) {
   const cast = {
     isConnected: signal(true),
+    replaced: signal(false),
     receiverPlays(id: number) {
       const m = this.receiverMedia();
-      return !m || m['mediaFileId'] === id;
+      return !this.replaced() && (!m || m['mediaFileId'] === id);
     },
     resumedState: signal<unknown>(null),
     settled: Promise.resolve(),
     receiverMedia: signal<Record<string, unknown> | null>(null),
     receiverQoe: signal(null),
-    playbackError$: new Subject<{ position?: number }>(),
+    playbackError$: new Subject<{ position?: number; mediaFileId?: number }>(),
     receiverError$: new Subject<object>(),
     saveResumeState: vi.fn(),
     saveHeartbeat: vi.fn(),
@@ -240,6 +241,31 @@ describe('another sender loads on the receiver', () => {
     cast.receiverMedia.set(ours);
     await (svc as any).saveCastPosition();
     expect(save).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('another sender takes the receiver while this one plays', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('issues no LOAD, adopts the new item read-only and saves nothing for the old one', async () => {
+    const { svc, cast, streamingApi } = setup();
+    cast.currentTime = () => 205;
+    svc.startCast({ ...base, mediaFileId: 69, mediaId: 5, subtitles: [], activeSubtitleId: null });
+    cast.receiverMedia.set({ mediaId: 5, mediaFileId: 69, sid: 'a' });
+    TestBed.tick();
+    // The old media goes IDLE/INTERRUPTED, then the receiver reports a failure of it.
+    cast.replaced.set(true);
+    cast.playbackError$.next({});
+    cast.playbackError$.next({ mediaFileId: 26 });
+    await (svc as any).saveCastPosition();
+    cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b' });
+    cast.replaced.set(false);
+    TestBed.tick();
+    await (svc as any).saveCastPosition();
+    expect(cast.loadMedia).not.toHaveBeenCalled();
+    expect(svc.mediaFileId()).toBe(26);
+    const saved = streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number }][];
+    expect(saved.map((c) => c[1].mediaFileId)).toEqual([26]);
   });
 });
 

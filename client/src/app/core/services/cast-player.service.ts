@@ -573,8 +573,8 @@ export class CastPlayerService {
       }
     });
     // Recoverable receiver error (session GC'd, 410 on next segment): reload a fresh stream and resume.
-    this.cast.playbackError$.subscribe(({ position }) => {
-      void this.recoverFromCastError(position);
+    this.cast.playbackError$.subscribe(({ position, mediaFileId }) => {
+      if (mediaFileId == null || mediaFileId === this.mediaFileId()) void this.recoverFromCastError(position);
     });
     this.cast.receiverError$.subscribe((e) => {
       const sid = this.liveSessionId();
