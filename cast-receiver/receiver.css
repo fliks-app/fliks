@@ -301,10 +301,10 @@ body.bar-on .party-reaction {
   top: 50%;
   left: 50%;
   z-index: 110;
-  width: 8vh;
-  height: 8vh;
-  margin: -4vh 0 0 -4vh;
-  border: 0.8vh solid rgba(255, 255, 255, 0.25);
+  width: 5vh;
+  height: 5vh;
+  margin: -2.5vh 0 0 -2.5vh;
+  border: 0.5vh solid rgba(255, 255, 255, 0.25);
   border-top-color: #fff;
   border-radius: 50%;
   opacity: 0;
@@ -312,7 +312,8 @@ body.bar-on .party-reaction {
   animation: spin 0.9s linear infinite;
 }
 
-.spinner.show {
+/* Only once the splash is gone: the first load keeps the splash alone. */
+body.playing .spinner.show {
   opacity: 1;
 }
 
