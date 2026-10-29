@@ -100,6 +100,23 @@ export class CastPlaybackTarget implements PlaybackOutput {
     this.cp.changeQuality(quality.id);
   }
 
+  async selectAudioById(trackId: string): Promise<void> {
+    const idx = parseAudioIndex(trackId);
+    if (Number.isNaN(idx)) {
+      console.warn('[remote] cast cannot resolve audio track', trackId);
+      return;
+    }
+    await this.cp.changeAudio(idx);
+  }
+
+  async selectSubtitleById(id: string | null): Promise<void> {
+    await this.cp.selectSubtitle(id);
+  }
+
+  selectQualityById(id: string): Promise<void> {
+    return this.cp.changeQuality(id);
+  }
+
   // Marker-driven skipping is not wired into the Cast sender today.
   readonly canSetVolume = computed(() => true);
   readonly skipCue = computed<{ labelKey: string } | null>(() => null);

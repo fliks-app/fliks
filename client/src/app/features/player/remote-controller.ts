@@ -2,10 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import type { Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
-import { CastPlayerService } from '../../core/services/cast-player.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { SseService, type RemoteCommand } from '../../core/services/sse.service';
-import { parseAudioIndex } from '../../core/utils/player.utils';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { QueueController } from './queue-controller';
@@ -18,11 +16,6 @@ export interface RemoteHost {
   onTogglePlay(): void;
   onSeek(time: number): void;
   savePosition(force: boolean): Promise<void>;
-  /** The local audio track at a position of the menu, if any. */
-  localAudioTrackId(index: number): string | undefined;
-  onSelectAudioTrack(trackId: string): Promise<void>;
-  onSelectSubtitleById(id: string | null): Promise<void>;
-  onSelectQualityById(id: string): Promise<void>;
 }
 
 /** Commands from other devices and from admins: the SSE `player.command` events targeting this
@@ -33,7 +26,6 @@ export class RemoteController {
   private readonly authService = inject(AuthService);
   private readonly remoteService = inject(RemoteService);
   private readonly castService = inject(CastService);
-  private readonly castPlayerService = inject(CastPlayerService);
   private readonly chrome = inject(ControlsVisibilityService);
   private readonly queueCtl = inject(QueueController);
   private readonly session = inject(PlaybackSession);
@@ -148,38 +140,17 @@ export class RemoteController {
           console.warn('[remote] audio command missing trackId', cmd.cmdId);
           return;
         }
-        if (casting) {
-          const idx = parseAudioIndex(cmd.trackId);
-          if (Number.isNaN(idx)) {
-            console.warn('[remote] cast cannot resolve audio track', cmd.trackId);
-            return;
-          }
-          await this.castPlayerService.changeAudio(idx);
-        } else {
-          const idx = parseAudioIndex(cmd.trackId);
-          const local = Number.isFinite(idx) ? this.host.localAudioTrackId(idx) : undefined;
-          if (!local) {
-            console.warn('[remote] no local audio track at index', cmd.trackId);
-            return;
-          }
-          try {
-            await this.host.onSelectAudioTrack(local);
-          } catch (err: unknown) {
-            console.warn('[remote] audio switch failed', cmd.trackId, err);
-          }
-        }
+        await output?.selectAudioById(cmd.trackId);
         break;
       case 'subtitle':
-        if (casting) await this.castPlayerService.selectSubtitle(cmd.subtitleId ?? null);
-        else await this.host.onSelectSubtitleById(cmd.subtitleId ?? null);
+        await output?.selectSubtitleById(cmd.subtitleId ?? null);
         break;
       case 'quality':
         if (!cmd.qualityId) {
           console.warn('[remote] quality without a qualityId', cmd.cmdId);
           break;
         }
-        if (casting) await this.castPlayerService.changeQuality(cmd.qualityId);
-        else await this.host.onSelectQualityById(cmd.qualityId);
+        await output?.selectQualityById(cmd.qualityId);
         break;
       case 'stop':
         if (casting) this.castService.disconnect();

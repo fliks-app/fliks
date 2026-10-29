@@ -643,10 +643,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onTogglePlay: () => this.onTogglePlay(),
     onSeek: (t) => this.onSeek(t),
     savePosition: (force) => this.savePosition(force),
-    localAudioTrackId: (i) => this.availableAudioTracks()[i]?.id,
-    onSelectAudioTrack: (id) => this.onSelectAudioTrack(id),
-    onSelectSubtitleById: (id) => this.subs.selectById(id),
-    onSelectQualityById: (id) => this.onSelectQualityById(id),
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
@@ -2009,9 +2005,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       canPlayNext: computed(() => this.queueCtl.upNext() !== null),
       skip: () => this.cues.onSkipCue(),
       playNext: () => void this.queueCtl.advance(),
-      selectSubtitle: (id) => void this.subs.selectById(id),
-      selectAudio: (id) => void this.onSelectAudioTrack(id),
-      selectQuality: (id) => void this.onSelectQualityById(id),
+      selectSubtitle: (id) => this.subs.selectById(id),
+      selectAudio: (id) => this.onSelectAudioTrack(id),
+      selectQuality: (id) => this.onSelectQualityById(id),
       onBack: () => this.onBack(),
       release: () => this.releaseForHandoff(),
       stepAside: () => this.stepAside(),
@@ -2149,23 +2145,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.resolveAudioTarget();
       await this.planSubtitleDelivery();
 
-      // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
+      // The new file's token goes into its own playback-info call.
       await this.requireStreamToken();
-      this.playbackInfo = await this.negotiatePlayback();
-      const pi = this.playbackInfo;
-      // Skipped for a pre-roll transition: the ids stay on the main film, so it would seek a trailer.
-      if (!opts.noResumeLookup) startTime = pi.startAtSeconds || undefined;
-      this.pendingStartTime = startTime ?? 0;
-      this.adoptPlaybackInfo(pi);
-      startTime = this.edlStartTime(startTime);
-
-      const { url, mimeType } = this.buildPlayUrl({ startTime });
-      await this.prepareLoad();
-      await this.engine.load(url, startTime, mimeType);
-      this.reloadLoadPending = false;
-      this.edl.settle();
-      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
-      this.restorePlaybackRate();
+      await this.negotiateAndLoad({
+        start: (pi) => {
+          // Skipped for a pre-roll transition: the ids stay on the main film, so it would seek a trailer.
+          if (!opts.noResumeLookup) startTime = pi.startAtSeconds || undefined;
+          this.pendingStartTime = startTime ?? 0;
+          startTime = this.edlStartTime(startTime);
+          return { url: startTime, load: startTime };
+        },
+        onLoaded: () => this.edl.settle(),
+      });
       await this.completeEpisodeSwitchSetup();
     } catch (e: any) {
       if (this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, () => this.completeEpisodeSwitchSetup())) return;
@@ -3570,7 +3561,32 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.reloadAt(currentPos, { preservePause: true, unmute: false, restart: true });
   }
 
-  /** The one re-negotiate-and-load sequence. The URL always carries `startAt` and the load window is tracked;
+  /** Negotiate the stream of the current file, adopt it and load it: the part a reload and an episode switch share.
+   *  `start` runs once the info is adopted and gives the position the URL and the engine start from. */
+  private async negotiateAndLoad(o: {
+    negotiateAt?: number;
+    replace?: { replaces?: string };
+    start: (pi: PlaybackInfoResponse) => { url?: number; load?: number };
+    onLoaded: () => void;
+  }): Promise<void> {
+    const engine = this.engine!;
+    const pi = (this.playbackInfo = await this.negotiatePlayback(o.negotiateAt, {}, o.replace));
+    this.adoptPlaybackInfo(pi);
+    // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
+    // load.
+    await this.requireStreamToken();
+    const start = o.start(pi);
+    const { url, mimeType } = this.buildPlayUrl({ startTime: start.url });
+    await this.prepareLoad();
+    if (this.destroyed) throw new Error('player destroyed');
+    await engine.load(url, start.load, mimeType);
+    this.reloadLoadPending = false;
+    o.onLoaded();
+    this.qualityManager.applyQualityPreferenceAfterLoad(engine, this.playbackMode());
+    this.restorePlaybackRate();
+  }
+
+  /** The reload sequence around {@link negotiateAndLoad}. The URL always carries `startAt` and the load window is tracked;
    *  `restart` (user switch) also stops the native surface first, else the session is refreshed behind a live one. Throws on failure, after releasing the unreplaced session. */
   private async reloadAt(
     pos: number,
@@ -3588,19 +3604,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Only this device's session goes; multi-device viewers on the same file stay alive.
       replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
       if (opts.unmute) engine.muted = false;
-      this.playbackInfo = await this.negotiatePlayback(at, {}, replace);
-      this.adoptPlaybackInfo(this.playbackInfo);
-      // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
-      // load.
-      await this.requireStreamToken();
-      const { url, mimeType } = this.buildPlayUrl({ startTime: at });
-      await this.prepareLoad();
-      if (this.destroyed) throw new Error('player destroyed');
-      await engine.load(url, opts.restart || at > 0 ? at : undefined, mimeType);
-      this.reloadReachedPlayback = true;
-      this.reloadLoadPending = false;
-      this.qualityManager.applyQualityPreferenceAfterLoad(engine, this.playbackMode());
-      this.restorePlaybackRate();
+      await this.negotiateAndLoad({
+        negotiateAt: at,
+        replace,
+        start: () => ({ url: at, load: opts.restart || at > 0 ? at : undefined }),
+        onLoaded: () => (this.reloadReachedPlayback = true),
+      });
       this.restorePlayState(wasPaused);
       await this.subs.restoreSubtitle(at);
     } catch (e) {

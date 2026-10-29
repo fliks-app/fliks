@@ -84,6 +84,10 @@ export interface PlaybackOutput {
   selectSubtitle(sub: PlaybackOption | null): void;
   selectAudio(track: PlaybackOption | null): void;
   selectQuality(quality: PlaybackOption): void;
+  /** A pick named by another device's ids (a remote command): mapped to this output's own track, settled once applied. */
+  selectAudioById(trackId: string): Promise<void>;
+  selectSubtitleById(id: string | null): Promise<void>;
+  selectQualityById(id: string): Promise<void>;
   /** Take the current skip offer. No-op when there is none. */
   skip(): void;
   /** Move to the next item. No-op when {@link canPlayNext} is false. */
