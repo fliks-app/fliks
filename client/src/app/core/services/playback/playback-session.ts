@@ -119,7 +119,7 @@ export class PlaybackSession {
     });
   }
 
-  /** The player registers its local output on init; the returned disposer only detaches that output. */
+  /** The player registers its local output once its route is set up; the disposer only detaches that output. */
   attachLocal(o: LocalOutput): () => void {
     this.watchReturns ??= this.watchReturnsToLocal();
     this.local.set(o);
@@ -310,6 +310,8 @@ export class PlaybackSession {
       episodeId: handoff.cast.episodeId,
       positionSeconds: Math.floor(handoff.position),
     });
+    const sid = handoff.localSessionId;
+    if (sid) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
     return true;
   }
 

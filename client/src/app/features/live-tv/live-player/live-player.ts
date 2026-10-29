@@ -57,8 +57,6 @@ import { PlayerScreen } from '../../player/player-screen';
 import { playerKeyAction, type MediaKeyAction } from '../../player/player-keymap';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 
-/** Same native plugins as the VOD player (player.ts), duplicated rather than shared. */
-
 /** How far back a rewind press steps, inside the DVR window. */
 const REWIND_STEP_SECONDS = 10;
 /** Rewind below this reads as "at live": it is measured against the live point,
@@ -91,7 +89,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly destroyRef = inject(DestroyRef);
-  /** Same owner as the VOD player: auto-hide, pins, blur, cursor. */
+  /** Same owner as the VOD player: auto-hide, pins, cursor. */
   readonly chrome = inject(ControlsVisibilityService);
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('video');
@@ -630,6 +628,14 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     const mapped = playerKeyAction(event);
     if (mapped?.kind === 'media') {
       this.onMediaKey(mapped.action, event);
+      return;
+    }
+    // Space plays or pauses, never presses the focused button; in the guide it picks the channel.
+    if (event.key === ' ' && !this.miniGuideOpen()) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.togglePlay();
+      this.chrome.show();
       return;
     }
     const action = liveKeyAction(event.key, {

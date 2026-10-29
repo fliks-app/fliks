@@ -4,9 +4,9 @@ import { playerKeyAction } from './player-keymap';
 
 export interface KeyboardHost {
   chrome: ControlsVisibilityService;
-  /** The engine, or the output playing elsewhere: what the seek and play keys read. */
   /** False while another output plays: the controls are the whole screen, so Escape leaves. */
   canHideControls(): boolean;
+  /** The engine, or the output playing elsewhere: what the seek and play keys read. */
   playhead(): { paused: boolean; currentTime: number } | null;
   controls(): PlayerControlsComponent | undefined;
   isTv(): boolean;

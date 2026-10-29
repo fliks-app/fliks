@@ -347,6 +347,7 @@ function createHarness(opts: {
   component.initCompleted = true;
   const engine = fakeEngine();
   component.engine = engine;
+  component.attachLocalOutput();
 
   return {
     fixture,
@@ -3424,5 +3425,84 @@ describe('PlayerComponent: passthrough and .edl mute ranges', () => {
     const { h, profiles } = await negotiate([{ start: 1, end: 2, action: 'mute' }], false);
     expect(h.streamingApi.getEdl).not.toHaveBeenCalled();
     expect(last(profiles)).toEqual({ passthrough: true });
+  });
+});
+
+describe('PlayerComponent review fixes', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('seekByReload replays a pick made while it ran', async () => {
+    const h = createHarness();
+    h.state.seekLocked.set(true);
+    h.component.pendingReload = { reason: 'quality' };
+    h.component.pollSeekConverge = vi.fn(async () => {});
+    h.component.reloadStream = vi.fn(async () => {});
+
+    await h.component.seekByReload(600);
+
+    expect(h.component.reloadStream).toHaveBeenCalledWith(undefined, { reason: 'quality' });
+  });
+
+  it('writes no position while an episode switch holds the old stream under the new ids', async () => {
+    const h = createHarness();
+    h.engine.currentTime = 95;
+    h.component.switchingItem = true;
+
+    await h.component.savePosition(true);
+
+    expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+  });
+
+  it('keeps the episode ids unsaved until the new stream is loaded', async () => {
+    const h = createHarness();
+    h.engine.currentTime = 95;
+    let savedDuringSwitch = false;
+    h.engine.load = vi.fn(async () => {
+      await h.component.savePosition(true);
+      savedDuringSwitch = h.streamingApi.updatePlaybackState.mock.calls.length > 0;
+    });
+
+    await h.component.reloadForEpisode(2, MEDIA_ID, undefined);
+
+    expect(savedDuringSwitch).toBe(false);
+    expect(h.component.switchingItem).toBe(false);
+  });
+
+  it('a reload that finds the player destroyed never loads the engine', async () => {
+    const h = createHarness();
+    h.component.destroyed = true;
+
+    await expect(h.component.refreshSidAndReload(30, { preservePause: false, unmute: false })).rejects.toThrow();
+
+    expect(h.engine.load).not.toHaveBeenCalled();
+  });
+
+  it('reloads with the same anchor it negotiated, 0 included', async () => {
+    const h = createHarness();
+
+    await h.component.refreshSidAndReload(0, { preservePause: false, unmute: false });
+
+    expect((h.streamingApi.getPlaybackInfo.mock.calls.at(-1) as unknown[])[5]).toBe(0);
+    expect(h.engine.loadCalls.at(-1)!.startTime).toBeUndefined();
+  });
+
+  it('follows the item the output switches to', async () => {
+    const h = createHarness();
+    h.component.queueCtl.syncSeriesQueue = vi.fn();
+
+    await h.component.adoptOutputItem({ fileId: 2, mediaId: MEDIA_ID, episodeId: 5 });
+
+    expect(h.component.mediaFileId).toBe(2);
+    expect(h.component.episodeId).toBe(5);
+    expect(h.component.itemAdopted).toBe(true);
+  });
+
+  it('keyboard seeks read the output while casting, not the unloaded engine', () => {
+    const h = createHarness();
+    h.component.elsewhere = () => ({ paused: () => false, position: () => 600 });
+
+    expect(h.component.keyboard.host.playhead()).toEqual({ paused: false, currentTime: 600 });
   });
 });
