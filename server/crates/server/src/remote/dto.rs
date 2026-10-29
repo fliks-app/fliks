@@ -105,6 +105,7 @@ pub struct Command {
     #[serde(default, deserialize_with = "nullable")]
     pub subtitle_id: Option<Option<String>>,
     pub quality_id: Option<String>,
+    pub paused: Option<bool>,
     pub by_target_id: Option<String>,
 }
 

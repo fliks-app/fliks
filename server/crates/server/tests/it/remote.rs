@@ -237,3 +237,19 @@ async fn polled_targets_are_per_user_and_missing_target_id_is_400(pool: PgPool) 
         (400, Some("remote.error_self_target"))
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn load_command_relays_paused(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("a", false).await;
+    c.register(&a, "d1").await;
+    let load = json!({"action": "load", "mediaFileId": 1, "paused": true});
+    let (s, _) = c
+        .call("POST", "/api/remote/d1%23native/command", &a, Some(load))
+        .await;
+    assert_eq!(s, 202);
+    let (_, cmds) = c
+        .call("GET", "/api/remote/commands?targetId=d1%23native", &a, None)
+        .await;
+    assert_eq!(cmds[0]["paused"], true);
+}
