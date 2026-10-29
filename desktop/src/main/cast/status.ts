@@ -25,7 +25,7 @@ export function mediaStatusEvent(
       detail: { position: Number(status['currentTime']) || undefined },
     };
   }
-  const volume = status['volume'] as { level?: number; muted?: boolean } | undefined;
+  // The media status `volume` is the stream's own level; the slider shows the device's, from RECEIVER_STATUS.
   return {
     name: 'castMediaUpdate',
     detail: {
@@ -34,8 +34,6 @@ export function mediaStatusEvent(
       isPaused: playerState === 'PAUSED',
       buffering: playerState === 'BUFFERING',
       ended: playerState === 'IDLE' && status['idleReason'] === 'FINISHED',
-      volume: volume?.level,
-      muted: volume?.muted,
     },
   };
 }
