@@ -122,7 +122,7 @@ describe('PartyProposalsComponent', () => {
     expect(api.choose).toHaveBeenCalledWith(9, 1);
   });
 
-  it('keeps the vote button enabled and focused while the request runs', async () => {
+  it('keeps the vote button enabled and focused while the request runs, and sends a second vote', async () => {
     const el = setup({ me: 1, host: false, proposals: [prop(5, [1])] });
     document.body.append(el.nativeElement);
     api.vote.mockReturnValue(new Promise(() => {}));
@@ -133,7 +133,7 @@ describe('PartyProposalsComponent', () => {
     expect(vote.disabled).toBe(false);
     expect(document.activeElement).toBe(vote);
     vote.click();
-    expect(api.vote).toHaveBeenCalledTimes(1);
+    expect(api.vote).toHaveBeenCalledTimes(2);
     el.nativeElement.remove();
   });
 

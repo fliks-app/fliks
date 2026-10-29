@@ -10,8 +10,6 @@ import { PlayerStateService } from '../player-state.service';
 import type { PlaybackEngine } from '../playback-engine/playback-engine';
 import { PlaybackQueueService, type QueueItem } from '../playback-queue.service';
 import { ToastService } from '../toast.service';
-import { NativeEngine } from '../playback-engine/native-engine';
-import { NativePlayer } from '../../plugins/native-player.plugin';
 import { VoiceService } from './voice.service';
 import { VoiceDucker } from './party-ducking';
 import { PlaybackSession, type PlaybackCommand } from '../playback/playback-session';
@@ -63,6 +61,8 @@ export class PartySync {
   private lastCorrectiveSeek = 0;
   private applying = false;
   private lastReported: 'ready' | 'buffering' = 'ready';
+  /** The party this device last drove an output for: only then may it release a waiting phase without one. */
+  private droveParty: number | undefined;
 
   readonly active = this.party.active;
 
@@ -121,16 +121,20 @@ export class PartySync {
     if (!id || this.party.party()?.id === id) return;
     this.resuming.set(true);
     const ok = await this.party.resume(id).finally(() => this.resuming.set(false));
-    if (ok || this.host() !== host) return;
+    if (this.host() !== host) {
+      if (ok) await this.party.leave();
+      return;
+    }
+    if (ok) return;
     this.toast.error(this.translate.instant('party.error_resume'));
     host.releasePlayback();
     void this.router.navigate([], { queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
-  /** Explicit leave: a host's ends the party (the `party.closed` event exits), a member's goes home here. */
+  /** A member leaves the party (the host ends it instead) and goes home. */
   async leave(): Promise<void> {
-    const wasHost = this.party.isHost();
-    if ((await this.party.leaveOrEnd()) && !wasHost) this.goHome();
+    await this.party.leave();
+    this.goHome();
   }
 
   private goHome(): void {
@@ -213,14 +217,6 @@ export class PartySync {
     untracked(() => (host ? this.ducker.set(duck) : undefined));
   });
 
-  /** The native audio session must record and play while the WebView holds the mic. */
-  private readonly voiceSessionEffect = effect(() => {
-    const active = this.voice.joined();
-    untracked(() => {
-      if (this.host()?.engine() instanceof NativeEngine) NativePlayer.setVoiceActive({ active }).catch(() => {});
-    });
-  });
-
   /** A new output (a handoff, a reopened player) is brought to the group's position; none left, the group stops waiting on us. */
   private lastOutput: PlaybackOutput | null = null;
   private readonly outputEffect = effect(() => {
@@ -279,9 +275,11 @@ export class PartySync {
     const gen = ++this.generation;
     this.clearPlayTimer();
     if (!this.out()) {
-      if (live.state === 'waiting') this.stopDriving(live);
+      const id = this.party.party()?.id;
+      if (live.state === 'waiting' && id !== undefined && id === this.droveParty) this.stopDriving(live);
       return;
     }
+    this.droveParty = this.party.party()?.id;
     this.applying = true;
     try {
       if (!(await this.untilReady(gen))) return;

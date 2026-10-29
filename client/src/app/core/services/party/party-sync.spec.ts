@@ -31,10 +31,10 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
     closed,
-    leaveOrEnd: vi.fn().mockResolvedValue(true),
     sendIntent: vi.fn().mockResolvedValue(undefined),
     reportStatus: vi.fn(),
     leave: vi.fn(),
+    drives: signal(true),
   };
   const cast = {
     isConnected: signal(false),
@@ -251,6 +251,13 @@ describe('PartySync resume from the URL', () => {
     expect(router.navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { party: null }, replaceUrl: true }));
   });
 
+  it('leaves the party it joined once the player is gone', async () => {
+    const { party, detach } = setup({ urlParty: '37' });
+    detach();
+    await flush();
+    expect(party.leave).toHaveBeenCalled();
+  });
+
   it('keeps the param after a successful join', async () => {
     const { ctl, toast, router } = setup({ urlParty: '37' });
     await flush();
@@ -306,14 +313,12 @@ describe('PartySync leaving', () => {
     expect(host.onBack).not.toHaveBeenCalled();
   });
 
-  it('lands on the Home when a member leaves, and stays put when the host declines', async () => {
+  it('lands on the Home when a member leaves', async () => {
     const { ctl, party, router } = setup();
     await ctl.leave();
+    expect(party.leave).toHaveBeenCalled();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
     router.navigateByUrl.mockClear();
-    party.leaveOrEnd.mockResolvedValue(false);
-    await ctl.leave();
-    expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
 });
 
@@ -328,7 +333,6 @@ describe('PartySync outside the player', () => {
     TestBed.tick();
     await flush();
     expect(party.leave).not.toHaveBeenCalled();
-    expect(party.leaveOrEnd).not.toHaveBeenCalled();
     expect(party.active()).toBe(true);
   });
 
@@ -343,8 +347,21 @@ describe('PartySync outside the player', () => {
     expect(party.reportStatus).toHaveBeenCalledWith('ready', 5);
   });
 
+  it('does not report ready for a waiting phase before any output drove the party', async () => {
+    const { party, detachLocal } = setup({ joined: 3 });
+    detachLocal();
+    TestBed.tick();
+    party.live.set({ ...held, state: 'waiting' });
+    TestBed.tick();
+    await flush();
+    expect(party.reportStatus).not.toHaveBeenCalled();
+  });
+
   it('answers a later waiting phase with ready while nothing plays', async () => {
     const { party, detachLocal } = setup({ joined: 3 });
+    party.live.set(held);
+    TestBed.tick();
+    await flush();
     detachLocal();
     TestBed.tick();
     party.reportStatus.mockClear();

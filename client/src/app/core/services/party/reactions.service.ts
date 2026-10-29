@@ -36,9 +36,9 @@ export class ReactionsService {
 
   /** Master switch: off hides the dock and the reactions rising over the video. */
   readonly enabled = signal(readFlag(ENABLED_KEY, true));
-  /** The floating reaction button over the video. */
   /** The emoji the keyboard last sat on in the row, where ArrowDown lands again. */
   lastFocused: string | null = null;
+  /** The floating reaction button over the video. */
   readonly dock = signal(readFlag(DOCK_KEY, true));
 
   private loading: Promise<void> | null = null;

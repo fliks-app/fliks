@@ -73,13 +73,27 @@ async function reconnect(sse: { connected: ReturnType<typeof signal<boolean>> })
 }
 
 describe('PartyService rejoin', () => {
-  it('applies a snapshot whose revision restarted after a server restart', async () => {
+  it('applies the rejoin snapshot with its chat', async () => {
     const { svc, api, sse } = setup();
     svc.applySnapshot(dto(50));
-    api.join.mockResolvedValue(dto(3));
+    api.join.mockResolvedValue(dto(60));
     await reconnect(sse);
-    expect(svc.live()?.rev).toBe(3);
-    expect(svc.messages().map((m) => m.id)).toEqual([3]);
+    expect(svc.live()?.rev).toBe(60);
+    expect(svc.messages().map((m) => m.id)).toEqual([60]);
+  });
+
+  it('does not bring a party back that was left while the rejoin was in flight', async () => {
+    const { svc, api, sse } = setup();
+    svc.applySnapshot(dto(50));
+    let landed!: (d: PartyDto) => void;
+    api.join.mockReturnValue(new Promise<PartyDto>((r) => (landed = r)));
+    await reconnect(sse);
+    await svc.leave();
+    landed(dto(60));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(svc.party()).toBeNull();
+    expect(svc.active()).toBe(false);
   });
 
   it.each([
@@ -434,5 +448,26 @@ describe('PartyService action errors', () => {
     const toast = TestBed.inject(ToastService) as unknown as { error: ReturnType<typeof vi.fn> };
     await svc.kick({ userId: 3, username: 'c' }, 7);
     expect(toast.error).toHaveBeenCalledWith('errors.network');
+  });
+});
+
+describe('PartyService switching parties', () => {
+  it('leaves the current party before joining another', async () => {
+    const { svc, api } = setup();
+    svc.applySnapshot(dto(50));
+    api.join.mockResolvedValue(dto(60, { id: 8, status: 'scheduled', item: null }));
+    await svc.enter(8);
+    expect(api.leave).toHaveBeenCalledWith(7, 'dev');
+    expect(api.leave.mock.invocationCallOrder[0]).toBeLessThan(api.join.mock.invocationCallOrder[0]);
+    expect(svc.party()?.id).toBe(8);
+  });
+
+  it('only drives playback once the party has something playing', () => {
+    const { svc } = setup();
+    svc.applySnapshot(dto(1, { live: { ...dto(1).live!, playback: null } }));
+    expect(svc.active()).toBe(true);
+    expect(svc.drives()).toBe(false);
+    svc.applySnapshot(dto(2));
+    expect(svc.drives()).toBe(true);
   });
 });

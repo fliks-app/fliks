@@ -1,23 +1,32 @@
 import type { PartyMember, PartySignalKind } from '../api/party-api.service';
 
-/** The lower deviceId sends the offer, so two peers never offer at once. */
-export function offersTo(me: string, other: string): boolean {
-  return me < other;
+/** A voice peer: a device is only unique within its user, so the pair identifies it. */
+export interface PeerId {
+  userId: number;
+  deviceId: string;
 }
 
-/** Peers to open and close so the mesh matches the voice members; an `away` member is dropped until it returns. */
+export const peerKey = (p: PeerId): string => `${p.userId}:${p.deviceId}`;
+
+/** The lower key sends the offer, so two peers never offer at once. */
+export function offersTo(me: PeerId, other: PeerId): boolean {
+  return peerKey(me) < peerKey(other);
+}
+
+/** Peers to open (ids) and close (keys) so the mesh matches the voice members; an `away` member is dropped until it returns. */
 export function diffPeers(
   current: Iterable<string>,
   members: readonly PartyMember[],
-  me: string,
-): { add: string[]; remove: string[] } {
-  const wanted = new Set(
-    members.filter((m) => m.voice && m.status !== 'away' && m.deviceId !== me).map((m) => m.deviceId),
+  me: PeerId,
+): { add: PeerId[]; remove: string[] } {
+  const meKey = peerKey(me);
+  const wanted = new Map(
+    members.filter((m) => m.voice && m.status !== 'away' && peerKey(m) !== meKey).map((m) => [peerKey(m), { userId: m.userId, deviceId: m.deviceId }]),
   );
   const have = new Set(current);
   return {
-    add: [...wanted].filter((id) => !have.has(id)),
-    remove: [...have].filter((id) => !wanted.has(id)),
+    add: [...wanted].filter(([k]) => !have.has(k)).map(([, id]) => id),
+    remove: [...have].filter((k) => !wanted.has(k)),
   };
 }
 

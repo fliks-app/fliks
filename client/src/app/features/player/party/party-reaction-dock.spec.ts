@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PartyService } from '../../../core/services/party/party.service';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { VoiceService } from '../../../core/services/party/voice.service';
+import { ControlsVisibilityService } from '../controls/controls-visibility';
 import { PartyReactionDockComponent } from './party-reaction-dock';
 
 function setup() {
@@ -19,11 +20,13 @@ function setup() {
     setMuted: vi.fn(async (m: boolean) => muted.set(m)),
     toggleMute: vi.fn(async () => muted.set(!muted())),
   };
+  const chrome = { holding: signal(false) };
   TestBed.configureTestingModule({
     providers: [
       { provide: ReactionsService, useValue: reactions },
       { provide: PartyService, useValue: party },
       { provide: VoiceService, useValue: voice },
+      { provide: ControlsVisibilityService, useValue: chrome },
       provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
     ],
   });
@@ -36,7 +39,7 @@ function setup() {
   for (const t of ['click', 'mousemove']) outer.addEventListener(t, wake);
   outer.append(host);
   document.body.append(outer);
-  return { fixture, host, party, wake, voice };
+  return { fixture, host, party, wake, voice, chrome };
 }
 
 describe('PartyReactionDockComponent', () => {
@@ -86,5 +89,28 @@ describe('PartyReactionDockComponent', () => {
 
     mic.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     expect(voice.muted()).toBe(true);
+  });
+
+  it('pins the controls while held and releases on a document pointerup after the strip unmounts', async () => {
+    const { fixture, host, voice, chrome } = setup();
+    const mic = host.querySelector<HTMLElement>('.mic')!;
+    fire(mic, ['pointerdown']);
+    expect(chrome.holding()).toBe(true);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(voice.muted()).toBe(false);
+    mic.remove();
+    document.dispatchEvent(new Event('pointerup'));
+    expect(voice.muted()).toBe(true);
+    expect(chrome.holding()).toBe(false);
+    fixture.destroy();
+  });
+
+  it('re-mutes a held mic when the dock is destroyed', async () => {
+    const { fixture, host, voice, chrome } = setup();
+    fire(host.querySelector<HTMLElement>('.mic')!, ['pointerdown']);
+    await vi.advanceTimersByTimeAsync(300);
+    fixture.destroy();
+    expect(voice.muted()).toBe(true);
+    expect(chrome.holding()).toBe(false);
   });
 });

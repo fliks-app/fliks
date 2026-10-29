@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideRefreshCw } from '@lucide/angular';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { VoiceService } from '../../../core/services/party/voice.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -23,8 +22,6 @@ export class PartySettingsComponent {
   protected readonly party = inject(PartyService);
   protected readonly voice = inject(VoiceService);
   protected readonly keyboard = inject(KeyboardOverlayService);
-  private readonly confirm = inject(ConfirmationService);
-  private readonly translate = inject(TranslateService);
   private readonly controller = inject(PartySync);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   /** The player mounts the dialog to open it and drops it on close. */
@@ -60,12 +57,7 @@ export class PartySettingsComponent {
   }
 
   protected async end(): Promise<void> {
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant('party.end_title'),
-      message: this.translate.instant('party.end_message', { name: this.party.party()?.name }),
-      variant: 'danger',
-    });
-    if (!ok) return;
+    if (!(await this.party.confirmEnd(this.party.party()?.name ?? ''))) return;
     this.dialog().nativeElement.close();
     await this.party.end();
   }
