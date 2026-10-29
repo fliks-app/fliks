@@ -1800,15 +1800,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const t = this.edl.resolveSeek(0);
       if (t !== null) this.seekInternal(t);
     }
-    // Decide off what the control shows, so a tap during launch pauses. Reflect the target in the UI at once
-    // (desktop mpv's stateChanged loop can lag ~1s); the engine event reasserts, a rejected command reverts.
+    // Decide off what the control shows, so a tap during launch pauses.
     if (this.uiPaused()) {
-      this.state.paused.set(false);
-      this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+      this.playPlayback();
       this.chrome.resetHideTimer();
     } else {
       void this.pausePlayback();
     }
+  }
+
+  /** Every intentional play goes through here. The control shows it at once: desktop mpv's stateChanged can
+   *  lag ~1s and a reload swallows it; the engine event reasserts, a rejected command reverts. */
+  private playPlayback(): void {
+    this.state.paused.set(false);
+    this.engine?.play().catch(() => {
+      const paused = this.engine?.paused ?? true;
+      this.state.paused.set(paused);
+      if (paused) this.state.buffering.set(false);
+    });
   }
 
   /** Every intentional pause goes through here so the launch stops counting as
@@ -2012,10 +2021,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeId: () => this.episodeId,
       seekTo: (t) => this.seekInternal(t),
       pausePlayback: () => this.pausePlayback(),
-      playLocal: () => {
-        this.state.paused.set(false);
-        this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
-      },
+      playLocal: () => this.playPlayback(),
       position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
       spriteUrl: this.spriteUrl,
       spriteMetadata: this.spriteMetadata,
@@ -2720,13 +2726,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Native engines autoplay on load(), so a paused user must be actively re-paused after a reload. */
   private restorePlayState(wasPaused: boolean): void {
     if (!this.engine) return;
-    const engine = this.engine;
-    const settle = () => {
-      this.state.paused.set(engine.paused);
-      if (engine.paused) this.state.buffering.set(false);
-    };
     if (wasPaused) void this.pausePlayback();
-    else engine.play().catch(settle);
+    else this.playPlayback();
   }
 
   /** Set in ngOnDestroy: blocks late async reloads (sessionLost, sessionExpired, Cast resume) that would
