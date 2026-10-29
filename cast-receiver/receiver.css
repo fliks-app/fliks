@@ -176,3 +176,26 @@ body.playing .party-layer {
   93% { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(0); }
 }
+
+/* Skip-intro / next-episode cue; a plain hint until a remote key has been seen, then a button. */
+.skip-cue {
+  position: fixed;
+  right: 4%;
+  bottom: 12vh;
+  padding: 1.6vh 3vh;
+  border-radius: 1vh;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 3vh;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.skip-cue.show {
+  opacity: 1;
+}
+
+.skip-cue.actionable {
+  background: var(--fliks-primary);
+  font-weight: 600;
+}

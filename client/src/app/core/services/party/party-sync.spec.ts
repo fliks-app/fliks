@@ -37,6 +37,8 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     drives: signal(true),
   };
   const cast = {
+    nextRequested$: new Subject<void>(),
+    sendFliks: vi.fn(),
     isConnected: signal(false),
     isPaused: signal(true),
     buffering: signal(false),
@@ -69,7 +71,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PlaybackQueueService, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
-      { provide: CastPlayerService, useValue: { hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]) } },
+      { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false) } },
       { provide: MediaService, useValue: {} },

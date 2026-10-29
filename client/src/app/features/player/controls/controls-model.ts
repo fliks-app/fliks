@@ -1,5 +1,7 @@
 import type { PlaybackOption, PlaybackOutput } from '../../../core/services/playback/playback-output';
 import type { SpriteMetadata } from '../../../core/utils/player.utils';
+import { inOutroRange } from '../../../core/utils/player.utils';
+import type { PlaybackTimeline } from '../../../core/services/playback/playback-output';
 
 import type { PlayerControlsComponent } from './player-controls';
 
@@ -28,6 +30,9 @@ export interface ControlsModel {
   spriteUrl: string | null;
   spriteMetadata: SpriteMetadata | null;
   skipCueLabelKey: string | null;
+  timeline: PlaybackTimeline;
+  /** The credits have started and something follows; a local player keeps its own timed cue. */
+  nextCue: boolean;
 }
 
 const asOptions = (list: PlaybackOption[]) =>
@@ -38,6 +43,7 @@ export function outputModel(o: PlaybackOutput): ControlsModel {
   // An output marks an eco rung with its second line.
   const qualities = o.availableQualities().map((q) => ({ id: q.id, label: q.label, lowBandwidth: !!q.sub }));
   const activeQualityId = o.activeQualityId();
+  const timeline = o.timeline();
   return {
     paused: o.uiPaused(),
     spinner: o.buffering() || o.isStarting(),
@@ -60,5 +66,7 @@ export function outputModel(o: PlaybackOutput): ControlsModel {
     spriteUrl: o.spriteUrl(),
     spriteMetadata: o.spriteMetadata(),
     skipCueLabelKey: o.skipCue()?.labelKey ?? null,
+    timeline,
+    nextCue: o.canPlayNext() && inOutroRange(timeline.outro, o.position()),
   };
 }

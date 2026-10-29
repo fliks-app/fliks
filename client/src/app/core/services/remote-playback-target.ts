@@ -10,7 +10,7 @@ import { MediaService } from './api/media.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
-import { PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
+import { NO_TIMELINE, PlaybackOption, PlaybackOutput, PlaybackSync } from './playback/playback-output';
 import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS } from './party/party-drift';
 
 /** Drives the cast-overlay UI from a remote target; track lists come from the played file's streamInfo, fetched once the target reports playback. */
@@ -201,6 +201,8 @@ export class RemotePlaybackTarget implements PlaybackOutput {
    *  position, so the offer appears and retracts at the same instants. */
   readonly canSetVolume = computed(() => this.remote.targetState()?.supportsVolume ?? true);
 
+  /** A remote report carries no markers, so the seekbar shows none. */
+  readonly timeline = computed(() => NO_TIMELINE);
   readonly skipCue = computed<{ labelKey: string } | null>(() => {
     const at = this.remote.interpolatedPosition();
     if (inIntroRange(this.introMarker(), at)) return { labelKey: 'player.skip_intro' };

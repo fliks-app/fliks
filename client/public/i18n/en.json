@@ -3066,6 +3066,10 @@
       "shaka_3017": "The Chromecast ran out of playback memory. Try a lower quality (code 3017).",
       "shaka_4001": "Invalid HLS manifest received by the Chromecast (code 4001).",
       "shaka_6001": "The Chromecast does not support this audio/video codec (code 6001)."
+    },
+    "receiver": {
+      "intro_hint": "Skip the intro from your device",
+      "next_hint": "Play the next episode from your device"
     }
   },
   "remote": {

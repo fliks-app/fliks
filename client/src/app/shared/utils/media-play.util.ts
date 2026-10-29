@@ -64,3 +64,12 @@ export function resolveNextEpisodeItem(m: Media, episodeId: number): QueueItem |
   const idx = items.findIndex((it) => it.episodeId === episodeId);
   return idx < 0 ? null : (items[idx + 1] ?? null);
 }
+
+/** The episode's header label, "S1:E2 - title", or null when the media has no such episode. */
+export function episodeLabel(m: Pick<Media, 'seasons'>, episodeId: number): string | null {
+  for (const season of m.seasons ?? []) {
+    const ep = season.episodes?.find((e) => e.id === episodeId);
+    if (ep) return `S${season.seasonNumber}:E${ep.episodeNumber}${ep.title ? ` - ${ep.title}` : ''}`;
+  }
+  return null;
+}

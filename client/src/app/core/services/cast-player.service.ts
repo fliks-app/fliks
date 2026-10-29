@@ -22,13 +22,15 @@ import {
 } from '../utils/edl-policy';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
+import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode, type TimeMarker } from '../utils/player.utils';
 import {
   PlayerSettingsService,
   type AudioStreamChoice,
 } from './player-settings.service';
 import { TrackManagerService, launchPickFor, type LaunchTracks, type SubtitleOption } from './track-manager.service';
 import { MediaService } from './api/media.service';
+import { episodeLabel } from '../../shared/utils/media-play.util';
+import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { ToastService } from './toast.service';
 
 export interface CastSubtitleOption {
@@ -151,6 +153,13 @@ interface CastResumeState {
   activeSubtitleId: string | null;
   activeAudioTrackId: string | null;
   activeBurnInId: number | null;
+  timeline?: PlaybackTimeline;
+}
+
+/** A marker from untyped receiver `customData`, or null. */
+function markerOf(v: unknown): TimeMarker | null {
+  const m = v as Partial<TimeMarker> | null | undefined;
+  return typeof m?.startSeconds === 'number' && typeof m.endSeconds === 'number' ? { startSeconds: m.startSeconds, endSeconds: m.endSeconds } : null;
 }
 
 /** Receiver probe version that reports the 10-bit and HDR fields; an older cached answer is re-probed. */
@@ -336,6 +345,8 @@ export class CastPlayerService {
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
   readonly playbackMode = signal<PlaybackMode>('transcode');
+  /** Markers, chapters and EDL of the file on the receiver, from its playback-info. */
+  readonly timeline = signal<PlaybackTimeline>(NO_TIMELINE);
 
   // Options
   readonly availableSubtitles = signal<CastSubtitleOption[]>([]);
@@ -444,6 +455,7 @@ export class CastPlayerService {
       activeSubtitleId: this.activeSubtitleId(),
       activeAudioTrackId: this.activeAudioTrackId(),
       activeBurnInId: this.activeBurnInId,
+      timeline: this.timeline(),
     };
   }
 
@@ -466,6 +478,7 @@ export class CastPlayerService {
       activeSubtitleId: null,
       activeAudioTrackId: null,
       activeBurnInId: null,
+      timeline: { ...NO_TIMELINE, intro: markerOf(d['intro']), outro: markerOf(d['outro']) },
     };
   }
 
@@ -498,6 +511,7 @@ export class CastPlayerService {
     this.activeSubtitleId.set(s.activeSubtitleId);
     this.activeAudioTrackId.set(s.activeAudioTrackId);
     this.activeBurnInId = s.activeBurnInId;
+    this.timeline.set(s.timeline ?? NO_TIMELINE);
     this.hasMedia.set(true);
     this.startPositionSaving();
     this.loadSpriteMetadata(s.mediaFileId);
@@ -522,7 +536,14 @@ export class CastPlayerService {
     this.setLiveSession(null);
     this.playbackId = null;
     this.hasMedia.set(false);
+    this.cast.clearResumeState();
     this.mediaFileId.set(0);
+    this.mediaId.set(0);
+    this.episodeId.set(undefined);
+    this.mediaTitle.set('');
+    this.episodeTitle.set('');
+    this.fanartUrl.set(null);
+    this.timeline.set(NO_TIMELINE);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
   }
@@ -667,7 +688,10 @@ export class CastPlayerService {
   /** Shared by quickStart and reloadCastStream; a refused LOAD is reported here and returns false. */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: PlayMethod; playUrl: string; sessionId?: string; edl?: EdlRange[] },
+    pi: {
+      playMethod: PlayMethod; playUrl: string; sessionId?: string; edl?: EdlRange[];
+      markers?: { intro?: TimeMarker; outro?: TimeMarker }; chapters?: PlaybackTimeline['chapters'];
+    },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
@@ -678,6 +702,12 @@ export class CastPlayerService {
       console.warn('[cast] unexpected DirectPlay decision for a Cast session', pi);
     }
     this.playbackMode.set(playbackModeOf(pi));
+    this.timeline.set({
+      intro: pi.markers?.intro ?? null,
+      outro: pi.markers?.outro ?? null,
+      chapters: pi.chapters ?? [],
+      edl: pi.edl ?? [],
+    });
 
     const { token: castToken, streamBaseUrl } = castInfo;
     this.cast.setCastStreamBase(streamBaseUrl);
@@ -727,6 +757,8 @@ export class CastPlayerService {
       playbackId: this.playbackId ?? undefined,
       sid: pi.sessionId,
       autoSkipCommercials: this.authService.user()?.edlAutoSkipCommercials !== false,
+      intro: pi.markers?.intro,
+      outro: pi.markers?.outro,
       ...this.edlPayload(pi.edl, {
         title: this.mediaTitle(),
         subtitle: this.episodeTitle(),
@@ -1018,6 +1050,7 @@ export class CastPlayerService {
     // Phase 1: fetches independent of streamInfo run in parallel; `original` audio needs the media payload's language.
     const needsMediaFetch =
       !opts.streamInfo ||
+      opts.episodeId != null ||
       this.playerSettings.get().audioSelectionMode === 'original';
     const [mediaResult, subsResult, castInfo] = await Promise.all([
       needsMediaFetch
@@ -1094,7 +1127,7 @@ export class CastPlayerService {
       mediaId: opts.mediaId,
       episodeId: opts.episodeId,
       mediaTitle: opts.title,
-      episodeTitle: opts.episodeTitle ?? '',
+      episodeTitle: (mediaResult && opts.episodeId != null ? episodeLabel(mediaResult, opts.episodeId) : null) ?? opts.episodeTitle ?? '',
       fanartUrl,
       playbackMode: 'transcode',
       subtitles: subtitleInfos,

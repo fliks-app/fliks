@@ -3066,6 +3066,10 @@
       "shaka_3017": "Der Chromecast hat seinen Wiedergabespeicher überschritten. Versuchen Sie eine niedrigere Qualität (Code 3017).",
       "shaka_4001": "Ungültiges HLS-Manifest vom Chromecast empfangen (Code 4001).",
       "shaka_6001": "Der Chromecast unterstützt diesen Audio-/Video-Codec nicht (Code 6001)."
+    },
+    "receiver": {
+      "intro_hint": "Intro über dein Gerät überspringen",
+      "next_hint": "Nächste Folge über dein Gerät starten"
     }
   },
   "remote": {

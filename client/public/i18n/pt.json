@@ -3066,6 +3066,10 @@
       "shaka_3017": "O Chromecast esgotou a sua memória de reprodução. Tente uma qualidade mais baixa (código 3017).",
       "shaka_4001": "Manifesto HLS inválido recebido pelo Chromecast (código 4001).",
       "shaka_6001": "O Chromecast não suporta este codec de áudio/vídeo (código 6001)."
+    },
+    "receiver": {
+      "intro_hint": "Saltar a introdução a partir do seu dispositivo",
+      "next_hint": "Próximo episódio a partir do seu dispositivo"
     }
   },
   "remote": {

@@ -1,3 +1,4 @@
+import { episodeLabel } from '../../shared/utils/media-play.util';
 import {
   AfterViewInit,
   Component,
@@ -409,6 +410,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       spriteUrl: this.spriteUrl(),
       spriteMetadata: this.spriteMetadata(),
       skipCueLabelKey: this.localOutput.skipCue()?.labelKey ?? null,
+      timeline: this.localOutput.timeline(),
+      nextCue: false,
     };
   });
   readonly playbackMode = this.state.playbackMode;
@@ -2002,6 +2005,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (this.cues.commercialCueVisible()) return { labelKey: 'player.edl.skip_commercial' };
         return this.cues.skipIntroVisible() ? { labelKey: 'player.skip_intro' } : null;
       }),
+      timeline: computed(() => ({
+        intro: this.introMarker(),
+        outro: this.outroMarker(),
+        chapters: this.chapters(),
+        edl: this.edl.ranges(),
+      })),
       canPlayNext: computed(() => this.queueCtl.upNext() !== null),
       skip: () => this.cues.onSkipCue(),
       playNext: () => void this.queueCtl.advance(),
@@ -2078,8 +2087,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     for (const season of this.media.seasons) {
       const ep = season.episodes?.find((e) => e.id === this.episodeId);
       if (!ep) continue;
-      const label = `S${season.seasonNumber}:E${ep.episodeNumber}`;
-      this.episodeTitle.set(ep.title ? `${label} - ${ep.title}` : label);
+      this.episodeTitle.set(episodeLabel(this.media, ep.id) ?? '');
       if (ep.stillUrl) {
         this.fanartUrl.set(this.serverConfig.resolveUrl(ep.stillUrl));
       }

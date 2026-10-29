@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Media } from '../../core/services/api/media.service';
-import { buildSeriesQueueItems, resolveNextEpisodeItem } from './media-play.util';
+import { buildSeriesQueueItems, episodeLabel, resolveNextEpisodeItem } from './media-play.util';
 
 /** S2 declared before S1, one special, and E2 with no file. */
 const series = {
@@ -43,5 +43,15 @@ describe('resolveNextEpisodeItem', () => {
     expect(resolveNextEpisodeItem(series, 21)).toBeNull();
     // Not queue-able itself, so it has no place to advance from.
     expect(resolveNextEpisodeItem(series, 12)).toBeNull();
+  });
+});
+
+describe('episodeLabel', () => {
+  const m = { seasons: [{ seasonNumber: 1, episodes: [{ id: 10, episodeNumber: 2, title: 'Pilot' }, { id: 11, episodeNumber: 3, title: null }] }] } as never;
+
+  it('reads like the player header, with or without a title', () => {
+    expect(episodeLabel(m, 10)).toBe('S1:E2 - Pilot');
+    expect(episodeLabel(m, 11)).toBe('S1:E3');
+    expect(episodeLabel(m, 99)).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ function make(loadMedia: ReturnType<typeof vi.fn>, connected = true) {
   svc['playbackMode'] = signal('transcode');
   svc['liveSessionId'] = signal<string | null>(null);
   svc['availableSubtitles'] = signal([]);
+  svc['timeline'] = signal({ intro: null, outro: null, chapters: [], edl: [] });
   for (const k of ['activeSubtitleId', 'fanartUrl']) svc[k] = signal(null);
   for (const k of ['mediaTitle', 'episodeTitle']) svc[k] = signal('t');
   for (const k of ['mediaId', 'episodeId']) svc[k] = signal(1);

@@ -1,5 +1,6 @@
 import { Signal } from '@angular/core';
-import { SpriteMetadata } from '../../utils/player.utils';
+import { SpriteMetadata, TimeMarker } from '../../utils/player.utils';
+import type { EdlRange } from '../../utils/edl-policy';
 import type { CastPlayerService } from '../cast-player.service';
 
 /** Minimal shape the playback surfaces need for a track/quality row. */
@@ -24,6 +25,16 @@ export interface PlaybackSync {
   readonly drift?: { ignoreS: number; cooldownMs: number };
   readonly rate?: { get(): number; set(rate: number): void };
 }
+
+/** Intro and credits ranges, chapters and EDL ranges of the playing file, on the output's own clock. */
+export interface PlaybackTimeline {
+  intro: TimeMarker | null;
+  outro: TimeMarker | null;
+  chapters: { startSeconds: number; endSeconds: number; title?: string }[];
+  edl: readonly EdlRange[];
+}
+
+export const NO_TIMELINE: PlaybackTimeline = { intro: null, outro: null, chapters: [], edl: [] };
 
 /** Something that plays (this device's engine, a Chromecast session or another Fliks device): what the controls show and what the party sync drives. */
 export interface PlaybackOutput {
@@ -61,6 +72,8 @@ export interface PlaybackOutput {
   readonly activeAudioTrackId: Signal<string | null>;
   readonly activeQualityId: Signal<string>;
 
+  /** What the seekbar marks and the skip cues key on. */
+  readonly timeline: Signal<PlaybackTimeline>;
   /** The skip offer that applies right now, or null. `labelKey` is an i18n key so the surface stays translation-only. */
   readonly skipCue: Signal<{ labelKey: string } | null>;
   /** Something follows what is playing, so the surface can offer it whatever the playhead is doing. */

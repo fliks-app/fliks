@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
+import { Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CastPlaybackTarget } from './cast-playback-target';
 import { CastService } from './cast.service';
@@ -10,9 +11,10 @@ import { PartyService } from './party/party.service';
 import { PlayerSettingsService } from './player-settings.service';
 
 function setup(autoPlayNext = true, partyActive = false) {
-  const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), duration: signal(0), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
+  const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), duration: signal(0), nextRequested$: new Subject<void>(), sendFliks: vi.fn(), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
   const quickStart = vi.fn(async () => {});
-  const cp = { changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
+  const timeline = signal<{ intro: unknown; outro: unknown; chapters: unknown[]; edl: unknown[] }>({ intro: null, outro: null, chapters: [], edl: [] });
+  const cp = { timeline, mediaFileId: signal(5), changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
   const media = {
     id: 1,
     type: 'series',
@@ -32,7 +34,7 @@ function setup(autoPlayNext = true, partyActive = false) {
     ],
   });
   const target = TestBed.inject(CastPlaybackTarget);
-  return { cast, cp, target, quickStart };
+  return { cast, cp, target, quickStart, timeline };
 }
 
 describe('CastPlaybackTarget auto-next', () => {
@@ -62,6 +64,50 @@ describe('CastPlaybackTarget auto-next', () => {
     party.cast.ended.set(true);
     TestBed.tick();
     expect(party.quickStart).not.toHaveBeenCalled();
+  });
+});
+
+describe('CastPlaybackTarget skip cues', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('offers the intro skip inside the intro and seeks to its end', () => {
+    const { cast, target, timeline } = setup();
+    timeline.set({ intro: { startSeconds: 10, endSeconds: 70 }, outro: null, chapters: [], edl: [] });
+    cast.currentTime.set(5);
+    expect(target.skipCue()).toBeNull();
+    cast.currentTime.set(30);
+    expect(target.skipCue()).toEqual({ labelKey: 'player.skip_intro' });
+    target.skip();
+    expect(cast.seek).toHaveBeenCalledWith(70);
+  });
+
+  it('tells the receiver the ranges and whether a next episode follows', async () => {
+    const { cast, target, timeline } = setup();
+    timeline.set({ intro: { startSeconds: 1, endSeconds: 2 }, outro: { startSeconds: 9, endSeconds: 10 }, chapters: [], edl: [] });
+    TestBed.tick();
+    await vi.waitFor(() => expect(target.canPlayNext()).toBe(true));
+    TestBed.tick();
+    expect(cast.sendFliks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'cues', fileId: 5, hasNext: true, intro: { startSeconds: 1, endSeconds: 2 } }),
+    );
+  });
+
+  it('plays the next episode when the receiver asks for it', async () => {
+    const { cast, target, quickStart } = setup();
+    await vi.waitFor(() => expect(target.canPlayNext()).toBe(true));
+    cast.nextRequested$.next();
+    expect(quickStart).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CastPlaybackTarget after a stop', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('is idle while connected with nothing loaded', () => {
+    const { cp, target } = setup();
+    expect(target.isIdle()).toBe(false);
+    cp.hasMedia.set(false);
+    expect(target.isIdle()).toBe(true);
   });
 });
 
