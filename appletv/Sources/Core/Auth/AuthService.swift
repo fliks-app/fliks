@@ -284,8 +284,11 @@ import Foundation
     @MainActor
     func logout() async {
         struct Body: Encodable { let refreshToken: String? }
-        try? await api.post("/api/auth/logout", body: Body(refreshToken: tokens.refreshToken))
+        let body = Body(refreshToken: tokens.refreshToken)
+        let bearer = tokens.accessToken.map { ["Authorization": "Bearer \($0)"] } ?? [:]
         dropActiveSession()
+        // Revoking server-side is best effort: signing out never waits on the server.
+        Task { [api] in try? await api.post("/api/auth/logout", body: body, headers: bearer) }
     }
 
     /// Wipe credentials scoped to the server just switched away from. No
