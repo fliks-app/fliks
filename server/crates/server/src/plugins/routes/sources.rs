@@ -243,6 +243,78 @@ pub async fn sources_catalog(State(st): State<AppState>, a: Authed, Path(id): Pa
     .into_response())
 }
 
+const LOGO_CAP: usize = 512 << 10;
+const LOGO_CACHE_MAX: usize = 256;
+type CachedLogo = (&'static str, Vec<u8>);
+static LOGOS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, CachedLogo>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// The image type of safe logo bytes: PNG, JPEG, WebP, or an SVG without script content.
+fn logo_type(b: &[u8]) -> Option<&'static str> {
+    if b.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
+        Some("image/png")
+    } else if b.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if b.len() > 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else {
+        crate::plugins::archive::sniff_logo("logo.svg", b)
+            .is_none()
+            .then_some("image/svg+xml")
+    }
+}
+
+#[utoipa::path(get, path = "/api/plugins/sources/{id}/catalog/{pluginId}/logo", responses((status = 200)))]
+pub async fn sources_catalog_logo(
+    State(st): State<AppState>,
+    a: Authed,
+    Path((id, plugin)): Path<(String, String)>,
+) -> Res {
+    need(&a, Action::Read)?;
+    let id = int_param(&id).map_err(app)?;
+    let s = source_or_404(&st, id).await?;
+    let not_found = || app(AppError::bare(StatusCode::NOT_FOUND));
+    let url = s
+        .cached_catalog
+        .as_ref()
+        .and_then(|c| c["plugins"].as_array())
+        .into_iter()
+        .flatten()
+        .find(|p| p["id"] == plugin.as_str())
+        .and_then(|p| p["logo"].as_str())
+        .ok_or_else(not_found)?
+        .to_owned();
+    let cached = LOGOS.lock().expect("logo cache").get(&url).cloned();
+    let (ct, bytes) = match cached {
+        Some(l) => l,
+        None => {
+            let bytes = st
+                .plugins
+                .opts
+                .fetch
+                .logo(&url, &s.url, LOGO_CAP)
+                .await
+                .map_err(|_| app(AppError::bare(StatusCode::BAD_GATEWAY)))?;
+            let ct = logo_type(&bytes).ok_or_else(not_found)?;
+            let mut c = LOGOS.lock().expect("logo cache");
+            if c.len() >= LOGO_CACHE_MAX {
+                c.clear();
+            }
+            c.insert(url, (ct, bytes.clone()));
+            (ct, bytes)
+        }
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, ct),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (header::CONTENT_SECURITY_POLICY, "sandbox"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
 #[utoipa::path(post, path = "/api/plugins/sources/{id}/refresh", responses((status = 201)))]
 pub async fn sources_refresh(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
     need(&a, Action::Manage)?;

@@ -189,3 +189,16 @@ describe('PluginCatalogueComponent — the version picker', () => {
     http.expectNone({ url: '/api/plugins/sources/1/inspect', method: 'POST' });
   });
 });
+
+describe('PluginCatalogueComponent — logos stay same-origin', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('relays a catalogue logo through the server and uses the local one once installed', async () => {
+    const { fixture } = await createComponent([]);
+    const row = { ...fixture.componentInstance.rows()[0] };
+    row.plugin = { ...row.plugin, logo: 'https://cdn.example/l.png' };
+    expect(fixture.componentInstance.logoFor(row)).toBe('/api/plugins/sources/1/catalog/fliks.acme/logo');
+    fixture.componentRef.setInput('installedIds', new Set(['fliks.acme']));
+    expect(fixture.componentInstance.logoFor(row)).toBe('/api/plugins/fliks.acme/logo');
+  });
+});
