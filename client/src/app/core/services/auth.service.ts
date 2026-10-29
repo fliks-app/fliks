@@ -286,10 +286,12 @@ export class AuthService {
     return firstValueFrom(this.http.get<PublicUserSummary[]>('/api/auth/users-public'));
   }
 
-  /** True while the server has no account at all: the first admin is still to be created. */
+  /** True while the server has no account at all; an older server has no such route and answers 404 (false, no toast). */
   async setupRequired(): Promise<boolean> {
     try {
-      const res = await firstValueFrom(this.http.get<{ required: boolean }>('/api/auth/setup'));
+      const res = await firstValueFrom(
+        this.http.get<{ required: boolean }>('/api/auth/setup', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
+      );
       return res.required;
     } catch {
       return false;

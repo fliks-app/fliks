@@ -474,6 +474,7 @@
     "col_note": "Nota"
   },
   "nav": {
+    "user_menu": "Menu utente",
     "home": "Home",
     "my_profile": "Il mio profilo",
     "statistics": "Statistiche",
@@ -736,8 +737,7 @@
     "password_hint": "Almeno 8 caratteri.",
     "confirm": "Conferma password",
     "mismatch": "Le password non corrispondono.",
-    "submit": "Crea account",
-    "error": "Impossibile creare l'account."
+    "submit": "Crea account"
   },
   "forced_password_change": {
     "title": "Nuova password richiesta",
@@ -1992,9 +1992,9 @@
       "probe_path_help": "Usato solo da Test connessione; non viene salvato. Una mappatura già presente su quel motore viene applicata.",
       "gateway_mismatch": "Il video viene ancora inoltrato a {{url}}. Riavvia il motore del NAS con --engine-upstream uguale all'URL salvato, oppure svuota questo URL per tenere quello del processo.",
       "status": "Stato connessione",
-      "status_off": "Spento — non configurato o non connesso",
-      "status_up": "Attivo — motore raggiungibile",
-      "status_down": "Giù — motore non raggiungibile",
+      "status_off": "Spento: non configurato o non connesso",
+      "status_up": "Attivo: motore raggiungibile",
+      "status_down": "Giù: motore non raggiungibile",
       "status_down_message": "Il motore di streaming non è raggiungibile",
       "test": "Test connessione",
       "saved": "Impostazioni motore remoto salvate",

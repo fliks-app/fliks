@@ -474,6 +474,7 @@
     "col_note": "Nota"
   },
   "nav": {
+    "user_menu": "Menu do utilizador",
     "home": "Início",
     "my_profile": "O meu perfil",
     "statistics": "Estatísticas",
@@ -736,8 +737,7 @@
     "password_hint": "Pelo menos 8 caracteres.",
     "confirm": "Confirmar palavra-passe",
     "mismatch": "As palavras-passe não coincidem.",
-    "submit": "Criar conta",
-    "error": "Não foi possível criar a conta."
+    "submit": "Criar conta"
   },
   "forced_password_change": {
     "title": "Nova palavra-passe obrigatória",
@@ -1992,9 +1992,9 @@
       "probe_path_help": "Usado apenas em Testar ligação; não é guardado. Um mapeamento já presente nesse motor é aplicado.",
       "gateway_mismatch": "O vídeo continua a ser encaminhado para {{url}}. Reinicie o motor do NAS com --engine-upstream igual ao URL guardado, ou esvazie este URL para manter o do processo.",
       "status": "Estado da ligação",
-      "status_off": "Desligado — não configurado ou sem ligação",
-      "status_up": "Ativo — motor acessível",
-      "status_down": "Inativo — motor inacessível",
+      "status_off": "Desligado: não configurado ou sem ligação",
+      "status_up": "Ativo: motor acessível",
+      "status_down": "Inativo: motor inacessível",
       "status_down_message": "O motor de streaming está inacessível",
       "test": "Testar ligação",
       "saved": "Definições do motor remoto guardadas",

@@ -8,12 +8,6 @@
         {{ 'create_admin.subtitle' | translate }}
       </p>
 
-      @if (error()) {
-        <div role="alert" class="alert alert-error mb-4">
-          <span>{{ error() }}</span>
-        </div>
-      }
-
       <form [formGroup]="form" (ngSubmit)="onSubmit()">
         <fieldset class="fieldset">
           <label class="fieldset-label" for="admin-username">{{ 'create_admin.username' | translate }}</label>
@@ -48,7 +42,7 @@
             formControlName="confirm"
             autocomplete="new-password"
           />
-          @if (mismatch()) {
+          @if (form.hasError('mismatch')) {
             <p class="text-sm text-error mt-1">{{ 'create_admin.mismatch' | translate }}</p>
           }
         </fieldset>
@@ -57,7 +51,7 @@
           <button
             type="submit"
             class="btn btn-primary w-full"
-            [disabled]="loading() || form.invalid || mismatch()"
+            [disabled]="loading() || form.invalid"
           >
             @if (loading()) {
               <span class="loading loading-spinner loading-sm"></span>

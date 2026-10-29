@@ -663,7 +663,7 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
-    /** The PiP window was closed: the activity is stopped yet still reports PiP, so handleOnStop kept playing. */
+    /** The PiP window was closed: the activity is stopped yet still reports PiP, so handleOnStop skips the pause and it is done here. */
     void onPipClosed() {
         if (player != null && mediaSession == null) player.pause();
     }
