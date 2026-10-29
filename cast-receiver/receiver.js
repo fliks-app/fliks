@@ -412,22 +412,25 @@ const barBands = barEl.querySelector('.bar-bands');
 const barPlayer = document.querySelector('cast-media-player');
 if (barPlayer && barPlayer.shadowRoot) {
   const hide = document.createElement('style');
-  // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
+  // The text track container is the only handle on cues (the Cast OS ignores cue.line). Chrome sizes it to the
+  // picture, so its bottom moved with the aspect ratio: it is pinned to the screen instead.
+  const track = 'video::-webkit-media-text-track-container';
   hide.textContent =
     'tv-overlay { display: none !important; }' +
-    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; transform: translateY(var(--sub-y, 8vh)); }' +
-    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(var(--sub-y-bar, -6vh)); }';
+    track + ' { position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important;' +
+    ' width: auto !important; height: auto !important; bottom: var(--sub-bottom, -3vh) !important; transition: bottom 200ms ease-out; }' +
+    ':host(.bar-on) ' + track + ' { bottom: var(--sub-bottom-bar, 12vh) !important; }';
   barPlayer.shadowRoot.appendChild(hide);
 }
 
-// Cast OS cues sit about 16vh up: shift them so a margin of m puts them m vh above the bottom, like
-// the local player, and 14vh higher while the bar shows. Custom properties reach the shadow root.
+// Cues sit about 10vh above the pinned container's bottom: a margin of m puts them about m + 2vh up, like the
+// local player, and clear of the bar while it shows. Custom properties reach the shadow root.
 function setSubMargin(style) {
   const m = Number(style && style.customData && style.customData.bottomMargin);
-  const y = 13 - (Number.isFinite(m) ? m : 5);
+  const margin = Number.isFinite(m) ? m : 5;
   if (!barPlayer) return;
-  barPlayer.style.setProperty('--sub-y', y + 'vh');
-  barPlayer.style.setProperty('--sub-y-bar', y - 14 + 'vh');
+  barPlayer.style.setProperty('--sub-bottom', margin - 8 + 'vh');
+  barPlayer.style.setProperty('--sub-bottom-bar', margin + 7 + 'vh');
 }
 
 function formatClock(sec) {
