@@ -93,7 +93,28 @@ async fn orphan_keeps_the_data_and_a_reprovision_reuses_it() {
     .execute(&s.pool)
     .await
     .unwrap();
-    db::orphan(&s.pool, "acme.tool").await.unwrap();
+    db::orphan(&s.pool, "acme.tool", Some("release-2026"))
+        .await
+        .unwrap();
+    let k = db::kept(&s.pool, "acme.tool").await.unwrap();
+    assert_eq!(k, db::Kept::Signer(Some("release-2026".into())));
+    assert!(db::may_adopt(&k, Some("release-2026")));
+    assert!(
+        !db::may_adopt(&k, None),
+        "an unsigned fork cannot adopt the data"
+    );
+    assert!(!db::may_adopt(&k, Some("other")));
+    sqlx::query(r#"DELETE FROM plugin_kept_data"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let k = db::kept(&s.pool, "acme.tool").await.unwrap();
+    assert_eq!(
+        k,
+        db::Kept::Unrecorded,
+        "an orphan from before signers were recorded"
+    );
+    assert!(!db::may_adopt(&k, None) && db::may_adopt(&k, Some("release-2026")));
     let login: bool = sqlx::query_scalar("SELECT rolcanlogin FROM pg_roles WHERE rolname = $1")
         .bind(&ours)
         .fetch_one(&s.pool)
@@ -123,6 +144,12 @@ async fn orphan_keeps_the_data_and_a_reprovision_reuses_it() {
     assert!(
         login && note.is_none(),
         "reprovisioning reactivates the schema"
+    );
+    db::orphan(&s.pool, "acme.tool", None).await.unwrap();
+    db::deprovision(&s.pool, "acme.tool").await.unwrap();
+    assert_eq!(
+        db::kept(&s.pool, "acme.tool").await.unwrap(),
+        db::Kept::Nothing
     );
     s.finish().await;
 }
