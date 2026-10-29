@@ -1097,6 +1097,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.queue.clear();
     }
 
+    await this.castPlayerService.adoptSurvivingSession();
+    if (this.destroyed) return;
     if (this.session.isLocal()) {
       this.attachLocalOutput();
       const completed = await this.startLocal(resumeTime);
@@ -3031,6 +3033,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.itemAdopted = true;
     this.edlEnded = false;
     this.resetTrackState();
+    this.followItemInUrl(item);
     if (item.mediaId !== this.mediaId) {
       this.mediaId = item.mediaId;
       const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
@@ -3048,6 +3051,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (duration > 0) this.state.duration.set(duration);
     this.resolveAudioTarget();
     await this.planSubtitleDelivery();
+  }
+
+  /** Route reuse keeps the player mounted; replaceUrl keeps the old item out of history. */
+  private followItemInUrl(item: { fileId: number; mediaId: number; episodeId?: number }): void {
+    const { episodeId: _prev, ...rest } = this.route.snapshot.queryParams;
+    const queryParams = { ...rest, mediaId: item.mediaId, ...(item.episodeId ? { episodeId: item.episodeId } : {}) };
+    this.navbar.markAsBackNavigation();
+    void this.router.navigate(['/watch', item.fileId], { queryParams, replaceUrl: true });
   }
 
   /** The reload that follows a cast negotiates from the player's own picks, so the ones

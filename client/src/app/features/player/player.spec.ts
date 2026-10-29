@@ -266,6 +266,7 @@ function createHarness(opts: {
           reloadCastStream: vi.fn(),
           startCast: vi.fn(),
           clear: vi.fn(),
+          adoptSurvivingSession: vi.fn(async () => {}),
           selectionFor: vi.fn(() => null),
           resolveStartSubtitle: vi.fn(async () => null),
         },
@@ -3497,6 +3498,10 @@ describe('PlayerComponent review fixes', () => {
     expect(h.component.mediaFileId).toBe(2);
     expect(h.component.episodeId).toBe(5);
     expect(h.component.itemAdopted).toBe(true);
+    expect(h.router.navigate).toHaveBeenCalledWith(['/watch', 2], {
+      queryParams: expect.objectContaining({ mediaId: MEDIA_ID, episodeId: 5 }),
+      replaceUrl: true,
+    });
   });
 
   it('keyboard seeks read the output while casting, not the unloaded engine', () => {
