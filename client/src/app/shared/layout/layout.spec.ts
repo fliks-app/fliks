@@ -131,7 +131,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           lastEvent: f.sseLastEvent ?? (() => null),
           connectionId: () => null,
           connect: () => {},
-          serverUnreachable: () => false, connected: () => true,
+          serverUnreachable: () => false, unreachableChip: () => false, connected: () => true,
         },
       },
       { provide: DownloadManagerService, useValue: {} },
