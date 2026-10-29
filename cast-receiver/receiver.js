@@ -19,7 +19,7 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
-const { activeCue, cueText } = self.FliksCues;
+const { activeCue, cueText, bandGeometry } = self.FliksCues;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -394,7 +394,88 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   if (!msg || msg.kind !== 'cues') return;
   cueState.cues = msg;
   refreshCue();
+  renderBar();
 });
+
+// --- Progress bar ---------------------------------------------------------------
+// Own bar bound to the CAF player data; the default overlay (tv-overlay in the player's shadow root) is hidden.
+
+const barEl = document.getElementById('bar');
+const barTitle = barEl.querySelector('.bar-title');
+const barSubtitle = barEl.querySelector('.bar-subtitle');
+const barElapsed = barEl.querySelector('.bar-elapsed');
+const barTotal = barEl.querySelector('.bar-total');
+const barPlayed = barEl.querySelector('.bar-played');
+const barBuffered = barEl.querySelector('.bar-buffered');
+const barBands = barEl.querySelector('.bar-bands');
+const barPlayer = document.querySelector('cast-media-player');
+if (barPlayer && barPlayer.shadowRoot) {
+  const hide = document.createElement('style');
+  // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
+  hide.textContent =
+    'tv-overlay { display: none !important; }' +
+    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; }' +
+    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(-6vh); }';
+  barPlayer.shadowRoot.appendChild(hide);
+}
+
+function formatClock(sec) {
+  const t = Math.max(0, Math.floor(Number.isFinite(sec) ? sec : 0));
+  const s = String(t % 60).padStart(2, '0');
+  const m = Math.floor(t / 60) % 60;
+  const h = Math.floor(t / 3600);
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+function bufferedEnd(el, time) {
+  if (!el) return 0;
+  for (let i = 0; i < el.buffered.length; i++) {
+    if (time >= el.buffered.start(i) && time <= el.buffered.end(i)) return el.buffered.end(i);
+  }
+  return 0;
+}
+
+const playerData = {};
+const playerBinder = new cast.framework.ui.PlayerDataBinder(playerData);
+const BarState = cast.framework.ui.State;
+let barBandsKey = '';
+
+const spinnerEl = document.getElementById('spinner');
+
+function renderBar() {
+  const st = playerData.state;
+  spinnerEl.classList.toggle('show', st === BarState.LOADING || st === BarState.BUFFERING);
+  const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
+  const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
+  barEl.classList.toggle('show', show);
+  document.body.classList.toggle('bar-on', show);
+  if (barPlayer) barPlayer.classList.toggle('bar-on', show);
+  if (!show) return;
+  const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
+  const time = playerData.currentTime || 0;
+  const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
+  // An episode leads with its own label (`subtitle`), the series name under it, as the CAF overlay does.
+  barTitle.textContent = playerData.subtitle || playerData.title || '';
+  barSubtitle.textContent = playerData.subtitle ? playerData.title || '' : '';
+  barTitle.classList.toggle('small', !!playerData.subtitle);
+  barElapsed.textContent = formatClock(time);
+  barTotal.textContent = duration ? formatClock(duration) : '';
+  barPlayed.style.width = pct(time);
+  barBuffered.style.width = pct(bufferedEnd(findMediaElement(), time));
+  const bands = bandGeometry(cueState.cues, cueState.fileId, duration);
+  const key = JSON.stringify(bands);
+  if (key === barBandsKey) return;
+  barBandsKey = key;
+  barBands.textContent = '';
+  bands.forEach((b) => {
+    const el = document.createElement('div');
+    el.className = 'bar-band ' + b.kind;
+    el.style.left = b.left + '%';
+    el.style.width = b.width + '%';
+    barBands.appendChild(el);
+  });
+}
+playerBinder.addEventListener(cast.framework.ui.PlayerDataEventType.ANY_CHANGE, renderBar);
 
 // --- Subtitle styling baked into every load -----------------------------
 //

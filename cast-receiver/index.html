@@ -42,6 +42,22 @@
 
   <div id="skip-cue" class="skip-cue" role="status"></div>
 
+  <!-- Progress bar driven by PlayerDataBinder; replaces the default overlay of <cast-media-player>. -->
+  <div id="spinner" class="spinner" aria-hidden="true"></div>
+  <div id="bar" class="bar" aria-hidden="true">
+    <div class="bar-title"></div>
+    <div class="bar-subtitle"></div>
+    <div class="bar-track">
+      <div class="bar-buffered"></div>
+      <div class="bar-bands"></div>
+      <div class="bar-played"></div>
+    </div>
+    <div class="bar-times">
+      <span class="bar-time bar-elapsed">0:00</span>
+      <span class="bar-time bar-total">0:00</span>
+    </div>
+  </div>
+
   <!-- Party reactions and chat bubbles, relayed by a sender; filled by receiver.js. -->
   <div id="party-layer" class="party-layer" aria-hidden="true">
     <div class="party-reactions"></div>

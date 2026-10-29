@@ -30,6 +30,7 @@ Your media stays on your NAS — only the receiver shell is centralised.
 
 - `index.html` — entry point loaded by the Chromecast.
 - `edl.js`: EDL skip/mute policy (port of `client/src/app/core/utils/edl-policy.ts`).
+- `cues.js`: skip cue and progress band policy.
 - `receiver.js` — boots CAF SDK, hooks LOAD/IDLE, applies subtitle defaults.
 - `receiver.css` — branding, idle splash, `::cue` style.
 - `fliks-icon.svg` — splash logo.

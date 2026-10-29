@@ -259,6 +259,7 @@ function loadCues() {
   return ctx.self['FliksCues'] as {
     activeCue(c: unknown, fileId: number, t: number): string | null;
     cueText(c: unknown, cue: string, remoteKeys: boolean): string;
+    bandGeometry(c: unknown, fileId: number, duration: number): { kind: string; left: number; width: number }[];
   };
 }
 
@@ -316,4 +317,19 @@ test('resumeFromMedia keeps the saved state only for the item the receiver still
   assert.equal(resumeFromMedia(record.resume, playing(undefined)), undefined);
   assert.equal(resumeFromMedia(record.resume, undefined), undefined);
   assert.equal(resumeFromMedia(undefined, playing({ mediaFileId: 7, mediaId: 3 })), undefined);
+});
+
+test('receiver bands: intro and credits as track percentages, clamped, only for the loaded file', () => {
+  const { bandGeometry } = loadCues();
+  const bands = (...a: Parameters<typeof bandGeometry>) => JSON.parse(JSON.stringify(bandGeometry(...a)));
+  const cues = { fileId: 7, intro: { startSeconds: 100, endSeconds: 200 }, outro: { startSeconds: 900, endSeconds: 1200 } };
+  assert.deepEqual(bands(cues, 7, 1000), [
+    { kind: 'intro', left: 10, width: 10 },
+    { kind: 'outro', left: 90, width: 10 },
+  ]);
+  assert.deepEqual(bands({ fileId: 7, intro: null, outro: null }, 7, 1000), []);
+  assert.deepEqual(bands(cues, 8, 1000), []);
+  assert.deepEqual(bands(cues, 7, 0), []);
+  assert.deepEqual(bands(cues, 7, Infinity), []);
+  assert.deepEqual(bands(null, 7, 1000), []);
 });
