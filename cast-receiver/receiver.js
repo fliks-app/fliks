@@ -421,13 +421,13 @@ if (barPlayer && barPlayer.shadowRoot) {
 }
 
 // Cast OS cues sit about 16vh up: shift them so a margin of m puts them m vh above the bottom, like
-// the local player, and never below the spot that clears the bar. Custom properties reach the shadow root.
+// the local player, and 14vh higher while the bar shows. Custom properties reach the shadow root.
 function setSubMargin(style) {
   const m = Number(style && style.customData && style.customData.bottomMargin);
   const y = 13 - (Number.isFinite(m) ? m : 5);
   if (!barPlayer) return;
   barPlayer.style.setProperty('--sub-y', y + 'vh');
-  barPlayer.style.setProperty('--sub-y-bar', Math.min(y, -6) + 'vh');
+  barPlayer.style.setProperty('--sub-y-bar', y - 14 + 'vh');
 }
 
 function formatClock(sec) {
