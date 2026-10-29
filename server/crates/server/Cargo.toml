@@ -20,7 +20,7 @@ parity = []
 axum = { version = "0.8", features = ["multipart"] }
 dunce = "1"
 emojis = "0.9"
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "gzip", "deflate", "brotli", "zstd"] }
 serde_path_to_error = "0.1"
 fliks_domain = { path = "../domain" }
@@ -28,7 +28,7 @@ chrono.workspace = true
 httpdate = "1"
 serde.workspace = true
 serde_json.workspace = true
-tower-http = { version = "0.6", features = ["compression-br", "compression-gzip", "cors", "fs", "trace"] }
+tower-http = { version = "0.7", features = ["compression-br", "compression-gzip", "cors", "fs", "trace"] }
 tracing = "0.1"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 futures-util = { version = "0.3", default-features = false }
