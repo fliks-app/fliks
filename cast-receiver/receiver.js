@@ -442,9 +442,23 @@ const BarState = cast.framework.ui.State;
 let barBandsKey = '';
 
 const spinnerEl = document.getElementById('spinner');
+const stateIconEl = document.getElementById('state-icon');
+let iconState = null;
+let iconTimer = 0;
+
+function renderStateIcon(st) {
+  if (st === iconState) return;
+  const resumed = iconState === BarState.PAUSED && st === BarState.PLAYING;
+  iconState = st;
+  clearTimeout(iconTimer);
+  stateIconEl.classList.toggle('paused', st === BarState.PAUSED);
+  stateIconEl.classList.toggle('show', st === BarState.PAUSED || resumed);
+  if (resumed) iconTimer = setTimeout(() => stateIconEl.classList.remove('show'), 600);
+}
 
 function renderBar() {
   const st = playerData.state;
+  renderStateIcon(st);
   spinnerEl.classList.toggle('show', st === BarState.LOADING || st === BarState.BUFFERING);
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
   const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
