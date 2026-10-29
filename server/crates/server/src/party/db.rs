@@ -11,6 +11,7 @@ pub struct Row {
     pub id: i32,
     pub name: String,
     pub owner_id: i32,
+    pub host_id: Option<i32>,
     pub media_id: Option<i32>,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
@@ -29,6 +30,11 @@ pub struct Row {
 }
 
 impl Row {
+    /// The host the machine boots with: whoever the role was handed to, else the owner.
+    pub fn host(&self) -> i32 {
+        self.host_id.unwrap_or(self.owner_id)
+    }
+
     /// The playing item, or the programme's head before the start; `None` while it is empty.
     pub fn item(&self) -> Option<Item> {
         Some(Item {
@@ -40,7 +46,7 @@ impl Row {
 }
 
 /// The item columns of a row: the playing item once started, else the head of the programme.
-const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id,
+const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id, p."hostId" AS host_id,
     CASE WHEN p.status = 'scheduled' THEN h."mediaId" ELSE p."mediaId" END AS media_id,
     CASE WHEN p.status = 'scheduled' THEN h."mediaFileId" ELSE p."mediaFileId" END AS media_file_id,
     CASE WHEN p.status = 'scheduled' THEN h."episodeId" ELSE p."episodeId" END AS episode_id,
@@ -83,10 +89,8 @@ pub async fn owner_switches(db: &PgPool, owner: i32) -> sqlx::Result<Option<(boo
     .await
 }
 
-/// The party the host already has for this item, else a new one (`true`). A "now" creation matches
-/// an open party (live, or scheduled and already due at `now`); a scheduled one matches the same
-/// start. Transaction-scoped advisory lock on host+item: the match is a time window, no unique
-/// index fits.
+/// The party the host already has for this item and start, else a new one (`true`); the match is a
+/// time window, so it runs under an advisory lock on host+item.
 pub async fn insert(
     db: &PgPool,
     n: &New<'_>,
@@ -325,14 +329,20 @@ pub async fn kick_guest(db: &PgPool, party: i32, user: i32) -> sqlx::Result<()> 
     Ok(())
 }
 
-/// Removes every user who joined through the link, except `keep` (the live host); they are
-/// returned so the caller can drop them from the live party.
-pub async fn drop_link_guests(db: &PgPool, party: i32, keep: i32) -> sqlx::Result<Vec<i32>> {
+/// Removes every guest whose `source` is one of `sources`, except `keep` (the live host); they
+/// are returned so the caller can drop them from the live party.
+pub async fn drop_guests(
+    db: &PgPool,
+    party: i32,
+    sources: &[&str],
+    keep: i32,
+) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar(
         r#"DELETE FROM watch_party_invitees
-           WHERE "partyId" = $1 AND "source" = 'link' AND "userId" <> $2 RETURNING "userId""#,
+           WHERE "partyId" = $1 AND "source" = ANY($2) AND "userId" <> $3 RETURNING "userId""#,
     )
     .bind(party)
+    .bind(sources)
     .bind(keep)
     .fetch_all(db)
     .await
@@ -399,6 +409,32 @@ pub async fn listed(db: &PgPool, user: i32, public: bool, all: bool) -> sqlx::Re
     .bind(all)
     .fetch_all(db)
     .await
+}
+
+/// The parties not yet ended that play `media`.
+pub async fn open_ids_playing(db: &PgPool, media: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(r#"SELECT id FROM watch_parties WHERE "mediaId" = $1 AND status <> 'ended'"#)
+        .bind(media)
+        .fetch_all(db)
+        .await
+}
+
+/// The parties not yet ended that `owner` owns.
+pub async fn open_ids_owned(db: &PgPool, owner: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(r#"SELECT id FROM watch_parties WHERE "ownerId" = $1 AND status <> 'ended'"#)
+        .bind(owner)
+        .fetch_all(db)
+        .await
+}
+
+/// Remembers who holds the host role, so a restart keeps it.
+pub async fn set_host(db: &PgPool, id: i32, host: i32) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE watch_parties SET "hostId" = $2 WHERE id = $1"#)
+        .bind(id)
+        .bind(host)
+        .execute(db)
+        .await?;
+    Ok(())
 }
 
 pub async fn live_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
@@ -666,6 +702,11 @@ pub async fn item_infos(
             },
         )
         .collect())
+}
+
+/// Whether `media` is in one of the `allowed` libraries, given the library of each media.
+pub fn can_open(libraries: &HashMap<i32, i32>, allowed: &[i32], media: i32) -> bool {
+    libraries.get(&media).is_some_and(|l| allowed.contains(l))
 }
 
 /// The library of each of the media, for access checks done in memory.

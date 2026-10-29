@@ -3,7 +3,7 @@ use super::store;
 use crate::{http::AppError, paths::data_dir};
 use axum::extract::{DefaultBodyLimit, Multipart, multipart::MultipartRejection};
 use image::{ImageFormat, ImageReader};
-use std::{io::Cursor, path::PathBuf};
+use std::{fmt::Display, io::Cursor, path::PathBuf};
 
 const MAX: usize = 5 * 1024 * 1024;
 
@@ -12,8 +12,8 @@ pub fn body_limit() -> DefaultBodyLimit {
     DefaultBodyLimit::max(MAX + 64 * 1024)
 }
 
-fn path(dir: &str, id: i32, suffix: &str) -> PathBuf {
-    data_dir().join(dir).join(format!("{id}{suffix}"))
+fn path(dir: &str, name: impl Display, suffix: &str) -> PathBuf {
+    data_dir().join(dir).join(format!("{name}{suffix}"))
 }
 
 fn upload_error(e: impl std::fmt::Display) -> AppError {
@@ -63,26 +63,32 @@ pub async fn read_jpeg(
     Ok(bytes)
 }
 
-/// A JPEG, PNG or WebP file told apart by its bytes, stored as a JPEG; anything else (SVG included) is refused.
+/// A JPEG, PNG or WebP file told apart by its bytes, always re-encoded as an upright JPEG (metadata
+/// dropped); anything else (SVG included) is refused.
 pub async fn read_image(
     multipart: Result<Multipart, MultipartRejection>,
     what: &str,
 ) -> Result<Vec<u8>, AppError> {
     let (_, bytes) = read_file(multipart).await?;
-    let format = ImageReader::new(Cursor::new(&bytes))
-        .with_guessed_format()
-        .ok()
-        .and_then(|r| r.format());
-    let jpeg = match format {
-        Some(ImageFormat::Jpeg) => Some(bytes),
-        Some(ImageFormat::Png | ImageFormat::WebP) => store::to_jpeg(&bytes),
-        _ => None,
-    };
+    let jpeg = tokio::task::spawn_blocking(move || {
+        let format = ImageReader::new(Cursor::new(&bytes))
+            .with_guessed_format()
+            .ok()
+            .and_then(|r| r.format());
+        matches!(
+            format,
+            Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
+        )
+        .then(|| store::to_jpeg(&bytes))
+        .flatten()
+    })
+    .await
+    .map_err(|e| AppError::internal(e.to_string()))?;
     jpeg.ok_or_else(|| AppError::bad_request(format!("{what} must be a JPEG, PNG or WebP image")))
 }
 
-pub async fn write(dir: &str, id: i32, bytes: &[u8]) -> Result<(), AppError> {
-    let dest = path(dir, id, ".jpg");
+pub async fn write(dir: &str, name: impl Display, bytes: &[u8]) -> Result<(), AppError> {
+    let dest = path(dir, name, ".jpg");
     let io = |e: std::io::Error| AppError::internal(e.to_string());
     tokio::fs::create_dir_all(dest.parent().expect("image dir"))
         .await
@@ -91,12 +97,12 @@ pub async fn write(dir: &str, id: i32, bytes: &[u8]) -> Result<(), AppError> {
 }
 
 /// Every file of the image, whichever variants exist.
-pub async fn remove(dir: &str, id: i32) {
+pub async fn remove(dir: &str, name: impl Display) {
     for suffix in [".jpg", "-thumb.jpg", "-medium.jpg", ".src.json"] {
-        if let Err(e) = tokio::fs::remove_file(path(dir, id, suffix)).await
+        if let Err(e) = tokio::fs::remove_file(path(dir, &name, suffix)).await
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            tracing::warn!(dir, id, error = %e, "image file removal failed");
+            tracing::warn!(dir, %name, error = %e, "image file removal failed");
         }
     }
 }

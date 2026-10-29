@@ -3,8 +3,8 @@ use super::paths::{Kind, Size, Target, Variant};
 use crate::ingest::KeyedLocks;
 use crate::{atomic_file::write_atomic, paths::data_dir};
 use image::{
-    ColorType, DynamicImage, ImageEncoder, ImageFormat, ImageReader, codecs::jpeg::JpegEncoder,
-    codecs::png::PngEncoder, imageops::FilterType,
+    ColorType, DynamicImage, ImageDecoder, ImageEncoder, ImageFormat, ImageReader,
+    codecs::jpeg::JpegEncoder, codecs::png::PngEncoder, imageops::FilterType,
 };
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
@@ -107,8 +107,8 @@ fn flatten(img: &DynamicImage) -> image::RgbImage {
     out
 }
 
-/// The source decoded once, within the pixel and allocation limits.
-fn decode(bytes: &[u8]) -> Option<DynamicImage> {
+/// A reader on a supported source, within the pixel and allocation limits.
+fn bounded_reader(bytes: &[u8]) -> Option<ImageReader<Cursor<&[u8]>>> {
     let (_, w, h) = probe(bytes)?;
     if u64::from(w) * u64::from(h) > MAX_PIXELS {
         return None;
@@ -119,12 +119,23 @@ fn decode(bytes: &[u8]) -> Option<DynamicImage> {
     let mut limits = image::Limits::default();
     limits.max_alloc = Some(MAX_PIXELS * 8);
     reader.limits(limits);
-    reader.decode().ok()
+    Some(reader)
 }
 
-/// The image re-encoded as a JPEG at its own size.
+/// The source decoded once, within the pixel and allocation limits.
+fn decode(bytes: &[u8]) -> Option<DynamicImage> {
+    bounded_reader(bytes)?.decode().ok()
+}
+
+/// The image re-encoded as an upright JPEG at its own size.
 pub fn to_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
-    resized(&decode(bytes)?, u32::MAX, false)
+    let mut decoder = bounded_reader(bytes)?.into_decoder().ok()?;
+    let orientation = decoder.orientation().ok();
+    let mut img = DynamicImage::from_decoder(decoder).ok()?;
+    if let Some(o) = orientation {
+        img.apply_orientation(o);
+    }
+    resized(&img, u32::MAX, false)
 }
 
 /// Fixed width, aspect kept, never enlarged; PNG for logos, JPEG q90 otherwise.

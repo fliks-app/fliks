@@ -74,6 +74,7 @@ pub async fn remove_media(
     )
     .fetch_all(&st.db)
     .await?;
+    crate::party::end_playing(st, id).await?;
     let mut tx = st.db.begin().await?;
     crate::requests::Lifecycle::of(st)
         .on_media_removed(&mut tx, &media.lifecycle_ref())

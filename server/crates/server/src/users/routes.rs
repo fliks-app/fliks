@@ -367,6 +367,7 @@ pub async fn remove(
     if target.is_admin && target.enabled && db::is_last_enabled_admin(&mut tx, id).await? {
         return Err(AppError::conflict("Cannot remove the last enabled admin"));
     }
+    crate::party::end_owned(&st, id).await?;
     let covers = crate::party::owned_uploads(&st.db, id).await?;
     sqlx::query!("DELETE FROM users WHERE id = $1", id)
         .execute(&mut *tx)

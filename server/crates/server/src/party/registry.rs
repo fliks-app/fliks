@@ -9,7 +9,8 @@ use chrono::{DateTime, Utc};
 use fliks_domain::{
     js::now_ms,
     party::{
-        CloseReason, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, Message, SCHEDULE_EXPIRY_MS,
+        CloseReason, EMPTY_TTL_MS, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, Message,
+        SCHEDULE_EXPIRY_MS,
     },
 };
 use serde_json::{Value, to_value};
@@ -19,13 +20,31 @@ use std::{
     time::Duration,
 };
 
-/// Creates the machine of a party that has none, with its stored chat.
-pub async fn ensure(st: &AppState, row: &Row, fresh: bool) -> sqlx::Result<()> {
-    if !st.parties.has(row.id) {
-        let chat = db::load_chat(&st.db, row.id).await?;
-        st.parties.insert(row, fresh, chat);
+/// `ensure_held` for a caller that does not hold the party's gate.
+pub async fn ensure(st: &AppState, row: &Row) -> sqlx::Result<bool> {
+    if st.parties.has(row.id) {
+        return Ok(true);
     }
-    Ok(())
+    let _held = hold(st, row.id).await;
+    ensure_held(st, row).await
+}
+
+/// Creates the machine of an open party that has none, from its row as stored now and with its
+/// stored chat; false for an ended party. The caller holds the party's gate.
+pub async fn ensure_held(st: &AppState, row: &Row) -> sqlx::Result<bool> {
+    if st.parties.has(row.id) {
+        return Ok(true);
+    }
+    let Some(row) = db::get(&st.db, row.id)
+        .await?
+        .filter(|r| r.status != "ended")
+    else {
+        st.parties.forget(row.id);
+        return Ok(false);
+    };
+    let chat = db::load_chat(&st.db, row.id).await?;
+    st.parties.insert(&row, chat);
+    Ok(true)
 }
 
 /// Effects of one mutation plus the members present when it ended.
@@ -97,14 +116,12 @@ impl Parties {
 
     /// Creates the machine for a row that has none: a `live` row boots paused (rule 10), else a
     /// room with nothing playing; `chat` is the history it reopens with.
-    fn insert(&self, row: &Row, fresh: bool, chat: Vec<Message>) {
-        let args = (row.name.clone(), row.policy, row.owner_id, now_ms());
+    fn insert(&self, row: &Row, chat: Vec<Message>) {
+        let args = (row.name.clone(), row.policy, row.host(), now_ms());
         self.inner().live.entry(row.id).or_insert_with(|| {
             let (n, p, h, now) = args;
             let mut l = match row.item() {
-                Some(item) if row.status == "live" && !fresh => {
-                    Live::boot(n, p, h, item, row.position, now)
-                }
+                Some(item) if row.status == "live" => Live::boot(n, p, h, item, row.position, now),
                 _ => Live::new(n, p, h, now),
             };
             l.room.reactions_enabled = row.reactions_enabled;
@@ -122,6 +139,15 @@ impl Parties {
         if let Some(t) = g.live.remove(&id).and_then(|l| l.room.empty_since()) {
             g.emptied.insert(id, t);
         }
+    }
+
+    /// Whether the machine has had no present member for `EMPTY_TTL_MS`.
+    fn empty_for(&self, id: i32, now: i64) -> bool {
+        self.inner()
+            .live
+            .get(&id)
+            .and_then(|l| l.room.empty_since())
+            .is_some_and(|t| now - t >= EMPTY_TTL_MS)
     }
 
     /// Rule 11: `None` while the room has a present member, else when it emptied (0: never joined).
@@ -341,8 +367,21 @@ pub async fn mutate_held<R>(
 /// Posts a system message in the party's chat, creating the machine of a scheduled party that has
 /// none so the message is kept.
 pub async fn note(st: &AppState, row: &Row, kind: &str, by: &str, args: Value) -> sqlx::Result<()> {
-    ensure(st, row, false).await?;
-    mutate(st, row.id, |l| ((), l.room.note(kind, by, args, now_ms()))).await;
+    let _held = hold(st, row.id).await;
+    note_held(st, row, kind, by, args).await
+}
+
+/// `note` for a caller that holds the gate.
+pub async fn note_held(
+    st: &AppState,
+    row: &Row,
+    kind: &str,
+    by: &str,
+    args: Value,
+) -> sqlx::Result<()> {
+    if ensure_held(st, row).await? {
+        mutate_held(st, row.id, |l| ((), l.room.note(kind, by, args, now_ms()))).await;
+    }
     Ok(())
 }
 
@@ -370,34 +409,64 @@ fn item_key(m: &Message) -> Option<(i32, Option<i32>)> {
     Some((media, episode))
 }
 
-/// Sets `args.title` of the item messages to what `viewer` may know: the title of a media they can
-/// open, else an empty one. Stored messages carry the row, never the title.
-pub async fn reveal(st: &AppState, viewer: i32, messages: &mut [Message]) -> Result<(), AppError> {
-    let keys: Vec<_> = messages.iter().filter_map(item_key).collect();
-    let mut medias: Vec<i32> = keys.iter().map(|k| k.0).collect();
-    medias.sort_unstable();
-    medias.dedup();
-    let (infos, libraries, allowed) = if keys.is_empty() {
-        Default::default()
-    } else {
-        (
-            db::item_infos(&st.db, &keys).await?,
-            db::media_libraries(&st.db, &medias).await?,
+/// What titling item messages needs that does not depend on who reads them.
+#[derive(Default)]
+pub struct Titles {
+    loaded: bool,
+    infos: HashMap<(i32, Option<i32>), db::ItemInfo>,
+    libraries: HashMap<i32, i32>,
+}
+
+impl Titles {
+    pub async fn load(st: &AppState, messages: &[Message]) -> Result<Self, AppError> {
+        let keys: Vec<_> = messages.iter().filter_map(item_key).collect();
+        if keys.is_empty() {
+            return Ok(Self::default());
+        }
+        let mut medias: Vec<i32> = keys.iter().map(|k| k.0).collect();
+        medias.sort_unstable();
+        medias.dedup();
+        Ok(Self {
+            loaded: true,
+            infos: db::item_infos(&st.db, &keys).await?,
+            libraries: db::media_libraries(&st.db, &medias).await?,
+        })
+    }
+
+    /// Sets `args.title` of the item messages to what `viewer` may know: the title of a media they
+    /// can open, else an empty one. Stored messages carry the row, never the title.
+    pub async fn reveal(
+        &self,
+        st: &AppState,
+        viewer: i32,
+        messages: &mut [Message],
+    ) -> Result<(), AppError> {
+        let allowed = if self.loaded {
             super::routes::user_libraries(st, viewer)
                 .await?
-                .unwrap_or_default(),
-        )
-    };
-    for m in messages.iter_mut().filter(|m| is_item_message(m)) {
-        let title = item_key(m)
-            .filter(|k| libraries.get(&k.0).is_some_and(|lib| allowed.contains(lib)))
-            .and_then(|k| infos.get(&k).map(|i| i.title.clone()))
-            .unwrap_or_default();
-        if let Some(args) = m.system.as_mut().and_then(|s| s.args.as_object_mut()) {
-            args.insert("title".into(), Value::String(title));
+                .unwrap_or_default()
+        } else {
+            vec![]
+        };
+        for m in messages.iter_mut().filter(|m| is_item_message(m)) {
+            let title = item_key(m)
+                .filter(|k| db::can_open(&self.libraries, &allowed, k.0))
+                .and_then(|k| self.infos.get(&k).map(|i| i.title.clone()))
+                .unwrap_or_default();
+            if let Some(args) = m.system.as_mut().and_then(|s| s.args.as_object_mut()) {
+                args.insert("title".into(), Value::String(title));
+            }
         }
+        Ok(())
     }
-    Ok(())
+}
+
+/// `Titles::load` then `reveal` for one reader.
+pub async fn reveal(st: &AppState, viewer: i32, messages: &mut [Message]) -> Result<(), AppError> {
+    Titles::load(st, messages)
+        .await?
+        .reveal(st, viewer, messages)
+        .await
 }
 
 /// Persists and emits what a mutation produced; a failed write is logged, never fails the action.
@@ -491,9 +560,16 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 if let Err(err) = db::save_message(&st.db, party, &m).await {
                     tracing::warn!(error = %err, party, "party message not saved");
                 }
+                let titles = match Titles::load(st, std::slice::from_ref(&m)).await {
+                    Ok(t) => t,
+                    Err(err) => {
+                        tracing::warn!(error = %err, party, "party message titles not resolved");
+                        continue;
+                    }
+                };
                 for (user, conn) in &d.audience {
                     let mut mine = [m.clone()];
-                    if let Err(err) = reveal(st, *user, &mut mine).await {
+                    if let Err(err) = titles.reveal(st, *user, &mut mine).await {
                         tracing::warn!(error = %err, party, "party message titles not resolved");
                         continue;
                     }
@@ -566,24 +642,55 @@ pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
 /// the rail. Under the gate, so a start or an edit in flight finishes first or sees the end.
 pub async fn end(
     st: &AppState,
-    row: &Row,
+    id: i32,
     reason: CloseReason,
     by: Option<String>,
 ) -> sqlx::Result<()> {
-    let _held = hold(st, row.id).await;
-    db::set_ended(&st.db, row.id).await?;
-    upload::remove(super::cover::DIR, row.id).await;
-    super::proposals::clear(&st.db, row.id).await?;
-    mutate_held(st, row.id, |l| ((), vec![l.room.close(reason, by)])).await;
-    st.parties.forget(row.id);
-    db::clear_chat(&st.db, row.id).await?;
-    notify_updated(st, row).await
+    let _held = hold(st, id).await;
+    end_held(st, id, reason, by).await
+}
+
+/// `end` for a caller that holds the gate; a party already ended is left alone.
+async fn end_held(
+    st: &AppState,
+    id: i32,
+    reason: CloseReason,
+    by: Option<String>,
+) -> sqlx::Result<()> {
+    let Some(row) = db::get(&st.db, id).await?.filter(|r| r.status != "ended") else {
+        return Ok(());
+    };
+    db::set_ended(&st.db, id).await?;
+    if let Some(stem) = row.cover.as_deref().and_then(|c| c.upload_stem(id)) {
+        upload::remove(super::cover::DIR, stem).await;
+    }
+    super::proposals::clear(&st.db, id).await?;
+    mutate_held(st, id, |l| ((), vec![l.room.close(reason, by)])).await;
+    st.parties.forget(id);
+    db::clear_chat(&st.db, id).await?;
+    notify_updated(st, &row).await
+}
+
+/// Ends every open party playing `media`, before the delete that would cascade its row away.
+pub async fn end_playing(st: &AppState, media: i32) -> sqlx::Result<()> {
+    for id in db::open_ids_playing(&st.db, media).await? {
+        end(st, id, CloseReason::HostEnded, None).await?;
+    }
+    Ok(())
+}
+
+/// Ends every open party `owner` owns, before their account (and so the rows) goes.
+pub async fn end_owned(st: &AppState, owner: i32) -> sqlx::Result<()> {
+    for id in db::open_ids_owned(&st.db, owner).await? {
+        end(st, id, CloseReason::HostEnded, None).await?;
+    }
+    Ok(())
 }
 
 /// Rule 10: every `live` row gets a machine, which starts its empty countdown.
 pub async fn boot(st: &AppState) -> sqlx::Result<()> {
     for row in db::live_rows(&st.db).await? {
-        ensure(st, &row, false).await?;
+        ensure(st, &row).await?;
     }
     Ok(())
 }
@@ -630,17 +737,18 @@ pub async fn tick(st: &AppState) {
         if !expired {
             continue;
         }
+        let _held = hold(st, id).await;
+        if !st.parties.empty_for(id, now_ms()) {
+            continue;
+        }
         match db::get(&st.db, id).await {
             Ok(Some(row)) if row.status == "live" => {
-                if let Err(e) = end(st, &row, CloseReason::Expired, None).await {
+                if let Err(e) = end_held(st, id, CloseReason::Expired, None).await {
                     tracing::warn!(error = %e, party = id, "party expiry failed");
                 }
             }
             // An empty lobby just frees its machine; the schedule decides the row's fate.
-            Ok(_) => {
-                let _held = hold(st, id).await;
-                st.parties.remove(id);
-            }
+            Ok(_) => st.parties.remove(id),
             // The machine stays and its expiry is judged again at the next tick.
             Err(e) => tracing::warn!(error = %e, party = id, "party expiry not checked"),
         }
@@ -654,12 +762,16 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
         let Some(at) = row.scheduled_at.map(|t| t.timestamp_millis()) else {
             continue;
         };
-        let expires = st
-            .parties
-            .empty_since(row.id)
-            .map(|e| at.max(e) + SCHEDULE_EXPIRY_MS);
-        if expires.is_some_and(|t| now_ms >= t) {
-            end(st, &row, CloseReason::Expired, None).await?;
+        if schedule_expired(st, at, row.id, now_ms) {
+            let _held = hold(st, row.id).await;
+            // Judged again under the gate: a join or a reschedule may have come in.
+            let current = db::get(&st.db, row.id)
+                .await?
+                .filter(|r| r.status == "scheduled")
+                .and_then(|r| r.scheduled_at);
+            if current.is_some_and(|t| schedule_expired(st, t.timestamp_millis(), row.id, now_ms)) {
+                end_held(st, row.id, CloseReason::Expired, None).await?;
+            }
         } else if now_ms >= at - LOBBY_OPEN_BEFORE_MS {
             announce_lobby(st, &row).await?;
         }
@@ -667,9 +779,14 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Tells the guests the party is about to start (the room itself is open from creation), once per
-/// schedule; the sweep does it at `scheduledAt - 15 min`, a creation or reschedule that is already
-/// due does not wait for it.
+fn schedule_expired(st: &AppState, at: i64, id: i32, now: i64) -> bool {
+    st.parties
+        .empty_since(id)
+        .is_some_and(|e| now >= at.max(e) + SCHEDULE_EXPIRY_MS)
+}
+
+/// Tells the guests the party is about to start, once per schedule: the sweep at `scheduledAt - 15
+/// min`, a creation or reschedule already due at once.
 pub async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
     if !st.parties.inner().notified.insert(row.id) {
         return Ok(());

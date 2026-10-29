@@ -9,5 +9,5 @@ mod routes;
 
 pub use cover::{DIR as COVER_DIR, owned_uploads};
 pub use proposals::*;
-pub use registry::{Parties, boot, spawn, sweep, tick};
+pub use registry::{Parties, boot, end_owned, end_playing, spawn, sweep, tick};
 pub use routes::*;

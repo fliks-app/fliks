@@ -176,6 +176,27 @@ pub struct Authed {
 }
 
 impl Authed {
+    fn new(user: UserRow, role: Option<RoleRow>, scope: Option<TokenScope>) -> Self {
+        let perms = Permissions::from(
+            role.as_ref().map_or(&[][..], |r| &r.permissions),
+            user.is_admin,
+        );
+        Self {
+            user,
+            role,
+            perms,
+            scope,
+        }
+    }
+
+    /// The user `id` as a request of theirs would load them, with no token scope; `None` when
+    /// disabled or gone.
+    pub async fn load(db: &PgPool, id: i32) -> Result<Option<Self>, sqlx::Error> {
+        Ok(load_enabled(db, id)
+            .await?
+            .map(|(user, role)| Self::new(user, role, None)))
+    }
+
     /// The handler's first line: 403 with the 4.x policy body unless the role grants it at class level.
     pub fn require(&self, action: Action, subject: Subject) -> Result<(), AppError> {
         if self.perms.can(action, &subject) {
@@ -260,16 +281,7 @@ async fn authenticate(parts: &Parts, state: &AppState) -> Result<Option<Authed>,
     let (user, role) = load_enabled(&state.db, claims.sub)
         .await?
         .ok_or_else(unauthorized)?;
-    let perms = Permissions::from(
-        role.as_ref().map_or(&[][..], |r| &r.permissions),
-        user.is_admin,
-    );
-    Ok(Some(Authed {
-        user,
-        role,
-        perms,
-        scope: claims.scope,
-    }))
+    Ok(Some(Authed::new(user, role, claims.scope)))
 }
 
 async fn required<S>(parts: &Parts, state: &S) -> Result<Authed, AppError>
