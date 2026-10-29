@@ -402,6 +402,7 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
 
 const barEl = document.getElementById('bar');
 const barTitle = barEl.querySelector('.bar-title');
+const barSubtitle = barEl.querySelector('.bar-subtitle');
 const barElapsed = barEl.querySelector('.bar-elapsed');
 const barTotal = barEl.querySelector('.bar-total');
 const barPlayed = barEl.querySelector('.bar-played');
@@ -445,7 +446,9 @@ function renderBar() {
   const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
   const time = playerData.currentTime || 0;
   const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
-  barTitle.textContent = [playerData.title, playerData.subtitle].filter(Boolean).join(' - ');
+  // An episode leads with its own label (`subtitle`), the series name under it, as the CAF overlay does.
+  barTitle.textContent = playerData.subtitle || playerData.title || '';
+  barSubtitle.textContent = playerData.subtitle ? playerData.title || '' : '';
   barElapsed.textContent = formatClock(time);
   barTotal.textContent = duration ? formatClock(duration) : '';
   barPlayed.style.width = pct(time);
