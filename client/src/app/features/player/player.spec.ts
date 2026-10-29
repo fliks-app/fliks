@@ -3498,6 +3498,16 @@ describe('PlayerComponent review fixes', () => {
     expect(h.engine.loadCalls.at(-1)!.startTime).toBeUndefined();
   });
 
+  it('loads the media aside to build the series queue', async () => {
+    const h = createHarness();
+    h.component.queueCtl.syncSeriesQueue = vi.fn();
+
+    h.component.loadMediaAside();
+    await vi.waitFor(() => expect(h.component.queueCtl.syncSeriesQueue).toHaveBeenCalled());
+
+    expect(h.component.media).toBe(MOVIE);
+  });
+
   it('follows the item the output switches to', async () => {
     const h = createHarness();
     h.component.queueCtl.syncSeriesQueue = vi.fn();

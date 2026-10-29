@@ -1141,6 +1141,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.openOnOutput(resumeTime);
       this.state.loading.set(false);
       if (this.destroyed) return;
+      this.loadMediaAside();
       // A pending take-back starts the one local launch from here, at the output's position.
       this.attachLocalOutput();
     }
@@ -1244,7 +1245,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           .load()
           .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
         this.applyOfflineHeader(offlineTask);
-        this.loadMediaForLocalCopy();
+        this.loadMediaAside();
         const offlineEdl = this.authService.user()?.edlEnabled === false ? undefined : offlineTask?.offlineEdl;
         this.edl.load(this.mediaFileId, offlineEdl);
         startTime = this.edlStartTime(startTime);
@@ -2068,9 +2069,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.showNowPlaying(this.nowPlayingMeta.describeDownload(task));
   }
 
-  /** Online with a local copy: fetch the media record in parallel (not on the first-frame path) for the
-   *  header, next-episode and queue; the stream, tracks and subtitles stay local. */
-  private loadMediaForLocalCopy(): void {
+  /** Fetch the media record off the launch path, for a local copy or an item another output plays: the header,
+   *  next episode and series queue need it; the stream, tracks and subtitles do not. */
+  private loadMediaAside(): void {
     if (!this.mediaId || !this.network.isOnline()) return;
     const fileId = this.mediaFileId;
     void this.mediaService.getOne(this.mediaId).then(
