@@ -176,6 +176,8 @@ export class SseService implements OnDestroy {
   /** `connected` (folded with the device's own network state) debounced by
    *  {@link UNREACHABLE_DEBOUNCE_MS}. Read by the layout shell to show its banner. */
   readonly serverUnreachable = signal(false);
+  /** The "server unreachable" chip is on screen; TVs have none. */
+  readonly unreachableChip = computed(() => this.serverUnreachable() && !this.device.isTv());
   /** `deviceId#tabNonce`: stable across this tab's SSE reconnects (unlike `connectionId`) and unique per screen (unlike the device id). */
   readonly targetId = signal<string | null>(null);
   /** Commands are transient intent: a last-value signal would let a state

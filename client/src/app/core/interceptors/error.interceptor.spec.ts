@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   TranslateLoader,
@@ -11,6 +11,7 @@ import { of } from 'rxjs';
 import { errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
 import { NetworkService } from '../services/network.service';
 import { ToastService } from '../services/toast.service';
+import { SseService } from '../services/sse.service';
 
 // Mirrors the `errors.*` subset of public/i18n/en.json so assertions read the
 // same generic copy production shows — not a value invented for the test.
@@ -31,6 +32,7 @@ describe('errorInterceptor', () => {
   let http: HttpTestingController;
   let client: HttpClient;
   let toast: ToastService;
+  const unreachableChip = signal(false);
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -38,6 +40,7 @@ describe('errorInterceptor', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
+        { provide: SseService, useValue: { unreachableChip } },
         provideTranslateService({
           lang: 'en',
           fallbackLang: 'en',
@@ -50,7 +53,10 @@ describe('errorInterceptor', () => {
     toast = TestBed.inject(ToastService);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    unreachableChip.set(false);
+  });
 
   /** Fires a GET and flushes the given response; the interceptor rethrows
    *  every error, so the request-site error handler is always a no-op. */
@@ -160,6 +166,13 @@ describe('errorInterceptor', () => {
       http.expectOne(url).flush(null, { status, statusText: 'x' });
     }
     expect(toast.toasts().map((t) => t.message)).toEqual(['Unable to reach the server']);
+  });
+
+  it('leaves an unreachable mutation to the chip when it is on screen', () => {
+    unreachableChip.set(true);
+    client.post('/api/a', {}).subscribe({ error: () => {} });
+    http.expectOne('/api/a').flush(null, { status: 0, statusText: 'x' });
+    expect(toast.toasts()).toEqual([]);
   });
 
   it('keeps a GET silent when the server is unreachable', () => {
