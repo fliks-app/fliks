@@ -1194,7 +1194,7 @@ mod guide_import {
         let c = ctx(pool).await;
         lineup(&c).await;
         c.prov.lock_clean().guide = feed();
-        let parent = source(&c, "P", "m3u", "http://h/x", 0).await;
+        let parent = source(&c, "P", "m3u", "http://h.example/x", 0).await;
         sqlx::query(r#"UPDATE livetv_sources SET "guideUrls" = $2 WHERE id = $1"#)
             .bind(parent)
             .bind(json!([format!("{}/guide.xml", c.base)]))
@@ -1425,8 +1425,14 @@ mod sessions {
         let c = &w.c;
         stream(&c.pool, w.a, w.src1, "http://h/a2.ts", 0).await;
         stream(&c.pool, w.a, w.src1, "http://169.254.169.254/a3.ts", 5).await;
+        sqlx::query(r#"UPDATE livetv_sources SET url = 'http://h.example/x' WHERE id = $1"#)
+            .bind(w.src1)
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"UPDATE livetv_channel_streams SET url = replace(url, 'http://h/', 'http://h.example/')"#).execute(&c.pool).await.unwrap();
         sqlx::query(r#"UPDATE livetv_sources SET "userAgent" = 'SrcAgent/1', referer = 'http://ref/' WHERE id = $1"#).bind(w.src1).execute(&c.pool).await.unwrap();
-        sqlx::query(r#"UPDATE livetv_channel_streams SET "userAgent" = 'EntryAgent/1', "probedVideoCodec" = 'h264' WHERE url = 'http://h/a2.ts'"#).execute(&c.pool).await.unwrap();
+        sqlx::query(r#"UPDATE livetv_channel_streams SET "userAgent" = 'EntryAgent/1', "probedVideoCodec" = 'h264' WHERE url = 'http://h.example/a2.ts'"#).execute(&c.pool).await.unwrap();
         sqlx::query(r#"UPDATE livetv_channel_streams SET "lastError" = 'boom' WHERE id = $1"#)
             .bind(w.s1)
             .execute(&c.pool)
@@ -1454,7 +1460,7 @@ mod sessions {
         );
         let ups = sent["upstreams"].as_array().unwrap();
         assert_eq!(
-            ups[0]["url"], "http://h/a2.ts",
+            ups[0]["url"], "http://h.example/a2.ts",
             "a stream with an error sorts after a clean one"
         );
         assert_eq!(

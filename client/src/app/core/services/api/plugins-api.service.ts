@@ -206,4 +206,9 @@ export class PluginsApiService {
   logoUrl(pluginId: string): string {
     return `/api/plugins/${pluginId}/logo`;
   }
+
+  /** `<img src>` only: the logo of a catalogue entry, fetched by the server from the cached catalogue. */
+  catalogLogoUrl(sourceId: number, pluginId: string): string {
+    return `/api/plugins/sources/${sourceId}/catalog/${pluginId}/logo`;
+  }
 }

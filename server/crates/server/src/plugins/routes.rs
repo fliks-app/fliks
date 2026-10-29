@@ -34,6 +34,7 @@ use utoipa::OpenApi;
     sources_update,
     sources_delete,
     sources_catalog,
+    sources_catalog_logo,
     sources_refresh,
     sources_inspect,
     enable,
@@ -87,6 +88,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/plugins/sources/{id}/catalog",
             with_proxy(get(sources_catalog)),
+        )
+        .route(
+            "/api/plugins/sources/{id}/catalog/{pluginId}/logo",
+            with_proxy(get(sources_catalog_logo)),
         )
         .route(
             "/api/plugins/sources/{id}/refresh",

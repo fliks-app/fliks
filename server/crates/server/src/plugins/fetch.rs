@@ -135,6 +135,33 @@ impl Fetcher {
         Self::body(res, cap, None).await
     }
 
+    /// A catalog entry's logo: https only, no redirect, 10 s, capped; a host other than the source's goes
+    /// through the outbound guard.
+    pub async fn logo(
+        &self,
+        url: &str,
+        source_url: &str,
+        cap: usize,
+    ) -> Result<Vec<u8>, FetchError> {
+        let u = Url::parse(url).map_err(|_| FetchError::Network("invalid logo URL".into()))?;
+        if u.scheme() != "https" {
+            return Err(FetchError::Network("logo URL must be https".into()));
+        }
+        let origin = |u: &Url| (u.host_str().map(str::to_owned), u.port_or_known_default());
+        const UA: &str = "Fliks-Plugin-Catalog-Client/1.0";
+        let c = if Url::parse(source_url).is_ok_and(|s| origin(&s) == origin(&u)) {
+            self.builder(CATALOG_TIMEOUT, UA)
+                .build()
+                .expect("reqwest client")
+        } else {
+            self.guarded(&u, CATALOG_TIMEOUT, UA)
+                .await
+                .map_err(|_| FetchError::Network("logo host refused".into()))?
+        };
+        let res = c.get(u).send().await.map_err(classify)?;
+        Self::body(res, cap, None).await
+    }
+
     /// The archive of a catalog version: https only, at most 5 https redirects, 5 min in all, 30 s idle, and
     /// `cap` over the whole chain; a hop off the `zipUrl` host goes through the outbound guard.
     pub async fn archive(&self, zip_url: &str, cap: usize) -> Result<Vec<u8>, ArchiveError> {

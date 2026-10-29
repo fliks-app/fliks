@@ -474,8 +474,27 @@ async fn sources_catalog_denylist_and_auto_update() {
         json!({"version": v, "pluginApi": 2, "fliks": ">=5.0.0 <6.0.0",
         "zipUrl": format!("https://localhost:{}/fixture-{v}.fkplugin", cat.port), "sha256": sha})
     };
+    let logo = |p: &str| format!("https://localhost:{}/{p}", cat.port);
+    let png = [
+        &[0x89u8, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a][..],
+        &[0; 8],
+    ]
+    .concat();
+    cat.archives.lock().unwrap().extend([
+        ("/ok.png".to_owned(), png.clone()),
+        (
+            "/evil.svg".to_owned(),
+            b"<svg><script>1</script></svg>".to_vec(),
+        ),
+        ("/big.png".to_owned(), vec![0; 600 << 10]),
+    ]);
+    let other = |id: &str, l: &str| {
+        json!({"id": id, "name": id, "description": "", "author": "a", "kind": "process",
+        "logo": logo(l), "versions": [entry("0.1.0", &sha)]})
+    };
     let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a", "kind": "process",
-        "versions": [entry("0.1.0", &sha)]}]});
+        "logo": logo("ok.png"), "versions": [entry("0.1.0", &sha)]},
+        other("fliks.evil", "evil.svg"), other("fliks.big", "big.png"), other("fliks.gone", "gone.png")]});
     *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
     let (st, r) = h
         .call(
@@ -499,6 +518,37 @@ async fn sources_catalog_denylist_and_auto_update() {
         )
         .await;
     assert_eq!(c["cachedCatalog"]["signedByKeyId"], "source");
+    let logo_uri = |p: &str| format!("/api/plugins/sources/{id}/catalog/{p}/logo");
+    let (st, headers, body) = h
+        .raw("GET", &logo_uri("fliks.fixture"), Some(&h.admin), None)
+        .await;
+    assert_eq!(
+        (
+            st,
+            &headers["content-type"],
+            &headers["content-security-policy"],
+            body
+        ),
+        (
+            200,
+            &"image/png".parse().unwrap(),
+            &"sandbox".parse().unwrap(),
+            png
+        ),
+    );
+    for (p, want) in [
+        ("fliks.evil", 404),
+        ("fliks.big", 502),
+        ("fliks.gone", 502),
+        ("fliks.nope", 404),
+    ] {
+        let (st, _, _) = h.raw("GET", &logo_uri(p), Some(&h.admin), None).await;
+        assert_eq!(st, want, "{p}");
+    }
+    assert_eq!(
+        h.raw("GET", &logo_uri("fliks.fixture"), None, None).await.0,
+        401
+    );
     let (st, r) = h
         .call(
             "POST",

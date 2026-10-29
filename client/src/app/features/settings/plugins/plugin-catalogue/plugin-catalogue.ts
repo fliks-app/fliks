@@ -93,11 +93,10 @@ export class PluginCatalogueComponent implements OnInit {
     return this.installedIds().has(pluginId);
   }
 
-  /** The catalogue's own URL, or — once installed — the logo core extracted from the archive,
-   *  which is the only source until a catalogue publishes one. */
+  /** The installed plugin's extracted logo, else the one the server relays from the catalogue. */
   logoFor(row: CatalogueRow): string | null {
-    if (row.plugin.logo) return row.plugin.logo;
-    return this.isInstalled(row.plugin.id) ? this.api.logoUrl(row.plugin.id) : null;
+    if (this.isInstalled(row.plugin.id)) return this.api.logoUrl(row.plugin.id);
+    return row.plugin.logo ? this.api.catalogLogoUrl(row.sourceId, row.plugin.id) : null;
   }
 
   hideBrokenLogo(event: Event): void {
