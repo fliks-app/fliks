@@ -3025,6 +3025,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     this.mediaLoadedTick.update((v) => v + 1);
     if (this.media) this.applyMedia(this.media);
+    this.queueCtl.followItem(item.mediaId, item.episodeId);
     this.queueCtl.syncSeriesQueue();
     const duration = (this.currentFile()?.streamInfo as any)?.durationSeconds;
     if (duration > 0) this.state.duration.set(duration);

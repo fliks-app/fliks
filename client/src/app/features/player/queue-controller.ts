@@ -163,6 +163,11 @@ export class QueueController {
     this.queue.start(items, idx, { source: 'series', sourceId: m.id, autoplay: false });
   }
 
+  /** Moves the cursor to the item an output switched to on its own. */
+  followItem(mediaId: number, episodeId?: number): void {
+    this.queue.syncTo(mediaId, episodeId);
+  }
+
   /** Marks the playing item completed server-side, so advancing past it counts as watched. */
   async markCurrentComplete(): Promise<void> {
     if (!this.host.mediaId() || this.host.preRollActive()) return;
@@ -249,18 +254,6 @@ export class QueueController {
       return false;
     }
     if (this.state.ended()) await this.markCurrentComplete();
-    if (!this.session.isLocal()) {
-      // A remount would close the player: switch the output in place.
-      await this.session.play(
-        {
-          fileId: mediaFileId,
-          mediaId: item.mediaId,
-          episodeId: item.episodeId ?? undefined,
-        },
-        { fromStart: true, expand: false },
-      );
-      return true;
-    }
     await this.loadItem(queueItem, mediaFileId);
     return true;
   }
@@ -319,6 +312,15 @@ export class QueueController {
     // rebuilt from the loaded media, so it needs no param.
     if (this.queue.source() === 'playlist' && sourceId != null) {
       qp['playlistId'] = sourceId;
+    }
+
+    if (!this.session.isLocal()) {
+      // A remount would close the player: the active output switches in place.
+      await this.session.play(
+        { fileId: mediaFileId, mediaId: item.mediaId, episodeId: item.episodeId },
+        { fromStart: true, expand: false },
+      );
+      return;
     }
 
     const canReloadInPlace =
