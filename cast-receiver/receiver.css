@@ -221,30 +221,20 @@ body.playing .party-layer {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
-.bar-row {
+.bar-times {
   display: flex;
-  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.2vh;
 }
 
 .bar-time {
-  min-width: 7vh;
   font-size: 2.8vh;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
-.bar-elapsed {
-  margin-right: 2vh;
-  text-align: right;
-}
-
-.bar-total {
-  margin-left: 2vh;
-}
-
 .bar-track {
   position: relative;
-  flex: 1;
   height: 1vh;
   border-radius: 1vh;
   overflow: hidden;
