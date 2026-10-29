@@ -360,3 +360,24 @@ test('receiver bands: intro and credits as track percentages, clamped, only for 
   assert.deepEqual(bands(cues, 7, Infinity), []);
   assert.deepEqual(bands(null, 7, 1000), []);
 });
+
+test('receiver captions: the sender style becomes the caption layer CSS', () => {
+  const ctx: { self: Record<string, any> } = { self: {} };
+  vm.runInNewContext(readFileSync(new URL('../../../../cast-receiver/captions.js', import.meta.url), 'utf8'), ctx);
+  const { captionStyle } = ctx.self['FliksCaptions'] as { captionStyle(s: unknown): Record<string, string> };
+  const ios = captionStyle({
+    fontScale: 0.85, foregroundColor: '#FFFFFFFF', backgroundColor: '#00000000', edgeType: 'DROP_SHADOW',
+    edgeColor: '#000000FF', windowType: 'ROUNDED_CORNERS', windowColor: '#00000080', windowRoundedCornerRadius: 8,
+    fontFamily: '.AppleSystemUIFont', fontGenericFamily: 'SANS_SERIF',
+  });
+  assert.equal(ios.fontSize, '3.48vh');
+  assert.equal(ios.color, 'rgba(255, 255, 255, 1)');
+  assert.equal(ios.background, 'rgba(0, 0, 0, 0.502)');
+  assert.equal(ios.borderRadius, '8px');
+  assert.match(ios.fontFamily, /^"\.AppleSystemUIFont", "Droid Sans", sans-serif$/);
+  assert.match(ios.textShadow, /rgba\(0, 0, 0, 1\) 0 0\.06em/);
+  const semi = captionStyle({ backgroundColor: '#00000080', windowType: 'NONE', edgeType: 'NONE' });
+  assert.equal(semi.background, 'rgba(0, 0, 0, 0.502)');
+  assert.equal(semi.textShadow, 'none');
+  assert.equal(semi.fontSize, '4.1vh');
+});

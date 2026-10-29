@@ -372,3 +372,33 @@ body.playing .state-icon.show {
     transform: rotate(360deg);
   }
 }
+
+/* Subtitles drawn by the receiver from the shown text track, in the sender's style. */
+.captions {
+  position: fixed;
+  left: 5vw;
+  right: 5vw;
+  bottom: var(--sub-bottom, 6vh);
+  z-index: 105;
+  text-align: center;
+  line-height: 1.3;
+  pointer-events: none;
+  transition: bottom 200ms ease-out;
+}
+
+body.bar-on .captions {
+  bottom: var(--sub-bottom-bar, 22vh);
+}
+
+body:not(.playing) .captions {
+  display: none;
+}
+
+.captions .cue {
+  padding: 0 0.25em;
+  white-space: pre-line;
+  background: var(--cap-bg, transparent);
+  border-radius: var(--cap-radius, 0);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
