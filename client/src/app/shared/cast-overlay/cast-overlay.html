@@ -1,7 +1,7 @@
 @if (output(); as o) {
   <div class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
        style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))">
-    <button type="button" class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-box p-1 text-left disabled:cursor-default"
+    <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left disabled:cursor-default"
             [disabled]="!session.playing()" [attr.aria-label]="'remote.open_player' | translate" (click)="open()">
       <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300" [class.skeleton]="!o.isIdle() && !session.nowPlaying()">
         @if (artwork(); as art) {
