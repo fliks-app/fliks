@@ -76,6 +76,8 @@ export class PlayerSession {
   /** Set by destroy(); createPlayer() can await the (slow, Windows gpu-next)
    *  probe for several seconds, during which the window may already have closed. */
   private destroyed = false;
+  /** Playback stopped: by the renderer (stop IPC) or by a renderer crash. */
+  onStop?: () => void;
 
   async start(opts: PlayerSessionOptions): Promise<void> {
     const { rendererUrl, preloadPath, iconPath } = opts;
@@ -147,6 +149,7 @@ export class PlayerSession {
       appUrl: rendererUrl,
       stopPlayback: async () => {
         setPlaybackKeepAwake(false);
+        this.onStop?.();
         await this.mpv?.stop();
       },
       log: appendLog,

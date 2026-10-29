@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NowPlaying } from './now-playing.ts';
+import { NowPlaying, mediaSessionSetter } from './now-playing.ts';
 
 function setup() {
   const calls: any[] = [];
@@ -54,4 +54,26 @@ test('republishes on a rate change and extrapolates drift at that rate', () => {
   tick(10_000);
   np.setPosition({ position: 20, duration: 100, buffered: 0 });
   assert.equal(calls.length, 2);
+});
+
+test('a withdrawal or newer metadata drops an artwork fetch still in flight', async () => {
+  const { np, calls } = setup();
+  const pending: Array<(b: Buffer) => void> = [];
+  const set = mediaSessionSetter(np, () => new Promise((r) => pending.push(r)));
+  np.setState('playing');
+  const first = set({ title: 'A', artworkUrl: 'u' });
+  const stop = set(null);
+  pending[0]!(Buffer.from('a'));
+  await first;
+  await stop;
+  assert.deepEqual(calls, ['clear']);
+  calls.length = 0;
+  np.setState('playing');
+  const b = set({ title: 'B', artworkUrl: 'u' });
+  const c = set({ title: 'C', artworkUrl: 'u' });
+  pending[2]!(Buffer.from('c'));
+  pending[1]!(Buffer.from('b'));
+  await Promise.all([b, c]);
+  assert.equal(calls.length, 1);
+  assert.equal((calls[0] as any).title, 'C');
 });

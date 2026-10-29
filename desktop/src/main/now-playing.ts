@@ -99,3 +99,16 @@ export class NowPlaying {
     this.native.clearNowPlaying();
   }
 }
+
+/** Publishes the page's metadata with its artwork; a newer call or a withdrawal drops an artwork fetch still in flight. */
+export function mediaSessionSetter(
+  nowPlaying: NowPlaying,
+  fetchArtwork: (url: string) => Promise<Buffer | undefined>,
+): (meta: DesktopMediaMetadata | null) => Promise<void> {
+  let latest = 0;
+  return async (meta) => {
+    const mine = ++latest;
+    const artwork = meta?.artworkUrl ? await fetchArtwork(meta.artworkUrl) : undefined;
+    if (mine === latest) nowPlaying.setMetadata(meta, artwork);
+  };
+}

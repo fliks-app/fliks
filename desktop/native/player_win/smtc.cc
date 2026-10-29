@@ -9,6 +9,8 @@
 #include <winrt/Windows.Storage.Streams.h>
 
 #include <chrono>
+#include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -21,6 +23,16 @@ namespace {
 SystemMediaTransportControls g_smtc{nullptr};
 Napi::ThreadSafeFunction g_commandFn;
 bool g_commandFnReady = false;
+
+// Artwork requests apply on a worker thread: one is stale once a newer request, title change or clear has bumped the generation.
+std::mutex g_artMutex;
+uint64_t g_artGen = 0;
+std::string g_title;
+
+uint64_t NextArtGen() {
+  std::lock_guard<std::mutex> lock(g_artMutex);
+  return ++g_artGen;
+}
 
 void Emit(const char* name, double position = 0) {
   if (!g_commandFnReady) return;
@@ -86,21 +98,29 @@ Napi::Value OnRemoteCommand(const Napi::CallbackInfo& info) {
 }
 
 // Building the thumbnail stream awaits WinRT, so it runs off the JS thread.
-void SetArtwork(std::vector<uint8_t> bytes) {
-  std::thread([bytes = std::move(bytes)]() {
+void SetArtwork(std::vector<uint8_t> bytes, uint64_t gen) {
+  std::thread([bytes = std::move(bytes), gen]() {
     try {
       init_apartment();
+    } catch (...) {
+      return;
+    }
+    try {
       InMemoryRandomAccessStream stream;
       DataWriter writer(stream);
       writer.WriteBytes(array_view<const uint8_t>(bytes.data(), bytes.data() + bytes.size()));
       writer.StoreAsync().get();
       writer.DetachStream();
       stream.Seek(0);
-      auto updater = g_smtc.DisplayUpdater();
-      updater.Thumbnail(Windows::Storage::Streams::RandomAccessStreamReference::CreateFromStream(stream));
-      updater.Update();
+      std::lock_guard<std::mutex> lock(g_artMutex);
+      if (gen == g_artGen) {
+        auto updater = g_smtc.DisplayUpdater();
+        updater.Thumbnail(Windows::Storage::Streams::RandomAccessStreamReference::CreateFromStream(stream));
+        updater.Update();
+      }
     } catch (...) {
     }
+    uninit_apartment();
   }).detach();
 }
 
@@ -122,14 +142,19 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   g_smtc.PlaybackRate(o.Get("rate").ToNumber().DoubleValue());
   g_smtc.PlaybackStatus(playing ? MediaPlaybackStatus::Playing : MediaPlaybackStatus::Paused);
 
+  std::string title = o.Get("title").ToString().Utf8Value();
+  uint64_t gen = 0;
+  if (title != g_title || o.Get("artwork").IsBuffer()) gen = NextArtGen();
+  g_title = title;
+
   auto updater = g_smtc.DisplayUpdater();
   updater.Type(MediaPlaybackType::Video);
-  updater.VideoProperties().Title(to_hstring(o.Get("title").ToString().Utf8Value()));
+  updater.VideoProperties().Title(to_hstring(title));
   if (o.Get("artist").IsString()) updater.VideoProperties().Subtitle(to_hstring(o.Get("artist").ToString().Utf8Value()));
   updater.Update();
   if (o.Get("artwork").IsBuffer()) {
     Napi::Buffer<uint8_t> a = o.Get("artwork").As<Napi::Buffer<uint8_t>>();
-    SetArtwork(std::vector<uint8_t>(a.Data(), a.Data() + a.Length()));
+    SetArtwork(std::vector<uint8_t>(a.Data(), a.Data() + a.Length()), gen);
   }
 
   if (duration > 0) {
@@ -147,6 +172,8 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
 Napi::Value ClearNowPlaying(const Napi::CallbackInfo& info) {
   return Guard(info, [&] {
     if (!g_smtc) return;
+    NextArtGen();
+    g_title.clear();
     g_smtc.PlaybackStatus(MediaPlaybackStatus::Stopped);
     g_smtc.DisplayUpdater().ClearAll();
     g_smtc.IsEnabled(false);
