@@ -84,6 +84,23 @@ without re-deploying:
 - Cast → check the receiver's debug overlay (`Receiver → Connect` in
   Chrome DevTools at `chrome://inspect`).
 
+## Developing the receiver
+
+Test receiver changes without touching the prod app (`66BF4DAE`):
+
+1. In the Cast Developer Console, create your own **unpublished** Custom Receiver whose URL is your
+   tunnel to the local `cast-receiver/` (see Local dev), and register your Chromecast under it.
+2. Put its ID in `.env.local` at the repo root (gitignored; template in `.env.local.example`):
+   `FLIKS_CAST_APP_ID=<your_app_id>`.
+3. Dev builds pick it up, release builds always use the prod app:
+   - Web dev server: `npm run start`, `start:docker` or `watch` in `client/` (they run
+     `npm run cast-app-id` first; the dev container reads `.env.local` through `env_file`).
+   - Desktop test builds: `npm run build:dev` in `client/`. A direct `ng serve` or `ng build -c development` fails until `npm run cast-app-id` has generated the file.
+   - Android: `debug` builds only (`build.gradle` injects it as `cast_receiver_app_id`).
+   - iOS: run `npm run cast-app-id` in `client/`, then build the Debug configuration.
+
+An empty or missing value means the prod ID everywhere.
+
 ## customData contract
 
 Sender sends, receiver reads:

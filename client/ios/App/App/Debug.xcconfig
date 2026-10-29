@@ -1,0 +1,3 @@
+FLIKS_CAST_APP_ID = 66BF4DAE
+// Written by client/scripts/cast-app-id.mjs from the repo's .env.local.
+#include? "Local.xcconfig"

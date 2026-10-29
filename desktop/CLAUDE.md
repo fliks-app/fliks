@@ -153,7 +153,7 @@ compound command (a bare `cd` between tool calls can prompt for permission).
 
 3. **Angular client** (after editing `../client/**`):
    ```bash
-   cd client && npx ng build --configuration=development
+   cd client && npm run build:dev
    ```
    - `--output-path` is overridden by `angular.json`; output always lands in
      `client/dist/client/browser`.

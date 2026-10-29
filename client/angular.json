@@ -70,6 +70,17 @@
               "outputHashing": "all"
             },
             "development": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/cast-app-id.ts",
+                  "with": "src/environments/cast-app-id.generated.ts"
+                }
+              ],
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
+            "test": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
@@ -129,6 +140,7 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
+            "buildTarget": "client:build:test",
             "runnerConfig": true
           }
         }

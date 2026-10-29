@@ -30,6 +30,10 @@ dc up -d
 
 The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect `pg_restore` errors only for tables dropped by later migrations (e.g. `delay_profiles`) and their sequences, plus `migrations_id_seq`.
 
+## Cast dev app ID
+
+- Never edit the prod Cast app ID (`66BF4DAE`) to test a receiver: put your own in the gitignored `.env.local` (`FLIKS_CAST_APP_ID`, see `cast-receiver/README.md`); dev builds read it, release builds never do.
+
 ## Angular conventions
 
 - Always use external template files (`templateUrl`) instead of inline templates (`template`) in components.
