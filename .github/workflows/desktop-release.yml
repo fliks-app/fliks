@@ -337,23 +337,6 @@ jobs:
           [[ "$version" == *-* ]] && type=prerelease || type=release
           npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type"
 
-      - name: Build the snap (Linux)
-        if: runner.os == 'Linux'
-        id: snap
-        uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79 # v1.3.0
-        with:
-          path: desktop
-
-      - name: Publish the snap (Linux)
-        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
-        uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1.2.0
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        with:
-          snap: ${{ steps.snap.outputs.snap }}
-          # Only a stable v* release reaches the stable channel.
-          release: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(steps.version.outputs.version, '-') && 'stable' || 'beta' }}
-
       # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
       - name: Publish the APT repository (Linux)
         if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/v') && !contains(steps.version.outputs.version, '-')
@@ -377,6 +360,23 @@ jobs:
           gh release upload apt Packages Packages.gz InRelease ../build/fliks.sources --clobber
           gh release view apt --json assets --jq ".assets[].name | select(endswith(\".deb\") and . != \"$deb\")" \
             | xargs -r -n1 gh release delete-asset apt -y
+
+      - name: Build the snap (Linux)
+        if: runner.os == 'Linux'
+        id: snap
+        uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79 # v1.3.0
+        with:
+          path: desktop
+
+      - name: Publish the snap (Linux)
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
+        uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1.2.0
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.snap.outputs.snap }}
+          # Only a stable v* release reaches the stable channel.
+          release: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(steps.version.outputs.version, '-') && 'stable' || 'beta' }}
 
       # ── Windows: pack win-unpacked into the Velopack Setup.exe + update feed ──
       # Default `win` channel; the Windows server uses `win-server` in the same release.
