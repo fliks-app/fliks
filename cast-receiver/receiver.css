@@ -336,8 +336,6 @@ body.playing .spinner.show {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
   color: #fff;
   opacity: 0;
   pointer-events: none;
@@ -345,8 +343,9 @@ body.playing .spinner.show {
 }
 
 .state-icon svg {
-  width: 6vh;
-  height: 6vh;
+  width: 8vh;
+  height: 8vh;
+  filter: drop-shadow(0 0.3vh 0.8vh rgba(0, 0, 0, 0.6));
 }
 
 .state-icon .i-pause,
