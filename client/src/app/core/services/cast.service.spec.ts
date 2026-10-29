@@ -39,7 +39,7 @@ function stubCastSdk(tracks: { trackId: number; type: string; name: string; lang
         TextTrackStyle: Stub,
         TextTrackEdgeType: { NONE: 'NONE', DROP_SHADOW: 'DROP_SHADOW' },
         LoadRequest: class { constructor(public media: unknown) {} },
-        EditTracksInfoRequest: class { constructor(public activeTrackIds: number[]) {} },
+        EditTracksInfoRequest: class { constructor(public activeTrackIds: number[], public textTrackStyle?: unknown) {} },
       },
     },
   });
@@ -152,6 +152,23 @@ describe('CastService text track picks', () => {
 
     expect(editTracksInfo).toHaveBeenCalledTimes(1);
     expect(lastActive(editTracksInfo)).toEqual([2]);
+  });
+});
+
+describe('CastService live text track style', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  it('restyles the media session and keeps the active subtitle', async () => {
+    const { session, editTracksInfo } = stubCastSdk(TEXT_TRACKS);
+    (session.getMediaSession() as { activeTrackIds: number[] }).activeTrackIds = [1];
+    const svc = make(session);
+    await svc.setTextTrackStyle({ size: 'large', color: 'yellow', shadow: 'none', background: 'semi' });
+    const req = editTracksInfo.mock.calls.at(-1)![0];
+    expect(req.activeTrackIds).toEqual([1]);
+    expect(req.textTrackStyle).toMatchObject({ fontScale: 0.975, foregroundColor: '#FFFF00FF', backgroundColor: '#00000080' });
   });
 });
 

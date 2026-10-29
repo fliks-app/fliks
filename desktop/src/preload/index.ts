@@ -16,6 +16,7 @@ import {
   type FliksDesktopApi,
   type FliksDownloaderApi,
   type DesktopCastEvent,
+  type DesktopCastTextTrackStyle,
   type DesktopCastLoadOptions,
   type FliksCastApi,
   type FliksUpdaterApi,
@@ -127,6 +128,8 @@ const cast: FliksCastApi = {
     ipcRenderer.invoke(CAST_IPC.setActiveSubtitle, opts.trackId),
   setActiveAudioLanguage: (opts: { language: string; name: string }) =>
     ipcRenderer.invoke(CAST_IPC.setActiveAudioLanguage, opts.language, opts.name),
+  setTextTrackStyle: (opts: { castTextTrackStyle: DesktopCastTextTrackStyle }) =>
+    ipcRenderer.invoke(CAST_IPC.setTextTrackStyle, opts.castTextTrackStyle),
   on: (handler: (event: DesktopCastEvent) => void) => {
     const listener = (_e: unknown, event: DesktopCastEvent) => handler(event);
     ipcRenderer.on(CAST_IPC.event, listener);

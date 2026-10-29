@@ -4,12 +4,13 @@ import type {
   DesktopCastDevice,
   DesktopCastEvent,
   DesktopCastLoadOptions,
+  DesktopCastTextTrackStyle,
 } from '../../shared/contract';
 import { CastDiscovery, type DiscoveredDevice } from './mdns';
 import {
   initializeResult,
   mediaStatusEvent,
-  mergeActiveTracks,
+  editTracksInfo,
   NS_FLIKS,
   pickAudioTrack,
   receiverMessageEvent,
@@ -263,11 +264,18 @@ class CastSender {
     return this.editTracks({ audioId: target.trackId });
   }
 
-  private editTracks(update: { audioId?: number | null; textId?: number | null }): boolean {
+  setTextTrackStyle(style: DesktopCastTextTrackStyle): boolean {
+    return this.editTracks({}, style);
+  }
+
+  private editTracks(
+    update: { audioId?: number | null; textId?: number | null },
+    textTrackStyle?: DesktopCastTextTrackStyle,
+  ): boolean {
     if (!this.channel || !this.transportId || this.mediaSessionId == null) return false;
-    const activeTrackIds = mergeActiveTracks(this.tracks, this.activeTrackIds, update);
-    this.mediaSend({ type: 'EDIT_TRACKS_INFO', activeTrackIds });
-    this.activeTrackIds = activeTrackIds;
+    const message = editTracksInfo(this.tracks, this.activeTrackIds, update, textTrackStyle);
+    this.mediaSend(message);
+    this.activeTrackIds = message.activeTrackIds;
     return true;
   }
 
@@ -332,6 +340,9 @@ export function registerCastIpc(): void {
   );
   ipcMain.handle(CAST_IPC.setActiveSubtitle, (_e, trackId: number) =>
     sender.setActiveSubtitle(trackId),
+  );
+  ipcMain.handle(CAST_IPC.setTextTrackStyle, (_e, style: DesktopCastTextTrackStyle) =>
+    sender.setTextTrackStyle(style),
   );
   ipcMain.handle(CAST_IPC.setActiveAudioLanguage, (_e, language: string, name: string) => ({
     success: sender.setActiveAudioLanguage(language, name),

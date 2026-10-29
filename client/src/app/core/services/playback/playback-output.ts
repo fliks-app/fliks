@@ -2,6 +2,7 @@ import { Signal } from '@angular/core';
 import { SpriteMetadata, TimeMarker } from '../../utils/player.utils';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { CastPlayerService } from '../cast-player.service';
+import type { CastSubtitleStyle } from '../cast-settings.service';
 
 /** Minimal shape the playback surfaces need for a track/quality row. */
 export interface PlaybackOption {
@@ -106,6 +107,9 @@ export interface PlaybackOutput {
   /** Stop what the output is playing. On Cast the session IS the playback, so the two collapse. */
   stopPlayback(): void;
   disconnect(): void;
+  /** Present when the output keeps its own subtitle style: the appearance panel edits it instead of the local one. */
+  readonly subtitleStyle?: Signal<CastSubtitleStyle>;
+  setSubtitleStyle?(style: CastSubtitleStyle): void;
 }
 
 /** What `CastPlayerService.startCast` needs to describe the media being handed to a receiver. */

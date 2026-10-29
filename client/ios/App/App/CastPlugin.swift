@@ -22,6 +22,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActiveSubtitle", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setTextTrackStyle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setVolume", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMuted", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
@@ -453,6 +454,15 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                 var ids = CastPlugin.activeAudioTrackIDs(of: client)
                 if trackId > 0 { ids.append(NSNumber(value: trackId)) }
                 client.setActiveTrackIDs(ids)
+            }
+            call.resolve()
+        }
+    }
+
+    @objc func setTextTrackStyle(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            if let client = self?.currentSession?.remoteMediaClient {
+                client.setTextTrackStyle(self?.buildTextTrackStyle(call.getObject("textTrackStyle")))
             }
             call.resolve()
         }

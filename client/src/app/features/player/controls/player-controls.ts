@@ -23,6 +23,8 @@ import {
   PlayerSettings,
   PlayerSettingsService,
 } from '../../../core/services/player-settings.service';
+import type { CastSubtitleStyle } from '../../../core/services/cast-settings.service';
+import type { PlaybackOutput } from '../../../core/services/playback/playback-output';
 import {
   SIZE_OPTIONS,
   COLOR_OPTIONS,
@@ -97,6 +99,8 @@ interface AppearanceOption {
 interface AppearanceRow {
   panel: SubtitlePanel;
   field: keyof PlayerSettings;
+  /** Field of an output's own style; absent when that style has no equivalent, which hides the row there. */
+  styleKey?: keyof CastSubtitleStyle;
   labelKey: string;
   options: AppearanceOption[];
 }
@@ -316,6 +320,8 @@ export class PlayerControlsComponent {
    *  target is online. Same gate as the top bar's picker. */
   readonly canPickDevice = input(false);
   readonly castConnected = input(false);
+  /** The output playback is on: when it keeps its own subtitle style, the appearance panel edits that. */
+  readonly styleOutput = input<PlaybackOutput | null>(null);
   /** Audio or video goes to an AirPlay receiver: tints the device button. */
   readonly airPlayConnected = input(false);
   readonly castConnecting = input(false);
@@ -419,11 +425,11 @@ export class PlayerControlsComponent {
   readonly subtitlesPanel = signal<SubtitlePanel>('tracks');
 
   /** One row per appearance field, rendered by a single generic leaf list. */
-  protected readonly appearanceRows: AppearanceRow[] = [
-    { panel: 'size', field: 'subtitleSize', labelKey: 'playback_settings.sub_size', options: SIZE_OPTIONS },
-    { panel: 'color', field: 'subtitleColor', labelKey: 'playback_settings.sub_color', options: COLOR_OPTIONS },
-    { panel: 'shadow', field: 'subtitleShadow', labelKey: 'playback_settings.sub_shadow', options: SHADOW_OPTIONS },
-    { panel: 'bg', field: 'subtitleBackground', labelKey: 'playback_settings.sub_bg', options: BG_OPTIONS },
+  private readonly allAppearanceRows: AppearanceRow[] = [
+    { panel: 'size', field: 'subtitleSize', styleKey: 'size', labelKey: 'playback_settings.sub_size', options: SIZE_OPTIONS },
+    { panel: 'color', field: 'subtitleColor', styleKey: 'color', labelKey: 'playback_settings.sub_color', options: COLOR_OPTIONS },
+    { panel: 'shadow', field: 'subtitleShadow', styleKey: 'shadow', labelKey: 'playback_settings.sub_shadow', options: SHADOW_OPTIONS },
+    { panel: 'bg', field: 'subtitleBackground', styleKey: 'background', labelKey: 'playback_settings.sub_bg', options: BG_OPTIONS },
     {
       panel: 'position-top',
       field: 'subtitleTopMargin',
@@ -437,6 +443,19 @@ export class PlayerControlsComponent {
       options: BOTTOM_MARGIN_OPTIONS.map((v) => ({ value: v, label: `${v}%` })),
     },
   ];
+
+  /** The output holding its own style while casting, else null: the local settings apply. */
+  private readonly styled = computed(() => {
+    const o = this.styleOutput();
+    return o?.subtitleStyle && o.setSubtitleStyle ? o : null;
+  });
+
+  /** Appearance is editable locally, or on an output that keeps a style; any other remote has none. */
+  protected readonly appearanceEditable = computed(() => !this.castConnected() || !!this.styled());
+
+  protected readonly appearanceRows = computed(() =>
+    this.styled() ? this.allAppearanceRows.filter((r) => r.styleKey) : this.allAppearanceRows,
+  );
 
   /** Resync needs the manage permission and a text track; opening it selects one if none is active. */
   readonly canSyncSubtitle = computed(
@@ -454,17 +473,25 @@ export class PlayerControlsComponent {
 
   /** The leaf row being edited, or undefined on the track/appearance panels. */
   readonly activeAppearanceRow = computed(() =>
-    this.appearanceRows.find((r) => r.panel === this.subtitlesPanel()),
+    this.appearanceRows().find((r) => r.panel === this.subtitlesPanel()),
   );
 
   /** The option currently in effect for a row — drives both the summary value
    *  and the check mark in the leaf list. */
   currentOption(row: AppearanceRow): AppearanceOption | undefined {
-    const value = String(this.playerSettings.settings()[row.field]);
+    const styled = this.styled();
+    const value = String(
+      styled && row.styleKey ? styled.subtitleStyle!()[row.styleKey] : this.playerSettings.settings()[row.field],
+    );
     return row.options.find((o) => String(o.value) === value);
   }
 
   setAppearance(row: AppearanceRow, value: string | number) {
+    const styled = this.styled();
+    if (styled && row.styleKey) {
+      styled.setSubtitleStyle!({ ...styled.subtitleStyle!(), [row.styleKey]: String(value) });
+      return;
+    }
     this.playerSettings.patch({ [row.field]: value } as Partial<PlayerSettings>);
   }
 
