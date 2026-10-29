@@ -307,7 +307,17 @@ impl Plugins {
                 );
                 continue;
             }
-            let granted = packages::granted_scopes(&self.db, &id).await.ok().flatten();
+            let granted = match packages::granted_scopes(&self.db, &id).await {
+                Ok(g) => g,
+                Err(e) => {
+                    tracing::warn!(
+                        "auto-update of \"{}\": granted scopes unreadable: {e}",
+                        pkg.plugin_id
+                    );
+                    skip("the granted scopes could not be read".into());
+                    continue;
+                }
+            };
             let new_scopes: Vec<&str> = granted
                 .iter()
                 .flat_map(|g| {
