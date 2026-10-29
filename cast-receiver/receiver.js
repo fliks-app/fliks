@@ -188,8 +188,9 @@ playerManager.addEventListener(EventType.SEEKED, () => {
   playerManager.addEventListener(EventType.PLAYING, onPlaying);
   playerManager.play();
 });
+// The player's own play() comes through here too, with requestId 0; only a sender's PLAY takes over.
 playerManager.setMessageInterceptor(cast.framework.messages.MessageType.PLAY, (request) => {
-  if (endFramePresent) endFramePresent(false);
+  if (endFramePresent && request.requestId) endFramePresent(false);
   return request;
 });
 playerManager.setMessageInterceptor(cast.framework.messages.MessageType.SEEK, (request) => {
