@@ -44,7 +44,7 @@ The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect 
 
 - **`main` is protected**: direct pushes are rejected (`protected branch hook declined`). Every change has to land via a pull request — branch off `main`, push the branch, open the PR, then merge through GitHub (`gh pr merge`).
 - **Don't run `git push` against `main` directly**; it always fails. If you mistakenly committed straight to local `main`, move the commit onto a branch (`git checkout -b <branch>` while on the commit, then `git reset --hard origin/main` on `main`) before pushing.
-- **Squash-merge to escape a bad-message branch**: when an existing branch's history has commits that fail `commitlint` or `release-parser` (both check every commit in the PR, see Commit conventions), prefer `gh pr merge --squash` with a clean conventional title over rewriting + force-pushing. Force-push to a published branch is destructive and needs explicit user approval.
+- **A bad commit message blocks the merge, squash included**: `commitlint` and `release-parser` are required checks and lint every commit of the PR, so a squash with a clean title does not escape them. Check every commit body before pushing (`git log --format=%b origin/main..HEAD | awk 'length > 100'`). Fixing a published commit means rewording it (`git filter-branch --msg-filter … origin/main..HEAD`) and a force-push with `--force-with-lease`, which is destructive and needs explicit user approval.
 - **Never merge `main` into a PR branch**: the merge commit (`Merge remote-tracking branch 'origin/main' into …`) is not a conventional commit and fails `release-parser`. Bring a branch up to date by rebasing onto `origin/main` before its first push; once it is published, catching up means a rebase and a force-push, which needs explicit user approval.
 - **Local hooks**: see `.husky/` if present. Don't bypass them.
 - **Write pull requests in English** — title and body — like commit messages and code comments, whatever language the conversation uses.
@@ -56,7 +56,7 @@ Two jobs in `.github/workflows/commit-lint.yml` check every commit of a PR, then
 - `commitlint`: `wagoid/commitlint-github-action` with `@commitlint/config-conventional` defaults.
 - `release-parser`: release-please's own, stricter parser (`.github/scripts/check-commit-parse.mjs`). release-please silently drops a message it can't parse from the changelog and the version bump. It rejects merge commits and an unbalanced `(` in the body.
 
-Neither is a required status check (GitHub still lets a PR merge with them red), so treat a red job as blocking. **Always apply these rules**:
+Both are required status checks on `main`: a red one blocks the merge, `gh api .../merge` answers 405. **Always apply these rules**:
 
 - **Header format**: `type(scope): subject` — type and scope lowercase, scope optional but encouraged.
 - **Allowed types**: `feat`, `fix`, `chore`, `refactor`, `style`, `docs`, `test`, `perf`, `build`, `ci`, `revert`.
