@@ -313,11 +313,59 @@ pub async fn deprovision(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
             drop_role_tolerant(&mut tx, &r).await?;
         }
     }
+    sqlx::query(r#"DELETE FROM plugin_kept_data WHERE "pluginId" = $1"#)
+        .bind(plugin_id)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await
 }
 
+/// What a reinstall finds of an earlier uninstall that kept the data.
+#[derive(Debug, PartialEq)]
+pub enum Kept {
+    Nothing,
+    /// The signer key id recorded at the uninstall (`None`: the package was unsigned).
+    Signer(Option<String>),
+    /// An orphaned schema from before signers were recorded.
+    Unrecorded,
+}
+
+pub async fn kept(core: &PgPool, plugin_id: &str) -> sqlx::Result<Kept> {
+    let row: Option<Option<String>> =
+        sqlx::query_scalar(r#"SELECT "signerKeyId" FROM plugin_kept_data WHERE "pluginId" = $1"#)
+            .bind(plugin_id)
+            .fetch_optional(core)
+            .await?;
+    if let Some(k) = row {
+        return Ok(Kept::Signer(k));
+    }
+    let orphaned: bool = sqlx::query_scalar(
+        "SELECT coalesce((SELECT obj_description(oid, 'pg_namespace') LIKE 'orphaned:%'
+                            FROM pg_namespace WHERE nspname = $1), false)",
+    )
+    .bind(schema(plugin_id))
+    .fetch_one(core)
+    .await?;
+    Ok(if orphaned {
+        Kept::Unrecorded
+    } else {
+        Kept::Nothing
+    })
+}
+
+/// A reinstall adopts the kept schema only from the signer that left it (an official package may
+/// adopt unsigned data); unrecorded orphans need an official package.
+pub fn may_adopt(kept: &Kept, signer: Option<&str>) -> bool {
+    match kept {
+        Kept::Nothing => true,
+        Kept::Signer(Some(k)) => signer == Some(k.as_str()),
+        Kept::Signer(None) => true,
+        Kept::Unrecorded => signer.is_some(),
+    }
+}
+
 /// Uninstall without `deleteData`: the schema and its rows stay, the role stops logging in.
-pub async fn orphan(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
+pub async fn orphan(core: &PgPool, plugin_id: &str, signer: Option<&str>) -> sqlx::Result<()> {
     let oid = database_oid(core).await?;
     let mut tx = core.begin().await?;
     let r = role(&oid, plugin_id);
@@ -338,6 +386,14 @@ pub async fn orphan(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
                 quote(&schema(plugin_id))
             ))),
         )
+        .await?;
+        sqlx::query(
+            r#"INSERT INTO plugin_kept_data ("pluginId", "signerKeyId") VALUES ($1, $2)
+               ON CONFLICT ("pluginId") DO UPDATE SET "signerKeyId" = EXCLUDED."signerKeyId""#,
+        )
+        .bind(plugin_id)
+        .bind(signer)
+        .execute(&mut *tx)
         .await?;
     }
     tx.commit().await

@@ -308,12 +308,20 @@ impl Plugins {
                 return Err(ie(
                     StatusCode::CONFLICT,
                     "PLUGIN_SIGNER_CHANGED",
-                    "the signer differs from the installed version: uninstall the plugin first",
+                    "the signer differs from the installed version: uninstall the plugin with data deletion first",
                 ));
             }
             manifest::check_files(i)
                 .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
             if m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true) {
+                let kept = super::db::kept(&self.db, id).await.map_err(internal)?;
+                if !super::db::may_adopt(&kept, i.signed_by.as_deref()) {
+                    return Err(ie(
+                        StatusCode::CONFLICT,
+                        "PLUGIN_KEPT_DATA_SIGNER",
+                        "the data kept by an earlier uninstall belongs to another signer: uninstall the plugin with data deletion first",
+                    ));
+                }
                 let refs: Vec<String> = m["database"]["coreRefs"]
                     .as_array()
                     .into_iter()
@@ -449,7 +457,7 @@ impl Plugins {
             if delete_data {
                 super::db::deprovision(&self.db, id).await?;
             } else {
-                super::db::orphan(&self.db, id).await?;
+                super::db::orphan(&self.db, id, pkg.verified_by_key_id.as_deref()).await?;
             }
         }
         sqlx::query(r#"DELETE FROM plugin_scheduled_calls WHERE "pluginId" = $1"#)

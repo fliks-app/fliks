@@ -1258,6 +1258,25 @@ async fn auto_update_rolls_back_and_holds_new_scopes() {
     // A newer version would carry another number than the held one.
     age(false).await;
     let full = offer(&m, "0.1.0", &w).await;
+    sqlx::query("ALTER TABLE plugin_registrations RENAME TO plugin_registrations_away")
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let out = h.st.plugins.auto_update().await;
+    sqlx::query("ALTER TABLE plugin_registrations_away RENAME TO plugin_registrations")
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        out["updated"],
+        json!([]),
+        "an unreadable grant never installs: {out}"
+    );
+    assert_eq!(
+        out["skipped"][0]["reason"], "the granted scopes could not be read",
+        "{out}"
+    );
+    assert_eq!(installed().await.version, "0.0.9");
     let out = h.st.plugins.auto_update().await;
     assert!(
         out["skipped"][0]["reason"]
