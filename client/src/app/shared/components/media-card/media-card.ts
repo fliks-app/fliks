@@ -475,8 +475,7 @@ export class MediaCardComponent {
       fileId: file.id,
       mediaId: m.id,
       episodeId: file.episodeId ?? undefined,
-      title: m.title,
-      fanartUrl: (m as any).fanartUrl ?? this._img() ?? null,
+      backdropUrl: m.fanartUrl ?? this._img() ?? null,
       streamInfo: (file as any).streamInfo,
     }, false);
   }

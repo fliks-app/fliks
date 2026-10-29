@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { absorb, buildQuery, collect, parseRecords, parseTxt } from './mdns.ts';
 import { decodeMessage, encodeFrame, splitFrames } from './protocol.ts';
-import { initializeResult, mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent } from './status.ts';
+import { initializeResult, mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent, receiverStatusEvent } from './status.ts';
 
 test('CastMessage survives an encode/decode round trip', () => {
   const msg = {
@@ -164,6 +164,12 @@ test('a playing status becomes a media update, without the stream volume', () =>
       ended: false,
     },
   });
+});
+
+test('a volume change is a device event that carries no media field', () => {
+  const event = receiverStatusEvent({ volume: { level: 0.4, muted: false }, applications: [] });
+  assert.deepEqual(event, { name: 'castDeviceUpdate', detail: { volume: 0.4, muted: false } });
+  assert.equal(receiverStatusEvent({ applications: [] }), null);
 });
 
 test('IDLE/ERROR becomes a recoverable error carrying the playhead', () => {

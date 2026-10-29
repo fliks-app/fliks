@@ -8,8 +8,6 @@ import { CastOverlayComponent } from './cast-overlay';
 
 function setup(over: { local?: boolean; tv?: boolean; fileId?: number } = {}) {
   const output = {
-    fanartUrl: signal<string | null>(null),
-    mediaTitle: signal('Title'),
     isIdle: signal(false),
     targetOffline: signal(false),
     uiPaused: signal(false),
@@ -19,6 +17,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number } = {}) {
     isLocal: signal(over.local ?? false),
     output: signal(output),
     deviceName: signal('Living room'),
+    nowPlaying: signal<{ title: string; fanartUrl: string | null; posterUrl: string | null } | null>({ title: 'Title', fanartUrl: '/f.jpg', posterUrl: null }),
     playing: signal(over.fileId === 0 ? null : { fileId: 7, mediaId: 3 }),
     openPlayer: vi.fn(),
     command: vi.fn(),
@@ -43,6 +42,7 @@ describe('CastOverlayComponent', () => {
     const { el } = setup();
     expect(el.textContent).toContain('Title');
     expect(el.textContent).toContain('Living room');
+    expect(el.querySelector('img')).not.toBeNull();
   });
 
   it('is absent while playing locally and on a TV', () => {

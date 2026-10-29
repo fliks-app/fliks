@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MediaService } from '../api/media.service';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
@@ -26,9 +27,6 @@ function target() {
     pause: vi.fn(async () => {}),
     stopPlayback: vi.fn(),
     disconnect: vi.fn(),
-    mediaTitle: vi.fn(() => 'Title'),
-    episodeTitle: vi.fn(() => 'Ep'),
-    fanartUrl: vi.fn(() => '/f.jpg'),
     activeAudioTrackId: vi.fn(() => 'audio-2' as string | null),
     activeSubtitleId: vi.fn(() => 'sub-5' as string | null),
   };
@@ -40,7 +38,7 @@ function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
     resolveSubtitle: false,
     localSessionId: 'sid-local',
     cast: {
-      mediaFileId: 7, mediaId: 3, episodeId: 9, mediaTitle: 'T', episodeTitle: 'E', fanartUrl: null,
+      mediaFileId: 7, mediaId: 3, episodeId: 9,
       playbackMode: 'transcode', subtitles: [], qualities: [], audioTracks: [],
       activeQualityId: '1080p', activeSubtitleId: 'sub-2', activeAudioStreamIndex: 1,
     } as LocalHandoff['cast'],
@@ -81,6 +79,7 @@ function setup() {
   const device = { isTv: signal(false) };
   const router = { navigate: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
+  const media = { id: 3, title: 'Show', logoUrl: '/logo.png', fanartUrl: '/f.jpg', seasons: [{ seasonNumber: 1, episodes: [{ id: 9, episodeNumber: 2, title: 'Pilot' }] }] };
   TestBed.configureTestingModule({
     providers: [
       { provide: CastPlaybackTarget, useValue: cast },
@@ -93,6 +92,7 @@ function setup() {
       { provide: Router, useValue: router },
       { provide: StreamingApiService, useValue: streaming },
       { provide: ToastService, useValue: { error: vi.fn() } },
+      { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });
@@ -120,6 +120,17 @@ describe('PlaybackSession', () => {
     expect(session.output()).toBe(cast);
     remote.isConnected.set(true);
     expect(session.output()).toBe(remote);
+  });
+
+  it('reads what another output plays from the metadata service, from its identity alone', async () => {
+    const { session, cast, local } = setup();
+    session.attachLocal(local);
+    TestBed.tick();
+    expect(session.nowPlaying()).toBeNull();
+    cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+    cast.isConnected.set(true);
+    TestBed.tick();
+    await vi.waitFor(() => expect(session.nowPlaying()).toMatchObject({ title: 'Show', episodeLabel: 'S1:E2 - Pilot', logoUrl: '/logo.png' }));
   });
 
   it('detaches a local output only through its own disposer', () => {
@@ -400,7 +411,7 @@ describe('PlaybackSession', () => {
   });
 
   describe('play', () => {
-    const item = { fileId: 7, mediaId: 3, episodeId: 9, title: 'T' };
+    const item = { fileId: 7, mediaId: 3, episodeId: 9 };
 
     it('navigates to the player when playing locally', async () => {
       const { session, router, castPlayer } = setup();

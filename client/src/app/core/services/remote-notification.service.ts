@@ -4,6 +4,8 @@ import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
 import { DeviceService } from './device.service';
 import { LikesApiService } from './api/likes-api.service';
 import { NotificationLike } from './notification-like';
+import { mediaSessionText } from './playback/now-playing-metadata.service';
+import { PlaybackSession } from './playback/playback-session';
 import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
@@ -15,6 +17,7 @@ export class RemoteNotificationService {
   private readonly device = inject(DeviceService);
   private readonly remote = inject(RemoteService);
   private readonly target = inject(RemotePlaybackTarget);
+  private readonly session = inject(PlaybackSession);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly injector = inject(Injector);
   private readonly like = new NotificationLike(inject(LikesApiService));
@@ -39,11 +42,11 @@ export class RemoteNotificationService {
       this.shown = true;
       const s = this.remote.targetState();
       untracked(() => void this.like.track(s?.mediaId, s?.episodeId));
-      const episode = t.episodeTitle();
-      const art = s?.fanartUrl || t.fanartUrl();
+      const meta = this.session.nowPlaying();
+      if (!meta) return;
+      const art = meta.fanartUrl ?? meta.posterUrl;
       void RemoteNotification.update({
-        title: episode || t.mediaTitle(),
-        artist: episode ? t.mediaTitle() : undefined,
+        ...mediaSessionText(meta),
         artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
         playing: !t.uiPaused(),
         buffering: t.buffering(),

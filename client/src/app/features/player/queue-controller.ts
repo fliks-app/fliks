@@ -12,7 +12,6 @@ import { NotificationLike } from '../../core/services/notification-like';
 import { PlayerSettingsService } from '../../core/services/player-settings.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { PlaybackQueueService, type QueueItem } from '../../core/services/playback-queue.service';
-import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { PartyService } from '../../core/services/party/party.service';
@@ -33,7 +32,7 @@ export interface QueueHost {
   isOfflinePlayback(): boolean;
   reloadingStream(): boolean;
   clearEdlEnded(): void;
-  setFanartUrl(url: string): void;
+  setBackdropUrl(url: string): void;
   reloadForEpisode(mediaFileId: number, mediaId: number, episodeId: number | undefined): Promise<void>;
 }
 
@@ -49,7 +48,6 @@ export class QueueController {
   private readonly device = inject(DeviceService);
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
-  private readonly serverConfig = inject(ServerConfigService);
   private readonly navbar = inject(NavbarService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
@@ -253,14 +251,11 @@ export class QueueController {
     if (this.state.ended()) await this.markCurrentComplete();
     if (!this.session.isLocal()) {
       // A remount would close the player: switch the output in place.
-      const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
       await this.session.play(
         {
           fileId: mediaFileId,
           mediaId: item.mediaId,
           episodeId: item.episodeId ?? undefined,
-          title: media?.title ?? '',
-          fanartUrl: media?.fanartUrl ?? null,
         },
         { fromStart: true, expand: false },
       );
@@ -332,7 +327,7 @@ export class QueueController {
       // Match the incoming item's backdrop during the brief reload (the episode
       // still, else the media fanart) so it's not the outgoing frame.
       const backdrop = item.stillUrl ?? item.fanartUrl;
-      if (backdrop) this.host.setFanartUrl(this.serverConfig.resolveUrl(backdrop));
+      if (backdrop) this.host.setBackdropUrl(backdrop);
       // replaceUrl + markAsBackNavigation keep both histories clear of the old
       // item so Back never reopens the player. Route reuse → no remount.
       this.navbar.markAsBackNavigation();

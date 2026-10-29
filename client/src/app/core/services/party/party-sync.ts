@@ -313,7 +313,7 @@ export class PartySync {
       return false;
     }
     await this.session.play(
-      { fileId, mediaId: item.mediaId, episodeId: item.episodeId ?? undefined, title: media?.title ?? '', fanartUrl: media?.fanartUrl ?? null },
+      { fileId, mediaId: item.mediaId, episodeId: item.episodeId ?? undefined, media: media ?? undefined },
       { fromStart: true, expand: false },
     );
     return true;

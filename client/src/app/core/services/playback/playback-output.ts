@@ -46,6 +46,7 @@ export interface PlaybackOutput {
   // ready, item, paused and position are plain reads: an engine's own state is not reactive.
   /** Loaded and seekable: the party only drives an output that is ready. */
   readonly ready: () => boolean;
+  /** The identity of what plays; display metadata comes from `NowPlayingMetadataService`. */
   readonly item: () => { mediaId: number; episodeId: number | undefined };
   readonly paused: () => boolean;
   /** What the play control shows: differs from `paused` while a launch is in flight. */
@@ -60,9 +61,6 @@ export interface PlaybackOutput {
   /** False when the engine cannot change a per-stream level, so the slider is hidden. */
   readonly canSetVolume: Signal<boolean>;
 
-  readonly mediaTitle: Signal<string>;
-  readonly episodeTitle: Signal<string>;
-  readonly fanartUrl: Signal<string | null>;
   readonly spriteUrl: Signal<string | null>;
   readonly spriteMetadata: Signal<SpriteMetadata | null>;
   readonly availableSubtitles: Signal<PlaybackOption[]>;

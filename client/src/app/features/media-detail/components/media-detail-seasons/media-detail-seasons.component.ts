@@ -452,10 +452,8 @@ export class MediaDetailSeasonsComponent {
       fileId: files[0].id,
       mediaId: m.id,
       episodeId: ep.id,
-      title: m.title,
-      episodeTitle: ep.title ?? undefined,
-      fanartUrl: m.fanartUrl ?? null,
-      stillUrl: ep.stillUrl ?? null,
+      media: m,
+      backdropUrl: ep.stillUrl ?? m.fanartUrl ?? null,
       streamInfo: (files[0] as any).streamInfo,
     }, false);
   }

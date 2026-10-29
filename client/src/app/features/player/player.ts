@@ -1,4 +1,3 @@
-import { episodeLabel } from '../../shared/utils/media-play.util';
 import {
   AfterViewInit,
   Component,
@@ -16,7 +15,6 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
@@ -109,6 +107,7 @@ import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { type ControlsModel, outputModel } from './controls/controls-model';
+import { NO_NOW_PLAYING, NowPlayingMetadataService, describeNowPlaying, mediaSessionText, type NowPlayingMetadata } from '../../core/services/playback/now-playing-metadata.service';
 import { CopyFallbackController } from './copy-fallback-controller';
 import { RecoveryController } from './recovery-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
@@ -133,7 +132,7 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, ResolveUrlPipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
+  imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
@@ -290,6 +289,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly title = inject(Title);
 
+  /** The OS media session (browser, MPRIS, SMTC, Now Playing) follows the item this route plays. */
+  private readonly mediaSessionEffect = effect(() => {
+    const meta = this.nowPlaying();
+    if (!meta.title) return;
+    untracked(() => {
+      const { title, artist } = mediaSessionText(meta);
+      const artwork: MediaImage[] = [];
+      if (meta.posterUrl) artwork.push({ src: this.serverConfig.resolveUrl(meta.posterUrl), sizes: '300x450', type: 'image/jpeg' });
+      if (meta.fanartUrl) artwork.push({ src: this.serverConfig.resolveUrl(meta.fanartUrl), sizes: '1280x720', type: 'image/jpeg' });
+      if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title, artist, artwork });
+      void window.fliksDesktop?.setMediaSession({ title, artist, artworkUrl: artwork[0]?.src });
+    });
+  });
+
   /** Set the tab title from the loaded media (the player route is outside the layout's title effect); keeps the
    *  previous title until the name resolves so the tab doesn't flicker. */
   private readonly tabTitleEffect = effect(() => {
@@ -387,7 +400,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Everything the controls read of the playing output: the cast or remote output, else the engine's own signals. */
   protected readonly view = computed<ControlsModel>(() => {
     const o = this.session.isLocal() ? null : this.session.output();
-    if (o) return outputModel(o);
+    if (o) return outputModel(o, this.session.nowPlaying());
     return {
       paused: this.uiPaused(),
       spinner: this.spinnerVisible(),
@@ -399,6 +412,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       canSetVolume: true,
       mediaTitle: this.mediaTitle(),
       episodeTitle: this.displayEpisodeTitle(),
+      logoUrl: this.nowPlaying().logoUrl,
       hasNext: this.localOutput.canPlayNext(),
       subtitles: this.subs.availableSubtitles(),
       audioTracks: this.availableAudioTracks(),
@@ -491,7 +505,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     isOfflinePlayback: () => this.isOfflinePlayback,
     reloadingStream: () => this.reloadingStream,
     clearEdlEnded: () => { this.edlEnded = false; },
-    setFanartUrl: (url) => this.fanartUrl.set(url),
+    setBackdropUrl: (url) => this.showBackdrop(url),
     reloadForEpisode: (fileId, mediaId, episodeId) => this.reloadForEpisode(fileId, mediaId, episodeId),
   }), null);
   readonly webCrop = inject(WebVideoCropController);
@@ -799,12 +813,35 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.state.setRecovering(recovering);
   }
 
-  readonly mediaTitle = signal('');
-  /** Clearlogo for the playing media, shown in the player's top-left overlay
-   *  in place of the title text. */
-  readonly mediaLogoUrl = signal<string | null>(null);
-  readonly episodeTitle = signal('');
-  readonly fanartUrl = signal<string | null>(null);
+  private readonly nowPlayingMeta = inject(NowPlayingMetadataService);
+  /** Display metadata of the item this route plays: the one place the header, logo and backdrop read. */
+  protected readonly nowPlaying = signal<NowPlayingMetadata>(NO_NOW_PLAYING);
+  readonly mediaTitle = computed(() => this.nowPlaying().title);
+  readonly episodeTitle = computed(() => this.nowPlaying().episodeLabel);
+  readonly fanartUrl = computed(() => {
+    const url = this.nowPlaying().backdropUrl;
+    return url ? this.serverConfig.resolveUrl(url) : null;
+  });
+  /** The route's own backdrop, else the one of what another output plays. */
+  protected readonly backdropUrl = computed(() => {
+    const url = this.session.nowPlaying()?.backdropUrl;
+    return this.fanartUrl() ?? (url ? this.serverConfig.resolveUrl(url) : null);
+  });
+
+  /** Shows `meta`; a backdrop it lacks keeps the one already painted. */
+  private showNowPlaying(meta: NowPlayingMetadata): void {
+    this.nowPlaying.update((cur) => ({ ...meta, backdropUrl: meta.backdropUrl ?? cur.backdropUrl }));
+  }
+
+  private showBackdrop(backdropUrl: string): void {
+    this.nowPlaying.update((cur) => ({ ...cur, backdropUrl }));
+  }
+
+  /** The metadata of `media`, loaded by this route, for the item it plays. */
+  private applyMedia(media: Media): void {
+    this.nowPlayingMeta.prime(media);
+    this.showNowPlaying(describeNowPlaying(media, this.episodeId));
+  }
   /** The backdrop fades in once decoded, not on insertion. */
   protected readonly backdropLoaded = signal<string | null>(null);
 
@@ -1069,13 +1106,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (video) this.detachAirPlay = this.airPlay.attachVideo(video);
 
     // Eager backdrop from router state, set before any await so the loading screen renders on the first tick.
-    // `stillUrl` (episode thumbnail) wins over `fanartUrl`: viewers recognise the episode they selected.
-    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null; stillUrl?: string | null; tracks?: LaunchTracks | null } | null;
+    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { backdropUrl?: string | null; tracks?: LaunchTracks | null } | null;
     this.launchTracks = navState?.tracks ?? null;
-    const eagerBackdrop = navState?.stillUrl ?? navState?.fanartUrl;
-    if (eagerBackdrop) {
-      this.fanartUrl.set(this.serverConfig.resolveUrl(eagerBackdrop));
-    }
+    if (navState?.backdropUrl) this.showBackdrop(navState.backdropUrl);
 
     const qp = this.route.snapshot.queryParams;
     this.mediaFileId = +this.route.snapshot.params['mediaFileId'];
@@ -1182,12 +1215,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         requestPlaybackInfo();
 
         this.mediaLoadedTick.update(v => v + 1);
-        this.mediaTitle.set(media.title);
-        this.mediaLogoUrl.set(media.logoUrl ?? null);
-        if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
+        this.applyMedia(media);
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
-        this.applyEpisodeMetadata();
         this.queueCtl.syncSeriesQueue();
 
         // Use duration from streamInfo (reliable, from ffprobe)
@@ -1208,17 +1238,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (local && local.positionSeconds > 10) startTime = local.positionSeconds;
       }
       this.pendingStartTime = startTime ?? 0;
-
-      // Set MediaSession metadata
-      if ('mediaSession' in navigator) {
-        const artwork: MediaImage[] = [];
-        if (this.media?.posterUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.posterUrl), sizes: '300x450', type: 'image/jpeg' });
-        if (this.media?.fanartUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.fanartUrl), sizes: '1280x720', type: 'image/jpeg' });
-        const title = this.episodeTitle() || this.mediaTitle();
-        const artist = this.episodeTitle() ? this.mediaTitle() : undefined;
-        navigator.mediaSession.metadata = new MediaMetadata({ title, artist, artwork });
-        void window.fliksDesktop?.setMediaSession({ title, artist, artworkUrl: artwork[0]?.src });
-      }
 
       if (this.isOfflinePlayback) {
         const offlineTask = this.dlCache
@@ -1568,8 +1587,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         engine.mediaInfo = () => {
           const art = this.media?.fanartUrl || this.media?.posterUrl;
           return {
-            title: this.episodeTitle() || this.mediaTitle(),
-            artist: this.episodeTitle() ? this.mediaTitle() : undefined,
+            ...mediaSessionText(this.nowPlaying()),
             artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
           };
         };
@@ -1990,9 +2008,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
       },
       position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
-      mediaTitle: this.mediaTitle,
-      episodeTitle: this.episodeTitle,
-      fanartUrl: this.fanartUrl,
       spriteUrl: this.spriteUrl,
       spriteMetadata: this.spriteMetadata,
       subtitles: this.subs.availableSubtitles,
@@ -2050,10 +2065,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The header from the download, so it shows offline; online, the media fetch fills in what the download lacks. */
   private applyOfflineHeader(task: DownloadTask | undefined): void {
     if (!task) return;
-    this.mediaTitle.set(task.media?.title ?? '');
-    const m = /^S(\d+)E(\d+)\s*(.*)$/.exec(task.episodeLabel ?? '');
-    this.episodeTitle.set(m ? `S${+m[1]}:E${+m[2]}${m[3] ? ` - ${m[3]}` : ''}` : (task.episodeLabel ?? ''));
-    if (task.media?.logoUrl) this.mediaLogoUrl.set(task.media.logoUrl);
+    this.showNowPlaying(this.nowPlayingMeta.describeDownload(task));
   }
 
   /** Online with a local copy: fetch the media record in parallel (not on the first-frame path) for the
@@ -2066,33 +2078,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (fileId !== this.mediaFileId) return;
         this.media = media;
         this.mediaLoadedTick.update((v) => v + 1);
-        this.mediaTitle.set(media.title);
-        this.mediaLogoUrl.set(media.logoUrl ?? null);
-        if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
-        this.applyEpisodeMetadata();
+        this.applyMedia(media);
         this.queueCtl.syncSeriesQueue();
       },
       () => {},
     );
-  }
-
-  /** Sets the episode label and still backdrop (no-op for movies); the still beats series fanart. */
-  private applyEpisodeMetadata(): void {
-    // A movie (or an item with no episode) carries no episode label — clear any
-    // that lingered from a previous episode when a queue crosses into a movie.
-    if (!this.episodeId || !this.media?.seasons) {
-      this.episodeTitle.set('');
-      return;
-    }
-    for (const season of this.media.seasons) {
-      const ep = season.episodes?.find((e) => e.id === this.episodeId);
-      if (!ep) continue;
-      this.episodeTitle.set(episodeLabel(this.media, ep.id) ?? '');
-      if (ep.stillUrl) {
-        this.fanartUrl.set(this.serverConfig.resolveUrl(ep.stillUrl));
-      }
-      return;
-    }
   }
 
   /** Switch to another episode of the open series without tearing the player down: swap the source like {@link
@@ -2137,12 +2127,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (mediaId && mediaId !== this.mediaId) {
         this.mediaId = mediaId;
         this.media = await this.mediaService.getOne(mediaId);
-        this.mediaTitle.set(this.media.title);
-        this.mediaLogoUrl.set(this.media.logoUrl ?? null);
       }
       // Recompute next-item context + refresh the episode label / backdrop.
       this.mediaLoadedTick.update((v) => v + 1);
-      this.applyEpisodeMetadata();
+      if (this.media) this.applyMedia(this.media);
       this.queueCtl.syncSeriesQueue();
 
       const file = this.currentFile();
@@ -2464,9 +2452,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       mediaFileId: this.mediaFileId,
       mediaId: this.mediaId,
       episodeId: this.episodeId,
-      mediaTitle: this.mediaTitle(),
-      episodeTitle: this.episodeTitle(),
-      fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
       subtitles: this.subs.availableSubtitles(),
       qualities: [],
@@ -2996,14 +2981,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.session.claimOpened(this.mediaFileId)) return;
     const cur = this.session.output()?.item();
     if (cur && cur.mediaId === this.mediaId && cur.episodeId === this.episodeId) return;
-    const media = await this.mediaService.getOne(this.mediaId).catch(() => null);
     await this.session.play(
       {
         fileId: this.mediaFileId,
         mediaId: this.mediaId,
         episodeId: this.episodeId,
-        title: media?.title ?? '',
-        fanartUrl: media?.fanartUrl ?? null,
         positionSeconds: resumeTime,
         tracks: this.launchTracks ?? undefined,
       },
@@ -3039,12 +3021,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.destroyed || this.mediaFileId !== item.fileId) return;
       if (media) {
         this.media = media;
-        this.mediaTitle.set(media.title);
-        this.mediaLogoUrl.set(media.logoUrl ?? null);
       }
     }
     this.mediaLoadedTick.update((v) => v + 1);
-    this.applyEpisodeMetadata();
+    if (this.media) this.applyMedia(this.media);
     this.queueCtl.syncSeriesQueue();
     const duration = (this.currentFile()?.streamInfo as any)?.durationSeconds;
     if (duration > 0) this.state.duration.set(duration);

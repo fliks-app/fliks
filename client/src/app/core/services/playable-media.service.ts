@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { MediaService } from './api/media.service';
+import { Media, MediaService } from './api/media.service';
 import { ContinueWatchingItem, StreamingApiService } from './api/streaming-api.service';
 import { PlaybackQueueService, QueueItem } from './playback-queue.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
@@ -10,12 +10,10 @@ export interface PlayContext {
   fileId: number;
   mediaId: number;
   episodeId?: number;
-  title: string;
-  episodeTitle?: string;
-  fanartUrl?: string | null;
-  /** Episode thumbnail to use as the eager backdrop instead of the
-   *  series fanart when playing an episode. Optional. */
-  stillUrl?: string | null;
+  /** The media when the caller already loaded it, so the output does not fetch it again. */
+  media?: Media;
+  /** Loading-screen backdrop of the local player: the episode still, else the fanart. */
+  backdropUrl?: string | null;
   streamInfo?: any;
   /** Where the caller knows playback stopped. Only a caller that read it from a
    *  list has it; a detail page leaves the player to resolve its own. */
@@ -40,10 +38,7 @@ export class PlayableMediaService {
         mediaId: item.mediaId,
         positionSeconds: item.positionSeconds,
         episodeId: item.episodeId ?? undefined,
-        title: item.mediaTitle,
-        episodeTitle: item.episodeLabel ?? undefined,
-        fanartUrl: item.fanartUrl ?? item.posterUrl ?? null,
-        stillUrl: item.stillUrl ?? null,
+        backdropUrl: item.stillUrl ?? item.fanartUrl ?? item.posterUrl ?? null,
       },
       false,
     );
@@ -59,10 +54,8 @@ export class PlayableMediaService {
         fileId: ctx.fileId,
         mediaId: ctx.mediaId,
         episodeId: ctx.episodeId,
-        title: ctx.title,
-        episodeTitle: ctx.episodeTitle,
-        fanartUrl: ctx.fanartUrl,
-        stillUrl: ctx.stillUrl,
+        media: ctx.media,
+        backdropUrl: ctx.backdropUrl,
         streamInfo: ctx.streamInfo,
         positionSeconds: ctx.positionSeconds,
         tracks: ctx.tracks,
@@ -109,10 +102,7 @@ export class PlayableMediaService {
         fileId: file.id,
         mediaId: start.mediaId,
         episodeId: start.episodeId,
-        title: start.title,
-        episodeTitle: start.episodeTitle,
-        fanartUrl: start.fanartUrl,
-        stillUrl: start.stillUrl,
+        backdropUrl: start.stillUrl ?? start.fanartUrl,
         streamInfo: file.streamInfo,
       },
       { query: { playlistId } },

@@ -152,6 +152,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
   private readonly session = inject(PlaybackSession);
+  protected readonly nowPlayingTitle = computed(() => this.session.nowPlaying()?.title ?? '');
   readonly appUpdate = inject(AppUpdateService);
   private readonly updateModal = viewChild(AppUpdateModalComponent);
   private readonly title = inject(Title);

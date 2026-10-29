@@ -88,7 +88,7 @@
   @if (elsewhere(); as o) {
     <div class="absolute inset-0 z-1 bg-black pointer-events-none">
       <!-- The route's own backdrop when it loaded; a remote device reports a server-relative poster path. -->
-      @let backdrop = fanartUrl() || (o.fanartUrl() | resolveUrl);
+      @let backdrop = backdropUrl();
       @if (backdrop) {
         <img [src]="backdrop" alt="" (load)="backdropLoaded.set(backdrop)"
           class="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
@@ -202,7 +202,7 @@
     [local]="!elsewhere()"
     [playbackRate]="playbackRate()"
     [mediaTitle]="view().mediaTitle"
-    [logoUrl]="mediaLogoUrl()"
+    [logoUrl]="view().logoUrl"
     [episodeTitle]="view().episodeTitle"
     [hasNext]="view().hasNext"
     [nextLabelKey]="queueCtl.nextLabelKey()"

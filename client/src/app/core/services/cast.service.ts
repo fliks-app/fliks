@@ -199,7 +199,6 @@ export class CastService implements OnDestroy {
   /** Receiver is loading/buffering (not yet playing) — drives the
    *  indeterminate seekbar sweep in the cast overlay. */
   readonly buffering = signal(false);
-  readonly mediaTitle = signal('');
   /** Base pour sous-titres / URLs Cast ; renseignée dans reloadCastStream via cast-info. */
   readonly castStreamBaseUrl = signal('');
   /** Cast devices visible to native discovery. Always empty on web: the
@@ -257,6 +256,21 @@ export class CastService implements OnDestroy {
     }
   }
 
+  /** Media state from the sender: a field the event does not carry keeps its value. */
+  applyMediaUpdate(d: { currentTime?: number; duration?: number; isPaused?: boolean; buffering?: boolean; ended?: boolean } | null | undefined): void {
+    if (d?.currentTime != null) this.mirrorReceiverTime(d.currentTime);
+    if (d?.duration != null) this.duration.set(d.duration);
+    if (d?.isPaused != null) this.isPaused.set(d.isPaused);
+    if (d?.buffering != null) this.buffering.set(d.buffering);
+    if (d?.ended != null) this.ended.set(d.ended);
+  }
+
+  /** The receiver device's own output level, apart from the media. */
+  applyDeviceUpdate(d: { volume?: number; muted?: boolean } | null | undefined): void {
+    if (d?.volume != null) this.volume.set(d.volume);
+    if (d?.muted != null) this.muted.set(d.muted);
+  }
+
   /** Appelé dans reloadCastStream juste après cast-info. */
   setCastStreamBase(url: string) {
     this.castStreamBaseUrl.set(url.replace(/\/+$/, ''));
@@ -311,17 +325,8 @@ export class CastService implements OnDestroy {
         this.endConnecting();
       });
 
-      window.addEventListener('castMediaUpdate', ((e: CustomEvent) => {
-        this.mirrorReceiverTime(e.detail?.currentTime ?? 0);
-        this.duration.set(e.detail?.duration ?? 0);
-        this.isPaused.set(e.detail?.isPaused ?? true);
-        this.buffering.set(e.detail?.buffering ?? false);
-        this.ended.set(e.detail?.ended ?? false);
-        // Volume fields are optional — older native builds omit them; skip
-        // the mirror rather than snapping the slider to a default.
-        if (e.detail?.volume != null) this.volume.set(e.detail.volume);
-        if (e.detail?.muted != null) this.muted.set(e.detail.muted);
-      }) as EventListener);
+      window.addEventListener('castMediaUpdate', ((e: CustomEvent) => this.applyMediaUpdate(e.detail)) as EventListener);
+      window.addEventListener('castDeviceUpdate', ((e: CustomEvent) => this.applyDeviceUpdate(e.detail)) as EventListener);
 
       // Native IDLE/ERROR poll; overlaps with the forwarded `player_error`, deduped downstream.
       window.addEventListener('castError', ((e: CustomEvent) => {
@@ -649,7 +654,6 @@ export class CastService implements OnDestroy {
         castTextTrackStyle: buildCastTextTrackStyle(subtitleStyle),
       });
       this.isPaused.set(false);
-      this.mediaTitle.set(info.title);
       return;
     }
 
@@ -689,7 +693,6 @@ export class CastService implements OnDestroy {
     }
 
     await this.session.loadMedia(request);
-    this.mediaTitle.set(info.title);
     this.isPaused.set(info.autoplay === false);
     if (info.activeSubtitleTrackId) {
       this.textReapplyTimer = setTimeout(() => {

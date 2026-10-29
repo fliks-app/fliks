@@ -40,9 +40,6 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly muted = this.cast.muted;
   readonly volume = this.cast.volume;
   readonly hasMedia = this.cp.hasMedia;
-  readonly mediaTitle = this.cp.mediaTitle;
-  readonly episodeTitle = this.cp.episodeTitle;
-  readonly fanartUrl = this.cp.fanartUrl;
   readonly spriteUrl = this.cp.spriteUrl;
   readonly spriteMetadata = this.cp.spriteMetadata;
   readonly availableSubtitles = this.cp.availableSubtitles;
@@ -200,9 +197,6 @@ export class CastPlaybackTarget implements PlaybackOutput {
         fileId: next.mediaFileId,
         mediaId: next.mediaId,
         episodeId: next.episodeId,
-        title: next.title,
-        episodeTitle: next.episodeTitle,
-        fanartUrl: next.fanartUrl,
       },
       { fromStart: true, expand: false },
     );

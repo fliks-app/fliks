@@ -13,6 +13,7 @@ import {
   NS_FLIKS,
   pickAudioTrack,
   receiverMessageEvent,
+  receiverStatusEvent,
   type CastTrack,
 } from './status';
 import {
@@ -121,13 +122,8 @@ class CastSender {
    *  Fliks receiver isn't among the running applications. */
   private adoptReceiverStatus(message: Record<string, unknown>): boolean {
     const status = message['status'] as Record<string, unknown> | undefined;
-    const volume = status?.['volume'] as { level?: number; muted?: boolean } | undefined;
-    if (volume) {
-      broadcast({
-        name: 'castMediaUpdate',
-        detail: { volume: volume.level, muted: volume.muted },
-      });
-    }
+    const device = receiverStatusEvent(status);
+    if (device) broadcast(device);
     const apps = (status?.['applications'] ?? []) as Record<string, unknown>[];
     const app = apps.find((a) => a['appId'] === this.appId);
     if (!app) return false;

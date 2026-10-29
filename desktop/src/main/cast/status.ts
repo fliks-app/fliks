@@ -38,6 +38,12 @@ export function mediaStatusEvent(
   };
 }
 
+/** The receiver device's own level from a RECEIVER_STATUS: its own event, so it never touches the media state. */
+export function receiverStatusEvent(status: Record<string, unknown> | undefined): DesktopCastEvent | null {
+  const volume = status?.['volume'] as { level?: number; muted?: boolean } | undefined;
+  return volume ? { name: 'castDeviceUpdate', detail: { volume: volume.level, muted: volume.muted } } : null;
+}
+
 /**
  * Build the activeTrackIds for an EDIT_TRACKS_INFO. CAF replaces the whole
  * active set in one shot, so the track type left unspecified has to be re-sent

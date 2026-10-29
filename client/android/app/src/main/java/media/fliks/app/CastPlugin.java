@@ -313,9 +313,10 @@ public class CastPlugin extends Plugin {
                              double volume, boolean muted, boolean ended) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
             + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
-            + ", buffering: " + buffering + ", volume: " + volume + ", muted: " + muted
-            + ", ended: " + ended
-            + " } }));";
+            + ", buffering: " + buffering + ", ended: " + ended
+            + " } }));"
+            + "window.dispatchEvent(new CustomEvent('castDeviceUpdate', { detail: { "
+            + "volume: " + volume + ", muted: " + muted + " } }));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );

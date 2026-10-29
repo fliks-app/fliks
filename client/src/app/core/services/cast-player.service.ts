@@ -28,8 +28,8 @@ import {
   type AudioStreamChoice,
 } from './player-settings.service';
 import { TrackManagerService, launchPickFor, type LaunchTracks, type SubtitleOption } from './track-manager.service';
-import { MediaService } from './api/media.service';
-import { episodeLabel } from '../../shared/utils/media-play.util';
+import type { Media } from './api/media.service';
+import { NO_NOW_PLAYING, NowPlayingMetadataService } from './playback/now-playing-metadata.service';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { ToastService } from './toast.service';
 
@@ -140,9 +140,6 @@ interface CastResumeState {
   mediaFileId: number;
   mediaId: number;
   episodeId: number | undefined;
-  mediaTitle: string;
-  episodeTitle: string;
-  fanartUrl: string | null;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
   playbackId?: string | null;
@@ -183,9 +180,9 @@ export class CastPlayerService {
   private readonly appSettings = inject(AppSettingsService);
   private readonly authService = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly nowPlaying = inject(NowPlayingMetadataService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
-  private readonly mediaService = inject(MediaService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
@@ -341,9 +338,6 @@ export class CastPlayerService {
   readonly mediaFileId = signal(0);
   readonly mediaId = signal(0);
   readonly episodeId = signal<number | undefined>(undefined);
-  readonly mediaTitle = signal('');
-  readonly episodeTitle = signal('');
-  readonly fanartUrl = signal<string | null>(null);
   readonly playbackMode = signal<PlaybackMode>('transcode');
   /** Markers, chapters and EDL of the file on the receiver, from its playback-info. */
   readonly timeline = signal<PlaybackTimeline>(NO_TIMELINE);
@@ -383,9 +377,6 @@ export class CastPlayerService {
     mediaFileId: number;
     mediaId: number;
     episodeId?: number;
-    mediaTitle: string;
-    episodeTitle: string;
-    fanartUrl: string | null;
     playbackMode: PlaybackMode;
     subtitles: SubtitleOption[];
     qualities: CastQualityOption[];
@@ -398,9 +389,6 @@ export class CastPlayerService {
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
     this.episodeId.set(opts.episodeId);
-    this.mediaTitle.set(opts.mediaTitle);
-    this.episodeTitle.set(opts.episodeTitle);
-    this.fanartUrl.set(opts.fanartUrl ?? null);
     this.playbackMode.set(opts.playbackMode);
     this.selectionFileId = opts.mediaFileId;
     this.activeQualityId.set(opts.activeQualityId);
@@ -442,9 +430,6 @@ export class CastPlayerService {
       mediaFileId: this.mediaFileId(),
       mediaId: this.mediaId(),
       episodeId: this.episodeId(),
-      mediaTitle: this.mediaTitle(),
-      episodeTitle: this.episodeTitle(),
-      fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
       playbackId: this.playbackId,
@@ -465,9 +450,6 @@ export class CastPlayerService {
       mediaFileId: d['mediaFileId'] as number,
       mediaId: d['mediaId'] as number,
       episodeId: typeof d['episodeId'] === 'number' ? d['episodeId'] : undefined,
-      mediaTitle: typeof d['title'] === 'string' ? d['title'] : '',
-      episodeTitle: typeof d['subtitle'] === 'string' ? d['subtitle'] : '',
-      fanartUrl: typeof d['posterUrl'] === 'string' ? d['posterUrl'] : null,
       playbackMode: 'transcode',
       liveSessionId: typeof d['sid'] === 'string' ? d['sid'] : null,
       playbackId: typeof d['playbackId'] === 'string' ? d['playbackId'] : null,
@@ -497,9 +479,6 @@ export class CastPlayerService {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
     this.episodeId.set(s.episodeId);
-    this.mediaTitle.set(s.mediaTitle);
-    this.episodeTitle.set(s.episodeTitle);
-    this.fanartUrl.set(s.fanartUrl);
     this.playbackMode.set(s.playbackMode);
     this.setLiveSession(s.liveSessionId);
     this.playbackId = s.playbackId ?? null;
@@ -540,9 +519,6 @@ export class CastPlayerService {
     this.mediaFileId.set(0);
     this.mediaId.set(0);
     this.episodeId.set(undefined);
-    this.mediaTitle.set('');
-    this.episodeTitle.set('');
-    this.fanartUrl.set(null);
     this.timeline.set(NO_TIMELINE);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
@@ -741,12 +717,15 @@ export class CastPlayerService {
 
     this.cast.buffering.set(true);
 
+    const meta = await this.nowPlaying.load({ mediaId: this.mediaId(), episodeId: this.episodeId() }).catch(() => NO_NOW_PLAYING);
+    const art = meta.fanartUrl ?? meta.posterUrl;
+    const posterUrl = art ? this.serverConfig.resolveUrl(art) : undefined;
     const load = () => this.cast.loadMedia({
       url: castUrl,
       contentType,
-      title: this.mediaTitle(),
-      subtitle: this.episodeTitle() || undefined,
-      posterUrl: this.fanartUrl() ?? undefined,
+      title: meta.title,
+      subtitle: meta.episodeLabel || undefined,
+      posterUrl,
       currentTime: currentPos,
       subtitles,
       activeSubtitleTrackId,
@@ -760,9 +739,9 @@ export class CastPlayerService {
       intro: pi.markers?.intro,
       outro: pi.markers?.outro,
       ...this.edlPayload(pi.edl, {
-        title: this.mediaTitle(),
-        subtitle: this.episodeTitle(),
-        posterUrl: this.fanartUrl(),
+        title: meta.title,
+        subtitle: meta.episodeLabel,
+        posterUrl: posterUrl ?? null,
         mediaId: this.mediaId(),
         episodeId: this.episodeId(),
         mediaFileId: mfId,
@@ -1040,34 +1019,24 @@ export class CastPlayerService {
     mediaFileId: number;
     mediaId: number;
     episodeId?: number;
-    title: string;
-    episodeTitle?: string;
-    fanartUrl?: string | null;
     streamInfo?: any;
     startTime?: number;
     tracks?: LaunchTracks;
+    /** Already loaded by the caller: skips the fetch. */
+    media?: Media;
   }) {
     // Phase 1: fetches independent of streamInfo run in parallel; `original` audio needs the media payload's language.
-    const needsMediaFetch =
-      !opts.streamInfo ||
-      opts.episodeId != null ||
-      this.playerSettings.get().audioSelectionMode === 'original';
     const [mediaResult, subsResult, castInfo] = await Promise.all([
-      needsMediaFetch
-        ? this.mediaService.getOne(opts.mediaId).catch(() => null)
-        : Promise.resolve(null),
+      this.nowPlaying.media(opts.mediaId, opts.media).catch(() => null),
       this.subtitlesApi.getForMedia(opts.mediaId).catch(() => [] as SubtitleFileRow[]),
       this.authService.getCastInfo(),
     ]);
 
     let streamInfo = opts.streamInfo;
-    let fanartUrl = opts.fanartUrl ?? null;
     if (mediaResult) {
       const file = mediaResult.files?.find((f) => f.id === opts.mediaFileId);
       streamInfo = file?.streamInfo ?? opts.streamInfo;
-      if (!fanartUrl && mediaResult.fanartUrl) fanartUrl = mediaResult.fanartUrl;
     }
-    if (fanartUrl) fanartUrl = this.serverConfig.resolveUrl(fanartUrl);
 
     const launchPick = launchPickFor(opts.tracks, opts.mediaFileId);
     const audioStreams: AudioStreamChoice[] = streamInfo?.audio ?? [];
@@ -1126,9 +1095,6 @@ export class CastPlayerService {
       mediaFileId: opts.mediaFileId,
       mediaId: opts.mediaId,
       episodeId: opts.episodeId,
-      mediaTitle: opts.title,
-      episodeTitle: (mediaResult && opts.episodeId != null ? episodeLabel(mediaResult, opts.episodeId) : null) ?? opts.episodeTitle ?? '',
-      fanartUrl,
       playbackMode: 'transcode',
       subtitles: subtitleInfos,
       qualities,
