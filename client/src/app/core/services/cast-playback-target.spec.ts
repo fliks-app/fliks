@@ -76,7 +76,7 @@ describe('CastPlaybackTarget subtitle style', () => {
 
   it('sends the style live and saves it to the cast settings', () => {
     const { cast, castSettings, target } = setup();
-    const style = { size: 'large', color: 'yellow', shadow: 'none', background: 'semi' };
+    const style = { size: 'large', color: 'yellow', shadow: 'none', background: 'semi', bottomMargin: 10 };
     target.setSubtitleStyle(style);
     expect(cast.setTextTrackStyle).toHaveBeenCalledWith(style);
     expect(castSettings.save).toHaveBeenCalledWith(expect.objectContaining({ subtitleStyle: style, hdr: false }));

@@ -6,6 +6,7 @@ export interface CastSubtitleStyle {
   color: string;       // 'white' | 'yellow' | 'green' | 'cyan'
   shadow: string;      // 'none' | 'drop' | 'outline' | 'raised'
   background: string;  // 'transparent' | 'semi' | 'black'
+  bottomMargin: number; // vh the receiver lifts the subtitles by
 }
 
 export interface CastDeviceCapabilities {
@@ -40,6 +41,7 @@ export const DEFAULT_CAST_SUBTITLE_STYLE: CastSubtitleStyle = {
   color: 'white',
   shadow: 'drop',
   background: 'transparent',
+  bottomMargin: 0,
 };
 
 const DEFAULTS: CastSettings = {

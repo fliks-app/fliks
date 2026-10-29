@@ -41,5 +41,13 @@
       (shadowChange)="subShadow.set($event)"
       (backgroundChange)="subBackground.set($event)"
     />
+
+    <label class="form-control w-full max-w-xs">
+      <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_bottom_margin' | translate }}</span></div>
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subBottomMargin()" (ngModelChange)="subBottomMargin.set(+$event)">
+        @for (v of bottomMarginOptions; track v) { <option [ngValue]="v">{{ v }}%</option> }
+      </select>
+    </label>
   </div>
 </div>

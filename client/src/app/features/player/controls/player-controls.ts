@@ -439,6 +439,7 @@ export class PlayerControlsComponent {
     {
       panel: 'position-bottom',
       field: 'subtitleBottomMargin',
+      styleKey: 'bottomMargin',
       labelKey: 'player.subtitle_position_bottom',
       options: BOTTOM_MARGIN_OPTIONS.map((v) => ({ value: v, label: `${v}%` })),
     },
@@ -489,7 +490,7 @@ export class PlayerControlsComponent {
   setAppearance(row: AppearanceRow, value: string | number) {
     const styled = this.styled();
     if (styled && row.styleKey) {
-      styled.setSubtitleStyle!({ ...styled.subtitleStyle!(), [row.styleKey]: String(value) });
+      styled.setSubtitleStyle!({ ...styled.subtitleStyle!(), [row.styleKey]: value } as CastSubtitleStyle);
       return;
     }
     this.playerSettings.patch({ [row.field]: value } as Partial<PlayerSettings>);

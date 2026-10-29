@@ -165,10 +165,10 @@ describe('CastService live text track style', () => {
     const { session, editTracksInfo } = stubCastSdk(TEXT_TRACKS);
     (session.getMediaSession() as { activeTrackIds: number[] }).activeTrackIds = [1];
     const svc = make(session);
-    await svc.setTextTrackStyle({ size: 'large', color: 'yellow', shadow: 'none', background: 'semi' });
+    await svc.setTextTrackStyle({ size: 'large', color: 'yellow', shadow: 'none', background: 'semi', bottomMargin: 10 });
     const req = editTracksInfo.mock.calls.at(-1)![0];
     expect(req.activeTrackIds).toEqual([1]);
-    expect(req.textTrackStyle).toMatchObject({ fontScale: 0.975, foregroundColor: '#FFFF00FF', backgroundColor: '#00000080' });
+    expect(req.textTrackStyle).toMatchObject({ fontScale: 0.975, foregroundColor: '#FFFF00FF', backgroundColor: '#00000080', customData: { bottomMargin: 10 } });
   });
 });
 

@@ -415,9 +415,15 @@ if (barPlayer && barPlayer.shadowRoot) {
   // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
   hide.textContent =
     'tv-overlay { display: none !important; }' +
-    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; }' +
-    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(-6vh); }';
+    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; transform: translateY(calc(-1 * var(--sub-margin, 0vh))); }' +
+    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(calc(-1 * var(--sub-margin, 0vh) - 6vh)); }';
   barPlayer.shadowRoot.appendChild(hide);
+}
+
+// Custom properties inherit into the shadow root, where the rules above read it.
+function setSubMargin(style) {
+  const vh = Number(style && style.customData && style.customData.bottomMargin) || 0;
+  if (barPlayer) barPlayer.style.setProperty('--sub-margin', vh + 'vh');
 }
 
 function formatClock(sec) {
@@ -505,6 +511,7 @@ playerManager.setMessageInterceptor(
         cast.framework.messages.HlsSegmentFormat.FMP4;
       media.hlsVideoSegmentFormat =
         cast.framework.messages.HlsVideoSegmentFormat.FMP4;
+      setSubMargin(media.textTrackStyle);
       if (!media.textTrackStyle) {
         const style = new cast.framework.messages.TextTrackStyle();
         style.fontGenericFamily =
@@ -518,6 +525,14 @@ playerManager.setMessageInterceptor(
       }
     }
     return loadRequest;
+  },
+);
+
+playerManager.setMessageInterceptor(
+  cast.framework.messages.MessageType.EDIT_TRACKS_INFO,
+  (request) => {
+    if (request.textTrackStyle) setSubMargin(request.textTrackStyle);
+    return request;
   },
 );
 

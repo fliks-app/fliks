@@ -44,7 +44,7 @@ describe('PlayerControlsComponent surface clicks', () => {
 describe('PlayerControlsComponent appearance target', () => {
   const proto = PlayerControlsComponent.prototype;
   const row = { panel: 'size', field: 'subtitleSize', styleKey: 'size', labelKey: 'k', options: [{ value: 'large', label: 'L' }] };
-  const style = { size: 'normal', color: 'white', shadow: 'drop', background: 'transparent' };
+  const style = { size: 'normal', color: 'white', shadow: 'drop', background: 'transparent', bottomMargin: 0 };
   const make = (styled: unknown) => {
     const patch = vi.fn();
     const ctrl = { styled: () => styled, playerSettings: { patch, settings: () => ({ subtitleSize: 'small' }) } };
@@ -57,6 +57,8 @@ describe('PlayerControlsComponent appearance target', () => {
     proto.setAppearance.call(ctrl, row as never, 'large');
     expect(out.setSubtitleStyle).toHaveBeenCalledWith({ ...style, size: 'large' });
     expect(patch).not.toHaveBeenCalled();
+    proto.setAppearance.call(ctrl, { ...row, styleKey: 'bottomMargin' } as never, 10);
+    expect(out.setSubtitleStyle).toHaveBeenCalledWith({ ...style, bottomMargin: 10 });
     expect(proto.currentOption.call(ctrl, { ...row, options: [{ value: 'normal', label: 'N' }] } as never)?.label).toBe('N');
   });
 
