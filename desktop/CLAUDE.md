@@ -170,7 +170,8 @@ compound command (a bare `cd` between tool calls can prompt for permission).
 
 **What to rebuild for a given edit:** addon.cc → step 1 (`dev-linux.sh` does it by itself when
 `addon.cc` is newer than the built `.node`; a stale addon ignores new `load()` fields such as
-`fileOptions`). `src/main`/`src/preload`
+`fileOptions` or `startPaused`). A new worktree has no `.node`, or a stale copy: run step 1 there
+before its first launch (`strings fliks_compositor.node | grep startPaused` tells). `src/main`/`src/preload`
 → step 2. `client/**` → step 3 (+ the `/tmp` sync). Only the changed unit needs
 rebuilding; the addon is reloaded fresh on each Electron start.
 
