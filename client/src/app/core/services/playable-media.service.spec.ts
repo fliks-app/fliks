@@ -32,7 +32,7 @@ describe('PlayableMediaService.play', () => {
         },
         { provide: PlaybackQueueService, useValue: { clear: vi.fn() } },
         { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, send } },
-        { provide: PartyService, useValue: { party: () => null, active: () => false } },
+        { provide: PartyService, useValue: { party: () => null, active: () => false, drives: () => false } },
         { provide: CastPlaybackTarget, useValue: { isConnected: () => !!over.cast } },
         { provide: RemotePlaybackTarget, useValue: { isConnected: () => !!over.target } },
       ],
