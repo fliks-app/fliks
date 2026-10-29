@@ -47,7 +47,7 @@ extension PartyItem {
     var cardImage: String? { hidden ? nil : (stillUrl ?? fanartUrl ?? posterUrl) }
 }
 
-/// A film suggested for the start; read-only on the TV.
+/// A film suggested for the start.
 struct PartyProposal: Codable, Equatable, Identifiable {
     let id: Int
     let item: PartyItem
@@ -56,9 +56,23 @@ struct PartyProposal: Codable, Equatable, Identifiable {
     let downvoterIds: [Int]
     var score: Int { upvoterIds.count - downvoterIds.count }
 
-    /// Best score (ups minus downs) first, the oldest (lowest id) among equals: how the server picks the start.
+    /// Most upvotes first, then fewest downvotes, then the oldest (lowest id): how the server picks the start.
     static func sorted(_ list: [PartyProposal]) -> [PartyProposal] {
-        list.sorted { $0.score != $1.score ? $0.score > $1.score : $0.id < $1.id }
+        list.sorted {
+            ($0.upvoterIds.count, $1.downvoterIds.count, $1.id) > ($1.upvoterIds.count, $0.downvoterIds.count, $0.id)
+        }
+    }
+
+    /// The proposals sharing the best votes: one entry when there is a clear winner.
+    static func best(_ list: [PartyProposal]) -> [PartyProposal] {
+        guard let first = sorted(list).first else { return [] }
+        return sorted(list).filter { $0.upvoterIds.count == first.upvoterIds.count && $0.downvoterIds.count == first.downvoterIds.count }
+    }
+
+    /// The proposal a start takes; nil without one, or on a tie for first (the server answers 409).
+    static func top(_ list: [PartyProposal]) -> PartyProposal? {
+        let best = best(list)
+        return best.count == 1 ? best[0] : nil
     }
 }
 
@@ -82,9 +96,47 @@ struct PartyMember: Codable, Equatable, Identifiable {
 struct PartyMessage: Codable, Equatable, Identifiable {
     struct System: Codable, Equatable {
         struct Args: Codable, Equatable {
-            let position: Double?
-            let title: String?
-            let username: String?
+            var position: Double?
+            var title: String?
+            var username: String?
+            var name: String?
+            var setting: String?
+            /// A switch (`true`/`false`), a policy or a vote (`1`/`-1`), as text.
+            var value: String?
+            var added: Int?
+            var removed: Int?
+            var count: Int?
+            var scheduledAt: Date?
+            var usernames: [String]?
+
+            init(position: Double? = nil, title: String? = nil, username: String? = nil, name: String? = nil,
+                 setting: String? = nil, value: String? = nil, added: Int? = nil, removed: Int? = nil,
+                 count: Int? = nil, scheduledAt: Date? = nil, usernames: [String]? = nil) {
+                self.position = position; self.title = title; self.username = username; self.name = name
+                self.setting = setting; self.value = value; self.added = added; self.removed = removed
+                self.count = count; self.scheduledAt = scheduledAt; self.usernames = usernames
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                position = try? c.decodeIfPresent(Double.self, forKey: .position)
+                title = try? c.decodeIfPresent(String.self, forKey: .title)
+                username = try? c.decodeIfPresent(String.self, forKey: .username)
+                name = try? c.decodeIfPresent(String.self, forKey: .name)
+                setting = try? c.decodeIfPresent(String.self, forKey: .setting)
+                if let flag = try? c.decodeIfPresent(Bool.self, forKey: .value) {
+                    value = String(flag)
+                } else if let number = try? c.decodeIfPresent(Int.self, forKey: .value) {
+                    value = String(number)
+                } else {
+                    value = try? c.decodeIfPresent(String.self, forKey: .value)
+                }
+                added = try? c.decodeIfPresent(Int.self, forKey: .added)
+                removed = try? c.decodeIfPresent(Int.self, forKey: .removed)
+                count = try? c.decodeIfPresent(Int.self, forKey: .count)
+                scheduledAt = try? c.decodeIfPresent(Date.self, forKey: .scheduledAt)
+                usernames = try? c.decodeIfPresent([String].self, forKey: .usernames)
+            }
         }
         let kind: String
         let by: String?

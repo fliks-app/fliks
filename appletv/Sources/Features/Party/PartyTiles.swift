@@ -1,11 +1,5 @@
 import SwiftUI
 
-private struct RingStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.85 : 1)
-    }
-}
-
 /// Name, item, host and start time of a party.
 struct PartyHeaderView: View {
     let party: Party
@@ -75,7 +69,7 @@ struct AvatarTile: View {
             Button(action: action ?? {}) {
                 circle.overlay(Circle().strokeBorder(.white, lineWidth: focused ? 6 : 0))
             }
-            .buttonStyle(RingStyle())
+            .buttonStyle(RingTileStyle())
             .focused($focused)
             VStack(spacing: 4) {
                 Text(name).font(.callout.weight(focused ? .bold : .semibold)).lineLimit(1)

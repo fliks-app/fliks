@@ -5,7 +5,9 @@ struct PartySchedulePicker: View {
     @Binding var date: Date
 
     private static let cal = Calendar.current
-    private static let days: [Date] = (0..<60).compactMap { cal.date(byAdding: .day, value: $0, to: cal.startOfDay(for: Date())) }
+    private static func days() -> [Date] {
+        (0..<60).compactMap { cal.date(byAdding: .day, value: $0, to: cal.startOfDay(for: Date())) }
+    }
 
     private static func dayLabel(_ day: Date) -> String {
         let f = DateFormatter()
@@ -23,7 +25,7 @@ struct PartySchedulePicker: View {
         let minute = Binding(get: { c.component(.minute, from: date) / 15 * 15 }, set: { date = c.date(bySettingHour: c.component(.hour, from: date), minute: $0, second: 0, of: date) ?? date })
         HStack(spacing: 20) {
             Picker("", selection: day) {
-                ForEach(Self.days, id: \.self) { Text(Self.dayLabel($0)).tag($0) }
+                ForEach(Self.days(), id: \.self) { Text(Self.dayLabel($0)).tag($0) }
             }
             Picker("", selection: hour) { ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) } }
             Text(":")
@@ -127,12 +129,12 @@ struct PartyCreateView: View {
             Text(trp("party.playlist_label", ["name": target.name])).foregroundStyle(.secondary)
         } else {
             HStack(spacing: 24) {
-                Text(film?.title ?? (target.mediaId != nil ? target.name : tr("party.create_film_later")))
+                Text(film?.title ?? (target.mediaId != nil ? target.name : tr("party.create_programme_later")))
                     .foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
-                Button(tr("party.create_film_choose")) { picking = true }.buttonStyle(.bordered)
+                Button(tr("party.programme_add")) { picking = true }.buttonStyle(.bordered)
                 if film != nil || target.mediaId != nil {
-                    Button(tr("party.create_film_clear")) { film = nil; target.mediaId = nil; target.mediaFileId = nil; target.episodeId = nil }
+                    Button(tr("party.programme_remove")) { film = nil; target.mediaId = nil; target.mediaFileId = nil; target.episodeId = nil }
                         .buttonStyle(.bordered)
                 }
             }

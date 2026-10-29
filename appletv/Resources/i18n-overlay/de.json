@@ -103,5 +103,6 @@
   "party.tv_leave_host_confirm": "Verlassen und beenden",
   "party.tv_votes_one": "{{count}} Stimme",
   "party.tv_votes_other": "{{count}} Stimmen",
-  "party.tv_proposals_empty": "Noch keine Vorschläge. Gäste schlagen Filme im Web oder in der mobilen App vor."
+  "party.tv_proposals_empty": "Noch keine Vorschläge. Gäste schlagen Filme im Web oder in der mobilen App vor.",
+  "media_picker.back": "Zurück"
 }

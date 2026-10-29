@@ -60,15 +60,6 @@ struct PlayerView: View {
                     .padding(60)
             }
 
-            if partyController != nil, let notice = party.notice {
-                Text(notice)
-                    .font(.callout)
-                    .padding(12)
-                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.top, 60)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
-
             if let notice = coordinator.edlNotice {
                 Text(notice)
                     .font(.callout)

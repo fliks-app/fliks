@@ -127,14 +127,6 @@ struct SelectUserView: View {
 
 private struct SetupStatus: Decodable { let required: Bool }
 
-/// No system focus decoration (no scale, no highlight card) — the tile draws
-/// its own focus ring.
-private struct RingTileStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.85 : 1)
-    }
-}
-
 private struct UserTile: View {
     let user: PublicUser
     var resumable = false

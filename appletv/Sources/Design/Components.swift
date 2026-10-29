@@ -434,3 +434,10 @@ struct HeroCarousel<Item: Identifiable>: View {
         backdrop.url = imagePath(items[i])
     }
 }
+
+/// No system focus decoration (no scale, no highlight card): the tile draws its own focus ring.
+struct RingTileStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}

@@ -19,6 +19,7 @@ struct PartySheetPage<Content: View, Bar: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.opacity(0.6))
         .shellBackdrop()
+        .overlay(alignment: .bottom) { PartyNotice() }
     }
 }
 
@@ -191,7 +192,7 @@ struct PartySettingsView: View {
                             rescheduling.toggle()
                         }
                         .buttonStyle(.bordered)
-                        Button(tr("party.invite_more")) { service.sheet = .invite }.buttonStyle(.bordered)
+                        Button(tr("party.add_people")) { service.sheet = .invite }.buttonStyle(.bordered)
                     }
                     EndPartyButton()
                 }

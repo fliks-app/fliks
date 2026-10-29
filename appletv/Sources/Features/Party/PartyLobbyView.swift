@@ -23,7 +23,6 @@ struct PartyLobbyView: View {
                 .padding(.vertical, 48)
             }
         }
-        .overlay(alignment: .bottom) { PartyNotice() }
         // Only the visible lobby pops itself: under the player it would take the player with it.
         .onChange(of: service.party == nil) { _, gone in
             if gone, visible { dismiss() }
@@ -96,7 +95,7 @@ struct PartyLobbyView: View {
             if !service.isHost {
                 Text(tr("party.tv_wait_host")).font(.callout).foregroundStyle(.secondary)
             } else if service.party?.item == nil, !service.proposals.isEmpty {
-                Text(tr("party.start_top_vote")).font(.callout).foregroundStyle(.secondary)
+                Text(tr(service.voteTied ? "party.start_tie" : "party.start_top_vote")).font(.callout).foregroundStyle(.secondary)
             }
         }
         .focusSection()
@@ -134,7 +133,7 @@ struct PartyLobbyView: View {
 
 private extension PartyLobbyView {
     var proposals: some View {
-        let rows = PartyProposal.sorted(service.proposals)
+        let rows = PartyProposal.sorted(service.openProposals)
         let myId = AuthService.shared.currentUser?.id
         return VStack(alignment: .leading, spacing: 10) {
             Text(tr("party.proposals")).font(.headline).foregroundStyle(.secondary)
@@ -158,7 +157,7 @@ struct PartyBubbles: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(service.bubbles) { message in
-                Text("\(message.username ?? "")\(tr("party.chat_name_sep"))\(message.text)")
+                Text(message.chatLine)
                     .font(.callout)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)

@@ -5,10 +5,11 @@ struct PartyDetailView: View {
     let partyId: Int
     @Environment(PartyService.self) private var service
     @Environment(Backdrop.self) private var backdrop
-    @State private var party: Party?
     @State private var gone = false
-    @State private var programme: [PartyItem] = []
+    @State private var fetched: [PartyItem] = []
 
+    private var party: Party? { service.managed?.id == partyId ? service.managed : nil }
+    private var programme: [PartyItem] { joined ? service.queue : fetched }
     private var isHost: Bool { party?.host.userId == AuthService.shared.currentUser?.id }
     private var joined: Bool { service.party?.id == partyId }
 
@@ -30,25 +31,19 @@ struct PartyDetailView: View {
                 ProgressView().controlSize(.large).frame(maxWidth: .infinity).padding(.top, 200)
             }
         }
-        .overlay(alignment: .bottom) { PartyNotice() }
         .onDisappear { service.setPreview(nil) }
         // The party changes under the page (people join, it goes live): keep it current while visible.
         .task {
             while !Task.isCancelled {
-                do {
-                    let dto: Party = try await APIClient.shared.get("/api/parties/\(partyId)")
-                    programme = (try? await APIClient.shared.get("/api/parties/\(partyId)/queue")) ?? programme
-                    if dto.status == "ended" { throw APIError.badStatus(404) }
-                    party = dto
-                    service.setPreview(dto)
-                    backdrop.url = dto.item?.fanartUrl ?? dto.item?.posterUrl
-                } catch APIError.badStatus(404, _) {
+                if await service.reload(id: partyId) {
+                    if !joined, let items = await service.fetchQueue() { fetched = items }
+                    backdrop.url = party?.item?.fanartUrl ?? party?.item?.posterUrl
+                } else {
                     gone = true
-                    party = nil
                     service.setPreview(nil)
                     service.sheet = nil
                     service.onGoHome?()
-                } catch {}
+                }
                 try? await Task.sleep(for: .seconds(5))
             }
         }
