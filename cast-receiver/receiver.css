@@ -294,3 +294,30 @@ body.bar-on .skip-cue {
 body.bar-on .party-reaction {
   bottom: 22vh;
 }
+
+/* Loading/buffering spinner, centred; the default overlay that held CAF's own is hidden. */
+.spinner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 110;
+  width: 8vh;
+  height: 8vh;
+  margin: -4vh 0 0 -4vh;
+  border: 0.8vh solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: spin 0.9s linear infinite;
+}
+
+.spinner.show {
+  opacity: 1;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

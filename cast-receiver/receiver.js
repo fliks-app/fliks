@@ -436,8 +436,11 @@ const playerBinder = new cast.framework.ui.PlayerDataBinder(playerData);
 const BarState = cast.framework.ui.State;
 let barBandsKey = '';
 
+const spinnerEl = document.getElementById('spinner');
+
 function renderBar() {
   const st = playerData.state;
+  spinnerEl.classList.toggle('show', st === BarState.LOADING || st === BarState.BUFFERING);
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
   const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
   barEl.classList.toggle('show', show);
