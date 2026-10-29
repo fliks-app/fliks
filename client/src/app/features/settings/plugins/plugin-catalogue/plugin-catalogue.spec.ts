@@ -190,7 +190,7 @@ describe('PluginCatalogueComponent — the version picker', () => {
   });
 });
 
-describe('PluginCatalogueComponent — logos stay same-origin', () => {
+describe('PluginCatalogueComponent: logos stay same-origin', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('relays a catalogue logo through the server and uses the local one once installed', async () => {
