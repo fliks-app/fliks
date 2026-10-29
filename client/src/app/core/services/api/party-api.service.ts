@@ -317,8 +317,8 @@ export class PartyApiService {
     }).catch(() => {});
   }
 
-  signal(id: number, deviceId: string, to: string, kind: PartySignalKind, data: object) {
-    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/signal`, { deviceId, to, kind, data }, QUIET()));
+  signal(id: number, deviceId: string, to: string, toUserId: number, kind: PartySignalKind, data: object) {
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/signal`, { deviceId, to, toUserId, kind, data }, QUIET()));
   }
 
   react(id: number, deviceId: string, emoji: string) {

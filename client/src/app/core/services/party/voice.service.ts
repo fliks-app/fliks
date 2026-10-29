@@ -3,12 +3,13 @@ import { Capacitor } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { PartyApiService, type PartyMember, type PartySignalKind } from '../api/party-api.service';
 import { NativePlayer } from '../../plugins/native-player.plugin';
+import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { SseService } from '../sse.service';
 import { ToastService } from '../toast.service';
 import { readFlag, writeFlag } from './local-flag';
 import { PartyService } from './party.service';
-import { SPEAK_HANG_MS, SPEAK_THRESHOLD, diffPeers, offersTo, rms, routeSignal } from './voice-mesh';
+import { SPEAK_HANG_MS, SPEAK_THRESHOLD, diffPeers, offersTo, peerKey, rms, routeSignal, type PeerId } from './voice-mesh';
 
 const DUCK_KEY = 'party.voice.duck';
 const GATHER_TIMEOUT_MS = 2000;
@@ -17,6 +18,7 @@ const MAX_RETRIES = 5;
 const POLL_MS = 100;
 
 interface Peer {
+  id: PeerId;
   pc: RTCPeerConnection;
   audio: HTMLAudioElement;
   analyser: AnalyserNode | null;
@@ -32,6 +34,7 @@ export class VoiceService {
   private readonly api = inject(PartyApiService);
   private readonly party = inject(PartyService);
   private readonly sse = inject(SseService);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);
@@ -57,8 +60,8 @@ export class VoiceService {
   readonly duck = signal(readFlag(DUCK_KEY, true));
   /** Someone else is audible: the player lowers the movie. */
   readonly othersSpeaking = computed(() => {
-    const me = this.sse.targetId();
-    return this.joined() && [...this.speaking()].some((id) => id !== me);
+    const me = this.me();
+    return this.joined() && [...this.speaking()].some((k) => k !== (me && peerKey(me)));
   });
 
   private readonly peers = new Map<string, Peer>();
@@ -68,20 +71,29 @@ export class VoiceService {
   private localAnalyser: AnalyserNode | null = null;
   private localLoud = 0;
   private poll: ReturnType<typeof setInterval> | null = null;
+  private partyId: number | null = null;
+
+  /** This device as the server addresses it; null before the SSE stream or the session is up. */
+  private me(): PeerId | null {
+    const deviceId = this.sse.targetId();
+    const userId = this.auth.user()?.id;
+    return deviceId && userId != null ? { userId, deviceId } : null;
+  }
 
   constructor() {
     this.sse.partyEvents.subscribe((e) => {
-      if (e.type === 'party.signal' && e.partyId === this.party.party()?.id) void this.onSignal(e.from.deviceId, e.kind, e.data);
+      if (e.type === 'party.signal' && e.partyId === this.party.party()?.id) void this.onSignal(e.from, e.kind, e.data);
     });
     effect(() => {
       const members = this.party.members();
-      const inParty = this.party.party() !== null;
+      const partyId = this.party.party()?.id ?? null;
       untracked(() => {
-        if (!inParty) this.teardown();
-        else {
-          void this.probe();
-          if (this.joined()) this.sync(members);
-        }
+        const switched = this.partyId !== null && partyId !== this.partyId;
+        this.partyId = partyId;
+        if (switched || partyId === null) this.teardown();
+        if (partyId === null) return;
+        void this.probe();
+        if (this.joined()) this.sync(members);
       });
     });
     this.party.rejoined.subscribe(() => void this.onRejoin());
@@ -104,7 +116,7 @@ export class VoiceService {
 
   async join(): Promise<void> {
     const id = this.party.party()?.id;
-    const me = this.sse.targetId();
+    const me = this.me();
     if (!this.supported || this.joined() || this.busy() || id == null || !me) return;
     this.busy.set(true);
     try {
@@ -114,7 +126,7 @@ export class VoiceService {
       await this.openMic();
       // Peers offer as soon as the server flags us: an offer that lands before this is set is dropped.
       this.joined.set(true);
-      await this.api.voice(id, me, true, true);
+      await this.api.voice(id, me.deviceId, true, true);
       this.muted.set(true);
       this.startPoll();
       this.sync(this.party.members());
@@ -123,7 +135,7 @@ export class VoiceService {
         if (!offersTo(me, to)) void this.send(to, 'bye', { retry: true });
       }
     } catch (err) {
-      for (const peer of [...this.peers.keys()]) this.closePeer(peer);
+      for (const key of [...this.peers.keys()]) this.closePeer(key);
       this.joined.set(false);
       this.releaseMic();
       if (Capacitor.getPlatform() === 'ios') void NativePlayer.setVoiceActive({ active: false }).catch(() => {});
@@ -137,7 +149,7 @@ export class VoiceService {
     const id = this.party.party()?.id;
     const me = this.sse.targetId();
     if (!this.joined()) return;
-    for (const to of this.peers.keys()) void this.send(to, 'bye', {});
+    for (const { id: to } of this.peers.values()) void this.send(to, 'bye', {});
     this.teardown();
     if (id != null && me) await this.api.voice(id, me, false, true).catch(() => {});
   }
@@ -159,24 +171,24 @@ export class VoiceService {
   // ── Mesh ──
 
   private sync(members: readonly PartyMember[]): void {
-    const me = this.sse.targetId();
+    const me = this.me();
     if (!me) return;
     const { add, remove } = diffPeers(this.peers.keys(), members, me);
-    for (const id of remove) this.closePeer(id);
+    for (const key of remove) this.closePeer(key);
     for (const id of add) if (offersTo(me, id)) void this.connect(id);
   }
 
   private resetPeers(): void {
-    for (const id of [...this.peers.keys()]) this.closePeer(id);
+    for (const key of [...this.peers.keys()]) this.closePeer(key);
     this.sync(this.party.members());
   }
 
-  private createPeer(to: string): Peer {
-    this.closePeer(to);
+  private createPeer(to: PeerId): Peer {
+    this.closePeer(peerKey(to));
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
     const audio = new Audio();
     audio.autoplay = true;
-    const peer: Peer = { pc, audio, analyser: null, lastLoud: 0, retries: 0, sid: Math.random().toString(36).slice(2) };
+    const peer: Peer = { id: to, pc, audio, analyser: null, lastLoud: 0, retries: 0, sid: Math.random().toString(36).slice(2) };
     const track = this.mic?.getAudioTracks()[0];
     if (track && this.mic) pc.addTrack(track, this.mic);
     else pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -190,7 +202,7 @@ export class VoiceService {
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') peer.retries = 0;
       else if (pc.iceConnectionState === 'failed') this.onIceFailed(to, pc);
     };
-    this.peers.set(to, peer);
+    this.peers.set(peerKey(to), peer);
     return peer;
   }
 
@@ -206,23 +218,24 @@ export class VoiceService {
     });
   }
 
-  private onIceFailed(to: string, pc: RTCPeerConnection): void {
-    const peer = this.peers.get(to);
-    const me = this.sse.targetId();
+  private onIceFailed(to: PeerId, pc: RTCPeerConnection): void {
+    const key = peerKey(to);
+    const peer = this.peers.get(key);
+    const me = this.me();
     if (!peer || peer.pc !== pc || !me || peer.retries >= MAX_RETRIES) return;
     const retries = peer.retries + 1;
-    this.closePeer(to);
-    this.peers.set(to, { ...peer, retries }); // placeholder keeps the count across the delay
+    this.closePeer(key);
+    this.peers.set(key, { ...peer, retries }); // placeholder keeps the count across the delay
     setTimeout(() => {
-      if (this.peers.get(to)?.retries !== retries || this.peers.get(to)?.pc !== pc) return;
-      this.peers.delete(to);
+      if (this.peers.get(key)?.retries !== retries || this.peers.get(key)?.pc !== pc) return;
+      this.peers.delete(key);
       if (!this.joined()) return;
       if (offersTo(me, to)) void this.connect(to, retries);
       else void this.send(to, 'bye', { retry: true });
     }, RETRY_MS);
   }
 
-  private async connect(to: string, retries = 0): Promise<void> {
+  private async connect(to: PeerId, retries = 0): Promise<void> {
     const peer = this.createPeer(to);
     peer.retries = retries;
     try {
@@ -230,14 +243,16 @@ export class VoiceService {
       await this.gathered(peer.pc);
       await this.send(to, 'offer', { ...peer.pc.localDescription!.toJSON(), sid: peer.sid });
     } catch {
-      this.closePeer(to);
+      this.closePeer(peerKey(to));
     }
   }
 
-  private async onSignal(from: string, kind: PartySignalKind, data: Record<string, unknown>): Promise<void> {
+  private async onSignal(from: PeerId, kind: PartySignalKind, data: Record<string, unknown>): Promise<void> {
     if (!this.joined()) return;
-    const action = routeSignal(kind, this.peers.has(from), data['retry'] === true);
-    const peer = this.peers.get(from);
+    const key = peerKey(from);
+    const me = this.me();
+    const action = routeSignal(kind, this.peers.has(key), data['retry'] === true);
+    const peer = this.peers.get(key);
     try {
       switch (action) {
         case 'accept-offer': {
@@ -257,15 +272,15 @@ export class VoiceService {
           await peer!.pc.addIceCandidate(data as unknown as RTCIceCandidateInit);
           return;
         case 'retry':
-          this.closePeer(from);
-          if (this.sse.targetId() && offersTo(this.sse.targetId()!, from)) void this.connect(from);
+          this.closePeer(key);
+          if (me && offersTo(me, from)) void this.connect(from);
           return;
         case 'close':
-          this.closePeer(from);
+          this.closePeer(key);
           return;
       }
     } catch {
-      this.closePeer(from);
+      this.closePeer(key);
     }
   }
 
@@ -303,11 +318,11 @@ export class VoiceService {
     });
   }
 
-  private async send(to: string, kind: PartySignalKind, data: object): Promise<void> {
+  private async send(to: PeerId, kind: PartySignalKind, data: object): Promise<void> {
     const id = this.party.party()?.id;
     const me = this.sse.targetId();
     if (id == null || !me) return;
-    await this.api.signal(id, me, to, kind, data).catch((err) => {
+    await this.api.signal(id, me, to.deviceId, to.userId, kind, data).catch((err) => {
       // Voice flags lag a beat behind members; anything else is worth saying.
       if (kind !== 'bye') this.party.onActionError(err);
     });
@@ -365,7 +380,7 @@ export class VoiceService {
 
   private measure(): void {
     const now = Date.now();
-    const me = this.sse.targetId();
+    const me = this.me();
     const buf = new Uint8Array(512);
     const loud = (a: AnalyserNode | null): boolean => {
       if (!a) return false;
@@ -374,7 +389,7 @@ export class VoiceService {
     };
     if (me) {
       if (loud(this.localAnalyser)) this.localLoud = now;
-      this.setSpeaking(me, now - this.localLoud < SPEAK_HANG_MS && !this.muted());
+      this.setSpeaking(peerKey(me), now - this.localLoud < SPEAK_HANG_MS && !this.muted());
     }
     for (const [id, p] of this.peers) {
       if (loud(p.analyser)) p.lastLoud = now;
@@ -401,6 +416,7 @@ export class VoiceService {
     this.ctx = null;
     this.speaking.set(new Set());
     this.audioBlocked.set(false);
+    if (this.joined() && Capacitor.getPlatform() === 'ios') void NativePlayer.setVoiceActive({ active: false }).catch(() => {});
     this.joined.set(false);
     this.muted.set(true);
     this.micIssue.set(null);

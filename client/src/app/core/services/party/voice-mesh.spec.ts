@@ -1,32 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import type { PartyMember } from '../api/party-api.service';
-import { diffPeers, offersTo, rms, routeSignal } from './voice-mesh';
+import { diffPeers, offersTo, peerKey, rms, routeSignal } from './voice-mesh';
 
-const member = (deviceId: string, voice: boolean, status: PartyMember['status'] = 'ready'): PartyMember => ({
-  userId: 1, username: 'u', deviceId, role: 'member', status, deviceName: null, formFactor: null,
+const member = (deviceId: string, voice: boolean, status: PartyMember['status'] = 'ready', userId = 1): PartyMember => ({
+  userId, username: 'u', deviceId, role: 'member', status, deviceName: null, formFactor: null,
   voice: voice ? { muted: true } : null,
 });
 
+const me = { userId: 1, deviceId: 'me' };
+
 describe('offer direction', () => {
-  it('the lower deviceId offers, never both', () => {
-    expect(offersTo('a', 'b')).toBe(true);
-    expect(offersTo('b', 'a')).toBe(false);
+  it('the lower key offers, never both', () => {
+    expect(offersTo({ userId: 1, deviceId: 'a' }, { userId: 1, deviceId: 'b' })).toBe(true);
+    expect(offersTo({ userId: 1, deviceId: 'b' }, { userId: 1, deviceId: 'a' })).toBe(false);
   });
 });
 
 describe('diffPeers', () => {
   it('opens peers for voice members and ignores self and non-voice', () => {
-    const d = diffPeers([], [member('me', true), member('a', true), member('b', false)], 'me');
-    expect(d).toEqual({ add: ['a'], remove: [] });
+    const d = diffPeers([], [member('me', true), member('a', true), member('b', false)], me);
+    expect(d).toEqual({ add: [{ userId: 1, deviceId: 'a' }], remove: [] });
+  });
+
+  it('tells apart two users reusing a deviceId', () => {
+    const d = diffPeers([], [member('x', true, 'ready', 1), member('x', true, 'ready', 2)], me);
+    expect(d.add).toEqual([{ userId: 1, deviceId: 'x' }, { userId: 2, deviceId: 'x' }]);
+    expect(diffPeers([peerKey({ userId: 1, deviceId: 'x' })], [member('x', true, 'ready', 2)], me).remove).toEqual(['1:x']);
   });
 
   it('closes a peer whose member lost voice or left, and drops an away member', () => {
-    const d = diffPeers(['a', 'b', 'c'], [member('a', false), member('b', true, 'away'), member('c', true)], 'me');
-    expect(d).toEqual({ add: [], remove: ['a', 'b'] });
+    const d = diffPeers(['1:a', '1:b', '1:c'], [member('a', false), member('b', true, 'away'), member('c', true)], me);
+    expect(d).toEqual({ add: [], remove: ['1:a', '1:b'] });
   });
 
   it('reopens an away member once it returns', () => {
-    expect(diffPeers([], [member('a', true)], 'me').add).toEqual(['a']);
+    expect(diffPeers([], [member('a', true)], me).add).toEqual([{ userId: 1, deviceId: 'a' }]);
   });
 });
 
