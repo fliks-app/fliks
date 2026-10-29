@@ -371,15 +371,15 @@ impl<R: BufRead> BufRead for Transcoded<R> {
 }
 
 struct Open {
-    close: &'static [u8],
+    close: &'static str,
     programme: bool,
     tag: String,
     block: String,
     skip: bool,
 }
 
-fn raw(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).replace('\0', "")
+fn raw(text: &str) -> String {
+    text.replace('\0', "")
 }
 
 /// Reads one feed to its end, element by element; memory is one element plus the reader's buffers.
@@ -390,19 +390,15 @@ pub fn parse_stream<R: Read>(input: R, opts: &Options, sink: &mut impl Sink) -> 
     (&mut input).take(1024).read_to_end(&mut head)?;
     let encoding = sniff_encoding(&head);
     let input = BufReader::new(io::Cursor::new(head).chain(input));
-    if encoding == UTF_8 {
-        read_events(input, opts, sink)
-    } else {
-        let decoder = encoding.new_decoder_with_bom_removal();
-        let transcoded = Transcoded {
-            inner: input,
-            decoder,
-            out: vec![],
-            pos: 0,
-            done: false,
-        };
-        read_events(transcoded, opts, sink)
-    }
+    // UTF-8 too: the reader rejects an invalid byte, the decoder replaces it.
+    let transcoded = Transcoded {
+        inner: input,
+        decoder: encoding.new_decoder_with_bom_removal(),
+        out: vec![],
+        pos: 0,
+        done: false,
+    };
+    read_events(transcoded, opts, sink)
 }
 
 fn read_events<R: BufRead>(input: R, opts: &Options, sink: &mut impl Sink) -> io::Result<Stats> {
@@ -471,8 +467,8 @@ fn begin(
     sink: &mut impl Sink,
     stats: &mut Stats,
 ) -> Option<Open> {
-    let programme = e.name().as_ref() == b"programme";
-    if !programme && !(want_channels && e.name().as_ref() == b"channel") {
+    let programme = e.name().as_ref() == "programme";
+    if !programme && !(want_channels && e.name().as_ref() == "channel") {
         return None;
     }
     let tag = format!("<{}>", raw(e));
@@ -486,7 +482,7 @@ fn begin(
         skip = !sink.wants(attr(&attrs(&tag), "channel").as_deref().unwrap_or_default());
     }
     Some(Open {
-        close: if programme { b"programme" } else { b"channel" },
+        close: if programme { "programme" } else { "channel" },
         programme,
         block: tag.clone(),
         tag,
@@ -709,6 +705,15 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["ok"]
         );
+    }
+
+    #[test]
+    fn an_invalid_utf8_byte_is_replaced_and_the_feed_read_on() {
+        let xml = b"<tv><programme start=\"20260101000000\" channel=\"c\"><title>A\xffB</title></programme><programme start=\"20260101010000\" channel=\"c\"><title>next</title></programme></tv>";
+        let (c, s) = parse(xml, 7);
+        let titles: Vec<&str> = c.programmes.iter().map(|p| p.title.as_str()).collect();
+        assert_eq!(titles, ["A\u{fffd}B", "next"]);
+        assert!(s.malformed.is_none(), "{:?}", s.malformed);
     }
 
     #[test]
