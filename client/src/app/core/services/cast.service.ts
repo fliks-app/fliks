@@ -108,6 +108,8 @@ interface NativeCastPlugin {
     available: boolean;
     connected?: boolean;
     resume?: unknown;
+    /** Desktop: the device level at connect, which a listener added after this call would miss. */
+    device?: { volume?: number; muted?: boolean };
   }>;
   /** Persisted per Cast session id, dropped when the session ends. */
   setResumeState?(opts: { state: unknown }): Promise<void>;
@@ -299,10 +301,11 @@ export class CastService implements OnDestroy {
 
   private async initNative() {
     try {
-      const { available, connected, resume } = await this.bridge.initialize({ appId: CAST_APP_ID });
+      const { available, connected, resume, device } = await this.bridge.initialize({ appId: CAST_APP_ID });
       this.isAvailable.set(available || !!connected);
       if (connected) this.isConnected.set(true);
       if (resume) this.resumedState.set(resume);
+      this.applyDeviceUpdate(device);
       if (available) void this.getCastDevices();
 
       // Listen for native Cast events

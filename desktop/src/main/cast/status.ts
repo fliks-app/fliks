@@ -86,7 +86,17 @@ export function receiverMessageEvent(ns: string, data: Record<string, unknown>):
   return { name: 'castReceiverMessage', detail: { namespace: ns, message: JSON.stringify(data) } };
 }
 
-/** What a renderer that boots while a session is live gets back: the resume state it saved, if any. */
-export function initializeResult(available: boolean, connected: boolean, resume: unknown) {
-  return { available, connected, resume: connected ? (resume ?? undefined) : undefined };
+/** What a renderer that boots while a session is live gets back: the resume state it saved, if any, and the device level. */
+export function initializeResult(
+  available: boolean,
+  connected: boolean,
+  resume: unknown,
+  device?: { volume?: number; muted?: boolean },
+) {
+  return {
+    available,
+    connected,
+    resume: connected ? (resume ?? undefined) : undefined,
+    ...(connected && device ? { device } : {}),
+  };
 }

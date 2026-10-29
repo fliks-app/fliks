@@ -248,6 +248,8 @@ test('initializeResult hands the saved state back only while a session is live',
   const state = { mediaFileId: 53 };
   assert.deepEqual(initializeResult(true, true, state), { available: true, connected: true, resume: state });
   assert.equal(initializeResult(true, false, state).resume, undefined);
+  assert.deepEqual(initializeResult(true, true, state, { volume: 0.4, muted: false }).device, { volume: 0.4, muted: false });
+  assert.equal('device' in initializeResult(true, false, state, { volume: 1 }), false);
   assert.equal(initializeResult(true, true, null).resume, undefined);
 });
 
