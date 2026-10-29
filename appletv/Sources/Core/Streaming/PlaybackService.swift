@@ -95,6 +95,8 @@ import Foundation
     var onFatalError: (() -> Void)?
     /// A recovery is starting: returns when its wait began, or nil to start it at the frozen playhead.
     var onRecoveryStart: (@MainActor (_ reason: String) -> Date?)?
+    /// The player's level and the viewer's mute, reported so a controller's slider keeps what it set.
+    var audioLevel: (@MainActor () -> (volume: Double, muted: Bool))?
 
     // MARK: - Start / stop
 
@@ -296,6 +298,9 @@ import Foundation
             let subtitleTrackIndex: Int?
             let subtitleId: Nullable
             let lastCmdId: String?
+            let volume: Double?
+            let muted: Bool?
+            let supportsVolume: Bool
             let quality: String
             let qualities: [Rung]
             // Links a polled remote target to this live session; nil until registered.
@@ -303,11 +308,13 @@ import Foundation
             let qoe: Qoe
         }
         struct Response: Decodable { let sessionLost: Bool? }
+        let level = audioLevel?()
         let body = Body(
             positionSeconds: position, durationSeconds: duration, mediaFileId: mediaFileId,
             episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
             audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex,
             subtitleId: Nullable(value: subtitleId), lastCmdId: lastCmdId,
+            volume: level?.volume, muted: level?.muted, supportsVolume: true,
             quality: qualityId,
             qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },
             targetId: RemoteControlService.shared.targetId,

@@ -82,6 +82,7 @@ import UIKit
     var skipIntroSecondsLeft = 0
 
     init() {
+        playback.audioLevel = { [weak self] in (Double(self?.player?.volume ?? 1), self?.userMuted ?? false) }
         playback.onReload = { [weak self] url, position in
             Task { @MainActor in self?.reload(url: url, position: position, keepingSubtitle: true) }
         }
