@@ -17,7 +17,8 @@ import UIKit
 
     /// Wired by `RootView` to push a fresh player route: the app's existing
     /// "start playing this" entry point: for a `load` command.
-    var onLoadRequested: ((_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?, _ startAt: Double, _ startPaused: Bool) -> Void)?
+    var onLoadRequested: ((_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?, _ startAt: Double, _ startPaused: Bool,
+                           _ tracks: LaunchTracks) -> Void)?
     /// The on-screen player, if any. Every action but `load` needs one.
     weak var activeCoordinator: PlayerCoordinator?
 
@@ -90,7 +91,8 @@ import UIKit
                 print("remote: load command \(cmd.cmdId) missing mediaFileId/mediaId, ignoring")
                 return
             }
-            onLoadRequested?(mediaFileId, mediaId, cmd.episodeId, cmd.positionSeconds ?? 0, cmd.paused ?? false)
+            onLoadRequested?(mediaFileId, mediaId, cmd.episodeId, cmd.positionSeconds ?? 0, cmd.paused ?? false,
+                             cmd.launchTracks)
             return
         }
         guard let coordinator = activeCoordinator else {

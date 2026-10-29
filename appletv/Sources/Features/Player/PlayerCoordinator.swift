@@ -82,6 +82,7 @@ import UIKit
     var skipIntroSecondsLeft = 0
 
     init() {
+        playback.audioLevel = { [weak self] in (Double(self?.player?.volume ?? 1), self?.userMuted ?? false) }
         playback.onReload = { [weak self] url, position in
             Task { @MainActor in self?.reload(url: url, position: position, keepingSubtitle: true) }
         }
@@ -103,7 +104,10 @@ import UIKit
 
     // MARK: - Load / reload / teardown
 
-    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true) async throws {
+    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true,
+              prerollPaused: Bool = false, launch: LaunchTracks? = nil) async throws {
+        prerollOnReady = prerollPaused
+        launchTracks = launch
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
@@ -130,7 +134,7 @@ import UIKit
         attachObservers(to: p, item: item, initialSeek: initialSeek, exact: initialSeek != startAt)
         armEdl()
         applyPreferredSubtitle(to: item, player: p)
-        if autoplay { p.play() }
+        if autoplay { p.play() } else { p.pause() }
         RemoteControlService.shared.activeCoordinator = self
     }
 
@@ -250,8 +254,37 @@ import UIKit
     var isBuffering: Bool { player?.timeControlStatus == .waitingToPlayAtSpecifiedRate }
     var currentItemIds: (mediaId: Int, episodeId: Int?) { (mediaId, episodeId) }
 
-    /// Loads the media pipeline without playing, so a paused party shows its first frame and AVKit drops its spinner.
-    func partyPreroll() async { _ = await player?.preroll(atRate: 1) }
+    /// Loads the media pipeline without playing, so a paused player shows its first frame.
+    func preroll() async {
+        guard let player, player.status == .readyToPlay, player.rate == 0 else { return }
+        _ = await player.preroll(atRate: 1)
+    }
+
+    /// AVKit keeps its spinner over a player that never played: a play and pause in one turn ends it with no frame
+    /// advancing, muted against an audio blip.
+    private func clearAVKitSpinner() {
+        guard let player, player.rate == 0 else { return }
+        let muted = player.isMuted
+        player.isMuted = true
+        player.play()
+        player.pause()
+        player.isMuted = muted
+    }
+
+    /// Opened paused outside a party, which prerolls on its own: preroll once ready and at the start position,
+    /// since a seek cancels a preroll.
+    private var prerollOnReady = false
+    /// A remote handoff's picks: they win over the preferences for this item's first selection.
+    private var launchTracks: LaunchTracks?
+    private var initialSeekPending = false
+    private func prerollIfOpenedPaused() {
+        guard prerollOnReady, !initialSeekPending, player?.currentItem?.status == .readyToPlay else { return }
+        prerollOnReady = false
+        Task {
+            await preroll()
+            clearAVKitSpinner()
+        }
+    }
 
     func partyPlay() { player?.play() }
     func partyPause() { player?.pause() }
@@ -373,10 +406,18 @@ import UIKit
 
     private func attachObservers(to player: AVPlayer, item: AVPlayerItem, initialSeek: Double, exact: Bool) {
         if initialSeek > 0 {
+            initialSeekPending = true
+            let landed: (Bool) -> Void = { [weak self] _ in
+                Task { @MainActor in
+                    self?.initialSeekPending = false
+                    self?.prerollIfOpenedPaused()
+                }
+            }
             if exact {
-                player.seek(to: Self.seekTime(initialSeek), toleranceBefore: .zero, toleranceAfter: .zero)
+                player.seek(to: Self.seekTime(initialSeek), toleranceBefore: .zero, toleranceAfter: .zero,
+                            completionHandler: landed)
             } else {
-                player.seek(to: Self.seekTime(initialSeek))
+                player.seek(to: Self.seekTime(initialSeek), completionHandler: landed)
             }
         }
         // A periodic time observer stops while the picture is frozen; the watchdog and heartbeat must not.
@@ -421,7 +462,12 @@ import UIKit
         }
         Task {
             let group = try? await item.asset.loadMediaSelectionGroup(for: .audible)
-            if player?.currentItem === item { audibleGroup = group }
+            guard player?.currentItem === item else { return }
+            audibleGroup = group
+            if let id = launchTracks?.audioId, let group, let option = matchOption(id, in: group) {
+                item.select(option, in: group)
+                lastAudio = currentAudioTrackIndex()
+            }
         }
         if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
         timeJumpObserver = NotificationCenter.default.addObserver(
@@ -476,6 +522,7 @@ import UIKit
             trackingSelection = true
             lastAudio = currentAudioTrackIndex()
             lastLegible = currentLegibleChoice()
+            prerollIfOpenedPaused()
         }
         selectionDidChange() // backup for a missed notification
 
@@ -766,6 +813,7 @@ import UIKit
         let settings = AppSettingsStore.shared
         let mode = settings.subtitleMode
         player.appliesMediaSelectionCriteriaAutomatically = mode != "off" && restoring == nil
+            && launchTracks?.subtitleSent != true
 
         Task {
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible),
@@ -784,6 +832,11 @@ import UIKit
                 return
             case nil:
                 break
+            }
+            if let launch = launchTracks, launch.subtitleSent {
+                item.select(launch.subtitleId.flatMap { matchOption($0, in: group) }, in: group)
+                lastLegible = currentLegibleChoice()
+                return
             }
             if case .text(let index)? = playback.subtitlePick, group.options.indices.contains(index) {
                 item.select(group.options[index], in: group)

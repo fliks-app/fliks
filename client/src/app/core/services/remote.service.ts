@@ -225,9 +225,12 @@ export class RemoteService {
     this.pendingAction.set(null);
   }
 
-  /** A selected target that has yet to report and could still be playing: a restored selection has no state, and the server join can lag a reconnect. */
+  /** A selected target that has yet to report and could still be playing: a restored selection has no state, and the server join can lag a reconnect.
+   *  A listing that shows it playing nothing settles it: an idle device never reports. */
   readonly awaitingFirstReport = computed(() => {
     if (!this.selectedTargetId() || this.reportedState()) return false;
+    const row = this.selectedRow();
+    if (row && !row.nowPlaying) return false;
     return this.wallClock() - this.observingSince < FIRST_REPORT_GRACE_MS;
   });
 
@@ -470,7 +473,7 @@ export class RemoteService {
     this.selectedTargetId.set(targetId);
     this.reportedState.set(null);
     this.stoppedUntilReport = false;
-    this.selectedRow.set(null);
+    this.selectedRow.set(this.targets().find((t) => t.targetId === targetId) ?? null);
     this.clearOffline();
     this.expectedMediaFileId = null;
     // Reports from a deselected target are dropped, so its pending ack can never land.

@@ -189,10 +189,13 @@ export class PlaybackSession {
     if (this.injector.get(DeviceService).isTv()) return Promise.resolve(false);
     if (this.moving) return this.moving;
     const from = this.kind();
+    // Another remote device is a switch too, not only another kind of output.
+    const switching =
+      from !== 'local' && (from !== kind || (kind === 'remote' && deviceId !== this.remoteSvc().selectedTargetId()));
     const run =
       kind === 'local'
         ? this.toLocal()
-        : from !== 'local' && from !== kind
+        : switching
           ? this.switchAway(kind, deviceId)
           : kind === 'cast'
             ? this.toCast(deviceId)
@@ -317,15 +320,14 @@ export class PlaybackSession {
     return true;
   }
 
-  /** Cast and remote swap without the local engine starting in between. */
+  /** Moves playback between two other devices without the local engine starting in between. */
   private async switchAway(kind: 'cast' | 'remote', deviceId?: string): Promise<boolean> {
     const from = this.output();
     const snap = from?.snapshot();
     if (!from || !snap || (kind === 'remote' && !deviceId)) return false;
     if (kind === 'cast') {
       if (!(await this.connectCast(deviceId))) return false;
-      await from.pause();
-      from.disconnect();
+      this.leave(from);
       await this.castPlayer().quickStart({
         mediaFileId: snap.item.fileId,
         mediaId: snap.item.mediaId,
@@ -336,11 +338,17 @@ export class PlaybackSession {
       });
       return true;
     }
+    this.leave(from);
     const remote = this.remoteSvc();
-    from.disconnect();
     remote.selectTarget(deviceId!);
     void remote.send(deviceId!, snapshotToWire(snap));
     return true;
+  }
+
+  /** Only one device plays: a remote device left behind closes its player, a Cast session ends with its receiver. */
+  private leave(from: PlaybackOutput): void {
+    if (from === this.injector.get(RemotePlaybackTarget)) from.stopPlayback();
+    from.disconnect();
   }
 
   private async toLocal(): Promise<boolean> {
@@ -349,14 +357,7 @@ export class PlaybackSession {
     if (!local || !from || from === local) return false;
     const snap = from.snapshot() ?? this.awaySnapshot;
     if (!snap) return false;
-    if (this.kind() === 'remote') {
-      // Only one device plays: the one left behind closes its player.
-      from.stopPlayback();
-      this.remoteSvc().selectTarget(null);
-    } else {
-      this.castSvc().disconnect();
-      this.castPlayer().clear();
-    }
+    this.leave(from);
     await local.resume(snap);
     return true;
   }

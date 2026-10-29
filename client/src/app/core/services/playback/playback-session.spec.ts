@@ -288,7 +288,7 @@ describe('PlaybackSession', () => {
       cast.isConnected.set(true);
       TestBed.tick();
       expect(await session.moveTo('local')).toBe(true);
-      expect(castSvc.disconnect).toHaveBeenCalled();
+      expect(cast.disconnect).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
@@ -312,7 +312,7 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       expect(await session.moveTo('local')).toBe(true);
       expect(remote.stopPlayback).toHaveBeenCalled();
-      expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
+      expect(remote.disconnect).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
@@ -376,7 +376,7 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       castSvc.selectCastDevice.mockImplementation(async () => cast.isConnected.set(true));
       expect(await session.moveTo('cast', 'cc-1')).toBe(true);
-      expect(remote.pause).toHaveBeenCalled();
+      expect(remote.stopPlayback).toHaveBeenCalled();
       expect(remote.disconnect).toHaveBeenCalled();
       expect(castPlayer.quickStart).toHaveBeenCalledWith(
         expect.objectContaining({ mediaFileId: 7, mediaId: 3, episodeId: 9, startTime: 42, tracks, autoplay: true }),
@@ -386,6 +386,20 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       expect(local.resume).not.toHaveBeenCalled();
       expect(remoteSvc.send).not.toHaveBeenCalled();
+    });
+
+    it('moves playback from one remote device to another and stops the first', async () => {
+      const { session, remote, local, remoteSvc } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      session.attachLocal(local);
+      remoteSvc.selectedTargetId.set('pc-1');
+      remote.isConnected.set(true);
+      TestBed.tick();
+      expect(await session.moveTo('remote', 'tv-2')).toBe(true);
+      expect(remote.stopPlayback).toHaveBeenCalled();
+      expect(remoteSvc.selectTarget).toHaveBeenCalledWith('tv-2');
+      expect(remoteSvc.send).toHaveBeenCalledWith('tv-2', expect.objectContaining({ action: 'load', mediaFileId: 7, mediaId: 3, positionSeconds: 42 }));
+      expect(local.release).not.toHaveBeenCalled();
     });
 
     it('loads the receiver paused when the remote device was paused', async () => {
