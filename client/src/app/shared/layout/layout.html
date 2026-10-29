@@ -173,7 +173,7 @@
       class="min-w-0 flex-1 px-[var(--page-p)]"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
     >
-      @if (!device.isTv() && sse.serverUnreachable() && !isDownloadsRoute()) {
+      @if (sse.unreachableChip() && !isDownloadsRoute()) {
         <div role="status"
              class="fixed inset-x-0 z-30 flex justify-center px-4 pointer-events-none"
              style="top: var(--chrome-top, 1rem)">

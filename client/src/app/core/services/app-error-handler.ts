@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ErrorHandler, Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
@@ -21,8 +22,10 @@ export class AppErrorHandler implements ErrorHandler {
   }
 }
 
-/** An opaque cross-origin "Script error." (no error behind the event) or an aborted transition tells the user nothing. */
+/** An opaque cross-origin "Script error." (no error behind the event) or an aborted transition tells the user nothing;
+ *  an HTTP failure was already reported, or kept quiet on purpose, by the error interceptor. */
 function actionable(error: unknown): boolean {
+  if (error instanceof HttpErrorResponse) return false;
   if (!(error instanceof Error)) return true;
   if (error.name === 'AbortError') return false;
   const cause = (error as { cause?: unknown }).cause;

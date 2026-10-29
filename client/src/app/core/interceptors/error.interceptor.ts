@@ -1,9 +1,10 @@
 import { HttpContextToken, HttpInterceptorFn, HttpErrorResponse, HttpEventType } from '@angular/common/http';
-import { inject } from '@angular/core';
+import { Injector, inject } from '@angular/core';
 import { catchError, filter, throwError, timeout, TimeoutError } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
 import { NetworkService } from '../services/network.service';
+import { SseService } from '../services/sse.service';
 import { translatedServerMessage } from '../utils/server-message';
 
 /** Set on a request whose failure the caller reports itself. For a batch: one summary beats N
@@ -17,6 +18,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const translate = inject(TranslateService);
   const network = inject(NetworkService);
+  // Resolved on error only: SseService reaches HttpClient through AuthService.
+  const injector = inject(Injector);
   const bounded = req.method === 'GET' && req.responseType === 'json' && req.url.includes('/api/');
 
   return next(req).pipe(
@@ -30,8 +33,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           : caught;
       if (err.status === 0 && req.url.includes('/api/')) network.reportDoubt();
       // Toasts for 400-499 except 408, plus 500 and 503 (an unreachable plugin); 401 is skipped since the auth guard already redirects.
-      // A mutation on an unreachable or restarting server (engine 502/504) always answers the user; GETs degrade in place.
-      const unreachable = req.method !== 'GET' && isUnreachable(err);
+      // A mutation on an unreachable or restarting server (engine 502/504) answers the user unless the chip already does; GETs degrade in place.
+      const unreachable =
+        req.method !== 'GET' && isUnreachable(err) && !injector.get(SseService).unreachableChip();
       const showToast =
         unreachable ||
         (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||
