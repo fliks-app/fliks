@@ -179,12 +179,15 @@ pub async fn rescan_files(
         .iter()
         .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
         .collect();
-    refresh_existing(st, &media, &dir, &kept, &slots, &mut c, &mut touched).await?;
-    add_new(st, &media, &disk, &linked, &slots, &mut c, &mut touched).await?;
-    // An interrupted walk proves nothing about what is on disk.
-    if w.complete {
-        reconcile_subtitles(st, media_id, &mut c, &touched).await;
+    let applied = async {
+        refresh_existing(st, &media, &dir, &kept, &slots, &mut c, &mut touched).await?;
+        add_new(st, &media, &disk, &linked, &slots, &mut c, &mut touched).await
     }
+    .await;
+    // A stamped row must get its embedded detection even when a later step failed.
+    // An interrupted walk proves nothing about the sidecars on disk.
+    reconcile_subtitles(st, media_id, &mut c, &touched, w.complete).await;
+    applied?;
     tracing::info!(
         "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
         c.added,
@@ -377,7 +380,7 @@ async fn refresh_existing(
             let id = r.id as u32;
             tokio::spawn(async move { st.engine.invalidate(id).await });
         }
-        if !unchanged || r.mtime_ms != mtime {
+        if !unchanged || r.mtime_ms.is_some_and(|m| Some(m) != mtime) {
             crate::stream::spawn_scan(st, r.id, abs.clone(), Some(p.info.clone()));
         }
     }
@@ -442,7 +445,43 @@ async fn add_new(
         .iter()
         .map(|n| (n.rel.as_str(), n.episode_id))
         .collect();
-    let inserted = sqlx::query!(
+    let inserted = match insert_rows(&st.db, media_id, &fresh).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::error!(
+                "Rescan[media #{media_id}]: batch insert of {} files failed, retrying one by one: {e}",
+                fresh.len()
+            );
+            let mut rows = vec![];
+            for n in &fresh {
+                match insert_rows(&st.db, media_id, std::slice::from_ref(n)).await {
+                    Ok(r) => rows.extend(r),
+                    Err(e) => tracing::error!(
+                        "Rescan[media #{media_id}]: failed to add \"{}\": {e}",
+                        n.rel
+                    ),
+                }
+            }
+            rows
+        }
+    };
+    let mut eps = vec![];
+    for (id, rel) in inserted {
+        let ep = by_rel.get(rel.as_str()).copied().flatten();
+        touched.push((id, ep));
+        c.added += 1;
+        eps.extend(ep);
+    }
+    set_has_file_many(&st.db, &eps).await?;
+    Ok(())
+}
+
+async fn insert_rows(
+    db: &sqlx::PgPool,
+    media_id: i32,
+    fresh: &[NewRow],
+) -> Result<Vec<(i32, String)>, sqlx::Error> {
+    let rows = sqlx::query!(
         r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality, "streamInfo",
              "mtimeMs", "probeVersion")
            SELECT $1, v.ep, v.rel, v.size, v.quality, v.info, v.mtime, $8
@@ -459,25 +498,9 @@ async fn add_new(
         &fresh.iter().map(|n| n.mtime).collect::<Vec<_>>() as &[Option<i64>],
         PROBE_VERSION
     )
-    .fetch_all(&st.db)
-    .await;
-    match inserted {
-        Ok(rows) => {
-            let mut eps = vec![];
-            for r in rows {
-                let ep = by_rel.get(r.rel.as_str()).copied().flatten();
-                touched.push((r.id, ep));
-                c.added += 1;
-                eps.extend(ep);
-            }
-            set_has_file_many(&st.db, &eps).await?;
-        }
-        Err(e) => tracing::error!(
-            "Rescan[media #{media_id}]: failed to add {} files: {e}",
-            fresh.len()
-        ),
-    }
-    Ok(())
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.rel)).collect())
 }
 
 struct NewRow {
@@ -621,11 +644,15 @@ async fn reconcile_subtitles(
     media_id: i32,
     c: &mut Counts,
     touched: &[(i32, Option<i32>)],
+    walk_complete: bool,
 ) {
-    let (missing, dupes) = crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
-    c.subtitle_removed_missing = missing as i64;
-    c.subtitle_removed_duplicates = dupes as i64;
-    crate::subtitles::sidecars::discover_external(st, media_id).await;
+    if walk_complete {
+        let (missing, dupes) =
+            crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
+        c.subtitle_removed_missing = missing as i64;
+        c.subtitle_removed_duplicates = dupes as i64;
+        crate::subtitles::sidecars::discover_external(st, media_id).await;
+    }
     for &(file, episode) in touched {
         crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
     }

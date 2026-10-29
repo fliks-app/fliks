@@ -553,14 +553,14 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
     let probes = |c: &Ctx| c.fake.seen("POST", "/v1/probe").len();
     let first = rescan(&c, a).await.unwrap();
     assert_eq!(
-        (first.updated, probes(&c), scans(&c, 1).await),
-        (1, 2, 1),
-        "unstamped row: probe + embedded detection, and the new bytes' scan"
+        (first.updated, probes(&c), scans(&c, 0).await),
+        (1, 2, 0),
+        "unstamped row, same size: probe + embedded detection, no scan"
     );
     let second = rescan(&c, a).await.unwrap();
     assert_eq!(
-        (second.updated, probes(&c), scans(&c, 2).await),
-        (0, 2, 1),
+        (second.updated, probes(&c), scans(&c, 0).await),
+        (0, 2, 0),
         "stamped and unchanged: no probe, no scan"
     );
     sqlx::query(r#"UPDATE media_files SET "mtimeMs" = 0"#)
@@ -569,10 +569,64 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
         .unwrap();
     let third = rescan(&c, a).await.unwrap();
     assert_eq!(
-        (third.updated, probes(&c), scans(&c, 2).await),
-        (1, 4, 2),
+        (third.updated, probes(&c), scans(&c, 1).await),
+        (1, 4, 1),
         "a moved mtime probes and scans again"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn rescan_detects_embedded_subtitles_after_an_interrupted_walk(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    touch(&lib.join("A/A.mkv"), b"a");
+    let locked = lib.join("A/locked");
+    fs::create_dir_all(&locked).unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    let a = media(&c, l, "A", "movie").await;
+    let r = rescan(&c, a).await;
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(r.unwrap().added, 1);
+    assert_eq!(
+        c.fake.seen("POST", "/v1/probe").len(),
+        2,
+        "probe + embedded detection although the walk was incomplete"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn rescan_adds_the_good_files_when_one_insert_fails(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    for n in ["good1.mkv", "bad.mkv", "good2.mkv"] {
+        touch(&lib.join("A").join(n), b"x");
+    }
+    let a = media(&c, l, "A", "movie").await;
+    sqlx::query(
+        r#"CREATE FUNCTION refuse_bad() RETURNS trigger AS $$
+           BEGIN
+             IF NEW."relativePath" = 'bad.mkv' THEN RAISE EXCEPTION 'refused'; END IF;
+             RETURN NEW;
+           END $$ LANGUAGE plpgsql"#,
+    )
+    .execute(&c.st.db)
+    .await
+    .unwrap();
+    sqlx::query("CREATE TRIGGER refuse_bad BEFORE INSERT ON media_files FOR EACH ROW EXECUTE FUNCTION refuse_bad()")
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+    let r = rescan(&c, a).await.unwrap();
+    assert_eq!(r.added, 2);
+    let rows: Vec<String> =
+        sqlx::query_scalar(r#"SELECT "relativePath" FROM media_files ORDER BY 1"#)
+            .fetch_all(&c.st.db)
+            .await
+            .unwrap();
+    assert_eq!(rows, ["good1.mkv", "good2.mkv"]);
 }
 
 #[sqlx::test(migrations = false)]
