@@ -739,9 +739,9 @@ async fn relink_transfer_copy_then_move(pool: PgPool) {
     assert!(files.iter().any(|p| p.ends_with(".en.srt")), "{files:?}");
     assert!(!c.fake.seen("POST", "/v1/probe").is_empty());
     assert_eq!(
-        scans(&c, 1).await,
-        1,
-        "scanned at import, not after the settle"
+        scans(&c, 2).await,
+        2,
+        "the truncation check, then the import's own scan (the fake's failed, none kept)"
     );
 
     let series = c.dir.join("series");
@@ -766,6 +766,70 @@ async fn relink_transfer_copy_then_move(pool: PgPool) {
         2,
         "{moved:?}"
     );
+}
+
+/// A 4800 s file whose scan ends at `end`, imported by a relink copy.
+async fn relink_scanned(pool: PgPool, end: f64) -> (Ctx, Value, PathBuf) {
+    let c = ctx(pool).await;
+    let mut p = probe_ok();
+    p["info"]["durationSeconds"] = json!(4800.0);
+    c.fake.script("POST", "/v1/probe", vec![ok(p)]);
+    let scan =
+        json!({"type": "Scan", "scan": {"keyframes": [], "end": end, "audioConfigChanges": {}}});
+    c.fake
+        .script("POST", "/v1/jobs", vec![ok(json!({"jobId": "j1"}))]);
+    c.fake.script(
+        "GET",
+        "/v1/jobs/j1",
+        vec![ok(json!({
+            "jobId": "j1", "kind": "Scan", "mediaFileId": 0, "priority": "high", "state": "done",
+            "pct": 100, "createdMs": 1, "result": scan,
+        }))],
+    );
+    let l = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
+    let src = c.dir.join("dl/Some.Movie.2010.1080p.mkv");
+    touch(&src, b"movie");
+    let body = json!({"libraryId": l, "type": "movie", "folderName": "dl", "title": "Some Movie",
+        "year": 2010, "transfer": "copy", "files": [{"filePath": src}]});
+    let (s, b) = call(
+        &c,
+        "POST",
+        "/api/imports/library/orphans/relink",
+        &c.admin,
+        body,
+    )
+    .await;
+    assert_eq!(s, 201, "{b}");
+    (c, b, src)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_truncated_file_is_refused_and_kept(pool: PgPool) {
+    let (c, b, src) = relink_scanned(pool, 1764.0).await;
+    assert_eq!(b["linked"], json!(0), "{b}");
+    let err = b["errors"][0].as_str().unwrap_or_default();
+    assert!(
+        err.contains("truncated file, its data ends at 29:24 of the 80:00"),
+        "{b}"
+    );
+    assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 0);
+    assert!(src.exists(), "the source is never touched");
+    let placed: Vec<String> = tree(&c.dir.join("movies"))
+        .into_iter()
+        .map(|(p, _)| p)
+        .collect();
+    assert!(placed.iter().all(|p| !p.ends_with(".mkv")), "{placed:?}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_complete_file_is_imported(pool: PgPool) {
+    let (c, b, _) = relink_scanned(pool, 4799.0).await;
+    assert_eq!(
+        (b["linked"].clone(), b["errors"].clone()),
+        (json!(1), json!([])),
+        "{b}"
+    );
+    assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
 }
 
 #[sqlx::test(migrations = false)]

@@ -15,11 +15,13 @@ use fliks_domain::{
         match_special_by_title, parse_episode_numbers,
     },
 };
+use fliks_engine_core::api::{MediaInfo, SourceScan};
 use serde_json::Value;
 use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
+    time::Duration,
 };
 use tokio::sync::OwnedMutexGuard;
 
@@ -189,6 +191,31 @@ async fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
     best.map(|(_, f)| f).into_iter().collect()
 }
 
+/// How long an import waits for the scan that tells a truncated file from a complete one.
+const TRUNCATION_SCAN_WAIT: Duration = Duration::from_secs(5 * 60);
+
+/// The source's scan when the probe has a video stream and a declared duration to compare it with.
+async fn scan_source(st: &AppState, src: &Path, info: &MediaInfo) -> Option<(SourceScan, String)> {
+    if info.video.is_empty() || info.duration_seconds.is_none_or(|d| d <= 0.0) {
+        return None;
+    }
+    crate::stream::scan_now(st, src, info, TRUNCATION_SCAN_WAIT).await
+}
+
+/// `(readable end, declared duration)` when the data ends short of the declared duration by more
+/// than `max(120 s, 5 %)` (`ingest.md` rule 21a). A clock break is another defect, not a cut file.
+fn truncated(info: &MediaInfo, scan: &SourceScan) -> Option<(f64, f64)> {
+    let declared = info.duration_seconds?;
+    let readable = scan.end - info.format_start_seconds.unwrap_or(0.0);
+    (scan.break_seconds.is_none() && declared - readable > (declared * 0.05).max(120.0))
+        .then_some((readable.max(0.0), declared))
+}
+
+fn clock(secs: f64) -> String {
+    let s = secs.round() as u64;
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
 enum Placed {
     Imported(Imported),
     Present,
@@ -243,6 +270,20 @@ impl Ctx<'_> {
             None
         };
         let probed = probe(self.st, &src, false).await?;
+        let scanned = scan_source(self.st, &src, &probed.info).await;
+        if let Some((scan, _)) = &scanned
+            && let Some((end, declared)) = truncated(&probed.info, scan)
+        {
+            tracing::warn!(
+                "Refusing \"{}\": data ends at {end:.0}s of {declared:.0}s",
+                src.display()
+            );
+            return Ok(Placed::Error(format!(
+                "{name}: truncated file, its data ends at {} of the {} its container declares",
+                clock(end),
+                clock(declared)
+            )));
+        }
         let release = self.req.release_name.as_deref();
         let quality = probed
             .quality(release.unwrap_or(&name))
@@ -327,6 +368,12 @@ impl Ctx<'_> {
             .await
             .map_or(src_size, |m| m.len()) as i64;
         let file_id = self.row(&rel, ep.as_ref(), size, &quality, &probed).await?;
+        if let Some((scan, version)) = scanned
+            && crate::stream::version_of(&dest).await.as_deref() == Some(version.as_str())
+        {
+            let prior = probed.info.timestamp_break_seconds.flatten();
+            crate::stream::keep_scan(self.st, file_id, dest, version, scan, prior);
+        }
         Ok(Placed::Imported(Imported {
             file_id,
             relative_path: rel,
@@ -715,4 +762,40 @@ pub fn caller_nums(
 
 pub fn info_json(p: &Probed) -> Value {
     serde_json::to_value(&p.info).unwrap_or(Value::Null)
+}
+
+#[cfg(test)]
+mod truncation_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn info(duration: f64, start: f64) -> MediaInfo {
+        serde_json::from_value(json!({"video": [], "audio": [], "subtitles": [],
+            "durationSeconds": duration, "formatStartSeconds": start}))
+        .unwrap()
+    }
+
+    fn scan(end: f64, brk: Option<f64>) -> SourceScan {
+        serde_json::from_value(json!({"keyframes": [], "end": end, "breakSeconds": brk,
+            "audioConfigChanges": {}}))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_cut_file_is_truncated_and_a_whole_one_is_not() {
+        assert!(truncated(&info(4800.0, 0.0), &scan(1764.0, None)).is_some());
+        assert!(truncated(&info(4800.0, 0.0), &scan(4799.0, None)).is_none());
+        // short of 5 %: 4560 s of 4800 s passes, 4500 s does not
+        assert!(truncated(&info(4800.0, 0.0), &scan(4560.0, None)).is_none());
+        assert!(truncated(&info(4800.0, 0.0), &scan(4500.0, None)).is_some());
+        // under 10 min the floor is 120 s
+        assert!(truncated(&info(600.0, 0.0), &scan(500.0, None)).is_none());
+        assert!(truncated(&info(600.0, 0.0), &scan(470.0, None)).is_some());
+    }
+
+    #[test]
+    fn a_start_offset_and_a_clock_break_are_not_truncation() {
+        assert!(truncated(&info(3600.0, 36000.0), &scan(39600.0, None)).is_none());
+        assert!(truncated(&info(4800.0, 0.0), &scan(100.0, Some(100.0))).is_none());
+    }
 }
