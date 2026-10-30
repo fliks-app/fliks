@@ -3632,6 +3632,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Capture the viewer's play/pause intent before the teardown: a switch must not resume a paused player.
       const wasPaused = opts.paused ?? (opts.preservePause ? this.pauseIntent() : false);
       if (opts.restart && this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
+      // The new stream restarts at `at`: the old one must not play on through the renegotiation.
+      else if (opts.restart) await engine.pause().catch(() => {});
       // Only this device's session goes; multi-device viewers on the same file stay alive.
       replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
       if (opts.unmute) engine.muted = false;
