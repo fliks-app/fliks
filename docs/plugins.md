@@ -189,7 +189,8 @@ There are no sockets, pid files or uids: the component only has what the host li
   {internal: true}` and an admin consented at install; reserved, multicast and link-local (cloud
   metadata) ranges stay refused either way. At most 32 requests per plugin are in flight.
 - **Filesystem**: one directory, `/data`, private to the plugin and kept across restarts and
-  upgrades. Uninstall removes it. Nothing else is visible.
+  upgrades. Uninstall keeps it unless the admin asks to delete the plugin's data. Nothing else is
+  visible.
 - **Database**: its own role and schema, through the `db` interface (see Database).
 - **Memory and time**: `memoryMb` caps each instance's linear memory, and every export has a
   deadline (see Deadlines and ceilings). A trapped, out-of-memory or overdue instance is dropped;
@@ -240,14 +241,16 @@ scheduled call.
 
 ## Database
 
-A `process` plugin that asks for a schema gets its own Postgres role and schema
-(`plugin_<id with dots as underscores>`), a password rotated on every start and never handed to the
+A `process` plugin that asks for a schema gets its own Postgres role
+(`fp_<database oid>_<id with dots as underscores>`) and schema (`plugin_<id with dots as
+underscores>`), a password rotated on every start and never handed to the
 guest, and `REFERENCES`-only grants on the core tables it declared. It reaches them only through the
 `db` interface (`query`, `execute`, `migrate`): the host keeps one pool per plugin, logged in as that
 role with the schema as its whole `search_path`. A plugin runs its own migrations, from `start`.
 Core never reads those tables.
 
-Uninstalling drops the role and the schema. Disabling does not.
+Uninstalling with `deleteData` drops the role and the schema. A plain uninstall keeps the schema
+and its rows, and the role stops logging in. Disabling touches neither.
 
 ### Export and import
 
@@ -262,10 +265,10 @@ exported, never written back, and never counted when deciding whether a schema i
 what a migration ledger like `_migrations` is: it records which migrations have run, so restoring an
 older copy of it over a freshly-migrated schema would misstate the schema's own version.
 
-**This document is a credential-bearing artifact.** It contains whatever the plugin stored,
-including anything an operator typed into a `secret` field on a config page. Nothing is stripped
-or masked — a partial export that looks complete is worse than one that's honest about carrying
-secrets. Handle it like any other credential dump.
+**Secrets are masked by default.** Settings and table columns the manifest declares secret are left
+out, and `maskedSettings` lists the masked keys; importing a masked export never touches an absent
+key, so the current secrets stay. `?includeSecrets=true` exports them too and needs Manage on
+Settings instead of Read: that document is a credential dump, handle it like one.
 
 `POST /api/plugins/:id/import` restores that document, and refuses rather than merges:
 
@@ -277,8 +280,8 @@ secrets. Handle it like any other credential dump.
 - **Schema already has rows** (`PLUGIN_SCHEMA_NOT_EMPTY`, 409): import refuses if any table in the
   plugin's schema already holds a row, bookkeeping tables aside — a plugin that has merely migrated
   counts as empty, which is the state a restore is meant for. A silent merge into a half-populated schema would look like
-  a complete restore without being one; uninstall and reinstall the plugin (which wipes its
-  schema) before importing.
+  a complete restore without being one; uninstall the plugin with `deleteData` and reinstall it
+  before importing.
 - **Not yet activated** (`PLUGIN_NOT_READY`, 409): the installed plugin's last activation must have
   succeeded, since that's what proves its own migrations have run.
 
@@ -321,8 +324,8 @@ staged, and the consent sheet in between is the only place an unverified plugin 
 Signature outcomes are `official` (a catalogue release key), `unverified`, or `unsigned`. Only the
 catalogue key verifies: there is no registry of third-party signing keys, so an archive signed by
 anyone else is `unverified` and reaches an operator behind the consent sheet's acknowledgement. A
-`process` plugin must be signed unless the admin setting `plugins.allow_unsigned` is on, which
-exists for local development only. The setting gates installs, not loads: switching it back off
+`process` plugin must be `official` (`PLUGIN_UNSIGNED` otherwise) unless the admin setting
+`plugins.allow_unsigned` is on, which exists for local development only. The setting gates installs, not loads: switching it back off
 leaves an unsigned plugin already installed running, uninstall it instead.
 
 ### Packaging
@@ -348,7 +351,7 @@ instance dropped. The values are `server/docs/spec/plugins.md` rules 39-43 and t
 |---|---|---|
 | `hello` | 10 s | crash, restarted with backoff |
 | `start` | 15 min | crash, restarted with backoff |
-| `health` | 3 s, asked every 15 s | a timeout is a crash; 2 `ok: false` replies degrade, 4 recycle |
+| `health` | 10 s, asked every 15 s | a timeout is a crash; 2 `ok: false` replies degrade, 4 recycle |
 | `config-changed` | none of its own | runs inside the deadline of the call it precedes |
 | `shutdown` | 3 s | instance dropped |
 | proxied `http` | 180 s | 504, instance dropped |
@@ -404,8 +407,8 @@ install.
 - **Disable** stops the plugin's instances and drops every live registration — routes, contributions,
   jobs, webhooks — while the row, the archive, the role, the schema and its pending scheduled calls
   stand.
-- **Uninstall** destroys the schema and its data, the plugin's data directory, its pending scheduled
-  calls, its `plugin.<id>.*` settings, and its registration.
+- **Uninstall** removes its pending scheduled calls, its `plugin.<id>.*` settings and its
+  registration. The schema, its rows and the data directory stay unless `deleteData` is set.
 - **An upgrade over a disabled plugin stays disabled.**
 - A plugin that is not `ready` has its contributions filtered out server-side, so a frozen client
   never has to know about plugin health.
