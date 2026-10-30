@@ -1,5 +1,5 @@
-# Angular unit tests (client/**/*.spec.ts) and the Electron desktop typecheck and tests. Neither ran in CI
-# before: native-build.yml only compiles the shells.
+# Angular unit tests (client/**/*.spec.ts), the Tizen widget build and the Electron desktop typecheck and tests.
+# None ran in CI before: native-build.yml only compiles the shells.
 name: Client
 
 on:
@@ -39,6 +39,24 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npx ng test --watch=false
+
+  # The release-only widget build runs the Chromium 85 CSS guard; a dependency bump must trip it here.
+  tizen:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run tizen:build
 
   desktop:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
