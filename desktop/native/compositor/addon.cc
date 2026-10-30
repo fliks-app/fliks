@@ -249,8 +249,9 @@ GLuint LinkProgram(const char* vs, const char* fs) {
   return p;
 }
 
-void EnsureVideoFbo(GlState* s, int w, int h) {
-  if (s->videoFbo && s->fboW == w && s->fboH == h) return;
+// True when the texture was reallocated: its contents are undefined until mpv renders again.
+bool EnsureVideoFbo(GlState* s, int w, int h) {
+  if (s->videoFbo && s->fboW == w && s->fboH == h) return false;
   if (!s->videoTex) glGenTextures(1, &s->videoTex);
   if (!s->videoFbo) glGenFramebuffers(1, &s->videoFbo);
   glBindTexture(GL_TEXTURE_2D, s->videoTex);
@@ -264,6 +265,7 @@ void EnsureVideoFbo(GlState* s, int w, int h) {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   s->fboW = w;
   s->fboH = h;
+  return true;
 }
 
 void DrawTex(GlState* s, GLuint tex, float flipY, int bgra) {
@@ -581,11 +583,11 @@ void RenderThreadMain(GlState* s) {
       snprintf(ib, sizeof(ib), "{\"kind\":\"resize\",\"w\":%d,\"h\":%d,\"zoom\":%.4f}", w, pageH, zoom);
       emitInput(ib);
     }
-    EnsureVideoFbo(s, w, pageH);
+    const bool fboRealloc = EnsureVideoFbo(s, w, pageH);
 
     if (s->mpvGl) {
       uint64_t flags = M::rc_update(s->mpvGl);
-      if (flags & MPV_RENDER_UPDATE_FRAME) {
+      if ((flags & MPV_RENDER_UPDATE_FRAME) || fboRealloc) {
         mpv_opengl_fbo fbo{static_cast<int>(s->videoFbo), w, pageH, 0};
         mpv_render_param rp[] = {
             {MPV_RENDER_PARAM_OPENGL_FBO, &fbo},
