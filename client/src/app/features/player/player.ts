@@ -3640,7 +3640,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.negotiateAndLoad({
         negotiateAt: at,
         replace,
-        start: () => ({ url: at, load: opts.restart || at > 0 ? at : undefined }),
+        start: () => {
+          engine.keepFrame = opts.restart;
+          return { url: at, load: opts.restart || at > 0 ? at : undefined };
+        },
         onLoaded: () => (this.reloadReachedPlayback = true),
       });
       this.restorePlayState(wasPaused);

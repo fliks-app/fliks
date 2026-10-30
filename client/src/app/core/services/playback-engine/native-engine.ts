@@ -90,6 +90,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   // ── Loading ──
 
   startPaused = false;
+  keepFrame = false;
   private _offline = false;
 
   /** Mark next load() as offline — uses CacheDataSource on Android. */
@@ -104,6 +105,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     this.resetFirstFrame();
     const startPaused = this.startPaused;
     this.startPaused = false;
+    const keepFrame = this.keepFrame;
+    this.keepFrame = false;
     this.lastTimeUpdatePos = -1;
     // Fresh media → fresh tracks: the previous item's list must not outlive it.
     this._audioTracks = [];
@@ -118,6 +121,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       headers,
       offline: this._offline,
       startPaused,
+      keepFrame,
       subtitles: this._preloadedSubtitles,
       backgroundAudio: !!info,
       title: info?.title,
