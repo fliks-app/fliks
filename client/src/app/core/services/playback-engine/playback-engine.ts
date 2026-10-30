@@ -281,6 +281,8 @@ export interface PlaybackEngine {
   load(url: string, startTime?: number, mimeType?: string, headers?: Record<string, string>): Promise<void>;
   /** Present only on engines that can open paused: the next load() does, then reports `firstFrame` for the paused picture. */
   startPaused?: boolean;
+  /** Present only on engines whose surface outlives a load: the next load() keeps the current picture until its first frame. */
+  keepFrame?: boolean;
   unload(): Promise<void>;
   /** Re-arms the native optimistic-recovery guard; provided by {@link AbstractPlaybackEngine}. */
   resetRecoveryGuard(): void;

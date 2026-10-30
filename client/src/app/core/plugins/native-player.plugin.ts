@@ -91,6 +91,8 @@ export interface NativePlayerPlugin {
     startTime?: number;
     /** Open paused on the first frame instead of autoplaying. */
     startPaused?: boolean;
+    /** A reload of the same file: keep the current picture and layout until the new first frame. */
+    keepFrame?: boolean;
     headers?: Record<string, string>;
     subtitles?: NativeSidecarSubtitle[];
     /** Use CacheDataSource for offline playback (Android). */

@@ -286,6 +286,7 @@ public class NativePlayerPlugin extends Plugin {
         boolean offline = call.getBoolean("offline", false);
         boolean backgroundAudio = call.getBoolean("backgroundAudio", false);
         boolean startPaused = call.getBoolean("startPaused", false);
+        boolean keepFrame = call.getBoolean("keepFrame", false);
         String title = call.getString("title", "");
         String artist = call.getString("artist", "");
         String artworkUrl = call.getString("artworkUrl");
@@ -304,11 +305,13 @@ public class NativePlayerPlugin extends Plugin {
             // so the old cue would sit on screen until a seek (notably after the silent session-expired recovery).
             if (this.subtitles != null) this.subtitles.clear();
 
-            // A new item's crop (if any) is re-sent by the TS layer after load().
-            crop = null;
-            displayWidth = 0f;
-            displayHeight = 0f;
-            layoutVideo();
+            // A new item's crop (if any) is re-sent by the TS layer after load(); a reload of the same file keeps its frame as is.
+            if (!keepFrame) {
+                crop = null;
+                displayWidth = 0f;
+                displayHeight = 0f;
+                layoutVideo();
+            }
 
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
@@ -562,7 +565,8 @@ public class NativePlayerPlugin extends Plugin {
             lastAudioTracksJson = null; // Reset so emitTracksChanged fires for new media
             videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
             firstFrameSignaled = false; // Re-arm the first-frame veil signal
-            if (shutter != null) shutter.setVisibility(View.VISIBLE);
+            // Same file, same aspect: the surface keeps the last picture until the new first frame replaces it.
+            if (shutter != null && !keepFrame) shutter.setVisibility(View.VISIBLE);
             videoRendererEnabled = false; // Re-arm the cold-prepare renderer probe
 
             // Disable text tracks by default — user selects via UI
@@ -748,8 +752,6 @@ public class NativePlayerPlugin extends Plugin {
         mainHandler.post(() -> {
             stopPositionUpdates();
             if (player != null) player.stop();
-            crop = null;
-            layoutVideo();
             call.resolve();
         });
     }
