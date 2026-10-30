@@ -504,6 +504,8 @@ app.whenReady().then(async () => {
     else if (i.kind === 'key') {
       const k = toElectronKey(i.key, i.mod | 0);
       if (k) wc.sendInputEvent({ type: i.down ? 'keyDown' : 'keyUp', ...k } as any);
+      // SDL sends no text for Enter, and Blink activates a button on its char event, not keydown.
+      if (k && i.down && k.keyCode === 'Enter') wc.sendInputEvent({ type: 'char', ...k } as any);
     }
   });
 
