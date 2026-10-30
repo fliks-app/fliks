@@ -40,11 +40,10 @@ export function findBestVariantForHeight(tracks: VariantTrack[], targetHeight: n
   return tracks.reduce((a, b) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
 }
 
-/** Id of the highest-resolution rung excluding 'auto'; undefined for an empty or auto-only list. */
+/** Id of the top rung excluding 'auto'; undefined for an empty or auto-only list. */
+// The backend sorts by tier, not height: a scope source's `original` is shorter than its eco rung.
 export function highestRungId(options: QualityOption[]): string | undefined {
-  const rungs = options.filter((q) => q.id !== 'auto');
-  if (!rungs.length) return undefined;
-  return rungs.reduce((a, b) => (b.height > a.height ? b : a)).id;
+  return options.find((q) => q.id !== 'auto')?.id;
 }
 
 @Injectable({ providedIn: 'root' })
