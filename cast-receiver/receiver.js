@@ -50,6 +50,7 @@ playerManager.addEventListener(
     qoeLoaded();
     publishAudioTracks();
     startEdl();
+    watchCaptionTracks();
   },
 );
 
@@ -412,22 +413,62 @@ const barBands = barEl.querySelector('.bar-bands');
 const barPlayer = document.querySelector('cast-media-player');
 if (barPlayer && barPlayer.shadowRoot) {
   const hide = document.createElement('style');
-  // The text track container is the only handle that moves cues on the Cast OS (cue.line is ignored).
+  // Chrome lays native cues out from the picture (their height moved with the format) and ignores cue.line on
+  // the Cast OS: the receiver draws them itself in #captions.
   hide.textContent =
     'tv-overlay { display: none !important; }' +
-    'video::-webkit-media-text-track-container { transition: transform 200ms ease-out; transform: translateY(var(--sub-y, 8vh)); }' +
-    ':host(.bar-on) video::-webkit-media-text-track-container { transform: translateY(var(--sub-y-bar, -6vh)); }';
+    'video::-webkit-media-text-track-container { display: none !important; }';
   barPlayer.shadowRoot.appendChild(hide);
 }
 
-// Cast OS cues sit about 16vh up: shift them so a margin of m puts them m vh above the bottom, like
-// the local player, and 14vh higher while the bar shows. Custom properties reach the shadow root.
-function setSubMargin(style) {
+const captionsEl = document.getElementById('captions');
+let captionTrack = null;
+
+// A margin of m puts the captions about m vh above the bottom, like the local player, and clear of the bar.
+function applyCaptionStyle(style) {
   const m = Number(style && style.customData && style.customData.bottomMargin);
-  const y = 13 - (Number.isFinite(m) ? m : 5);
-  if (!barPlayer) return;
-  barPlayer.style.setProperty('--sub-y', y + 'vh');
-  barPlayer.style.setProperty('--sub-y-bar', y - 14 + 'vh');
+  const margin = Number.isFinite(m) ? m : 5;
+  const css = FliksCaptions.captionStyle(style);
+  captionsEl.style.setProperty('--sub-bottom', margin + 1 + 'vh');
+  captionsEl.style.setProperty('--sub-bottom-bar', margin + 17 + 'vh');
+  captionsEl.style.setProperty('--cap-bg', css.background);
+  Object.assign(captionsEl.style, {
+    fontSize: css.fontSize, fontFamily: css.fontFamily, color: css.color, textShadow: css.textShadow,
+  });
+}
+
+function renderCaptions() {
+  captionsEl.textContent = '';
+  const cues = captionTrack && captionTrack.mode === 'showing' ? captionTrack.activeCues : null;
+  for (const cue of cues ? Array.from(cues) : []) {
+    const line = document.createElement('div');
+    const text = document.createElement('span');
+    text.className = 'cue';
+    if (cue.getCueAsHTML) text.appendChild(cue.getCueAsHTML());
+    else text.textContent = cue.text;
+    line.appendChild(text);
+    captionsEl.appendChild(line);
+  }
+}
+
+/** Follows the track CAF shows: a sender's subtitle pick or Off changes it. */
+function followCaptionTrack() {
+  const media = findMediaElement();
+  const showing = media ? Array.from(media.textTracks).find((t) => t.mode === 'showing') || null : null;
+  if (showing !== captionTrack) {
+    if (captionTrack) captionTrack.removeEventListener('cuechange', renderCaptions);
+    captionTrack = showing;
+    if (captionTrack) captionTrack.addEventListener('cuechange', renderCaptions);
+  }
+  renderCaptions();
+}
+
+function watchCaptionTracks() {
+  const media = findMediaElement();
+  if (!media) return;
+  media.textTracks.onchange = followCaptionTrack;
+  media.textTracks.onaddtrack = followCaptionTrack;
+  followCaptionTrack();
 }
 
 function formatClock(sec) {
@@ -531,7 +572,6 @@ playerManager.setMessageInterceptor(
         cast.framework.messages.HlsSegmentFormat.FMP4;
       media.hlsVideoSegmentFormat =
         cast.framework.messages.HlsVideoSegmentFormat.FMP4;
-      setSubMargin(media.textTrackStyle);
       if (!media.textTrackStyle) {
         const style = new cast.framework.messages.TextTrackStyle();
         style.fontGenericFamily =
@@ -543,6 +583,7 @@ playerManager.setMessageInterceptor(
         style.edgeColor = '#000000FF';
         media.textTrackStyle = style;
       }
+      applyCaptionStyle(media.textTrackStyle);
     }
     return loadRequest;
   },
@@ -551,7 +592,7 @@ playerManager.setMessageInterceptor(
 playerManager.setMessageInterceptor(
   cast.framework.messages.MessageType.EDIT_TRACKS_INFO,
   (request) => {
-    if (request.textTrackStyle) setSubMargin(request.textTrackStyle);
+    if (request.textTrackStyle) applyCaptionStyle(request.textTrackStyle);
     return request;
   },
 );
