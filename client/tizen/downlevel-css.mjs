@@ -35,6 +35,15 @@ const tvFallbacks = require(resolve(clientRoot, 'postcss/tv-fallbacks.cjs'));
 const tvColorMixAlpha = require(resolve(clientRoot, 'postcss/tv-color-mix-alpha.cjs'));
 
 const processor = postcss([
+  // preset-env skips any colour with a `none` component (Tailwind's greys); outside
+  // interpolation `none` is 0, so resolve it first.
+  {
+    postcssPlugin: 'oklab-none-to-zero',
+    Declaration(decl) {
+      if (!decl.value.includes('none')) return;
+      decl.value = decl.value.replace(/okl(?:ab|ch)\([^)]*\)/g, (fn) => fn.replace(/\bnone\b/g, '0'));
+    },
+  },
   // preset-env handles the bulk: cascade-layer ordering via specificity
   // hacks, `:is(A,B)` → `A, B`, logical → physical properties,
   // `:focus-visible` → `:focus`, oklab/color-mix rgb fallbacks, modern
