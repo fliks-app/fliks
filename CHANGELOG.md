@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.2.1](https://github.com/fliks-app/fliks/compare/v5.2.0...v5.2.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **android:** keep the current frame visible while a reload loads ([#2201](https://github.com/fliks-app/fliks/issues/2201)) ([6d94374](https://github.com/fliks-app/fliks/commit/6d943748df9f63c2b5b56bcd5eafd1f6d319e8ef))
+* **desktop:** activate buttons with the enter key on linux ([#2197](https://github.com/fliks-app/fliks/issues/2197)) ([e572363](https://github.com/fliks-app/fliks/commit/e57236396bd18e6d777e3e7de68e6612f41eb17e))
+* **desktop:** redraw the paused video frame after a resize on linux ([#2196](https://github.com/fliks-app/fliks/issues/2196)) ([aec91ea](https://github.com/fliks-app/fliks/commit/aec91ea8a3b174e99f4f7bbd628161bf88dd32c3))
+* **player:** pause the old stream while a reload renegotiates ([#2199](https://github.com/fliks-app/fliks/issues/2199)) ([b2e1f1d](https://github.com/fliks-app/fliks/commit/b2e1f1d0691eae4894a7809d770477a444e655ab))
+* **player:** take the top rung from the backend order, not the height ([#2198](https://github.com/fliks-app/fliks/issues/2198)) ([6859017](https://github.com/fliks-app/fliks/commit/68590172a0b060e2aeb9a0e80f9713f18a25c984))
+* **tizen:** resolve none components before downlevelling oklch colours ([#2192](https://github.com/fliks-app/fliks/issues/2192)) ([88ff687](https://github.com/fliks-app/fliks/commit/88ff687fe6a9272cf79ec014ce458a7e61c22f10))
+
 ## [5.2.0](https://github.com/fliks-app/fliks/compare/v5.1.1...v5.2.0) (2026-10-30)
 
 
