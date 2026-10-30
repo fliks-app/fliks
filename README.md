@@ -90,6 +90,10 @@ create, no subscription, and nothing leaves the house.
 
 ### Sharing with the household
 
+- **Watch parties**: watch the same film together, each on your own
+  screen, with playback kept in sync, a chat and press-to-talk voice.
+  Plan one ahead, let guests propose and vote for what to watch, and
+  build the evening's programme on the party page.
 - **Recommend something to someone** — pick a film or a season and send
   it to another user. It shows up on their home page under *Recommended
   for you*, with your name on it.
@@ -103,6 +107,8 @@ create, no subscription, and nothing leaves the house.
   automatic on your phone, tablet or the desktop app: what you haven't
   watched is downloaded to the device, and what you have watched is
   removed to give the space back. Nothing to think about before a flight.
+  A whole season or show downloads in one go, or keeps the next episodes
+  on the device, over wifi only if you prefer.
 - **Everyone stays in control** — each user decides whether their
   profile is public and what appears on it: tastes, recent activity,
   favourites, statistics — or nothing at all.
@@ -120,6 +126,10 @@ create, no subscription, and nothing leaves the house.
   See it live next to each stream, or look back over the last weeks per
   device to spot the TV that struggles with HEVC. The numbers stay on
   your server, and an admin can switch the collection off.
+- **Library cleanup rules**: titles nobody watches go to a *Leaving
+  soon* list, with reminders before they're removed after a grace
+  period. Or browse the suggestions (never played, ended series) and
+  decide title by title.
 - **Images cached locally** — no hotlinking to external services while
   you browse.
 
@@ -165,7 +175,7 @@ full list of what it runs on.
 | **Android TV** | Play Store | Android 6 | |
 | **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 | works fully, not yet on Samsung Apps |
 | **LG TV (webOS)** | LG Content Store | webOS 7.0 | approved, on the store |
-| **Desktop** | release assets, APT on Linux | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
+| **Desktop** | release assets, APT or Snap Store on Linux | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
 | **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
 | **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
 | **Nintendo Switch** | build the `.nro` from [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta**, native client with hardware decode |
@@ -177,7 +187,10 @@ sudo curl -fsSLo /etc/apt/sources.list.d/fliks.sources https://github.com/fliks-
 sudo apt update && sudo apt install fliks-desktop
 ```
 
-A `.deb` installed from the release assets adds the same source, so `apt upgrade` keeps it up to date.
+The first command adds the Fliks repository and its signing key to APT. A `.deb` installed from the
+release assets adds the same source, so `apt upgrade` keeps it up to date.
+
+Or from the Snap Store: `sudo snap install fliks`.
 
 ---
 
