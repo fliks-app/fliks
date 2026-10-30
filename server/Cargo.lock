@@ -1209,7 +1209,7 @@ dependencies = [
 
 [[package]]
 name = "fliks-server"
-version = "5.1.1"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1272,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "fliks_domain"
-version = "5.1.1"
+version = "5.2.0"
 dependencies = [
  "chrono",
  "encoding_rs",
