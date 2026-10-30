@@ -423,14 +423,14 @@ if (barPlayer && barPlayer.shadowRoot) {
 
 const captionsEl = document.getElementById('captions');
 let captionTrack = null;
+let captionMargin = 5;
 
-// A margin of m puts the captions about m vh above the bottom, like the local player, and clear of the bar.
+// A margin of m puts the captions about m vh above the bottom, like the local player.
 function applyCaptionStyle(style) {
   const m = Number(style && style.customData && style.customData.bottomMargin);
-  const margin = Number.isFinite(m) ? m : 5;
+  captionMargin = Number.isFinite(m) ? m : 5;
   const css = FliksCaptions.captionStyle(style);
-  captionsEl.style.setProperty('--sub-bottom', margin + 1 + 'vh');
-  captionsEl.style.setProperty('--sub-bottom-bar', margin + 17 + 'vh');
+  captionsEl.style.setProperty('--sub-bottom', captionMargin + 1 + 'vh');
   captionsEl.style.setProperty('--cap-bg', css.background);
   Object.assign(captionsEl.style, {
     fontSize: css.fontSize, fontFamily: css.fontFamily, color: css.color, textShadow: css.textShadow,
@@ -526,6 +526,9 @@ function renderBar() {
   barTitle.textContent = playerData.subtitle || playerData.title || '';
   barSubtitle.textContent = playerData.subtitle ? playerData.title || '' : '';
   barTitle.classList.toggle('small', !!playerData.subtitle);
+  // Just above the bar's text, whose height depends on the title lines; never below the margin.
+  const textTop = (innerHeight - barTitle.getBoundingClientRect().top) / innerHeight * 100;
+  captionsEl.style.setProperty('--sub-bottom-bar', Math.max(captionMargin + 1, textTop + 1.5).toFixed(1) + 'vh');
   barElapsed.textContent = formatClock(time);
   barTotal.textContent = duration ? formatClock(duration) : '';
   barPlayed.style.width = pct(time);
