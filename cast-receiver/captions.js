@@ -43,15 +43,14 @@
     const style = s || {};
     const scale = Number(style.fontScale) > 0 ? Number(style.fontScale) : 1;
     const bg = color(style.backgroundColor);
-    const win = style.windowType && style.windowType !== 'NONE' ? color(style.windowColor) : null;
     const generic = GENERIC[style.fontGenericFamily] || GENERIC.SANS_SERIF;
     return {
       fontSize: Math.round(BASE_FONT_VH * scale * 100) / 100 + 'vh',
       fontFamily: (style.fontFamily ? `"${style.fontFamily}", ` : '') + generic,
       color: (color(style.foregroundColor) || color('#FFFFFFFF')).css,
       textShadow: edgeShadow(style.edgeType, style.edgeColor),
-      background: bg && bg.alpha > 0 ? bg.css : win && win.alpha > 0 ? win.css : 'transparent',
-      borderRadius: style.windowType === 'ROUNDED_CORNERS' ? (Number(style.windowRoundedCornerRadius) || 0) + 'px' : '0',
+      // The window is left out, as CAF does: the iOS SDK's default style always sets one.
+      background: bg && bg.alpha > 0 ? bg.css : 'transparent',
     };
   }
 

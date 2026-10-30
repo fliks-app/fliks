@@ -432,7 +432,6 @@ function applyCaptionStyle(style) {
   captionsEl.style.setProperty('--sub-bottom', margin + 1 + 'vh');
   captionsEl.style.setProperty('--sub-bottom-bar', margin + 17 + 'vh');
   captionsEl.style.setProperty('--cap-bg', css.background);
-  captionsEl.style.setProperty('--cap-radius', css.borderRadius);
   Object.assign(captionsEl.style, {
     fontSize: css.fontSize, fontFamily: css.fontFamily, color: css.color, textShadow: css.textShadow,
   });

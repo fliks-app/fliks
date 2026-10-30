@@ -398,7 +398,6 @@ body:not(.playing) .captions {
   padding: 0 0.25em;
   white-space: pre-line;
   background: var(--cap-bg, transparent);
-  border-radius: var(--cap-radius, 0);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }

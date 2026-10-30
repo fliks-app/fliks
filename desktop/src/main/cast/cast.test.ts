@@ -372,8 +372,7 @@ test('receiver captions: the sender style becomes the caption layer CSS', () => 
   });
   assert.equal(ios.fontSize, '3.48vh');
   assert.equal(ios.color, 'rgba(255, 255, 255, 1)');
-  assert.equal(ios.background, 'rgba(0, 0, 0, 0.502)');
-  assert.equal(ios.borderRadius, '8px');
+  assert.equal(ios.background, 'transparent');
   assert.match(ios.fontFamily, /^"\.AppleSystemUIFont", "Droid Sans", sans-serif$/);
   assert.match(ios.textShadow, /rgba\(0, 0, 0, 1\) 0 0\.06em/);
   const semi = captionStyle({ backgroundColor: '#00000080', windowType: 'NONE', edgeType: 'NONE' });
