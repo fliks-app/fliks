@@ -8,14 +8,14 @@ import { BEST_QUALITY_ID, highestRungId, QualityManagerService, type QualityOpti
 const opt = (id: string, height: number): QualityOption => ({ id, label: id, height });
 
 describe('highestRungId', () => {
-  it('picks the max-height rung, excluding auto', () => {
-    const opts = [opt('auto', 0), opt('480p', 480), opt('1080p', 1080), opt('2160p', 2160)];
+  it('picks the first rung of the backend order, excluding auto', () => {
+    const opts = [opt('auto', 0), opt('2160p', 2160), opt('1080p', 1080), opt('480p', 480)];
     expect(highestRungId(opts)).toBe('2160p');
   });
 
-  it('is order-independent', () => {
-    const opts = [opt('1080p', 1080), opt('2160p', 2160), opt('auto', 0), opt('480p', 480)];
-    expect(highestRungId(opts)).toBe('2160p');
+  it('keeps a scope original above its taller eco rung', () => {
+    const opts = [opt('auto', 0), opt('original', 818), { ...opt('eco-1080p', 1080), lowBandwidth: true }];
+    expect(highestRungId(opts)).toBe('original');
   });
 
   it('returns undefined for an empty list', () => {
