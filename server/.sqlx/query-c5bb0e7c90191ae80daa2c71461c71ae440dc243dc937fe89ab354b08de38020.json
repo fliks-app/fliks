@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, path, \"mediaTypes\" AS \"media_types: Json<Vec<MediaKind>>\" FROM libraries ORDER BY id",
+  "query": "SELECT id, name, path, \"mediaTypes\" AS \"media_types: Json<Vec<String>>\" FROM libraries ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -38,7 +38,7 @@
       },
       {
         "ordinal": 3,
-        "name": "media_types: Json<Vec<MediaKind>>",
+        "name": "media_types: Json<Vec<String>>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "1bb29395d49f907ea4612ac97b02635ca4bef4cbc6e733bae6e3d83adaf28d4c"
+  "hash": "c5bb0e7c90191ae80daa2c71461c71ae440dc243dc937fe89ab354b08de38020"
 }

@@ -21,7 +21,7 @@ pub async fn items_view(
   (jsonb_build_object(
     'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
     'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
-    'year', media.year, 'type', media.type::text, 'tmdbId', media."tmdbId", 'imdbId', media."imdbId",
+    'year', media.year, 'type', media.type, 'tmdbId', media."tmdbId", 'imdbId', media."imdbId",
     'tvdbId', media."tvdbId", 'overview', media.overview, 'status', media.status::text,
     'monitored', media.monitored, 'preferredProvider', media."preferredProvider", 'folderName', media."folderName",
     'posterUrl', media."posterUrl", 'fanartUrl', media."fanartUrl", 'logoUrl', media."logoUrl")

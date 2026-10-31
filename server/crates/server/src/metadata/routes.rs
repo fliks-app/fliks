@@ -134,7 +134,7 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
             .collect()
     };
     let (tmdb, tvdb) = (ids("tmdbId"), ids("tvdbId"));
-    let kind = MediaKind::from_series(tv);
+    let kind = MediaKind::from_tv(tv);
     let mut rows: Vec<MediaIds> = vec![];
     if !tmdb.is_empty() || !tvdb.is_empty() {
         let libs = accessible_library_ids(db, a).await?;

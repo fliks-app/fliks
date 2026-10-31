@@ -38,7 +38,7 @@ pub struct MediaCtx {
     pub overview: Option<String>,
 }
 
-const MEDIA_SQL: &str = r#"SELECT m.id, m.title, m."type"::text AS kind, m.year, m."imdbId" AS imdb_id, m."tmdbId" AS tmdb_id,
+const MEDIA_SQL: &str = r#"SELECT m.id, m.title, m."type" AS kind, m.year, m."imdbId" AS imdb_id, m."tmdbId" AS tmdb_id,
   m."folderName" AS folder_name, l.path AS library_path, m."libraryId" AS library_id,
   m."languageProfileId" AS language_profile_id, m.monitored, m.genres, m.overview
   FROM media m LEFT JOIN libraries l ON l.id = m."libraryId""#;

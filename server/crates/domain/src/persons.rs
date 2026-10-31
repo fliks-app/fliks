@@ -1,4 +1,5 @@
 //! Person search and refresh rules (`docs/spec/persons.md`).
+use crate::media::kind::MediaKind;
 
 /// A person is refreshed when never refreshed or older than 7 days (rule 10).
 pub const REFRESH_AFTER_MS: i64 = 7 * 86_400_000;
@@ -22,15 +23,15 @@ pub fn tsquery(q: &str) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Owned {
     pub id: i32,
-    pub is_series: bool,
+    pub kind: MediaKind,
     pub external_id: i64,
 }
 
 /// The owned media of a credit, matched on `(type, id)`; the last row wins.
-pub fn link(owned: &[Owned], external_id: i64, is_series: bool) -> Option<i32> {
+pub fn link(owned: &[Owned], external_id: i64, kind: MediaKind) -> Option<i32> {
     owned
         .iter()
-        .rfind(|m| m.external_id == external_id && m.is_series == is_series)
+        .rfind(|m| m.external_id == external_id && m.kind == kind)
         .map(|m| m.id)
 }
 
@@ -77,23 +78,23 @@ mod tests {
         let owned = [
             Owned {
                 id: 1,
-                is_series: false,
+                kind: MediaKind::Movie,
                 external_id: 603,
             },
             Owned {
                 id: 2,
-                is_series: true,
+                kind: MediaKind::Series,
                 external_id: 603,
             },
             Owned {
                 id: 3,
-                is_series: true,
+                kind: MediaKind::Series,
                 external_id: 603,
             },
         ];
-        assert_eq!(link(&owned, 603, false), Some(1));
-        assert_eq!(link(&owned, 603, true), Some(3));
-        assert_eq!(link(&owned, 7, true), None);
-        assert_eq!(link(&[], 603, false), None);
+        assert_eq!(link(&owned, 603, MediaKind::Movie), Some(1));
+        assert_eq!(link(&owned, 603, MediaKind::Series), Some(3));
+        assert_eq!(link(&owned, 7, MediaKind::Series), None);
+        assert_eq!(link(&[], 603, MediaKind::Movie), None);
     }
 }

@@ -108,7 +108,7 @@ pub async fn candidates(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<Valu
     sqlx::query_scalar(
         r#"SELECT jsonb_build_object('id', c.id, 'mediaId', m.id, 'seasonId', c."seasonId", 'episodeId', c."episodeId",
           'seasonNumber', s."seasonNumber", 'episodeNumber', e."episodeNumber", 'title', m.title,
-          'type', m."type"::text, 'posterUrl', m."posterUrl", 'ruleId', r.id, 'ruleName', r.name, 'action', r.action,
+          'type', m."type", 'posterUrl', m."posterUrl", 'ruleId', r.id, 'ruleName', r.name, 'action', r.action,
           'size', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = m.id
             AND (c."episodeId" IS NULL OR f."episodeId" = c."episodeId")
             AND (c."seasonId" IS NULL OR f."episodeId" IN (SELECT id FROM episodes WHERE "seasonId" = c."seasonId"))), 0),

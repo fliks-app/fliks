@@ -282,7 +282,7 @@ async fn resolve(
     .fetch_optional(&mut *c)
     .await?
     .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
-    if !crate::db::kind(&kind)?.is_series() {
+    if !crate::db::kind(&kind)?.has_seasons() {
         return Ok((
             vec![Target {
                 media,

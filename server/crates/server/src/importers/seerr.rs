@@ -252,7 +252,7 @@ impl Run<'_> {
                 .unwrap_or_default();
         }
         let seasons = media_type
-            .is_series()
+            .has_seasons()
             .then(|| req["seasons"].as_array().filter(|a| !a.is_empty()))
             .flatten()
             .map(|a| Value::Array(a.iter().map(|s| s["seasonNumber"].clone()).collect()));

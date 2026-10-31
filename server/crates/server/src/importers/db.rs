@@ -12,7 +12,7 @@ pub struct Library {
 
 pub async fn libraries(db: &PgPool) -> sqlx::Result<Vec<Library>> {
     let rows = sqlx::query!(
-        r#"SELECT id, name, path, "mediaTypes" AS "media_types: Json<Vec<MediaKind>>" FROM libraries ORDER BY id"#
+        r#"SELECT id, name, path, "mediaTypes" AS "media_types: Json<Vec<String>>" FROM libraries ORDER BY id"#
     )
     .fetch_all(db)
     .await?;
@@ -22,7 +22,12 @@ pub async fn libraries(db: &PgPool) -> sqlx::Result<Vec<Library>> {
             id: r.id,
             name: r.name,
             path: r.path,
-            media_types: r.media_types.0,
+            media_types: r
+                .media_types
+                .0
+                .iter()
+                .filter_map(|t| MediaKind::parse(t))
+                .collect(),
         })
         .collect())
 }

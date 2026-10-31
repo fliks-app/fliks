@@ -18,7 +18,6 @@ pub const STATUSES: [&str; 7] = [
     "removed",
 ];
 pub const KINDS: [&str; 2] = ["add", "delete"];
-pub const MEDIA_TYPES: [&str; 2] = MediaKind::NAMES;
 
 /// An optional field: absent, explicit `null` or a value (`PATCH` keeps absent, clears `null`).
 #[derive(Debug, PartialEq)]
@@ -231,7 +230,7 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
     };
     let status = text("status", &STATUSES);
     let kind = text("kind", &KINDS);
-    let media_type = text("mediaType", &MEDIA_TYPES).and_then(|m| MediaKind::parse(&m));
+    let media_type = text("mediaType", &MediaKind::NAMES).and_then(|m| MediaKind::parse(&m));
     let mut int = |k: &str, min: Option<i32>, max: Option<i32>| -> Option<i32> {
         let one = match all(k).as_slice() {
             [] => return None,
@@ -284,8 +283,8 @@ pub fn title_state(q: &[(String, String)]) -> Res<(i32, MediaKind)> {
     match one("mediaType").and_then(MediaKind::parse) {
         Some(m) => Ok((tmdb, m)),
         None => Err(AppError::bad_request(vec![format!(
-            "mediaType must be one of the following values: {}",
-            MEDIA_TYPES.join(", ")
+            "mediaType {}",
+            MediaKind::one_of_message()
         )])),
     }
 }
@@ -375,7 +374,7 @@ fn criteria(k: &Map<String, Value>, errs: &mut Vec<String>) -> Value {
                 out.insert(key.into(), Value::Null);
             }
             ("mediaType", Some(_)) => {
-                if let Some(m) = c.one_of(key, &MEDIA_TYPES, true) {
+                if let Some(m) = c.one_of(key, &MediaKind::NAMES, true) {
                     out.insert(key.into(), m.into());
                 }
             }

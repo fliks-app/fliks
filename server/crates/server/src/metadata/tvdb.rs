@@ -135,7 +135,7 @@ impl Tvdb {
         self.token(None).await?;
         let mut p = vec![
             ("q", query.to_owned()),
-            ("type", MediaKind::from_series(tv).as_str().into()),
+            ("type", MediaKind::from_tv(tv).as_str().into()),
         ];
         if let Some(y) = year {
             p.push(("year", y.to_string()));
@@ -341,7 +341,7 @@ impl Tvdb {
             let is_movie = get(c, "movieId").as_i64().is_some_and(|n| n != 0);
             o.insert(
                 "mediaType".into(),
-                MediaKind::from_series(!is_movie).as_str().into(),
+                MediaKind::from_tv(!is_movie).as_str().into(),
             );
             o.insert("posterUrl".into(), poster);
             let year = match get(work, "year") {
@@ -451,7 +451,7 @@ pub fn map_search_result(r: &Value, tv: bool, code: &str) -> Value {
         "posterUrl": poster,
         "rating": 0,
         "genres": or(r, "genres", json!([])),
-        "mediaType": MediaKind::from_series(tv),
+        "mediaType": MediaKind::from_tv(tv),
     })
 }
 
@@ -643,10 +643,7 @@ pub fn map_details(m: &Value, tv: bool, code: &str) -> Value {
     );
     o.insert("rating".into(), json!(0));
     o.insert("genres".into(), pluck(arr(m, "genres"), "name").into());
-    o.insert(
-        "mediaType".into(),
-        MediaKind::from_series(tv).as_str().into(),
-    );
+    o.insert("mediaType".into(), MediaKind::from_tv(tv).as_str().into());
     o.insert("voteCount".into(), Value::Null);
     o.insert("popularity".into(), Value::Null);
     o.insert("tagline".into(), opt(loc.and_then(|l| l.2)));

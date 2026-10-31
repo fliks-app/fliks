@@ -138,7 +138,7 @@ pub fn compile(
     let size = &sc.size;
     let last_played = &sc.last_played;
     let mut q = QueryBuilder::new(format!(
-        r#"SELECT media.id, media.title, media."type"::text AS "type", {size}::bigint AS size,
+        r#"SELECT media.id, media.title, media."type" AS "type", {size}::bigint AS size,
         {last_played} AS "lastPlayedAt", media."libraryId" AS "libraryId", {ids} FROM {from} WHERE NOT EXISTS
         (SELECT 1 FROM cleanup_exclusions x WHERE x."mediaId" = media.id{excluded})"#
     ));
@@ -168,7 +168,7 @@ pub fn compile(
             .push(")");
     }
     if level == "movie" || level == "series" {
-        q.push(r#" AND media."type"::text = "#)
+        q.push(r#" AND media."type" = "#)
             .push_bind(level.to_owned());
     }
     if let Some(d) = int32(c, "addedOlderThanDays") {

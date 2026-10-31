@@ -118,12 +118,18 @@ impl Body {
         )
     }
 
+    /// The kind of an optional field.
     pub fn kind(&self, k: &str) -> Result<Field<MediaKind>, AppError> {
-        let msg = format!(
-            "must be one of the following values: {}",
-            MediaKind::NAMES.join(", ")
-        );
-        self.get(k, |v| v.as_str().and_then(MediaKind::parse), &msg)
+        self.get(
+            k,
+            |v| v.as_str().and_then(MediaKind::parse),
+            &MediaKind::one_of_message(),
+        )
+    }
+
+    /// The kind of a required field.
+    pub fn required_kind(&self, k: &str) -> Result<MediaKind, AppError> {
+        self.required(self.kind(k)?, k, &MediaKind::one_of_message())
     }
 
     pub fn strings(&self, k: &str) -> Result<Field<Vec<String>>, AppError> {

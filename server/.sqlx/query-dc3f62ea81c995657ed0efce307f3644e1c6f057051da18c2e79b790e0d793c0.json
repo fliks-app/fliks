@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id AS \"id!\", (type::text = 'series') AS \"series!\", \"tvdbId\" AS \"ext!\" FROM media\n                   WHERE \"tvdbId\" = ANY($1) AND \"libraryId\" = ANY($2) ORDER BY id ASC",
+  "query": "SELECT id AS \"id!\", type AS \"kind!\", \"tmdbId\" AS \"ext!\" FROM media\n                   WHERE \"tmdbId\" = ANY($1) AND \"libraryId\" = ANY($2) ORDER BY id ASC",
   "describe": {
     "columns": [
       {
@@ -16,9 +16,14 @@
       },
       {
         "ordinal": 1,
-        "name": "series!",
-        "type_info": "Bool",
-        "origin": "Expression"
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
       },
       {
         "ordinal": 2,
@@ -27,7 +32,7 @@
         "origin": {
           "Table": {
             "table": "media",
-            "name": "tvdbId"
+            "name": "tmdbId"
           }
         }
       }
@@ -40,9 +45,9 @@
     },
     "nullable": [
       false,
-      null,
+      false,
       true
     ]
   },
-  "hash": "0ed4e0a8d761686830beaf1ee42e26104904994647e99f525e2c23b3ff00575d"
+  "hash": "dc3f62ea81c995657ed0efce307f3644e1c6f057051da18c2e79b790e0d793c0"
 }

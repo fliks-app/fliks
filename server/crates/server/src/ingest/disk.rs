@@ -80,7 +80,11 @@ async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
         id: r.id,
         name: r.name,
         path,
-        types: serde_json::from_value(r.types).unwrap_or_default(),
+        types: serde_json::from_value::<Vec<String>>(r.types)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|t| MediaKind::parse(t))
+            .collect(),
         provider: r.provider,
         dq: r.dq,
         dl: r.dl,
@@ -346,8 +350,8 @@ pub async fn preview(
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| {
                 AppError::bad_request(vec![format!(
-                    "each value in mediaTypes must be one of the following values: {}",
-                    MediaKind::NAMES.join(", ")
+                    "each value in mediaTypes {}",
+                    MediaKind::one_of_message()
                 )])
             })?,
         _ => MediaKind::ALL.to_vec(),
@@ -488,8 +492,11 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
 }
 
 fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppError> {
-    if name.is_empty() && !media_type.is_series() {
-        return Ok(String::new());
+    if name.is_empty() {
+        match media_type {
+            MediaKind::Movie => return Ok(String::new()),
+            MediaKind::Series => {}
+        }
     }
     validate_folder_name(name)
         .map(str::to_owned)

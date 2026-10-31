@@ -300,7 +300,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     .await?;
     download_media_images(st, id, d).await;
     service::persist_credits(st, id, d).await?;
-    if media.is_series() {
+    if media.has_seasons() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {
             st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
@@ -339,7 +339,7 @@ async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if media.is_series() {
+    if media.has_seasons() {
         drop_absent(st, id, &found).await?;
     }
     let guard = st.ingest.media.lock(id).await;

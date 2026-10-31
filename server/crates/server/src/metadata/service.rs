@@ -308,7 +308,7 @@ pub async fn import(st: &AppState, l: Lookup) -> Result<Found, AppError> {
     let lang = language(st, lib.as_ref()).await?;
     let (p, id, mut details) =
         read_for_library(st, kind, finder, &l.external_id, lib.as_ref(), &lang).await?;
-    let seasons = if kind.is_series() {
+    let seasons = if kind.has_seasons() {
         read_seasons(st, p, &id, &lang).await?
     } else {
         vec![]
@@ -627,7 +627,7 @@ pub async fn for_media(st: &AppState, media_id: i32) -> Result<Found, AppError> 
         media.1
     );
     let details = read_details(st, media.0, m.kind, &media.1, &lang).await?;
-    let seasons = if m.kind.is_series() {
+    let seasons = if m.kind.has_seasons() {
         seasons_of(st, &m, lib.as_ref(), &lang, &media).await?
     } else {
         vec![]

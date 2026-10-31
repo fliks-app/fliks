@@ -176,7 +176,7 @@ pub async fn import_title(
         }
     })?;
     let mut stills = vec![];
-    if imp.media_type.is_series() {
+    if imp.media_type.has_seasons() {
         let scope = imp.monitored_seasons.clone().filter(|s| !s.is_empty());
         for sd in &found.seasons {
             let n = sd.season_number;
@@ -370,14 +370,7 @@ struct Common {
 
 fn common(b: &Body) -> Result<Common, AppError> {
     Ok(Common {
-        media_type: b.required(
-            b.kind("type")?,
-            "type",
-            &format!(
-                "must be one of the following values: {}",
-                MediaKind::NAMES.join(", ")
-            ),
-        )?,
+        media_type: b.required_kind("type")?,
         quality: b.id("qualityProfileId")?.flatten(),
         language: b.id("languageProfileId")?.flatten(),
         library: b.id("libraryId")?.flatten(),

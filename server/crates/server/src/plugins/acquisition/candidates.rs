@@ -121,7 +121,7 @@ pub async fn context(
         season = Some(s);
     }
     let files = files_for(db, &m, season.map(|s| s.0), episode.as_ref()).await?;
-    let whole_series = m.kind.is_series() && season.is_none() && episode.is_none();
+    let whole_series = m.kind.has_seasons() && season.is_none() && episode.is_none();
     let decision = (!whole_series).then(|| classify(&m, &files));
     let Some(mut tg) = target(&m, decision, &files) else {
         return Ok(None);

@@ -51,7 +51,7 @@ struct MediaRow {
     lp_audio: Option<Value>,
 }
 
-const MEDIA_SELECT: &str = r#"SELECT m.id, m.type::text AS kind, m.title, m."originalTitle" AS original_title,
+const MEDIA_SELECT: &str = r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
     m."alternativeTitles" AS alternative_titles, m.year, m.runtime, m."imdbId" AS imdb_id,
     m."tmdbId" AS tmdb_id, m."tvdbId" AS tvdb_id, m."libraryId" AS library_id, m.monitored,
     m."minimumAvailability" AS minimum_availability, m."inCinemas" AS in_cinemas,
@@ -293,22 +293,24 @@ async fn files_for(
     season: Option<i32>,
     episode: Option<&EpisodeRow>,
 ) -> sqlx::Result<Files> {
-    if let MediaKind::Movie = m.kind {
-        return Ok(file_qualities(db, "mediaId", m.id)
+    match m.kind {
+        MediaKind::Movie => Ok(file_qualities(db, "mediaId", m.id)
             .await?
             .into_iter()
             .map(Some)
-            .collect());
+            .collect()),
+        MediaKind::Series => {
+            if let Some(e) = episode {
+                let sib = episodes_of(db, e.season_id).await?;
+                return files_for_episode(db, e, &on_disk(&sib)).await;
+            }
+            if let Some(s) = season {
+                let eps = episodes_of(db, s).await?;
+                return files_for_pack(db, &eps, &on_disk(&eps)).await;
+            }
+            Ok(vec![])
+        }
     }
-    if let Some(e) = episode {
-        let sib = episodes_of(db, e.season_id).await?;
-        return files_for_episode(db, e, &on_disk(&sib)).await;
-    }
-    if let Some(s) = season {
-        let eps = episodes_of(db, s).await?;
-        return files_for_pack(db, &eps, &on_disk(&eps)).await;
-    }
-    Ok(vec![])
 }
 
 mod candidates;

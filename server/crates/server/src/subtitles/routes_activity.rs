@@ -90,7 +90,7 @@ struct ItemRow {
     created_at: DateTime<Utc>,
 }
 
-const ITEM_SELECT: &str = r#"SELECT sf.id, sf."mediaId" AS media_id, m.title AS media_title, m."type"::text AS media_type,
+const ITEM_SELECT: &str = r#"SELECT sf.id, sf."mediaId" AS media_id, m.title AS media_title, m."type" AS media_type,
   COALESCE(sf."episodeId", fe.id) AS episode_id, COALESCE(es."seasonNumber", fs."seasonNumber") AS season_number,
   COALESCE(e."episodeNumber", fe."episodeNumber") AS episode_number, COALESCE(e.title, fe.title) AS episode_title,
   sf.language, sf."providerType"::text AS provider_type, sf.score, sf.status::text AS status, sf.forced,
@@ -293,7 +293,7 @@ pub async fn missing(
     // The HI mode never decides what is missing; items without an isoCode are skipped.
     let rows: Vec<M> = sqlx::query_as(
         r#"WITH required AS (
-             SELECT m.id AS media_id, m.title AS media_title, m.type::text AS media_type,
+             SELECT m.id AS media_id, m.title AS media_title, m.type AS media_type,
                     lang->>'isoCode' AS language, COALESCE((lang->>'forced')::boolean, false) AS forced
              FROM media m
              JOIN language_profiles lp ON lp.id = m."languageProfileId"

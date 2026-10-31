@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.title, m.type::text AS \"kind!\", m.year, m.\"posterUrl\" AS poster_url,\n                  m.\"fanartUrl\" AS fanart_url, m.\"additionalFanartUrls\" AS additional_fanart_urls,\n                  m.genres AS \"genres: Jsonb<Vec<String>>\"\n           FROM media m WHERE m.id = ANY($1)",
+  "query": "SELECT m.id, m.title, m.type AS \"kind!\", m.year, m.\"posterUrl\" AS poster_url,\n                  m.\"fanartUrl\" AS fanart_url, m.\"additionalFanartUrls\" AS additional_fanart_urls,\n                  m.genres AS \"genres: Jsonb<Vec<String>>\"\n           FROM media m WHERE m.id = ANY($1)",
   "describe": {
     "columns": [
       {
@@ -108,5 +108,5 @@
       true
     ]
   },
-  "hash": "35d925424b16d9e825a6e9537e699779923c01384fbfa71627ea1042dde7c41b"
+  "hash": "61eed3424807a4175d5f88672f5933ac3b72d775dff4abbbab1ed3ab3d47e9a6"
 }

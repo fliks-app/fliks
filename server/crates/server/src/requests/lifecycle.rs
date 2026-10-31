@@ -96,7 +96,7 @@ impl Lifecycle {
                 continue;
             }
             db::adopt(&self.st.db, r.id, media.id, added_by.filter(|u| *u != 0)).await?;
-            let seasons = r.scope().filter(|_| media.media_type.is_series());
+            let seasons = r.scope().filter(|_| media.media_type.has_seasons());
             db::monitor_scope(&self.st.db, media.id, seasons).await?;
             touched = true;
         }
@@ -190,7 +190,7 @@ impl Lifecycle {
         for r in db::linked(&self.st.db, media_id, None, &statuses).await? {
             let scope = match r.scope() {
                 Some(s) => s.to_vec(),
-                None if r.media_type.is_series() => {
+                None if r.media_type.has_seasons() => {
                     if whole.is_none() {
                         whole = Some(db::monitored_seasons(&self.st.db, media_id, season).await?);
                     }

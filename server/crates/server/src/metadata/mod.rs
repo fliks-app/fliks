@@ -70,9 +70,13 @@ impl Metadata {
         id: i64,
         lang: &Resolved,
     ) -> Result<Value, Upstream> {
+        let tv = match kind {
+            MediaKind::Movie => false,
+            MediaKind::Series => true,
+        };
         match p {
-            Provider::Tmdb => self.tmdb.details(kind.is_series(), id, lang).await,
-            Provider::Tvdb => self.tvdb.details(kind.is_series(), id, lang).await,
+            Provider::Tmdb => self.tmdb.details(tv, id, lang).await,
+            Provider::Tvdb => self.tvdb.details(tv, id, lang).await,
         }
     }
 

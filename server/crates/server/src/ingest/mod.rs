@@ -76,8 +76,8 @@ pub struct MediaRow {
 }
 
 impl MediaRow {
-    pub fn is_series(&self) -> bool {
-        self.media_type.is_series()
+    pub fn has_seasons(&self) -> bool {
+        self.media_type.has_seasons()
     }
 
     /// The `Media.path` getter (lexical, for messages and outbound notifications only).

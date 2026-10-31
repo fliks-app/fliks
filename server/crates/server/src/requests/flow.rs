@@ -148,7 +148,7 @@ async fn assert_no_active_duplicate(st: &AppState, dto: &CreateRequest) -> Res<(
         return Ok(());
     }
     let wanted = dto.seasons.as_deref().unwrap_or_default();
-    if !dto.media_type.is_series() || wanted.is_empty() {
+    if !dto.media_type.has_seasons() || wanted.is_empty() {
         return Err(AppError::conflict("This title has already been requested"));
     }
     let mut taken = vec![];
@@ -193,7 +193,7 @@ async fn existing_series_profiles(st: &AppState, tmdb_id: i32) -> Res<Option<Pro
 
 pub async fn title_state(st: &AppState, tmdb_id: i32, media_type: MediaKind) -> Res<Value> {
     let active = db::active_adds(&st.db, tmdb_id, media_type).await?;
-    let series = media_type.is_series();
+    let series = media_type.has_seasons();
     let whole = series && active.iter().any(|r| r.scope().is_none());
     let mut seasons: Vec<i64> = active
         .iter()
@@ -268,7 +268,7 @@ pub async fn ensure_media(
     let seasons = spec
         .seasons
         .as_deref()
-        .filter(|_| spec.media_type.is_series());
+        .filter(|_| spec.media_type.has_seasons());
     db::monitor_scope(&st.db, media_id, seasons).await?;
     Ok(Some(media_id))
 }
@@ -332,7 +332,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         Some(l) => l,
         None => resolve_sole_library(st, a, dto.media_type).await?,
     };
-    if dto.media_type.is_series()
+    if dto.media_type.has_seasons()
         && let Some((q, l)) = existing_series_profiles(st, dto.tmdb_id).await?
     {
         (dto.quality_profile_id, dto.language_profile_id) = (q, l);

@@ -103,73 +103,74 @@ async fn match_one(
         return Ok(skip(t::SkipReason::Unmatched, None, None, None));
     };
     let (mut season_n, mut episode_n) = (None, None);
-    let files: Files = if m.kind.is_series() {
-        let Some(sn) = se.season else {
-            return Ok(skip(t::SkipReason::NotAvailable, Some(m.id), None, None));
-        };
-        let Some((sid, _, number, monitored)) = season_row(
-            db,
-            r#""mediaId" = $1 AND "seasonNumber" = $2"#,
-            m.id,
-            Some(sn as i32),
-        )
-        .await?
-        else {
-            return Ok(skip(t::SkipReason::NotAvailable, Some(m.id), None, None));
-        };
-        if !monitored {
-            return Ok(skip(
-                t::SkipReason::NotMonitored,
-                Some(m.id),
-                Some(number),
-                None,
-            ));
-        }
-        season_n = Some(number);
-        let eps = episodes_of(db, sid).await?;
-        if se.is_full_season {
-            if eps.is_empty() {
-                return Ok(skip(
-                    t::SkipReason::NotAvailable,
-                    Some(m.id),
-                    season_n,
-                    None,
-                ));
-            }
-            files_for_pack(db, &eps, &on_disk(&eps)).await?
-        } else if let Some(en) = se.episode {
-            let Some(e) = eps.iter().find(|e| i64::from(e.episode_number) == en) else {
-                return Ok(skip(
-                    t::SkipReason::NotAvailable,
-                    Some(m.id),
-                    season_n,
-                    None,
-                ));
+    let files: Files = match m.kind {
+        MediaKind::Series => {
+            let Some(sn) = se.season else {
+                return Ok(skip(t::SkipReason::NotAvailable, Some(m.id), None, None));
             };
-            if !e.monitored {
+            let Some((sid, _, number, monitored)) = season_row(
+                db,
+                r#""mediaId" = $1 AND "seasonNumber" = $2"#,
+                m.id,
+                Some(sn as i32),
+            )
+            .await?
+            else {
+                return Ok(skip(t::SkipReason::NotAvailable, Some(m.id), None, None));
+            };
+            if !monitored {
                 return Ok(skip(
                     t::SkipReason::NotMonitored,
                     Some(m.id),
-                    season_n,
-                    Some(e.episode_number),
+                    Some(number),
+                    None,
                 ));
             }
-            episode_n = Some(e.episode_number);
-            files_for_episode(db, e, &on_disk(&eps)).await?
-        } else {
-            return Ok(skip(
-                t::SkipReason::NotAvailable,
-                Some(m.id),
-                season_n,
-                None,
-            ));
+            season_n = Some(number);
+            let eps = episodes_of(db, sid).await?;
+            if se.is_full_season {
+                if eps.is_empty() {
+                    return Ok(skip(
+                        t::SkipReason::NotAvailable,
+                        Some(m.id),
+                        season_n,
+                        None,
+                    ));
+                }
+                files_for_pack(db, &eps, &on_disk(&eps)).await?
+            } else if let Some(en) = se.episode {
+                let Some(e) = eps.iter().find(|e| i64::from(e.episode_number) == en) else {
+                    return Ok(skip(
+                        t::SkipReason::NotAvailable,
+                        Some(m.id),
+                        season_n,
+                        None,
+                    ));
+                };
+                if !e.monitored {
+                    return Ok(skip(
+                        t::SkipReason::NotMonitored,
+                        Some(m.id),
+                        season_n,
+                        Some(e.episode_number),
+                    ));
+                }
+                episode_n = Some(e.episode_number);
+                files_for_episode(db, e, &on_disk(&eps)).await?
+            } else {
+                return Ok(skip(
+                    t::SkipReason::NotAvailable,
+                    Some(m.id),
+                    season_n,
+                    None,
+                ));
+            }
         }
-    } else {
-        file_qualities(db, "mediaId", m.id)
+        MediaKind::Movie => file_qualities(db, "mediaId", m.id)
             .await?
             .into_iter()
             .map(Some)
-            .collect()
+            .collect(),
     };
     match classify(m, &files) {
         Decision::Unprofiled => {
@@ -227,7 +228,7 @@ pub(super) async fn runtime_minutes(
     season: Option<u32>,
     episode: Option<u32>,
 ) -> sqlx::Result<f64> {
-    let (Some(season), true) = (season, m.kind.is_series()) else {
+    let (Some(season), true) = (season, m.kind.has_seasons()) else {
         return Ok(m.runtime.unwrap_or(0).into());
     };
     let total: i64 = sqlx::query_scalar(
@@ -279,7 +280,7 @@ pub async fn score(
     } else {
         0
     };
-    let whole_series = m.kind.is_series() && season.is_none();
+    let whole_series = m.kind.has_seasons() && season.is_none();
     let (min_rank, max_rank) = match (!whole_series).then(|| classify(&m, &files)) {
         Some(Decision::Window { min, max, .. }) => (Some(i64::from(min)), max.map(i64::from)),
         _ => (None, None),
@@ -391,7 +392,7 @@ async fn season_and_episode(
     episode_n: Option<u32>,
 ) -> sqlx::Result<(Option<SeasonRow>, Option<EpisodeRow>)> {
     let (mut season, mut episode) = (None, None);
-    if m.kind.is_series()
+    if m.kind.has_seasons()
         && let Some(sn) = season_n
     {
         season = season_row(

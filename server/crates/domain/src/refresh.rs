@@ -1,11 +1,12 @@
 //! Which media the metadata jobs refresh (`scheduler.md` rules 23-25).
+use crate::media::kind::MediaKind;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 
 const DAY: i64 = 24 * 3600;
 
 /// The columns the due tests read.
 pub struct Row<'a> {
-    pub is_series: bool,
+    pub kind: MediaKind,
     pub status: &'a str,
     pub release_date: Option<NaiveDate>,
     pub year: Option<i32>,
@@ -30,10 +31,9 @@ pub fn is_due<Z: TimeZone>(m: &Row, now: DateTime<Utc>, tz: &Z) -> bool {
         };
         start.is_some_and(|s| (now - s).num_seconds() > 365 * DAY)
     };
-    let settled = if m.is_series {
-        m.status == "ended"
-    } else {
-        released()
+    let settled = match m.kind {
+        MediaKind::Series => m.status == "ended",
+        MediaKind::Movie => released(),
     };
     !settled
         || m.refreshed_at
@@ -97,7 +97,7 @@ mod tests {
 
     fn movie(release: Option<&str>, year: Option<i32>, refreshed: Option<&str>) -> Row<'static> {
         Row {
-            is_series: false,
+            kind: MediaKind::Movie,
             status: "released",
             release_date: release.map(|d| d.parse().unwrap()),
             year,
@@ -120,7 +120,7 @@ mod tests {
         assert!(!is_due(&fresh, now, &utc));
         assert!(is_due(&movie(Some("2020-01-01"), None, None), now, &utc));
         let series = |status, r| Row {
-            is_series: true,
+            kind: MediaKind::Series,
             status,
             release_date: None,
             year: None,

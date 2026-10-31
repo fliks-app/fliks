@@ -103,7 +103,7 @@ pub async fn following_popular(
     .fetch_all(&st.db)
     .await?;
     let mut media: HashMap<i32, RecommendedMedia> = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type::text AS "kind!", m.year, m."posterUrl" AS poster_url,
+        r#"SELECT m.id, m.title, m.type AS "kind!", m.year, m."posterUrl" AS poster_url,
                   m."fanartUrl" AS fanart_url, m."additionalFanartUrls" AS additional_fanart_urls,
                   m.genres AS "genres: Jsonb<Vec<String>>"
            FROM media m WHERE m.id = ANY($1)"#,

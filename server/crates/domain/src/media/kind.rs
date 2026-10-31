@@ -1,5 +1,5 @@
 //! The catalog's media kinds, as stored in `media.type` and exchanged as `mediaType`.
-use std::{fmt, str::FromStr};
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ pub enum MediaKind {
 
 impl MediaKind {
     pub const ALL: [Self; 2] = [Self::Movie, Self::Series];
-    /// Wire names, in `ALL` order: the allow-list of every `type` / `mediaType` input.
+    /// Wire names, in `ALL` order.
     pub const NAMES: [&'static str; 2] = [Self::Movie.as_str(), Self::Series.as_str()];
 
     pub const fn as_str(self) -> &'static str {
@@ -26,15 +26,25 @@ impl MediaKind {
         Self::ALL.into_iter().find(|k| k.as_str() == s)
     }
 
-    pub const fn from_series(is_series: bool) -> Self {
-        if is_series { Self::Series } else { Self::Movie }
+    /// The kind a provider's `tv` flag stands for.
+    pub const fn from_tv(tv: bool) -> Self {
+        if tv { Self::Series } else { Self::Movie }
     }
 
-    pub const fn is_series(self) -> bool {
+    /// Whether the title is made of seasons and episodes.
+    pub const fn has_seasons(self) -> bool {
         match self {
             Self::Movie => false,
             Self::Series => true,
         }
+    }
+
+    /// The `"must be one of the following values"` text of every input naming a kind.
+    pub fn one_of_message() -> String {
+        format!(
+            "must be one of the following values: {}",
+            Self::NAMES.join(", ")
+        )
     }
 }
 
@@ -56,19 +66,11 @@ impl fmt::Display for UnknownKind {
 
 impl std::error::Error for UnknownKind {}
 
-impl FromStr for MediaKind {
-    type Err = UnknownKind;
-
-    fn from_str(s: &str) -> Result<Self, UnknownKind> {
-        Self::parse(s).ok_or_else(|| UnknownKind(s.to_owned()))
-    }
-}
-
 impl TryFrom<String> for MediaKind {
     type Error = UnknownKind;
 
     fn try_from(s: String) -> Result<Self, UnknownKind> {
-        s.parse()
+        Self::parse(&s).ok_or(UnknownKind(s))
     }
 }
 
@@ -84,6 +86,11 @@ mod tests {
         }
         assert_eq!(MediaKind::NAMES, ["movie", "series"]);
         assert_eq!(MediaKind::parse("Movie"), None);
-        assert!(MediaKind::Series.is_series() && !MediaKind::Movie.is_series());
+        assert!(MediaKind::Series.has_seasons() && !MediaKind::Movie.has_seasons());
+        assert_eq!(MediaKind::from_tv(true), MediaKind::Series);
+        assert_eq!(
+            MediaKind::one_of_message(),
+            "must be one of the following values: movie, series"
+        );
     }
 }

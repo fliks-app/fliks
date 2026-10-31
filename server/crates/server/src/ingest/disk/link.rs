@@ -29,7 +29,7 @@ pub(super) async fn link_files(
         (linked, 0)
     };
     let identified = media.tmdb_id.is_some() || media.tvdb_id.is_some() || media.imdb_id.is_some();
-    if media.is_series()
+    if media.has_seasons()
         && slot
         && identified
         && let Err(e) = mw::refresh_series_episodes(st, media).await
@@ -65,7 +65,7 @@ async fn relink_moved(
             continue;
         }
         let mut episode_id = None;
-        if media.is_series() {
+        if media.has_seasons() {
             match caller_nums(f.season, f.episode, f.end)
                 .or_else(|| parse_episode_numbers(&name, Some(&f.path)))
             {
@@ -287,8 +287,8 @@ pub(super) async fn confirm_import(
 
 pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
     let (year, tmdb_id) = (m.year.map(i64::from), m.tmdb_id.map(i64::from));
-    if m.is_series() {
-        naming::apply_series_folder_format(
+    match m.media_type {
+        MediaKind::Series => naming::apply_series_folder_format(
             &f.series_folder,
             &SeriesFolder {
                 series_title: m.title.clone(),
@@ -296,9 +296,8 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
                 year,
                 tmdb_id,
             },
-        )
-    } else {
-        naming::apply_movie_folder_format(
+        ),
+        MediaKind::Movie => naming::apply_movie_folder_format(
             &f.movie_folder,
             &MovieFolder {
                 title: m.title.clone(),
@@ -306,7 +305,7 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
                 year,
                 tmdb_id,
             },
-        )
+        ),
     }
 }
 
@@ -451,8 +450,8 @@ async fn target_folder(
 ) -> Result<String, AppError> {
     Ok(if d.transfer.is_some() {
         let f = naming_formats(&st.db).await?;
-        let named = if d.media_type.is_series() {
-            naming::apply_series_folder_format(
+        let named = match d.media_type {
+            MediaKind::Series => naming::apply_series_folder_format(
                 &f.series_folder,
                 &SeriesFolder {
                     series_title: title.to_owned(),
@@ -460,9 +459,8 @@ async fn target_folder(
                     year: year.map(i64::from),
                     tmdb_id: None,
                 },
-            )
-        } else {
-            naming::apply_movie_folder_format(
+            ),
+            MediaKind::Movie => naming::apply_movie_folder_format(
                 &f.movie_folder,
                 &MovieFolder {
                     title: title.to_owned(),
@@ -470,7 +468,7 @@ async fn target_folder(
                     year: year.map(i64::from),
                     tmdb_id: None,
                 },
-            )
+            ),
         };
         validate_folder_name(&named)
             .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
@@ -522,13 +520,13 @@ pub(super) async fn find_or_create_unmatched(
     user: i32,
 ) -> Result<(MediaRow, bool, String), AppError> {
     let sample = PathBuf::from(resolve(&d.files[0].path, "/"));
-    let series = d.media_type.is_series();
-    let art_dir = if !series {
-        sample.parent().unwrap_or(&sample).to_path_buf()
-    } else if d.transfer.is_some() {
-        series_folder_of(&sample, &d.folder_name, d.scan_root.as_deref())
-    } else {
-        PathBuf::from(&lib.path).join(&d.folder_name)
+    let series = d.media_type.has_seasons();
+    let art_dir = match d.media_type {
+        MediaKind::Movie => sample.parent().unwrap_or(&sample).to_path_buf(),
+        MediaKind::Series if d.transfer.is_some() => {
+            series_folder_of(&sample, &d.folder_name, d.scan_root.as_deref())
+        }
+        MediaKind::Series => PathBuf::from(&lib.path).join(&d.folder_name),
     };
     let root_movie = d.folder_name.is_empty();
     let art_base = (!series).then(|| split_ext(&file_name(&sample)).0.to_owned());

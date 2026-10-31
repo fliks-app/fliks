@@ -74,7 +74,7 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
         return false;
     }
     if let Some(max) = c["maxSeasons"].as_i64()
-        && ctx.media_type.is_series()
+        && ctx.media_type.has_seasons()
         && ctx.season_count.is_none_or(|n| n > max)
     {
         return false;

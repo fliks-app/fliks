@@ -158,14 +158,7 @@ pub async fn create(
     // `CreateMediaDto` has no `preferredProvider`, the last field.
     let b = Body::new(v, &MEDIA_FIELDS[..18])?;
     b.required(b.str("title")?, "title", "must be a string")?;
-    let media_type = b.required(
-        b.kind("type")?,
-        "type",
-        &format!(
-            "must be one of the following values: {}",
-            MediaKind::NAMES.join(", ")
-        ),
-    )?;
+    let media_type = b.required_kind("type")?;
     let cols = columns(&b)?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
     q.push(

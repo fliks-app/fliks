@@ -119,7 +119,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 8 | `subtitle.translation_progress` | B Us(viewersForMedia) | `{subtitleId: number, mediaId: number, progress: number (0-100)}` |
 | 9 | `import.complete` | Us(viewersForMedia) | `{mediaId: number, title: string, seasonNumber?: number, episodeNumber?: number}`; clears the replay cache |
 | 10 | `import.failed` | Us(recipientsForMedia) | `{mediaId: number, title: string, error: string}` |
-| 11 | `download.progress` | Us(viewersForMedia); skipped when empty; cached for replay | `{mediaId: number, mediaType: 'movie'|'series', downloads: {ref: string, seasonNumber?: number, episodeNumber?: number, progress: number (0-1), dlspeed: number, eta: number, state: DownloadProgressState}[]}` |
+| 11 | `download.progress` | Us(viewersForMedia); skipped when empty or when the media row is missing; cached for replay | `{mediaId: number, mediaType: 'movie'|'series', downloads: {ref: string, seasonNumber?: number, episodeNumber?: number, progress: number (0-1), dlspeed: number, eta: number, state: DownloadProgressState}[]}` |
 | 12 | `stalled.removed` | Us(recipientsForMedia) | `{title: string}` |
 | 13 | `queue.updated` | B | `{}` |
 | 14 | `activity.changed` | B (debounced 250 ms) | `{}` |
