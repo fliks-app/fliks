@@ -19,6 +19,7 @@ import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
+import { KIND_REGISTRY } from '../../../../core/media-kinds';
 
 @Component({
   selector: 'app-request-modal',
@@ -33,6 +34,7 @@ import { SeasonPickerComponent } from '../../../../shared/components/season-pick
   templateUrl: './request-modal.component.html',
 })
 export class RequestModalComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly metadata = inject(MetadataService);
   private readonly requestsApi = inject(RequestsService);
   private readonly toast = inject(ToastService);
@@ -81,7 +83,7 @@ export class RequestModalComponent {
   /** Series only: a pick is required, unless the season list never loaded. */
   readonly nothingPicked = computed(
     () =>
-      this.mediaType() === 'series' && !this.seasonsFailed() && this.selectedSeasons().size === 0,
+      KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
   /** A profile still on the previous library's pre-fill follows the new library. */
@@ -134,7 +136,7 @@ export class RequestModalComponent {
     this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
 
-    if (params.mediaType === 'series') {
+    if (KIND_REGISTRY[params.mediaType].hasSeasons) {
       this.seasonsLoading.set(true);
       const preselected = new Set(params.preselectedSeasons ?? []);
       this.metadata
@@ -183,7 +185,7 @@ export class RequestModalComponent {
   async confirm() {
     this.requesting.set(true);
     try {
-      const isSeries = this.mediaType() === 'series';
+      const isSeries = KIND_REGISTRY[this.mediaType()].hasSeasons;
       await this.requestsApi.create({
         mediaType: this.mediaType(),
         tmdbId: this.tmdbId(),

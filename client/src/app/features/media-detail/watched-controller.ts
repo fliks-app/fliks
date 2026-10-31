@@ -2,6 +2,7 @@ import { computed, signal } from '@angular/core';
 import type { Media, Season, Episode } from '../../core/services/api/media.service';
 import type { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { filesForEpisode } from './media-detail.utils';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 
 export interface WatchedHost {
   media(): Media | null;
@@ -17,7 +18,7 @@ export class WatchedController {
   /** True iff every downloaded episode in a non-special season is watched; drives the series root toggle. */
   readonly seriesFullyWatched = computed(() => {
     const m = this.host.media();
-    if (m?.type !== 'series' || !m.seasons?.length) return false;
+    if (!m || !KIND_REGISTRY[m.type].hasSeasons || !m.seasons?.length) return false;
     const watched = this.episodeIds();
     let total = 0;
     for (const s of m.seasons) {

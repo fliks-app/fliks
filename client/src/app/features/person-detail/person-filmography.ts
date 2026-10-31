@@ -7,6 +7,7 @@ import {
 } from '../../core/services/api/persons-api.service';
 import { PersonDetailComponent } from './person-detail';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 @Component({
   selector: 'app-person-filmography',
@@ -34,12 +35,9 @@ export class PersonFilmographyComponent implements OnInit {
   /** Owned works open in the library; the rest land on the provider preview
    *  page, where they can be requested. */
   linkFor(credit: PersonProviderCreditItem): string[] {
-    const series = credit.mediaType === 'series';
-    if (credit.mediaId) {
-      return [series ? '/series' : '/movies', String(credit.mediaId)];
-    }
+    if (credit.mediaId) return mediaDetailLink(credit.mediaType, credit.mediaId);
     return [
-      series ? '/add/tv' : '/add/movie',
+      '/add/' + KIND_REGISTRY[credit.mediaType].providerSegment,
       this.credits()?.provider ?? 'tmdb',
       String(credit.externalId),
     ];

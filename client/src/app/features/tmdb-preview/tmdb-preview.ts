@@ -69,6 +69,7 @@ interface PreviewSeed {
   templateUrl: './tmdb-preview.html',
 })
 export class TmdbPreviewComponent implements OnInit, OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly metadata = inject(MetadataService);
@@ -95,10 +96,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
   readonly libraries = signal<LibrarySummary[]>([]);
 
-  readonly type = computed(() => {
-    const url = this.router.url;
-    return url.startsWith('/add/tv') ? 'series' : 'movie';
-  });
+  readonly type = computed(() => this.route.snapshot.data['kind'] as MediaType);
 
   /** Provider from route param (e.g. /add/movie/tvdb/123) or default to 'tmdb' */
   readonly provider = computed(() => {
@@ -205,7 +203,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   readonly seasonsLabel = computed(() => {
     const m = this.media();
-    if (this.type() !== 'series' || !m?.seasonCount) return '';
+    if (!KIND_REGISTRY[this.type()].hasSeasons || !m?.seasonCount) return '';
     const plural = (key: string, count: number) =>
       this.translate.instant(
         `media_detail.${key}_${count <= 1 ? 'one' : 'other'}`,
@@ -281,7 +279,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private async loadTitleState(tmdbId: number) {
     try {
       this.titleState.set(
-        await this.requestsApi.getTitleState(tmdbId, this.type() as MediaType),
+        await this.requestsApi.getTitleState(tmdbId, this.type()),
       );
     } catch { /* ignore */ }
   }
@@ -298,7 +296,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     if (!m) return;
     this.importModal()?.open({
       title: m.title,
-      mediaType: this.type() as MediaType,
+      mediaType: this.type(),
       tmdbId: m.tmdbId,
       provider: this.provider(),
       externalId: this.externalId(),
@@ -311,7 +309,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       const page = await this.requestsApi.list(
         {
           tmdbId,
-          mediaType: this.type() as MediaType,
+          mediaType: this.type(),
           status: 'pending',
           kind: 'add',
           limit: 50,
@@ -409,7 +407,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
-      mediaType: this.type() as 'movie' | 'series',
+      mediaType: this.type(),
       tmdbId: m.tmdbId,
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,

@@ -1,4 +1,3 @@
-import type { MediaType } from '../../enums/media-type.enum';
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -11,7 +10,7 @@ export interface ActiveStream {
   mediaId: number;
   mediaFileId: number;
   mediaTitle: string;
-  mediaType: MediaType | 'livetv';
+  mediaType: string;
   episodeId: number | null;
   episodeLabel: string | null;
   posterUrl: string | null;

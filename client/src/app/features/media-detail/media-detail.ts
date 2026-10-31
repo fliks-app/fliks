@@ -136,6 +136,7 @@ interface HandedEpisode {
   templateUrl: './media-detail.html',
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly identifyModalService = inject(IdentifyModalService);
   private readonly trackingModalService = inject(TrackingModalService);
   private readonly route = inject(ActivatedRoute);
@@ -355,7 +356,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m || !params) return;
     // Seeded stub: the episode is already in place and there is no season tree
     // to resolve against, so resolving now would only report it missing.
-    if (m.type === 'series' && !m.seasons) return;
+    if (KIND_REGISTRY[m.type].hasSeasons && !m.seasons) return;
     const idParam = params.get('id');
     const paramId = idParam ? Number(idParam) : NaN;
     if (m.id !== paramId) return;
@@ -704,7 +705,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           .getCrew(m.id)
           .then((c) => this.crew.set(c))
           .catch(() => {});
-        if (m.type === 'movie') {
+        if (!KIND_REGISTRY[m.type].hasSeasons) {
           this.mediaService
             .getSimilar(m.id)
             .then((s) => this.similar.set(s))
@@ -768,7 +769,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     // Preselect the season of the in-progress episode (resumeInfo), else of the first unwatched
     // episode with a file (covers between-episodes, where resumeInfo is null).
     let resumeHandled = false;
-    if (m.type === 'series' && m.seasons?.length) {
+    if (KIND_REGISTRY[m.type].hasSeasons && m.seasons?.length) {
       let targetSeasonId: number | null = null;
       if (resumeInfo?.episodeId) {
         targetSeasonId =
@@ -787,7 +788,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       }
     }
 
-    if (m.type === 'series' && m.seasons?.length) {
+    if (KIND_REGISTRY[m.type].hasSeasons && m.seasons?.length) {
       if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
     } else {
       this.activeSeasonId.set(null);
@@ -856,7 +857,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         });
       }
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.libraryPatchSaved.set(true);
       setTimeout(() => this.libraryPatchSaved.set(false), 3000);
     } finally {
@@ -876,7 +877,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         languageProfileId: this.draftLanguageProfileId(),
       });
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.draftQualityProfileId.set(updated.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
       this.profilesOk.set(this.translate.instant('media_detail.profiles_saved'));
@@ -906,7 +907,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const updated = await this.mediaService.toggleMonitored(m.id, !m.monitored);
       this.media.set(updated);
-      if (updated.type === 'series') {
+      if (KIND_REGISTRY[updated.type].hasSeasons) {
         this.syncActiveSeasonForSeriesFilter();
         const open = this.episodeDrawerContext();
         if (open) {
@@ -1182,7 +1183,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const updated = await this.mediaService.getOne(mediaId, { force: true });
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       // Re-resolve the focused episode against the refreshed tree.
       const ep = this.focusedEpisode();
       if (ep) {
@@ -1243,7 +1244,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Garde activeSeasonId sur une saison visible (onglets) quand le filtre disque est actif. */
   private syncActiveSeasonForSeriesFilter() {
     const m = this.media();
-    if (m?.type !== 'series' || !m.seasons?.length) return;
+    if (!m || !KIND_REGISTRY[m.type].hasSeasons || !m.seasons?.length) return;
     const visible = seasonsVisibleWithDiskFilter(m, this.episodesHasFileOnly());
     if (!visible.length) {
       this.activeSeasonId.set(null);

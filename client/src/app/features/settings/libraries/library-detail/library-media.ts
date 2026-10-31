@@ -19,7 +19,7 @@ import { FolderPickerService } from '../../../../core/services/folder-picker.ser
 import { SseService } from '../../../../core/services/sse.service';
 import { LibraryDetailState } from './library-detail.state';
 import { OrphanScanModalComponent } from './orphan-scan-modal/orphan-scan-modal';
-import { mediaDetailLink } from '../../../../core/media-kinds';
+import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
 
 const PAGE_SIZE = 30;
 
@@ -37,6 +37,7 @@ const PAGE_SIZE = 30;
   templateUrl: './library-media.html',
 })
 export class LibraryMediaComponent implements OnInit {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly mediaService = inject(MediaService);
   private readonly folderPicker = inject(FolderPickerService);
   private readonly sse = inject(SseService);

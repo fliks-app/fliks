@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { Media } from './media.service';
+import type { MediaType } from '../../enums/media-type.enum';
 
 export interface Person {
   id: number;
@@ -35,7 +36,7 @@ export interface PersonMediaCredit {
 export interface PersonProviderCreditItem {
   externalId: number;
   title: string;
-  mediaType: 'movie' | 'series';
+  mediaType: MediaType;
   character?: string;
   job?: string;
   department?: string;

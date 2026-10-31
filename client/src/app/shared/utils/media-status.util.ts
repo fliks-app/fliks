@@ -18,7 +18,7 @@ export function computeMediaBarStatus(m: Media): BarStatus {
 
 
 function isMediaReleased(m: Media): boolean {
-  if (m.type === 'series') {
+  if (KIND_REGISTRY[m.type].hasSeasons) {
     return m.status === 'continuing' || m.status === 'ended';
   }
   const now = new Date();

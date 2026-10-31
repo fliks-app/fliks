@@ -66,6 +66,7 @@ import { KIND_REGISTRY } from '../../core/media-kinds';
   templateUrl: './requests.html',
 })
 export class RequestsComponent implements OnInit, OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly requestsService = inject(RequestsService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);

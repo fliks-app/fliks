@@ -3,7 +3,7 @@ import type { MediaType } from './enums/media-type.enum';
 export interface KindDescriptor {
   /** Route segment of the detail page, without the leading slash. */
   segment: string;
-  /** Metadata-provider path segment for this kind. */
+  /** The kind in the metadata API path, the `/add/*` route and the view-transition name. */
   providerSegment: string;
   /** Key of the request-type label. */
   requestLabelKey: string;
@@ -33,6 +33,11 @@ export function isMediaKind(value: unknown): value is MediaType {
   return typeof value === 'string' && Object.hasOwn(KIND_REGISTRY, value);
 }
 
+/** A wire string as a kind, or undefined when it names none. */
+export function asKind(value: unknown): MediaType | undefined {
+  return isMediaKind(value) ? value : undefined;
+}
+
 /** Router link of a title's detail page. */
 export function mediaDetailLink(type: MediaType, id: number | string): string[] {
   return ['/' + KIND_REGISTRY[type].segment, String(id)];
@@ -47,7 +52,18 @@ export function assertNever(value: never): never {
   throw new Error(`Unhandled media kind: ${String(value)}`);
 }
 
-/** The kind a list filter stands for when it must pick one: "all" falls on the first kind. */
-export function filterKind(filter: 'all' | MediaType): MediaType {
-  return filter === 'all' ? MEDIA_KINDS[0] : filter;
+/** The kind a list filter stands for when it must name one: "all" falls on this one. */
+export const DEFAULT_LIST_KIND: MediaType = 'movie';
+
+export function kindOfListFilter(filter: 'all' | MediaType): MediaType {
+  return filter === 'all' ? DEFAULT_LIST_KIND : filter;
+}
+
+/** Regex alternations over every kind's detail segment and `/add/*` segment. */
+export const DETAIL_SEGMENTS_PATTERN = MEDIA_KINDS.map((k) => KIND_REGISTRY[k].segment).join('|');
+export const PROVIDER_SEGMENTS_PATTERN = MEDIA_KINDS.map((k) => KIND_REGISTRY[k].providerSegment).join('|');
+
+/** The kind served at an `/add/<segment>` route segment, if any. */
+export function kindFromProviderSegment(segment: string | null | undefined): MediaType | undefined {
+  return MEDIA_KINDS.find((k) => KIND_REGISTRY[k].providerSegment === segment);
 }

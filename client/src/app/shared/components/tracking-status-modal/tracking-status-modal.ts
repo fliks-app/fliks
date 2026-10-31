@@ -16,6 +16,7 @@ import {
 } from '../../../core/services/api/media.service';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { KIND_REGISTRY } from '../../../core/media-kinds';
 
 export type TrackingScope =
   | { kind: 'movie' }
@@ -39,6 +40,7 @@ export type TrackingScope =
   templateUrl: './tracking-status-modal.html',
 })
 export class TrackingStatusModalComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly media = inject(MediaService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 

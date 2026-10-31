@@ -4,8 +4,9 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { TmdbGenre } from '../../../core/services/api/metadata.service';
 import { SearchParams } from '../../../core/services/api/media.service';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
+import type { MediaType } from '../../../core/enums/media-type.enum';
 
-export type SearchContentType = 'all' | 'movie' | 'series';
+export type SearchContentType = 'all' | MediaType;
 
 export const DEFAULT_SORT = 'popularity.desc';
 

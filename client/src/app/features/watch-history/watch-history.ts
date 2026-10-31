@@ -11,7 +11,7 @@ import { PaginationComponent } from '../../shared/components/pagination/paginati
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { mediaDetailLink } from '../../core/media-kinds';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 @Component({
   selector: 'app-watch-history',
@@ -21,6 +21,7 @@ import { mediaDetailLink } from '../../core/media-kinds';
   templateUrl: './watch-history.html',
 })
 export class WatchHistoryComponent implements OnInit, OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly streamingApi = inject(StreamingApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);

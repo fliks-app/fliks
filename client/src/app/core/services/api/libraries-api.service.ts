@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
+import type { MediaType } from '../../enums/media-type.enum';
 
 /** Lightweight library projection for non-admin users (sidebar, route resolution). */
 export interface LibrarySummary {
@@ -9,7 +10,7 @@ export interface LibrarySummary {
   name: string;
   icon: string | null;
   color: string | null;
-  mediaTypes: ('movie' | 'series')[];
+  mediaTypes: MediaType[];
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
 }
@@ -25,7 +26,7 @@ export interface Library {
   name: string;
   icon: string | null;
   color: string | null;
-  mediaTypes: ('movie' | 'series')[];
+  mediaTypes: MediaType[];
   preferredProvider: string | null;
   metadataLanguage: string | null;
   metadataRegion: string | null;
@@ -41,7 +42,7 @@ export interface CreateLibraryBody {
   name: string;
   icon?: string | null;
   color?: string | null;
-  mediaTypes?: ('movie' | 'series')[];
+  mediaTypes?: MediaType[];
   preferredProvider?: string | null;
   metadataLanguage?: string | null;
   metadataRegion?: string | null;

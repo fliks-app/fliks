@@ -268,7 +268,7 @@ export class MetadataService {
   }
 
   /** Provider-aware detail fetch */
-  getDetails(provider: string, mediaType: 'movie' | 'series', externalId: string) {
+  getDetails(provider: string, mediaType: MediaType, externalId: string) {
     const segment = KIND_REGISTRY[mediaType].providerSegment;
     return firstValueFrom(
       this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${externalId}`),

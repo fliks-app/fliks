@@ -55,7 +55,7 @@
             <div class="collapse-title cursor-pointer flex items-center justify-between gap-2 flex-wrap pr-12"
               (click)="toggleCollapse(i)">
               <div class="flex items-center gap-2 min-w-0">
-                <span class="badge badge-sm" [class.badge-info]="vm.group.mediaType === 'series'">
+                <span class="badge badge-sm" [class.badge-info]="kinds[vm.group.mediaType].hasSeasons">
                   {{ groupLabelKeys[vm.group.mediaType] | translate }}
                 </span>
                 <span class="font-mono text-sm text-base-content/70 truncate">{{ vm.group.folderName || vm.group.files[0].filename }}</span>

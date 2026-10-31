@@ -36,6 +36,7 @@ import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
   templateUrl: './import-modal.component.html',
 })
 export class ImportModalComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly metadata = inject(MetadataService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -83,7 +84,7 @@ export class ImportModalComponent {
    *  confirm button waits for a pick, same rule as the request modal. */
   protected readonly nothingToMonitor = computed(
     () =>
-      this.mediaType() === 'series' && !this.seasonsFailed() && this.selectedSeasons().size === 0,
+      KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
   async open(params: {
@@ -105,7 +106,7 @@ export class ImportModalComponent {
     this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
 
-    if (params.mediaType === 'series') this.loadSeasons();
+    if (KIND_REGISTRY[params.mediaType].hasSeasons) this.loadSeasons();
 
     this.loading.set(true);
     try {

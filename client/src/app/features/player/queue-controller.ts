@@ -17,6 +17,7 @@ import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { PartyService } from '../../core/services/party/party.service';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 
 export interface QueueHost {
   media(): Media | null;
@@ -65,7 +66,7 @@ export class QueueController {
     this.host.mediaLoadedTick();
     const m = this.host.media();
     const currentEpId = this.host.episodeId();
-    if (!m || m.type !== 'series' || !currentEpId || !m.seasons?.length) return null;
+    if (!m || !KIND_REGISTRY[m.type].hasSeasons || !currentEpId || !m.seasons?.length) return null;
     // Flatten episodes in S/E order (skip specials: seasonNumber <= 0).
     const flat: { seasonNumber: number; episodeNumber: number; id: number }[] = [];
     for (const s of m.seasons) {

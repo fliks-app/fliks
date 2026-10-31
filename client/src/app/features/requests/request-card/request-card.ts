@@ -43,6 +43,7 @@ import { KIND_REGISTRY } from '../../../core/media-kinds';
 export class RequestCardComponent {
   private readonly router = inject(Router);
 
+  protected readonly kinds = KIND_REGISTRY;
   readonly request = input.required<FliksRequestRow>();
   readonly canManage = input(false);
   readonly qualityProfileName = input('-');

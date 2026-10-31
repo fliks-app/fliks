@@ -156,6 +156,7 @@ interface AudioTrack {
   templateUrl: './media-info-header.html',
 })
 export class MediaInfoHeaderComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -284,7 +285,7 @@ export class MediaInfoHeaderComponent {
   /** A series root marks every episode at once, so it needs no selected file;
    *  a movie or a single episode toggles one file and does need one. */
   readonly canToggleWatched = computed(
-    () => (this.mediaType() === 'series' && !this.episodeId()) || !!this.selectedFileId(),
+    () => (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) || !!this.selectedFileId(),
   );
 
   // ── Outputs (delegated to parent) ──
@@ -369,7 +370,7 @@ export class MediaInfoHeaderComponent {
 
 
     // A series root toggle marks every episode, so it reads the aggregate `seriesFullyWatched`, keyed on the episode input rather than the resume fallback.
-    if (this.mediaType() === 'series' && !this.episodeId()) {
+    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
     } else {
       this.playable.loadWatchedState(mediaId, episodeId).then((v) => {
@@ -378,7 +379,7 @@ export class MediaInfoHeaderComponent {
       });
     }
 
-    if (this.mediaType() === 'series' && !episodeId) {
+    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !episodeId) {
       // A series' own row is never its resume target; the parent resolves `resumeEpisodeId` shortly and re-runs this.
       return;
     }
@@ -511,7 +512,7 @@ export class MediaInfoHeaderComponent {
   async onToggleWatched() {
     const mediaId = this.mediaId();
     // Series root toggle: bulk mark every episode as (un)watched.
-    if (this.mediaType() === 'series' && !this.episodeId()) {
+    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) {
       const target = !this.watched();
       try {
         const result = await this.streamingApi.toggleSeriesWatched(mediaId, target);
@@ -692,7 +693,7 @@ export class MediaInfoHeaderComponent {
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
-      const needsFile = this.mediaType() === 'movie' || !!this.episodeId();
+      const needsFile = !KIND_REGISTRY[this.mediaType()].hasSeasons || !!this.episodeId();
       return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
     },
     // Already `requests.create && !media.delete && !<pending>` — pending is

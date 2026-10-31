@@ -4,6 +4,7 @@ import type { Media, MediaService } from '../../core/services/api/media.service'
 import type { MarkersApiService } from '../../core/services/api/markers-api.service';
 import type { ToastService } from '../../core/services/toast.service';
 import { serverMessage } from '../../core/utils/server-message';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 
 export interface AnalyzeHost {
   media(): Media | null;
@@ -35,7 +36,10 @@ export class AnalyzeController {
   readonly hasSelection = computed(() => Object.values(this.opts()).some(Boolean));
   /** Intro/outro detection is episode-based, so the analyze option only
    *  applies to series. */
-  readonly showMarkers = computed(() => this.host.media()?.type === 'series');
+  readonly showMarkers = computed(() => {
+    const m = this.host.media();
+    return !!m && KIND_REGISTRY[m.type].hasSeasons;
+  });
 
   constructor(
     private readonly host: AnalyzeHost,

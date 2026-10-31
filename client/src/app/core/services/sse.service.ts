@@ -43,7 +43,7 @@ export interface RemoteCommand {
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
     | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality' | 'browse';
   mediaId?: number;
-  mediaType?: 'movie' | 'series';
+  mediaType?: MediaType;
   mediaFileId?: number;
   episodeId?: number;
   positionSeconds?: number;

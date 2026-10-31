@@ -153,7 +153,7 @@ export interface TrackingEpisode extends TrackingItemState {
 }
 
 export interface TrackingStatus {
-  type: 'movie' | 'series';
+  type: MediaType;
   hasProfile: boolean;
   movie?: TrackingItemState;
   seasons?: { seasonNumber: number; episodes: TrackingEpisode[] }[];

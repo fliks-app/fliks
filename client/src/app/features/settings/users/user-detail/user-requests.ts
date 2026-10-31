@@ -12,6 +12,7 @@ import {
   FliksRequestRow,
 } from '../../../../core/services/api/requests.service';
 import { UserDetailState } from './user-detail.state';
+import { KIND_REGISTRY } from '../../../../core/media-kinds';
 
 @Component({
   selector: 'app-user-requests',
@@ -19,6 +20,7 @@ import { UserDetailState } from './user-detail.state';
   templateUrl: './user-requests.html',
 })
 export class UserRequestsComponent implements OnInit {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly requestsApi = inject(RequestsService);
   private readonly state = inject(UserDetailState);
 

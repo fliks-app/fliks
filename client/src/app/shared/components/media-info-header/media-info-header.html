@@ -142,7 +142,7 @@
           {{ 'media_info.watched' | translate }}
         </button>
       }
-      @if (selectedFileId() && (mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
+      @if (selectedFileId() && (!kinds[mediaType()].hasSeasons || episodeId()) && !tv.isTv()) {
         @if (download(); as d) {
           @if (d.status === 'ready') {
             <button class="flex flex-col items-center gap-1 text-sm text-success" (click)="openDownload.emit()">
@@ -164,7 +164,7 @@
       }
       <!-- Like is a taste signal, not a playback action — available on movies,
            series and episodes, with or without a local file. -->
-      @if (mediaType() === 'movie' || mediaType() === 'series' || episodeId()) {
+      @if (kinds[mediaType()] || episodeId()) {
         <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" [class.text-error]="liked()" (click)="likeToggled.emit()">
           <svg lucideHeart class="h-5 w-5" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           {{ 'likes.like' | translate }}
@@ -333,7 +333,7 @@
           </button>
         }
         @if (selectedFileId() || resumeMediaFileId()) {
-          @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
+          @if ((!kinds[mediaType()].hasSeasons || episodeId()) && !tv.isTv()) {
             @if (download(); as d) {
               @if (d.status === 'ready') {
                 <button type="button" class="btn btn-ghost btn btn-circle text-success" [attr.aria-label]="'downloads.downloaded' | translate" [title]="'downloads.downloaded' | translate" (click)="openDownload.emit()">
@@ -356,7 +356,7 @@
         }
         <!-- Like is a taste signal, not a playback action — available on movies,
              series and episodes, with or without a local file. -->
-        @if (mediaType() === 'movie' || mediaType() === 'series' || episodeId()) {
+        @if (kinds[mediaType()] || episodeId()) {
           <button type="button" class="btn btn-ghost btn btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" (click)="likeToggled.emit()">
             <svg lucideHeart class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           </button>
@@ -453,7 +453,7 @@
 
 <!-- Video / Audio / Subtitles shared by mobile and desktop (hidden on series overview). -->
 <ng-template #streamInfoBlock>
-  @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
+  @if (selectedFileId() && (!kinds[mediaType()].hasSeasons || episodeId())) {
     <!-- min-h reserves the tallest child (a `select-sm`): the subtitle dropdown
          arrives after the video/audio labels, which are plain text. -->
     <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5 min-h-8">

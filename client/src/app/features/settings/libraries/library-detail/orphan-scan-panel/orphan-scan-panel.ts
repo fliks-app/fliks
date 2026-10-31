@@ -27,6 +27,7 @@ import {
   RelinkOrphansBody,
   TransferMethod,
 } from '../../../../../core/services/api/imports-api.service';
+import { KIND_REGISTRY } from '../../../../../core/media-kinds';
 
 const PAGE_SIZE = 20;
 const SEARCH_CONCURRENCY = 8;
@@ -65,6 +66,7 @@ interface GroupVM {
   host: { class: 'flex flex-col min-h-0 flex-1' },
 })
 export class OrphanScanPanelComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly importsApi = inject(ImportsApiService);
   private readonly metadata = inject(MetadataService);
   private readonly toast = inject(ToastService);

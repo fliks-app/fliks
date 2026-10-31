@@ -1,4 +1,14 @@
-import { KIND_REGISTRY, MEDIA_KINDS, isMediaKind, kindFromSegment, mediaDetailLink } from './media-kinds';
+import {
+  DEFAULT_LIST_KIND,
+  KIND_REGISTRY,
+  MEDIA_KINDS,
+  asKind,
+  isMediaKind,
+  kindFromProviderSegment,
+  kindFromSegment,
+  kindOfListFilter,
+  mediaDetailLink,
+} from './media-kinds';
 
 describe('media kind registry', () => {
   it('describes every kind', () => {
@@ -18,5 +28,19 @@ describe('media kind registry', () => {
     expect(kindFromSegment('nope')).toBeUndefined();
     expect(isMediaKind('movie')).toBe(true);
     expect(isMediaKind('toString')).toBe(false);
+  });
+
+  it('narrows wire strings', () => {
+    expect(asKind('series')).toBe('series');
+    expect(asKind('')).toBeUndefined();
+    expect(asKind(null)).toBeUndefined();
+    expect(kindFromProviderSegment('tv')).toBe('series');
+    expect(kindFromProviderSegment('series')).toBeUndefined();
+  });
+
+  it('maps a list filter to a kind, "all" onto the default', () => {
+    expect(kindOfListFilter('all')).toBe(DEFAULT_LIST_KIND);
+    expect(kindOfListFilter('series')).toBe('series');
+    expect(kindOfListFilter('movie')).toBe('movie');
   });
 });

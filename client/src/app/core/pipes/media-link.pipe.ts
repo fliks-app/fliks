@@ -4,7 +4,7 @@ import { mediaDetailLink } from '../media-kinds';
 
 @Pipe({ name: 'mediaLink' })
 export class MediaLinkPipe implements PipeTransform {
-  transform(type: MediaType | null | undefined, id: number | string): string[] {
-    return mediaDetailLink(type ?? 'movie', id);
+  transform(type: MediaType, id: number | string): string[] {
+    return mediaDetailLink(type, id);
   }
 }

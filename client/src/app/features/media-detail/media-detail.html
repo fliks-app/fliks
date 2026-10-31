@@ -244,11 +244,11 @@
           (openDownloadDetail)="openDownloadDetailModal()"
         />
 
-        @if (m.type === 'movie') {
+        @if (!kinds[m.type].hasSeasons) {
           <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
-        @if (m.type === 'movie' && collection(); as coll) {
+        @if (!kinds[m.type].hasSeasons && collection(); as coll) {
           <div class="divider my-6"></div>
           <app-collapsible-section
             [heading]="'media_detail.part_of' | translate: { name: coll.name }"
@@ -260,7 +260,7 @@
           </app-collapsible-section>
         }
 
-        @if (m.type === 'movie' && similar().length) {
+        @if (!kinds[m.type].hasSeasons && similar().length) {
           <div class="divider my-6"></div>
           <app-collapsible-section
             [heading]="'media_detail.similar' | translate"
@@ -270,12 +270,12 @@
           </app-collapsible-section>
         }
 
-        @if (m.type === 'movie' && cast().length) {
+        @if (!kinds[m.type].hasSeasons && cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }
 
-        @if (m.type === 'movie') {
+        @if (!kinds[m.type].hasSeasons) {
           <app-subtitles-modal
             [mediaId]="m.id"
             [selectedFileId]="activeFileId()"
@@ -300,7 +300,7 @@
           />
         }
 
-        @if (m.type === 'series' && m.seasons?.length) {
+        @if (kinds[m.type].hasSeasons && m.seasons?.length) {
           <app-media-detail-seasons
             [media]="m"
             [selectedSeason]="activeSeason(m)"
@@ -338,11 +338,11 @@
           />
         }
 
-        @if (m.type === 'series') {
+        @if (kinds[m.type].hasSeasons) {
           <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
-        @if (m.type === 'series' && cast().length) {
+        @if (kinds[m.type].hasSeasons && cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }

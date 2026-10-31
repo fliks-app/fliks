@@ -7,6 +7,7 @@ import type { ReleasesModalComponent } from './components/releases-modal/release
 import type { MediaDetailReleasePickerService, MovieRelease } from './media-detail-release-picker.service';
 import { isUnprofiledReleaseError, releaseGrabBody } from './media-detail-release.utils';
 import type { IndexerRosterEntry, ReleaseSearchStreamService } from './release-search-stream.service';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 
 export interface ReleaseGrabHost {
   media(): Media | null;
@@ -89,7 +90,7 @@ export class ReleaseGrabController {
 
   async loadReleases() {
     const m = this.host.media();
-    if (!m || m.type !== 'movie') return;
+    if (!m || KIND_REGISTRY[m.type].hasSeasons) return;
     this.releasesLoading.set(true);
     this.releasesError.set('');
     this.releasesEmptyMessage.set(RELEASES_EMPTY);
@@ -169,13 +170,13 @@ export class ReleaseGrabController {
 
   async grabBest() {
     const m = this.host.media();
-    if (!m || m.type !== 'movie') return;
+    if (!m || KIND_REGISTRY[m.type].hasSeasons) return;
     await this.runGrabBest(this.movieGrabBestBusy, m.id, {}, () => this.deps.api.grabMovie(m.id, {}));
   }
 
   async grabRelease(r: MovieRelease, key: string) {
     const m = this.host.media();
-    if (!m || m.type !== 'movie') return;
+    if (!m || KIND_REGISTRY[m.type].hasSeasons) return;
     this.grabBusy.set(key);
     try {
       await this.withGrabPhase({}, () => this.deps.api.grabMovie(m.id, releaseGrabBody(r)));

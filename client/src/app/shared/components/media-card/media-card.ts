@@ -36,7 +36,7 @@ import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plug
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { isActive, type DownloadStatus } from '../../../core/services/download-status';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
-import { mediaDetailLink } from '../../../core/media-kinds';
+import { PROVIDER_SEGMENTS_PATTERN, kindFromSegment, mediaDetailLink } from '../../../core/media-kinds';
 
 /** Provided by the search page so its cards keep the type badge under the 'search' setting. */
 export const SEARCH_CARD_CONTEXT = new InjectionToken<boolean>('SEARCH_CARD_CONTEXT');
@@ -239,7 +239,7 @@ export class MediaCardComponent {
     const id = this.resolveMediaId();
     const link = this.link();
     if (id == null || !link) return undefined;
-    const type: 'movie' | 'series' = link[0] === '/series' ? 'series' : 'movie';
+    const type = kindFromSegment(link[0].slice(1)) ?? 'movie';
     const stub = {
       id,
       type,
@@ -256,7 +256,7 @@ export class MediaCardComponent {
     if (id == null) return undefined;
     const stub = {
       id,
-      type: this.titleLink()![0] === '/series' ? 'series' : 'movie',
+      type: kindFromSegment(this.titleLink()![0].slice(1)) ?? 'movie',
       title: this._title(),
       posterUrl: this.titlePosterUrl(),
       fanartUrl: this.fanartUrl() ?? null,
@@ -300,7 +300,7 @@ export class MediaCardComponent {
 
   /** A `/add/<movie|tv>/[provider/]<id>` link: a title the library does not hold. */
   private readonly previewTarget = computed(() => {
-    const hit = this.link()?.join('/').match(/^\/add\/(movie|tv)\/(?:([^/]+)\/)?([^/]+)$/);
+    const hit = this.link()?.join('/').match(new RegExp(`^/add/(${PROVIDER_SEGMENTS_PATTERN})/(?:([^/]+)/)?([^/]+)$`));
     return hit ? { type: hit[1], provider: hit[2] ?? 'tmdb', externalId: hit[3] } : null;
   });
 

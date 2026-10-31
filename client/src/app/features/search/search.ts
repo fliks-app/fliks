@@ -41,7 +41,8 @@ import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
-import { KIND_REGISTRY, filterKind, mediaDetailLink } from '../../core/media-kinds';
+import { KIND_REGISTRY, kindOfListFilter, mediaDetailLink } from '../../core/media-kinds';
+import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-search',
@@ -266,7 +267,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  setContentType(ct: 'all' | 'movie' | 'series') {
+  setContentType(ct: 'all' | MediaType) {
     if (ct === this.state.contentType()) return;
     // Discover genres/results are type-specific — drop them when the type changes.
     this.state.resetDiscover();
@@ -311,7 +312,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Populate the empty-state discovery rows; TMDB rows need external search, suggestions come from the library, and each fetch fails soft. */
   private async loadDiscovery(
-    ct: 'all' | 'movie' | 'series',
+    ct: 'all' | MediaType,
     external: boolean,
   ): Promise<void> {
     this.state.discoveryLoading.set(true);
@@ -336,7 +337,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       const [trending, popular, genres] = await Promise.all([
         this.fetchTrending(ct, this.state.trendingWindow()),
         this.fetchPopular(ct),
-        this.metadata.genresByKind(filterKind(ct)).catch(
+        this.metadata.genresByKind(kindOfListFilter(ct)).catch(
           () => [],
         ),
       ]);
@@ -379,13 +380,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** TMDB discover across the taste genres (one call per genre, merged
    *  round-robin + deduped — an OR the AND-only /discover can't express). */
   private async fetchSuggestions(
-    ct: 'all' | 'movie' | 'series',
+    ct: 'all' | MediaType,
     genreIds: number[],
   ): Promise<MetadataSearchResult[]> {
     if (!genreIds.length) return [];
     const perGenre = await Promise.all(
       genreIds.map((id) =>
-        this.metadata.discoverByKind(filterKind(ct), { genreIds: [id], sort: 'popularity.desc' }).catch(() => [] as MetadataSearchResult[]),
+        this.metadata.discoverByKind(kindOfListFilter(ct), { genreIds: [id], sort: 'popularity.desc' }).catch(() => [] as MetadataSearchResult[]),
       ),
     );
     const out: MetadataSearchResult[] = [];
@@ -404,7 +405,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async fetchTrending(
-    ct: 'all' | 'movie' | 'series',
+    ct: 'all' | MediaType,
     window: 'day' | 'week',
   ): Promise<MetadataSearchResult[]> {
     if (ct !== 'all') return this.metadata.trendingByKind(ct, window).catch(() => []);
@@ -416,7 +417,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async fetchPopular(
-    ct: 'all' | 'movie' | 'series',
+    ct: 'all' | MediaType,
   ): Promise<MetadataSearchResult[]> {
     if (ct !== 'all') return this.metadata.popularByKind(ct).catch(() => []);
     const [m, t] = await Promise.all([
@@ -428,7 +429,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** True if the type/toggle moved on while a discovery fetch was in flight. */
   private staleDiscovery(
-    ct: 'all' | 'movie' | 'series',
+    ct: 'all' | MediaType,
     external: boolean,
   ): boolean {
     return (
@@ -480,7 +481,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.discoverLoading.set(true);
     const fresh = () => this.lastDiscoverSig === sig;
     try {
-      const rows = await this.metadata.discoverByKind(filterKind(ct), opts);
+      const rows = await this.metadata.discoverByKind(kindOfListFilter(ct), opts);
       if (fresh()) {
         this.state.discoverResults.set(rows);
         this.loadRequestedIds();
@@ -519,12 +520,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
    *  the filter panel's genre chips render during a text search. Fails soft. */
   private async ensureDiscoverGenres(): Promise<void> {
     if (this.state.tab() !== 'videos') return;
-    const type = filterKind(this.state.contentType());
+    const type = kindOfListFilter(this.state.contentType());
     if (type === this.lastGenreType && this.state.discoverGenres().length) return;
     this.lastGenreType = type;
     const stale = () =>
       this.state.tab() !== 'videos' ||
-      filterKind(this.state.contentType()) !== type;
+      kindOfListFilter(this.state.contentType()) !== type;
     try {
       const genres = await this.metadata.genresByKind(type);
       if (!stale()) this.state.discoverGenres.set(genres);
@@ -539,12 +540,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Series toggle via the bulk endpoint; movies need a local file. */
   canMarkMediaWatched(m: Media): boolean {
-    return m.type === 'series' || !!m.files?.length;
+    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
   }
 
   async toggleMediaWatched(m: Media, watched: boolean) {
     try {
-      if (m.type === 'series') {
+      if (KIND_REGISTRY[m.type].hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;
@@ -594,7 +595,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Local library query with the discover panel filters pushed to the backend
    *  (q + genres + year + rating + sort). Re-run standalone on a filter change. */
-  private async runLocalSearch(q: string, ct: 'all' | 'movie' | 'series') {
+  private async runLocalSearch(q: string, ct: 'all' | MediaType) {
     const sig = (this.lastLocalSig = this.filterSig(q, ct));
     // Selected genres are mapped to names via the loaded genre list; wait for it
     // when a genre is selected so the filter isn't silently dropped.
@@ -634,7 +635,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** External provider (TMDB) title search. Not re-run on filter changes — the
    *  state computeds re-filter the fetched rows client-side. */
-  private async runExternalSearch(q: string, ct: 'all' | 'movie' | 'series') {
+  private async runExternalSearch(q: string, ct: 'all' | MediaType) {
     const fresh = () => this.state.query().trim() === q && this.state.contentType() === ct;
     this.state.externalLoading.set(true);
     try {
