@@ -2,7 +2,6 @@ import {
   DEFAULT_LIST_KIND,
   KIND_REGISTRY,
   MEDIA_KINDS,
-  asKind,
   isMediaKind,
   kindFromProviderSegment,
   kindFromSegment,
@@ -31,9 +30,6 @@ describe('media kind registry', () => {
   });
 
   it('narrows wire strings', () => {
-    expect(asKind('series')).toBe('series');
-    expect(asKind('')).toBeUndefined();
-    expect(asKind(null)).toBeUndefined();
     expect(kindFromProviderSegment('tv')).toBe('series');
     expect(kindFromProviderSegment('series')).toBeUndefined();
   });

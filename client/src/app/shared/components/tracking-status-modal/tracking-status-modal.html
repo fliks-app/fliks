@@ -13,9 +13,9 @@
         </div>
       }
 
-      @if (!kinds[d.type].hasSeasons && d.movie) {
+      @if (singleTitleLabelKeys[d.type] && d.movie) {
         <div class="flex items-center justify-between gap-3 py-1.5">
-          <span class="text-sm font-medium">{{ 'tracking.this_movie' | translate }}</span>
+          <span class="text-sm font-medium">{{ singleTitleLabelKeys[d.type]! | translate }}</span>
           <ng-container *ngTemplateOutlet="line; context: { $implicit: d.movie }"></ng-container>
         </div>
       } @else {

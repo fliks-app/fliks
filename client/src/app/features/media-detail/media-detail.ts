@@ -705,7 +705,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           .getCrew(m.id)
           .then((c) => this.crew.set(c))
           .catch(() => {});
-        if (!KIND_REGISTRY[m.type].hasSeasons) {
+        if (m.type === 'movie') {
           this.mediaService
             .getSimilar(m.id)
             .then((s) => this.similar.set(s))

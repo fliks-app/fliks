@@ -33,11 +33,6 @@ export function isMediaKind(value: unknown): value is MediaType {
   return typeof value === 'string' && Object.hasOwn(KIND_REGISTRY, value);
 }
 
-/** A wire string as a kind, or undefined when it names none. */
-export function asKind(value: unknown): MediaType | undefined {
-  return isMediaKind(value) ? value : undefined;
-}
-
 /** Router link of a title's detail page. */
 export function mediaDetailLink(type: MediaType, id: number | string): string[] {
   return ['/' + KIND_REGISTRY[type].segment, String(id)];

@@ -244,11 +244,11 @@
           (openDownloadDetail)="openDownloadDetailModal()"
         />
 
-        @if (!kinds[m.type].hasSeasons) {
+        @if (m.type === 'movie') {
           <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
-        @if (!kinds[m.type].hasSeasons && collection(); as coll) {
+        @if (m.type === 'movie' && collection(); as coll) {
           <div class="divider my-6"></div>
           <app-collapsible-section
             [heading]="'media_detail.part_of' | translate: { name: coll.name }"
@@ -260,7 +260,7 @@
           </app-collapsible-section>
         }
 
-        @if (!kinds[m.type].hasSeasons && similar().length) {
+        @if (m.type === 'movie' && similar().length) {
           <div class="divider my-6"></div>
           <app-collapsible-section
             [heading]="'media_detail.similar' | translate"
@@ -275,7 +275,7 @@
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }
 
-        @if (!kinds[m.type].hasSeasons) {
+        @if (m.type === 'movie') {
           <app-subtitles-modal
             [mediaId]="m.id"
             [selectedFileId]="activeFileId()"

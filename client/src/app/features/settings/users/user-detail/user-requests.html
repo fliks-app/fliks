@@ -41,7 +41,7 @@
           <tr>
             <td class="font-medium max-w-xs truncate" [title]="req.title">{{ req.title }}</td>
             <td>
-              <span class="badge badge-sm" [class.badge-info]="!kinds[req.mediaType].hasSeasons" [class.badge-accent]="kinds[req.mediaType].hasSeasons">
+              <span class="badge badge-sm" [class]="badgeClasses[req.mediaType]">
                 {{ req.mediaType }}
               </span>
             </td>

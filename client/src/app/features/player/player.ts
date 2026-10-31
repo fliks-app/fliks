@@ -130,7 +130,7 @@ import { isMutedAt, muteRangesOf } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { KIND_REGISTRY, asKind, mediaDetailLink } from '../../core/media-kinds';
+import { KIND_REGISTRY, isMediaKind, mediaDetailLink } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
@@ -1183,7 +1183,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (offlineCheck) {
         this.isOfflinePlayback = true;
         this.offlineCrop = download?.offlineCrop ?? null;
-        this.offlineMediaType = asKind(download?.media?.type);
+        this.offlineMediaType = isMediaKind(download?.media?.type) ? download.media.type : undefined;
       }
 
       // playback-info runs once the media is known: its audio index picks the DEFAULT rendition, and

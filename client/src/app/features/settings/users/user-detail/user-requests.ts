@@ -12,7 +12,7 @@ import {
   FliksRequestRow,
 } from '../../../../core/services/api/requests.service';
 import { UserDetailState } from './user-detail.state';
-import { KIND_REGISTRY } from '../../../../core/media-kinds';
+import type { MediaType } from '../../../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-user-requests',
@@ -20,7 +20,10 @@ import { KIND_REGISTRY } from '../../../../core/media-kinds';
   templateUrl: './user-requests.html',
 })
 export class UserRequestsComponent implements OnInit {
-  protected readonly kinds = KIND_REGISTRY;
+  protected readonly badgeClasses: Record<MediaType, string> = {
+    movie: 'badge-info',
+    series: 'badge-accent',
+  };
   private readonly requestsApi = inject(RequestsService);
   private readonly state = inject(UserDetailState);
 
