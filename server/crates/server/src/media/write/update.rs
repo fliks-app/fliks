@@ -7,8 +7,9 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
-    ingest::load_media,
+    ingest::{MediaRow, load_media},
     libraries::{accessible_library_ids, assert_media_accessible},
+    media::external_ids,
     requests::MediaRef,
     state::AppState,
 };
@@ -20,7 +21,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::kind::MediaKind,
+    media::{external_id::ExternalProvider, kind::MediaKind},
 };
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
@@ -65,6 +66,47 @@ enum Col {
     Date(Option<String>),
 }
 
+/// The external ids a `CreateMediaDto` / `UpdateMediaDto` body carries; `None` leaves one alone, `Some(None)` clears it.
+struct BodyIds {
+    tmdb: Option<Option<i32>>,
+    imdb: Option<Option<String>>,
+}
+
+fn body_ids(b: &Body) -> Result<BodyIds, AppError> {
+    Ok(BodyIds {
+        tmdb: b.int("tmdbId")?,
+        imdb: b.str("imdbId")?,
+    })
+}
+
+impl BodyIds {
+    /// Whether applying the ids changes what the media holds.
+    fn differ(&self, m: &MediaRow) -> bool {
+        let tmdb = |t: &Option<i32>| t.filter(|t| *t > 0);
+        let imdb = |i: &Option<String>| i.clone().filter(|i| !i.is_empty());
+        self.tmdb.as_ref().is_some_and(|t| tmdb(t) != m.tmdb_id)
+            || self.imdb.as_ref().is_some_and(|i| imdb(i) != m.imdb_id)
+    }
+
+    /// `false` when another media of the kind holds one of the ids.
+    async fn apply(
+        &self,
+        c: &mut PgConnection,
+        id: i32,
+        kind: MediaKind,
+    ) -> Result<bool, sqlx::Error> {
+        let mut free = true;
+        if let Some(t) = &self.tmdb {
+            let v = t.map(|t| t.to_string());
+            free &= external_ids::set(c, id, kind, ExternalProvider::Tmdb, v.as_deref()).await?;
+        }
+        if let Some(i) = &self.imdb {
+            free &= external_ids::set(c, id, kind, ExternalProvider::Imdb, i.as_deref()).await?;
+        }
+        Ok(free)
+    }
+}
+
 /// Columns of `CreateMediaDto` / `UpdateMediaDto` that persist (`path` and the profile ids do not).
 fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     let mut out = vec![];
@@ -81,8 +123,8 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     put!("type", b.kind("type")?, |v: Option<MediaKind>| Col::Text(
         v.map(|k| k.as_str().to_owned())
     ));
-    put!("tmdbId", b.int("tmdbId")?, Col::Int);
-    put!("imdbId", b.str("imdbId")?, Col::Text);
+    b.int("tmdbId")?;
+    b.str("imdbId")?;
     put!("overview", b.str("overview")?, Col::Text);
     put!("status", b.one_of("status", &STATUSES)?, |v| {
         Col::Enum("media_status_enum", v)
@@ -147,6 +189,14 @@ fn clash() -> AppError {
     AppError::conflict("This title is already in the library")
 }
 
+fn clash_or(e: sqlx::Error) -> AppError {
+    if is_unique_violation(&e) {
+        clash()
+    } else {
+        e.into()
+    }
+}
+
 /// `POST /api/media` (rule 18): columns only, no library, no folder, no hook.
 #[utoipa::path(post, path = "/api/media", responses((status = 201)))]
 pub async fn create(
@@ -160,6 +210,7 @@ pub async fn create(
     b.required(b.str("title")?, "title", "must be a string")?;
     let media_type = b.required_kind("type")?;
     let cols = columns(&b)?;
+    let ids = body_ids(&b)?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
     q.push(
         cols.iter()
@@ -175,24 +226,15 @@ pub async fn create(
         push_value(&mut q, c);
     }
     q.push(") RETURNING id");
-    let id: i32 = q
-        .build_query_scalar()
-        .fetch_one(&st.db)
-        .await
-        .map_err(|e| {
-            if is_unique_violation(&e) {
-                clash()
-            } else {
-                e.into()
-            }
-        })?;
-    let tmdb = cols.iter().find_map(|(k, c)| match (k, c) {
-        (&"tmdbId", Col::Int(v)) => *v,
-        _ => None,
-    });
+    let mut tx = st.db.begin().await?;
+    let id: i32 = q.build_query_scalar().fetch_one(&mut *tx).await?;
+    if !ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? {
+        return Err(clash());
+    }
+    tx.commit().await?;
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
-        tmdb_id: tmdb.map(i64::from),
+        tmdb_id: ids.tmdb.flatten().filter(|t| *t > 0).map(i64::from),
         media_type,
         library_id: None,
         added_by_user_id: None,
@@ -240,7 +282,7 @@ pub async fn apply_media_monitored(
     monitored: bool,
 ) -> Result<MonitoredChange, sqlx::Error> {
     let media = sqlx::query!(
-        r#"SELECT id, type AS "media_type!", "tmdbId" AS tmdb_id
+        r#"SELECT id, type AS "media_type!", external_id('media', id, 'tmdb')::int AS tmdb_id
            FROM media WHERE id = ANY($1) AND monitored IS DISTINCT FROM $2"#,
         ids,
         monitored
@@ -295,7 +337,7 @@ pub async fn apply_season_monitored(
 ) -> Result<MonitoredChange, sqlx::Error> {
     let was = sqlx::query!(
         r#"SELECT s."seasonNumber" AS number, s.monitored AS was, m.id AS "media_id?",
-             m.type AS media_type, m."tmdbId" AS tmdb_id
+             m.type AS media_type, external_id('media', m.id, 'tmdb')::int AS tmdb_id
            FROM seasons s LEFT JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
         season_id
     )
@@ -377,7 +419,8 @@ pub async fn update(
     let id = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let cols = columns(&b)?;
-    load_media(&st.db, id)
+    let ids = body_ids(&b)?;
+    let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let monitored = b.bool("monitored")?.flatten();
@@ -398,13 +441,27 @@ pub async fn update(
             push_value(&mut q, c);
         }
         q.push(")");
-        q.build().execute(&mut *tx).await.map_err(|e| {
-            if is_unique_violation(&e) {
-                clash()
-            } else {
-                e.into()
-            }
-        })?;
+        q.build().execute(&mut *tx).await.map_err(clash_or)?;
+    }
+    let kind = cols
+        .iter()
+        .find_map(|(k, c)| match (k, c) {
+            (&"type", Col::Text(Some(t))) => MediaKind::parse(t),
+            _ => None,
+        })
+        .unwrap_or(media.media_type);
+    if kind != media.media_type {
+        external_ids::rescope(&mut tx, id, kind)
+            .await
+            .map_err(clash_or)?;
+    }
+    if ids.differ(&media) {
+        if !ids.apply(&mut tx, id, kind).await.map_err(clash_or)? {
+            return Err(clash());
+        }
+        sqlx::query!(r#"UPDATE media SET "updatedAt" = now() WHERE id = $1"#, id)
+            .execute(&mut *tx)
+            .await?;
     }
     let change = match monitored {
         Some(m) => Some(apply_media_monitored(&mut tx, &[id], m).await?),

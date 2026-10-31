@@ -623,10 +623,10 @@ async fn seed_library(pool: &PgPool) {
         .unwrap();
     q(r#"INSERT INTO role_default_libraries ("roleId", "libraryId") SELECT id, l FROM roles, (VALUES (1),(2)) v(l) WHERE name = 'User'"#).execute(pool).await.unwrap();
     for n in 1..=5 {
-        q(r#"INSERT INTO media (title, type, "tmdbId", "libraryId", "folderName") VALUES ($1, 'movie', $2, 1, $1)"#)
+        q(r#"WITH m AS (INSERT INTO media (title, type, "libraryId", "folderName") VALUES ($1, 'movie', 1, $1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', $2::int4::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
             .bind(format!("Movie {n}")).bind(1000 + n).execute(pool).await.unwrap();
     }
-    q(r#"INSERT INTO media (title, type, "tmdbId", "libraryId", "folderName") VALUES ('Show', 'series', 2000, 2, 'Show')"#).execute(pool).await.unwrap();
+    q(r#"WITH m AS (INSERT INTO media (title, type, "libraryId", "folderName") VALUES ('Show', 'series', 2, 'Show') RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (2000)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).execute(pool).await.unwrap();
     q(r#"INSERT INTO seasons ("seasonNumber", "mediaId") SELECT 1, id FROM media WHERE type = 'series'"#).execute(pool).await.unwrap();
     q(r#"INSERT INTO episodes ("episodeNumber", title, "seasonId") SELECT n, 'E' || n, s.id FROM seasons s, generate_series(1,2) n"#).execute(pool).await.unwrap();
 }
@@ -682,7 +682,7 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
             .await
             .unwrap();
     // Fliks played movie 2 after Emby did, so Emby must not overwrite it.
-    sqlx::query(r#"INSERT INTO playback_states ("userId","mediaId","positionSeconds","lastPlayedAt") SELECT $1, id, 5, '2026-01-03' FROM media WHERE "tmdbId" = 1002"#)
+    sqlx::query(r#"INSERT INTO playback_states ("userId","mediaId","positionSeconds","lastPlayedAt") SELECT $1, id, 5, '2026-01-03' FROM media WHERE external_id('media', id, 'tmdb') = '1002'"#)
         .bind(existing).execute(&pool).await.unwrap();
     let id = add_server(&c, "ok", &[], true).await;
     let ev = run_import(&c, id).await;

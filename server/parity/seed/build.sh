@@ -7,7 +7,7 @@ probe="${FLIKS_ENGINE_FIXTURES:-$HOME/Documents/clement/code/fliks-engine/fixtur
 db=${PARITY_TPL:-fliks_parity_tpl}
 
 # psql inside the container: credentials never leave it
-sql() { docker exec -i fliks-postgres-1 sh -c 'PGOPTIONS="-c client_min_messages=warning" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
+sql() { docker exec -i "${PARITY_PG:-fliks-postgres-1}" sh -c 'PGOPTIONS="-c client_min_messages=warning" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
 
 sql -d postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)" -c "CREATE DATABASE $db"
 for f in "$mig"/*.sql; do sql -d $db <"$f"; done
@@ -56,12 +56,13 @@ def fx(name):
     return json.dumps(d["expected"]["info"], sort_keys=True).replace("'", "''"), d["fileSize"]
 info = {"mkv": fx("h264-aac-mkv"), "mp4": fx("h264-aac-mp4")}
 q = lambda s: "'" + s.replace("'", "''") + "'"
-media, files, seasons, episodes = [], [], [], []
+media, ext_ids, files, seasons, episodes = [], [], [], [], []
 fid = 0
 for n in range(1, 18):
     title = f"Parity Movie {n:02d}"
     folder = f"{title} (2020)"
-    media.append(f"({n}, {q(title)}, 2020, 'movie', {1000+n}, {q('Synthetic movie '+str(n))}, 'released', true, {q(folder)}, 7.5, '[\"Drama\"]', 90, '2020-01-01', 1)")
+    ext_ids.append(f"('media', {n}, 'movie', 'tmdb', '{1000+n}')")
+    media.append(f"({n}, {q(title)}, 2020, 'movie', {q('Synthetic movie '+str(n))}, 'released', true, {q(folder)}, 7.5, '[\"Drama\"]', 90, '2020-01-01', 1)")
     ext = "mp4" if n % 2 == 0 else "mkv"
     fid += 1
     i, size = info[ext]
@@ -70,7 +71,8 @@ sid = eid = 0
 for k, s in enumerate("ABC"):
     mid = 18 + k
     title = f"Parity Series {s}"
-    media.append(f"({mid}, {q(title)}, 2021, 'series', {2000+k}, {q('Synthetic series '+s)}, 'continuing', true, {q(title)}, 8.0, '[\"Drama\"]', 30, NULL, 2)")
+    ext_ids.append(f"('media', {mid}, 'series', 'tmdb', '{2000+k}')")
+    media.append(f"({mid}, {q(title)}, 2021, 'series', {q('Synthetic series '+s)}, 'continuing', true, {q(title)}, 8.0, '[\"Drama\"]', 30, NULL, 2)")
     for se in (1, 2):
         sid += 1
         seasons.append(f"({sid}, {se}, {mid})")
@@ -79,7 +81,8 @@ for k, s in enumerate("ABC"):
             episodes.append(f"({eid}, {ep}, {q(f'Episode {ep}')}, true, {sid})")
             i, size = info["mkv"]
             files.append(f"({fid}, {mid}, {eid}, {q(f'Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
-print('INSERT INTO media (id, title, year, type, "tmdbId", overview, status, monitored, "folderName", rating, genres, runtime, "releaseDate", "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
+print('INSERT INTO media (id, title, year, type, overview, status, monitored, "folderName", rating, genres, runtime, "releaseDate", "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
+print('INSERT INTO external_ids (entity, "entityId", scope, provider, value) VALUES\n ' + ",\n ".join(ext_ids) + ";")
 print('INSERT INTO seasons (id, "seasonNumber", "mediaId") VALUES\n ' + ",\n ".join(seasons) + ";")
 print('INSERT INTO episodes (id, "episodeNumber", title, "hasFile", "seasonId") VALUES\n ' + ",\n ".join(episodes) + ";")
 print('INSERT INTO media_files (id, "mediaId", "episodeId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
@@ -111,6 +114,6 @@ END $$;
 SQL
 } | sql -d $db
 
-docker exec fliks-postgres-1 sh -c 'pg_dump -U "$POSTGRES_USER" --no-owner --no-privileges '"$db" |
+docker exec "${PARITY_PG:-fliks-postgres-1}" sh -c 'pg_dump -U "$POSTGRES_USER" --no-owner --no-privileges '"$db" |
   grep -v '^\\\(un\)\?restrict ' >"$here/base.sql"
 echo "wrote $here/base.sql"

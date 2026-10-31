@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, type AS \"media_type!\", \"libraryId\" AS library_id,\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"posterUrl\" AS poster_url, \"fanartUrl\" AS fanart_url\n        FROM media WHERE \"tmdbId\" = $1 AND type = $2",
+  "query": "SELECT id, type AS \"media_type!\", \"libraryId\" AS library_id,\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"posterUrl\" AS poster_url, \"fanartUrl\" AS fanart_url\n        FROM media WHERE id = (SELECT \"entityId\" FROM external_ids WHERE entity = 'media'\n          AND scope = $2 AND provider = 'tmdb' AND value = $1::int4::text)",
   "describe": {
     "columns": [
       {
@@ -97,5 +97,5 @@
       true
     ]
   },
-  "hash": "514fc053887493cb25c8dd4205f49a284ae1f319530eb9a9bdad6601d1090173"
+  "hash": "22659ac7c9fd64de5e396b4b5b132b49cf1005db166c863b47ca969e4f7d430e"
 }

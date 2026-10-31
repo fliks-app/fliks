@@ -634,7 +634,7 @@ async fn title_state_and_the_add_path_ignore_delete_rows(pool: PgPool) {
     let c = ctx(pool).await;
     q(
         &c.pool(),
-        r#"INSERT INTO media (title, type, "tmdbId", "libraryId") VALUES ('M', 'movie', 70, 1)"#,
+        r#"WITH m AS (INSERT INTO media (title, type, "libraryId") VALUES ('M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (70)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#,
     )
     .await;
     let (s, r) = call(
@@ -685,7 +685,7 @@ async fn title_state_and_the_add_path_ignore_delete_rows(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn delete_request_approve_removes_the_media_and_resolves_every_duplicate(pool: PgPool) {
     let mut c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (7, 'M', 'movie', 71, 1)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (7, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (71)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     let del = json!({"mediaType": "movie", "kind": "delete", "tmdbId": 71, "title": "M"});
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, del.clone()).await;
     // a concurrent duplicate the dedup could not prevent
@@ -731,7 +731,7 @@ async fn delete_request_approve_removes_the_media_and_resolves_every_duplicate(p
 #[sqlx::test(migrations = false)]
 async fn delete_request_rolls_back_when_the_removal_fails(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (8, 'M', 'movie', 72, 1)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (8, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (72)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     let del = json!({"mediaType": "movie", "kind": "delete", "tmdbId": 72, "title": "M"});
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, del).await;
     let id = rid(&a);
@@ -852,7 +852,7 @@ async fn approve_rolls_back_on_an_import_error(pool: PgPool) {
 async fn existing_media_is_reused_only_when_its_profiles_cover_the_request(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), "INSERT INTO language_profiles (id, name, \"audioLanguages\") VALUES (101, 'EN', '[{\"isoCode\":\"en\",\"name\":\"English\"}]'), (102, 'FR', '[{\"isoCode\":\"fr\",\"name\":\"French\"}]')").await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId", "languageProfileId", monitored) VALUES (9, 'M', 'movie', 82, 1, 101, false)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId", "languageProfileId", monitored) VALUES (9, 'M', 'movie', 1, 101, false) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (82)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     let mut body = movie(82);
     body["languageProfileId"] = json!(102);
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, body).await;
@@ -928,7 +928,7 @@ async fn on_media_imported_adopts_only_covered_requests(pool: PgPool) {
     .await;
     let any = json!({"id": 2});
     let _ = domain(&mut c);
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId", "languageProfileId", monitored) VALUES (11, 'M', 'movie', 90, 1, 101, false)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId", "languageProfileId", monitored) VALUES (11, 'M', 'movie', 1, 101, false) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (90)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     let lc = Lifecycle::of(&c.st);
     lc.on_media_imported(
         MediaRef {
@@ -969,7 +969,7 @@ async fn on_media_imported_adopts_only_covered_requests(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn removal_declines_add_rows_resolves_delete_rows_and_retires_available(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (12, 'M', 'movie', 91, 1)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (12, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (91)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     for (kind, status) in [
         ("add", "pending"),
         ("add", "processing"),
@@ -1013,7 +1013,7 @@ async fn removal_declines_add_rows_resolves_delete_rows_and_retires_available(po
 #[sqlx::test(migrations = false)]
 async fn unmonitoring_declines_linked_adds_and_trims_season_scopes(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (13, 'S', 'series', 92, 2)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (13, 'S', 'series', 2) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (92)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     for seasons in ["NULL", "'[1]'", "'[1,2]'"] {
         q(&c.pool(), &format!(r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId", seasons)
             VALUES (1, 'add', 'series', 92, 'S', 'approved', 13, {seasons})"#)).await;
@@ -1080,7 +1080,7 @@ async fn unmonitoring_declines_linked_adds_and_trims_season_scopes(pool: PgPool)
 #[sqlx::test(migrations = false)]
 async fn grabs_move_approved_requests_to_processing_by_season(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (14, 'S', 'series', 93, 2)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (14, 'S', 'series', 2) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (93)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     for seasons in ["NULL", "'[1]'", "'[2]'"] {
         q(&c.pool(), &format!(r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId", seasons)
             VALUES (1, 'add', 'series', 93, 'S', 'approved', 14, {seasons})"#)).await;
@@ -1115,7 +1115,7 @@ async fn episode(
 async fn import_complete_makes_requests_available_when_the_scope_is_on_disk(pool: PgPool) {
     let c = ctx(pool).await;
     let p = c.pool();
-    q(&p, r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (15, 'S', 'series', 94, 2)"#).await;
+    q(&p, r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (15, 'S', 'series', 2) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (94)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     q(&p, r#"INSERT INTO seasons ("seasonNumber", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, false)"#).await;
     // season 1: a two-episode file covers E2; season 2: E2 is missing
     episode(&p, 1, 1, None, true, true).await;
@@ -1144,7 +1144,7 @@ async fn import_complete_makes_requests_available_when_the_scope_is_on_disk(pool
 async fn import_complete_needs_a_file_for_a_movie(pool: PgPool) {
     let c = ctx(pool).await;
     let p = c.pool();
-    q(&p, r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (16, 'M', 'movie', 95, 1)"#).await;
+    q(&p, r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (16, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (95)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     q(&p, r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId") VALUES (1, 'add', 'movie', 95, 'M', 'approved', 16)"#).await;
     let lc = Lifecycle::of(&c.st);
     lc.on_import_complete(16).await.unwrap();
@@ -1159,7 +1159,7 @@ async fn reconcile_makes_open_requests_available_when_their_scope_is_on_disk(poo
     let c = ctx(pool).await;
     let p = c.pool();
     for (id, tmdb, file) in [(18, 97, true), (19, 98, false)] {
-        q(&p, &format!(r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES ({id}, 'M', 'movie', {tmdb}, 1)"#)).await;
+        q(&p, &format!(r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES ({id}, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', ({tmdb})::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)).await;
         if file {
             q(&p, &format!(r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{{}}', {id})"#)).await;
         }
@@ -1189,7 +1189,7 @@ async fn the_event_subscriptions_drive_the_lifecycle(pool: PgPool) {
     let c = ctx(pool).await;
     let p = c.pool();
     fliks_server::requests::spawn(&c.st);
-    q(&p, r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (17, 'M', 'movie', 96, 1)"#).await;
+    q(&p, r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (17, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (96)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     q(&p, r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{}', 17)"#).await;
     q(&p, r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId") VALUES (1, 'add', 'movie', 96, 'M', 'approved', 17)"#).await;
     c.st.hub.emit_domain(DomainEvent::AcquisitionGrabbed {
@@ -1347,7 +1347,7 @@ impl Ctx {
 
 /// An `available` movie request on media 14 (tmdb 93), then the same title requested again by `c.user`.
 async fn available_then(c: &Ctx, media_call: (&str, &str, Value)) {
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (14, 'M', 'movie', 93, 1)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (14, 'M', 'movie', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (93)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     q(
         &c.pool(),
         r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId")
@@ -1401,7 +1401,7 @@ async fn a_bulk_unmonitor_retires_available_requests_and_the_title_can_be_reques
 #[sqlx::test(migrations = false)]
 async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (15, 'S', 'series', 94, 2)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (15, 'S', 'series', 2) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (94)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     for seasons in ["'[1]'", "'[1,2]'"] {
         q(&c.pool(), &format!(r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId", seasons)
             VALUES (1, 'add', 'series', 94, 'S', 'available', 15, {seasons})"#)).await;
@@ -1433,7 +1433,7 @@ async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn unmonitoring_a_season_keeps_a_whole_series_request_on_the_other_seasons(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (15, 'S', 'series', 94, 2)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (15, 'S', 'series', 2) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (94)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
     q(&c.pool(), r#"INSERT INTO seasons ("seasonNumber", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, true)"#).await;
     q(
         &c.pool(),

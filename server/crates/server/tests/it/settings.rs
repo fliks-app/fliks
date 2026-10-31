@@ -478,7 +478,8 @@ async fn sidebar_counts(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     sqlx::raw_sql(
         r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1, 'M', '["movie"]', '/nonexistent/m');
-           INSERT INTO media (title, type, "tmdbId", "libraryId", "folderName") VALUES ('A', 'movie', 1, 1, 'a'), ('B', 'movie', 2, 1, 'b');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (1, 'A', 'movie', 1, 'a'), (2, 'B', 'movie', 1, 'b');
+           INSERT INTO external_ids (entity, "entityId", scope, provider, value) VALUES ('media', 1, 'movie', 'tmdb', '1'), ('media', 2, 'movie', 'tmdb', '2');
            INSERT INTO requests ("userId", "mediaType", "tmdbId", title, status)
              SELECT id, 'movie', 9, 'R', 'pending' FROM users WHERE username = 'admin';"#,
     )

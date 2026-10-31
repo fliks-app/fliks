@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM external_ids WHERE entity = 'media' AND \"entityId\" = $1 AND provider = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6bb6fc55c98cc8641a5e03b5f23b9e28fcec7fa7fa7ae74a1af83e757ee07683"
+}

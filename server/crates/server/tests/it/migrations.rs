@@ -542,6 +542,58 @@ async fn m1789000020_turns_the_media_kind_enums_into_checked_text(pool: PgPool) 
     }
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000030_moves_the_provider_ids_into_external_ids(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_030).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type, "tmdbId", "tvdbId", "imdbId") VALUES
+          (1, 'a', 'movie', 603, 111, 'tt1'), (2, 'b', 'series', 603, 222, 'tt2'),
+          (3, 'c', 'series', 604, 222, 'tt3'), (4, 'd', 'movie', 0, 0, ''), (5, 'e', 'movie', NULL, NULL, NULL)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_030).await;
+
+    let got: Vec<(i32, String, String, String)> = rows(
+        &pool,
+        r#"SELECT "entityId", scope, provider, value FROM external_ids ORDER BY "entityId", provider"#,
+    )
+    .await;
+    // Media 3 repeats media 2's tvdb id and loses it: the lower id keeps it.
+    let want = [
+        (1, "movie", "imdb", "tt1"),
+        (1, "movie", "tmdb", "603"),
+        (1, "movie", "tvdb", "111"),
+        (2, "series", "imdb", "tt2"),
+        (2, "series", "tmdb", "603"),
+        (2, "series", "tvdb", "222"),
+        (3, "series", "imdb", "tt3"),
+        (3, "series", "tmdb", "604"),
+    ];
+    let want: Vec<_> = want
+        .iter()
+        .map(|(i, a, b, c)| (*i, a.to_string(), b.to_string(), c.to_string()))
+        .collect();
+    assert_eq!(got, want);
+    let gone: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'media' AND column_name IN ('tmdbId', 'tvdbId', 'imdbId')"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(gone, 0);
+    for bad in [
+        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'tmdb', '603')"#,
+        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'tmdb', '0603')"#,
+        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'imdb', '')"#,
+        r#"INSERT INTO external_ids VALUES ('media', 9, 'book', 'tmdb', '5')"#,
+        r#"INSERT INTO external_ids VALUES ('person', 9, 'movie', 'tmdb', '5')"#,
+        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'isbn', '5')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64

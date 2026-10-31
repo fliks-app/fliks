@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO external_ids (entity, \"entityId\", scope, provider, value)\n           SELECT 'media', $1::int4, $2::text, $3::text, $4::text\n           WHERE NOT EXISTS (SELECT 1 FROM external_ids WHERE entity = 'media' AND scope = $2\n                               AND provider = $3 AND value = $4 AND \"entityId\" <> $1)\n           ON CONFLICT (entity, \"entityId\", provider)\n           DO UPDATE SET scope = EXCLUDED.scope, value = EXCLUDED.value",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3c3cefd43e446ffd429683b1bcb886251c49ca1bc46c3e2ef968fd9eb84b7d9"
+}

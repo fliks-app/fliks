@@ -417,6 +417,7 @@ async fn import_one(
         Some(e) => {
             db::update_media(
                 &st.db,
+                arr.media_type(),
                 &db::MediaUpdate {
                     id: e.id,
                     title,
@@ -429,7 +430,7 @@ async fn import_one(
                 },
             )
             .await
-            .map_err(fail)?;
+            .map_err(|e| format!("{title}: {e}"))?;
             if let Some(m) = monitored.filter(|m| *m != e.monitored) {
                 crate::media::write::set_media_monitored(st, &[e.id], m)
                     .await
@@ -455,7 +456,7 @@ async fn import_one(
                 },
             )
             .await
-            .map_err(fail)?;
+            .map_err(|e| format!("{title}: {e}"))?;
             Ok(Outcome::Imported(Some(id)))
         }
     }

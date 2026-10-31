@@ -1,29 +1,28 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM media WHERE \"tmdbId\" = $1 AND type = $2 LIMIT 1",
+  "query": "SELECT title FROM media WHERE id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
-        "type_info": "Int4",
+        "name": "title",
+        "type_info": "Varchar",
         "origin": {
           "Table": {
             "table": "media",
-            "name": "id"
+            "name": "title"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Text"
+        "Int4"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "e2364a2e8a4ccca29ff5e525fd1ab2a146419b112e42ea5fbf8f8a5000a138d4"
+  "hash": "c6d3320a31cef75497fc4410f1a07f37d84ba88fcec7a39bad9ac23024ba09ac"
 }

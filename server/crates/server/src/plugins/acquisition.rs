@@ -52,8 +52,9 @@ struct MediaRow {
 }
 
 const MEDIA_SELECT: &str = r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
-    m."alternativeTitles" AS alternative_titles, m.year, m.runtime, m."imdbId" AS imdb_id,
-    m."tmdbId" AS tmdb_id, m."tvdbId" AS tvdb_id, m."libraryId" AS library_id, m.monitored,
+    m."alternativeTitles" AS alternative_titles, m.year, m.runtime, external_id('media', m.id, 'imdb') AS imdb_id,
+    external_id('media', m.id, 'tmdb')::int AS tmdb_id, external_id('media', m.id, 'tvdb')::int AS tvdb_id,
+    m."libraryId" AS library_id, m.monitored,
     m."minimumAvailability" AS minimum_availability, m."inCinemas" AS in_cinemas,
     m."digitalRelease" AS digital_release, m."physicalRelease" AS physical_release,
     m."releaseDate" AS release_date, m.status::text AS status,

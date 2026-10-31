@@ -1,6 +1,7 @@
 //! Metadata imports (rules 10-17, 19-22): the provider reads happen first, the rows in one
 //! transaction; images and credits follow detached.
 use super::{body::Body, entity_or_404, metadata, resolve_profile};
+use crate::media::external_ids::{self, Ids};
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed, validate::ValidJson},
@@ -16,7 +17,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
-    media::kind::MediaKind,
+    media::{external_id::ExternalProvider, kind::MediaKind},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
     nfo::NfoData,
 };
@@ -110,23 +111,12 @@ async fn duplicate(
     tvdb: bool,
     id: i32,
 ) -> Result<(), AppError> {
-    let hit = if tvdb {
-        sqlx::query_scalar!(
-            r#"SELECT id FROM media WHERE "tvdbId" = $1 AND type = $2 LIMIT 1"#,
-            id,
-            media_type.as_str()
-        )
-        .fetch_optional(&st.db)
-        .await?
+    let p = if tvdb {
+        ExternalProvider::Tvdb
     } else {
-        sqlx::query_scalar!(
-            r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
-            id,
-            media_type.as_str()
-        )
-        .fetch_optional(&st.db)
-        .await?
+        ExternalProvider::Tmdb
     };
+    let hit = external_ids::find_numeric(&st.db, media_type, p, id).await?;
     match hit {
         Some(_) => Err(AppError::conflict("This title is already in the library")),
         None => Ok(()),
@@ -168,13 +158,16 @@ pub async fn import_title(
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{}\"", d.title)))?
         .to_owned();
     let mut tx = st.db.begin().await?;
-    let id = insert_media(&mut tx, &imp, d, &folder).await.map_err(|e| {
+    let (id, free) = insert_media(&mut tx, &imp, d, &folder).await.map_err(|e| {
         if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
             AppError::conflict("This title is already in the library")
         } else {
             e.into()
         }
     })?;
+    if !free {
+        return Err(AppError::conflict("This title is already in the library"));
+    }
     let mut stills = vec![];
     if imp.media_type.has_seasons() {
         let scope = imp.monitored_seasons.clone().filter(|s| !s.is_empty());
@@ -302,25 +295,22 @@ async fn insert_media(
     imp: &Import,
     d: &Details,
     folder: &str,
-) -> Result<i32, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type, "tmdbId", "tvdbId", "imdbId",
+) -> Result<(i32, bool), sqlx::Error> {
+    let id = sqlx::query_scalar!(
+        r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type,
              overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime, "releaseDate",
              "inCinemas", "digitalRelease", "physicalRelease", "tmdbCollectionId", "tmdbCollectionName",
              monitored, "metadataRefreshedAt", "qualityProfileId", "languageProfileId", "libraryId",
              "folderName", "addedById")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::media_status_enum, $11, $12,
-             $13, $14, $15, $16, $17::text::date, $18::text::date, $19::text::date, $20::text::date, $21, $22,
-             true, now(), $23, $24, $25, NULLIF($26, ''), $27)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,
+             $10, $11, $12, $13, $14::text::date, $15::text::date, $16::text::date, $17::text::date, $18, $19,
+             true, now(), $20, $21, $22, NULLIF($23, ''), $24)
            RETURNING id"#,
         d.title,
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
         json!(d.alternative_titles),
         d.year.filter(|y| y.is_finite()).map(|y| y as i32),
         imp.media_type.as_str(),
-        d.tmdb_id.filter(|t| *t != 0),
-        d.tvdb_id,
-        d.imdb_id,
         d.overview,
         map_status(imp.media_type, &d.status),
         d.poster_url,
@@ -342,7 +332,13 @@ async fn insert_media(
         imp.added_by.filter(|u| *u != 0)
     )
     .fetch_one(&mut *tx)
-    .await
+    .await?;
+    let ids = Ids {
+        tmdb: d.tmdb_id,
+        tvdb: d.tvdb_id,
+        imdb: d.imdb_id.clone(),
+    };
+    Ok((id, ids.fill(tx, id, imp.media_type).await?.is_empty()))
 }
 
 const TMDB_FIELDS: [&str; 5] = [

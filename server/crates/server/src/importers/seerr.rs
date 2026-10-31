@@ -218,7 +218,8 @@ impl Run<'_> {
         let user = self.user(username).await.map_err(db_err)?;
         if !self.media.contains_key(&(media_type, tmdb)) {
             let row = sqlx::query!(
-                r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
+                r#"SELECT id, title FROM media WHERE id = (SELECT "entityId" FROM external_ids
+                     WHERE entity = 'media' AND scope = $2 AND provider = 'tmdb' AND value = $1::int4::text)"#,
                 tmdb,
                 media_type.as_str()
             )

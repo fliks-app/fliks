@@ -961,9 +961,11 @@ async fn releases_match_and_score() {
     sqlx::raw_sql(
         r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1, 'Movies', '["movie"]', '/nonexistent/m');
            INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
-           INSERT INTO media (id, title, type, "tmdbId", "libraryId", "folderName", year, monitored, "qualityProfileId")
-             VALUES (1, 'Big Buck Bunny', 'movie', 10378, 1, 'bbb', 2008, true, 1),
-                    (2, 'Sintel', 'movie', 45745, 1, 'sintel', 2010, true, NULL);"#,
+           INSERT INTO media (id, title, type, "libraryId", "folderName", year, monitored, "qualityProfileId")
+             VALUES (1, 'Big Buck Bunny', 'movie', 1, 'bbb', 2008, true, 1),
+                    (2, 'Sintel', 'movie', 1, 'sintel', 2010, true, NULL);
+           INSERT INTO external_ids (entity, "entityId", scope, provider, value)
+             VALUES ('media', 1, 'movie', 'tmdb', '10378'), ('media', 2, 'movie', 'tmdb', '45745');"#,
     )
     .execute(&s.pool)
     .await

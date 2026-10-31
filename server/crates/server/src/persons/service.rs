@@ -273,30 +273,21 @@ async fn link_credits(
     let mut owned = vec![];
     if !ids.is_empty() {
         let libs = accessible_library_ids(&st.db, a).await?;
-        let rows: Vec<(i32, String, i32)> = match served {
-            Provider::Tmdb => sqlx::query!(
-                r#"SELECT id AS "id!", type AS "kind!", "tmdbId" AS "ext!" FROM media
-                   WHERE "tmdbId" = ANY($1) AND "libraryId" = ANY($2) ORDER BY id ASC"#,
-                &ids,
-                &libs
-            )
-            .fetch_all(&st.db)
-            .await?
-            .into_iter()
-            .map(|r| (r.id, r.kind, r.ext))
-            .collect(),
-            Provider::Tvdb => sqlx::query!(
-                r#"SELECT id AS "id!", type AS "kind!", "tvdbId" AS "ext!" FROM media
-                   WHERE "tvdbId" = ANY($1) AND "libraryId" = ANY($2) ORDER BY id ASC"#,
-                &ids,
-                &libs
-            )
-            .fetch_all(&st.db)
-            .await?
-            .into_iter()
-            .map(|r| (r.id, r.kind, r.ext))
-            .collect(),
-        };
+        let wanted: Vec<String> = ids.iter().map(i32::to_string).collect();
+        let rows: Vec<(i32, String, i32)> = sqlx::query!(
+            r#"SELECT m.id AS "id!", m.type AS "kind!", e.value::int AS "ext!"
+               FROM external_ids e JOIN media m ON m.id = e."entityId"
+               WHERE e.entity = 'media' AND e.provider = $3 AND e.value = ANY($1) AND m."libraryId" = ANY($2)
+               ORDER BY m.id ASC"#,
+            &wanted,
+            &libs,
+            served.external().as_str()
+        )
+        .fetch_all(&st.db)
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r.kind, r.ext))
+        .collect();
         owned = rows
             .into_iter()
             .map(|(id, kind, ext)| {

@@ -1,5 +1,6 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
+use fliks_domain::media::external_id::ExternalProvider;
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -321,23 +322,12 @@ pub(super) async fn find_or_import(
     })?;
     let tvdb = d.provider.as_deref() == Some("tvdb");
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
-        let id = if tvdb {
-            sqlx::query_scalar!(
-                r#"SELECT id FROM media WHERE "tvdbId" = $1 AND type = $2 LIMIT 1"#,
-                n,
-                d.media_type.as_str()
-            )
-            .fetch_optional(&st.db)
-            .await?
+        let p = if tvdb {
+            ExternalProvider::Tvdb
         } else {
-            sqlx::query_scalar!(
-                r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
-                n,
-                d.media_type.as_str()
-            )
-            .fetch_optional(&st.db)
-            .await?
+            ExternalProvider::Tmdb
         };
+        let id = crate::media::external_ids::find_numeric(&st.db, d.media_type, p, n).await?;
         Ok(match id {
             Some(id) => load_media(&st.db, id).await?,
             None => None,

@@ -101,7 +101,8 @@ impl MediaRow {
 pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::Error> {
     let Some(r) = sqlx::query!(
         r#"SELECT m.id, m.title, m."originalTitle" AS original_title, m.year, m.type AS "media_type!",
-                  m."tmdbId" AS tmdb_id, m."tvdbId" AS tvdb_id, m."imdbId" AS imdb_id, m.monitored,
+                  external_id('media', m.id, 'tmdb')::int AS tmdb_id, external_id('media', m.id, 'tvdb')::int AS tvdb_id,
+                  external_id('media', m.id, 'imdb') AS imdb_id, m.monitored,
                   m."folderName" AS folder_name, m."libraryId" AS library_id, l.name AS "library_name?",
                   l.path AS "library_path?", l."mediaTypes" AS "library_types?"
            FROM media m LEFT JOIN libraries l ON l.id = m."libraryId" WHERE m.id = $1"#,

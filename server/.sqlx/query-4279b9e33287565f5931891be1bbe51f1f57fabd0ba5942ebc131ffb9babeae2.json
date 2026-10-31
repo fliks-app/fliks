@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object(\n  'id', r.id, 'createdAt', iso_ms(r.\"createdAt\"), 'updatedAt', iso_ms(r.\"updatedAt\"),\n  'user', CASE WHEN u.id IS NULL THEN 'null'::jsonb\n    ELSE jsonb_build_object('id', u.id, 'username', u.username, 'avatar', u.avatar) END,\n  'userId', r.\"userId\", 'mediaType', r.\"mediaType\", 'kind', r.kind::text, 'tmdbId', r.\"tmdbId\",\n  'title', r.title, 'status', r.status::text,\n  'approvedBy', CASE WHEN ab.id IS NULL THEN 'null'::jsonb\n    ELSE jsonb_build_object('id', ab.id, 'username', ab.username, 'avatar', ab.avatar) END,\n  'approvedById', r.\"approvedById\", 'declinedReason', r.\"declinedReason\",\n  'qualityProfileId', r.\"qualityProfileId\", 'languageProfileId', r.\"languageProfileId\",\n  'libraryId', r.\"libraryId\",\n  'media', CASE WHEN m.id IS NULL THEN 'null'::jsonb ELSE\n    jsonb_build_object('id', m.id, 'createdAt', iso_ms(m.\"createdAt\"), 'updatedAt', iso_ms(m.\"updatedAt\"),\n      'title', m.title, 'originalTitle', m.\"originalTitle\", 'alternativeTitles', m.\"alternativeTitles\",\n      'year', m.year, 'type', m.type, 'tmdbId', external_id('media', m.id, 'tmdb')::int, 'imdbId', external_id('media', m.id, 'imdb'),\n      'tvdbId', external_id('media', m.id, 'tvdb')::int,\n      'overview', m.overview, 'status', m.status::text, 'monitored', m.monitored,\n      'libraryId', m.\"libraryId\", 'preferredProvider', m.\"preferredProvider\", 'folderName', m.\"folderName\",\n      'posterUrl', m.\"posterUrl\", 'metadataRefreshedAt', iso_ms(m.\"metadataRefreshedAt\"),\n      'fanartUrl', m.\"fanartUrl\", 'logoUrl', m.\"logoUrl\", 'additionalFanartUrls', to_jsonb(m.\"additionalFanartUrls\"))\n    || jsonb_build_object('rating', m.rating, 'genres', m.genres, 'tmdbCollectionId', m.\"tmdbCollectionId\",\n      'tmdbCollectionName', m.\"tmdbCollectionName\", 'runtime', m.runtime, 'releaseDate', m.\"releaseDate\",\n      'inCinemas', m.\"inCinemas\", 'digitalRelease', m.\"digitalRelease\", 'physicalRelease', m.\"physicalRelease\",\n      'minimumAvailability', m.\"minimumAvailability\", 'qualityProfileId', m.\"qualityProfileId\",\n      'languageProfileId', m.\"languageProfileId\", 'addedById', m.\"addedById\", 'path', NULL) END,\n  'mediaId', r.\"mediaId\", 'seasons', r.seasons, 'posterUrl', r.\"posterUrl\", 'fanartUrl', r.\"fanartUrl\"\n) AS \"json!: Value\"\nFROM requests r\nLEFT JOIN users u ON u.id = r.\"userId\"\nLEFT JOIN users ab ON ab.id = r.\"approvedById\"\nLEFT JOIN media m ON m.id = (SELECT e.\"entityId\" FROM external_ids e WHERE e.entity = 'media'\n  AND e.scope = r.\"mediaType\" AND e.provider = 'tmdb' AND e.value = r.\"tmdbId\"::text)\nWHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r.\"userId\" = $2)\nAND ($3::int[] IS NULL OR r.\"libraryId\" IS NULL OR r.\"libraryId\" = ANY($3))\nAND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)\nAND ($6::int IS NULL OR r.\"tmdbId\" = $6) AND ($7::text IS NULL OR r.\"mediaType\" = $7)\nORDER BY r.\"createdAt\" DESC, r.id ASC LIMIT $8 OFFSET $9",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array",
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4279b9e33287565f5931891be1bbe51f1f57fabd0ba5942ebc131ffb9babeae2"
+}

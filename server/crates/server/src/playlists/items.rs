@@ -149,7 +149,9 @@ pub async fn items(
     let paths = paths_visible(&a.perms);
     let rows = sqlx::query!(
         r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
-                  to_jsonb(m) - 'searchVector' AS "media!: Jsonb<Value>",
+                  (to_jsonb(m) - 'searchVector') || jsonb_build_object(
+                    'tmdbId', external_id('media', m.id, 'tmdb')::int, 'imdbId', external_id('media', m.id, 'imdb'),
+                    'tvdbId', external_id('media', m.id, 'tvdb')::int) AS "media!: Jsonb<Value>",
                   to_jsonb(l) AS "library!: Jsonb<Value>",
                   to_jsonb(q) AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",

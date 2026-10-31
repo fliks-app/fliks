@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, l.path AS library_path, m.\"folderName\" AS folder_name\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           WHERE m.\"tmdbId\" = $1 AND m.type = 'series' LIMIT 1",
+  "query": "SELECT m.id, l.path AS library_path, m.\"folderName\" AS folder_name\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           WHERE m.id = (SELECT \"entityId\" FROM external_ids WHERE entity = 'media'\n             AND scope = 'series' AND provider = 'tmdb' AND value = $1::int4::text)",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       true
     ]
   },
-  "hash": "0e8d17afdc7ca52fcd89ec0aa91dc502ea896ddab13761c2b59bf8bb21fca505"
+  "hash": "f1f54b05c457ddb787609c3e3a28e10e2f503a6279346a0b6567d7c9b48a940b"
 }

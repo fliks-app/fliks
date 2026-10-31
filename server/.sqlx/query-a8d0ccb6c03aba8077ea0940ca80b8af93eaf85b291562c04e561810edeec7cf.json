@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.title, m.\"originalTitle\" AS original_title, m.year, m.type AS \"media_type!\",\n                  m.\"tmdbId\" AS tmdb_id, m.\"tvdbId\" AS tvdb_id, m.\"imdbId\" AS imdb_id, m.monitored,\n                  m.\"folderName\" AS folder_name, m.\"libraryId\" AS library_id, l.name AS \"library_name?\",\n                  l.path AS \"library_path?\", l.\"mediaTypes\" AS \"library_types?\"\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\" WHERE m.id = $1",
+  "query": "SELECT m.id, m.title, m.\"originalTitle\" AS original_title, m.year, m.type AS \"media_type!\",\n                  external_id('media', m.id, 'tmdb')::int AS tmdb_id, external_id('media', m.id, 'tvdb')::int AS tvdb_id,\n                  external_id('media', m.id, 'imdb') AS imdb_id, m.monitored,\n                  m.\"folderName\" AS folder_name, m.\"libraryId\" AS library_id, l.name AS \"library_name?\",\n                  l.path AS \"library_path?\", l.\"mediaTypes\" AS \"library_types?\"\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\" WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -62,34 +62,19 @@
         "ordinal": 5,
         "name": "tmdb_id",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "tmdbId"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 6,
         "name": "tvdb_id",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "tvdbId"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 7,
         "name": "imdb_id",
-        "type_info": "Varchar",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "imdbId"
-          }
-        }
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 8,
@@ -169,9 +154,9 @@
       true,
       true,
       false,
-      true,
-      true,
-      true,
+      null,
+      null,
+      null,
       false,
       true,
       true,
@@ -180,5 +165,5 @@
       true
     ]
   },
-  "hash": "b27f751c67f5e975a0ca3c9a8f044a7d2054c71730ca90fa2d07ac1df9b9f4b1"
+  "hash": "a8d0ccb6c03aba8077ea0940ca80b8af93eaf85b291562c04e561810edeec7cf"
 }

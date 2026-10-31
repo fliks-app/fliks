@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"entityId\" FROM external_ids\n           WHERE entity = 'media' AND scope = $1 AND provider = $2 AND value = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entityId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "external_ids",
+            "name": "entityId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c116c05a055877769125d6f72b339a450ab0a4ca4f0e036e49d8e593aa6cb75a"
+}
