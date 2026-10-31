@@ -39,8 +39,9 @@ fn env(k: &str, d: &str) -> String {
 fn psql(args: &[&str], sql: Option<&[u8]>) -> String {
     use std::io::Write;
     use std::process::Stdio;
+    let pg = std::env::var("PARITY_PG").unwrap_or_else(|_| "fliks-postgres-1".into());
     let mut child = Command::new("docker")
-        .args(["exec", "-i", "fliks-postgres-1", "sh", "-c"])
+        .args(["exec", "-i", &pg, "sh", "-c"])
         .arg(r#"psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@""#)
         .arg("_")
         .args(args)

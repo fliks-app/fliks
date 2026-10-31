@@ -1,2 +1,2 @@
 #!/bin/sh
-exec docker exec -i -e PGPASSWORD fliks-postgres-1 pg_dump "$@"
+exec docker exec -i -e PGPASSWORD "${PARITY_PG:-fliks-postgres-1}" pg_dump "$@"

@@ -14,13 +14,15 @@ export FLIKS_PARITY_ROOT=$RUN/root # media and fixtures of this run only; other 
 DBPFX=${PARITY_DB_PREFIX:-pall_}
 HEAVY=${HEAVY:-fliks-heavy}
 FILTER=${1:-}
+export PARITY_PG=${PARITY_PG:-fliks-postgres-1} # the PostgreSQL container the run creates its databases in
+PG=$PARITY_PG
 P_ARR=4960 P_LIVETV=4961 P_EMBY=4962 P_ESTUB=4963 P_PROV=4964 P_ENGINE=4965 P_TARGET=4966
 PIDS=()
 
 log() { echo "[run-all] $*" >&2; }
 die() { log "$*"; exit 2; }
 
-psql_admin() { docker exec -i fliks-postgres-1 sh -c 'psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
+psql_admin() { docker exec -i "$PG" sh -c 'psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
 
 stop_all() {
   local p
@@ -51,7 +53,7 @@ wait_http() { # wait_http <url> [seconds]
 
 # ---- preconditions ----
 for t in docker ffmpeg python3 node curl sha256sum; do command -v "$t" >/dev/null || die "missing tool: $t"; done
-docker exec fliks-postgres-1 true 2>/dev/null || die "docker container fliks-postgres-1 is not running"
+docker exec "$PG" true 2>/dev/null || die "docker container $PG is not running"
 for p in $P_ARR $P_LIVETV $P_EMBY $P_ESTUB $P_PROV $P_ENGINE $P_TARGET; do
   ss -ltn | grep -q "[:.]$p " && die "port $p is in use (4960-4999 are reserved for run-all.sh)"
 done
@@ -92,9 +94,9 @@ TPL=${DBPFX}tpl
 DB=${DBPFX}run
 psql_admin -d postgres -c "DROP DATABASE IF EXISTS $TPL WITH (FORCE)" -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $TPL" || die "template db"
 sed "s|/tmp/fliks-parity|$FLIKS_PARITY_ROOT|g" "$SERVER/parity/seed/base.sql" | psql_admin -d "$TPL" >/dev/null || die "base.sql"
-DBHOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' fliks-postgres-1)
-DBUSER=$(docker exec fliks-postgres-1 sh -c 'printf %s "$POSTGRES_USER"')
-DBPASS=$(docker exec fliks-postgres-1 sh -c 'printf %s "$POSTGRES_PASSWORD"')
+DBHOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PG")
+DBUSER=$(docker exec "$PG" sh -c 'printf %s "$POSTGRES_USER"')
+DBPASS=$(docker exec "$PG" sh -c 'printf %s "$POSTGRES_PASSWORD"')
 # scenario databases are copies of the template: bring it to the current schema once
 env -u DATABASE_URL DB_HOST=$DBHOST DB_PORT=5432 DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$TPL "$BIN" migrate || die "migrating the template"
 

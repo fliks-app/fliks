@@ -1,7 +1,7 @@
 # HTTP parity
 
 Scenarios replayed against `fliks-server`. A behaviour change edits the `expect`s it affects. Local only.
-Needs docker (`fliks-postgres-1`), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
+Needs docker (a PostgreSQL container, `fliks-postgres-1` unless `PARITY_PG` names another), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
 
 ## Run everything
 
