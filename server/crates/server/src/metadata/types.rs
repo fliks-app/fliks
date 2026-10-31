@@ -26,18 +26,6 @@ impl Provider {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MediaKind {
-    Movie,
-    Series,
-}
-
-impl MediaKind {
-    pub fn is_tv(self) -> bool {
-        self == Self::Series
-    }
-}
-
 #[derive(Debug)]
 pub enum MetaError {
     Upstream(Upstream),

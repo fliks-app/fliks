@@ -705,7 +705,8 @@ fn name(ev: &SseEvent) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::event::{DownloadState, MediaKind};
+    use crate::events::event::DownloadState;
+    use fliks_domain::media::kind::MediaKind;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn at(device: &str) -> Identity {

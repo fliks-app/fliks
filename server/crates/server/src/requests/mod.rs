@@ -14,6 +14,7 @@ use axum::{
     Router,
     routing::{get, post},
 };
+use fliks_domain::media::kind::MediaKind;
 
 pub use lifecycle::{Lifecycle, MediaRef, spawn, spawn_reconcile};
 pub use routes::*;
@@ -47,7 +48,7 @@ pub struct Art {
 /// What `importFromTmdb` is asked for (rule 24); `seasons` scopes the monitoring of a series.
 #[derive(Debug, Clone)]
 pub struct ImportSpec {
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub tmdb_id: i32,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,

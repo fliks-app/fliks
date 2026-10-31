@@ -89,7 +89,7 @@ pub async fn remove_media(
     st.hub.emit_domain(DomainEvent::MediaRemoved {
         media_id: i64::from(id),
         tmdb_id: media.tmdb_id.map(i64::from),
-        media_type: media.media_type.clone(),
+        media_type: media.media_type,
     });
     crate::media_servers::dispatch_detached(st, "media.deleted");
     Ok(media)

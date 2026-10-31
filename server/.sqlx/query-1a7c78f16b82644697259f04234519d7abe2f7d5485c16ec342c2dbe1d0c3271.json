@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO requests (\"userId\", kind, \"mediaType\", \"tmdbId\", title, seasons, status,\n        \"approvedById\", \"qualityProfileId\", \"languageProfileId\", \"libraryId\", \"mediaId\", \"posterUrl\", \"fanartUrl\")\n        VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6,\n        $7::text::requests_status_enum, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Int4",
+        "Varchar",
+        "Jsonb",
+        "Text",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1a7c78f16b82644697259f04234519d7abe2f7d5485c16ec342c2dbe1d0c3271"
+}

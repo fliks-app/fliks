@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM requests WHERE \"userId\" = $1 AND \"mediaType\" = $2\n        AND kind = 'add' AND status IN ('pending', 'approved') AND \"createdAt\" >= $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c185a37b78ecb4848e8076973ac762e81628c8f4f029991fc406dd751fd3fa34"
+}

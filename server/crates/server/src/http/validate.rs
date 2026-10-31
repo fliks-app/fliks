@@ -5,7 +5,7 @@ use axum::{
     extract::{FromRequest, FromRequestParts, RawPathParams, Request},
     http::{HeaderMap, StatusCode, header::CONTENT_TYPE, request::Parts},
 };
-use fliks_domain::media::query::js_number;
+use fliks_domain::media::{kind::MediaKind, query::js_number};
 use serde::Deserialize;
 use serde::de::{
     DeserializeOwned, Deserializer, Error as DeError, IntoDeserializer, Visitor,
@@ -341,6 +341,11 @@ impl<'a> Check<'a> {
                 None
             }
         }
+    }
+
+    pub(crate) fn kind(&mut self, key: &str, optional: bool) -> Option<MediaKind> {
+        self.one_of(key, &MediaKind::NAMES, optional)
+            .and_then(|s| MediaKind::parse(&s))
     }
 
     /// `@IsInt` (with `@Type(() => Number)` when `coerced`) and the bounds, messages in validator order.

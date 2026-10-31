@@ -4,19 +4,12 @@ use crate::{
     http::AppError,
     images::paths::{Target, Variant},
     media::write::{all_library_ids, import_for_request, remove_media_with_dir, resolve_target_in},
-    metadata::{MediaKind, Provider, service::Details},
+    metadata::{Provider, service::Details},
     notifications,
     state::AppState,
 };
+use fliks_domain::media::kind::MediaKind;
 use serde_json::{Map, Value};
-
-fn kind(media_type: &str) -> MediaKind {
-    if media_type == "movie" {
-        MediaKind::Movie
-    } else {
-        MediaKind::Series
-    }
-}
 
 fn port(e: AppError) -> PortError {
     PortError {
@@ -25,7 +18,7 @@ fn port(e: AppError) -> PortError {
     }
 }
 
-async fn tmdb_details(st: &AppState, media_type: &str, tmdb_id: i32) -> Result<Value, String> {
+async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Result<Value, String> {
     if !st.metadata.available(Provider::Tmdb) {
         return Err("TMDB API key is not configured".into());
     }
@@ -36,7 +29,7 @@ async fn tmdb_details(st: &AppState, media_type: &str, tmdb_id: i32) -> Result<V
         .await
         .map_err(|e| e.to_string())?;
     st.metadata
-        .details(Provider::Tmdb, kind(media_type), i64::from(tmdb_id), &lang)
+        .details(Provider::Tmdb, media_type, i64::from(tmdb_id), &lang)
         .await
         .map_err(|e| e.to_string())
 }
@@ -44,7 +37,7 @@ async fn tmdb_details(st: &AppState, media_type: &str, tmdb_id: i32) -> Result<V
 /// TMDB details of a title; an error fails the auto-approval criteria that need them closed.
 pub async fn title_facts(
     st: &AppState,
-    media_type: &str,
+    media_type: MediaKind,
     tmdb_id: i32,
 ) -> Result<TitleFacts, String> {
     let d = tmdb_details(st, media_type, tmdb_id).await?;
@@ -70,8 +63,11 @@ pub async fn title_facts(
 }
 
 /// Stores the art of a title (`request/<mediaType>-<tmdbId>`) unless already stored; best effort.
-pub async fn request_art(st: &AppState, media_type: &str, tmdb_id: i32) -> Result<Art, String> {
-    let k = kind(media_type);
+pub async fn request_art(
+    st: &AppState,
+    media_type: MediaKind,
+    tmdb_id: i32,
+) -> Result<Art, String> {
     let slots = [
         (Variant::Poster, "posterUrl"),
         (Variant::Fanart, "fanartUrl"),
@@ -79,7 +75,7 @@ pub async fn request_art(st: &AppState, media_type: &str, tmdb_id: i32) -> Resul
     let mut details: Option<Details> = None;
     let mut out = [None, None];
     for (i, (variant, field)) in slots.into_iter().enumerate() {
-        let t = Target::request(k, i64::from(tmdb_id), variant);
+        let t = Target::request(media_type, i64::from(tmdb_id), variant);
         if st.images.has_image(&t) {
             out[i] = Some(t.api_path());
             continue;
@@ -106,7 +102,7 @@ pub async fn request_art(st: &AppState, media_type: &str, tmdb_id: i32) -> Resul
 /// `resolveImportTarget` over every library: 400 when the title has no library to land in.
 pub async fn assert_import_target(
     st: &AppState,
-    media_type: &str,
+    media_type: MediaKind,
     library_id: Option<i32>,
 ) -> Result<(), PortError> {
     let all = all_library_ids(&st.db).await.map_err(|e| port(e.into()))?;
@@ -129,7 +125,7 @@ pub async fn import_from_tmdb(
     });
     import_for_request(
         st,
-        &spec.media_type,
+        spec.media_type,
         spec.tmdb_id,
         (spec.quality_profile_id, spec.language_profile_id),
         spec.library_id,

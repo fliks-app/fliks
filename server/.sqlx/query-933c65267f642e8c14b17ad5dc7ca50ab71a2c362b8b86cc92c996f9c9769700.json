@@ -106,7 +106,12 @@
         "ordinal": 9,
         "name": "media_type!",
         "type_info": "Text",
-        "origin": "Expression"
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
       },
       {
         "ordinal": 10,
@@ -172,7 +177,7 @@
       false,
       false,
       false,
-      null,
+      false,
       true,
       true,
       true,

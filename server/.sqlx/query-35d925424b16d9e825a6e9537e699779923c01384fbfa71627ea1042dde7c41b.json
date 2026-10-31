@@ -29,7 +29,12 @@
         "ordinal": 2,
         "name": "kind!",
         "type_info": "Text",
-        "origin": "Expression"
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
       },
       {
         "ordinal": 3,
@@ -95,7 +100,7 @@
     "nullable": [
       false,
       false,
-      null,
+      false,
       true,
       true,
       true,

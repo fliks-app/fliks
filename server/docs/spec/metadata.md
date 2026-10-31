@@ -108,7 +108,7 @@ Errors share the standard body (auth rule 15): `{"message":<string>,"error":"Bad
 ## SQL
 
 - **Q1 preferred provider** (rule 7): `SELECT m."preferredProvider" AS media_pref, l."preferredProvider" AS library_pref FROM media m LEFT JOIN libraries l ON l.id = m."libraryId" WHERE m.id = $1`.
-- **Q2 existing media** (rule 12): `SELECT id, "tmdbId", "tvdbId", type FROM media WHERE ("tmdbId" = ANY($1) AND type = $3) OR ("tvdbId" = ANY($2) AND type = $3) ORDER BY id ASC`; arms omitted when their id list is empty, no query when both are. `type` is the `media_type_enum` (`movie|series`).
+- **Q2 existing media** (rule 12): `SELECT id, "tmdbId", "tvdbId", type FROM media WHERE ("tmdbId" = ANY($1) AND type = $3) OR ("tvdbId" = ANY($2) AND type = $3) ORDER BY id ASC`; arms omitted when their id list is empty, no query when both are. `type` is `text` under a `CHECK` (`movie|series`).
 - **Q3 language settings** (rule 23): two point reads in parallel, `SELECT value FROM app_settings WHERE key = $1` for `metadata_language` and `metadata_region` (settings `get`, absent row → `null`); Rust may use one `key IN (…)` query.
 
 No writes.

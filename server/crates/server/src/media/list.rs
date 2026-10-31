@@ -116,7 +116,7 @@ fn push_scope(
         qb.push(" AND media.\"libraryId\" = ").push_bind(l);
     }
     if let Some(t) = &p.media_type {
-        qb.push(" AND media.type::text = ").push_bind(t.clone());
+        qb.push(" AND media.type = ").push_bind(t.as_str());
     }
     if let Some(s) = &p.status {
         qb.push(" AND media.status::text = ").push_bind(s.clone());
@@ -348,13 +348,13 @@ async fn attach_watched(
       )
     )
   ) AS "watched!",
-  CASE WHEN m.type = 'movie' THEN COALESCE((
+  CASE m.type WHEN 'movie' THEN COALESCE((
     SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
     FROM playback_states ps
     WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps."episodeId" IS NULL
       AND ps.completed = false AND ps."durationSeconds" > 0
     ORDER BY ps."lastPlayedAt" DESC LIMIT 1
-  ), 0) ELSE 0 END AS "progress!"
+  ), 0) WHEN 'series' THEN 0 END AS "progress!"
 FROM media m
 WHERE m.id = ANY($2::int[])"#,
         uid,

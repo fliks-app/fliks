@@ -1,4 +1,5 @@
 //! `GET /api/media/:id/tracking` (`media-query.md` rules 39-46).
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::release::parsing::quality::{
     AppQuality, app_quality_by_id, parse_release_quality,
 };
@@ -72,7 +73,7 @@ fn state_of(
 
 pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error> {
     let Some(media) = sqlx::query!(
-        r#"SELECT m.type::text AS "kind!", m.monitored, qp.id AS "profile_id?", qp.cutoff AS "cutoff?"
+        r#"SELECT m.type AS "kind!", m.monitored, qp.id AS "profile_id?", qp.cutoff AS "cutoff?"
            FROM media m LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId" WHERE m.id = $1"#,
         id
     )
@@ -89,10 +90,15 @@ pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error
     )
     .fetch_all(db)
     .await?;
-    if media.kind == "movie" {
-        let q: Vec<&str> = files.iter().map(|f| f.quality.as_str()).collect();
-        return Ok(Some(json!({"type": "movie", "hasProfile": has_profile,
-            "movie": state_of(cutoff, media.monitored, &q)})));
+    match crate::db::kind(&media.kind)? {
+        MediaKind::Movie => {
+            let q: Vec<&str> = files.iter().map(|f| f.quality.as_str()).collect();
+            return Ok(Some(
+                json!({"type": MediaKind::Movie, "hasProfile": has_profile,
+                "movie": state_of(cutoff, media.monitored, &q)}),
+            ));
+        }
+        MediaKind::Series => {}
     }
     let mut by_episode: HashMap<i32, Vec<&str>> = HashMap::new();
     for f in &files {
@@ -146,7 +152,7 @@ pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error
         })
         .collect();
     Ok(Some(
-        json!({"type": "series", "hasProfile": has_profile, "seasons": out}),
+        json!({"type": MediaKind::Series, "hasProfile": has_profile, "seasons": out}),
     ))
 }
 

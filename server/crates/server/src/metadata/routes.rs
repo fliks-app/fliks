@@ -1,5 +1,5 @@
 //! `/api/metadata/*` (`docs/spec/metadata.md` rules 1-16, 38-39).
-use super::{MediaKind, Provider, Upstream};
+use super::{Provider, Upstream};
 use crate::{
     http::{
         AppError,
@@ -15,6 +15,7 @@ use axum::{
     http::StatusCode,
     routing::get,
 };
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::{
     media::query::js_parse_int,
     metadata::{discover, language::Resolved},
@@ -133,18 +134,18 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
             .collect()
     };
     let (tmdb, tvdb) = (ids("tmdbId"), ids("tvdbId"));
-    let kind = if tv { "series" } else { "movie" };
+    let kind = MediaKind::from_series(tv);
     let mut rows: Vec<MediaIds> = vec![];
     if !tmdb.is_empty() || !tvdb.is_empty() {
         let libs = accessible_library_ids(db, a).await?;
         rows = sqlx::query!(
             r#"SELECT id AS "id!", "tmdbId" AS tmdb_id, "tvdbId" AS tvdb_id FROM media
-               WHERE type::text = $3 AND "libraryId" = ANY($4)
+               WHERE type = $3 AND "libraryId" = ANY($4)
                  AND ("tmdbId" = ANY($1) OR "tvdbId" = ANY($2))
                ORDER BY id ASC"#,
             &tmdb,
             &tvdb,
-            kind,
+            kind.as_str(),
             &libs
         )
         .fetch_all(db)
@@ -164,7 +165,7 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
             };
             let hit = find("tmdbId", |m| m.1).or_else(|| find("tvdbId", |m| m.2));
             r["existingMediaId"] = hit.map_or(Value::Null, Value::from);
-            r["existingMediaType"] = hit.map_or(Value::Null, |_| kind.into());
+            r["existingMediaType"] = hit.map_or(Value::Null, |_| kind.as_str().into());
             r
         })
         .collect();

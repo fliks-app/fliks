@@ -432,13 +432,7 @@ async fn resolve(
     core: &PgPool,
     q: &t::ResolveQuery,
 ) -> sqlx::Result<Vec<(String, t::ResolvedMedia)>> {
-    let kind = |k: &str| {
-        if k == "movie" {
-            t::MediaKind::Movie
-        } else {
-            t::MediaKind::Series
-        }
-    };
+    let kind = |k: &str| -> sqlx::Result<t::MediaKind> { Ok(crate::db::kind(k)?.into()) };
     let ids = |v: &[u32]| v.iter().map(|i| *i as i32).collect::<Vec<i32>>();
     let mut out = vec![];
     let rows: Vec<(i32, String, String, Option<i32>)> = sqlx::query_as(
@@ -452,7 +446,7 @@ async fn resolve(
             format!("media:{id}"),
             t::ResolvedMedia {
                 title,
-                kind: kind(&k),
+                kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
                 season_number: None,
                 episode_number: None,
@@ -472,7 +466,7 @@ async fn resolve(
             format!("season:{id}"),
             t::ResolvedMedia {
                 title,
-                kind: kind(&k),
+                kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
                 season_number: Some(n as u32),
                 episode_number: None,
@@ -494,7 +488,7 @@ async fn resolve(
             format!("episode:{id}"),
             t::ResolvedMedia {
                 title,
-                kind: kind(&k),
+                kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
                 season_number: Some(s as u32),
                 episode_number: Some(e as u32),

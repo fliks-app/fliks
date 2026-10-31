@@ -2,6 +2,7 @@
 //! The HTTP transport and the clock are injected so the state machines replay against scripted engines.
 use crate::js::{rx, trim, u16len};
 use crate::language::app_language_by_iso;
+use crate::media::kind::MediaKind;
 use std::{collections::HashMap, future::Future};
 
 pub const MAX_OUTPUT_TOKENS: u64 = 8192;
@@ -56,7 +57,7 @@ impl std::fmt::Display for TranslationError {
 pub struct Context {
     pub title: Option<String>,
     pub year: Option<i64>,
-    pub media_type: Option<String>,
+    pub media_type: Option<MediaKind>,
     pub genres: Vec<String>,
     pub overview: Option<String>,
 }
@@ -114,10 +115,9 @@ pub fn has_register_choice(target: &str) -> bool {
 
 pub fn build_register_probe(req: &Request, sample: &[String]) -> Option<(String, String)> {
     let f = second_person(&req.target_language)?;
-    let kind = if req.context.media_type.as_deref() == Some("series") {
-        "series"
-    } else {
-        "film"
+    let kind = match req.context.media_type {
+        Some(MediaKind::Series) => "series",
+        Some(MediaKind::Movie) | None => "film",
     };
     Some((
         format!(
@@ -190,10 +190,9 @@ fn slice16(s: &str, n: usize) -> String {
 
 pub fn build_system_instruction(req: &Request) -> String {
     let c = &req.context;
-    let kind = if c.media_type.as_deref() == Some("series") {
-        "series"
-    } else {
-        "movie"
+    let kind = match c.media_type {
+        Some(MediaKind::Series) => "series",
+        Some(MediaKind::Movie) | None => "movie",
     };
     let mut bits = vec![];
     if let Some(t) = c.title.as_deref().filter(|t| !t.is_empty()) {

@@ -103,7 +103,7 @@ async fn match_one(
         return Ok(skip(t::SkipReason::Unmatched, None, None, None));
     };
     let (mut season_n, mut episode_n) = (None, None);
-    let files: Files = if !m.is_movie() {
+    let files: Files = if m.kind.is_series() {
         let Some(sn) = se.season else {
             return Ok(skip(t::SkipReason::NotAvailable, Some(m.id), None, None));
         };
@@ -227,7 +227,7 @@ pub(super) async fn runtime_minutes(
     season: Option<u32>,
     episode: Option<u32>,
 ) -> sqlx::Result<f64> {
-    let (Some(season), false) = (season, m.is_movie()) else {
+    let (Some(season), true) = (season, m.kind.is_series()) else {
         return Ok(m.runtime.unwrap_or(0).into());
     };
     let total: i64 = sqlx::query_scalar(
@@ -279,7 +279,7 @@ pub async fn score(
     } else {
         0
     };
-    let whole_series = !m.is_movie() && season.is_none();
+    let whole_series = m.kind.is_series() && season.is_none();
     let (min_rank, max_rank) = match (!whole_series).then(|| classify(&m, &files)) {
         Some(Decision::Window { min, max, .. }) => (Some(i64::from(min)), max.map(i64::from)),
         _ => (None, None),
@@ -303,10 +303,9 @@ pub async fn score(
         expected_season: season_n.map(i64::from),
         expected_episode: episode_n.map(i64::from),
         min_resolution: Some(i64::from(min_resolution)),
-        expected_year: if m.is_movie() {
-            m.year.map(i64::from)
-        } else {
-            None
+        expected_year: match m.kind {
+            MediaKind::Movie => m.year.map(i64::from),
+            MediaKind::Series => None,
         },
         min_custom_format_score: m.qp_id.map(|_| i64::from(m.qp_min_cf.unwrap_or(0))),
         min_rank_exclusive: min_rank,
@@ -392,7 +391,7 @@ async fn season_and_episode(
     episode_n: Option<u32>,
 ) -> sqlx::Result<(Option<SeasonRow>, Option<EpisodeRow>)> {
     let (mut season, mut episode) = (None, None);
-    if !m.is_movie()
+    if m.kind.is_series()
         && let Some(sn) = season_n
     {
         season = season_row(

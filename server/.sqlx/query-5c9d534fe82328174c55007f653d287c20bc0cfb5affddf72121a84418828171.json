@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"seasonNumber\" AS number, s.monitored AS was, m.id AS \"media_id?\",\n             m.type AS media_type, m.\"tmdbId\" AS tmdb_id\n           FROM seasons s LEFT JOIN media m ON m.id = s.\"mediaId\" WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "seasons",
+            "name": "seasonNumber"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "was",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "seasons",
+            "name": "monitored"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "media_id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tmdb_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tmdbId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5c9d534fe82328174c55007f653d287c20bc0cfb5affddf72121a84418828171"
+}

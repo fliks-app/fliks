@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, year, monitored, \"imdbId\" AS imdb_id, overview, \"qualityProfileId\" AS quality_profile_id\n           FROM media WHERE \"tmdbId\" = $1 AND type = $2 LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "year",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "year"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "monitored",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "monitored"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "imdb_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "imdbId"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "overview",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "overview"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "quality_profile_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "qualityProfileId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "547adbd93f381c88542afec835e4cb14c65841e28fdf7a3f41d711341a6f864c"
+}

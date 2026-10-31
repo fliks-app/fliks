@@ -897,6 +897,11 @@ async fn progress_is_coalesced_per_media() {
     };
     let gates = fliks_server::plugins::events::progress_gates();
     let media = 424_242;
+    sqlx::query("INSERT INTO media (id, title, type) VALUES ($1, 'm', 'movie')")
+        .bind(media)
+        .execute(&h.st.db)
+        .await
+        .unwrap();
     let t = std::time::Instant::now();
     let seen = Arc::new(Mutex::new(vec![]));
     let sink = seen.clone();

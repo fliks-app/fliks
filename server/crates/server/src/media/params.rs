@@ -1,6 +1,9 @@
 //! Query-string DTOs of the media routes (`media-query.md` rules 4-9): JS-style number coercion, a 400 for what Postgres rejects.
 use crate::http::AppError;
-use fliks_domain::media::query::{is_iso8601, js_number};
+use fliks_domain::media::{
+    kind::MediaKind,
+    query::{is_iso8601, js_number},
+};
 
 pub type Pairs = [(String, String)];
 
@@ -73,6 +76,11 @@ impl<'a> Reader<'a> {
         }
     }
 
+    fn kind(&mut self, key: &str) -> Option<MediaKind> {
+        self.one_of(key, &MediaKind::NAMES)
+            .and_then(|s| MediaKind::parse(&s))
+    }
+
     /// `@Type(() => Number)` + `IsNumber`: an array, NaN or an infinity is a 400.
     fn number(&mut self, key: &str) -> Option<f64> {
         match self.all(key).as_slice() {
@@ -120,7 +128,7 @@ impl<'a> Reader<'a> {
 #[derive(Debug, Default)]
 pub struct Search {
     pub q: Option<String>,
-    pub media_type: Option<String>,
+    pub media_type: Option<MediaKind>,
     pub status: Option<String>,
     pub monitored: Option<bool>,
     pub year: Option<i32>,
@@ -195,7 +203,7 @@ impl Search {
         };
         let s = Self {
             q: r.string("q"),
-            media_type: r.one_of("type", &["movie", "series"]),
+            media_type: r.kind("type"),
             status: r.one_of("status", &STATUSES),
             monitored: r.flag("monitored"),
             year: r.int("year"),
@@ -300,7 +308,7 @@ impl Recent {
 pub struct Calendar {
     pub start: Option<String>,
     pub end: Option<String>,
-    pub media_type: Option<String>,
+    pub media_type: Option<MediaKind>,
     pub monitored_only: bool,
     pub requested_by_me: bool,
 }
@@ -327,7 +335,7 @@ impl Calendar {
         let s = Self {
             start,
             end,
-            media_type: r.one_of("type", &["movie", "series"]),
+            media_type: r.kind("type"),
             monitored_only: r.flag("monitoredOnly") == Some(true),
             requested_by_me: r.flag("requestedByMe") == Some(true),
         };

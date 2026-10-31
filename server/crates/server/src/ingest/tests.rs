@@ -261,7 +261,7 @@ async fn library(c: &Ctx, name: &str, path: &Path, types: &str) -> i32 {
 }
 
 async fn media(c: &Ctx, lib: i32, folder: &str, t: &str) -> i32 {
-    sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ($1, $2::text::media_type_enum, $3, $1) RETURNING id"#)
+    sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ($1, $2, $3, $1) RETURNING id"#)
         .bind(folder)
         .bind(t)
         .bind(lib)

@@ -1,9 +1,10 @@
 //! What host imports emit on a plugin's behalf (`plugins.md` rule 33).
 use super::runtime::fliks::plugin::types as t;
-use crate::events::event::{Download, DownloadState, MediaKind};
+use crate::events::event::{Download, DownloadState};
 use crate::events::{DomainEvent, Num, SseEvent};
 use crate::state::AppState;
 use crate::sync::MutexExt;
+use fliks_domain::media::kind::MediaKind;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -43,13 +44,15 @@ pub async fn recipients(st: &AppState, media_id: Option<i32>) -> Vec<i32> {
     admins(st).await
 }
 
-async fn media_row(st: &AppState, id: i32) -> Option<(String, String)> {
-    sqlx::query_as(r#"SELECT title, type::text FROM media WHERE id = $1"#)
-        .bind(id)
-        .fetch_optional(&st.db)
-        .await
-        .ok()
-        .flatten()
+async fn media_row(st: &AppState, id: i32) -> Option<(String, MediaKind)> {
+    let (title, kind): (String, String) =
+        sqlx::query_as(r#"SELECT title, type FROM media WHERE id = $1"#)
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten()?;
+    Some((title, MediaKind::parse(&kind)?))
 }
 
 fn state_of(s: t::DownloadState) -> DownloadState {
@@ -80,16 +83,14 @@ pub async fn push_progress(st: &AppState, media_id: i32, downloads: Vec<Download
     if recipients.is_empty() {
         return;
     }
-    let kind = media_row(st, media_id).await.map(|(_, k)| k);
+    let Some((_, media_type)) = media_row(st, media_id).await else {
+        return;
+    };
     st.hub.emit_to_users(
         &recipients,
         SseEvent::DownloadProgress {
             media_id: media_id.into(),
-            media_type: if kind.as_deref() == Some("movie") {
-                MediaKind::Movie
-            } else {
-                MediaKind::Series
-            },
+            media_type,
             downloads,
         },
     );

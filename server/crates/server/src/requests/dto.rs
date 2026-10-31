@@ -3,7 +3,7 @@ use crate::http::{
     AppError,
     validate::{Check, int_param, int4, object},
 };
-use fliks_domain::media::query::js_number;
+use fliks_domain::media::{kind::MediaKind, query::js_number};
 use serde_json::{Map, Value, json};
 
 pub(crate) type Res<T> = Result<T, AppError>;
@@ -18,7 +18,7 @@ pub const STATUSES: [&str; 7] = [
     "removed",
 ];
 pub const KINDS: [&str; 2] = ["add", "delete"];
-pub const MEDIA_TYPES: [&str; 2] = ["movie", "series"];
+pub const MEDIA_TYPES: [&str; 2] = MediaKind::NAMES;
 
 /// An optional field: absent, explicit `null` or a value (`PATCH` keeps absent, clears `null`).
 #[derive(Debug, PartialEq)]
@@ -55,7 +55,7 @@ fn opt_int(c: &mut Check, key: &str, coerced: bool) -> Field<i32> {
 
 #[derive(Debug)]
 pub struct CreateRequest {
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub delete: bool,
     pub tmdb_id: i32,
     pub title: String,
@@ -81,7 +81,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         ],
         "",
     );
-    let media_type = c.one_of("mediaType", &MEDIA_TYPES, false);
+    let media_type = c.kind("mediaType", false);
     let kind = c.one_of("kind", &KINDS, true);
     // past int4 Postgres rejected the insert (500)
     let tmdb_id = match o.get("tmdbId") {
@@ -106,7 +106,9 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned();
-    let (media_type, tmdb_id) = (media_type.unwrap_or_default(), tmdb_id.unwrap_or_default());
+    let (Some(media_type), Some(tmdb_id)) = (media_type, tmdb_id) else {
+        return Err(AppError::bad_request(c.errs));
+    };
     c.finish(CreateRequest {
         media_type,
         delete: kind.as_deref() == Some("delete"),
@@ -185,7 +187,7 @@ pub struct List {
     pub kind: Option<String>,
     pub user_id: Option<i32>,
     pub tmdb_id: Option<i32>,
-    pub media_type: Option<String>,
+    pub media_type: Option<MediaKind>,
     pub page: i64,
     pub limit: i64,
 }
@@ -229,7 +231,7 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
     };
     let status = text("status", &STATUSES);
     let kind = text("kind", &KINDS);
-    let media_type = text("mediaType", &MEDIA_TYPES);
+    let media_type = text("mediaType", &MEDIA_TYPES).and_then(|m| MediaKind::parse(&m));
     let mut int = |k: &str, min: Option<i32>, max: Option<i32>| -> Option<i32> {
         let one = match all(k).as_slice() {
             [] => return None,
@@ -273,15 +275,15 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
 }
 
 /// The `tmdbId` and `mediaType` of `title-state` (canonical integers; the enum is validated here).
-pub fn title_state(q: &[(String, String)]) -> Res<(i32, String)> {
+pub fn title_state(q: &[(String, String)]) -> Res<(i32, MediaKind)> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
     let tmdb =
         int_param(one("tmdbId").ok_or_else(|| {
             AppError::bad_request("Validation failed (numeric string is expected)")
         })?)?;
-    match one("mediaType") {
-        Some(m) if MEDIA_TYPES.contains(&m) => Ok((tmdb, m.to_owned())),
-        _ => Err(AppError::bad_request(vec![format!(
+    match one("mediaType").and_then(MediaKind::parse) {
+        Some(m) => Ok((tmdb, m)),
+        None => Err(AppError::bad_request(vec![format!(
             "mediaType must be one of the following values: {}",
             MEDIA_TYPES.join(", ")
         )])),
@@ -513,7 +515,7 @@ mod tests {
         };
         assert_eq!(
             title_state(&q(&[("tmdbId", "9"), ("mediaType", "movie")])).unwrap(),
-            (9, "movie".into())
+            (9, MediaKind::Movie)
         );
         assert!(title_state(&q(&[("tmdbId", "09"), ("mediaType", "movie")])).is_err());
         assert!(title_state(&q(&[("tmdbId", "9"), ("mediaType", "x")])).is_err());

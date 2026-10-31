@@ -275,14 +275,14 @@ async fn resolve(
         return Err(AppError::bad_request("errors.playlist_add_target_required"));
     };
     let kind = sqlx::query_scalar!(
-        r#"SELECT type::text AS "kind!" FROM media WHERE id = $1 AND "libraryId" = ANY($2)"#,
+        r#"SELECT type AS "kind!" FROM media WHERE id = $1 AND "libraryId" = ANY($2)"#,
         media,
         accessible
     )
     .fetch_optional(&mut *c)
     .await?
     .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
-    if kind != "series" {
+    if !crate::db::kind(&kind)?.is_series() {
         return Ok((
             vec![Target {
                 media,

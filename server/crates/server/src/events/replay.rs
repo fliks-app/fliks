@@ -1,5 +1,6 @@
 //! Replay cache for `download.progress` (rules 25-27): one whole snapshot per media, not persisted.
-use super::event::{Download, MediaKind, SseEvent};
+use super::event::{Download, SseEvent};
+use fliks_domain::media::kind::MediaKind;
 use std::time::{Duration, Instant};
 
 /// A media not restated for three publisher ticks has lost its publisher.

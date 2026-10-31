@@ -33,6 +33,7 @@ pub mod webhooks;
 use crate::ingest::KeyedLocks;
 use crate::state::AppState;
 use crate::sync::{MutexExt, RwLockExt};
+use fliks_domain::media::kind::MediaKind;
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
@@ -46,6 +47,24 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 pub use runtime::{HealthReport, HttpRequest, HttpResponse, Principal};
+
+impl From<MediaKind> for runtime::fliks::plugin::types::MediaKind {
+    fn from(k: MediaKind) -> Self {
+        match k {
+            MediaKind::Movie => Self::Movie,
+            MediaKind::Series => Self::Series,
+        }
+    }
+}
+
+impl From<runtime::fliks::plugin::types::MediaKind> for MediaKind {
+    fn from(k: runtime::fliks::plugin::types::MediaKind) -> Self {
+        match k {
+            runtime::fliks::plugin::types::MediaKind::Movie => Self::Movie,
+            runtime::fliks::plugin::types::MediaKind::Series => Self::Series,
+        }
+    }
+}
 
 /// The 15 s a caller (boot, enable, confirm, restart) waits for `ready` (rules 23, 41).
 pub const READY_WAIT: Duration = Duration::from_secs(15);

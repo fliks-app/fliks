@@ -69,7 +69,7 @@ async fn subject_of(
     Ok(Subject {
         title: title.to_owned(),
         media_id: file.media_id.map(i64::from),
-        media_type: file.media_type.clone(),
+        media_type: file.media_type,
         season_number: ep.as_ref().and_then(|e| e.season).map(i64::from),
         episode_number: ep.as_ref().and_then(|e| e.number).map(i64::from),
         episode_title: ep

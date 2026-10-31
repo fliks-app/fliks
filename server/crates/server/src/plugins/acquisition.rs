@@ -3,6 +3,7 @@ use super::runtime::fliks::plugin::types as t;
 use crate::profiles::db as profiles;
 use crate::state::AppState;
 use chrono::{Days, NaiveDate, Utc};
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quality_string};
 use fliks_domain::release::parsing::season_episode::{
     ReleaseCoverage, coverage_of, parse_season_episode,
@@ -24,7 +25,8 @@ const PACK_MIN_SHARE: f64 = 0.5;
 #[derive(FromRow, Clone)]
 struct MediaRow {
     id: i32,
-    kind: String,
+    #[sqlx(try_from = "String")]
+    kind: MediaKind,
     title: String,
     original_title: Option<String>,
     alternative_titles: Value,
@@ -62,9 +64,6 @@ const MEDIA_SELECT: &str = r#"SELECT m.id, m.type::text AS kind, m.title, m."ori
   LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId""#;
 
 impl MediaRow {
-    fn is_movie(&self) -> bool {
-        self.kind == "movie"
-    }
     fn alt(&self) -> Vec<String> {
         self.alternative_titles
             .as_array()
@@ -294,7 +293,7 @@ async fn files_for(
     season: Option<i32>,
     episode: Option<&EpisodeRow>,
 ) -> sqlx::Result<Files> {
-    if m.is_movie() {
+    if let MediaKind::Movie = m.kind {
         return Ok(file_qualities(db, "mediaId", m.id)
             .await?
             .into_iter()

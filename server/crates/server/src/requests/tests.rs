@@ -4,13 +4,14 @@ use super::{
     lifecycle::scope_covered,
     rules::{Ctx, matches, reads_metadata},
 };
+use fliks_domain::media::kind::MediaKind;
 use serde_json::json;
 
 fn ctx() -> Ctx {
     Ctx {
         user_id: 7,
         role_id: Some(3),
-        media_type: "series".into(),
+        media_type: MediaKind::Series,
         library_id: Some(2),
         genre_ids: vec![16, 35],
         year: Some(2015),
@@ -71,7 +72,7 @@ fn year_bounds_and_the_season_cap() {
     assert!(matches(&json!({"maxSeasons": 2}), &ctx()));
     assert!(!matches(&json!({"maxSeasons": 1}), &ctx()));
     let mut movie = ctx();
-    movie.media_type = "movie".into();
+    movie.media_type = MediaKind::Movie;
     movie.season_count = None;
     assert!(
         matches(&json!({"maxSeasons": 1}), &movie),

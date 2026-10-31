@@ -294,7 +294,7 @@ async fn try_run(
         context: Context {
             title: Some(media.title.clone()),
             year: media.year.map(i64::from),
-            media_type: Some(media.kind.clone()),
+            media_type: Some(media.kind),
             genres: media
                 .genres
                 .as_ref()

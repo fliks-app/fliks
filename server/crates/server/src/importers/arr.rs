@@ -12,7 +12,10 @@ use fliks_domain::{
         Mapped, PathMapping, RemoteItem, apply_path_mapping, extname, language_from_name,
         map_remote_items, parse_language_from_path, resolve_cutoff, suggest_local_library_id,
     },
-    media::path::{join, media_path, normalize},
+    media::{
+        kind::MediaKind,
+        path::{join, media_path, normalize},
+    },
     naming::validate_folder_name,
 };
 use serde_json::{Value, json};
@@ -45,14 +48,17 @@ impl Arr {
             Self::Sonarr => "sonarr_url",
         }
     }
-    fn media_type(self) -> &'static str {
+    fn media_type(self) -> MediaKind {
+        match self {
+            Self::Radarr => MediaKind::Movie,
+            Self::Sonarr => MediaKind::Series,
+        }
+    }
+    fn list_path(self) -> &'static str {
         match self {
             Self::Radarr => "movie",
             Self::Sonarr => "series",
         }
-    }
-    fn list_path(self) -> &'static str {
-        self.media_type()
     }
     fn status(self) -> &'static str {
         match self {
@@ -231,7 +237,7 @@ pub(super) async fn import(
         .ok_or_else(|| {
             AppError::bad_request(format!("Library #{} not found", b.target_library_id))
         })?;
-    if !library.media_types.iter().any(|t| t == arr.media_type()) {
+    if !library.media_types.contains(&arr.media_type()) {
         return Err(AppError::bad_request(format!(
             "Library \"{}\" does not accept {}",
             library.name,
@@ -544,7 +550,7 @@ async fn radarr_movie_subtitles(
         return Ok(0);
     };
     let db_err = |e: sqlx::Error| e.to_string();
-    let Some(media) = db::media_by_tmdb(&st.db, tmdb, "movie")
+    let Some(media) = db::media_by_tmdb(&st.db, tmdb, MediaKind::Movie)
         .await
         .map_err(db_err)?
     else {

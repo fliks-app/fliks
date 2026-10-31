@@ -143,7 +143,7 @@ pub fn progress_subject(media: &MediaCtx, ep: Option<(i32, i32, i32, Option<Stri
     let mut s = Subject {
         title: media.title.clone(),
         media_id: Some(media.id.into()),
-        media_type: Some(media.kind.clone()),
+        media_type: Some(media.kind),
         season_number: None,
         episode_number: None,
         episode_title: None,

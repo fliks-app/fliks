@@ -14,6 +14,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
+use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::collections::HashSet;
@@ -42,7 +43,7 @@ impl TargetDto {
 #[serde(rename_all = "camelCase")]
 pub struct LikedItem {
     media_id: i32,
-    media_type: String,
+    media_type: MediaKind,
     title: String,
     poster_url: Option<String>,
     fanart_url: Option<String>,
@@ -93,7 +94,7 @@ pub async fn list_likes(
     }
     let rows = sqlx::query!(
         r#"SELECT l."seasonId" AS season_id, l."episodeId" AS episode_id,
-                  m.id AS "media_id?", m.type::text AS media_type, m.title AS "title?",
+                  m.id AS "media_id?", m.type AS "media_type?", m.title AS "title?",
                   m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, m."libraryId" AS library_id,
                   s."seasonNumber" AS "season_number?", e."episodeNumber" AS "episode_number?",
                   e.title AS episode_title, e."stillUrl" AS still_url,
@@ -111,9 +112,16 @@ pub async fn list_likes(
     )
     .fetch_all(db)
     .await?;
+    let rows = rows
+        .into_iter()
+        .map(|r| {
+            let kind = r.media_type.as_deref().map(crate::db::kind).transpose()?;
+            Ok((r, kind))
+        })
+        .collect::<sqlx::Result<Vec<_>>>()?;
     Ok(rows
         .into_iter()
-        .filter_map(|r| {
+        .filter_map(|(r, kind)| {
             let (media_id, library_id) = (r.media_id?, r.library_id?);
             let in_library = library.is_none_or(|n| f64::from(library_id) == n);
             if !accessible.contains(&library_id) || !in_library {
@@ -128,7 +136,7 @@ pub async fn list_likes(
             );
             Some(LikedItem {
                 media_id,
-                media_type: r.media_type?,
+                media_type: kind?,
                 title,
                 poster_url: r.poster_url,
                 fanart_url: r.fanart_url,
