@@ -520,7 +520,6 @@ pub(super) async fn find_or_create_unmatched(
     user: i32,
 ) -> Result<(MediaRow, bool, String), AppError> {
     let sample = PathBuf::from(resolve(&d.files[0].path, "/"));
-    let series = d.media_type.has_seasons();
     let art_dir = match d.media_type {
         MediaKind::Movie => sample.parent().unwrap_or(&sample).to_path_buf(),
         MediaKind::Series if d.transfer.is_some() => {
@@ -529,17 +528,21 @@ pub(super) async fn find_or_create_unmatched(
         MediaKind::Series => PathBuf::from(&lib.path).join(&d.folder_name),
     };
     let root_movie = d.folder_name.is_empty();
-    let art_base = (!series).then(|| split_ext(&file_name(&sample)).0.to_owned());
+    let art_base = match d.media_type {
+        MediaKind::Movie => Some(split_ext(&file_name(&sample)).0.to_owned()),
+        MediaKind::Series => None,
+    };
     let read_nfo = async || -> Option<NfoData> {
-        if series {
-            match nfo::file(&art_dir.join("tvshow.nfo")).await {
+        match d.media_type {
+            MediaKind::Series => match nfo::file(&art_dir.join("tvshow.nfo")).await {
                 Some(n) => Some(n),
                 None => nfo::for_video(&sample).await,
+            },
+            MediaKind::Movie if root_movie => {
+                let base = art_base.clone().unwrap_or_default();
+                nfo::file(&art_dir.join(format!("{base}.nfo"))).await
             }
-        } else if root_movie {
-            nfo::file(&art_dir.join(format!("{}.nfo", art_base.clone().unwrap_or_default()))).await
-        } else {
-            nfo::for_video(&sample).await
+            MediaKind::Movie => nfo::for_video(&sample).await,
         }
     };
     let guessed = d

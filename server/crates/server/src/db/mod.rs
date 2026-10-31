@@ -2,8 +2,9 @@ pub mod migrate;
 
 pub use migrate::{MigrateError, adopt_typeorm, migrate};
 
+use fliks_domain::media::kind::{MediaKind, UnknownKind};
+
 /// Decodes a `media.type` / `requests."mediaType"` value (`text` under a `CHECK`).
-pub fn kind(s: &str) -> Result<fliks_domain::media::kind::MediaKind, sqlx::Error> {
-    fliks_domain::media::kind::MediaKind::try_from(s.to_owned())
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))
+pub fn kind(s: &str) -> Result<MediaKind, sqlx::Error> {
+    MediaKind::parse(s).ok_or_else(|| sqlx::Error::Decode(Box::new(UnknownKind(s.to_owned()))))
 }

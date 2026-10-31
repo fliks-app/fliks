@@ -1,11 +1,12 @@
 //! The listing of the companion files of one media file (rules 83-85).
 use super::*;
+use fliks_domain::media::kind::MediaKind;
 
 /// Rules 83-85.
 pub(super) fn scan(
     root: &fsx::Root,
     mdir: &Path,
-    series: bool,
+    kind: MediaKind,
     own_folder: bool,
     files: &[FileRow],
     pos: usize,
@@ -40,7 +41,7 @@ pub(super) fn scan(
         out: vec![],
     };
     if own_folder {
-        c.folder_companions(&dir, series);
+        c.folder_companions(&dir, kind);
     }
     c.row_subtitles(&by_path);
     let media_files: Vec<(&str, bool)> = files
@@ -60,7 +61,7 @@ pub(super) fn scan(
         &names,
         &Sidecar {
             stem: &stem,
-            series,
+            kind,
             own_folder,
             by_path: &by_path,
             media_files: &media_files,
@@ -89,7 +90,7 @@ pub(super) struct Collector<'a> {
 
 pub(super) struct Sidecar<'a> {
     stem: &'a str,
-    series: bool,
+    kind: MediaKind,
     own_folder: bool,
     by_path: &'a BTreeMap<String, Vec<&'a SubRow>>,
     media_files: &'a [(&'a str, bool)],
@@ -187,20 +188,22 @@ impl Collector<'_> {
     }
 
     /// The `.nfo` and the artwork of a media folder.
-    fn folder_companions(&mut self, dir: &Path, series: bool) {
+    fn folder_companions(&mut self, dir: &Path, kind: MediaKind) {
         let mdir = self.mdir;
         let parent = dir
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| dir.to_path_buf());
-        let nfo: Vec<(PathBuf, &str)> = if series {
-            vec![
-                (mdir.to_path_buf(), "tvshow.nfo"),
-                (dir.to_path_buf(), "tvshow.nfo"),
-                (parent, "tvshow.nfo"),
-            ]
-        } else {
-            vec![(dir.to_path_buf(), "movie.nfo")]
+        let (nfo, art): (Vec<(PathBuf, &str)>, PathBuf) = match kind {
+            MediaKind::Series => (
+                vec![
+                    (mdir.to_path_buf(), "tvshow.nfo"),
+                    (dir.to_path_buf(), "tvshow.nfo"),
+                    (parent, "tvshow.nfo"),
+                ],
+                mdir.to_path_buf(),
+            ),
+            MediaKind::Movie => (vec![(dir.to_path_buf(), "movie.nfo")], dir.to_path_buf()),
         };
         for (d, want) in nfo {
             if !d.starts_with(mdir) {
@@ -213,11 +216,6 @@ impl Collector<'_> {
                 self.add(&d, &hit, "folder", "nfo", &[]);
             }
         }
-        let art = if series {
-            mdir.to_path_buf()
-        } else {
-            dir.to_path_buf()
-        };
         for n in regular_files(&art) {
             let (s, e) = split_ext(&n);
             if IMAGE_EXTS.contains(&e.to_lowercase().as_str())
@@ -263,7 +261,7 @@ impl Collector<'_> {
                 self.add(dir, name, "file", "edl", &[]);
             } else if lower == format!("{stem}.nfo") {
                 self.add(dir, name, "file", "nfo", &[]);
-            } else if !x.series
+            } else if x.kind == MediaKind::Movie
                 && IMAGE_EXTS.contains(&ext)
                 && (base == format!("{stem}-poster") || base == format!("{stem}-fanart"))
             {
