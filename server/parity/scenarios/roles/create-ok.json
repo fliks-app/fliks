@@ -120,7 +120,6 @@
             "permissions": [
               "media.read",
               "users.manage",
-              "parties.create",
               "parties.read_public"
             ]
           },
@@ -133,7 +132,6 @@
             "permissions": [
               "media.read",
               "livetv.read",
-              "parties.create",
               "parties.read_public"
             ]
           },

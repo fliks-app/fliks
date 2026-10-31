@@ -34,7 +34,6 @@
           "permissions": [
             "media.read",
             "livetv.read",
-            "parties.create",
             "parties.read_public"
           ],
           "profileVisibility": "private",
