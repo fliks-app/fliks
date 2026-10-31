@@ -324,17 +324,17 @@ pub(super) async fn find_or_import(
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
         let id = if tvdb {
             sqlx::query_scalar!(
-                r#"SELECT id FROM media WHERE "tvdbId" = $1 AND type::text = $2 LIMIT 1"#,
+                r#"SELECT id FROM media WHERE "tvdbId" = $1 AND type = $2 LIMIT 1"#,
                 n,
-                d.media_type
+                d.media_type.as_str()
             )
             .fetch_optional(&st.db)
             .await?
         } else {
             sqlx::query_scalar!(
-                r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type::text = $2 LIMIT 1"#,
+                r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
                 n,
-                d.media_type
+                d.media_type.as_str()
             )
             .fetch_optional(&st.db)
             .await?
@@ -349,9 +349,9 @@ pub(super) async fn find_or_import(
     }
     let provider = d.provider.clone().filter(|p| p == "tmdb" || p == "tvdb");
     let imported = async {
-        let target = mw::resolve_target(st, a, &d.media_type, Some(d.library_id)).await?;
+        let target = mw::resolve_target(st, a, d.media_type, Some(d.library_id)).await?;
         let imp = mw::Import {
-            media_type: d.media_type.clone(),
+            media_type: d.media_type,
             library_id: target.id,
             quality_profile_id: mw::resolve_profile(
                 &st.db,
@@ -451,7 +451,7 @@ async fn target_folder(
 ) -> Result<String, AppError> {
     Ok(if d.transfer.is_some() {
         let f = naming_formats(&st.db).await?;
-        let named = if d.media_type == "series" {
+        let named = if d.media_type.is_series() {
             naming::apply_series_folder_format(
                 &f.series_folder,
                 &SeriesFolder {
@@ -493,20 +493,20 @@ async fn existing_unmatched(
             .map(|f| file_name(Path::new(&f.path)))
             .collect();
         sqlx::query_scalar!(
-            r#"SELECT m.id FROM media m WHERE m."libraryId" = $1 AND m.type::text = $2 AND m."folderName" = ''
+            r#"SELECT m.id FROM media m WHERE m."libraryId" = $1 AND m.type = $2 AND m."folderName" = ''
                AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."relativePath" = ANY($3))
                ORDER BY m.id LIMIT 1"#,
             lib.id,
-            d.media_type,
+            d.media_type.as_str(),
             &wanted
         )
         .fetch_optional(&st.db)
         .await?
     } else {
         sqlx::query_scalar!(
-            r#"SELECT id FROM media WHERE "libraryId" = $1 AND type::text = $2 AND "folderName" = $3 ORDER BY id LIMIT 1"#,
+            r#"SELECT id FROM media WHERE "libraryId" = $1 AND type = $2 AND "folderName" = $3 ORDER BY id LIMIT 1"#,
             lib.id,
-            d.media_type,
+            d.media_type.as_str(),
             folder
         )
         .fetch_optional(&st.db)
@@ -522,7 +522,7 @@ pub(super) async fn find_or_create_unmatched(
     user: i32,
 ) -> Result<(MediaRow, bool, String), AppError> {
     let sample = PathBuf::from(resolve(&d.files[0].path, "/"));
-    let series = d.media_type == "series";
+    let series = d.media_type.is_series();
     let art_dir = if !series {
         sample.parent().unwrap_or(&sample).to_path_buf()
     } else if d.transfer.is_some() {
@@ -594,7 +594,7 @@ pub(super) async fn find_or_create_unmatched(
                 mw::Unmatched {
                     title,
                     year,
-                    media_type: d.media_type.clone(),
+                    media_type: d.media_type,
                     library_id: d.library_id,
                     folder_name: folder,
                     quality_profile_id: d.quality_profile_id,

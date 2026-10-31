@@ -180,7 +180,7 @@ fn movie(id: i64) -> Value {
 }
 
 async fn media(pool: &PgPool, id: i32, kind: &str, tmdb: Option<i32>, tvdb: Option<i32>, lib: i32) {
-    sqlx::query(r#"INSERT INTO media (id, title, type, "tmdbId", "tvdbId", "libraryId") VALUES ($1, $2, $3::media_type_enum, $4, $5, $6)"#)
+    sqlx::query(r#"INSERT INTO media (id, title, type, "tmdbId", "tvdbId", "libraryId") VALUES ($1, $2, $3, $4, $5, $6)"#)
         .bind(id)
         .bind(format!("m{id}"))
         .bind(kind)

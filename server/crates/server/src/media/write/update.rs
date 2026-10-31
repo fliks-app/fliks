@@ -18,11 +18,13 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    media::kind::MediaKind,
+};
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
 
-const TYPES: [&str; 2] = ["movie", "series"];
 const STATUSES: [&str; 6] = [
     "tba",
     "announced",
@@ -76,9 +78,8 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     put!("title", b.str("title")?, Col::Text);
     put!("originalTitle", b.str("originalTitle")?, Col::Text);
     put!("year", b.int("year")?, Col::Int);
-    put!("type", b.one_of("type", &TYPES)?, |v| Col::Enum(
-        "media_type_enum",
-        v
+    put!("type", b.kind("type")?, |v: Option<MediaKind>| Col::Text(
+        v.map(|k| k.as_str().to_owned())
     ));
     put!("tmdbId", b.int("tmdbId")?, Col::Int);
     put!("imdbId", b.str("imdbId")?, Col::Text);
@@ -158,9 +159,12 @@ pub async fn create(
     let b = Body::new(v, &MEDIA_FIELDS[..18])?;
     b.required(b.str("title")?, "title", "must be a string")?;
     let media_type = b.required(
-        b.one_of("type", &TYPES)?,
+        b.kind("type")?,
         "type",
-        "must be one of the following values: movie, series",
+        &format!(
+            "must be one of the following values: {}",
+            MediaKind::NAMES.join(", ")
+        ),
     )?;
     let cols = columns(&b)?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
@@ -243,7 +247,7 @@ pub async fn apply_media_monitored(
     monitored: bool,
 ) -> Result<MonitoredChange, sqlx::Error> {
     let media = sqlx::query!(
-        r#"SELECT id, type::text AS "media_type!", "tmdbId" AS tmdb_id
+        r#"SELECT id, type AS "media_type!", "tmdbId" AS tmdb_id
            FROM media WHERE id = ANY($1) AND monitored IS DISTINCT FROM $2"#,
         ids,
         monitored
@@ -251,13 +255,15 @@ pub async fn apply_media_monitored(
     .fetch_all(&mut *c)
     .await?
     .into_iter()
-    .map(|r| MediaRef {
-        id: r.id,
-        media_type: r.media_type,
-        tmdb_id: r.tmdb_id,
-        monitored,
+    .map(|r| {
+        Ok(MediaRef {
+            id: r.id,
+            media_type: crate::db::kind(&r.media_type)?,
+            tmdb_id: r.tmdb_id,
+            monitored,
+        })
     })
-    .collect::<Vec<_>>();
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
     let changed: Vec<i32> = media.iter().map(|m| m.id).collect();
     sqlx::query!(
         "UPDATE media SET monitored = $1 WHERE id = ANY($2)",
@@ -296,12 +302,16 @@ pub async fn apply_season_monitored(
 ) -> Result<MonitoredChange, sqlx::Error> {
     let was = sqlx::query!(
         r#"SELECT s."seasonNumber" AS number, s.monitored AS was, m.id AS "media_id?",
-             m.type::text AS media_type, m."tmdbId" AS tmdb_id
+             m.type AS media_type, m."tmdbId" AS tmdb_id
            FROM seasons s LEFT JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
         season_id
     )
     .fetch_optional(&mut *c)
     .await?;
+    let was_kind = match was.as_ref().and_then(|w| w.media_type.as_deref()) {
+        Some(t) => Some(crate::db::kind(t)?),
+        None => None,
+    };
     sqlx::query!(
         "UPDATE seasons SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
         season_id,
@@ -322,7 +332,7 @@ pub async fn apply_season_monitored(
             Some((
                 MediaRef {
                     id: w.media_id?,
-                    media_type: w.media_type?,
+                    media_type: was_kind?,
                     tmdb_id: w.tmdb_id,
                     monitored: true,
                 },

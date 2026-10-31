@@ -1,11 +1,9 @@
 //! Request bodies (`remote/dto/*.ts`); an optional field accepts `null` like `@IsOptional()`.
 use crate::{
-    events::{
-        Num,
-        event::{MediaKind, RemoteAction},
-    },
+    events::{Num, event::RemoteAction},
     http::AppError,
 };
+use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Deserializer};
 
 fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(

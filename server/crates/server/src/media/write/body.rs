@@ -1,6 +1,7 @@
 //! class-validator style checks on a JSON body read as a map: absent = `None`, `null` = `Some(None)`
 //! (`@IsOptional` lets `null` through), messages as the global pipe words them.
 use crate::http::AppError;
+use fliks_domain::media::kind::MediaKind;
 use serde_json::{Map, Value};
 
 pub type Field<T> = Option<Option<T>>;
@@ -115,6 +116,14 @@ impl Body {
             |v| v.as_str().filter(|s| values.contains(s)).map(str::to_owned),
             &msg,
         )
+    }
+
+    pub fn kind(&self, k: &str) -> Result<Field<MediaKind>, AppError> {
+        let msg = format!(
+            "must be one of the following values: {}",
+            MediaKind::NAMES.join(", ")
+        );
+        self.get(k, |v| v.as_str().and_then(MediaKind::parse), &msg)
     }
 
     pub fn strings(&self, k: &str) -> Result<Field<Vec<String>>, AppError> {

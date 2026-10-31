@@ -1,4 +1,5 @@
 //! Queries of the importers (`importers.md` SQL 1-7).
+use fliks_domain::media::kind::MediaKind;
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
 
@@ -6,12 +7,12 @@ pub struct Library {
     pub id: i32,
     pub name: String,
     pub path: Option<String>,
-    pub media_types: Vec<String>,
+    pub media_types: Vec<MediaKind>,
 }
 
 pub async fn libraries(db: &PgPool) -> sqlx::Result<Vec<Library>> {
     let rows = sqlx::query!(
-        r#"SELECT id, name, path, "mediaTypes" AS "media_types: Json<Vec<String>>" FROM libraries ORDER BY id"#
+        r#"SELECT id, name, path, "mediaTypes" AS "media_types: Json<Vec<MediaKind>>" FROM libraries ORDER BY id"#
     )
     .fetch_all(db)
     .await?;
@@ -38,14 +39,14 @@ pub struct Existing {
 pub async fn media_by_tmdb(
     db: &PgPool,
     tmdb_id: i32,
-    media_type: &str,
+    media_type: MediaKind,
 ) -> sqlx::Result<Option<Existing>> {
     sqlx::query_as!(
         Existing,
         r#"SELECT id, year, monitored, "imdbId" AS imdb_id, overview, "qualityProfileId" AS quality_profile_id
-           FROM media WHERE "tmdbId" = $1 AND type = $2::text::media_type_enum LIMIT 1"#,
+           FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
         tmdb_id,
-        media_type
+        media_type.as_str()
     )
     .fetch_optional(db)
     .await
@@ -55,7 +56,7 @@ pub struct NewMedia<'a> {
     pub title: &'a str,
     pub tmdb_id: i32,
     pub year: Option<i32>,
-    pub media_type: &'a str,
+    pub media_type: MediaKind,
     pub status: &'a str,
     pub monitored: bool,
     pub library_id: i32,
@@ -69,12 +70,12 @@ pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO media (title, "tmdbId", year, type, status, monitored, "libraryId", "folderName",
                               "imdbId", overview, "qualityProfileId")
-           VALUES ($1, $2, $3, $4::text::media_type_enum, $5::text::media_status_enum, $6, $7, $8, $9, $10, $11)
+           VALUES ($1, $2, $3, $4, $5::text::media_status_enum, $6, $7, $8, $9, $10, $11)
            RETURNING id"#,
         m.title,
         m.tmdb_id,
         m.year,
-        m.media_type,
+        m.media_type.as_str(),
         m.status,
         m.monitored,
         m.library_id,

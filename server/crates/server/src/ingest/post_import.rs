@@ -167,7 +167,7 @@ impl Queue {
 
 async fn enrich_subject(st: &AppState, id: i32) -> Option<Subject> {
     let r = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type::text AS "media_type!" FROM media_files f JOIN media m ON m.id = f."mediaId"
+        r#"SELECT m.id, m.title, m.type AS "media_type!" FROM media_files f JOIN media m ON m.id = f."mediaId"
            WHERE f.id = $1"#,
         id
     )
@@ -177,7 +177,7 @@ async fn enrich_subject(st: &AppState, id: i32) -> Option<Subject> {
     Some(Subject {
         title: r.title,
         media_id: Some(i64::from(r.id)),
-        media_type: Some(r.media_type),
+        media_type: crate::db::kind(&r.media_type).ok(),
         season_number: None,
         episode_number: None,
         episode_title: None,

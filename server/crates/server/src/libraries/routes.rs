@@ -17,13 +17,16 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    media::kind::MediaKind,
+};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool, QueryBuilder};
 use std::collections::HashSet;
 
-const MEDIA_TYPES: [&str; 2] = ["movie", "series"];
+const MEDIA_TYPES: [&str; 2] = MediaKind::NAMES;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -159,7 +159,7 @@ Tables: `likes`, `user_follows`, `content_recommendations`, `users`, `media`, `s
   followed by `SELECT m.id, m.title, m.type, m.year, m."posterUrl", m."fanartUrl", m."additionalFanartUrls", m.genres FROM media m WHERE m.id = ANY($ids)`. The ordering is total (`cnt DESC, mediaId DESC`).
 - Recommend: `DELETE FROM content_recommendations WHERE "senderId" = $1 AND "recipientId" = $2 AND "mediaId" = $3 AND ("seasonId" = $4 | "seasonId" IS NULL) AND ("episodeId" = $5 | "episodeId" IS NULL)`; `INSERT INTO content_recommendations ("senderId","recipientId","mediaId","seasonId","episodeId",message,"dismissedAt") VALUES ($1,$2,$3,$4|NULL,$5|NULL,$6|NULL,NULL)`; media check `SELECT * FROM media WHERE id = $1`.
 - Received: `SELECT cr.*, u.id, u.username, u.avatar, m.*, s.*, e.*, es.* FROM content_recommendations cr JOIN users u ON u.id = cr."senderId" LEFT JOIN media m... LEFT JOIN seasons s... LEFT JOIN episodes e... LEFT JOIN seasons es ON es.id = e."seasonId" WHERE cr."recipientId" = $me [AND cr."dismissedAt" IS NULL] ORDER BY cr."createdAt" DESC, cr.id ASC LIMIT 60`. Sent: same with `cr."senderId" = $me`, joined to the recipient. Dismiss: `UPDATE content_recommendations SET "dismissedAt" = now, "updatedAt" = now WHERE id = $1 AND "recipientId" = $2 AND "dismissedAt" IS NULL`.
-- Stats (`$1` target id, `'movie'`/`'series'` the `media.type` enum values):
+- Stats (`$1` target id, `'movie'`/`'series'` the `media.type` values):
   ```sql
   SELECT COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0) AS "totalWatchTimeSeconds",
          COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "moviesWatched",

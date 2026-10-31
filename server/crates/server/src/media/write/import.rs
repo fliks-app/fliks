@@ -16,6 +16,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
+    media::kind::MediaKind,
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
     nfo::NfoData,
 };
@@ -33,7 +34,7 @@ pub struct Target {
 pub async fn resolve_target(
     st: &AppState,
     a: &Authed,
-    media_type: &str,
+    media_type: MediaKind,
     library_id: Option<i32>,
 ) -> Result<Target, AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
@@ -44,7 +45,7 @@ pub async fn resolve_target(
 pub async fn resolve_target_in(
     st: &AppState,
     libs: &[i32],
-    media_type: &str,
+    media_type: MediaKind,
     library_id: Option<i32>,
 ) -> Result<Target, AppError> {
     let rows = sqlx::query!(
@@ -56,8 +57,10 @@ pub async fn resolve_target_in(
     .fetch_all(&st.db)
     .await?;
     let accepts = |t: &Value| {
-        t.as_array()
-            .is_some_and(|a| a.iter().any(|v| v == media_type))
+        t.as_array().is_some_and(|a| {
+            a.iter()
+                .any(|v| v.as_str().and_then(MediaKind::parse) == Some(media_type))
+        })
     };
     let lib = match library_id {
         Some(id) => match rows.iter().find(|r| r.id == id) {
@@ -101,20 +104,25 @@ pub async fn resolve_target_in(
     })
 }
 
-async fn duplicate(st: &AppState, media_type: &str, tvdb: bool, id: i32) -> Result<(), AppError> {
+async fn duplicate(
+    st: &AppState,
+    media_type: MediaKind,
+    tvdb: bool,
+    id: i32,
+) -> Result<(), AppError> {
     let hit = if tvdb {
         sqlx::query_scalar!(
-            r#"SELECT id FROM media WHERE "tvdbId" = $1 AND type::text = $2 LIMIT 1"#,
+            r#"SELECT id FROM media WHERE "tvdbId" = $1 AND type = $2 LIMIT 1"#,
             id,
-            media_type
+            media_type.as_str()
         )
         .fetch_optional(&st.db)
         .await?
     } else {
         sqlx::query_scalar!(
-            r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type::text = $2 LIMIT 1"#,
+            r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
             id,
-            media_type
+            media_type.as_str()
         )
         .fetch_optional(&st.db)
         .await?
@@ -127,7 +135,7 @@ async fn duplicate(st: &AppState, media_type: &str, tvdb: bool, id: i32) -> Resu
 
 /// What an import persists besides the provider data.
 pub struct Import {
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub library_id: i32,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
@@ -146,16 +154,16 @@ pub async fn import_title(
     let found = service::import(
         st,
         Lookup {
-            media_type: imp.media_type.clone(),
+            media_type: imp.media_type,
             provider,
             external_id,
             library_id: imp.library_id,
         },
     )
     .await?;
-    let format = folder_format(&st.db, &imp.media_type).await?;
+    let format = folder_format(&st.db, imp.media_type).await?;
     let d = &found.details;
-    let folder = folder_name(&format, &imp.media_type, d);
+    let folder = folder_name(&format, imp.media_type, d);
     let folder = validate_folder_name(&folder)
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{}\"", d.title)))?
         .to_owned();
@@ -168,7 +176,7 @@ pub async fn import_title(
         }
     })?;
     let mut stills = vec![];
-    if imp.media_type != "movie" {
+    if imp.media_type.is_series() {
         let scope = imp.monitored_seasons.clone().filter(|s| !s.is_empty());
         for sd in &found.seasons {
             let n = sd.season_number;
@@ -209,7 +217,7 @@ pub async fn import_title(
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
         tmdb_id: d.tmdb_id.filter(|t| *t != 0).map(i64::from),
-        media_type: imp.media_type.clone(),
+        media_type: imp.media_type,
         library_id: Some(i64::from(imp.library_id)),
         added_by_user_id: imp.added_by.map(i64::from),
     });
@@ -223,14 +231,13 @@ pub async fn import_title(
 }
 
 /// The stored folder format, else the import's own default (not the naming service's, rule 13).
-async fn folder_format(db: &sqlx::PgPool, media_type: &str) -> Result<String, sqlx::Error> {
-    let (key, default) = if media_type == "movie" {
-        (
+async fn folder_format(db: &sqlx::PgPool, media_type: MediaKind) -> Result<String, sqlx::Error> {
+    let (key, default) = match media_type {
+        MediaKind::Movie => (
             "naming_movie_folder_format",
             "{Original Title} ({Release Year})",
-        )
-    } else {
-        ("naming_series_folder_format", "{Series Title}")
+        ),
+        MediaKind::Series => ("naming_series_folder_format", "{Series Title}"),
     };
     let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
         .fetch_optional(db)
@@ -239,11 +246,11 @@ async fn folder_format(db: &sqlx::PgPool, media_type: &str) -> Result<String, sq
     Ok(stored.unwrap_or_else(|| default.to_owned()))
 }
 
-fn folder_name(format: &str, media_type: &str, d: &Details) -> String {
+fn folder_name(format: &str, media_type: MediaKind, d: &Details) -> String {
     let year = d.year.filter(|y| y.is_finite()).map(|y| y as i64);
     let tmdb_id = d.tmdb_id.map(i64::from);
-    if media_type == "movie" {
-        naming::apply_movie_folder_format(
+    match media_type {
+        MediaKind::Movie => naming::apply_movie_folder_format(
             format,
             &MovieFolder {
                 title: d.title.clone(),
@@ -251,9 +258,8 @@ fn folder_name(format: &str, media_type: &str, d: &Details) -> String {
                 year,
                 tmdb_id,
             },
-        )
-    } else {
-        naming::apply_series_folder_format(
+        ),
+        MediaKind::Series => naming::apply_series_folder_format(
             format,
             &SeriesFolder {
                 series_title: d.title.clone(),
@@ -261,26 +267,26 @@ fn folder_name(format: &str, media_type: &str, d: &Details) -> String {
                 year,
                 tmdb_id,
             },
-        )
+        ),
     }
 }
 
 /// `mapTmdbStatusToMediaStatus`.
-pub fn map_status(media_type: &str, status: &str) -> &'static str {
+pub fn map_status(media_type: MediaKind, status: &str) -> &'static str {
     let s = status.to_lowercase();
-    if media_type == "movie" {
-        return match s.as_str() {
+    match media_type {
+        MediaKind::Movie => match s.as_str() {
             "released" => "released",
             "planned" | "in production" | "post production" => "announced",
             "canceled" | "cancelled" => "ended",
             _ => "tba",
-        };
-    }
-    match s.as_str() {
-        "continuing" => "continuing",
-        "ended" => "ended",
-        "announced" => "announced",
-        _ => "tba",
+        },
+        MediaKind::Series => match s.as_str() {
+            "continuing" => "continuing",
+            "ended" => "ended",
+            "announced" => "announced",
+            _ => "tba",
+        },
     }
 }
 
@@ -303,7 +309,7 @@ async fn insert_media(
              "inCinemas", "digitalRelease", "physicalRelease", "tmdbCollectionId", "tmdbCollectionName",
              monitored, "metadataRefreshedAt", "qualityProfileId", "languageProfileId", "libraryId",
              "folderName", "addedById")
-           VALUES ($1, $2, $3, $4, $5::text::media_type_enum, $6, $7, $8, $9, $10::text::media_status_enum, $11, $12,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::media_status_enum, $11, $12,
              $13, $14, $15, $16, $17::text::date, $18::text::date, $19::text::date, $20::text::date, $21, $22,
              true, now(), $23, $24, $25, NULLIF($26, ''), $27)
            RETURNING id"#,
@@ -311,12 +317,12 @@ async fn insert_media(
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
         json!(d.alternative_titles),
         d.year.filter(|y| y.is_finite()).map(|y| y as i32),
-        imp.media_type,
+        imp.media_type.as_str(),
         d.tmdb_id.filter(|t| *t != 0),
         d.tvdb_id,
         d.imdb_id,
         d.overview,
-        map_status(&imp.media_type, &d.status),
+        map_status(imp.media_type, &d.status),
         d.poster_url,
         d.fanart_url,
         d.logo_url,
@@ -355,10 +361,8 @@ const MEDIA_FIELDS: [&str; 7] = [
     "libraryId",
     "monitoredSeasons",
 ];
-const TYPES: [&str; 2] = ["movie", "series"];
-
 struct Common {
-    media_type: String,
+    media_type: MediaKind,
     quality: Option<i32>,
     language: Option<i32>,
     library: Option<i32>,
@@ -367,9 +371,12 @@ struct Common {
 fn common(b: &Body) -> Result<Common, AppError> {
     Ok(Common {
         media_type: b.required(
-            b.one_of("type", &TYPES)?,
+            b.kind("type")?,
             "type",
-            "must be one of the following values: movie, series",
+            &format!(
+                "must be one of the following values: {}",
+                MediaKind::NAMES.join(", ")
+            ),
         )?,
         quality: b.id("qualityProfileId")?.flatten(),
         language: b.id("languageProfileId")?.flatten(),
@@ -383,9 +390,9 @@ async fn prepare(
     c: &Common,
     seasons: Option<Vec<i32>>,
 ) -> Result<Import, AppError> {
-    let target = resolve_target(st, a, &c.media_type, c.library).await?;
+    let target = resolve_target(st, a, c.media_type, c.library).await?;
     Ok(Import {
-        media_type: c.media_type.clone(),
+        media_type: c.media_type,
         library_id: target.id,
         quality_profile_id: resolve_profile(&st.db, false, c.quality, target.default_quality)
             .await?,
@@ -405,7 +412,7 @@ pub async fn all_library_ids(db: &sqlx::PgPool) -> Result<Vec<i32>, sqlx::Error>
 /// `importFromTmdb` for a request approval (rules 11, 25): no caller ACL, the requester is `addedBy`.
 pub async fn import_for_request(
     st: &AppState,
-    media_type: &str,
+    media_type: MediaKind,
     tmdb_id: i32,
     profiles: (Option<i32>, Option<i32>),
     library_id: Option<i32>,
@@ -419,7 +426,7 @@ pub async fn import_for_request(
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id).await?;
     let imp = Import {
-        media_type: media_type.to_owned(),
+        media_type,
         library_id: target.id,
         quality_profile_id: resolve_profile(&st.db, false, profiles.0, target.default_quality)
             .await?,
@@ -445,7 +452,7 @@ pub async fn import_tmdb(
     if !st.metadata.available(Provider::Tmdb) {
         return Err(AppError::bad_request("TMDB API key is not configured"));
     }
-    duplicate(&st, &c.media_type, false, tmdb).await?;
+    duplicate(&st, c.media_type, false, tmdb).await?;
     let imp = prepare(&st, &a, &c, None).await?;
     let id = import_title(&st, Some("tmdb".into()), tmdb.to_string(), imp).await?;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
@@ -493,7 +500,7 @@ pub async fn import_media(
         .ok_or_else(|| {
             AppError::bad_request(vec!["externalId must be a number string".to_owned()])
         })?;
-    duplicate(&st, &c.media_type, provider.as_deref() == Some("tvdb"), n).await?;
+    duplicate(&st, c.media_type, provider.as_deref() == Some("tvdb"), n).await?;
     let imp = prepare(&st, &a, &c, seasons).await?;
     let id = import_title(&st, provider, external, imp).await?;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
@@ -503,7 +510,7 @@ pub async fn import_media(
 pub struct Unmatched {
     pub title: String,
     pub year: Option<i32>,
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub library_id: i32,
     pub folder_name: String,
     pub quality_profile_id: Option<i32>,
@@ -551,13 +558,13 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles", overview,
              genres, runtime, rating, "releaseDate", "libraryId", "folderName", "qualityProfileId",
              "languageProfileId", "addedById")
-           VALUES ($1, $2, $3, $4::text::media_type_enum, 'released', false, '[]', $5, $6, $7, $8, $9::text::date,
+           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8, $9::text::date,
              $10, $11, $12, $13, $14)
            RETURNING id"#,
         title,
         original,
         u.year.or(nfo.year.and_then(|y| i32::try_from(y).ok())),
-        u.media_type,
+        u.media_type.as_str(),
         nfo.plot,
         json!(nfo.genres.clone().unwrap_or_default()),
         nfo.runtime.and_then(|r| i32::try_from(r).ok()),

@@ -6,6 +6,7 @@ use crate::{
     profiles,
     state::AppState,
 };
+use fliks_domain::media::kind::MediaKind;
 use serde_json::json;
 use sqlx::PgConnection;
 use tokio::sync::broadcast::error::RecvError;
@@ -16,7 +17,7 @@ type Res<T> = Result<T, AppError>;
 #[derive(Debug, Clone)]
 pub struct MediaRef {
     pub id: i32,
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub tmdb_id: Option<i32>,
     pub monitored: bool,
 }
@@ -83,7 +84,7 @@ impl Lifecycle {
         let Some(tmdb_id) = media.tmdb_id else {
             return Ok(());
         };
-        let open = db::in_flight_by_title(&self.st.db, tmdb_id, &media.media_type).await?;
+        let open = db::in_flight_by_title(&self.st.db, tmdb_id, media.media_type).await?;
         let Some(row) = db::media_by_id(&self.st.db, media.id).await? else {
             return Ok(());
         };
@@ -95,7 +96,7 @@ impl Lifecycle {
                 continue;
             }
             db::adopt(&self.st.db, r.id, media.id, added_by.filter(|u| *u != 0)).await?;
-            let seasons = r.scope().filter(|_| media.media_type == "series");
+            let seasons = r.scope().filter(|_| media.media_type.is_series());
             db::monitor_scope(&self.st.db, media.id, seasons).await?;
             touched = true;
         }
@@ -139,21 +140,14 @@ impl Lifecycle {
         let Some(media) = db::media_by_id(&self.st.db, media_id).await? else {
             return Ok(());
         };
-        let eps = if media.media_type == "series" {
-            db::episodes(&self.st.db, media_id).await?
-        } else {
-            vec![]
-        };
-        let files = if media.media_type == "series" {
-            0
-        } else {
-            db::file_count(&self.st.db, media_id).await?
+        let (eps, files) = match media.media_type {
+            MediaKind::Movie => (vec![], db::file_count(&self.st.db, media_id).await?),
+            MediaKind::Series => (db::episodes(&self.st.db, media_id).await?, 0),
         };
         for r in active {
-            let covered = if media.media_type == "movie" {
-                files > 0
-            } else {
-                scope_covered(r.scope(), &eps)
+            let covered = match media.media_type {
+                MediaKind::Movie => files > 0,
+                MediaKind::Series => scope_covered(r.scope(), &eps),
             };
             if !covered {
                 continue;
@@ -196,7 +190,7 @@ impl Lifecycle {
         for r in db::linked(&self.st.db, media_id, None, &statuses).await? {
             let scope = match r.scope() {
                 Some(s) => s.to_vec(),
-                None if r.media_type == "series" => {
+                None if r.media_type.is_series() => {
                     if whole.is_none() {
                         whole = Some(db::monitored_seasons(&self.st.db, media_id, season).await?);
                     }

@@ -3,6 +3,7 @@ use crate::{
     http::AppError,
     ingest::fsx::{self, Unlinked},
 };
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::subtitle_path::{
     is_safe_lang_suffix, relative_path_under_root, resolve_subtitle_absolute_path,
 };
@@ -23,7 +24,8 @@ pub const OUTSIDE: &str =
 pub struct MediaCtx {
     pub id: i32,
     pub title: String,
-    pub kind: String,
+    #[sqlx(try_from = "String")]
+    pub kind: MediaKind,
     pub year: Option<i32>,
     pub imdb_id: Option<String>,
     pub tmdb_id: Option<i32>,

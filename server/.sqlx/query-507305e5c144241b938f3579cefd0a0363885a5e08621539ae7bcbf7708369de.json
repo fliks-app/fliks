@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.type AS \"kind!\", m.\"libraryId\" AS library_id, m.genres, m.year, m.\"tmdbCollectionId\" AS collection_id,\n                  mm.keywords AS \"keywords?\"\n           FROM media m LEFT JOIN media_metadata mm ON mm.\"mediaId\" = m.id WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "library_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "genres",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "genres"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "year",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "year"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "collection_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tmdbCollectionId"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "keywords?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_metadata",
+            "name": "keywords"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "507305e5c144241b938f3579cefd0a0363885a5e08621539ae7bcbf7708369de"
+}

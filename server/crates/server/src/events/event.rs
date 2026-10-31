@@ -1,5 +1,6 @@
 //! Wire events (`docs/spec/events-hub.md`, Events): the 50 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
+use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -44,7 +45,7 @@ pub struct Subject {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub media_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub media_type: Option<String>,
+    pub media_type: Option<MediaKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub season_number: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,13 +54,6 @@ pub struct Subject {
     pub episode_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub episode_id: Option<i64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MediaKind {
-    Movie,
-    Series,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -529,7 +523,7 @@ pub enum DomainEvent {
     MediaImported {
         media_id: i64,
         tmdb_id: Option<i64>,
-        media_type: String,
+        media_type: MediaKind,
         library_id: Option<i64>,
         added_by_user_id: Option<i64>,
     },
@@ -545,7 +539,7 @@ pub enum DomainEvent {
     MediaRemoved {
         media_id: i64,
         tmdb_id: Option<i64>,
-        media_type: String,
+        media_type: MediaKind,
     },
     #[serde(rename = "media.files.imported")]
     MediaFilesImported {
@@ -569,7 +563,7 @@ pub enum DomainEvent {
     #[serde(rename = "request.created")]
     RequestCreated {
         request_id: i64,
-        media_type: String,
+        media_type: MediaKind,
         tmdb_id: i64,
         user_id: Option<i64>,
         kind: String,
@@ -579,7 +573,7 @@ pub enum DomainEvent {
     RequestApproved {
         request_id: i64,
         media_id: Option<i64>,
-        media_type: String,
+        media_type: MediaKind,
         tmdb_id: i64,
         seasons: Option<Vec<i64>>,
         approved_by_user_id: Option<i64>,

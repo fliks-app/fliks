@@ -8,7 +8,10 @@ use super::{
     types::{Credits, PersonDetails},
 };
 use crate::sync::MutexExt;
-use fliks_domain::metadata::{discover::Options, language::Resolved};
+use fliks_domain::{
+    media::kind::MediaKind,
+    metadata::{discover::Options, language::Resolved},
+};
 use futures_util::{StreamExt, stream};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, sync::Mutex, time::Duration};
@@ -112,7 +115,7 @@ impl Tmdb {
         o.insert("genreIds".into(), or(r, "genre_ids", json!([])));
         o.insert(
             "mediaType".into(),
-            if tv { "series" } else { "movie" }.into(),
+            MediaKind::from_series(tv).as_str().into(),
         );
         Value::Object(o)
     }
@@ -317,7 +320,7 @@ impl Tmdb {
         o.insert("genreIds".into(), pluck(arr(d, "genres"), "id").into());
         o.insert(
             "mediaType".into(),
-            if tv { "series" } else { "movie" }.into(),
+            MediaKind::from_series(tv).as_str().into(),
         );
         o.insert("originalLanguage".into(), nn(d, "original_language"));
         o.insert("voteCount".into(), nn(d, "vote_count"));
@@ -582,12 +585,8 @@ impl Tmdb {
                 .or_else(|| get(c, "name").as_str())
                 .unwrap_or_default();
             o.insert("title".into(), title.into());
-            let kind = if get(c, "media_type") == "tv" {
-                "series"
-            } else {
-                "movie"
-            };
-            o.insert("mediaType".into(), kind.into());
+            let kind = MediaKind::from_series(get(c, "media_type") == "tv");
+            o.insert("mediaType".into(), kind.as_str().into());
             for k in extra {
                 put(&mut o, k, c, k);
             }

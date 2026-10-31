@@ -25,7 +25,10 @@ use axum::{
     Router,
     routing::{delete as del, get, patch, post, put},
 };
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    media::kind::MediaKind,
+};
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -113,11 +116,11 @@ pub async fn detail_or_404(st: &AppState, a: &Authed, id: i32) -> Result<Value, 
         .ok_or_else(|| crate::libraries::media_not_found(id))
 }
 
-fn subject(id: i32, title: &str, media_type: &str) -> Subj {
+fn subject(id: i32, title: &str, media_type: MediaKind) -> Subj {
     Subj {
         title: title.to_owned(),
         media_id: Some(i64::from(id)),
-        media_type: Some(media_type.to_owned()),
+        media_type: Some(media_type),
         season_number: None,
         episode_number: None,
         episode_title: None,
