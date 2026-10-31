@@ -70,7 +70,6 @@
           "permissions": [
             "media.read",
             "users.manage",
-            "parties.create",
             "parties.read_public"
           ],
           "profileVisibility": "private",

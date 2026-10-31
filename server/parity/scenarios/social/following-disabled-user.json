@@ -37,7 +37,6 @@
           "permissions": [
             "media.read",
             "users.manage",
-            "parties.create",
             "parties.read_public"
           ],
           "profileVisibility": "public",
@@ -164,7 +163,6 @@
           "permissions": [
             "media.read",
             "users.manage",
-            "parties.create",
             "parties.read_public"
           ],
           "profileVisibility": "public",
