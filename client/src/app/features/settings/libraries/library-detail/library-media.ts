@@ -19,6 +19,8 @@ import { FolderPickerService } from '../../../../core/services/folder-picker.ser
 import { SseService } from '../../../../core/services/sse.service';
 import { LibraryDetailState } from './library-detail.state';
 import { OrphanScanModalComponent } from './orphan-scan-modal/orphan-scan-modal';
+import { mediaDetailLink } from '../../../../core/media-kinds';
+import type { MediaType } from '../../../../core/enums/media-type.enum';
 
 const PAGE_SIZE = 30;
 
@@ -36,6 +38,10 @@ const PAGE_SIZE = 30;
   templateUrl: './library-media.html',
 })
 export class LibraryMediaComponent implements OnInit {
+  protected readonly typeLabelKeys: Record<MediaType, string> = {
+    movie: 'settings.libraries.media_type_movie',
+    series: 'settings.libraries.media_type_series',
+  };
   private readonly mediaService = inject(MediaService);
   private readonly folderPicker = inject(FolderPickerService);
   private readonly sse = inject(SseService);
@@ -136,6 +142,6 @@ export class LibraryMediaComponent implements OnInit {
   }
 
   mediaLink(m: Media): string[] {
-    return ['/' + (m.type === 'movie' ? 'movies' : 'series'), String(m.id)];
+    return mediaDetailLink(m.type, m.id);
   }
 }

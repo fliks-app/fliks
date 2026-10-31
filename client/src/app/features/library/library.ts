@@ -1,3 +1,4 @@
+import type { MediaType } from '../../core/enums/media-type.enum';
 import {
   Component,
   signal,
@@ -53,6 +54,8 @@ import {
   CdkVirtualForOf,
   CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
+import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -74,6 +77,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 @Component({
   selector: 'app-library',
   imports: [
+    MediaLinkPipe,
     MediaCardComponent,
     DefaultFocusDirective,
     TvRowDirective,
@@ -636,14 +640,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Route to a liked / recommended item: the episode page when it targets an
    *  episode, otherwise the movie or series detail page. */
   contentLink(
-    mediaType: string,
+    mediaType: MediaType,
     mediaId: number,
     episodeId: number | null,
   ): string[] {
     if (episodeId) {
       return ['/series', String(mediaId), 'episode', String(episodeId)];
     }
-    return [mediaType === 'series' ? '/series' : '/movies', String(mediaId)];
+    return mediaDetailLink(mediaType, mediaId);
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {
@@ -869,7 +873,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   /** Series always toggleable (bulk endpoint); movies need a local file, else `toggleWatched` has nothing to reference. */
   canMarkMediaWatched(m: Media): boolean {
-    return m.type === 'series' || !!m.files?.length;
+    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
   }
 
   isLiked(mediaId: number): boolean {
@@ -885,7 +889,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   async toggleMediaWatched(m: Media, watched: boolean) {
     try {
-      if (m.type === 'series') {
+      if (KIND_REGISTRY[m.type].hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;

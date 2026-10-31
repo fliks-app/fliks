@@ -93,13 +93,10 @@ export class MediaDetailIdentifyModalComponent {
     if (!cfg) return;
     this.searching.set(true);
     try {
-      const isSeries = cfg.mediaType === 'series';
       const title = this.formTitle().trim();
       const year = this.formYear();
       const found = title
-        ? isSeries
-          ? await this.metadata.searchTv(title, year ?? undefined, undefined, cfg.mediaId)
-          : await this.metadata.searchMovie(title, year ?? undefined, undefined, cfg.mediaId)
+        ? await this.metadata.searchByKind(cfg.mediaType, title, year ?? undefined, undefined, cfg.mediaId)
         : [];
       this.results.set(found);
       this.searched.set(true);

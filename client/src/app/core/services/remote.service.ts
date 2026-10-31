@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { NavigationEnd, Router } from '@angular/router';
+import type { MediaType } from '../enums/media-type.enum';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { RemoteCommand, RemoteState, SseService } from './sse.service';
@@ -11,6 +12,7 @@ import { CastService } from './cast.service';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import type { PlaybackSnapshot } from './playback/playback-output';
+import { DETAIL_SEGMENTS_PATTERN, KIND_REGISTRY, isMediaKind, kindFromSegment } from '../media-kinds';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -33,7 +35,7 @@ export interface RemoteTarget {
 export type RemoteCommandInput = {
   action: RemoteAction;
   mediaId?: number;
-  mediaType?: 'movie' | 'series';
+  mediaType?: MediaType;
   mediaFileId?: number;
   episodeId?: number;
   positionSeconds?: number;
@@ -310,11 +312,11 @@ export class RemoteService {
     // A load in flight means the target isn't on /watch yet; `applyBrowse` would pull it back to the detail page.
     const pending = this.pendingAction();
     if (pending && SLOW_ACK_ACTIONS.has(pending)) return;
-    const m = /^\/(movies|series)\/(\d+)(?:\/episode\/(\d+))?/.exec(url.split('?')[0]);
+    const m = new RegExp(`^/(${DETAIL_SEGMENTS_PATTERN})/(\\d+)(?:/episode/(\\d+))?`).exec(url.split('?')[0]);
     if (!m) return;
     void this.browse({
       mediaId: Number(m[2]),
-      mediaType: m[1] === 'series' ? 'series' : 'movie',
+      mediaType: kindFromSegment(m[1]) ?? 'movie',
       episodeId: m[3] ? Number(m[3]) : undefined,
     });
   }
@@ -375,13 +377,13 @@ export class RemoteService {
   /** Never over a player: a controller browsing while the target plays must
    *  not kick the target out of its film. */
   private async applyBrowse(cmd: RemoteCommand): Promise<void> {
-    if (!cmd.mediaId || !cmd.mediaType) {
+    if (!cmd.mediaId || !isMediaKind(cmd.mediaType)) {
       console.warn('[remote] browse without a media', cmd.cmdId);
       return;
     }
     if (this.router.url.startsWith('/watch')) return;
     this.appliedBrowseKey = browseKey(cmd);
-    const base = cmd.mediaType === 'series' ? '/series' : '/movies';
+    const base = '/' + KIND_REGISTRY[cmd.mediaType].segment;
     const path = cmd.episodeId ? [base, cmd.mediaId, 'episode', cmd.episodeId] : [base, cmd.mediaId];
     await this.router.navigate(path);
   }

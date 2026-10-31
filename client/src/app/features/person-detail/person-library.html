@@ -10,7 +10,7 @@
             [title]="c.media.title"
             [subtitle]="c.character"
             [rating]="c.media.rating"
-            [link]="['/' + (c.media.type === 'movie' ? 'movies' : 'series'), '' + c.media.id]"
+            [link]="(c.media.type | mediaLink: c.media.id)"
           />
         }
       </div>
@@ -27,7 +27,7 @@
             [title]="c.media.title"
             [subtitle]="c.job"
             [rating]="c.media.rating"
-            [link]="['/' + (c.media.type === 'movie' ? 'movies' : 'series'), '' + c.media.id]"
+            [link]="(c.media.type | mediaLink: c.media.id)"
           />
         }
       </div>

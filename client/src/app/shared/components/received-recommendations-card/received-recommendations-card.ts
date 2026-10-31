@@ -28,6 +28,7 @@ import { AddToPlaylistService } from '../../../core/services/add-to-playlist.ser
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { itemArtwork } from '../../utils/media-artwork.util';
+import { mediaDetailLink } from '../../../core/media-kinds';
 
 /** Home widget of content other members recommended (linked, dismissible), live via `social.content_recommended` SSE;
  *  renders nothing when empty or on TV, where the social surface is hidden. */
@@ -99,7 +100,7 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
     if (item.episodeId) {
       return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
     }
-    return [item.mediaType === 'series' ? '/series' : '/movies', String(item.mediaId)];
+    return mediaDetailLink(item.mediaType, item.mediaId);
   }
 
   private async load(): Promise<void> {

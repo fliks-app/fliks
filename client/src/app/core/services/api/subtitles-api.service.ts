@@ -277,7 +277,7 @@ export interface SubtitleStats {
     id: number;
     mediaId: number;
     mediaTitle: string;
-    mediaType: 'movie' | 'series' | null;
+    mediaType: MediaType | null;
     episodeId: number | null;
     seasonNumber: number | null;
     episodeNumber: number | null;
@@ -336,7 +336,7 @@ export interface SubtitleHealthEntry {
 export interface MissingSubtitleEntry {
   mediaId: number;
   mediaTitle: string;
-  mediaType: string;
+  mediaType: MediaType;
   fileId: number;
   fileName: string;
   episodeId: number | null;

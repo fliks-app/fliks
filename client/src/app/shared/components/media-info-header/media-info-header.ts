@@ -79,6 +79,7 @@ import type { UiContribution } from '@fliks/plugin-ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
+import { KIND_REGISTRY } from '../../../core/media-kinds';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
@@ -155,6 +156,7 @@ interface AudioTrack {
   templateUrl: './media-info-header.html',
 })
 export class MediaInfoHeaderComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -277,13 +279,13 @@ export class MediaInfoHeaderComponent {
   }
 
   // ── Inputs: series-specific ──
-  readonly mediaType = input<string>('movie');
+  readonly mediaType = input<MediaType>('movie');
   /** True iff every downloaded episode of non-special seasons is watched; series have no PlaybackState row. */
   readonly seriesFullyWatched = input<boolean>(false);
   /** A series root marks every episode at once, so it needs no selected file;
    *  a movie or a single episode toggles one file and does need one. */
   readonly canToggleWatched = computed(
-    () => (this.mediaType() === 'series' && !this.episodeId()) || !!this.selectedFileId(),
+    () => (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) || !!this.selectedFileId(),
   );
 
   // ── Outputs (delegated to parent) ──
@@ -331,9 +333,9 @@ export class MediaInfoHeaderComponent {
   readonly watched = signal(false);
 
   protected readonly overviewMasked = computed(() =>
-    this.mediaType() === 'movie'
-      ? this.spoilers.overview(this.watched())
-      : this.spoilerOverview(),
+    KIND_REGISTRY[this.mediaType()].hasSeasons
+      ? this.spoilerOverview()
+      : this.spoilers.overview(this.watched()),
   );
   readonly resumePositionSeconds = signal<number | null>(null);
   readonly durationSeconds = signal<number | null>(null);
@@ -368,7 +370,7 @@ export class MediaInfoHeaderComponent {
 
 
     // A series root toggle marks every episode, so it reads the aggregate `seriesFullyWatched`, keyed on the episode input rather than the resume fallback.
-    if (this.mediaType() === 'series' && !this.episodeId()) {
+    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
     } else {
       this.playable.loadWatchedState(mediaId, episodeId).then((v) => {
@@ -377,7 +379,7 @@ export class MediaInfoHeaderComponent {
       });
     }
 
-    if (this.mediaType() === 'series' && !episodeId) {
+    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !episodeId) {
       // A series' own row is never its resume target; the parent resolves `resumeEpisodeId` shortly and re-runs this.
       return;
     }
@@ -510,7 +512,7 @@ export class MediaInfoHeaderComponent {
   async onToggleWatched() {
     const mediaId = this.mediaId();
     // Series root toggle: bulk mark every episode as (un)watched.
-    if (this.mediaType() === 'series' && !this.episodeId()) {
+    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) {
       const target = !this.watched();
       try {
         const result = await this.streamingApi.toggleSeriesWatched(mediaId, target);
@@ -691,7 +693,7 @@ export class MediaInfoHeaderComponent {
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
-      const needsFile = this.mediaType() === 'movie' || !!this.episodeId();
+      const needsFile = !KIND_REGISTRY[this.mediaType()].hasSeasons || !!this.episodeId();
       return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
     },
     // Already `requests.create && !media.delete && !<pending>` — pending is

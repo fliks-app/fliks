@@ -130,6 +130,8 @@ import { isMutedAt, muteRangesOf } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { KIND_REGISTRY, isMediaKind, mediaDetailLink } from '../../core/media-kinds';
+import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
   imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
@@ -730,7 +732,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private mediaId = 0;
   private isOfflinePlayback = false;
   /** Offline playback loads no media record; the download carries the type for the back target. */
-  private offlineMediaType: string | undefined;
+  private offlineMediaType: MediaType | undefined;
   private episodeId: number | undefined;
   private media: Media | null = null;
 
@@ -1181,7 +1183,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (offlineCheck) {
         this.isOfflinePlayback = true;
         this.offlineCrop = download?.offlineCrop ?? null;
-        this.offlineMediaType = download?.media?.type;
+        this.offlineMediaType = isMediaKind(download?.media?.type) ? download.media.type : undefined;
       }
 
       // playback-info runs once the media is known: its audio index picks the DEFAULT rendition, and
@@ -3125,7 +3127,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onBack() {
     this.detachLocalOutput();
     this.savePosition();
-    const kind = (this.media?.type ?? this.offlineMediaType) === 'series' ? 'series' : 'movies';
+    const kind = this.media?.type ?? this.offlineMediaType ?? 'movie';
     const next = this.queueCtl.nextEpisodeContext();
     const target = backTarget({
       origin: this.navHistory.originUrl,
@@ -3135,7 +3137,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       landingEpisodeId: this.episodeFinished() && next ? next.episodeId : this.episodeId,
     });
     // Same handoff as a media card: the detail page paints from the record the player holds.
-    const handoff = this.media && target.startsWith(`/${kind}/${this.mediaId}`) ? { media: this.media } : undefined;
+    const handoff = this.media && target.startsWith(`/${KIND_REGISTRY[kind].segment}/${this.mediaId}`) ? { media: this.media } : undefined;
     // Landing on the origin pops /watch (replaceUrl would stack a duplicate); another target replaces it. Either
     // way the NavigationEnd is marked a back-pop so /watch isn't pushed on NavbarService's history.
     this.navbar.markAsBackNavigation();
@@ -3179,14 +3181,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onOpenMedia() {
     this.detachLocalOutput();
     this.savePosition();
-    const kind = this.media?.type === 'series' ? 'series' : 'movies';
-    if (this.episodeId && kind === 'series') {
+    const kind = this.media?.type ?? 'movie';
+    if (this.episodeId && KIND_REGISTRY[kind].hasSeasons) {
       this.router.navigate(
-        ['/series', this.mediaId, 'episode', this.episodeId],
+        [...mediaDetailLink(kind, this.mediaId), 'episode', this.episodeId],
         { replaceUrl: true },
       );
     } else {
-      this.router.navigate(['/' + kind, this.mediaId], { replaceUrl: true });
+      this.router.navigate(mediaDetailLink(kind, this.mediaId), { replaceUrl: true });
     }
   }
 

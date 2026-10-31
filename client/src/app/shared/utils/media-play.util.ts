@@ -1,5 +1,6 @@
 import { Media } from '../../core/services/api/media.service';
 import { QueueItem } from '../../core/services/playback-queue.service';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 
 /** One entry of {@link Media.files}. */
 export type MediaFile = NonNullable<Media['files']>[number];
@@ -19,7 +20,7 @@ export function resolvePlayableFile(
 
 /** The series' episodes as queue items in S/E order, excluding specials and episodes with no available file; empty for non-series. */
 export function buildSeriesQueueItems(m: Media): QueueItem[] {
-  if (m.type !== 'series' || !m.seasons?.length) return [];
+  if (!KIND_REGISTRY[m.type].hasSeasons || !m.seasons?.length) return [];
   const flat: {
     seasonNumber: number;
     episodeNumber: number;

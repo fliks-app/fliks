@@ -16,10 +16,11 @@ import {
 import { ToastService } from '../../../core/services/toast.service';
 import { TranslateService } from '@ngx-translate/core';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
+import { MediaLinkPipe } from '../../../core/pipes/media-link.pipe';
 
 @Component({
   selector: 'app-subtitles-stats',
-  imports: [LucideSearch, RouterLink, TranslatePipe, PaginationComponent],
+  imports: [MediaLinkPipe, LucideSearch, RouterLink, TranslatePipe, PaginationComponent],
   templateUrl: './subtitles-stats.html',
 })
 export class SubtitlesStatsComponent implements OnInit {

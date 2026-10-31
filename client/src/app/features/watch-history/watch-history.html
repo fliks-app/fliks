@@ -30,7 +30,7 @@
                 <img [cachedSrc]="item.posterUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else {
                 <div class="flex h-full w-full items-center justify-center text-base-content/30">
-                  @if (item.mediaType === 'series') {
+                  @if (kinds[item.mediaType].hasSeasons) {
                     <svg lucideTv class="h-8 w-8" [strokeWidth]="1.5"></svg>
                   } @else {
                     <svg lucideFilm class="h-8 w-8" [strokeWidth]="1.5"></svg>

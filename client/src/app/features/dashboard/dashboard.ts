@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 import { SubtitlesApiService, SubtitleStats } from '../../core/services/api/subtitles-api.service';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { episodeLabel } from '../../shared/utils/episode-label';
+import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
 
 interface DiskSpaceEntry {
   path: string;
@@ -28,7 +29,7 @@ interface StatsReport {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, TranslatePipe, LocaleDatePipe],
+  imports: [MediaLinkPipe, RouterLink, TranslatePipe, LocaleDatePipe],
   templateUrl: './dashboard.html',
 })
 export class DashboardComponent implements OnInit {

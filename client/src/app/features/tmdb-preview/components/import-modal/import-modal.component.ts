@@ -21,6 +21,7 @@ import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
+import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
 
 @Component({
   selector: 'app-import-modal',
@@ -35,6 +36,7 @@ import { SeasonPickerComponent } from '../../../../shared/components/season-pick
   templateUrl: './import-modal.component.html',
 })
 export class ImportModalComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly metadata = inject(MetadataService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -82,7 +84,7 @@ export class ImportModalComponent {
    *  confirm button waits for a pick, same rule as the request modal. */
   protected readonly nothingToMonitor = computed(
     () =>
-      this.mediaType() === 'series' && !this.seasonsFailed() && this.selectedSeasons().size === 0,
+      KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
   async open(params: {
@@ -104,7 +106,7 @@ export class ImportModalComponent {
     this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
 
-    if (params.mediaType === 'series') this.loadSeasons();
+    if (KIND_REGISTRY[params.mediaType].hasSeasons) this.loadSeasons();
 
     this.loading.set(true);
     try {
@@ -189,7 +191,7 @@ export class ImportModalComponent {
         qualityProfileId: this.selectedQualityProfileId() ?? undefined,
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
         libraryId: this.selectedLibraryId() ?? undefined,
-        ...(this.mediaType() === 'series' && !this.seasonsFailed()
+        ...(KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed()
           ? {
               monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b),
             }
@@ -198,8 +200,7 @@ export class ImportModalComponent {
       this.toast.success(this.translate.instant('discover.import_success'));
       this.close();
       this.imported.emit();
-      const prefix = saved.type === 'movie' ? '/movies' : '/series';
-      void this.router.navigate([prefix, saved.id]);
+      void this.router.navigate(mediaDetailLink(saved.type, saved.id));
     } catch (err: unknown) {
       const httpErr = err as { status?: number; error?: { message?: string } };
       if (httpErr?.status === 400) {

@@ -12,6 +12,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { mediaDetailLink } from '../../../core/media-kinds';
 
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
@@ -244,7 +245,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
    *  plain text instead of a link a producer can't actually resolve. */
   mediaRouterLink(subject: MediaProgressSubject): unknown[] | null {
     if (subject.mediaId == null) return null;
-    return ['/' + (subject.mediaType === 'series' ? 'series' : 'movies'), subject.mediaId];
+    return mediaDetailLink(subject.mediaType ?? 'movie', subject.mediaId);
   }
 
   /** `null` when there's no episode id to link to (a season-level row, or a

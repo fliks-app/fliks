@@ -11,6 +11,7 @@ import {
 } from '../../../../core/services/api/profiles.service';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../../core/services/toast.service';
+import type { MediaType } from '../../../../core/enums/media-type.enum';
 
 /** Shared state between the library-detail shell and its tab components. */
 @Injectable()
@@ -123,8 +124,8 @@ export class LibraryDetailState {
     }
   }
 
-  mediaTypes(): ('movie' | 'series')[] {
-    const types: ('movie' | 'series')[] = [];
+  mediaTypes(): MediaType[] {
+    const types: MediaType[] = [];
     if (this.formMovies()) types.push('movie');
     if (this.formSeries()) types.push('series');
     return types;

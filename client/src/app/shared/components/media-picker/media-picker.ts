@@ -16,6 +16,7 @@ import { ModalHeaderComponent } from '../modal-header';
 import { SynopsisComponent } from '../synopsis/synopsis';
 import { ContentTypeToggleComponent } from '../search-filters/content-type-toggle';
 import { DEFAULT_SORT, SearchContentType, SearchFiltersComponent, filtersEngaged, libraryFilterParams } from '../search-filters/search-filters';
+import { KIND_REGISTRY, kindOfListFilter } from '../../../core/media-kinds';
 
 export interface MediaPick {
   mediaId: number;
@@ -39,7 +40,7 @@ export type EpisodePickMode = 'this' | 'untilEnd' | 'season' | 'multiple';
 export const SEARCH_DEBOUNCE_MS = 300;
 
 /** A series opens to its playable episodes; a movie needs a file, which a missing or monitored one lacks. */
-const pickable = (m: Media) => m.type !== 'movie' || (m.files?.length ?? m.fileCount ?? 0) > 0;
+const pickable = (m: Media) => KIND_REGISTRY[m.type].hasSeasons || (m.files?.length ?? m.fileCount ?? 0) > 0;
 
 const MODE_KEY: Record<EpisodePickMode, string> = {
   this: 'this',
@@ -108,6 +109,7 @@ export function pickEpisodes(mode: EpisodePickMode, episodes: Episode[], anchor:
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MediaPickerComponent implements OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly media = inject(MediaService);
   private readonly metadata = inject(MetadataService);
   private readonly streaming = inject(StreamingApiService);
@@ -158,7 +160,10 @@ export class MediaPickerComponent implements OnDestroy {
   private readonly takenKeys = computed(() => new Set(this.taken().map((t) => itemKey(t.mediaId, t.episodeId))));
   protected readonly modes = computed<EpisodePickMode[]>(() =>
     this.multiple() ? ['this', 'untilEnd', 'season', 'multiple'] : ['this']);
-  protected readonly isSeries = computed(() => this.selected()?.type === 'series');
+  protected readonly isSeries = computed(() => {
+    const m = this.selected();
+    return !!m && KIND_REGISTRY[m.type].hasSeasons;
+  });
   protected readonly seasons = computed(() => pickerSeasons(this.selected()?.seasons));
   protected readonly episodes = computed(() =>
     this.seasons().find((s) => s.seasonNumber === this.seasonNumber())?.episodes ?? []);
@@ -199,10 +204,10 @@ export class MediaPickerComponent implements OnDestroy {
 
   /** Movie genres for "all" and "movie", the TV list for series, as on the search page. */
   private readonly genreEffect = effect(() => {
-    const series = this.contentType() === 'series';
+    const kind = kindOfListFilter(this.contentType());
     untracked(() => {
       const seq = ++this.genreSeq;
-      (series ? this.metadata.getTvGenres() : this.metadata.getMovieGenres())
+      this.metadata.genresByKind(kind)
         .then((g) => { if (seq === this.genreSeq) this.genres.set(g); })
         .catch(() => { if (seq === this.genreSeq) this.genres.set([]); });
     });
@@ -303,15 +308,15 @@ export class MediaPickerComponent implements OnDestroy {
     try {
       const [full, watched] = await Promise.all([
         this.media.getOne(m.id),
-        m.type === 'series' ? this.streaming.getWatchedEpisodeIds(m.id).catch(() => [] as number[]) : [],
+        KIND_REGISTRY[m.type].hasSeasons ? this.streaming.getWatchedEpisodeIds(m.id).catch(() => [] as number[]) : [],
       ]);
       if (seq !== this.chooseSeq) return;
       this.watchedEpisodes.set(new Set(watched));
       this.selected.set(full);
       this.seasonNumber.set(this.seasons()[0]?.seasonNumber ?? null);
-      if (full.type === 'series') this.focusView();
+      if (KIND_REGISTRY[full.type].hasSeasons) this.focusView();
     } catch {
-      if (seq === this.chooseSeq && m.type === 'series') this.selected.set(null);
+      if (seq === this.chooseSeq && KIND_REGISTRY[m.type].hasSeasons) this.selected.set(null);
     } finally {
       if (seq === this.chooseSeq) this.detailLoading.set(false);
     }

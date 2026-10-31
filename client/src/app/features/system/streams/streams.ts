@@ -1,3 +1,4 @@
+import { KIND_REGISTRY, isMediaKind } from '../../../core/media-kinds';
 import { Component, computed, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -153,10 +154,10 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     return this.formatTime(Math.max(0, (Date.now() - started) / 1000));
   }
 
-  mediaLink(s: ActiveStream): string {
+  mediaLink(s: ActiveStream): string | null {
     if (s.mediaType === 'livetv') return `/watch-live/${s.mediaId}`;
-    const prefix = s.mediaType === 'movie' ? '/movies' : '/series';
-    return `${prefix}/${s.mediaId}`;
+    if (!isMediaKind(s.mediaType)) return null;
+    return `/${KIND_REGISTRY[s.mediaType].segment}/${s.mediaId}`;
   }
 
   episodeLink(s: ActiveStream): string {

@@ -203,7 +203,7 @@
           [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
           [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
           [translations]="subtitleSection()?.translationInProgress() ?? []"
-          [files]="m.type === 'series' ? (m.files ?? []) : mediaFiles()"
+          [files]="headerFiles()"
           [selectedFileId]="activeFileId()"
           [mediaType]="m.type"
           [seriesFullyWatched]="watched.seriesFullyWatched()"
@@ -239,7 +239,7 @@
           (recommend)="openRecommend()"
           [liked]="like.focusedLiked()"
           (likeToggled)="like.toggle()"
-          (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
+          (openTracking)="openTracking({ kind: m.type })"
           [badge]="headerBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
         />
@@ -270,7 +270,7 @@
           </app-collapsible-section>
         }
 
-        @if (m.type === 'movie' && cast().length) {
+        @if (!kinds[m.type].hasSeasons && cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }
@@ -300,7 +300,7 @@
           />
         }
 
-        @if (m.type === 'series' && m.seasons?.length) {
+        @if (kinds[m.type].hasSeasons && m.seasons?.length) {
           <app-media-detail-seasons
             [media]="m"
             [selectedSeason]="activeSeason(m)"
@@ -338,11 +338,11 @@
           />
         }
 
-        @if (m.type === 'series') {
+        @if (kinds[m.type].hasSeasons) {
           <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
-        @if (m.type === 'series' && cast().length) {
+        @if (kinds[m.type].hasSeasons && cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }

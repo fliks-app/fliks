@@ -53,6 +53,7 @@ import { TrailerDialogComponent } from '../../shared/components/trailer-dialog/t
 import { previewPosterName } from '../../shared/utils/view-transition';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 /** What the card that opened the page already knows, handed over in router state. */
 interface PreviewSeed {
@@ -68,6 +69,7 @@ interface PreviewSeed {
   templateUrl: './tmdb-preview.html',
 })
 export class TmdbPreviewComponent implements OnInit, OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly metadata = inject(MetadataService);
@@ -94,10 +96,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
   readonly libraries = signal<LibrarySummary[]>([]);
 
-  readonly type = computed(() => {
-    const url = this.router.url;
-    return url.startsWith('/add/tv') ? 'series' : 'movie';
-  });
+  readonly type = computed(() => this.route.snapshot.data['kind'] as MediaType);
 
   /** Provider from route param (e.g. /add/movie/tvdb/123) or default to 'tmdb' */
   readonly provider = computed(() => {
@@ -127,11 +126,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   /** A film fills more of the facts grid (release dates, budget, revenue) than a series. */
   readonly skeletonFacts = computed(() =>
-    Array.from({ length: this.type() === 'series' ? 4 : 8 }, (_, i) => i),
+    Array.from({ length: KIND_REGISTRY[this.type()].hasSeasons ? 4 : 8 }, (_, i) => i),
   );
 
   readonly posterTransitionName = computed(() =>
-    previewPosterName(this.type() === 'series' ? 'tv' : 'movie', this.provider(), this.externalId()),
+    previewPosterName(KIND_REGISTRY[this.type()].providerSegment, this.provider(), this.externalId()),
   );
 
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
@@ -199,12 +198,12 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   );
 
   readonly typeLabelKey = computed(() =>
-    this.type() === 'series' ? 'requests.type_series' : 'requests.type_movie',
+    KIND_REGISTRY[this.type()].requestLabelKey,
   );
 
   readonly seasonsLabel = computed(() => {
     const m = this.media();
-    if (this.type() !== 'series' || !m?.seasonCount) return '';
+    if (!KIND_REGISTRY[this.type()].hasSeasons || !m?.seasonCount) return '';
     const plural = (key: string, count: number) =>
       this.translate.instant(
         `media_detail.${key}_${count <= 1 ? 'one' : 'other'}`,
@@ -280,7 +279,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private async loadTitleState(tmdbId: number) {
     try {
       this.titleState.set(
-        await this.requestsApi.getTitleState(tmdbId, this.type() as MediaType),
+        await this.requestsApi.getTitleState(tmdbId, this.type()),
       );
     } catch { /* ignore */ }
   }
@@ -297,7 +296,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     if (!m) return;
     this.importModal()?.open({
       title: m.title,
-      mediaType: this.type() as MediaType,
+      mediaType: this.type(),
       tmdbId: m.tmdbId,
       provider: this.provider(),
       externalId: this.externalId(),
@@ -310,7 +309,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       const page = await this.requestsApi.list(
         {
           tmdbId,
-          mediaType: this.type() as MediaType,
+          mediaType: this.type(),
           status: 'pending',
           kind: 'add',
           limit: 50,
@@ -340,10 +339,9 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
         this.refreshPendingRequests();
         return;
       }
-      const prefix = approved.mediaType === 'movie' ? '/movies' : '/series';
       // Both histories: the browser's (replaceUrl) and the in-app back stack.
       this.navbar.markAsBackNavigation();
-      void this.router.navigate([prefix, mediaId], { replaceUrl: true });
+      void this.router.navigate(mediaDetailLink(approved.mediaType, mediaId), { replaceUrl: true });
     } catch {
       /* surfaced by the global HTTP error interceptor */
     } finally {
@@ -409,7 +407,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
-      mediaType: this.type() as 'movie' | 'series',
+      mediaType: this.type(),
       tmdbId: m.tmdbId,
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,

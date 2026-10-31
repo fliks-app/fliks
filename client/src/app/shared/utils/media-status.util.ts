@@ -1,9 +1,10 @@
 import { Media } from '../../core/services/api/media.service';
 import { BarStatus } from '../components/media-card/media-card';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 
 /** Compute the status bar state for a media item. */
 export function computeMediaBarStatus(m: Media): BarStatus {
-  const hasFiles = m.type === 'series'
+  const hasFiles = KIND_REGISTRY[m.type].hasSeasons
     ? (m.episodeStats?.downloadedEpisodes ?? 0) > 0
     : (m.files?.length ?? 0) > 0;
   const isReleased = isMediaReleased(m);
@@ -17,7 +18,7 @@ export function computeMediaBarStatus(m: Media): BarStatus {
 
 
 function isMediaReleased(m: Media): boolean {
-  if (m.type === 'series') {
+  if (KIND_REGISTRY[m.type].hasSeasons) {
     return m.status === 'continuing' || m.status === 'ended';
   }
   const now = new Date();

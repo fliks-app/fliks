@@ -4,6 +4,7 @@ import { MetadataSearchResult, TmdbGenre } from './api/metadata.service';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters';
+import type { MediaType } from '../enums/media-type.enum';
 
 const EXTERNAL_KEY = 'fliks-search-external';
 
@@ -14,7 +15,7 @@ export class SearchStateService {
   readonly tab = signal<'videos' | 'people'>('videos');
   /** Media type filter within the videos tab — drives search + discover
    *  (genre list, trending/popular). */
-  readonly contentType = signal<'all' | 'movie' | 'series'>('all');
+  readonly contentType = signal<'all' | MediaType>('all');
   readonly externalEnabled = signal(localStorage.getItem(EXTERNAL_KEY) !== 'false');
 
   private readonly persistExternal = effect(() => {

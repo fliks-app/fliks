@@ -199,22 +199,26 @@ export const routes: Routes = [
       },
       {
         path: 'add/movie/:provider/:externalId',
+        data: { kind: 'movie' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },
       {
         path: 'add/tv/:provider/:externalId',
+        data: { kind: 'series' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },
       // Backward compat: /add/movie/:tmdbId → defaults to tmdb provider
       {
         path: 'add/movie/:tmdbId',
+        data: { kind: 'movie' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },
       {
         path: 'add/tv/:tmdbId',
+        data: { kind: 'series' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },

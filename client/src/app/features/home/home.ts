@@ -53,11 +53,14 @@ import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { armPageSlide } from '../../shared/utils/page-slide';
 import { CacheRead } from '../../core/interceptors/cache.interceptor';
+import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 /** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
   selector: 'app-home',
   imports: [
+    MediaLinkPipe,
     RouterLink, TranslatePipe, DefaultFocusDirective,
     LocaleDatePipe,
     MediaCardComponent,
@@ -348,7 +351,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (item.episodeId) {
       return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
     }
-    return ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), String(item.mediaId)];
+    return mediaDetailLink(item.mediaType, item.mediaId);
   }
 
   /** Cards actually rendered by each zone, for the layout snapshot. */
@@ -605,8 +608,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       const media = await this.mediaService.getOne(rec.media.id);
       const file = media.files?.[0];
       if (!file) {
-        const segment = media.type === 'series' ? 'series' : 'movies';
-        void this.router.navigate(['/' + segment, media.id]);
+        void this.router.navigate(mediaDetailLink(media.type, media.id));
         return;
       }
       await this.playableMedia.play({
@@ -637,7 +639,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private async markRecommendationWatched(rec: RecommendationItem) {
     const id = rec.media.id;
     try {
-      if (rec.media.type === 'series') {
+      if (KIND_REGISTRY[rec.media.type].hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(id, true);
       } else {
         const media = await this.mediaService.getOne(id);
@@ -657,7 +659,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Needs a movie with a file or a series (bulk endpoint); lean rows without a file keep it hidden. */
   canMarkMediaWatched(m: Media): boolean {
-    return m.type === 'series' || !!m.files?.length;
+    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
   }
 
   async toggleContinueWatchingWatched(item: ContinueWatchingItem, watched: boolean) {
@@ -673,7 +675,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async toggleRecentMediaWatched(m: Media, watched: boolean) {
     try {
-      if (m.type === 'series') {
+      if (KIND_REGISTRY[m.type].hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;
@@ -691,7 +693,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  row — drops the watched item from that library's bucket. */
   async toggleLibraryRecentWatched(libraryId: number, m: Media, watched: boolean) {
     try {
-      if (m.type === 'series') {
+      if (KIND_REGISTRY[m.type].hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;

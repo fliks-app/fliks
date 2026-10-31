@@ -54,11 +54,8 @@ export class RequestPosterComponent implements OnInit {
     const key = `${this.mediaType()}:${this.tmdbId()}`;
     let promise = detailsCache.get(key);
     if (!promise) {
-      promise = (
-        this.mediaType() === 'movie'
-          ? this.metadata.getMovieDetails(this.tmdbId())
-          : this.metadata.getTvDetails(this.tmdbId())
-      )
+      promise = this.metadata
+        .detailsByKind(this.mediaType(), this.tmdbId())
         .then((d) => ({ posterUrl: d.posterUrl, fanartUrl: d.fanartUrl }))
         .catch(() => ({ posterUrl: null, fanartUrl: null }));
       detailsCache.set(key, promise);

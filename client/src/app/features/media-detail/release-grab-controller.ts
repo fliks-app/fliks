@@ -7,6 +7,7 @@ import type { ReleasesModalComponent } from './components/releases-modal/release
 import type { MediaDetailReleasePickerService, MovieRelease } from './media-detail-release-picker.service';
 import { isUnprofiledReleaseError, releaseGrabBody } from './media-detail-release.utils';
 import type { IndexerRosterEntry, ReleaseSearchStreamService } from './release-search-stream.service';
+import { assertNever } from '../../core/media-kinds';
 
 export interface ReleaseGrabHost {
   media(): Media | null;
@@ -87,9 +88,20 @@ export class ReleaseGrabController {
     private readonly deps: ReleaseGrabDeps,
   ) {}
 
-  async loadReleases() {
+  /** The open title when it is a movie: the acquisition endpoints here are movie-only. */
+  private movie() {
     const m = this.host.media();
-    if (!m || m.type !== 'movie') return;
+    if (!m) return null;
+    switch (m.type) {
+      case 'movie': return m;
+      case 'series': return null;
+      default: return assertNever(m.type);
+    }
+  }
+
+  async loadReleases() {
+    const m = this.movie();
+    if (!m) return;
     this.releasesLoading.set(true);
     this.releasesError.set('');
     this.releasesEmptyMessage.set(RELEASES_EMPTY);
@@ -168,14 +180,14 @@ export class ReleaseGrabController {
   }
 
   async grabBest() {
-    const m = this.host.media();
-    if (!m || m.type !== 'movie') return;
+    const m = this.movie();
+    if (!m) return;
     await this.runGrabBest(this.movieGrabBestBusy, m.id, {}, () => this.deps.api.grabMovie(m.id, {}));
   }
 
   async grabRelease(r: MovieRelease, key: string) {
-    const m = this.host.media();
-    if (!m || m.type !== 'movie') return;
+    const m = this.movie();
+    if (!m) return;
     this.grabBusy.set(key);
     try {
       await this.withGrabPhase({}, () => this.deps.api.grabMovie(m.id, releaseGrabBody(r)));

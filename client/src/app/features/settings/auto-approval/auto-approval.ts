@@ -28,8 +28,10 @@ import {
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import type { MediaType } from '../../../core/enums/media-type.enum';
+import { KIND_REGISTRY } from '../../../core/media-kinds';
 
-type RuleMediaType = '' | 'movie' | 'series';
+type RuleMediaType = '' | MediaType;
 
 @Component({
   selector: 'app-auto-approval',
@@ -73,6 +75,14 @@ export class AutoApprovalSettingsComponent implements OnInit {
   readonly formUserIds = signal<number[]>([]);
   readonly formRoleIds = signal<number[]>([]);
   readonly formMediaType = signal<RuleMediaType>('');
+  private readonly genresByKind: Record<MediaType, () => TmdbGenre[]> = {
+    movie: this.movieGenres,
+    series: this.tvGenres,
+  };
+  protected readonly showMaxSeasons = computed(() => {
+    const type = this.formMediaType();
+    return !type || KIND_REGISTRY[type].hasSeasons;
+  });
   readonly formLibraryIds = signal<number[]>([]);
   readonly formGenreIds = signal<number[]>([]);
   readonly formMaxSeasons = signal<number | null>(null);
@@ -82,8 +92,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
   /** Genre list follows the media type: a movie-only rule can't match a TV genre. */
   readonly genres = computed(() => {
     const type = this.formMediaType();
-    if (type === 'movie') return this.movieGenres();
-    if (type === 'series') return this.tvGenres();
+    if (type) return this.genresByKind[type]();
     const byId = new Map<number, TmdbGenre>();
     for (const g of [...this.movieGenres(), ...this.tvGenres()]) byId.set(g.id, g);
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -221,7 +230,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   setMediaType(value: RuleMediaType) {
     this.formMediaType.set(value);
-    if (value === 'movie') this.formMaxSeasons.set(null);
+    if (value && !KIND_REGISTRY[value].hasSeasons) this.formMaxSeasons.set(null);
     // Genre ids are type-scoped: drop any that the new list no longer offers.
     const allowed = new Set(this.genres().map((g) => g.id));
     this.formGenreIds.update((ids) => ids.filter((id) => allowed.has(id)));
@@ -244,7 +253,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
     const criteria: AutoApprovalCriteria = {};
     if (this.formUserIds().length) criteria.userIds = this.formUserIds();
     if (this.formRoleIds().length) criteria.roleIds = this.formRoleIds();
-    if (this.formMediaType()) criteria.mediaType = this.formMediaType() as 'movie' | 'series';
+    if (this.formMediaType()) criteria.mediaType = this.formMediaType() as MediaType;
     if (this.formLibraryIds().length) criteria.libraryIds = this.formLibraryIds();
     if (this.formGenreIds().length) criteria.genreIds = this.formGenreIds();
     if (this.formMaxSeasons() != null) criteria.maxSeasons = this.formMaxSeasons()!;

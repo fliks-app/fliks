@@ -1,12 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import type { MediaType } from '../../enums/media-type.enum';
 
 /** Every set criterion must match and an unset one matches anything (`{}` approves all); `userIds`/`roleIds` are OR'd, as are rules. */
 export interface AutoApprovalCriteria {
   userIds?: number[];
   roleIds?: number[];
-  mediaType?: 'movie' | 'series';
+  mediaType?: MediaType;
   libraryIds?: number[];
   genreIds?: number[];
   maxSeasons?: number;

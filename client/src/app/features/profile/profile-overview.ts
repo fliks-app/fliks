@@ -1,3 +1,4 @@
+import type { MediaType } from '../../core/enums/media-type.enum';
 import {
   Component,
   computed,
@@ -15,6 +16,7 @@ import { SearchStateService } from '../../core/services/search-state.service';
 import { resolveTmdbGenreId } from '../../core/utils/tmdb-genres';
 import { ProfileContextService } from './profile-context.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 /** The profile "overview" tab: tastes, playlists, recommendations, recently watched and likes, each behind its share toggle; reads {@link ProfileContextService}. */
 @Component({
@@ -77,13 +79,13 @@ export class ProfileOverviewComponent {
     void this.router.navigate(['/search']);
   }
 
-  mediaLink(mediaType: string, mediaId: number): string[] {
-    return [mediaType === 'series' ? '/series' : '/movies', String(mediaId)];
+  mediaLink(mediaType: MediaType, mediaId: number): string[] {
+    return mediaDetailLink(mediaType, mediaId);
   }
 
   /** Route to a liked item: the episode page when it targets an episode,
    *  otherwise the movie or series detail page. */
-  likeLink(item: { mediaType: string; mediaId: number; episodeId: number | null }): string[] {
+  likeLink(item: { mediaType: MediaType; mediaId: number; episodeId: number | null }): string[] {
     if (item.episodeId) {
       return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
     }

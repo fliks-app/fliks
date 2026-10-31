@@ -17,7 +17,7 @@
       </div>
     }
 
-    @if (mediaType() === 'series') {
+    @if (kinds[mediaType()].hasSeasons) {
       @if (seasonsFailed()) {
         <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
           {{ 'discover.seasons_unavailable' | translate }}

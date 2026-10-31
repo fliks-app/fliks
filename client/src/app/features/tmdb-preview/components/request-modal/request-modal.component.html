@@ -3,7 +3,7 @@
     <app-modal-header>
       <div>
         <h3 class="text-lg font-bold text-primary">
-          @if (mediaType() === 'series') {
+          @if (kinds[mediaType()].hasSeasons) {
             {{ 'discover.request_series_title' | translate }}
           } @else {
             {{ 'discover.request_movie_title' | translate }}
@@ -19,7 +19,7 @@
       </div>
     }
 
-    @if (mediaType() === 'series') {
+    @if (kinds[mediaType()].hasSeasons) {
       @if (seasonsFailed()) {
         <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
           {{ 'discover.seasons_unavailable_request' | translate }}
@@ -110,7 +110,7 @@
         @if (requesting()) {
           <span class="loading loading-spinner loading-xs"></span>
         }
-        @if (mediaType() === 'series') {
+        @if (kinds[mediaType()].hasSeasons) {
           {{ 'discover.select_seasons' | translate }}
         } @else {
           {{ 'discover.request' | translate }}

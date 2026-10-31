@@ -2,6 +2,7 @@ import { Injectable, computed, signal } from '@angular/core';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
+import { KIND_REGISTRY } from '../media-kinds';
 
 /** Identifies one download within a season: `ref:<r>` is the reporter's identity (two releases of one episode stay two leaves),
  *  `pending:<scope>` is the placeholder a grab puts up before any download exists. */
@@ -111,7 +112,7 @@ function toLeaf(d: DownloadProgressItem): DownloadLeaf {
 function toEntry(e: DownloadProgressEvent, at: number): MediaDownloadProgress | null {
   if (!e.downloads.length) return null;
 
-  if (e.mediaType !== 'series') {
+  if (!KIND_REGISTRY[e.mediaType].hasSeasons) {
     const f = foldLeaves(e.downloads.map(toLeaf));
     return {
       mediaId: e.mediaId,
@@ -167,7 +168,7 @@ export class DownloadProgressService {
       const cur = out.get(mediaId);
       const mediaType = cur?.mediaType ?? scopes[0]!.mediaType;
 
-      if (mediaType !== 'series') {
+      if (!KIND_REGISTRY[mediaType].hasSeasons) {
         // Nothing to place a movie placeholder under, and a reported movie already says more.
         if (!cur) {
           out.set(mediaId, {

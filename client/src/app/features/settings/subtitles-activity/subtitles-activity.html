@@ -46,7 +46,7 @@
             <td class="text-sm whitespace-nowrap">{{ entry.createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>
             <td class="font-medium max-w-[14rem]" [title]="entry.mediaTitle">
               <a
-                [routerLink]="['/' + (entry.mediaType === 'series' ? 'series' : 'movies'), entry.mediaId]"
+                [routerLink]="((entry.mediaType ?? 'movie') | mediaLink: entry.mediaId)"
                 class="link link-hover block truncate"
               >{{ entry.mediaTitle }}</a>
               @if (episodeLabel(entry)) {

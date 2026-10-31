@@ -83,6 +83,7 @@ import { AnalyzeController } from './analyze-controller';
 import { RequestFlowController } from './request-flow-controller';
 import { WatchedController } from './watched-controller';
 import { EpisodeViewController } from './episode-view-controller';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -135,6 +136,7 @@ interface HandedEpisode {
   templateUrl: './media-detail.html',
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly identifyModalService = inject(IdentifyModalService);
   private readonly trackingModalService = inject(TrackingModalService);
   private readonly route = inject(ActivatedRoute);
@@ -354,7 +356,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m || !params) return;
     // Seeded stub: the episode is already in place and there is no season tree
     // to resolve against, so resolving now would only report it missing.
-    if (m.type === 'series' && !m.seasons) return;
+    if (KIND_REGISTRY[m.type].hasSeasons && !m.seasons) return;
     const idParam = params.get('id');
     const paramId = idParam ? Number(idParam) : NaN;
     if (m.id !== paramId) return;
@@ -399,12 +401,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly similar = signal<RelatedMedia[]>([]);
   readonly collection = signal<MediaCollection | null>(null);
   readonly resumeInfo = signal<MediaResumeInfo | null>(null);
+  readonly headerFiles = computed(() => {
+    const m = this.media();
+    return m && KIND_REGISTRY[m.type].hasSeasons ? (m.files ?? []) : this.mediaFiles();
+  });
   readonly mediaFiles = computed(() => {
     const m = this.media();
     if (!m) return [];
     const list = m.files ?? [];
     // Series files belong to episodes; hide orphans at the root.
-    return m.type === 'series' ? [] : list;
+    return KIND_REGISTRY[m.type].hasSeasons ? [] : list;
   });
 
   /** Falls back to the file's own duration when the provider never gave a runtime. */
@@ -664,7 +670,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const m = await this.mediaService.getOne(id);
       if (m.type !== kind) {
-        void this.router.navigate(['/', m.type === 'movie' ? 'movies' : 'series', m.id]);
+        void this.router.navigate(mediaDetailLink(m.type, m.id));
         return;
       }
       this.media.set(m);
@@ -740,10 +746,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private async loadPlaybackState(m: Media): Promise<void> {
     const [resumeInfo, watchedIds, progress] = await Promise.all([
       this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
-      m.type === 'series'
+      KIND_REGISTRY[m.type].hasSeasons
         ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
         : Promise.resolve([] as number[]),
-      m.type === 'series'
+      KIND_REGISTRY[m.type].hasSeasons
         ? this.streamingApi.getEpisodeProgress(m.id).catch(() => ({}) as Record<number, number>)
         : Promise.resolve({} as Record<number, number>),
     ]);
@@ -763,7 +769,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     // Preselect the season of the in-progress episode (resumeInfo), else of the first unwatched
     // episode with a file (covers between-episodes, where resumeInfo is null).
     let resumeHandled = false;
-    if (m.type === 'series' && m.seasons?.length) {
+    if (KIND_REGISTRY[m.type].hasSeasons && m.seasons?.length) {
       let targetSeasonId: number | null = null;
       if (resumeInfo?.episodeId) {
         targetSeasonId =
@@ -782,7 +788,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       }
     }
 
-    if (m.type === 'series' && m.seasons?.length) {
+    if (KIND_REGISTRY[m.type].hasSeasons && m.seasons?.length) {
       if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
     } else {
       this.activeSeasonId.set(null);
@@ -826,7 +832,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   backSegment(): string {
-    return this.expectedKind() === 'movie' ? 'movies' : 'series';
+    return KIND_REGISTRY[this.expectedKind()].segment;
   }
 
   openLibraryModal() {
@@ -851,7 +857,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         });
       }
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.libraryPatchSaved.set(true);
       setTimeout(() => this.libraryPatchSaved.set(false), 3000);
     } finally {
@@ -871,7 +877,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         languageProfileId: this.draftLanguageProfileId(),
       });
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.draftQualityProfileId.set(updated.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
       this.profilesOk.set(this.translate.instant('media_detail.profiles_saved'));
@@ -901,7 +907,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const updated = await this.mediaService.toggleMonitored(m.id, !m.monitored);
       this.media.set(updated);
-      if (updated.type === 'series') {
+      if (KIND_REGISTRY[updated.type].hasSeasons) {
         this.syncActiveSeasonForSeriesFilter();
         const open = this.episodeDrawerContext();
         if (open) {
@@ -1125,7 +1131,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       analyze: () => this.analyze.open(),
       refresh: () => void this.refreshMetadata(),
       tracking: () =>
-        this.openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' }),
+        this.openTracking({ kind: m.type }),
     };
     const open = openers[action];
     void this.router.navigate([], {
@@ -1177,7 +1183,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const updated = await this.mediaService.getOne(mediaId, { force: true });
       this.media.set(updated);
-      if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
+      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       // Re-resolve the focused episode against the refreshed tree.
       const ep = this.focusedEpisode();
       if (ep) {
@@ -1238,7 +1244,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Garde activeSeasonId sur une saison visible (onglets) quand le filtre disque est actif. */
   private syncActiveSeasonForSeriesFilter() {
     const m = this.media();
-    if (m?.type !== 'series' || !m.seasons?.length) return;
+    if (!m || !KIND_REGISTRY[m.type].hasSeasons || !m.seasons?.length) return;
     const visible = seasonsVisibleWithDiskFilter(m, this.episodesHasFileOnly());
     if (!visible.length) {
       this.activeSeasonId.set(null);

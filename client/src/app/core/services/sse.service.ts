@@ -43,7 +43,7 @@ export interface RemoteCommand {
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
     | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality' | 'browse';
   mediaId?: number;
-  mediaType?: 'movie' | 'series';
+  mediaType?: MediaType;
   mediaFileId?: number;
   episodeId?: number;
   positionSeconds?: number;
@@ -124,7 +124,7 @@ const DIAL_TIMEOUT_MS = 10_000;
 export interface MediaProgressSubject {
   title: string;
   mediaId?: number;
-  mediaType?: string;
+  mediaType?: MediaType;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;

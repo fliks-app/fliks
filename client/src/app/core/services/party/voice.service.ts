@@ -48,6 +48,7 @@ export class VoiceService {
   readonly micIssue = signal<'unavailable' | 'denied' | null>(null);
   readonly listenOnly = computed(() => !this.micAvailable || this.micIssue() !== null);
   readonly listenOnlyReason = computed(() =>
+    // eslint-disable-next-line no-restricted-syntax -- 'tv' is the device class here, not a media kind
     this.device.isTv() ? 'tv' : (this.micIssue() ?? (this.micAvailable ? null : 'unavailable')),
   );
   readonly busy = signal(false);

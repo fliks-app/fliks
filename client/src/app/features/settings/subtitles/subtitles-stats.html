@@ -72,7 +72,7 @@
                       </a>
                     } @else {
                       <a class="link link-hover text-sm"
-                        [routerLink]="['/', row.mediaType === 'movie' ? 'movies' : 'series', row.mediaId]">
+                        [routerLink]="(row.mediaType | mediaLink: row.mediaId)">
                         {{ row.mediaTitle }}
                       </a>
                     }

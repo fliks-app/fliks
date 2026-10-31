@@ -27,6 +27,7 @@ import {
   RelinkOrphansBody,
   TransferMethod,
 } from '../../../../../core/services/api/imports-api.service';
+import { KIND_REGISTRY } from '../../../../../core/media-kinds';
 
 const PAGE_SIZE = 20;
 const SEARCH_CONCURRENCY = 8;
@@ -65,6 +66,7 @@ interface GroupVM {
   host: { class: 'flex flex-col min-h-0 flex-1' },
 })
 export class OrphanScanPanelComponent {
+  protected readonly kinds = KIND_REGISTRY;
   private readonly importsApi = inject(ImportsApiService);
   private readonly metadata = inject(MetadataService);
   private readonly toast = inject(ToastService);
@@ -89,6 +91,10 @@ export class OrphanScanPanelComponent {
 
   /** Nothing to render before the first scan runs. */
   readonly started = signal(false);
+  protected readonly groupLabelKeys: Record<MediaType, string> = {
+    movie: 'settings.libraries.scan_group_movie',
+    series: 'settings.libraries.scan_group_series',
+  };
   readonly scanning = signal(false);
   readonly scanError = signal('');
   readonly scannedFiles = signal(0);
@@ -332,10 +338,7 @@ export class OrphanScanPanelComponent {
     const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
-      const results =
-        vm.group.mediaType === 'series'
-          ? await this.metadata.searchTv(query, vm.year ?? undefined, provider)
-          : await this.metadata.searchMovie(query, vm.year ?? undefined, provider);
+      const results = await this.metadata.searchByKind(vm.group.mediaType, query, vm.year ?? undefined, provider);
       if (stale()) return;
 
       // Auto-select the match referenced by the .nfo id, if any.

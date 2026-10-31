@@ -90,13 +90,20 @@ function setup(folders: string[], metadataOverrides: Record<string, unknown> = {
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
-      { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+      { provide: MetadataService, useValue: withSearchByKind(metadata) },
       { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
     ],
   });
   const fixture = TestBed.createComponent(OrphanScanPanelComponent);
   return { panel: fixture.componentInstance, fixture, relinked, linked };
 }
+
+type KindSearch = { searchMovie: (...a: never[]) => unknown; searchTv: (...a: never[]) => unknown };
+const withSearchByKind = (m: KindSearch) =>
+  ({
+    ...m,
+    searchByKind: (kind: string, ...a: never[]) => (kind === 'series' ? m.searchTv : m.searchMovie)(...a),
+  }) as unknown as MetadataService;
 
 describe('OrphanScanPanelComponent.importAll', () => {
   it('queues every detected group, defaulting to the first result', async () => {
@@ -177,7 +184,7 @@ describe('OrphanScanPanelComponent.autoImportAll', () => {
           loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
         }),
         { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
-        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        { provide: MetadataService, useValue: withSearchByKind(metadata) },
         { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
       ],
     });
@@ -222,7 +229,7 @@ describe('OrphanScanPanelComponent.link: files already present', () => {
           },
         }),
         { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
-        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        { provide: MetadataService, useValue: withSearchByKind(metadata) },
         {
           provide: ToastService,
           useValue: { success: () => undefined, info: (m: string) => (infoMessage = m) },
@@ -287,7 +294,7 @@ describe('OrphanScanPanelComponent: scan generation', () => {
           loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
         }),
         { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
-        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        { provide: MetadataService, useValue: withSearchByKind(metadata) },
         { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
       ],
     });
@@ -345,10 +352,10 @@ describe('OrphanScanPanelComponent.linkAll', () => {
         { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
         {
           provide: MetadataService,
-          useValue: {
+          useValue: withSearchByKind({
             searchMovie: () => Promise.resolve([result(11, 'First')]),
             searchTv: () => Promise.resolve([]),
-          } as unknown as MetadataService,
+          }),
         },
         { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
       ],
@@ -511,7 +518,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
           loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
         }),
         { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
-        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        { provide: MetadataService, useValue: withSearchByKind(metadata) },
         { provide: ToastService, useValue: { success: () => undefined } },
       ],
     });

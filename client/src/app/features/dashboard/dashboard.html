@@ -147,7 +147,7 @@
                   <tr>
                     <td class="font-medium max-w-[12rem]" [title]="r.mediaTitle">
                       <a
-                        [routerLink]="['/', r.mediaType === 'series' ? 'series' : 'movies', r.mediaId]"
+                        [routerLink]="((r.mediaType ?? 'movie') | mediaLink: r.mediaId)"
                         class="link link-hover block truncate"
                       >{{ r.mediaTitle }}</a>
                       @if (episodeLabel(r)) {

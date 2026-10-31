@@ -16,6 +16,7 @@ import {
 } from '../../../core/services/api/media.service';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import type { MediaType } from '../../../core/enums/media-type.enum';
 
 export type TrackingScope =
   | { kind: 'movie' }
@@ -39,6 +40,10 @@ export type TrackingScope =
   templateUrl: './tracking-status-modal.html',
 })
 export class TrackingStatusModalComponent {
+  protected readonly singleTitleLabelKeys: Record<MediaType, string | null> = {
+    movie: 'tracking.this_movie',
+    series: null,
+  };
   private readonly media = inject(MediaService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 

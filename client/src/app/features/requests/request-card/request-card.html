@@ -31,15 +31,11 @@
         </span>
       }
       <span>
-        @if (request().mediaType === 'movie') {
-          {{ 'requests.type_movie' | translate }}
-        } @else {
-          {{ 'requests.type_series' | translate }}
-        }
+        {{ kinds[request().mediaType].requestLabelKey | translate }}
       </span>
     </div>
 
-    @if (request().mediaType === 'series' && request().seasons?.length) {
+    @if (kinds[request().mediaType].hasSeasons && request().seasons?.length) {
       <p class="text-sm text-base-content/70 m-0">
         <span class="text-base-content/50">{{ (request().seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}</span>
         {{ request().seasons?.join(', ') }}

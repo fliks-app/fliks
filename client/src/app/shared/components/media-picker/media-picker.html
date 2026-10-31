@@ -37,7 +37,7 @@
                   @if (selected()?.id === r.media.id) {
                     <ng-container *ngTemplateOutlet="detail" />
                   } @else if (!selected()) {
-                    <app-media-card [attr.data-id]="r.media.id" [imageUrl]="r.media.posterUrl" [title]="r.media.title" [subtitle]="'' + (r.media.year ?? '')" selectOnly [hideStatusBar]="true" [posterMorph]="false" [badge]="r.media.type === 'movie' && isTaken(r.media.id, null) ? 'added' : null" (clicked)="choose(r.media)" />
+                    <app-media-card [attr.data-id]="r.media.id" [imageUrl]="r.media.posterUrl" [title]="r.media.title" [subtitle]="'' + (r.media.year ?? '')" selectOnly [hideStatusBar]="true" [posterMorph]="false" [badge]="!kinds[r.media.type].hasSeasons && isTaken(r.media.id, null) ? 'added' : null" (clicked)="choose(r.media)" />
                   }
                 }
               </div>
@@ -52,7 +52,7 @@
                 @if (selected()?.id === r.id) {
                   <ng-container *ngTemplateOutlet="detail" />
                 } @else if (!selected()) {
-                  <app-media-card [attr.data-id]="r.id" [media]="r" selectOnly [hideStatusBar]="true" [posterMorph]="false" [status]="r.watched ? 'watched' : null" [badge]="r.type === 'movie' && isTaken(r.id, null) ? 'added' : null" (clicked)="choose(r)" />
+                  <app-media-card [attr.data-id]="r.id" [media]="r" selectOnly [hideStatusBar]="true" [posterMorph]="false" [status]="r.watched ? 'watched' : null" [badge]="!kinds[r.type].hasSeasons && isTaken(r.id, null) ? 'added' : null" (clicked)="choose(r)" />
                 }
               }
             </div>

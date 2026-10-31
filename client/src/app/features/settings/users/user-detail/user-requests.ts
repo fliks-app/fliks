@@ -12,6 +12,7 @@ import {
   FliksRequestRow,
 } from '../../../../core/services/api/requests.service';
 import { UserDetailState } from './user-detail.state';
+import type { MediaType } from '../../../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-user-requests',
@@ -19,6 +20,10 @@ import { UserDetailState } from './user-detail.state';
   templateUrl: './user-requests.html',
 })
 export class UserRequestsComponent implements OnInit {
+  protected readonly badgeClasses: Record<MediaType, string> = {
+    movie: 'badge-info',
+    series: 'badge-accent',
+  };
   private readonly requestsApi = inject(RequestsService);
   private readonly state = inject(UserDetailState);
 
