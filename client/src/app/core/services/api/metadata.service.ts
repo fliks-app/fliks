@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
+import { KIND_REGISTRY, assertNever } from '../../media-kinds';
 
 export interface MetadataSearchResult {
   tmdbId: number;
@@ -202,6 +203,54 @@ export class MetadataService {
     );
   }
 
+  searchByKind(type: MediaType, q: string, year?: number, provider?: string, mediaId?: number) {
+    switch (type) {
+      case 'movie': return this.searchMovie(q, year, provider, mediaId);
+      case 'series': return this.searchTv(q, year, provider, mediaId);
+      default: return assertNever(type);
+    }
+  }
+
+  discoverByKind(type: MediaType, opts: DiscoverFilters) {
+    switch (type) {
+      case 'movie': return this.discoverMovies(opts);
+      case 'series': return this.discoverTv(opts);
+      default: return assertNever(type);
+    }
+  }
+
+  genresByKind(type: MediaType) {
+    switch (type) {
+      case 'movie': return this.getMovieGenres();
+      case 'series': return this.getTvGenres();
+      default: return assertNever(type);
+    }
+  }
+
+  trendingByKind(type: MediaType, window: 'day' | 'week' = 'week') {
+    switch (type) {
+      case 'movie': return this.getTrendingMovies(window);
+      case 'series': return this.getTrendingTv(window);
+      default: return assertNever(type);
+    }
+  }
+
+  popularByKind(type: MediaType) {
+    switch (type) {
+      case 'movie': return this.getPopularMovies();
+      case 'series': return this.getPopularTv();
+      default: return assertNever(type);
+    }
+  }
+
+  detailsByKind(type: MediaType, tmdbId: number) {
+    switch (type) {
+      case 'movie': return this.getMovieDetails(tmdbId);
+      case 'series': return this.getTvDetails(tmdbId);
+      default: return assertNever(type);
+    }
+  }
+
   /** Season numbers + episode counts only: one provider call, unlike
    *  {@link getSeasons} which fetches every episode of every season. */
   getSeasonStubs(provider: string, externalId: string) {
@@ -220,7 +269,7 @@ export class MetadataService {
 
   /** Provider-aware detail fetch */
   getDetails(provider: string, mediaType: 'movie' | 'series', externalId: string) {
-    const segment = mediaType === 'series' ? 'tv' : 'movie';
+    const segment = KIND_REGISTRY[mediaType].providerSegment;
     return firstValueFrom(
       this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${externalId}`),
     );

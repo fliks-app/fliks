@@ -39,7 +39,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTranslateService(),
-        { provide: MetadataService, useValue: { searchTv, searchMovie: vi.fn() } },
+        { provide: MetadataService, useValue: { searchByKind: (kind: string, ...a: unknown[]) => (kind === 'series' ? searchTv : vi.fn())(...a) } },
         { provide: MediaService, useValue: { identify } },
         { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       ],

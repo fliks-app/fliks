@@ -500,7 +500,7 @@
               [subtitle]="item.episodeLabel ?? undefined"
               [progressPercent]="item.progressPercent"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
-              [titleLink]="item.episodeId ? ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId] : null"
+              [titleLink]="item.episodeId ? (item.mediaType | mediaLink: item.mediaId) : null"
               [titlePosterUrl]="item.posterUrl"
               [playlistMediaId]="item.mediaId"
               [playlistEpisodeId]="item.episodeId"
@@ -523,7 +523,7 @@
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
               [mediaTypeBadge]="mixedLibrary() ? rec.media.type : null"
-              [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+              [link]="(rec.media.type | mediaLink: rec.media.id)"
             />
           }
         </app-horizontal-scroller>
@@ -540,7 +540,7 @@
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
               [mediaTypeBadge]="mixedLibrary() ? rec.media.type : null"
-              [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+              [link]="(rec.media.type | mediaLink: rec.media.id)"
             />
           }
         </div>

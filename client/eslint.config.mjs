@@ -47,9 +47,20 @@ export default [
     rules: {
       'fence/no-plugin-api-paths': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ConditionalExpression:has(BinaryExpression[operator=/^[!=]==?$/] > Literal[value=/^(movie|series)$/])",
+          message: 'Branch on a media kind through KIND_REGISTRY (core/media-kinds.ts), not a ternary on the literal.',
+        },
+      ],
     },
     linterOptions: {
       reportUnusedDisableDirectives: 'off',
     },
+  },
+  {
+    files: ['src/**/*.spec.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
   },
 ];

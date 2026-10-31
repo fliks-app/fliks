@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { backTarget } from './back-target';
 
-const movie = { mediaId: 7, kind: 'movies' as const };
+const movie = { mediaId: 7, kind: 'movie' as const };
 const ep = { mediaId: 9, kind: 'series' as const, episodeId: 3 };
 
 describe('backTarget', () => {
@@ -23,7 +23,7 @@ describe('backTarget', () => {
     expect(backTarget({ ...movie, origin: '/movies/8' })).toBe('/movies/8');
   });
   it('goes home or to the origin without media', () => {
-    expect(backTarget({ mediaId: 0, kind: 'movies', origin: null })).toBe('/');
-    expect(backTarget({ mediaId: 0, kind: 'movies', origin: '/parties/1' })).toBe('/parties/1');
+    expect(backTarget({ mediaId: 0, kind: 'movie', origin: null })).toBe('/');
+    expect(backTarget({ mediaId: 0, kind: 'movie', origin: '/parties/1' })).toBe('/parties/1');
   });
 });

@@ -1,3 +1,4 @@
+import type { MediaType } from '../enums/media-type.enum';
 /** UI-facing contribution types of the manifest's `ui.*` block, as the plugin host validates them
  *  (`server/docs/spec/plugins.md` rule 5); imported as `@fliks/plugin-ui`. */
 
@@ -14,8 +15,7 @@ export type SlotId =
 export type WhenPredicateName =
   | 'isAdmin'
   | `hasPermission:${string}`
-  | 'mediaType:movie'
-  | 'mediaType:series'
+  | `mediaType:${MediaType}`
   | 'hasFiles'
   | 'isMonitored'
   | 'hasQualityProfile'

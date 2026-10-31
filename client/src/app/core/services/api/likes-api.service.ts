@@ -1,3 +1,4 @@
+import type { MediaType } from '../../enums/media-type.enum';
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -20,7 +21,7 @@ export interface LikeState {
 /** A liked entry rendered as a card. */
 export interface LikedItem {
   mediaId: number;
-  mediaType: string;
+  mediaType: MediaType;
   title: string;
   posterUrl: string | null;
   fanartUrl: string | null;

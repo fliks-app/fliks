@@ -16,6 +16,7 @@ import { ModalHeaderComponent } from '../modal-header';
 import { SynopsisComponent } from '../synopsis/synopsis';
 import { ContentTypeToggleComponent } from '../search-filters/content-type-toggle';
 import { DEFAULT_SORT, SearchContentType, SearchFiltersComponent, filtersEngaged, libraryFilterParams } from '../search-filters/search-filters';
+import { KIND_REGISTRY, filterKind } from '../../../core/media-kinds';
 
 export interface MediaPick {
   mediaId: number;
@@ -199,10 +200,10 @@ export class MediaPickerComponent implements OnDestroy {
 
   /** Movie genres for "all" and "movie", the TV list for series, as on the search page. */
   private readonly genreEffect = effect(() => {
-    const series = this.contentType() === 'series';
+    const kind = filterKind(this.contentType());
     untracked(() => {
       const seq = ++this.genreSeq;
-      (series ? this.metadata.getTvGenres() : this.metadata.getMovieGenres())
+      this.metadata.genresByKind(kind)
         .then((g) => { if (seq === this.genreSeq) this.genres.set(g); })
         .catch(() => { if (seq === this.genreSeq) this.genres.set([]); });
     });
@@ -303,7 +304,7 @@ export class MediaPickerComponent implements OnDestroy {
     try {
       const [full, watched] = await Promise.all([
         this.media.getOne(m.id),
-        m.type === 'series' ? this.streaming.getWatchedEpisodeIds(m.id).catch(() => [] as number[]) : [],
+        KIND_REGISTRY[m.type].hasSeasons ? this.streaming.getWatchedEpisodeIds(m.id).catch(() => [] as number[]) : [],
       ]);
       if (seq !== this.chooseSeq) return;
       this.watchedEpisodes.set(new Set(watched));

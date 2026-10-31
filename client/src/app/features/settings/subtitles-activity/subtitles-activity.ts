@@ -19,10 +19,11 @@ import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe
 import { SubtitleStatusPipe } from '../../../core/pipes/subtitle-status.pipe';
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { episodeLabel } from '../../../shared/utils/episode-label';
+import { MediaLinkPipe } from '../../../core/pipes/media-link.pipe';
 
 @Component({
   selector: 'app-subtitles-activity',
-  imports: [TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, RouterLink, FormsModule, PaginationComponent, ErrorBadgeComponent, SubtitleStatusPipe],
+  imports: [MediaLinkPipe, TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, RouterLink, FormsModule, PaginationComponent, ErrorBadgeComponent, SubtitleStatusPipe],
   templateUrl: './subtitles-activity.html',
 })
 export class SubtitlesActivityComponent implements OnInit {

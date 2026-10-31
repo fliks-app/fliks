@@ -36,6 +36,7 @@ import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plug
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { isActive, type DownloadStatus } from '../../../core/services/download-status';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
+import { mediaDetailLink } from '../../../core/media-kinds';
 
 /** Provided by the search page so its cards keep the type badge under the 'search' setting. */
 export const SEARCH_CARD_CONTEXT = new InjectionToken<boolean>('SEARCH_CARD_CONTEXT');
@@ -203,7 +204,7 @@ export class MediaCardComponent {
     if (this.selectOnly()) return null;
     if (this.link()) return this.link();
     const m = this.media();
-    return m ? ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + m.id] : null;
+    return m ? mediaDetailLink(m.type, m.id) : null;
   });
   /** Hands a full Media (or stub) to the detail page via router state so it renders without a spinner. */
   readonly navState = computed(() => {
@@ -529,7 +530,7 @@ export class MediaCardComponent {
     'media.open-tracking': () => {
       const mediaId = this.media()?.id ?? this.playlistMediaId();
       if (mediaId == null) return;
-      this.trackingModal.open(mediaId, this.media()?.type === 'series' ? { kind: 'series' } : { kind: 'movie' });
+      this.trackingModal.open(mediaId, { kind: this.media()?.type ?? 'movie' });
     },
     'media.identify': () => {
       const m = this.media();

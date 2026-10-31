@@ -79,6 +79,7 @@ import type { UiContribution } from '@fliks/plugin-ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
+import { KIND_REGISTRY } from '../../../core/media-kinds';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
@@ -277,7 +278,7 @@ export class MediaInfoHeaderComponent {
   }
 
   // ── Inputs: series-specific ──
-  readonly mediaType = input<string>('movie');
+  readonly mediaType = input<MediaType>('movie');
   /** True iff every downloaded episode of non-special seasons is watched; series have no PlaybackState row. */
   readonly seriesFullyWatched = input<boolean>(false);
   /** A series root marks every episode at once, so it needs no selected file;
@@ -331,9 +332,9 @@ export class MediaInfoHeaderComponent {
   readonly watched = signal(false);
 
   protected readonly overviewMasked = computed(() =>
-    this.mediaType() === 'movie'
-      ? this.spoilers.overview(this.watched())
-      : this.spoilerOverview(),
+    KIND_REGISTRY[this.mediaType()].hasSeasons
+      ? this.spoilerOverview()
+      : this.spoilers.overview(this.watched()),
   );
   readonly resumePositionSeconds = signal<number | null>(null);
   readonly durationSeconds = signal<number | null>(null);

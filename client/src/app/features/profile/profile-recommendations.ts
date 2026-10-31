@@ -1,3 +1,4 @@
+import type { MediaType } from '../../core/enums/media-type.enum';
 import {
   Component,
   effect,
@@ -17,6 +18,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 /** The own-profile "recommendations" tab: content recommended to the viewer and by them, as compact tables. */
 @Component({
@@ -81,13 +83,13 @@ export class ProfileRecommendationsComponent {
   }
 
   contentLink(item: {
-    mediaType: string;
+    mediaType: MediaType;
     mediaId: number;
     episodeId: number | null;
   }): string[] {
     if (item.episodeId) {
       return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
     }
-    return [item.mediaType === 'series' ? '/series' : '/movies', String(item.mediaId)];
+    return mediaDetailLink(item.mediaType, item.mediaId);
   }
 }

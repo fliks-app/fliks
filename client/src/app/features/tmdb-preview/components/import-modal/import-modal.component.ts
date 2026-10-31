@@ -21,6 +21,7 @@ import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
+import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
 
 @Component({
   selector: 'app-import-modal',
@@ -189,7 +190,7 @@ export class ImportModalComponent {
         qualityProfileId: this.selectedQualityProfileId() ?? undefined,
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
         libraryId: this.selectedLibraryId() ?? undefined,
-        ...(this.mediaType() === 'series' && !this.seasonsFailed()
+        ...(KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed()
           ? {
               monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b),
             }
@@ -198,8 +199,7 @@ export class ImportModalComponent {
       this.toast.success(this.translate.instant('discover.import_success'));
       this.close();
       this.imported.emit();
-      const prefix = saved.type === 'movie' ? '/movies' : '/series';
-      void this.router.navigate([prefix, saved.id]);
+      void this.router.navigate(mediaDetailLink(saved.type, saved.id));
     } catch (err: unknown) {
       const httpErr = err as { status?: number; error?: { message?: string } };
       if (httpErr?.status === 400) {

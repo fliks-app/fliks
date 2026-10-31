@@ -95,7 +95,7 @@ describe('TmdbPreviewComponent.approveRequest', () => {
 
     await fixture.componentInstance.approveRequest(7);
 
-    expect(navigate).toHaveBeenCalledWith(['/movies', 99], { replaceUrl: true });
+    expect(navigate).toHaveBeenCalledWith(['/movies', '99'], { replaceUrl: true });
   });
 });
 

@@ -124,7 +124,7 @@ const DIAL_TIMEOUT_MS = 10_000;
 export interface MediaProgressSubject {
   title: string;
   mediaId?: number;
-  mediaType?: string;
+  mediaType?: MediaType;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;

@@ -19,6 +19,7 @@ import { FolderPickerService } from '../../../../core/services/folder-picker.ser
 import { SseService } from '../../../../core/services/sse.service';
 import { LibraryDetailState } from './library-detail.state';
 import { OrphanScanModalComponent } from './orphan-scan-modal/orphan-scan-modal';
+import { mediaDetailLink } from '../../../../core/media-kinds';
 
 const PAGE_SIZE = 30;
 
@@ -136,6 +137,6 @@ export class LibraryMediaComponent implements OnInit {
   }
 
   mediaLink(m: Media): string[] {
-    return ['/' + (m.type === 'movie' ? 'movies' : 'series'), String(m.id)];
+    return mediaDetailLink(m.type, m.id);
   }
 }

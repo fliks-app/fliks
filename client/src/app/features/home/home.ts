@@ -53,11 +53,14 @@ import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { armPageSlide } from '../../shared/utils/page-slide';
 import { CacheRead } from '../../core/interceptors/cache.interceptor';
+import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 /** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
   selector: 'app-home',
   imports: [
+    MediaLinkPipe,
     RouterLink, TranslatePipe, DefaultFocusDirective,
     LocaleDatePipe,
     MediaCardComponent,
@@ -348,7 +351,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (item.episodeId) {
       return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
     }
-    return ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), String(item.mediaId)];
+    return mediaDetailLink(item.mediaType, item.mediaId);
   }
 
   /** Cards actually rendered by each zone, for the layout snapshot. */
@@ -605,8 +608,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       const media = await this.mediaService.getOne(rec.media.id);
       const file = media.files?.[0];
       if (!file) {
-        const segment = media.type === 'series' ? 'series' : 'movies';
-        void this.router.navigate(['/' + segment, media.id]);
+        void this.router.navigate(mediaDetailLink(media.type, media.id));
         return;
       }
       await this.playableMedia.play({

@@ -45,6 +45,7 @@ import { episodeLabel } from '../../shared/utils/episode-label';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { partyWhen } from './party-time';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 const JOIN_RETRY_MS = 10_000;
 
@@ -116,7 +117,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const item = this.head()?.item;
     const m = this.media();
     if (!item || !m) return null;
-    const base = ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + item.mediaId];
+    const base = mediaDetailLink(m.type, item.mediaId);
     return item.episodeId == null ? base : [...base, 'episode', '' + item.episodeId];
   });
   protected readonly armSlide = armPageSlide;

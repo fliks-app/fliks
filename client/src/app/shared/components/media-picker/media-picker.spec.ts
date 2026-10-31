@@ -136,7 +136,7 @@ describe('MediaPickerComponent', () => {
         { provide: MediaService, useValue: { getAll, getOne } },
         { provide: KeyboardOverlayService, useValue: overlay },
         { provide: StreamingApiService, useValue: { getRecommendations, getWatchedEpisodeIds } },
-        { provide: MetadataService, useValue: { getMovieGenres: vi.fn().mockResolvedValue([{ id: 18, name: 'Drama' }]), getTvGenres: vi.fn().mockResolvedValue([]) } },
+        { provide: MetadataService, useValue: { genresByKind: vi.fn().mockResolvedValue([{ id: 18, name: 'Drama' }]) } },
       ],
     });
     TestBed.overrideComponent(MediaPickerComponent, {

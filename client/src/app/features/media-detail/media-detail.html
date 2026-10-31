@@ -203,7 +203,7 @@
           [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
           [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
           [translations]="subtitleSection()?.translationInProgress() ?? []"
-          [files]="m.type === 'series' ? (m.files ?? []) : mediaFiles()"
+          [files]="headerFiles()"
           [selectedFileId]="activeFileId()"
           [mediaType]="m.type"
           [seriesFullyWatched]="watched.seriesFullyWatched()"
@@ -239,7 +239,7 @@
           (recommend)="openRecommend()"
           [liked]="like.focusedLiked()"
           (likeToggled)="like.toggle()"
-          (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
+          (openTracking)="openTracking({ kind: m.type })"
           [badge]="headerBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
         />

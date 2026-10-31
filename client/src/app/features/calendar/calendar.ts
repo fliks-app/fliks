@@ -10,6 +10,7 @@ import { NgClass } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MediaService, CalendarEntry } from '../../core/services/api/media.service';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 interface CalendarWeek {
   days: CalendarDay[];
@@ -143,7 +144,7 @@ export class CalendarComponent implements OnInit {
   }
 
   routeForEntry(e: CalendarEntry): string[] {
-    return ['/', e.type === 'movie' ? 'movies' : 'series', String(e.mediaId)];
+    return mediaDetailLink(e.type, e.mediaId);
   }
 
   entryLabel(e: CalendarEntry): string {

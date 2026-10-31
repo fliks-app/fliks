@@ -187,7 +187,7 @@ export interface WatchHistoryItem {
   completed: boolean;
   lastPlayedAt: string;
   mediaTitle: string;
-  mediaType: string;
+  mediaType: MediaType;
   posterUrl: string | null;
   fanartUrl: string | null;
   /** Episode still — null for movies or when TMDB had no still. */
@@ -225,7 +225,7 @@ export interface ContinueWatchingItem {
   progressPercent: number;
   lastPlayedAt: string;
   mediaTitle: string;
-  mediaType: string;
+  mediaType: MediaType;
   posterUrl: string | null;
   fanartUrl: string | null;
   stillUrl: string | null;

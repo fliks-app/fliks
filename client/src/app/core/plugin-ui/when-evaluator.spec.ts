@@ -34,6 +34,11 @@ describe('evaluateWhen', () => {
     expect(evaluateWhen(['mediaType:series'], ctx({}))).toBe(false);
   });
 
+  it('fails closed on an unregistered mediaType, even negated', () => {
+    expect(evaluateWhen(['mediaType:nope'], ctx({ mediaType: 'movie' }))).toBe(false);
+    expect(evaluateWhen(['!mediaType:nope'], ctx({ mediaType: 'movie' }))).toBe(false);
+  });
+
   it('treats every optional flag as false when the context omits it', () => {
     expect(evaluateWhen(['hasFiles'], ctx())).toBe(false);
     expect(evaluateWhen(['isMonitored'], ctx())).toBe(false);

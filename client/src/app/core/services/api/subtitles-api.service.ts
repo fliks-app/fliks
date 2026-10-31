@@ -336,7 +336,7 @@ export interface SubtitleHealthEntry {
 export interface MissingSubtitleEntry {
   mediaId: number;
   mediaTitle: string;
-  mediaType: string;
+  mediaType: MediaType;
   fileId: number;
   fileName: string;
   episodeId: number | null;

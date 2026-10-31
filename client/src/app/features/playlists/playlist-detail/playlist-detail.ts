@@ -65,6 +65,7 @@ import { TvService } from '../../../core/services/tv.service';
 import { PosterMosaicComponent } from '../../../shared/components/poster-mosaic/poster-mosaic';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { mediaDetailLink } from '../../../core/media-kinds';
 
 interface PlaylistSeriesGroup {
   seriesId: number;
@@ -244,8 +245,7 @@ export class PlaylistDetailComponent {
    *  series detail. */
   itemLink(it: PlaylistItem): string[] {
     if (it.episode) return this.episodeLink(it);
-    const kind = it.media.type === 'series' ? 'series' : 'movies';
-    return ['/' + kind, String(it.media.id)];
+    return mediaDetailLink(it.media.type, it.media.id);
   }
 
   itemThumb(it: PlaylistItem): string | null {

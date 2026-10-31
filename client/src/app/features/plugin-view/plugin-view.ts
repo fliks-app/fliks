@@ -40,6 +40,7 @@ function isTableRowActionId(value: string): value is TableRowActionId {
   return (TABLE_ROW_ACTION_IDS as readonly string[]).includes(value);
 }
 import { AnyConfigPage, ProvidersView, TableView, isFormView, isProvidersView, isTableView } from './view-kinds.types';
+import { KIND_REGISTRY, isMediaKind, mediaDetailLink } from '../../core/media-kinds';
 
 type UnavailableReason = 'unknown_plugin' | 'unknown_view';
 
@@ -395,14 +396,10 @@ export class PluginViewComponent implements OnDestroy {
     const id = row['mediaId'];
     const type = row['mediaType'];
     // Both columns or no button: guessing the type sends a series to a movie page.
-    if (id == null || (type !== 'series' && type !== 'movie')) return undefined;
+    if (id == null || !isMediaKind(type)) return undefined;
     const episodeId = row['episodeId'];
-    const url =
-      type === 'series'
-        ? episodeId == null
-          ? `/series/${id}`
-          : `/series/${id}/episode/${episodeId}`
-        : `/movies/${id}`;
+    const detail = mediaDetailLink(type, String(id)).join('/');
+    const url = episodeId != null && KIND_REGISTRY[type].hasSeasons ? `${detail}/episode/${episodeId}` : detail;
     return () => {
       void this.router.navigateByUrl(url);
     };

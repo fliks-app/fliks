@@ -11,6 +11,7 @@ import { PaginationComponent } from '../../shared/components/pagination/paginati
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 @Component({
   selector: 'app-watch-history',
@@ -87,8 +88,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   }
 
   goToMedia(item: WatchHistoryItem) {
-    const base = item.mediaType === 'series' ? '/series' : '/movies';
-    this.router.navigate([base, item.mediaId]);
+    this.router.navigate(mediaDetailLink(item.mediaType, item.mediaId));
   }
 
   private patchItemFromPlaybackState(prev: WatchHistoryItem, state: PlaybackState): WatchHistoryItem {

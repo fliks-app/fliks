@@ -89,6 +89,10 @@ export class OrphanScanPanelComponent {
 
   /** Nothing to render before the first scan runs. */
   readonly started = signal(false);
+  protected readonly groupLabelKeys: Record<MediaType, string> = {
+    movie: 'settings.libraries.scan_group_movie',
+    series: 'settings.libraries.scan_group_series',
+  };
   readonly scanning = signal(false);
   readonly scanError = signal('');
   readonly scannedFiles = signal(0);
@@ -332,10 +336,7 @@ export class OrphanScanPanelComponent {
     const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
-      const results =
-        vm.group.mediaType === 'series'
-          ? await this.metadata.searchTv(query, vm.year ?? undefined, provider)
-          : await this.metadata.searchMovie(query, vm.year ?? undefined, provider);
+      const results = await this.metadata.searchByKind(vm.group.mediaType, query, vm.year ?? undefined, provider);
       if (stale()) return;
 
       // Auto-select the match referenced by the .nfo id, if any.

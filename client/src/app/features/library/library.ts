@@ -1,3 +1,4 @@
+import type { MediaType } from '../../core/enums/media-type.enum';
 import {
   Component,
   signal,
@@ -53,6 +54,8 @@ import {
   CdkVirtualForOf,
   CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
+import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
+import { mediaDetailLink } from '../../core/media-kinds';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -74,6 +77,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 @Component({
   selector: 'app-library',
   imports: [
+    MediaLinkPipe,
     MediaCardComponent,
     DefaultFocusDirective,
     TvRowDirective,
@@ -636,14 +640,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Route to a liked / recommended item: the episode page when it targets an
    *  episode, otherwise the movie or series detail page. */
   contentLink(
-    mediaType: string,
+    mediaType: MediaType,
     mediaId: number,
     episodeId: number | null,
   ): string[] {
     if (episodeId) {
       return ['/series', String(mediaId), 'episode', String(episodeId)];
     }
-    return [mediaType === 'series' ? '/series' : '/movies', String(mediaId)];
+    return mediaDetailLink(mediaType, mediaId);
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {

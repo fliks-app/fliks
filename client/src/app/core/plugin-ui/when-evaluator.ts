@@ -1,4 +1,5 @@
 import type { MediaType } from '../enums/media-type.enum';
+import { isMediaKind } from '../media-kinds';
 
 /** Everything a `when` predicate can read; deliberately narrow, just the facts the closed vocabulary needs. */
 export interface WhenContext {
@@ -27,8 +28,10 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate.startsWith('hasPermission:')) {
     return ctx.hasPermission(predicate.slice('hasPermission:'.length));
   }
-  if (predicate === 'mediaType:movie') return ctx.mediaType === 'movie';
-  if (predicate === 'mediaType:series') return ctx.mediaType === 'series';
+  if (predicate.startsWith('mediaType:')) {
+    const kind = predicate.slice('mediaType:'.length);
+    return isMediaKind(kind) ? ctx.mediaType === kind : null;
+  }
   if (predicate === 'hasFiles') return ctx.hasFiles ?? false;
   if (predicate === 'isMonitored') return ctx.isMonitored ?? false;
   if (predicate === 'hasQualityProfile') return ctx.hasQualityProfile ?? false;

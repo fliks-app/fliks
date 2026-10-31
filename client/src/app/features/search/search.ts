@@ -41,6 +41,7 @@ import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
+import { KIND_REGISTRY, filterKind, mediaDetailLink } from '../../core/media-kinds';
 
 @Component({
   selector: 'app-search',
@@ -315,17 +316,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   ): Promise<void> {
     this.state.discoveryLoading.set(true);
     try {
-      const isSeries = ct === 'series';
-      const isMovie = ct === 'movie';
 
       const recs = await this.streamingApi
         .getRecommendations({ limit: 30 })
         .catch(() => []);
       if (this.staleDiscovery(ct, external)) return;
       this.state.discoveryRecommendations.set(
-        isMovie || isSeries
-          ? recs.filter((r) => r.media.type === (isMovie ? 'movie' : 'series'))
-          : recs,
+        ct === 'all' ? recs : recs.filter((r) => r.media.type === ct),
       );
 
       if (!external) {
@@ -339,7 +336,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       const [trending, popular, genres] = await Promise.all([
         this.fetchTrending(ct, this.state.trendingWindow()),
         this.fetchPopular(ct),
-        (isSeries ? this.metadata.getTvGenres() : this.metadata.getMovieGenres()).catch(
+        this.metadata.genresByKind(filterKind(ct)).catch(
           () => [],
         ),
       ]);
@@ -386,13 +383,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     genreIds: number[],
   ): Promise<MetadataSearchResult[]> {
     if (!genreIds.length) return [];
-    const isSeries = ct === 'series';
     const perGenre = await Promise.all(
       genreIds.map((id) =>
-        (isSeries
-          ? this.metadata.discoverTv({ genreIds: [id], sort: 'popularity.desc' })
-          : this.metadata.discoverMovies({ genreIds: [id], sort: 'popularity.desc' })
-        ).catch(() => [] as MetadataSearchResult[]),
+        this.metadata.discoverByKind(filterKind(ct), { genreIds: [id], sort: 'popularity.desc' }).catch(() => [] as MetadataSearchResult[]),
       ),
     );
     const out: MetadataSearchResult[] = [];
@@ -414,8 +407,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ct: 'all' | 'movie' | 'series',
     window: 'day' | 'week',
   ): Promise<MetadataSearchResult[]> {
-    if (ct === 'series') return this.metadata.getTrendingTv(window).catch(() => []);
-    if (ct === 'movie') return this.metadata.getTrendingMovies(window).catch(() => []);
+    if (ct !== 'all') return this.metadata.trendingByKind(ct, window).catch(() => []);
     const [m, t] = await Promise.all([
       this.metadata.getTrendingMovies(window).catch(() => []),
       this.metadata.getTrendingTv(window).catch(() => []),
@@ -426,8 +418,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private async fetchPopular(
     ct: 'all' | 'movie' | 'series',
   ): Promise<MetadataSearchResult[]> {
-    if (ct === 'series') return this.metadata.getPopularTv().catch(() => []);
-    if (ct === 'movie') return this.metadata.getPopularMovies().catch(() => []);
+    if (ct !== 'all') return this.metadata.popularByKind(ct).catch(() => []);
     const [m, t] = await Promise.all([
       this.metadata.getPopularMovies().catch(() => []),
       this.metadata.getPopularTv().catch(() => []),
@@ -461,7 +452,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   recLink(rec: RecommendationItem): string[] {
-    return ['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id];
+    return mediaDetailLink(rec.media.type, rec.media.id);
   }
 
   // ── Discover panel ──
@@ -489,10 +480,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.discoverLoading.set(true);
     const fresh = () => this.lastDiscoverSig === sig;
     try {
-      const rows =
-        ct === 'series'
-          ? await this.metadata.discoverTv(opts)
-          : await this.metadata.discoverMovies(opts);
+      const rows = await this.metadata.discoverByKind(filterKind(ct), opts);
       if (fresh()) {
         this.state.discoverResults.set(rows);
         this.loadRequestedIds();
@@ -531,17 +519,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
    *  the filter panel's genre chips render during a text search. Fails soft. */
   private async ensureDiscoverGenres(): Promise<void> {
     if (this.state.tab() !== 'videos') return;
-    const type = this.state.contentType() === 'series' ? 'series' : 'movie';
+    const type = filterKind(this.state.contentType());
     if (type === this.lastGenreType && this.state.discoverGenres().length) return;
     this.lastGenreType = type;
     const stale = () =>
       this.state.tab() !== 'videos' ||
-      (this.state.contentType() === 'series' ? 'series' : 'movie') !== type;
+      filterKind(this.state.contentType()) !== type;
     try {
-      const genres =
-        type === 'series'
-          ? await this.metadata.getTvGenres()
-          : await this.metadata.getMovieGenres();
+      const genres = await this.metadata.genresByKind(type);
       if (!stale()) this.state.discoverGenres.set(genres);
     } catch {
       if (!stale()) this.state.discoverGenres.set([]);
@@ -654,10 +639,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.externalLoading.set(true);
     try {
       let rows: MetadataSearchResult[];
-      if (ct === 'movie') {
-        rows = await this.metadata.searchMovie(q);
-      } else if (ct === 'series') {
-        rows = await this.metadata.searchTv(q);
+      if (ct !== 'all') {
+        rows = await this.metadata.searchByKind(ct, q);
       } else {
         const [movies, tv] = await Promise.all([
           this.metadata.searchMovie(q),
@@ -687,11 +670,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   externalLink(row: MetadataSearchResult): string[] {
     if (row.existingMediaId) {
-      return [row.existingMediaType === 'series' ? '/series' : '/movies', String(row.existingMediaId)];
+      return mediaDetailLink(row.existingMediaType ?? 'movie', row.existingMediaId);
     }
     const provider = row.provider ?? 'tmdb';
     const externalId = provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId);
-    return [row.mediaType === 'series' ? '/add/tv' : '/add/movie', provider, externalId];
+    return ['/add/' + KIND_REGISTRY[row.mediaType].providerSegment, provider, externalId];
   }
 
 }

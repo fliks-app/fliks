@@ -28,6 +28,7 @@ import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
 import { groupDownloads } from './downloads-grouping';
+import { isMediaKind, mediaDetailLink } from '../../core/media-kinds';
 
 const openGroupKeys = signal<ReadonlySet<string>>(new Set());
 
@@ -123,7 +124,7 @@ export class DownloadsComponent {
   detailRoute(task: DownloadTask): string[] | null {
     if (!task.mediaId) return null;
     if (task.episodeId != null) return ['/series', String(task.mediaId), 'episode', String(task.episodeId)];
-    return [task.media?.type === 'series' ? '/series' : '/movies', String(task.mediaId)];
+    return mediaDetailLink(isMediaKind(task.media?.type) ? task.media.type : 'movie', task.mediaId);
   }
   readonly totalBytes = computed(() => this.items().reduce((n, t) => n + (t.sizeBytes ?? 0), 0));
 
