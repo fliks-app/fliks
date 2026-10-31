@@ -7,7 +7,10 @@ use crate::{
     jobs::{Command, Trigger, finish, insert_queued_with_body, mark_running},
     state::AppState,
 };
-use fliks_domain::media::path::{join, resolve};
+use fliks_domain::media::{
+    kind::MediaKind,
+    path::{join, resolve},
+};
 use fliks_engine_core::api::{
     Chapter, Fingerprint, FingerprintWindow, IntroDetectKind, IntroDetectRequest, IntroEpisode,
     JobKind, JobPriority, JobRequest, JobResult, MediaRef,
@@ -307,7 +310,7 @@ fn subject(info: &SeasonInfo) -> Subject {
     Subject {
         title: info.media_title.clone(),
         media_id: Some(i64::from(info.media_id)),
-        media_type: Some("series".into()),
+        media_type: Some(MediaKind::Series),
         season_number: Some(i64::from(info.season_number)),
         episode_number: None,
         episode_title: None,

@@ -432,17 +432,11 @@ async fn resolve(
     core: &PgPool,
     q: &t::ResolveQuery,
 ) -> sqlx::Result<Vec<(String, t::ResolvedMedia)>> {
-    let kind = |k: &str| {
-        if k == "movie" {
-            t::MediaKind::Movie
-        } else {
-            t::MediaKind::Series
-        }
-    };
+    let kind = |k: &str| -> sqlx::Result<t::MediaKind> { Ok(crate::db::kind(k)?.into()) };
     let ids = |v: &[u32]| v.iter().map(|i| *i as i32).collect::<Vec<i32>>();
     let mut out = vec![];
     let rows: Vec<(i32, String, String, Option<i32>)> = sqlx::query_as(
-        r#"SELECT id, title, type::text, "libraryId" FROM media WHERE id = ANY($1) ORDER BY id"#,
+        r#"SELECT id, title, type, "libraryId" FROM media WHERE id = ANY($1) ORDER BY id"#,
     )
     .bind(ids(&q.media_ids))
     .fetch_all(core)
@@ -452,7 +446,7 @@ async fn resolve(
             format!("media:{id}"),
             t::ResolvedMedia {
                 title,
-                kind: kind(&k),
+                kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
                 season_number: None,
                 episode_number: None,
@@ -461,7 +455,7 @@ async fn resolve(
         ));
     }
     let rows: Vec<(i32, i32, String, String, Option<i32>)> = sqlx::query_as(
-        r#"SELECT s.id, s."seasonNumber", m.title, m.type::text, m."libraryId"
+        r#"SELECT s.id, s."seasonNumber", m.title, m.type, m."libraryId"
              FROM seasons s JOIN media m ON m.id = s."mediaId" WHERE s.id = ANY($1) ORDER BY s.id"#,
     )
     .bind(ids(&q.season_ids))
@@ -472,7 +466,7 @@ async fn resolve(
             format!("season:{id}"),
             t::ResolvedMedia {
                 title,
-                kind: kind(&k),
+                kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
                 season_number: Some(n as u32),
                 episode_number: None,
@@ -482,7 +476,7 @@ async fn resolve(
     }
     type Row = (i32, i32, i32, Option<String>, String, String, Option<i32>);
     let rows: Vec<Row> = sqlx::query_as(
-        r#"SELECT e.id, s."seasonNumber", e."episodeNumber", e.title, m.title, m.type::text, m."libraryId"
+        r#"SELECT e.id, s."seasonNumber", e."episodeNumber", e.title, m.title, m.type, m."libraryId"
              FROM episodes e JOIN seasons s ON s.id = e."seasonId" JOIN media m ON m.id = s."mediaId"
             WHERE e.id = ANY($1) ORDER BY e.id"#,
     )
@@ -494,7 +488,7 @@ async fn resolve(
             format!("episode:{id}"),
             t::ResolvedMedia {
                 title,
-                kind: kind(&k),
+                kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
                 season_number: Some(s as u32),
                 episode_number: Some(e as u32),

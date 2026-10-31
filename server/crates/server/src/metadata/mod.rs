@@ -12,10 +12,10 @@ mod types;
 pub use http::Upstream;
 pub use language::{LanguageCache, Override};
 pub use routes::*;
-pub use types::{Credits, MediaKind, MetaError, PersonDetails, Provider};
+pub use types::{Credits, MetaError, PersonDetails, Provider};
 
 use crate::config::MetadataConfig;
-use fliks_domain::metadata::language::Resolved;
+use fliks_domain::{media::kind::MediaKind, metadata::language::Resolved};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -70,9 +70,13 @@ impl Metadata {
         id: i64,
         lang: &Resolved,
     ) -> Result<Value, Upstream> {
+        let tv = match kind {
+            MediaKind::Movie => false,
+            MediaKind::Series => true,
+        };
         match p {
-            Provider::Tmdb => self.tmdb.details(kind.is_tv(), id, lang).await,
-            Provider::Tvdb => self.tvdb.details(kind.is_tv(), id, lang).await,
+            Provider::Tmdb => self.tmdb.details(tv, id, lang).await,
+            Provider::Tvdb => self.tvdb.details(tv, id, lang).await,
         }
     }
 

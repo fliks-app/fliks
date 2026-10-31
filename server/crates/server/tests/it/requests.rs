@@ -8,6 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use fliks_domain::media::kind::MediaKind;
 use fliks_server::{
     app,
     config::Config,
@@ -932,7 +933,7 @@ async fn on_media_imported_adopts_only_covered_requests(pool: PgPool) {
     lc.on_media_imported(
         MediaRef {
             id: 11,
-            media_type: "movie".into(),
+            media_type: MediaKind::Movie,
             tmdb_id: Some(90),
             monitored: false,
         },
@@ -955,7 +956,7 @@ async fn on_media_imported_adopts_only_covered_requests(pool: PgPool) {
     lc.on_media_imported(
         MediaRef {
             id: 11,
-            media_type: "movie".into(),
+            media_type: MediaKind::Movie,
             tmdb_id: Some(1234),
             monitored: false,
         },
@@ -984,7 +985,7 @@ async fn removal_declines_add_rows_resolves_delete_rows_and_retires_available(po
             &mut conn,
             &MediaRef {
                 id: 12,
-                media_type: "movie".into(),
+                media_type: MediaKind::Movie,
                 tmdb_id: Some(91),
                 monitored: true,
             },
@@ -1020,7 +1021,7 @@ async fn unmonitoring_declines_linked_adds_and_trims_season_scopes(pool: PgPool)
     let lc = Lifecycle::of(&c.st);
     let media = MediaRef {
         id: 13,
-        media_type: "series".into(),
+        media_type: MediaKind::Series,
         tmdb_id: Some(92),
         monitored: true,
     };
@@ -1407,7 +1408,7 @@ async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
     }
     let media = MediaRef {
         id: 15,
-        media_type: "series".into(),
+        media_type: MediaKind::Series,
         tmdb_id: Some(94),
         monitored: true,
     };

@@ -119,7 +119,10 @@ impl Queue {
                 return;
             };
             let key = format!("{KIND}:{id}");
-            let subject = enrich_subject(st, id).await;
+            let subject = enrich_subject(st, id).await.unwrap_or_else(|e| {
+                tracing::warn!("Post-import subject of file #{id} failed: {e}");
+                None
+            });
             st.hub.activity().upsert_running(
                 &key,
                 KIND,
@@ -165,24 +168,26 @@ impl Queue {
     }
 }
 
-async fn enrich_subject(st: &AppState, id: i32) -> Option<Subject> {
-    let r = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type::text AS "media_type!" FROM media_files f JOIN media m ON m.id = f."mediaId"
+async fn enrich_subject(st: &AppState, id: i32) -> sqlx::Result<Option<Subject>> {
+    let Some(r) = sqlx::query!(
+        r#"SELECT m.id, m.title, m.type AS "media_type!" FROM media_files f JOIN media m ON m.id = f."mediaId"
            WHERE f.id = $1"#,
         id
     )
     .fetch_optional(&st.db)
-    .await
-    .ok()??;
-    Some(Subject {
+    .await?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(Subject {
         title: r.title,
         media_id: Some(i64::from(r.id)),
-        media_type: Some(r.media_type),
+        media_type: Some(crate::db::kind(&r.media_type)?),
         season_number: None,
         episode_number: None,
         episode_title: None,
         episode_id: None,
-    })
+    }))
 }
 
 /// The absolute path of a file row, contained in its library root; `None` when it cannot be.

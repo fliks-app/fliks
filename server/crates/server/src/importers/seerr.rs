@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use fliks_domain::{
     acl::{Action, Subject},
     arr_import::map_status,
+    media::kind::MediaKind,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -110,7 +111,7 @@ struct Run<'a> {
     db: &'a PgPool,
     base: String,
     key: String,
-    media: HashMap<(&'static str, i32), Option<MediaRow>>,
+    media: HashMap<(MediaKind, i32), Option<MediaRow>>,
     titles: HashMap<(String, i32), Option<String>>,
     users: HashMap<String, i32>,
     stats: Stats,
@@ -203,9 +204,9 @@ impl Run<'_> {
             return Ok(Outcome::Skipped);
         }
         let media_type = if req["type"] == "tv" {
-            "series"
+            MediaKind::Series
         } else {
-            "movie"
+            MediaKind::Movie
         };
         let Some(tmdb) = req["media"]["tmdbId"]
             .as_i64()
@@ -217,9 +218,9 @@ impl Run<'_> {
         let user = self.user(username).await.map_err(db_err)?;
         if !self.media.contains_key(&(media_type, tmdb)) {
             let row = sqlx::query!(
-                r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type = $2::text::media_type_enum LIMIT 1"#,
+                r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
                 tmdb,
-                media_type
+                media_type.as_str()
             )
             .fetch_optional(self.db)
             .await
@@ -250,7 +251,8 @@ impl Run<'_> {
                 .await
                 .unwrap_or_default();
         }
-        let seasons = (media_type == "series")
+        let seasons = media_type
+            .has_seasons()
             .then(|| req["seasons"].as_array().filter(|a| !a.is_empty()))
             .flatten()
             .map(|a| Value::Array(a.iter().map(|s| s["seasonNumber"].clone()).collect()));
@@ -270,11 +272,11 @@ impl Run<'_> {
         let existing = sqlx::query!(
             r#"SELECT id, status::text AS "status!", seasons, "mediaId" AS media_id, title,
                       "createdAt" AS created_at, "updatedAt" AS updated_at
-               FROM requests WHERE "userId" = $1 AND "tmdbId" = $2 AND "mediaType" = $3::text::requests_mediatype_enum
+               FROM requests WHERE "userId" = $1 AND "tmdbId" = $2 AND "mediaType" = $3
                  AND kind = 'add' ORDER BY id LIMIT 1"#,
             user,
             tmdb,
-            media_type
+            media_type.as_str()
         )
         .fetch_optional(self.db)
         .await
@@ -283,9 +285,9 @@ impl Run<'_> {
             sqlx::query!(
                 r#"INSERT INTO requests ("userId", "mediaType", "tmdbId", title, status, seasons, "mediaId",
                                          "createdAt", "updatedAt")
-                   VALUES ($1, $2::text::requests_mediatype_enum, $3, $4, $5::text::requests_status_enum, $6, $7, $8, $9)"#,
+                   VALUES ($1, $2, $3, $4, $5::text::requests_status_enum, $6, $7, $8, $9)"#,
                 user,
-                media_type,
+                media_type.as_str(),
                 tmdb,
                 title,
                 status,

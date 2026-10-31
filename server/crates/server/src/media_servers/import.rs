@@ -5,6 +5,7 @@ use super::{
 };
 use crate::users::imported_user;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use fliks_domain::media::kind::MediaKind;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 
@@ -153,10 +154,10 @@ fn tmdb_of(raw: Option<&str>) -> Option<i32> {
         .ok()
 }
 
-async fn media_id(db: &PgPool, kind: &str, tmdb: i32) -> sqlx::Result<Option<i32>> {
+async fn media_id(db: &PgPool, kind: MediaKind, tmdb: i32) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar!(
-        r#"SELECT id FROM media WHERE type::text = $1 AND "tmdbId" = $2 ORDER BY id LIMIT 1"#,
-        kind,
+        r#"SELECT id FROM media WHERE type = $1 AND "tmdbId" = $2 ORDER BY id LIMIT 1"#,
+        kind.as_str(),
         tmdb
     )
     .fetch_optional(db)
@@ -182,7 +183,7 @@ async fn apply(
         let media = match c.movies.get(&tmdb) {
             Some(m) => *m,
             None => {
-                let m = media_id(db, "movie", tmdb).await.map_err(sql)?;
+                let m = media_id(db, MediaKind::Movie, tmdb).await.map_err(sql)?;
                 c.movies.insert(tmdb, m);
                 m
             }
@@ -212,7 +213,7 @@ async fn apply(
     let series = match c.series.get(&tmdb) {
         Some(m) => *m,
         None => {
-            let m = media_id(db, "series", tmdb).await.map_err(sql)?;
+            let m = media_id(db, MediaKind::Series, tmdb).await.map_err(sql)?;
             c.series.insert(tmdb, m);
             m
         }

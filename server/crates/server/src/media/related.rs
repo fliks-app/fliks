@@ -1,6 +1,7 @@
 //! Similar titles, collection, cast and crew (`media-query.md` rules 52-58).
 use crate::http::AppError;
 use crate::libraries::media_not_found;
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::media::similarity::{MIN_SCORE, Signals, score_similarity};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -33,7 +34,7 @@ fn item(
 
 pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, AppError> {
     let Some(src) = sqlx::query!(
-        r#"SELECT m.type::text AS "kind!", m."libraryId" AS library_id, m.genres, m.year, m."tmdbCollectionId" AS collection_id,
+        r#"SELECT m.type AS "kind!", m."libraryId" AS library_id, m.genres, m.year, m."tmdbCollectionId" AS collection_id,
                   mm.keywords AS "keywords?"
            FROM media m LEFT JOIN media_metadata mm ON mm."mediaId" = m.id WHERE m.id = $1"#,
         id
@@ -43,7 +44,11 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
     else {
         return Err(media_not_found(id));
     };
-    let Some(library) = src.library_id.filter(|_| src.kind == "movie") else {
+    let library = match crate::db::kind(&src.kind)? {
+        MediaKind::Movie => src.library_id,
+        MediaKind::Series => None,
+    };
+    let Some(library) = library else {
         return Ok(vec![]);
     };
     let genres = strings(src.genres.clone());

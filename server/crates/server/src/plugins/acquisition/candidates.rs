@@ -41,11 +41,7 @@ pub(super) fn target(
     let titles = resolve_search_titles(&m.search(), None);
     Some(t::AcquisitionTarget {
         media_id: m.id as u32,
-        kind: if m.is_movie() {
-            t::MediaKind::Movie
-        } else {
-            t::MediaKind::Series
-        },
+        kind: m.kind.into(),
         title: m.title.clone(),
         original_title: m.original_title.clone(),
         alternative_titles: m.alt(),
@@ -125,7 +121,7 @@ pub async fn context(
         season = Some(s);
     }
     let files = files_for(db, &m, season.map(|s| s.0), episode.as_ref()).await?;
-    let whole_series = !m.is_movie() && season.is_none() && episode.is_none();
+    let whole_series = m.kind.has_seasons() && season.is_none() && episode.is_none();
     let decision = (!whole_series).then(|| classify(&m, &files));
     let Some(mut tg) = target(&m, decision, &files) else {
         return Ok(None);
@@ -316,16 +312,10 @@ pub(super) async fn media_batch(
     ids: Option<&[i32]>,
     kind: Option<t::MediaKind>,
 ) -> sqlx::Result<Vec<i32>> {
-    let kind = kind.map(|k| {
-        if matches!(k, t::MediaKind::Movie) {
-            "movie"
-        } else {
-            "series"
-        }
-    });
+    let kind = kind.map(|k| MediaKind::from(k).as_str());
     sqlx::query_scalar(
         r#"SELECT id FROM media WHERE monitored AND id >= $1 AND ($2::int[] IS NULL OR id = ANY($2))
-             AND ($3::text IS NULL OR type::text = $3) ORDER BY id LIMIT $4"#,
+             AND ($3::text IS NULL OR type = $3) ORDER BY id LIMIT $4"#,
     )
     .bind(from)
     .bind(ids)

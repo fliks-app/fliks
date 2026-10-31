@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM requests WHERE \"tmdbId\" = $1 AND \"mediaType\" = $2\n        AND kind = 'delete' AND status = 'pending') AS \"e!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3a7462ec5206b13dd1db6b828c46f6344a74d5c5101023d8e04fbf3e209d0607"
+}

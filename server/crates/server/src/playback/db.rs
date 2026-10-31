@@ -377,7 +377,7 @@ pub async fn history(
              ps."positionSeconds" AS position_seconds, ps."durationSeconds" AS duration_seconds,
              ps.completed,
              ps."lastPlayedAt" AS last_played_at,
-             m.title AS media_title, m.type::text AS "media_type!",
+             m.title AS media_title, m.type AS "media_type!",
              m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, e."stillUrl" AS still_url,
              CASE WHEN ps."durationSeconds" > 0
                   THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)

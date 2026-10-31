@@ -9,7 +9,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    media::VIDEO_EXTS,
+    media::{VIDEO_EXTS, kind::MediaKind},
     naming::{
         self, EpisodeNumbers, HasTitle, MovieFile, SeriesFile, extract_release_group,
         match_special_by_title, parse_episode_numbers,
@@ -178,7 +178,7 @@ pub async fn ingest(
 
 /// Rule 19 (largest file by its real size; on a tie the later one) unless a series season pack.
 async fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
-    if media.is_series() && files.len() > 1 {
+    if media.has_seasons() && files.len() > 1 {
         return files;
     }
     let mut best: Option<(u64, File)> = None;
@@ -264,7 +264,7 @@ impl Ctx<'_> {
                 "{name}: source is not a regular file"
             )));
         };
-        let ep = if self.media.is_series() {
+        let ep = if self.media.has_seasons() {
             self.episode(f).await?
         } else {
             None
@@ -403,19 +403,22 @@ impl Ctx<'_> {
         group: Option<String>,
     ) -> (Result<PathBuf, String>, String) {
         let m = self.media;
-        if !m.is_series() {
-            let base = naming::apply_movie_format(
-                &self.formats.movie,
-                &MovieFile {
-                    title: m.title.clone(),
-                    original_title: m.original_title.clone(),
-                    year: m.year.map(i64::from),
-                    quality: quality.to_owned(),
-                    release_group: group,
-                    tmdb_id: m.tmdb_id.map(i64::from),
-                },
-            );
-            return (Ok(self.mdir.to_path_buf()), base);
+        match m.media_type {
+            MediaKind::Movie => {
+                let base = naming::apply_movie_format(
+                    &self.formats.movie,
+                    &MovieFile {
+                        title: m.title.clone(),
+                        original_title: m.original_title.clone(),
+                        year: m.year.map(i64::from),
+                        quality: quality.to_owned(),
+                        release_group: group,
+                        tmdb_id: m.tmdb_id.map(i64::from),
+                    },
+                );
+                return (Ok(self.mdir.to_path_buf()), base);
+            }
+            MediaKind::Series => {}
         }
         let season = ep.map_or(1, |e| e.0.season_number);
         let base = naming::apply_series_format(
@@ -690,17 +693,17 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
         .collect();
     for old in olds {
         let r: Result<(), String> = async {
-            let heir = if media.is_series() {
-                match (old.season_number, old.episode_number, old.end) {
+            let heir = match media.media_type {
+                MediaKind::Series => match (old.season_number, old.episode_number, old.end) {
                     (Some(s), Some(e), None) => imported
                         .iter()
                         .find(|i| i.season_number == Some(s) && i.episode_number == Some(e) && i.episode_end.is_none()),
                     _ => None,
-                }
-            } else {
-                imported.first()
+                },
+                MediaKind::Movie => imported.first(),
             };
-            if media.is_series() {
+            match media.media_type {
+                MediaKind::Series => {
                 let (Some(s), Some(e)) = (old.season_number, old.episode_number) else {
                     return Ok(());
                 };
@@ -719,7 +722,8 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
                     .await
                     .map_err(|e| e.to_string())?;
                 }
-            } else {
+                }
+                MediaKind::Movie => {
                 sqlx::query!(
                     r#"UPDATE playback_states SET "mediaFileId" = $1 WHERE "mediaFileId" = $2"#,
                     imported[0].file_id,
@@ -728,6 +732,7 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
                 .execute(&st.db)
                 .await
                 .map_err(|e| e.to_string())?;
+                }
             }
             if let Some(h) = heir {
                 carried.extend(crate::subtitles::sidecars::carry_over(st, media.id, old.id, h.file_id).await);

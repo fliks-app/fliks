@@ -2,6 +2,7 @@
 use super::params::Calendar;
 use crate::http::AppError;
 use chrono::{Datelike, Local, NaiveDate};
+use fliks_domain::media::kind::MediaKind;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -50,7 +51,7 @@ pub async fn calendar(
     let added_by = p.requested_by_me.then_some(uid);
     let mut out: Vec<Value> = vec![];
 
-    if p.media_type.as_deref().is_none_or(|t| t == "movie") {
+    if p.media_type.is_none_or(|t| t == MediaKind::Movie) {
         let rows = sqlx::query!(
             r#"SELECT m.id AS "id!", m.title AS "title!", m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
   m.status::text AS "status!", m.year,
@@ -75,7 +76,7 @@ ORDER BY m.id"#,
         .map_err(date_error)?;
         for m in rows {
             let entry = |event: &str, date: &str| {
-                json!({"id": m.id, "mediaId": m.id, "title": m.title, "type": "movie", "event": event, "date": date,
+                json!({"id": m.id, "mediaId": m.id, "title": m.title, "type": MediaKind::Movie, "event": event, "date": date,
                     "posterUrl": m.poster_url, "fanartUrl": m.fanart_url, "status": m.status, "year": m.year,
                     "hasFile": m.has_file})
             };
@@ -101,7 +102,7 @@ ORDER BY m.id"#,
         }
     }
 
-    if p.media_type.as_deref().is_none_or(|t| t == "series") {
+    if p.media_type.is_none_or(|t| t == MediaKind::Series) {
         let rows = sqlx::query!(
             r#"SELECT ep.id AS "id!", ep."episodeNumber" AS "episode_number!", ep.title, to_char(ep."airDate", 'YYYY-MM-DD') AS "date!",
   season."seasonNumber" AS "season_number!", media.id AS "media_id!", media.title AS "media_title!",
@@ -129,7 +130,7 @@ ORDER BY ep."airDate" ASC, ep.id ASC"#,
         .await
         .map_err(date_error)?;
         out.extend(rows.into_iter().map(|e| {
-            json!({"id": e.id, "mediaId": e.media_id, "title": e.media_title, "type": "series", "event": "airing",
+            json!({"id": e.id, "mediaId": e.media_id, "title": e.media_title, "type": MediaKind::Series, "event": "airing",
                 "date": e.date, "posterUrl": e.poster_url, "fanartUrl": e.fanart_url, "status": e.status,
                 "year": e.year, "seasonNumber": e.season_number, "episodeNumber": e.episode_number,
                 "episodeTitle": e.title, "hasFile": e.on_disk})

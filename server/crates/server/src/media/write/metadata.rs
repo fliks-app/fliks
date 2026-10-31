@@ -282,7 +282,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         d.tvdb_id,
         d.imdb_id,
         d.overview,
-        super::map_status(&media.media_type, &d.status),
+        super::map_status(media.media_type, &d.status),
         d.poster_url,
         d.fanart_url,
         d.logo_url,
@@ -300,7 +300,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     .await?;
     download_media_images(st, id, d).await;
     service::persist_credits(st, id, d).await?;
-    if media.is_series() {
+    if media.has_seasons() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {
             st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
@@ -339,7 +339,7 @@ async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if media.is_series() {
+    if media.has_seasons() {
         drop_absent(st, id, &found).await?;
     }
     let guard = st.ingest.media.lock(id).await;
@@ -389,7 +389,7 @@ pub async fn identify(
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let key = format!("Identify:{id}");
-    let subj = subject(id, &media.title, &media.media_type);
+    let subj = subject(id, &media.title, media.media_type);
     if !st
         .hub
         .activity()
@@ -438,9 +438,9 @@ async fn apply_identity(
     }
     if let Some(t) = tmdb.filter(|t| Some(*t) != media.tmdb_id)
         && let Some(o) = sqlx::query!(
-            r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type::text = $2 AND id <> $3 LIMIT 1"#,
+            r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type = $2 AND id <> $3 LIMIT 1"#,
             t,
-            media.media_type,
+            media.media_type.as_str(),
             media.id
         )
         .fetch_optional(&st.db)
@@ -483,7 +483,7 @@ pub async fn refresh(
         title: media.title.clone(),
     });
     let key = format!("RefreshMetadata:{id}");
-    let subj = subject(id, &media.title, &media.media_type);
+    let subj = subject(id, &media.title, media.media_type);
     if !st
         .hub
         .activity()
@@ -526,7 +526,7 @@ pub async fn refresh_episode(
         title: media.title.clone(),
     });
     let key = format!("RefreshEpisodeMetadata:{episode}");
-    let subj = subject(id, &media.title, &media.media_type);
+    let subj = subject(id, &media.title, media.media_type);
     if !st
         .hub
         .activity()

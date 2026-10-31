@@ -3,6 +3,7 @@ use crate::{
     http::AppError,
     ingest::fsx::{self, Unlinked},
 };
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::subtitle_path::{
     is_safe_lang_suffix, relative_path_under_root, resolve_subtitle_absolute_path,
 };
@@ -23,7 +24,8 @@ pub const OUTSIDE: &str =
 pub struct MediaCtx {
     pub id: i32,
     pub title: String,
-    pub kind: String,
+    #[sqlx(try_from = "String")]
+    pub kind: MediaKind,
     pub year: Option<i32>,
     pub imdb_id: Option<String>,
     pub tmdb_id: Option<i32>,
@@ -36,7 +38,7 @@ pub struct MediaCtx {
     pub overview: Option<String>,
 }
 
-const MEDIA_SQL: &str = r#"SELECT m.id, m.title, m."type"::text AS kind, m.year, m."imdbId" AS imdb_id, m."tmdbId" AS tmdb_id,
+const MEDIA_SQL: &str = r#"SELECT m.id, m.title, m."type" AS kind, m.year, m."imdbId" AS imdb_id, m."tmdbId" AS tmdb_id,
   m."folderName" AS folder_name, l.path AS library_path, m."libraryId" AS library_id,
   m."languageProfileId" AS language_profile_id, m.monitored, m.genres, m.overview
   FROM media m LEFT JOIN libraries l ON l.id = m."libraryId""#;

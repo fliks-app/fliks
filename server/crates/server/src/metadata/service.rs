@@ -1,7 +1,8 @@
 //! What the media services read from the providers and write back (`media-write.md` rules 16, 17, 53-58):
 //! provider choice per library, media and season, cross-references, season overrides and credits.
-use super::{MediaKind, Override, Provider, Upstream};
+use super::{Override, Provider, Upstream};
 use crate::{http::AppError, state::AppState};
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::metadata::language::Resolved;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -145,7 +146,7 @@ pub struct Found {
 /// What `importMedia` / `importFromTmdb` look up (`media-write.md` rules 16-17).
 #[derive(Debug, Clone)]
 pub struct Lookup {
-    pub media_type: String,
+    pub media_type: MediaKind,
     /// `None` = default provider.
     pub provider: Option<String>,
     pub external_id: String,
@@ -159,14 +160,6 @@ fn fail(p: Provider, e: Upstream) -> AppError {
         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
         "Internal server error",
     )
-}
-
-fn kind_of(media_type: &str) -> MediaKind {
-    if media_type == "movie" {
-        MediaKind::Movie
-    } else {
-        MediaKind::Series
-    }
 }
 
 fn ext_i64(external_id: &str) -> Result<i64, AppError> {
@@ -309,13 +302,13 @@ async fn read_for_library(
 /// `importMedia` / `importFromTmdb` reads (rules 16, 17): the title, every season for a series, a missing
 /// `tmdbId` filled from the `tvdbId`.
 pub async fn import(st: &AppState, l: Lookup) -> Result<Found, AppError> {
-    let kind = kind_of(&l.media_type);
+    let kind = l.media_type;
     let finder = st.metadata.resolve(l.provider.as_deref());
     let lib = library(st, Some(l.library_id)).await?;
     let lang = language(st, lib.as_ref()).await?;
     let (p, id, mut details) =
         read_for_library(st, kind, finder, &l.external_id, lib.as_ref(), &lang).await?;
-    let seasons = if kind.is_tv() {
+    let seasons = if kind.has_seasons() {
         read_seasons(st, p, &id, &lang).await?
     } else {
         vec![]
@@ -355,24 +348,24 @@ impl Row {
 }
 
 async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
-    sqlx::query!(
-        r#"SELECT title, type::text AS "kind!", "tmdbId" AS tmdb, "tvdbId" AS tvdb, "imdbId" AS imdb,
+    let r = sqlx::query!(
+        r#"SELECT title, type AS "kind!", "tmdbId" AS tmdb, "tvdbId" AS tvdb, "imdbId" AS imdb,
                   "preferredProvider" AS pref, "libraryId" AS lib FROM media WHERE id = $1"#,
         id
     )
     .fetch_optional(&st.db)
     .await?
-    .map(|r| Row {
+    .ok_or_else(|| AppError::not_found(format!("Media #{id} not found")))?;
+    Ok(Row {
         id,
         title: r.title,
-        kind: kind_of(&r.kind),
+        kind: crate::db::kind(&r.kind)?,
         tmdb_id: r.tmdb,
         tvdb_id: r.tvdb,
         imdb_id: r.imdb,
         preferred: r.pref,
         library_id: r.lib,
     })
-    .ok_or_else(|| AppError::not_found(format!("Media #{id} not found")))
 }
 
 type Source = (Provider, String);
@@ -634,7 +627,7 @@ pub async fn for_media(st: &AppState, media_id: i32) -> Result<Found, AppError> 
         media.1
     );
     let details = read_details(st, media.0, m.kind, &media.1, &lang).await?;
-    let seasons = if m.kind.is_tv() {
+    let seasons = if m.kind.has_seasons() {
         seasons_of(st, &m, lib.as_ref(), &lang, &media).await?
     } else {
         vec![]

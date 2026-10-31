@@ -12,7 +12,10 @@ mod tests;
 
 use crate::state::AppState;
 use crate::sync::MutexExt;
-use fliks_domain::naming::{NamingFormats, formats_from_rows};
+use fliks_domain::{
+    media::kind::MediaKind,
+    naming::{NamingFormats, formats_from_rows},
+};
 use fliks_engine_core::api::MediaInfo;
 use sqlx::PgPool;
 use std::{
@@ -60,7 +63,7 @@ pub struct MediaRow {
     pub title: String,
     pub original_title: Option<String>,
     pub year: Option<i32>,
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub tmdb_id: Option<i32>,
     pub tvdb_id: Option<i32>,
     pub imdb_id: Option<String>,
@@ -73,8 +76,8 @@ pub struct MediaRow {
 }
 
 impl MediaRow {
-    pub fn is_series(&self) -> bool {
-        self.media_type != "movie"
+    pub fn has_seasons(&self) -> bool {
+        self.media_type.has_seasons()
     }
 
     /// The `Media.path` getter (lexical, for messages and outbound notifications only).
@@ -88,7 +91,7 @@ impl MediaRow {
     pub fn lifecycle_ref(&self) -> crate::requests::MediaRef {
         crate::requests::MediaRef {
             id: self.id,
-            media_type: self.media_type.clone(),
+            media_type: self.media_type,
             tmdb_id: self.tmdb_id,
             monitored: self.monitored,
         }
@@ -96,9 +99,8 @@ impl MediaRow {
 }
 
 pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::Error> {
-    sqlx::query_as!(
-        MediaRow,
-        r#"SELECT m.id, m.title, m."originalTitle" AS original_title, m.year, m.type::text AS "media_type!",
+    let Some(r) = sqlx::query!(
+        r#"SELECT m.id, m.title, m."originalTitle" AS original_title, m.year, m.type AS "media_type!",
                   m."tmdbId" AS tmdb_id, m."tvdbId" AS tvdb_id, m."imdbId" AS imdb_id, m.monitored,
                   m."folderName" AS folder_name, m."libraryId" AS library_id, l.name AS "library_name?",
                   l.path AS "library_path?", l."mediaTypes" AS "library_types?"
@@ -106,7 +108,26 @@ pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::
         id
     )
     .fetch_optional(db)
-    .await
+    .await?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(MediaRow {
+        id: r.id,
+        title: r.title,
+        original_title: r.original_title,
+        year: r.year,
+        media_type: crate::db::kind(&r.media_type)?,
+        tmdb_id: r.tmdb_id,
+        tvdb_id: r.tvdb_id,
+        imdb_id: r.imdb_id,
+        monitored: r.monitored,
+        folder_name: r.folder_name,
+        library_id: r.library_id,
+        library_name: r.library_name,
+        library_path: r.library_path,
+        library_types: r.library_types,
+    }))
 }
 
 pub async fn naming_formats(db: &PgPool) -> Result<NamingFormats, sqlx::Error> {

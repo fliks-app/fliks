@@ -24,6 +24,7 @@ use fliks_domain::{
     acl::{Action, Subject},
     media::{
         bonus::{is_bonus_dir, is_sample_file},
+        kind::MediaKind,
         path::resolve,
     },
     naming::{
@@ -56,7 +57,7 @@ struct Lib {
     id: i32,
     name: String,
     path: String,
-    types: Vec<String>,
+    types: Vec<MediaKind>,
     provider: Option<String>,
     dq: Option<i32>,
     dl: Option<i32>,
@@ -79,7 +80,11 @@ async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
         id: r.id,
         name: r.name,
         path,
-        types: serde_json::from_value(r.types).unwrap_or_default(),
+        types: serde_json::from_value::<Vec<String>>(r.types)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|t| MediaKind::parse(t))
+            .collect(),
         provider: r.provider,
         dq: r.dq,
         dl: r.dl,
@@ -103,7 +108,7 @@ struct FileEntry {
 #[serde(rename_all = "camelCase")]
 struct Group {
     group_key: String,
-    media_type: &'static str,
+    media_type: MediaKind,
     folder_name: String,
     guess_title: String,
     guess_year: Option<i64>,
@@ -175,7 +180,7 @@ fn subject_titled(title: &str) -> Subj {
 async fn scan_under(
     st: &AppState,
     root: &str,
-    types: &[String],
+    types: &[MediaKind],
     provider: &str,
     linked: &HashSet<PathBuf>,
 ) -> Value {
@@ -203,8 +208,12 @@ async fn scan_under(
         let abs_s = abs.to_string_lossy().into_owned();
         let nums = parse_episode_numbers(&name, Some(&abs_s));
         let series = nums.is_some() || is_special_file(&abs_s);
-        let media_type = if series { "series" } else { "movie" };
-        if !types.iter().any(|t| t == media_type) {
+        let media_type = if series {
+            MediaKind::Series
+        } else {
+            MediaKind::Movie
+        };
+        if !types.contains(&media_type) {
             continue;
         }
         let q = parse_release_quality(&name).quality;
@@ -335,16 +344,17 @@ pub async fn preview(
     let b = Body::new(v, &["path", "mediaTypes", "preferredProvider"])?;
     let path = b.required(b.str("path")?, "path", "must be a string")?;
     let types = match b.strings("mediaTypes")? {
-        Some(Some(t)) => {
-            if t.iter().any(|t| t != "movie" && t != "series") {
-                return Err(AppError::bad_request(vec![
-                    "each value in mediaTypes must be one of the following values: movie, series"
-                        .to_owned(),
-                ]));
-            }
-            t
-        }
-        _ => vec!["movie".into(), "series".into()],
+        Some(Some(t)) => t
+            .iter()
+            .map(|t| MediaKind::parse(t))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                AppError::bad_request(vec![format!(
+                    "each value in mediaTypes {}",
+                    MediaKind::one_of_message()
+                )])
+            })?,
+        _ => MediaKind::ALL.to_vec(),
     };
     let provider = b
         .str("preferredProvider")?
@@ -481,9 +491,12 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
     );
 }
 
-fn validated_folder(name: &str, media_type: &str) -> Result<String, AppError> {
-    if name.is_empty() && media_type == "movie" {
-        return Ok(String::new());
+fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppError> {
+    if name.is_empty() {
+        match media_type {
+            MediaKind::Movie => return Ok(String::new()),
+            MediaKind::Series => {}
+        }
     }
     validate_folder_name(name)
         .map(str::to_owned)
@@ -520,7 +533,7 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
         ));
     }
     let folder = match d.transfer {
-        None => validated_folder(&d.folder_name, &d.media_type)?,
+        None => validated_folder(&d.folder_name, d.media_type)?,
         Some(_) => String::new(),
     };
     let (media, created, unmatched_key) = match &d.external_id {

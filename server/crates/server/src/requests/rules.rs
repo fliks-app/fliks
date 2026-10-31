@@ -18,14 +18,17 @@ use axum::{
     extract::{FromRequest, Request, State},
     http::StatusCode,
 };
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    media::kind::MediaKind,
+};
 use serde_json::Value;
 
 /// What a rule is matched against.
 pub struct Ctx {
     pub user_id: i32,
     pub role_id: Option<i32>,
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub library_id: Option<i32>,
     pub genre_ids: Vec<i64>,
     pub year: Option<i64>,
@@ -52,7 +55,10 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
             return false;
         }
     }
-    if c["mediaType"].as_str().is_some_and(|m| m != ctx.media_type) {
+    if c["mediaType"]
+        .as_str()
+        .is_some_and(|m| m != ctx.media_type.as_str())
+    {
         return false;
     }
     let libraries = ints(c, "libraryIds");
@@ -68,7 +74,7 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
         return false;
     }
     if let Some(max) = c["maxSeasons"].as_i64()
-        && ctx.media_type == "series"
+        && ctx.media_type.has_seasons()
         && ctx.season_count.is_none_or(|n| n > max)
     {
         return false;
@@ -109,7 +115,7 @@ pub async fn should_auto_approve(
         .iter()
         .any(|r| reads_metadata(&r.criteria.0, scoped.is_some()))
     {
-        match services::title_facts(st, &dto.media_type, dto.tmdb_id).await {
+        match services::title_facts(st, dto.media_type, dto.tmdb_id).await {
             Ok(f) => Some(f),
             Err(e) => {
                 tracing::warn!(
@@ -126,7 +132,7 @@ pub async fn should_auto_approve(
     let ctx = Ctx {
         user_id: a.user.id,
         role_id: a.user.role_id,
-        media_type: dto.media_type.clone(),
+        media_type: dto.media_type,
         library_id: Some(library_id),
         genre_ids: facts
             .as_ref()

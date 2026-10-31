@@ -164,7 +164,7 @@ pub async fn rescan_files(
     let mut slots_created = false;
     let mut touched: Vec<(i32, Option<i32>)> = vec![];
     let mut slots = Slots::default();
-    if media.is_series() {
+    if media.has_seasons() {
         slots = Slots::load(&st.db, media_id).await?;
         let wanted = wanted_numbers(&dir, &rows, &on_disk, &disk, &linked);
         slots_created = slots.ensure(&st.db, media_id, &wanted).await?;
@@ -305,7 +305,7 @@ async fn refresh_existing(
         let mtime = mtime_ms(&meta);
         let name = file_name(&abs);
         let mut episode_id = r.episode_id;
-        if media.is_series() {
+        if media.has_seasons() {
             let nums = parse_episode_numbers(&name, Some(&abs.to_string_lossy()));
             match (nums, r.episode_id) {
                 (Some(n), None) => {
@@ -406,7 +406,7 @@ async fn add_new(
         };
         let name = file_name(abs);
         let mut episode_id = None;
-        if media.is_series() {
+        if media.has_seasons() {
             match parse_episode_numbers(&name, Some(&abs.to_string_lossy())) {
                 Some(n) => episode_id = slots.episode(n),
                 None => match slots.special(&name) {
@@ -901,7 +901,7 @@ pub async fn link_in_place(
     let name = file_name(&real);
     let mut episode_id = None;
     let mut created = false;
-    if media.is_series() {
+    if media.has_seasons() {
         match nums.or_else(|| parse_episode_numbers(&name, Some(&real.to_string_lossy()))) {
             None => match match_special(&st.db, media.id, &name).await? {
                 Some(ep) => episode_id = Some(ep.id),

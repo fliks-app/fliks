@@ -9,7 +9,7 @@ use crate::{
     system::backup,
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use fliks_domain::refresh;
+use fliks_domain::{media::kind::MediaKind, refresh};
 use fliks_engine_core::api::JobPriority;
 use sqlx::{FromRow, PgPool};
 use std::collections::HashMap;
@@ -67,7 +67,8 @@ fn tmdb_configured(st: &AppState, job: &str) -> bool {
 struct MediaRow {
     id: i32,
     title: String,
-    kind: String,
+    #[sqlx(try_from = "String")]
+    kind: MediaKind,
     status: String,
     release_date: Option<NaiveDate>,
     year: Option<i32>,
@@ -86,16 +87,16 @@ impl MediaRow {
     }
 
     fn subject(&self) -> Subject {
-        media_subject(self.id, &self.title, &self.kind)
+        media_subject(self.id, &self.title, Some(self.kind))
     }
 }
 
 async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
     let all: Vec<MediaRow> = sqlx::query_as(
-        r#"SELECT m.id, m.title, m."type"::text AS kind, m.status::text AS status, m."releaseDate" AS release_date,
+        r#"SELECT m.id, m.title, m."type" AS kind, m.status::text AS status, m."releaseDate" AS release_date,
                   m.year, m."metadataRefreshedAt" AS refreshed_at, m."posterUrl" AS poster, m.overview,
                   m."tmdbId" AS tmdb, m."tvdbId" AS tvdb, m."imdbId" AS imdb,
-                  (m."type"::text = 'series' AND NOT EXISTS (SELECT 1 FROM seasons s WHERE s."mediaId" = m.id)) AS no_seasons
+                  (m."type" = 'series' AND NOT EXISTS (SELECT 1 FROM seasons s WHERE s."mediaId" = m.id)) AS no_seasons
            FROM media m ORDER BY m.id"#,
     )
     .fetch_all(db)
@@ -121,7 +122,7 @@ async fn refresh_metadata(st: &AppState) -> Outcome {
         .filter(|m| {
             refresh::is_due(
                 &refresh::Row {
-                    is_series: m.kind == "series",
+                    kind: m.kind,
                     status: &m.status,
                     release_date: m.release_date,
                     year: m.year,
@@ -208,18 +209,23 @@ async fn refresh_loop(
     Ok(updated)
 }
 
-const ALL_MEDIA: &str = r#"SELECT id, title, "type"::text FROM media ORDER BY id"#;
-const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type"::text FROM media m JOIN libraries l ON l.id = m."libraryId"
+const ALL_MEDIA: &str = r#"SELECT id, title, "type" FROM media ORDER BY id"#;
+const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type" FROM media m JOIN libraries l ON l.id = m."libraryId"
     WHERE l.path IS NOT NULL AND l.path <> '' AND (
         (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AND COALESCE(m."folderName", '') <> '')
-        OR (m."type"::text = 'series'
+        OR (m."type" = 'series'
             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."episodeId" IS NULL)))
     ORDER BY m.id"#;
 
 async fn rescan(st: &AppState, job: &str, select: &'static str) -> Outcome {
-    let media: Vec<(i32, String, String)> = sqlx::query_as(select)
+    let media = sqlx::query_as::<_, (i32, String, String)>(select)
         .fetch_all(&st.db)
         .await
+        .and_then(|rows| {
+            rows.into_iter()
+                .map(|(id, title, kind)| Ok((id, title, crate::db::kind(&kind)?)))
+                .collect::<sqlx::Result<Vec<_>>>()
+        })
         .map_err(|e| e.to_string())?;
     let total = media.len();
     tracing::info!("{job}: started — {total} media to scan");
@@ -229,7 +235,7 @@ async fn rescan(st: &AppState, job: &str, select: &'static str) -> Outcome {
         hub.activity().upsert_pending(
             &child(*id),
             job,
-            Some(media_subject(*id, title, kind)),
+            Some(media_subject(*id, title, Some(*kind))),
             Some(job.into()),
         );
     }
@@ -239,7 +245,7 @@ async fn rescan(st: &AppState, job: &str, select: &'static str) -> Outcome {
     );
     let (mut changes, mut skipped) = (0, 0);
     for (i, (id, title, kind)) in media.iter().enumerate() {
-        let subject = media_subject(*id, title, kind);
+        let subject = media_subject(*id, title, Some(*kind));
         progress(hub, job, i, total, title.clone(), Some(subject.clone()));
         running(hub, job, job, None, i, total, None);
         hub.activity()
@@ -325,11 +331,7 @@ async fn sprite_of(st: &AppState, id: i32, subject: Option<&Subject>, force: boo
     let title = file.media_title.clone().unwrap_or_default();
     let subject = subject.cloned().unwrap_or_else(|| Subject {
         title: title.clone(),
-        ..media_subject(
-            file.media_id.unwrap_or_default(),
-            &title,
-            file.media_type.as_deref().unwrap_or_default(),
-        )
+        ..media_subject(file.media_id.unwrap_or_default(), &title, file.media_type)
     });
     let priority = if force {
         JobPriority::Normal
@@ -367,7 +369,7 @@ async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
     let mut out = HashMap::new();
     for chunk in ids.chunks(1000) {
         let rows: Vec<Row> = sqlx::query_as(
-            r#"SELECT f.id, m.id, m."type"::text, m.title, e.id, e."episodeNumber", e.title, s."seasonNumber"
+            r#"SELECT f.id, m.id, m."type", m.title, e.id, e."episodeNumber", e.title, s."seasonNumber"
                FROM media_files f JOIN media m ON m.id = f."mediaId"
                LEFT JOIN episodes e ON e.id = f."episodeId" LEFT JOIN seasons s ON s.id = e."seasonId"
                WHERE f.id = ANY($1)"#,
@@ -376,7 +378,7 @@ async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
         .fetch_all(db)
         .await?;
         for (file, media, kind, title, ep, number, ep_title, season) in rows {
-            let mut subject = media_subject(media, &title, &kind);
+            let mut subject = media_subject(media, &title, Some(crate::db::kind(&kind)?));
             if let Some(season) = season {
                 subject.season_number = Some(i64::from(season));
                 if let Some(number) = number {
@@ -400,7 +402,7 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
     let child = |s: &ScanSeason| format!("IntroDetection:{}", s.id);
     let subject = |s: &ScanSeason| Subject {
         season_number: Some(i64::from(s.season_number)),
-        ..media_subject(s.media_id, &s.media_title, "series")
+        ..media_subject(s.media_id, &s.media_title, Some(MediaKind::Series))
     };
     for s in &seasons {
         st.hub.activity().upsert_pending(
@@ -447,11 +449,11 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
 }
 
 /// `buildMediaProgressSubject(media)`.
-fn media_subject(id: i32, title: &str, kind: &str) -> Subject {
+fn media_subject(id: i32, title: &str, kind: Option<MediaKind>) -> Subject {
     Subject {
         title: title.to_owned(),
         media_id: Some(i64::from(id)),
-        media_type: Some(kind.to_owned()),
+        media_type: kind,
         season_number: None,
         episode_number: None,
         episode_title: None,
@@ -545,7 +547,7 @@ mod tests {
 
     #[test]
     fn subject_text_matches_the_ts_formatter() {
-        let mut s = media_subject(1, "Show", "series");
+        let mut s = media_subject(1, "Show", Some(MediaKind::Series));
         assert_eq!(format_subject(&s), "Show");
         s.season_number = Some(1);
         assert_eq!(format_subject(&s), "Show S01");

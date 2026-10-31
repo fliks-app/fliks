@@ -81,7 +81,7 @@ pub async fn recommendations(
     );
     let excluded: Vec<i32> = excluded.into_iter().collect();
     let candidates = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type::text AS "kind!", m.year, m."posterUrl" AS poster_url,
+        r#"SELECT m.id, m.title, m.type AS "kind!", m.year, m."posterUrl" AS poster_url,
                   m."fanartUrl" AS fanart_url, m."additionalFanartUrls" AS additional_fanart_urls,
                   m.genres AS "genres: Json<Vec<String>>"
            FROM media m

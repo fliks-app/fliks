@@ -17,13 +17,14 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    media::kind::MediaKind,
+};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool, QueryBuilder};
 use std::collections::HashSet;
-
-const MEDIA_TYPES: [&str; 2] = ["movie", "series"];
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -93,12 +94,12 @@ fn max_len(field: &str, v: Option<&str>, max: usize) -> Result<(), AppError> {
 }
 
 fn check_media_types(v: &[String]) -> Result<(), AppError> {
-    if v.iter().all(|t| MEDIA_TYPES.contains(&t.as_str())) {
+    if v.iter().all(|t| MediaKind::parse(t).is_some()) {
         Ok(())
     } else {
         Err(bad(format!(
-            "each value in mediaTypes must be one of the following values: {}",
-            MEDIA_TYPES.join(", ")
+            "each value in mediaTypes {}",
+            MediaKind::one_of_message()
         )))
     }
 }
@@ -185,7 +186,7 @@ pub async fn create(
     max_len("metadataRegion", dto.metadata_region.as_deref(), 8)?;
     let media_types = dto
         .media_types
-        .unwrap_or_else(|| MEDIA_TYPES.map(String::from).to_vec());
+        .unwrap_or_else(|| MediaKind::NAMES.map(String::from).to_vec());
     check_media_types(&media_types)?;
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(

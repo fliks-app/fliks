@@ -10,7 +10,7 @@ pub struct RelinkFile {
 
 pub struct RelinkDto {
     pub(super) library_id: i32,
-    pub(super) media_type: String,
+    pub(super) media_type: MediaKind,
     pub(super) external_id: Option<String>,
     pub(super) provider: Option<String>,
     pub(super) title: Option<String>,
@@ -62,11 +62,7 @@ pub(super) fn non_negative(b: &Body, k: &str) -> Result<Option<i32>, AppError> {
 pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError> {
     let b = Body::nested(v, &RELINK_FIELDS, prefix)?;
     let library_id = b.required(b.id("libraryId")?, "libraryId", "must be an integer number")?;
-    let media_type = b.required(
-        b.one_of("type", &["movie", "series"])?,
-        "type",
-        "must be one of the following values: movie, series",
-    )?;
+    let media_type = b.required_kind("type")?;
     let title = b.str("title")?.flatten();
     if title.as_ref().is_some_and(|t| t.chars().count() > 255) {
         return Err(AppError::bad_request(vec![format!(

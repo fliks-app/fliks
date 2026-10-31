@@ -227,7 +227,7 @@ async fn run(
     let tags = to_tags(&Tags {
         username: Some(a.user.username.clone()),
         media_title: file.media_title.clone(),
-        media_type: file.media_type.clone(),
+        media_type: file.media_type.map(|k| k.to_string()),
         poster_url: file.poster_url.clone(),
         fanart_url: file.fanart_url.clone(),
         sse_connection_id: sse_connection.clone(),

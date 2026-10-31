@@ -2,6 +2,7 @@
 mod common;
 
 use common::replay;
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::translation::*;
 use serde_json::{Value, json};
 use std::{
@@ -141,7 +142,7 @@ fn request(v: &Value) -> Request {
         context: Context {
             title: c["title"].as_str().map(str::to_owned),
             year: c["year"].as_i64(),
-            media_type: c["mediaType"].as_str().map(str::to_owned),
+            media_type: c["mediaType"].as_str().and_then(MediaKind::parse),
             genres: c["genres"]
                 .as_array()
                 .map(|g| g.iter().map(|x| x.as_str().unwrap().to_owned()).collect())

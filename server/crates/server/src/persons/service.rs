@@ -7,6 +7,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
+    media::kind::MediaKind,
     metadata::language::Resolved,
     persons::{Owned, link, needs_refresh, tsquery},
 };
@@ -272,9 +273,9 @@ async fn link_credits(
     let mut owned = vec![];
     if !ids.is_empty() {
         let libs = accessible_library_ids(&st.db, a).await?;
-        let rows: Vec<(i32, bool, i32)> = match served {
+        let rows: Vec<(i32, String, i32)> = match served {
             Provider::Tmdb => sqlx::query!(
-                r#"SELECT id AS "id!", (type::text = 'series') AS "series!", "tmdbId" AS "ext!" FROM media
+                r#"SELECT id AS "id!", type AS "kind!", "tmdbId" AS "ext!" FROM media
                    WHERE "tmdbId" = ANY($1) AND "libraryId" = ANY($2) ORDER BY id ASC"#,
                 &ids,
                 &libs
@@ -282,10 +283,10 @@ async fn link_credits(
             .fetch_all(&st.db)
             .await?
             .into_iter()
-            .map(|r| (r.id, r.series, r.ext))
+            .map(|r| (r.id, r.kind, r.ext))
             .collect(),
             Provider::Tvdb => sqlx::query!(
-                r#"SELECT id AS "id!", (type::text = 'series') AS "series!", "tvdbId" AS "ext!" FROM media
+                r#"SELECT id AS "id!", type AS "kind!", "tvdbId" AS "ext!" FROM media
                    WHERE "tvdbId" = ANY($1) AND "libraryId" = ANY($2) ORDER BY id ASC"#,
                 &ids,
                 &libs
@@ -293,17 +294,19 @@ async fn link_credits(
             .fetch_all(&st.db)
             .await?
             .into_iter()
-            .map(|r| (r.id, r.series, r.ext))
+            .map(|r| (r.id, r.kind, r.ext))
             .collect(),
         };
         owned = rows
             .into_iter()
-            .map(|(id, is_series, ext)| Owned {
-                id,
-                is_series,
-                external_id: i64::from(ext),
+            .map(|(id, kind, ext)| {
+                Ok(Owned {
+                    id,
+                    kind: crate::db::kind(&kind)?,
+                    external_id: i64::from(ext),
+                })
             })
-            .collect();
+            .collect::<sqlx::Result<_>>()?;
     }
     let attach = |items: Vec<Value>| -> Vec<Value> {
         items
@@ -313,8 +316,13 @@ async fn link_credits(
                     .get("externalId")
                     .and_then(Value::as_i64)
                     .unwrap_or_default();
-                let series = c.get("mediaType").and_then(Value::as_str) == Some("series");
-                c["mediaId"] = link(&owned, ext, series).map_or(Value::Null, Value::from);
+                let kind = c
+                    .get("mediaType")
+                    .and_then(Value::as_str)
+                    .and_then(MediaKind::parse);
+                c["mediaId"] = kind
+                    .and_then(|k| link(&owned, ext, k))
+                    .map_or(Value::Null, Value::from);
                 c
             })
             .collect()

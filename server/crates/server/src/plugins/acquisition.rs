@@ -3,6 +3,7 @@ use super::runtime::fliks::plugin::types as t;
 use crate::profiles::db as profiles;
 use crate::state::AppState;
 use chrono::{Days, NaiveDate, Utc};
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quality_string};
 use fliks_domain::release::parsing::season_episode::{
     ReleaseCoverage, coverage_of, parse_season_episode,
@@ -24,7 +25,8 @@ const PACK_MIN_SHARE: f64 = 0.5;
 #[derive(FromRow, Clone)]
 struct MediaRow {
     id: i32,
-    kind: String,
+    #[sqlx(try_from = "String")]
+    kind: MediaKind,
     title: String,
     original_title: Option<String>,
     alternative_titles: Value,
@@ -49,7 +51,7 @@ struct MediaRow {
     lp_audio: Option<Value>,
 }
 
-const MEDIA_SELECT: &str = r#"SELECT m.id, m.type::text AS kind, m.title, m."originalTitle" AS original_title,
+const MEDIA_SELECT: &str = r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
     m."alternativeTitles" AS alternative_titles, m.year, m.runtime, m."imdbId" AS imdb_id,
     m."tmdbId" AS tmdb_id, m."tvdbId" AS tvdb_id, m."libraryId" AS library_id, m.monitored,
     m."minimumAvailability" AS minimum_availability, m."inCinemas" AS in_cinemas,
@@ -62,9 +64,6 @@ const MEDIA_SELECT: &str = r#"SELECT m.id, m.type::text AS kind, m.title, m."ori
   LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId""#;
 
 impl MediaRow {
-    fn is_movie(&self) -> bool {
-        self.kind == "movie"
-    }
     fn alt(&self) -> Vec<String> {
         self.alternative_titles
             .as_array()
@@ -294,22 +293,24 @@ async fn files_for(
     season: Option<i32>,
     episode: Option<&EpisodeRow>,
 ) -> sqlx::Result<Files> {
-    if m.is_movie() {
-        return Ok(file_qualities(db, "mediaId", m.id)
+    match m.kind {
+        MediaKind::Movie => Ok(file_qualities(db, "mediaId", m.id)
             .await?
             .into_iter()
             .map(Some)
-            .collect());
+            .collect()),
+        MediaKind::Series => {
+            if let Some(e) = episode {
+                let sib = episodes_of(db, e.season_id).await?;
+                return files_for_episode(db, e, &on_disk(&sib)).await;
+            }
+            if let Some(s) = season {
+                let eps = episodes_of(db, s).await?;
+                return files_for_pack(db, &eps, &on_disk(&eps)).await;
+            }
+            Ok(vec![])
+        }
     }
-    if let Some(e) = episode {
-        let sib = episodes_of(db, e.season_id).await?;
-        return files_for_episode(db, e, &on_disk(&sib)).await;
-    }
-    if let Some(s) = season {
-        let eps = episodes_of(db, s).await?;
-        return files_for_pack(db, &eps, &on_disk(&eps)).await;
-    }
-    Ok(vec![])
 }
 
 mod candidates;

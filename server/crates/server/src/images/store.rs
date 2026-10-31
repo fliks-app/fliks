@@ -390,7 +390,6 @@ impl ImageStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::MediaKind;
     use crate::sync::MutexExt;
     use axum::{
         Router,
@@ -399,6 +398,7 @@ mod tests {
         response::{IntoResponse, Redirect},
         routing::get,
     };
+    use fliks_domain::media::kind::MediaKind;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::{collections::HashMap, sync::Mutex};
 

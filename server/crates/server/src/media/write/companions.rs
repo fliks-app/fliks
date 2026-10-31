@@ -151,7 +151,7 @@ async fn collect(st: &AppState, media_id: i32, file_id: i32) -> Result<Listing, 
         Some((r, m)) => scan(
             r,
             m,
-            media.is_series(),
+            media.media_type,
             media.folder_name.as_deref().is_some_and(|f| !f.is_empty()),
             &files,
             pos,

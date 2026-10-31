@@ -40,7 +40,7 @@ Shapes used below. `PublicIdentity` = `{id: number, username: string, avatar: st
 5. `RequestRow` columns (table `requests`): `id`, `createdAt`/`updatedAt` (ISO), `mediaType`, `kind` (`'add'` default), `tmdbId`, `title`, `status`, `declinedReason` `string|null`, `seasons` `number[]|null` (jsonb; `[]` and `null` both mean "whole title"), `posterUrl`/`fanartUrl` `string|null`. Enums: status `pending|approved|declined|processing|available|failed|removed` (`failed` is only written by the Seerr importer; `removed` = was `available`, then its media left the library or was unmonitored), kind `add|delete`, mediaType `movie|series`. Relation ids (`userId`, `approvedById`, `qualityProfileId`, `languageProfileId`, `libraryId`, `mediaId`: `number|null`) are present on rows loaded from the DB and also present on the rows `POST`, `PATCH` and decline return; only a comment's embedded `request` has none (rule 27).
 6. Embedded users are always projected to `PublicIdentity` (`user`, `approvedBy`, each `comments[].user`): `approvedBy` null when unset. Nothing else of the account (email, permissions, quotas) leaves the server. Every route returning a request goes through `projectEmbeddedUsers` (or builds the projection in the query).
 7. `GET /api/requests/:id` loads `relations: ['user','approvedBy','media','comments','comments.user']` via the FK: `media` is the full `Media` JSON of the linked row including its eager relations (`library`, `qualityProfile`, `languageProfile`, `metadata`; no files or seasons) and the `path` getter (`@Expose`, `library.path` joined with `folderName`, or null), `searchVector` excluded (`select:false`); `comments` have no ORDER BY (physical order). The list and `approve` use rule 8 instead, so the same title has two different `media` shapes. `media.path` and `media.library.path` are present only for callers who can manage libraries (`paths_visible`), omitted otherwise.
-8. List and `approve` join the library media by `(tmdbId, type)`, not by the request's FK, so partial-library titles surface a `media` object; the FK `mediaId` stays as stored. Media is mapped from the QueryBuilder join: the entity's own columns only (no eager relations, so no `library`/`qualityProfile`/`metadata` keys and `path` serialises as `null`); `media.type::text = r."mediaType"::text` because the two enums are distinct Postgres types. `UQ(type, tmdbId)` on `media` guarantees at most one match.
+8. List and `approve` join the library media by `(tmdbId, type)`, not by the request's FK, so partial-library titles surface a `media` object; the FK `mediaId` stays as stored. Media is mapped from the QueryBuilder join: the entity's own columns only (no eager relations, so no `library`/`qualityProfile`/`metadata` keys and `path` serialises as `null`); `media.type = r."mediaType"`, both `text`. `UQ(type, tmdbId)` on `media` guarantees at most one match.
 
 ### B. List and title state
 
@@ -110,7 +110,7 @@ Shapes used below. `PublicIdentity` = `{id: number, username: string, avatar: st
 
 ## SQL
 
-All tables/columns are camelCase quoted identifiers . Enum columns are Postgres enums (`requests_status_enum`, `requests_mediatype_enum`, request kind enum): compare to text literals or cast.
+All tables/columns are camelCase quoted identifiers . `requests."mediaType"` is `text` under a `CHECK` (`movie|series`); the other enum columns are Postgres enums (`requests_status_enum`, request kind enum): compare to text literals or cast.
 
 1. List (rule 9), equivalent to:
 ```sql

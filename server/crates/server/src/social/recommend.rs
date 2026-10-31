@@ -21,7 +21,10 @@ use axum::{
     http::StatusCode,
 };
 use chrono::{DateTime, Utc};
-use fliks_domain::recommend::{RecommendationItem, RecommendedMedia};
+use fliks_domain::{
+    media::kind::MediaKind,
+    recommend::{RecommendationItem, RecommendedMedia},
+};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, types::Json as Jsonb};
 use std::collections::HashMap;
@@ -100,7 +103,7 @@ pub async fn following_popular(
     .fetch_all(&st.db)
     .await?;
     let mut media: HashMap<i32, RecommendedMedia> = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type::text AS "kind!", m.year, m."posterUrl" AS poster_url,
+        r#"SELECT m.id, m.title, m.type AS "kind!", m.year, m."posterUrl" AS poster_url,
                   m."fanartUrl" AS fanart_url, m."additionalFanartUrls" AS additional_fanart_urls,
                   m.genres AS "genres: Jsonb<Vec<String>>"
            FROM media m WHERE m.id = ANY($1)"#,
@@ -240,7 +243,7 @@ pub struct Card {
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
     media_id: i32,
-    media_type: String,
+    media_type: MediaKind,
     title: String,
     poster_url: Option<String>,
     fanart_url: Option<String>,
@@ -270,7 +273,7 @@ async fn cards(
     let rows = sqlx::query!(
         r#"SELECT cr.id, cr.message, cr."createdAt" AS created_at, cr."seasonId" AS season_id,
                   cr."episodeId" AS episode_id,
-                  m.id AS "media_id?", m.type::text AS media_type, m.title AS "title?",
+                  m.id AS "media_id?", m.type AS "media_type?", m.title AS "title?",
                   m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, m."libraryId" AS library_id,
                   s."seasonNumber" AS "season_number?", e."episodeNumber" AS "episode_number?",
                   e.title AS episode_title, e."stillUrl" AS still_url,
@@ -294,9 +297,16 @@ async fn cards(
     )
     .fetch_all(db)
     .await?;
+    let rows = rows
+        .into_iter()
+        .map(|r| {
+            let kind = r.media_type.as_deref().map(crate::db::kind).transpose()?;
+            Ok((r, kind))
+        })
+        .collect::<sqlx::Result<Vec<_>>>()?;
     Ok(rows
         .into_iter()
-        .filter_map(|r| {
+        .filter_map(|(r, kind)| {
             let (media_id, library_id) = (r.media_id?, r.library_id?);
             if !accessible.contains(&library_id)
                 || !super::graph::listable(r.other_enabled, r.other_share_disabled)
@@ -315,7 +325,7 @@ async fn cards(
                 message: r.message,
                 created_at: r.created_at,
                 media_id,
-                media_type: r.media_type?,
+                media_type: kind?,
                 title,
                 poster_url: r.poster_url,
                 fanart_url: r.fanart_url,

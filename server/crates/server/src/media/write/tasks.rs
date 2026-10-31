@@ -34,7 +34,7 @@ pub async fn rescan(
         },
     );
     let key = format!("Rescan:{id}");
-    let subj = subject(id, &media.title, &media.media_type);
+    let subj = subject(id, &media.title, media.media_type);
     if !st
         .hub
         .activity()

@@ -1,4 +1,5 @@
 //! Queries of the `requests`, `request_comments` and `auto_approval_rules` tables (`requests.md` SQL section).
+use fliks_domain::media::kind::MediaKind;
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool, types::Json};
 
@@ -14,7 +15,7 @@ fn strs(v: &[&str]) -> Vec<String> {
 pub struct Req {
     pub id: i32,
     pub user_id: Option<i32>,
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub kind: String,
     pub tmdb_id: i32,
     pub title: String,
@@ -24,6 +25,43 @@ pub struct Req {
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
     pub media_id: Option<i32>,
+}
+
+/// `Req` as the database returns it, before `media_type` is decoded.
+struct RawReq {
+    id: i32,
+    user_id: Option<i32>,
+    media_type: String,
+    kind: String,
+    tmdb_id: i32,
+    title: String,
+    status: String,
+    seasons: Option<Json<Vec<i64>>>,
+    quality_profile_id: Option<i32>,
+    language_profile_id: Option<i32>,
+    library_id: Option<i32>,
+    media_id: Option<i32>,
+}
+
+impl TryFrom<RawReq> for Req {
+    type Error = sqlx::Error;
+
+    fn try_from(r: RawReq) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: r.id,
+            user_id: r.user_id,
+            media_type: crate::db::kind(&r.media_type)?,
+            kind: r.kind,
+            tmdb_id: r.tmdb_id,
+            title: r.title,
+            status: r.status,
+            seasons: r.seasons,
+            quality_profile_id: r.quality_profile_id,
+            language_profile_id: r.language_profile_id,
+            library_id: r.library_id,
+            media_id: r.media_id,
+        })
+    }
 }
 
 impl Req {
@@ -38,8 +76,8 @@ impl Req {
 
 pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>> {
     sqlx::query_as!(
-        Req,
-        r#"SELECT id, "userId" AS user_id, "mediaType"::text AS "media_type!", kind::text AS "kind!",
+        RawReq,
+        r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
@@ -47,38 +85,47 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
         id
     )
     .fetch_optional(db)
-    .await
+    .await?
+    .map(Req::try_from)
+    .transpose()
 }
 
 /// Active ADD rows of a title, oldest first (the guard, `title-state` and the series profile lock).
-pub async fn active_adds(db: &PgPool, tmdb_id: i32, media_type: &str) -> sqlx::Result<Vec<Req>> {
+pub async fn active_adds(
+    db: &PgPool,
+    tmdb_id: i32,
+    media_type: MediaKind,
+) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
-        Req,
-        r#"SELECT id, "userId" AS user_id, "mediaType"::text AS "media_type!", kind::text AS "kind!",
+        RawReq,
+        r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
         FROM requests
-        WHERE "tmdbId" = $1 AND "mediaType"::text = $2 AND kind = 'add' AND status::text = ANY($3)
+        WHERE "tmdbId" = $1 AND "mediaType" = $2 AND kind = 'add' AND status::text = ANY($3)
         ORDER BY "createdAt" ASC, id ASC"#,
         tmdb_id,
-        media_type,
+        media_type.as_str(),
         &strs(&ACTIVE)
     )
     .fetch_all(db)
-    .await
+    .await?
+    .into_iter()
+    .map(Req::try_from)
+    .collect()
 }
 
 pub async fn pending_delete_exists(
     db: &PgPool,
     tmdb_id: i32,
-    media_type: &str,
+    media_type: MediaKind,
 ) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM requests WHERE "tmdbId" = $1 AND "mediaType"::text = $2
+        r#"SELECT EXISTS(SELECT 1 FROM requests WHERE "tmdbId" = $1 AND "mediaType" = $2
         AND kind = 'delete' AND status = 'pending') AS "e!""#,
         tmdb_id,
-        media_type
+        media_type.as_str()
     )
     .fetch_one(db)
     .await
@@ -88,14 +135,14 @@ pub async fn pending_delete_exists(
 pub async fn quota_count(
     db: &PgPool,
     user_id: i32,
-    media_type: &str,
+    media_type: MediaKind,
     since: chrono::DateTime<chrono::Utc>,
 ) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM requests WHERE "userId" = $1 AND "mediaType"::text = $2
+        r#"SELECT count(*) AS "n!" FROM requests WHERE "userId" = $1 AND "mediaType" = $2
         AND kind = 'add' AND status IN ('pending', 'approved') AND "createdAt" >= $3"#,
         user_id,
-        media_type,
+        media_type.as_str(),
         since
     )
     .fetch_one(db)
@@ -106,7 +153,7 @@ pub async fn quota_count(
 #[derive(Debug, Clone)]
 pub struct MediaRow {
     pub id: i32,
-    pub media_type: String,
+    pub media_type: MediaKind,
     pub library_id: Option<i32>,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
@@ -114,47 +161,78 @@ pub struct MediaRow {
     pub fanart_url: Option<String>,
 }
 
+/// `MediaRow` as the database returns it, before `media_type` is decoded.
+struct RawMediaRow {
+    id: i32,
+    media_type: String,
+    library_id: Option<i32>,
+    quality_profile_id: Option<i32>,
+    language_profile_id: Option<i32>,
+    poster_url: Option<String>,
+    fanart_url: Option<String>,
+}
+
+impl TryFrom<RawMediaRow> for MediaRow {
+    type Error = sqlx::Error;
+
+    fn try_from(r: RawMediaRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: r.id,
+            media_type: crate::db::kind(&r.media_type)?,
+            library_id: r.library_id,
+            quality_profile_id: r.quality_profile_id,
+            language_profile_id: r.language_profile_id,
+            poster_url: r.poster_url,
+            fanart_url: r.fanart_url,
+        })
+    }
+}
+
 pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<MediaRow>> {
     sqlx::query_as!(
-        MediaRow,
-        r#"SELECT id, type::text AS "media_type!", "libraryId" AS library_id,
+        RawMediaRow,
+        r#"SELECT id, type AS "media_type!", "libraryId" AS library_id,
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "posterUrl" AS poster_url, "fanartUrl" AS fanart_url FROM media WHERE id = $1"#,
         id
     )
     .fetch_optional(db)
-    .await
+    .await?
+    .map(MediaRow::try_from)
+    .transpose()
 }
 
 pub async fn media_by_tmdb(
     db: &PgPool,
     tmdb_id: i32,
-    media_type: &str,
+    media_type: MediaKind,
 ) -> sqlx::Result<Option<MediaRow>> {
     sqlx::query_as!(
-        MediaRow,
-        r#"SELECT id, type::text AS "media_type!", "libraryId" AS library_id,
+        RawMediaRow,
+        r#"SELECT id, type AS "media_type!", "libraryId" AS library_id,
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "posterUrl" AS poster_url, "fanartUrl" AS fanart_url
-        FROM media WHERE "tmdbId" = $1 AND type::text = $2"#,
+        FROM media WHERE "tmdbId" = $1 AND type = $2"#,
         tmdb_id,
-        media_type
+        media_type.as_str()
     )
     .fetch_optional(db)
-    .await
+    .await?
+    .map(MediaRow::try_from)
+    .transpose()
 }
 
 /// Libraries accepting `media_type`, by name, limited to `ids` when given (`findAccepting`).
 pub async fn libraries_accepting(
     db: &PgPool,
-    media_type: &str,
+    media_type: MediaKind,
     ids: Option<&[i32]>,
 ) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar!(
         r#"SELECT id AS "id!" FROM libraries
         WHERE ($2::int[] IS NULL OR id = ANY($2)) AND "mediaTypes" ? $1
         ORDER BY name ASC, id ASC"#,
-        media_type,
+        media_type.as_str(),
         ids
     )
     .fetch_all(db)
@@ -171,7 +249,11 @@ pub async fn library_exists(db: &PgPool, id: i32) -> sqlx::Result<bool> {
 }
 
 /// Serialises the duplicate check and the insert of one title's ADD requests until the transaction ends.
-pub async fn lock_title(tx: &mut PgConnection, tmdb_id: i32, media_type: &str) -> sqlx::Result<()> {
+pub async fn lock_title(
+    tx: &mut PgConnection,
+    tmdb_id: i32,
+    media_type: MediaKind,
+) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(format!("requests:{media_type}:{tmdb_id}"))
         .execute(tx)
@@ -182,7 +264,7 @@ pub async fn lock_title(tx: &mut PgConnection, tmdb_id: i32, media_type: &str) -
 pub struct New<'a> {
     pub user_id: i32,
     pub kind: &'a str,
-    pub media_type: &'a str,
+    pub media_type: MediaKind,
     pub tmdb_id: i32,
     pub title: &'a str,
     pub seasons: Option<&'a [i64]>,
@@ -200,11 +282,11 @@ pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, seasons, status,
         "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "mediaId", "posterUrl", "fanartUrl")
-        VALUES ($1, $2::text::requests_kind_enum, $3::text::requests_mediatype_enum, $4, $5, $6,
+        VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6,
         $7::text::requests_status_enum, $8, $9, $10, $11, $12, $13, $14) RETURNING id"#,
         n.user_id,
         n.kind,
-        n.media_type,
+        n.media_type.as_str(),
         n.tmdb_id,
         n.title,
         n.seasons.map(|s| Json(s.to_vec())) as Option<Json<Vec<i64>>>,
@@ -340,22 +422,25 @@ pub async fn link_if_unlinked(db: &PgPool, id: i32, media_id: i32) -> sqlx::Resu
 pub async fn in_flight_by_title(
     db: &PgPool,
     tmdb_id: i32,
-    media_type: &str,
+    media_type: MediaKind,
 ) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
-        Req,
-        r#"SELECT id, "userId" AS user_id, "mediaType"::text AS "media_type!", kind::text AS "kind!",
+        RawReq,
+        r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
-        FROM requests WHERE "tmdbId" = $1 AND "mediaType"::text = $2 AND status::text = ANY($3)
+        FROM requests WHERE "tmdbId" = $1 AND "mediaType" = $2 AND status::text = ANY($3)
         ORDER BY id"#,
         tmdb_id,
-        media_type,
+        media_type.as_str(),
         &strs(&IN_FLIGHT)
     )
     .fetch_all(db)
-    .await
+    .await?
+    .into_iter()
+    .map(Req::try_from)
+    .collect()
 }
 
 /// Rows linked by FK to `media_id` in one of `statuses`, optionally of one `kind`.
@@ -366,8 +451,8 @@ pub async fn linked(
     statuses: &[&str],
 ) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
-        Req,
-        r#"SELECT id, "userId" AS user_id, "mediaType"::text AS "media_type!", kind::text AS "kind!",
+        RawReq,
+        r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
@@ -378,7 +463,10 @@ pub async fn linked(
         &strs(statuses)
     )
     .fetch_all(db)
-    .await
+    .await?
+    .into_iter()
+    .map(Req::try_from)
+    .collect()
 }
 
 /// Media that still have an `approved` or `processing` ADD request linked (the reconcile's work list).
@@ -571,7 +659,7 @@ pub struct Filter<'a> {
     pub status: Option<&'a str>,
     pub kind: Option<&'a str>,
     pub tmdb_id: Option<i32>,
-    pub media_type: Option<&'a str>,
+    pub media_type: Option<MediaKind>,
 }
 
 pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
@@ -580,14 +668,14 @@ pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
         WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
         AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
         AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-        AND ($6::int IS NULL OR r."tmdbId" = $6) AND ($7::text IS NULL OR r."mediaType"::text = $7)"#,
+        AND ($6::int IS NULL OR r."tmdbId" = $6) AND ($7::text IS NULL OR r."mediaType" = $7)"#,
         f.id,
         f.user_id,
         f.libraries,
         f.status,
         f.kind,
         f.tmdb_id,
-        f.media_type
+        f.media_type.map(MediaKind::as_str)
     )
     .fetch_one(db)
     .await
@@ -606,7 +694,7 @@ pub async fn rows(
   'id', r.id, 'createdAt', iso_ms(r."createdAt"), 'updatedAt', iso_ms(r."updatedAt"),
   'user', CASE WHEN u.id IS NULL THEN 'null'::jsonb
     ELSE jsonb_build_object('id', u.id, 'username', u.username, 'avatar', u.avatar) END,
-  'userId', r."userId", 'mediaType', r."mediaType"::text, 'kind', r.kind::text, 'tmdbId', r."tmdbId",
+  'userId', r."userId", 'mediaType', r."mediaType", 'kind', r.kind::text, 'tmdbId', r."tmdbId",
   'title', r.title, 'status', r.status::text,
   'approvedBy', CASE WHEN ab.id IS NULL THEN 'null'::jsonb
     ELSE jsonb_build_object('id', ab.id, 'username', ab.username, 'avatar', ab.avatar) END,
@@ -616,7 +704,7 @@ pub async fn rows(
   'media', CASE WHEN m.id IS NULL THEN 'null'::jsonb ELSE
     jsonb_build_object('id', m.id, 'createdAt', iso_ms(m."createdAt"), 'updatedAt', iso_ms(m."updatedAt"),
       'title', m.title, 'originalTitle', m."originalTitle", 'alternativeTitles', m."alternativeTitles",
-      'year', m.year, 'type', m.type::text, 'tmdbId', m."tmdbId", 'imdbId', m."imdbId", 'tvdbId', m."tvdbId",
+      'year', m.year, 'type', m.type, 'tmdbId', m."tmdbId", 'imdbId', m."imdbId", 'tvdbId', m."tvdbId",
       'overview', m.overview, 'status', m.status::text, 'monitored', m.monitored,
       'libraryId', m."libraryId", 'preferredProvider', m."preferredProvider", 'folderName', m."folderName",
       'posterUrl', m."posterUrl", 'metadataRefreshedAt', iso_ms(m."metadataRefreshedAt"),
@@ -631,11 +719,11 @@ pub async fn rows(
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"
-LEFT JOIN media m ON m."tmdbId" = r."tmdbId" AND m.type::text = r."mediaType"::text
+LEFT JOIN media m ON m."tmdbId" = r."tmdbId" AND m.type = r."mediaType"
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-AND ($6::int IS NULL OR r."tmdbId" = $6) AND ($7::text IS NULL OR r."mediaType"::text = $7)
+AND ($6::int IS NULL OR r."tmdbId" = $6) AND ($7::text IS NULL OR r."mediaType" = $7)
 ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.id,
         f.user_id,
@@ -643,7 +731,7 @@ ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.status,
         f.kind,
         f.tmdb_id,
-        f.media_type,
+        f.media_type.map(MediaKind::as_str),
         limit,
         offset
     )

@@ -1,5 +1,5 @@
 //! Where artwork lives: one table for the serving routes and the store.
-use crate::metadata::MediaKind;
+use fliks_domain::media::kind::MediaKind;
 use std::{
     fmt,
     path::{Path, PathBuf},
@@ -161,7 +161,7 @@ impl Target {
 
     /// Request art is keyed `<movie|series>-<tmdbId>` (`image-store.md` rule 22).
     pub fn request(kind: MediaKind, tmdb_id: i64, variant: Variant) -> Self {
-        let k = if kind.is_tv() { "series" } else { "movie" };
+        let k = kind.as_str();
         Self::new(Kind::Request, format!("{k}-{tmdb_id}"), Some(variant))
     }
 

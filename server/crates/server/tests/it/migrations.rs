@@ -519,6 +519,29 @@ async fn m1787900_turns_level_into_levels(pool: PgPool) {
     assert_eq!(dropped, 0);
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000020_turns_the_media_kind_enums_into_checked_text(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_020).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie'), (2, 'b', 'series');
+           INSERT INTO requests ("mediaType", "tmdbId", title) VALUES ('movie', 1, 'a'), ('series', 2, 'b')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_020).await;
+
+    let media: Vec<(i32, String)> = rows(&pool, "SELECT id, type FROM media ORDER BY id").await;
+    assert_eq!(media, vec![(1, "movie".into()), (2, "series".into())]);
+    let reqs: Vec<(String,)> = rows(&pool, r#"SELECT "mediaType" FROM requests ORDER BY id"#).await;
+    assert_eq!(reqs, vec![("movie".into(),), ("series".into(),)]);
+    for bad in [
+        "INSERT INTO media (title, type) VALUES ('x', 'book')",
+        r#"INSERT INTO requests ("mediaType", "tmdbId", title) VALUES ('book', 3, 'x')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64
