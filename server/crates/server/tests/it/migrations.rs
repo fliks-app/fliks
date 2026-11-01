@@ -1081,7 +1081,7 @@ async fn m1789000090_turns_episode_markers_into_item_markers(pool: PgPool) {
             (2, 11, "outro".into(), false)
         ]
     );
-    // every part carries its file's chapters, in file order, a blank title as NULL and a bad entry skipped
+    // every part carries its file's chapters, in file order, a blank title kept and a bad entry skipped
     type Chapter = (i32, i32, f64, f64, Option<String>);
     let chapters: Vec<Chapter> = rows(
         &pool,
@@ -1091,7 +1091,7 @@ async fn m1789000090_turns_episode_markers_into_item_markers(pool: PgPool) {
     .await;
     let want: Vec<Chapter> = vec![
         (5, 1, 0.0, 5.0, Some("One".into())),
-        (5, 1, 5.0, 9.0, None),
+        (5, 1, 5.0, 9.0, Some(String::new())),
         (5, 2, 0.0, 9.0, Some("Cut".into())),
         (10, 3, 0.0, 7.0, None),
         (11, 3, 0.0, 7.0, None),
@@ -1099,6 +1099,8 @@ async fn m1789000090_turns_episode_markers_into_item_markers(pool: PgPool) {
     assert_eq!(chapters, want);
 
     for bad in [
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (NULL, 'recap', 1, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'chapter', 1, 2)"#,
         r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'intro', 1, 2)"#,
         r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'bogus', 1, 2)"#,
         r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'recap', 2, 2)"#,

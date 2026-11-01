@@ -43,12 +43,12 @@ pub async fn markers(db: &PgPool, item: i32) -> sqlx::Result<Option<Markers>> {
     Ok((m.intro.is_some() || m.outro.is_some()).then_some(m))
 }
 
-/// The chapters of `file` as a part of `item`, in file order.
+/// The chapters of `file` as a part of `item`, in probe order.
 pub async fn chapters(db: &PgPool, item: i32, file: i32) -> sqlx::Result<Vec<Chapter>> {
     sqlx::query!(
         r#"SELECT "startSeconds" AS start, "endSeconds" AS "end", title FROM item_markers
            WHERE "itemId" = $1 AND "mediaFileId" = $2 AND kind = 'chapter'
-           ORDER BY "startSeconds", id"#,
+           ORDER BY id"#,
         item,
         file
     )

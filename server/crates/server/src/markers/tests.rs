@@ -885,7 +885,7 @@ async fn chapters_follow_the_probe_through_the_triggers(pool: PgPool) {
     let file = file_of(&c, ep).await;
     assert!(chapters_of(&c, ep, file).await.is_empty());
 
-    // a malformed entry is skipped, an empty title is null, the file order is kept
+    // a malformed entry is skipped, an empty title is kept, the probe order is kept
     set_chapters(
         &c,
         file,
@@ -899,7 +899,10 @@ async fn chapters_follow_the_probe_through_the_triggers(pool: PgPool) {
         ]),
     )
     .await;
-    let want = vec![(10.0, 20.0, Some("B".to_string())), (0.0, 10.0, None)];
+    let want = vec![
+        (10.0, 20.0, Some("B".to_string())),
+        (0.0, 10.0, Some(String::new())),
+    ];
     assert_eq!(chapters_of(&c, ep, file).await, want);
 
     // another key of the blob leaves them alone

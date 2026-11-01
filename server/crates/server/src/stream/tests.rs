@@ -574,10 +574,30 @@ async fn chapters_come_from_the_item_markers_in_order(pool: PgPool) {
     assert_eq!(
         b["chapters"],
         json!([
-            {"startSeconds": 0.0, "endSeconds": 5.0},
             {"startSeconds": 5.0, "endSeconds": 9.0, "title": "Second"},
+            {"startSeconds": 0.0, "endSeconds": 5.0},
         ])
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_no_item_plays_reports_no_chapters(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    sqlx::query("DELETE FROM item_parts")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let mut blob = stream_info();
+    blob["chapters"] = json!([{"startSeconds": 0.0, "endSeconds": 5.0}]);
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = $1 WHERE id = $2"#)
+        .bind(blob)
+        .bind(c.file)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, b) = info(&c, "").await;
+    assert_eq!(s, 201);
+    assert!(b.get("chapters").is_none());
 }
 
 #[sqlx::test(migrations = false)]

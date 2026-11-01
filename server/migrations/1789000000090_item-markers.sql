@@ -19,16 +19,17 @@ ALTER TABLE "item_markers"
   ADD COLUMN "title" text,
   ADD CONSTRAINT "CK_item_markers_kind" CHECK ("kind" IN ('chapter', 'intro', 'outro', 'recap', 'credits')),
   ADD CONSTRAINT "CK_item_markers_range" CHECK ("startSeconds" >= 0 AND "endSeconds" > "startSeconds"),
-  ADD CONSTRAINT "CK_item_markers_file" CHECK ("kind" = 'chapter' OR "mediaFileId" IS NULL),
+  ADD CONSTRAINT "CK_item_markers_file" CHECK (("kind" = 'chapter') = ("mediaFileId" IS NOT NULL)),
   ADD CONSTRAINT "FK_item_markers_part" FOREIGN KEY ("itemId", "mediaFileId")
     REFERENCES "item_parts" ("itemId", "mediaFileId") ON DELETE CASCADE;
 CREATE UNIQUE INDEX "UQ_item_markers_item_kind" ON "item_markers" ("itemId", "kind") WHERE "kind" <> 'chapter';
+CREATE INDEX "IDX_item_markers_item" ON "item_markers" ("itemId");
 CREATE INDEX "IDX_item_markers_file" ON "item_markers" ("mediaFileId") WHERE "mediaFileId" IS NOT NULL;
 
 CREATE FUNCTION probe_chapters(info jsonb)
 RETURNS TABLE (n bigint, start_s float8, end_s float8, title text)
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
-  SELECT c.n, (c.v->>'startSeconds')::float8, (c.v->>'endSeconds')::float8, NULLIF(c.v->>'title', '')
+  SELECT c.n, (c.v->>'startSeconds')::float8, (c.v->>'endSeconds')::float8, c.v->>'title'
     FROM jsonb_array_elements(CASE WHEN jsonb_typeof(info->'chapters') = 'array'
                                    THEN info->'chapters' ELSE '[]'::jsonb END) WITH ORDINALITY AS c(v, n)
    WHERE jsonb_typeof(c.v->'startSeconds') = 'number' AND jsonb_typeof(c.v->'endSeconds') = 'number'
@@ -49,7 +50,7 @@ CREATE TRIGGER item_parts_chapters AFTER INSERT ON "item_parts"
 
 CREATE FUNCTION media_files_chapters() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  DELETE FROM "item_markers" WHERE "mediaFileId" = NEW."id" AND "kind" = 'chapter' AND NOT "manual";
+  DELETE FROM "item_markers" WHERE "mediaFileId" = NEW."id" AND "kind" = 'chapter';
   INSERT INTO "item_markers" ("itemId", "mediaFileId", "kind", "startSeconds", "endSeconds", "title")
   SELECT p."itemId", p."mediaFileId", 'chapter', c.start_s, c.end_s, c.title
     FROM "item_parts" p, probe_chapters(NEW."streamInfo") c
