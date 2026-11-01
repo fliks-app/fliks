@@ -236,35 +236,27 @@ pub async fn toggle_season_watched(
         .map(drop);
     }
     log_uncompleted_episodes(db, user, media, Some(season)).await?;
-    let mut tx = db.begin().await?;
-    sqlx::query!(
-        r#"DELETE FROM playback_states
-           WHERE "userId" = $1
-             AND "itemId" IN (SELECT i.id FROM items i WHERE i."groupId" = $2
-                                 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id))"#,
-        user,
-        season
-    )
-    .execute(&mut *tx)
-    .await?;
     let inserted: Vec<i32> = sqlx::query_scalar!(
         r#"INSERT INTO playback_states
              ("userId", "itemId", "mediaFileId", "positionSeconds",
-              "durationSeconds", completed, "lastPlayedAt", "playedAt")
+              "durationSeconds", completed, "lastPlayedAt")
            SELECT $1::int4, e.id, f.id, 0,
-                  COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0), true, now(), NULL
+                  COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0), true, now()
            FROM items e
            CROSS JOIN LATERAL (SELECT mf.id, mf."streamInfo" FROM media_files mf
                                JOIN item_parts p ON p."mediaFileId" = mf.id
                                WHERE p."itemId" = e.id ORDER BY mf.id DESC LIMIT 1) f
            WHERE e."groupId" = $2
+           ON CONFLICT ("userId", "itemId") DO UPDATE SET
+             "mediaFileId" = EXCLUDED."mediaFileId", "positionSeconds" = 0,
+             "durationSeconds" = EXCLUDED."durationSeconds", completed = true,
+             "hiddenFromContinueWatching" = false, "lastPlayedAt" = now()
            RETURNING "itemId""#,
         user,
         season
     )
-    .fetch_all(&mut *tx)
+    .fetch_all(db)
     .await?;
-    tx.commit().await?;
     remove_watched_from_auto_playlists(db, user, media, Some(&inserted)).await;
     Ok(())
 }

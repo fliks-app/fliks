@@ -30,7 +30,7 @@ const DEBOUNCE_MS: i64 = 30_000;
 const SEEK_SECONDS: f64 = 30.0;
 const PRUNE_MS: i64 = DEBOUNCE_MS * 10;
 
-/// Last history write per `user:item`, per process and never persisted (rules 1, 13, 14).
+/// Last history write per `user:media:episode`, per process and never persisted (rules 1, 13, 14).
 #[derive(Default)]
 pub struct Debounce(Mutex<HashMap<String, (i64, f64)>>);
 
@@ -300,13 +300,18 @@ pub async fn heartbeat(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Response, AppError> {
     let user = a.user.id;
+    // An id outside i32 names no item, never the movie item.
     let episode = int(&body, "episodeId")
-        .and_then(|e| i32::try_from(e).ok())
+        .map(|e| i32::try_from(e).unwrap_or(-1))
         .filter(|e| *e != 0);
-    let item = super::db::item_of(&st.db, media, episode).await?;
-    if let Some(bound) = bound_file {
-        check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
-    }
+    let bound_item = match bound_file {
+        Some(bound) => {
+            let item = super::db::item_of(&st.db, media, episode).await?;
+            check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
+            Some(item)
+        }
+        None => None,
+    };
     let mut lost = false;
     let mut attributed = None;
     let mut state_changed = false;
@@ -334,10 +339,7 @@ pub async fn heartbeat(
         }
     }
     let history_user = attributed.unwrap_or(user);
-    let key = match item {
-        Some(item) => format!("{history_user}:{item}"),
-        None => format!("{history_user}:unresolved:{media}:{}", episode.unwrap_or(0)),
-    };
+    let key = format!("{history_user}:{media}:{}", episode.unwrap_or(0));
     let (pos, dur) = (
         num(&body, "positionSeconds").unwrap_or(0.0),
         num(&body, "durationSeconds").unwrap_or(0.0),
@@ -359,6 +361,10 @@ pub async fn heartbeat(
         return Err(AppError::bad_request(
             "mediaId and mediaFileId are required",
         ));
+    };
+    let item = match bound_item {
+        Some(item) => item,
+        None => super::db::item_of(&st.db, media, episode).await?,
     };
     let Some(item) = item else {
         return Ok(reply(lost, Some(None)));

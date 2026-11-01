@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id?\", m.title AS \"title?\", m.genres AS \"genres?: Json<Vec<String>>\"\n           FROM playback_states ps\n           LEFT JOIN items i ON i.id = ps.\"itemId\"\n           LEFT JOIN media m ON m.id = i.\"mediaId\"\n           WHERE ps.\"userId\" = $1 AND ps.completed = true\n             AND ($2::int[] IS NULL OR m.\"libraryId\" = ANY($2))\n           ORDER BY ps.\"lastPlayedAt\" DESC\n           LIMIT 15",
+  "query": "SELECT m.id AS \"id?\", m.title AS \"title?\", m.genres AS \"genres?: Json<Vec<String>>\"\n           FROM playback_states ps\n           JOIN items i ON i.id = ps.\"itemId\"\n           JOIN media m ON m.id = i.\"mediaId\"\n           WHERE ps.\"userId\" = $1 AND ps.completed = true\n             AND ($2::int[] IS NULL OR m.\"libraryId\" = ANY($2))\n           ORDER BY ps.\"lastPlayedAt\" DESC\n           LIMIT 15",
   "describe": {
     "columns": [
       {
@@ -49,5 +49,5 @@
       true
     ]
   },
-  "hash": "a6040db99108e7788b61dec66af5ae097a1a69ba8181364bfe9c0656c8eb1801"
+  "hash": "56f2603443cdeda074ed427262d5cbbdba4630c3f4a0a86a74373f1d99c23e29"
 }

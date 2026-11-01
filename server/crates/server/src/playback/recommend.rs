@@ -15,8 +15,8 @@ async fn window(
     let rows = sqlx::query!(
         r#"SELECT m.id AS "id?", m.title AS "title?", m.genres AS "genres?: Json<Vec<String>>"
            FROM playback_states ps
-           LEFT JOIN items i ON i.id = ps."itemId"
-           LEFT JOIN media m ON m.id = i."mediaId"
+           JOIN items i ON i.id = ps."itemId"
+           JOIN media m ON m.id = i."mediaId"
            WHERE ps."userId" = $1 AND ps.completed = true
              AND ($2::int[] IS NULL OR m."libraryId" = ANY($2))
            ORDER BY ps."lastPlayedAt" DESC

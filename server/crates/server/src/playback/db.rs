@@ -242,7 +242,7 @@ pub async fn continue_watching(
              ORDER BY "mediaId", gnum DESC, inum DESC
            ),
            in_progress AS (
-             SELECT DISTINCT ON ("mediaId") "mediaId", "itemId", "mediaFileId",
+             SELECT DISTINCT ON ("mediaId") id, "mediaId", "itemId", "mediaFileId",
                     "positionSeconds", "durationSeconds"
              FROM st
              WHERE NOT completed AND "positionSeconds" >= 5 AND "groupId" IS NOT NULL
@@ -264,11 +264,10 @@ pub async fn continue_watching(
              WHERE st."groupId" IS NULL AND NOT st.completed AND NOT st.hidden
                AND st."positionSeconds" >= 5
              UNION ALL
-             SELECT COALESCE(ps.id, 0), ip."mediaId", ip."itemId", ip."mediaFileId",
+             SELECT ip.id, ip."mediaId", ip."itemId", ip."mediaFileId",
                     ip."positionSeconds", ip."durationSeconds", us."lastPlayedAt"
              FROM in_progress ip
              JOIN user_series us ON us."mediaId" = ip."mediaId"
-             LEFT JOIN playback_states ps ON ps."userId" = $1 AND ps."itemId" = ip."itemId"
              UNION ALL
              SELECT COALESCE(ps.id, 0), ni."mediaId", ni."itemId", NULL::int,
                     COALESCE(ps."positionSeconds", 0), COALESCE(ps."durationSeconds", 0),
@@ -303,7 +302,7 @@ pub async fn continue_watching(
                SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
                ORDER BY (p."mediaFileId" = c."mediaFileId") DESC NULLS LAST, p."mediaFileId" DESC
                LIMIT 1) f ON true
-             WHERE e."groupId" IS NULL OR f.id IS NOT NULL
+             WHERE f.id IS NOT NULL
            ) x
            ORDER BY date_trunc('milliseconds', x."lastPlayedAt") DESC, x.kind, x."mediaId"
            LIMIT $3"#,

@@ -871,7 +871,7 @@ async fn m1789000070_keys_progress_and_history_by_item(pool: PgPool) {
             (4, 2, 2, NULL, NULL, 60, '2020-01-01'),
             (5, 2, 1, NULL, 10, 70, '2020-01-01');
           INSERT INTO playback_history ("userId", "mediaId", "episodeId") VALUES
-            (1, 1, NULL), (1, 2, 10), (2, 3, 11), (2, 2, NULL)"#,
+            (1, 1, NULL), (1, 2, 10), (2, 3, 11), (2, 2, NULL), (2, 1, 10)"#,
     )
     .await;
     apply_only(&pool, 1_789_000_000_070).await;
@@ -895,7 +895,8 @@ async fn m1789000070_keys_progress_and_history_by_item(pool: PgPool) {
         r#"SELECT "userId", "itemId" FROM playback_history ORDER BY id"#,
     )
     .await;
-    assert_eq!(history, [(1, movie_item), (1, 10), (2, 11)]);
+    // The last row is an episode of another media: it keeps its episode as item.
+    assert_eq!(history, [(1, movie_item), (1, 10), (2, 11), (2, 10)]);
     let bumped: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM playback_states WHERE "updatedAt" > '2021-01-01'"#,
     )

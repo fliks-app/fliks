@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states\n             (\"userId\", \"itemId\", \"mediaFileId\", \"positionSeconds\",\n              \"durationSeconds\", completed, \"lastPlayedAt\")\n           SELECT $1::int4, e.id, f.id, 0,\n                  COALESCE((f.\"streamInfo\"->>'durationSeconds')::float8, 0), true, now()\n           FROM items e\n           CROSS JOIN LATERAL (SELECT mf.id, mf.\"streamInfo\" FROM media_files mf\n                               JOIN item_parts p ON p.\"mediaFileId\" = mf.id\n                               WHERE p.\"itemId\" = e.id ORDER BY mf.id DESC LIMIT 1) f\n           WHERE e.\"groupId\" = $2\n           ON CONFLICT (\"userId\", \"itemId\") DO UPDATE SET\n             \"mediaFileId\" = EXCLUDED.\"mediaFileId\", \"positionSeconds\" = 0,\n             \"durationSeconds\" = EXCLUDED.\"durationSeconds\", completed = true,\n             \"hiddenFromContinueWatching\" = false, \"lastPlayedAt\" = now()\n           RETURNING \"itemId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "itemId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "itemId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "20b46edfdf83b10f81201ff19998432358cfa41173ef75b149a968bc0ee5f7a2"
+}

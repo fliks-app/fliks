@@ -15,7 +15,7 @@ What a media is made of. A movie is one item; a series is items (its episodes) g
 
 7. `media::items::create_shell(conn, media, kind)` inserts the media's `video` edition and, when the kind has no seasons, its item (`monitored = true`, everything else null). Every `INSERT INTO media` calls it in the same transaction: `POST /api/media`, the title import, the unmatched media a disk import creates, and the Radarr and Sonarr importers. A route that creates a media without it breaks rule 4.
 8. A group is inserted with its `"mediaId"`; an item of a series with the `"groupId"`, the group's `"mediaId"` and the media's `video` edition (`media::items::video_edition`).
-9. `PUT /api/media/:id` changing `type` follows it (`media::items::follow_kind`): a media that becomes a series loses its ungrouped item; a media that becomes a movie gains one if it has none. Groups and grouped items are kept.
+9. `PUT /api/media/:id` changing `type` follows it (`media::items::follow_kind`): a media that becomes a series loses its ungrouped item, and with it the progress and history of that item; a media that becomes a movie gains one if it has none. Groups and grouped items are kept.
 10. Deleting a media removes its editions, groups and items by cascade.
 
 ## Reads and wire

@@ -460,6 +460,41 @@ async fn engine_answers_decide_the_session_and_the_ownership(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_pair_that_names_no_item_writes_nothing(pool: PgPool) {
+    let c = ctx(pool).await;
+    let series: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type) VALUES ('s', 'series') RETURNING id"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let beat = |media: i32, episode: Option<i64>| {
+        let mut b = json!({"positionSeconds": 50, "durationSeconds": 3600, "mediaFileId": c.file});
+        if let Some(e) = episode {
+            b["episodeId"] = json!(e);
+        }
+        c.put(media, b)
+    };
+    for (media, episode) in [
+        (series, None),
+        (c.media, Some(99_999)),
+        (c.media, Some(5_000_000_000)),
+        (999_999, None),
+    ] {
+        assert_eq!(
+            beat(media, episode).await,
+            (200, r#"{"state":null}"#.to_owned()),
+            "{media} {episode:?}"
+        );
+    }
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM playback_states")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_file_bound_stream_token_beats_only_for_its_own_file(pool: PgPool) {
     let mut c = ctx(pool).await;
     let other_media: i32 =
