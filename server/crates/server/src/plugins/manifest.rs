@@ -6,8 +6,7 @@ use serde_json::{Map, Value};
 
 pub const SUPPORTED_PLUGIN_API_VERSIONS: [u32; 1] = [3];
 
-/// The kinds and levels a `ui.releasePicker` may name (`plugins.md` rule 5).
-const PICKER_KINDS: [&str; 5] = ["movie", "series", "book", "comic", "album"];
+/// The levels a `ui.releasePicker` may name per kind (`plugins.md` rule 5).
 const PICKER_LEVELS: [&str; 3] = ["work", "group", "item"];
 
 /// Every `(kind, level, pair)` of a `ui.releasePicker`.
@@ -29,7 +28,8 @@ fn shaped_picker(rp: &Value) -> bool {
         return false;
     };
     kinds.iter().all(|(kind, levels)| {
-        PICKER_KINDS.contains(&kind.as_str())
+        (1..=16).contains(&kind.len())
+            && kind.bytes().all(|b| b.is_ascii_lowercase())
             && levels.as_object().is_some_and(|l| {
                 !l.is_empty()
                     && l.iter().all(|(level, pair)| {

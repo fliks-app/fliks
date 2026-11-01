@@ -447,15 +447,15 @@ pub async fn candidates(
         items: vec![],
         cursor: None,
     };
-    let Ok(kind) = q
-        .kind
-        .as_deref()
-        .map(crate::plugins::served_kind)
-        .transpose()
-    else {
-        return Ok(empty());
+    let kind = match q.kind.as_deref().map(MediaKind::parse) {
+        Some(None) => {
+            tracing::debug!(kind = ?q.kind, "candidates: kind not served, empty page");
+            return Ok(empty());
+        }
+        parsed => parsed.flatten(),
     };
     if q.family.is_some_and(|f| crate::plugins::served(f).is_err()) {
+        tracing::debug!(family = ?q.family, "candidates: family not served, empty page");
         return Ok(empty());
     }
     let limit = q.limit.clamp(1, MAX_LIMIT) as usize;

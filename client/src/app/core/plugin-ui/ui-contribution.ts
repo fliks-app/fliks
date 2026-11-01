@@ -172,7 +172,7 @@ export type ReleasePickerLevel = 'work' | 'group' | 'item';
 
 /** Routes the core release picker calls per kind and level, relative to the plugin; `:id`, `:seasonId`,
  *  `:episodeId` are substituted. A level a plugin does not declare never opens the picker.
- *  A 6.x server sends `byKind` and the three pairs; a 5.x server sends the three pairs only. */
+ *  A 6.x server sends `byKind`, and the three pairs when all three are declared; a 5.x server sends the three pairs only. */
 export interface ReleasePickerRoutes {
   byKind?: Partial<Record<ReleasePickerKind, Partial<Record<ReleasePickerLevel, ReleasePickerPair>>>>;
   movie?: ReleasePickerPair;

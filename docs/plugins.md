@@ -442,7 +442,8 @@ one of those sets, open an issue. A proposal that can be acted on says:
 4. **Whether it can avoid a break.** The host links one WIT package version per `pluginApi`, so any
    change to a record or a function, an added field included, is a `pluginApi` bump that orphans every
    plugin that has not republished, and waits for a scheduled break. The enum `family`
-   lists every case the roadmap foresees and `kind` is a string, for that reason.
+   is a modality, and `video`, `audio`, `text`, `image` cover every one a library can hold; `kind` is an
+   open product taxonomy and so a string.
 
 Items 3 and 4 are what decide the answer. A proposal whose worst case is bounded and that rides a
 scheduled break is a small change; one that widens an existing scope is a security review.

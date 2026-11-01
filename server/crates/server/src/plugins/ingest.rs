@@ -71,9 +71,16 @@ pub async fn run(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let media_id = r.media_id as i32;
-    let edition = crate::media::items::video_edition(&st.db, media_id)
-        .await
-        .map_err(db_err)?;
+    let edition = match crate::media::items::video_edition(&st.db, media_id).await {
+        Ok(edition) => edition,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(host_err(
+                "ERR_NOT_FOUND",
+                format!("Media #{media_id} not found"),
+            ));
+        }
+        Err(e) => return Err(db_err(e)),
+    };
     let guard = st.ingest.media.lock(media_id).await;
     let out = library::ingest(
         st,
@@ -98,7 +105,13 @@ pub async fn run(
     if out.imported.is_empty() && !out.errors.is_empty() {
         return Err(host_err("ERR", out.errors.join("; ")));
     }
-    let mut items = item_ids(st, &out.imported).await?;
+    let mut items = item_ids(st, &out.imported).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            "library.ingest: item ids of media {media_id} unreadable: {}",
+            e.message
+        );
+        HashMap::new()
+    });
     if let Some(first) = out.imported.first() {
         let title: Option<String> = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
             .bind(media_id)

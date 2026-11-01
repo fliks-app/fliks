@@ -28,10 +28,25 @@ pub fn video(u: Option<&t::UnitRef>) -> Result<(Option<u32>, Option<u32>), HostE
     if u.label.is_some() && u.number.is_none() {
         return Err(host_err("ERR_VALIDATION", "a unit label needs its number"));
     }
-    u.end_number.map(|n| whole(n, "end-number")).transpose()?;
+    let end = u.end_number.map(|n| whole(n, "end-number")).transpose()?;
     let number = u.number.map(|n| whole(n, "number")).transpose()?;
     if number.is_some() && u.group.is_none() {
         return Err(host_err("ERR_VALIDATION", "a unit number needs its group"));
+    }
+    match (number, end) {
+        (None, Some(_)) => {
+            return Err(host_err(
+                "ERR_VALIDATION",
+                "a unit end-number needs its number",
+            ));
+        }
+        (Some(n), Some(e)) if e < n => {
+            return Err(host_err(
+                "ERR_VALIDATION",
+                "a unit end-number is below its number",
+            ));
+        }
+        _ => {}
     }
     Ok((u.group, number))
 }
@@ -92,6 +107,21 @@ mod tests {
             ..unit(Some(1), Some(1.0))
         };
         assert!(video(Some(&end)).is_err());
+        let range = |group, number, end| t::UnitRef {
+            end_number: end,
+            ..unit(group, number)
+        };
+        assert_eq!(
+            video(Some(&range(Some(1), Some(2.0), Some(4.0)))).unwrap(),
+            (Some(1), Some(2))
+        );
+        for bad in [
+            range(Some(1), None, Some(4.0)),
+            range(None, None, Some(4.0)),
+            range(Some(1), Some(4.0), Some(2.0)),
+        ] {
+            assert_eq!(video(Some(&bad)).unwrap_err().code, "ERR_VALIDATION");
+        }
     }
 
     #[test]

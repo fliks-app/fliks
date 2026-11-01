@@ -35,7 +35,6 @@ use crate::ingest::KeyedLocks;
 use crate::state::AppState;
 use crate::sync::{MutexExt, RwLockExt};
 use fliks_domain::media::family::Family;
-use fliks_domain::media::kind::MediaKind;
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
@@ -49,12 +48,6 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 pub use runtime::{HealthReport, HostError, HttpRequest, HttpResponse, Principal};
-
-/// The kind a call names: `movie` and `series` are served, any other string is not.
-pub fn served_kind(k: &str) -> Result<MediaKind, HostError> {
-    MediaKind::parse(k)
-        .ok_or_else(|| imports::host_err("unsupported-kind", format!("kind \"{k}\" is not served")))
-}
 
 impl From<Family> for runtime::fliks::plugin::types::Family {
     fn from(f: Family) -> Self {
@@ -630,12 +623,7 @@ mod kind_tests {
     use super::*;
 
     #[test]
-    fn unserved_kinds_and_families_are_named_in_the_refusal() {
-        let kind = |k| served_kind(k).unwrap_err();
-        assert_eq!(kind("book").code, "unsupported-kind");
-        assert_eq!(kind("book").message, "kind \"book\" is not served");
-        assert_eq!(kind("artist").message, "kind \"artist\" is not served");
-        assert_eq!(served_kind("series").unwrap(), MediaKind::Series);
+    fn an_unserved_family_is_named_in_the_refusal() {
         let family = served(w::Family::Audio).unwrap_err();
         assert_eq!(family.code, "unsupported-family");
         assert_eq!(family.message, "family \"audio\" is not served");
