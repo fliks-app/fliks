@@ -1,5 +1,6 @@
 //! Pure rules of the catalog read routes (`docs/spec/media-query.md`).
 pub mod bonus;
+pub mod family;
 pub mod kind;
 pub mod path;
 pub mod query;

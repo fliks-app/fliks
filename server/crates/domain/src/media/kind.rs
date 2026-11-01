@@ -3,6 +3,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use super::family::Family;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MediaKind {
@@ -36,6 +38,13 @@ impl MediaKind {
         match self {
             Self::Movie => false,
             Self::Series => true,
+        }
+    }
+
+    /// The families a media of this kind is wished in: one want each.
+    pub const fn families(self) -> &'static [Family] {
+        match self {
+            Self::Movie | Self::Series => &[Family::Video],
         }
     }
 
