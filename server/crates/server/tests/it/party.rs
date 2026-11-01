@@ -29,7 +29,12 @@ async fn movie_items(pool: &PgPool) {
              WHERE type = 'movie' AND NOT EXISTS (SELECT 1 FROM items WHERE "mediaId" = m.id);
            INSERT INTO items (id, "mediaId", "editionId")
              SELECT 1000 + id, id, 1000 + id FROM media m
-             WHERE type = 'movie' AND NOT EXISTS (SELECT 1 FROM items WHERE "mediaId" = m.id)"#,
+             WHERE type = 'movie' AND NOT EXISTS (SELECT 1 FROM items WHERE "mediaId" = m.id);
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
+             SELECT (SELECT min(i.id) FROM items i WHERE i."mediaId" = f."mediaId" AND i."groupId" IS NULL),
+                    f.id, f."mediaId"
+             FROM media_files f JOIN media m ON m.id = f."mediaId"
+             WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaFileId" = f.id)"#,
     )
     .execute(pool)
     .await
@@ -2993,6 +2998,7 @@ async fn a_programme_holds_five_hundred_items_whoever_adds_them(pool: PgPool) {
     .execute(&c.pool)
     .await
     .unwrap();
+    movie_items(&c.pool).await;
     let url = bare_party(&c, &a, &[]).await;
     let rest: Vec<i32> = (2..=501).collect();
     assert_eq!(put_programme(&c, &url, &a, &rest).await.0, 200);

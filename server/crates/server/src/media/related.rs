@@ -83,7 +83,7 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
        m.rating, m.genres, meta.keywords AS "keywords?",
        EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
 FROM media m LEFT JOIN movie_details meta ON meta."mediaId" = m.id
-WHERE m."libraryId" = $1 AND m.type = 'movie' AND m.id != $2
+WHERE m."libraryId" = $1 AND m.type = $7 AND m.id != $2
   AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))
        OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))
        OR m.id = ANY($5))
@@ -97,7 +97,8 @@ ORDER BY m.id"#,
         &genres,
         &keywords,
         &same_director,
-        src.collection_id
+        src.collection_id,
+        src.kind
     )
     .fetch_all(db)
     .await?;

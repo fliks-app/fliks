@@ -6,40 +6,12 @@ use super::{
 };
 use chrono::{NaiveDate, Utc};
 use fliks_domain::{
-    media::search::prefix_tsquery,
+    media::{kind::MediaKind, search::prefix_tsquery},
     release::parsing::quality::{APP_QUALITIES, rank_from_quality_string},
 };
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use std::collections::HashMap;
-
-/// Rule 20 verbatim; `uid` is the authenticated user's id, never user text.
-pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
-    format!(
-        r#"
-  SELECT DISTINCT i."mediaId" AS id FROM playback_states ps
-  INNER JOIN items i ON i.id = ps."itemId"
-  INNER JOIN media m ON m.id = i."mediaId"
-  WHERE ps."userId" = {uid} AND ps.completed = true AND m.type = 'movie'
-  UNION
-  SELECT m2.id FROM media m2
-  WHERE m2.type = 'series'
-  AND EXISTS (
-    SELECT 1 FROM item_groups s
-    JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM item_groups s
-    JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-    AND NOT EXISTS (
-      SELECT 1 FROM playback_states ps2
-      WHERE ps2."userId" = {uid} AND ps2."itemId" = e.id AND ps2.completed = true
-    )
-  )"#
-    )
-}
 
 /// Rule 22's `<ME>`: a monitored season holds a monitored, aired, not-on-disk episode.
 const MISSING_EPISODE: &str = r#"EXISTS (
@@ -192,8 +164,11 @@ fn push_scope(
         None => {}
     }
     if p.exclude_watched || p.only_watched {
-        let op = if p.only_watched { "IN" } else { "NOT IN" };
-        qb.push(format!(" AND media.id {op} ({})", watched_sql(uid)));
+        let not = if p.only_watched { "" } else { "NOT " };
+        qb.push(format!(
+            " AND {not}({})",
+            super::watched::predicate(uid, "media")
+        ));
     }
     if p.requested_by_me {
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);
@@ -229,8 +204,8 @@ fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
         .push(") > 0.8)");
 }
 
-/// Rule 26 in SQL: a media without a known cutoff never reaches here (inner join); movies compare their best file,
-/// series each monitored episode of seasons > 0 not shadowed by a range (pooled across seasons).
+/// Rule 26 in SQL: a media without a known cutoff never reaches here (inner join); a kind without seasons compares
+/// its best file, a seasonal kind each monitored episode of seasons > 0 not shadowed by a range (pooled across seasons).
 fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
     let rank = |qb: &mut QueryBuilder<Postgres>, files_on: &str| {
         qb.push("COALESCE((SELECT MAX(qr.rank) FROM media_files f JOIN unnest(");
@@ -241,14 +216,16 @@ fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
             "::int4[]) AS qr(q, rank) ON qr.q = f.quality WHERE {files_on}), 0)"
         ));
     };
-    qb.push(" AND ((media.type = 'movie' AND ");
-    rank(qb, "f.\"mediaId\" = media.id");
-    qb.push(" < c.cr) OR (media.type = 'series' AND EXISTS (SELECT 1 FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0 AND e.monitored = true AND ");
+    qb.push(" AND CASE WHEN media.type = ANY(")
+        .push_bind(MediaKind::seasonal_names())
+        .push(") THEN EXISTS (SELECT 1 FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0 AND e.monitored = true AND ");
     rank(
         qb,
         "EXISTS (SELECT 1 FROM item_parts p WHERE p.\"mediaFileId\" = f.id AND p.\"itemId\" = e.id)",
     );
-    qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM item_groups s2 JOIN items o ON o.\"groupId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"number\" > 0 AND o.monitored = true AND o.\"endNumber\" IS NOT NULL AND e.\"number\" > o.\"number\" AND e.\"number\" <= o.\"endNumber\")))) ");
+    qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM item_groups s2 JOIN items o ON o.\"groupId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"number\" > 0 AND o.monitored = true AND o.\"endNumber\" IS NOT NULL AND e.\"number\" > o.\"number\" AND e.\"number\" <= o.\"endNumber\")) ELSE ");
+    rank(qb, "f.\"mediaId\" = media.id");
+    qb.push(" < c.cr END ");
 }
 
 fn order_sql(p: &Search) -> &'static str {
@@ -332,46 +309,18 @@ async fn attach_watched(
     ids: &[i32],
     uid: i32,
 ) -> Result<(), sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"SELECT m.id::int AS "id!",
-  (
-    (m.type = 'movie' AND EXISTS (
-      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
-      WHERE ps."userId" = $1 AND i."mediaId" = m.id AND ps.completed = true
-    ))
-    OR
-    (m.type = 'series'
-      AND EXISTS (
-        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-          AND NOT EXISTS (
-            SELECT 1 FROM playback_states ps2
-            WHERE ps2."userId" = $1 AND ps2."itemId" = e.id AND ps2.completed = true
-          )
-      )
-    )
-  ) AS "watched!",
-  CASE m.type WHEN 'movie' THEN COALESCE((
-    SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
-    FROM playback_states ps JOIN items i ON i.id = ps."itemId"
-    WHERE ps."userId" = $1 AND i."mediaId" = m.id AND i."groupId" IS NULL
-      AND ps.completed = false AND ps."durationSeconds" > 0
-    ORDER BY ps."lastPlayedAt" DESC LIMIT 1
-  ), 0) WHEN 'series' THEN 0 END AS "progress!"
-FROM media m
-WHERE m.id = ANY($2::int[])"#,
-        uid,
-        ids
-    )
+    let rows: Vec<(i32, bool, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT m.id::int, ({}), ({}) FROM media m WHERE m.id = ANY($2::int[])",
+        super::watched::predicate("$1", "m"),
+        super::watched::progress("$1", "m")
+    )))
+    .bind(uid)
+    .bind(ids)
     .fetch_all(db)
     .await?;
     let by_id: HashMap<i32, (bool, i32)> = rows
         .into_iter()
-        .map(|r| (r.id, (r.watched, r.progress)))
+        .map(|(id, watched, progress)| (id, (watched, progress)))
         .collect();
     for (item, id) in data.iter_mut().zip(ids) {
         let (watched, progress) = by_id.get(id).copied().unwrap_or((false, 0));
@@ -405,7 +354,10 @@ pub async fn recently_added(
         qb.push(" AND media.\"libraryId\" = ").push_bind(l);
     }
     if p.exclude_watched {
-        qb.push(format!(" AND media.id NOT IN ({})", watched_sql(uid)));
+        qb.push(format!(
+            " AND NOT ({})",
+            super::watched::predicate(uid, "media")
+        ));
     }
     if p.requested_by_me {
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);

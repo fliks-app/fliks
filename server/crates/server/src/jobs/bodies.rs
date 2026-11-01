@@ -23,8 +23,11 @@ pub async fn run(st: &AppState, name: &str) -> Outcome {
         "Backup" => backup_job(st).await,
         "RefreshMetadata" => refresh_metadata(st).await,
         "RefreshMissingMetadata" => refresh_missing(st).await,
-        "RescanAll" => rescan(st, name, ALL_MEDIA).await,
-        "RescanMissingFiles" => rescan(st, name, MISSING_FILES).await,
+        "RescanAll" => rescan(st, name, sqlx::query_as(ALL_MEDIA)).await,
+        "RescanMissingFiles" => {
+            let select = sqlx::query_as(MISSING_FILES).bind(MediaKind::seasonal_names());
+            rescan(st, name, select).await
+        }
         "GenerateSprites" => sprites(st, name, true).await,
         "GenerateMissingSprites" => sprites(st, name, false).await,
         "DetectMarkers" => markers(st, name, false).await,
@@ -97,11 +100,12 @@ async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
         r#"SELECT m.id, m.title, m."type" AS kind, m.status::text AS status, dates.release_date,
                   m.year, m."metadataRefreshedAt" AS refreshed_at, m."posterUrl" AS poster, m.overview,
                   ids.tmdb AS tmdb, ids.tvdb AS tvdb, ids.imdb AS imdb,
-                  (m."type" = 'series' AND NOT EXISTS (SELECT 1 FROM item_groups s WHERE s."mediaId" = m.id)) AS no_seasons
+                  (m."type" = ANY($1) AND NOT EXISTS (SELECT 1 FROM item_groups s WHERE s."mediaId" = m.id)) AS no_seasons
            FROM media m {} {} ORDER BY m.id"#,
         crate::media::external_ids::ids_join("m"),
         crate::media::details::dates_join("m")
     )))
+    .bind(MediaKind::seasonal_names())
     .fetch_all(db)
     .await?;
     let total = all.len();
@@ -219,13 +223,16 @@ const ALL_MEDIA: &str = r#"SELECT id, title, "type" FROM media ORDER BY id"#;
 const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type" FROM media m JOIN libraries l ON l.id = m."libraryId"
     WHERE l.path IS NOT NULL AND l.path <> '' AND (
         (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AND COALESCE(m."folderName", '') <> '')
-        OR (m."type" = 'series'
+        OR (m."type" = ANY($1)
             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id
                 AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaFileId" = f.id))))
     ORDER BY m.id"#;
 
-async fn rescan(st: &AppState, job: &str, select: &'static str) -> Outcome {
-    let media = sqlx::query_as::<_, (i32, String, String)>(select)
+type MediaQuery<'q> =
+    sqlx::query::QueryAs<'q, sqlx::Postgres, (i32, String, String), sqlx::postgres::PgArguments>;
+
+async fn rescan(st: &AppState, job: &str, select: MediaQuery<'_>) -> Outcome {
+    let media = select
         .fetch_all(&st.db)
         .await
         .and_then(|rows| {
@@ -409,7 +416,7 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
     let child = |s: &ScanSeason| format!("IntroDetection:{}", s.id);
     let subject = |s: &ScanSeason| Subject {
         season_number: Some(i64::from(s.season_number)),
-        ..media_subject(s.media_id, &s.media_title, Some(MediaKind::Series))
+        ..media_subject(s.media_id, &s.media_title, Some(s.kind))
     };
     for s in &seasons {
         st.hub.activity().upsert_pending(

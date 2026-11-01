@@ -113,7 +113,7 @@ ORDER BY m.id"#,
         let rows = sqlx::query!(
             r#"SELECT ep.id AS "id!", ep."number" AS "episode_number!", ep.title, to_char(ep."airDate", 'YYYY-MM-DD') AS "date!",
   season."number" AS "season_number!", media.id AS "media_id!", media.title AS "media_title!",
-  media."posterUrl" AS poster_url, media."fanartUrl" AS fanart_url, media.status::text AS "status!", media.year,
+  media."posterUrl" AS poster_url, media."fanartUrl" AS fanart_url, media.status::text AS "status!", media.year, media.type AS "kind!",
   EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ep.id) AS "on_disk!"
 FROM items ep
 INNER JOIN item_groups season ON season.id = ep."groupId"
@@ -133,7 +133,7 @@ ORDER BY ep."airDate" ASC, ep.id ASC"#,
         .await
         .map_err(date_error)?;
         out.extend(rows.into_iter().map(|e| {
-            json!({"id": e.id, "mediaId": e.media_id, "title": e.media_title, "type": MediaKind::Series, "event": "airing",
+            json!({"id": e.id, "mediaId": e.media_id, "title": e.media_title, "type": e.kind, "event": "airing",
                 "date": e.date, "posterUrl": e.poster_url, "fanartUrl": e.fanart_url, "status": e.status,
                 "year": e.year, "seasonNumber": e.season_number, "episodeNumber": e.episode_number,
                 "episodeTitle": e.title, "hasFile": e.on_disk})

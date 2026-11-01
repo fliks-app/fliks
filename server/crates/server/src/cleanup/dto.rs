@@ -3,6 +3,7 @@ use crate::http::{
     AppError,
     validate::{Check, object},
 };
+use fliks_domain::media::kind::MediaKind;
 use serde_json::{Map, Value, json};
 
 type Res<T> = Result<T, AppError>;
@@ -11,10 +12,23 @@ type Res<T> = Result<T, AppError>;
 const MAX_DAYS: i32 = 36_500;
 
 pub const ACTIONS: [&str; 3] = ["delete", "delete_files_unmonitor", "none"];
-pub const LEVELS: [&str; 4] = ["movie", "series", "season", "episode"];
+/// The levels below a media: its seasons and episodes, only for kinds made of them.
+const ITEM_LEVELS: [&str; 2] = ["season", "episode"];
+
+/// Every kind names a whole-media level, then the item levels of the kinds with seasons.
+pub fn levels_allowed() -> Vec<&'static str> {
+    let mut all = MediaKind::NAMES.to_vec();
+    all.extend(ITEM_LEVELS);
+    all
+}
+
+/// Levels that name a media of a kind without seasons.
+fn flat(level: &str) -> bool {
+    MediaKind::parse(level).is_some_and(|k| !k.has_seasons())
+}
 
 pub fn scoped(level: &str) -> bool {
-    level == "season" || level == "episode"
+    ITEM_LEVELS.contains(&level)
 }
 
 #[derive(Debug)]
@@ -105,9 +119,10 @@ pub fn rule(v: Value) -> Res<Rule> {
     })
 }
 
-/// Canonical order; null or absent is `["movie"]`; at most one of series, season, episode.
+/// Canonical order; null or absent is `["movie"]`; at most one seasonal level (kind, season, episode).
 fn levels(c: &mut Check, o: &Map<String, Value>) -> Vec<String> {
-    let default = || vec!["movie".to_owned()];
+    let default = || vec![MediaKind::Movie.to_string()];
+    let allowed = levels_allowed();
     let a = match o.get("levels") {
         None | Some(Value::Null) => return default(),
         Some(Value::Array(a)) => a,
@@ -122,24 +137,27 @@ fn levels(c: &mut Check, o: &Map<String, Value>) -> Vec<String> {
     }
     let mut got: Vec<&str> = vec![];
     for v in a {
-        match v.as_str().filter(|s| LEVELS.contains(s)) {
+        match v.as_str().filter(|s| allowed.contains(s)) {
             Some(s) if got.contains(&s) => {
                 c.errs.push("levels's elements must be unique".into());
             }
             Some(s) => got.push(s),
             None => c.errs.push(format!(
                 "each value in levels must be one of the following values: {}",
-                LEVELS.join(", ")
+                allowed.join(", ")
             )),
         }
     }
-    if got.iter().filter(|l| **l != "movie").count() > 1 {
+    if got.iter().filter(|l| !flat(l)).count() > 1 {
+        let mut names: Vec<&str> = MediaKind::seasonal_names();
+        names.extend(ITEM_LEVELS);
+        let last = names.pop().unwrap_or_default();
         c.err(
             "levels",
-            "must hold at most one of series, season and episode",
+            &format!("must hold at most one of {} and {last}", names.join(", ")),
         );
     }
-    let v: Vec<String> = LEVELS
+    let v: Vec<String> = allowed
         .iter()
         .filter(|l| got.contains(l))
         .map(|l| (*l).to_owned())
