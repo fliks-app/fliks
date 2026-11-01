@@ -35,6 +35,23 @@ export class LibraryWizardMediaComponent {
     if (picked) this.state.formPath.set(picked);
   }
 
+  addExtra() {
+    this.state.formExtraPaths.update((list) => [...list, '']);
+  }
+
+  setExtra(index: number, path: string) {
+    this.state.formExtraPaths.update((list) => list.map((p, i) => (i === index ? path : p)));
+  }
+
+  removeExtra(index: number) {
+    this.state.formExtraPaths.update((list) => list.filter((_, i) => i !== index));
+  }
+
+  async browseExtra(index: number) {
+    const picked = await this.folderPicker.open(this.state.formExtraPaths()[index]?.trim() ?? '');
+    if (picked) this.setExtra(index, picked);
+  }
+
   async scan() {
     const path = this.state.formPath().trim();
     if (!path) return;

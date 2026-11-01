@@ -36,17 +36,16 @@
                     <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>
                   }
                 </div>
-                @if (lib.path) {
-                  <p class="text-xs text-base-content/60 mt-2">
-                    {{ formatBytes(freeSpace(lib)) }} / {{ formatBytes(totalCapacity(lib)) }}
-                  </p>
+                @for (folder of lib.folders; track folder.id) {
                   <p class="font-mono text-xs text-base-content/60 mt-1 truncate">
-                    {{ lib.path }}
-                    @if (lib.disk && !lib.disk.accessible) {
+                    {{ folder.path }}
+                    @if (folder.disk?.accessible) {
+                      <span class="font-sans ml-2">{{ formatBytes(folder.disk!.freeSpace) }} / {{ formatBytes(folder.disk!.totalSpace) }}</span>
+                    } @else if (folder.disk) {
                       <span class="badge badge-error badge-sm ml-2">{{ 'settings.libraries.inaccessible' | translate }}</span>
                     }
                   </p>
-                } @else {
+                } @empty {
                   <p class="text-xs text-base-content/50 italic mt-2">{{ 'settings.libraries.no_path' | translate }}</p>
                 }
               </div>

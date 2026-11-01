@@ -1,0 +1,155 @@
+<div class="flex flex-col gap-4">
+  <p class="text-sm text-base-content/60">{{ 'settings.libraries.folders_hint' | translate }}</p>
+
+  @if (folders().length === 0) {
+    <p class="text-sm text-base-content/50 italic">{{ 'settings.libraries.no_path' | translate }}</p>
+  } @else {
+    <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-2">
+      @for (folder of folders(); track folder.id; let i = $index; let last = $last) {
+        <div
+          cdkDrag
+          [cdkDragDisabled]="busy() || editId() !== null"
+          class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+        >
+          <button
+            type="button"
+            cdkDragHandle
+            class="cursor-grab text-base-content/40 hover:text-base-content/70"
+            [attr.aria-label]="'settings.libraries.folder_drag' | translate"
+          >
+            <svg lucideGripVertical class="h-4 w-4"></svg>
+          </button>
+
+          @if (editId() === folder.id) {
+            <input
+              type="text"
+              class="input input-bordered input-sm flex-1 min-w-0 font-mono"
+              [ngModel]="editPath()"
+              (ngModelChange)="editPath.set($event)"
+              (keydown.enter)="saveEdit(folder)"
+              (keydown.escape)="editId.set(null)"
+              [attr.aria-label]="'settings.libraries.path' | translate"
+            />
+            <button type="button" class="btn btn-outline btn-sm" (click)="browseEdit()">
+              {{ 'common.browse' | translate }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" (click)="saveEdit(folder)" [disabled]="busy()">
+              {{ 'common.save' | translate }}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" (click)="editId.set(null)">
+              {{ 'common.cancel' | translate }}
+            </button>
+          } @else {
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-mono text-sm truncate">{{ folder.path }}</span>
+                @if (i === 0) {
+                  <span class="badge badge-primary badge-sm shrink-0">{{ 'settings.libraries.folder_default' | translate }}</span>
+                }
+                @if (folder.disk && !folder.disk.accessible) {
+                  <span class="badge badge-error badge-sm shrink-0">{{ 'settings.libraries.inaccessible' | translate }}</span>
+                }
+              </div>
+              <p class="text-xs text-base-content/60 mt-0.5">
+                @if (folder.disk?.accessible) {
+                  {{ 'settings.libraries.folder_space' | translate: {
+                    free: formatBytes(folder.disk!.freeSpace),
+                    total: formatBytes(folder.disk!.totalSpace)
+                  } }}
+                  ·
+                }
+                {{ 'settings.libraries.media_count' | translate: { count: folder.mediaCount } }}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="busy() || i === 0"
+              (click)="reorder(i, i - 1)"
+              [attr.aria-label]="'settings.libraries.folder_move_up' | translate"
+            >
+              <svg lucideArrowUp class="h-4 w-4"></svg>
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="busy() || last"
+              (click)="reorder(i, i + 1)"
+              [attr.aria-label]="'settings.libraries.folder_move_down' | translate"
+            >
+              <svg lucideArrowDown class="h-4 w-4"></svg>
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="busy()"
+              (click)="startEdit(folder)"
+              [attr.aria-label]="'settings.libraries.folder_edit' | translate"
+            >
+              <svg lucidePencil class="h-4 w-4"></svg>
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square text-error"
+              [disabled]="busy()"
+              (click)="remove(folder)"
+              [attr.aria-label]="'settings.libraries.folder_remove' | translate"
+            >
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <div class="flex flex-wrap items-center gap-3">
+    <input
+      type="text"
+      class="input input-bordered flex-1 min-w-64 font-mono"
+      [ngModel]="newPath()"
+      (ngModelChange)="newPath.set($event)"
+      (keydown.enter)="add()"
+      placeholder="/medias/movies"
+      [attr.aria-label]="'settings.libraries.path' | translate"
+    />
+    <button type="button" class="btn btn-outline" (click)="browseNew()">
+      {{ 'common.browse' | translate }}
+    </button>
+    <button type="button" class="btn btn-primary" (click)="add()" [disabled]="busy() || !newPath().trim()">
+      @if (busy()) { <span class="loading loading-spinner loading-sm"></span> }
+      {{ 'settings.libraries.folder_add' | translate }}
+    </button>
+  </div>
+</div>
+
+<dialog #inUseDialog class="modal" (close)="blocked.set(null)">
+  <div class="modal-box max-w-md">
+    <app-modal-header [title]="'settings.libraries.folder_in_use_title' | translate" />
+    @if (blocked(); as folder) {
+      <div class="flex flex-col gap-4">
+        <p class="text-sm">
+          {{ 'settings.libraries.folder_in_use_message' | translate: { count: folder.mediaCount, path: folder.path } }}
+        </p>
+        <div class="flex flex-col gap-1">
+          <button type="button" class="btn btn-outline justify-start" disabled>
+            {{ 'settings.libraries.folder_move_media' | translate }}
+            <span class="badge badge-sm">{{ 'settings.libraries.folder_coming_soon' | translate }}</span>
+          </button>
+          <button type="button" class="btn btn-outline btn-error justify-start" (click)="removeWithMedia()" [disabled]="busy()">
+            @if (busy()) { <span class="loading loading-spinner loading-xs"></span> }
+            {{ 'settings.libraries.folder_remove_media' | translate }}
+          </button>
+          <span class="text-xs text-base-content/60">{{ 'settings.libraries.folder_remove_media_hint' | translate }}</span>
+        </div>
+      </div>
+    }
+    <app-modal-footer>
+      <form method="dialog">
+        <button class="btn btn-ghost">{{ 'common.cancel' | translate }}</button>
+      </form>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

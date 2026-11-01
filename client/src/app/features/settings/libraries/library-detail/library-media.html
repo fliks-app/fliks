@@ -2,30 +2,7 @@
   <div class="card-body gap-5">
     <h2 class="card-title text-lg">{{ 'settings.libraries.section_storage' | translate }}</h2>
 
-    <div class="flex flex-wrap items-end gap-3">
-      <label class="form-control flex-1 min-w-64">
-        <div class="label">
-          <span class="label-text text-base">{{ 'settings.libraries.path' | translate }}</span>
-        </div>
-        <input type="text" class="input input-bordered w-full font-mono"
-          [ngModel]="state.formPath()" (ngModelChange)="state.formPath.set($event)"
-          placeholder="/medias/movies" />
-        <div class="label">
-          <span class="label-text-alt text-sm text-base-content/50">{{ 'settings.libraries.path_hint' | translate }}</span>
-        </div>
-      </label>
-      <button type="button" class="btn btn-outline mb-6" (click)="browsePath()">
-        {{ 'common.browse' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary mb-6" (click)="save()" [disabled]="state.saving()">
-        @if (state.saving()) { <span class="loading loading-spinner loading-sm"></span> }
-        {{ 'common.save' | translate }}
-      </button>
-    </div>
-
-    @if (state.saveError()) {
-      <div role="alert" class="alert alert-error text-base">{{ state.saveError() }}</div>
-    }
+    <app-library-folders />
 
     <div class="divider my-0"></div>
 

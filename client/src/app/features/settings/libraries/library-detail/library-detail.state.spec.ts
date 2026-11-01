@@ -12,7 +12,19 @@ import { ToastService } from '../../../../core/services/toast.service';
 
 function setup() {
   const created: CreateLibraryBody[] = [];
+  const folders: string[] = [];
+  const updated: unknown[] = [];
   const api = {
+    addFolder: (_id: number, path: string) => {
+      folders.push(path);
+      return path === '/refused' ? Promise.reject(new Error('folder_overlap')) : Promise.resolve({});
+    },
+    update: (_id: number, body: unknown) => {
+      updated.push(body);
+      return Promise.resolve({});
+    },
+    setAccess: () => Promise.resolve(),
+    get: () => Promise.resolve({ id: 7 } as unknown as Library),
     create: (body: CreateLibraryBody) => {
       created.push(body);
       return Promise.resolve({
@@ -44,7 +56,7 @@ function setup() {
       LibraryDetailState,
     ],
   });
-  return { state: TestBed.inject(LibraryDetailState), created };
+  return { state: TestBed.inject(LibraryDetailState), created, folders, updated };
 }
 
 describe('LibraryDetailState.validate', () => {
@@ -95,5 +107,27 @@ describe('LibraryDetailState.create', () => {
     ]);
     expect(state.libraryId()).toBe(7);
     expect(state.formName()).toBe('Films');
+  });
+
+  it('adds the further folders once the library exists, keeping it when one is refused', async () => {
+    const { state, folders } = setup();
+    state.formName.set('Books');
+    state.formPath.set('/medias/books');
+    state.formExtraPaths.set(['/refused', ' /medias/audio ', '']);
+
+    expect(await state.create()).toBe(7);
+    expect(folders).toEqual(['/refused', '/medias/audio']);
+  });
+});
+
+describe('LibraryDetailState.save', () => {
+  it('leaves the folders to their own routes', async () => {
+    const { state, updated } = setup();
+    state.libraryId.set(7);
+    state.formName.set('Films');
+    state.formPath.set('/medias/movies');
+
+    expect(await state.save()).toBe(true);
+    expect(updated).toEqual([expect.not.objectContaining({ path: expect.anything() })]);
   });
 });
