@@ -54,7 +54,7 @@ pub async fn calendar(
     if p.media_type.is_none_or(|t| !t.has_seasons()) {
         let kinds: Vec<&str> = MediaKind::ALL
             .into_iter()
-            .filter(|k| !k.has_seasons())
+            .filter(|k| !k.has_seasons() && p.media_type.is_none_or(|t| t == *k))
             .map(MediaKind::as_str)
             .collect();
         let rows = sqlx::query!(

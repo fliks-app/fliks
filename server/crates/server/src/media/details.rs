@@ -43,12 +43,12 @@ pub async fn set_release_dates(
     .await?
     .rows_affected()
         > 0;
-    if !keep_on_null {
-        let cleared: Vec<&str> = dates
-            .iter()
-            .filter(|(_, d)| d.is_none())
-            .map(|(k, _)| k.as_str())
-            .collect();
+    let cleared: Vec<&str> = dates
+        .iter()
+        .filter(|(_, d)| d.is_none())
+        .map(|(k, _)| k.as_str())
+        .collect();
+    if !keep_on_null && !cleared.is_empty() {
         changed |= sqlx::query!(
             r#"DELETE FROM media_release_dates WHERE "mediaId" = $1 AND kind = ANY($2)"#,
             media,
