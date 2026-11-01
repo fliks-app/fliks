@@ -953,9 +953,10 @@ async fn m1789000080_keys_playlists_and_parties_by_item(pool: PgPool) {
             (3, 'c', 1, 't3', 'live', 2, 999, NULL), (4, 'd', 1, 't4', 'scheduled', NULL, NULL, NULL),
             (5, 'e', 1, 't5', 'ended', 2, 999, 1);
           INSERT INTO watch_party_items ("partyId", position, "mediaId", "episodeId") VALUES
-            (4, 0, 1, NULL), (4, 1, 2, 10);
-          INSERT INTO watch_party_proposals ("partyId", "mediaId", "episodeId", "proposedBy") VALUES
-            (4, 1, NULL, 1), (4, 2, 10, 1)"#,
+            (4, 0, 1, NULL), (4, 1, 2, 10), (4, 2, 1, 10);
+          INSERT INTO watch_party_proposals (id, "partyId", "mediaId", "episodeId", "proposedBy", "createdAt") VALUES
+            (1, 4, 1, NULL, 1, '2020-01-01'), (2, 4, 2, 10, 1, '2020-01-02'), (3, 4, 1, 10, 1, '2020-01-03');
+          INSERT INTO watch_party_votes ("proposalId", "userId") VALUES (2, 1), (3, 1)"#,
     )
     .await;
     apply_only(&pool, 1_789_000_000_080).await;
@@ -1006,7 +1007,10 @@ async fn m1789000080_keys_playlists_and_parties_by_item(pool: PgPool) {
         r#"SELECT "partyId", "itemId" FROM watch_party_proposals ORDER BY id"#,
     )
     .await;
+    // Two rows naming one item across media collapse to the first, and the lost row's votes go.
     assert_eq!(proposals, [(4, movie_item), (4, 10)]);
+    let votes: Vec<(i32,)> = rows(&pool, r#"SELECT "proposalId" FROM watch_party_votes"#).await;
+    assert_eq!(votes, [(2,)]);
 
     for bad in [
         r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (1, 10, 9)"#,

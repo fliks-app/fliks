@@ -305,7 +305,7 @@ pub async fn heartbeat(
     let episode = int(&body, "episodeId")
         .map(|e| i32::try_from(e).unwrap_or(-1))
         .filter(|e| *e != 0);
-    let bound_item = match bound_file {
+    let mut resolved = match bound_file {
         Some(bound) => {
             let item = super::db::item_of(&st.db, media, episode).await?;
             check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
@@ -322,6 +322,11 @@ pub async fn heartbeat(
         .filter(|s| !s.is_empty())
     {
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
+        let item = match resolved {
+            Some(item) => item,
+            None => super::db::item_of(&st.db, media, episode).await?,
+        };
+        resolved = Some(item);
         let before = st.presence.peek(sid);
         let updated = match engine_lost {
             Some(true) => None,
@@ -363,7 +368,7 @@ pub async fn heartbeat(
             "mediaId and mediaFileId are required",
         ));
     };
-    let item = match bound_item {
+    let item = match resolved {
         Some(item) => item,
         None => super::db::item_of(&st.db, media, episode).await?,
     };

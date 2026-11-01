@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mediaFileId\", \"itemId\" FROM item_parts\n               WHERE \"itemId\" = ANY($1) AND \"mediaFileId\" = ANY($2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mediaFileId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "itemId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "itemId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "67c54700f3f35818705b69bf5b3c8aaf71a81e0f19349d7274cb0426846cfb2f"
+}

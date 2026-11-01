@@ -423,6 +423,16 @@ pub async fn open_ids_playing(db: &PgPool, media: i32) -> sqlx::Result<Vec<i32>>
     .await
 }
 
+/// The parties not yet ended that play one of `items`.
+pub async fn open_ids_playing_items(db: &PgPool, items: &[i32]) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT id FROM watch_parties WHERE "itemId" = ANY($1) AND status <> 'ended'"#,
+    )
+    .bind(items)
+    .fetch_all(db)
+    .await
+}
+
 /// The parties not yet ended that `owner` owns.
 pub async fn open_ids_owned(db: &PgPool, owner: i32) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar(r#"SELECT id FROM watch_parties WHERE "ownerId" = $1 AND status <> 'ended'"#)

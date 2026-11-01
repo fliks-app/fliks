@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id FROM items i JOIN item_groups g ON g.id = i.\"groupId\"\n           WHERE g.\"mediaId\" = $1 AND NOT (g.\"number\" = ANY($2))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3895a83bc830fb288190ceb792fd4c231ce8d9740014ae5f60bd6944d9095e1c"
+}

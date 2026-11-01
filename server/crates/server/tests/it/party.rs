@@ -3755,3 +3755,32 @@ async fn removing_the_playing_media_ends_the_party_for_its_members(pool: PgPool)
     assert_eq!(closed.len(), 1);
     assert!(c.st.parties.view(id as i32).is_none());
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_type_change_that_drops_the_playing_item_ends_the_party_for_its_members(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c
+        .user_with("alice", true, &["parties.create", "media.edit"])
+        .await;
+    let _ca = c.connect(alice, "da");
+    let mut sa = c.stream(&a, "da#tab").await;
+    let id = party_with(&c, &a, vec![]).await;
+    c.call(
+        "POST",
+        &format!("/api/parties/{id}/join"),
+        &a,
+        Some(json!({"deviceId": "da"})),
+    )
+    .await;
+    let full = fliks_server::app::router(c.st.clone(), None, "/nonexistent".into(), None);
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/api/media/1")
+        .header("authorization", format!("Bearer {a}"))
+        .header("content-type", "application/json")
+        .body(Body::from(json!({"type": "series"}).to_string()))
+        .unwrap();
+    assert_eq!(full.oneshot(req).await.unwrap().status().as_u16(), 200);
+    assert_eq!(events_of(&mut sa, "party.closed").await.len(), 1);
+    assert!(c.st.parties.view(id as i32).is_none());
+}

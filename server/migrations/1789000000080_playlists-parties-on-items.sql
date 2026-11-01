@@ -28,7 +28,8 @@ UPDATE "watch_parties" SET "itemId" = COALESCE(item_of("mediaId", "episodeId"),
  WHERE "mediaId" IS NOT NULL;
 
 DO $$ DECLARE n bigint; BEGIN
-  SELECT count(*) INTO n FROM "watch_parties" WHERE "mediaId" IS NOT NULL AND "itemId" IS NULL;
+  SELECT count(*) INTO n FROM "watch_parties"
+   WHERE "mediaId" IS NOT NULL AND "itemId" IS NULL AND "status" <> 'ended';
   IF n > 0 THEN RAISE NOTICE 'watch_parties: % party(ies) without an item ended', n; END IF;
 END $$;
 UPDATE "watch_parties" SET "status" = 'ended', "endedAt" = COALESCE("endedAt", now())
@@ -43,6 +44,7 @@ ALTER TABLE "watch_parties"
   ADD CONSTRAINT "FK_watch_parties_item" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE CASCADE,
   ADD CONSTRAINT "CHK_watch_parties_item_started" CHECK ("status" <> 'live' OR "itemId" IS NOT NULL),
   ADD CONSTRAINT "CHK_watch_parties_item_file" CHECK ("itemId" IS NOT NULL OR "mediaFileId" IS NULL);
+CREATE INDEX "IDX_watch_parties_itemId" ON "watch_parties" ("itemId");
 
 ALTER TABLE "watch_party_items" ADD COLUMN "itemId" integer;
 UPDATE "watch_party_items" SET "itemId" = COALESCE(item_of("mediaId", "episodeId"), "episodeId");
@@ -82,3 +84,4 @@ ALTER TABLE "watch_party_proposals"
   ADD CONSTRAINT "UQ_watch_party_proposals_item" UNIQUE ("partyId", "itemId"),
   DROP COLUMN "mediaId",
   DROP COLUMN "episodeId";
+CREATE INDEX "IDX_watch_party_proposals_itemId" ON "watch_party_proposals" ("itemId");

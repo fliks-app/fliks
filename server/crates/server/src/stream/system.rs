@@ -20,7 +20,7 @@ use fliks_domain::acl::{Action, Subject};
 use fliks_engine_core::api::{AudioPlan, BitrateHint, JobStats, LiveMode, MediaInfo, SessionKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -408,7 +408,29 @@ pub async fn streams(
             )
         })
         .collect();
-    let played: Vec<Option<i32>> = live.iter().map(|s| s.live.item_id).collect();
+    let named: Vec<i32> = live.iter().filter_map(|s| s.live.item_id).collect();
+    let parts: HashSet<(i32, i32)> = if named.is_empty() {
+        HashSet::new()
+    } else {
+        sqlx::query!(
+            r#"SELECT "mediaFileId", "itemId" FROM item_parts
+               WHERE "itemId" = ANY($1) AND "mediaFileId" = ANY($2)"#,
+            &named,
+            &ids
+        )
+        .fetch_all(&st.db)
+        .await?
+        .into_iter()
+        .map(|p| (p.mediaFileId, p.itemId))
+        .collect()
+    };
+    let played: Vec<Option<i32>> = live
+        .iter()
+        .map(|s| {
+            let file = s.live.media_file_id as i32;
+            s.live.item_id.filter(|i| parts.contains(&(file, *i)))
+        })
+        .collect();
     let mut eps: Vec<i32> = rows
         .iter()
         .filter_map(|r| r.episode_id)
