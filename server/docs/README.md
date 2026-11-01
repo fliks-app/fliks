@@ -12,3 +12,5 @@ Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item p
 Media details: [`spec/media-details.md`](spec/media-details.md) (release dates, the calendar and the counters).
 
 Book metadata providers: [`spec/book-providers.md`](spec/book-providers.md) (endpoints, rate limits, identification, field mappings of OpenLibrary, Google Books, BnF, Audible, Audnexus).
+
+Metadata providers: [`spec/metadata-orchestrator.md`](spec/metadata-orchestrator.md) (the provider trait, the registry, call priorities, the rate limiter).
