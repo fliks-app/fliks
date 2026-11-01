@@ -7,7 +7,7 @@ mod routes;
 mod sse;
 mod ticket;
 
-pub use event::{Bus, DomainEvent, Num, RawEvent, SseEvent, Subject};
+pub use event::{Bus, DomainEvent, ExternalId, Num, RawEvent, SseEvent, Subject};
 pub(crate) use hub::uuid_v4;
 pub use hub::{Connection, Hub, Identity, Target};
 pub use routes::{

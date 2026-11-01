@@ -250,7 +250,7 @@ pub async fn create(
     tx.commit().await?;
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
-        tmdb_id: ids.tmdb.flatten().filter(|t| *t > 0).map(i64::from),
+        external_ids: external_ids::refs(&st.db, id).await?,
         media_type,
         library_id: None,
         added_by_user_id: None,

@@ -4,6 +4,7 @@ use crate::{
     events::{DomainEvent, SseEvent},
     http::{AppError, auth::Authed, validate::PathParams},
     ingest::{MediaRow, drop_thumbnails, fsx, load_media},
+    media::external_ids::Ids,
     state::AppState,
 };
 use axum::{
@@ -88,7 +89,12 @@ pub async fn remove_media(
     }
     st.hub.emit_domain(DomainEvent::MediaRemoved {
         media_id: i64::from(id),
-        tmdb_id: media.tmdb_id.map(i64::from),
+        external_ids: Ids {
+            tmdb: media.tmdb_id,
+            tvdb: media.tvdb_id,
+            imdb: media.imdb_id.clone(),
+        }
+        .refs(),
         media_type: media.media_type,
     });
     crate::media_servers::dispatch_detached(st, "media.deleted");

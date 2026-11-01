@@ -1,5 +1,6 @@
 //! `/api/requests/*`, `/api/auto-approval-rules/*` and the request lifecycle (`docs/spec/requests.md`).
 mod db;
+pub(crate) use db::lock_title;
 pub(crate) mod dto;
 mod flow;
 mod lifecycle;
@@ -9,7 +10,7 @@ pub mod services;
 #[cfg(test)]
 mod tests;
 
-use crate::state::AppState;
+use crate::{events::ExternalId, state::AppState};
 use axum::{
     Router,
     routing::{get, post},
@@ -45,6 +46,13 @@ impl TitleKey {
             provider: ExternalProvider::Tmdb,
             external_id: tmdb_id.to_string(),
         }
+    }
+
+    pub fn refs(&self) -> Vec<ExternalId> {
+        vec![ExternalId {
+            provider: self.provider.as_str().into(),
+            value: self.external_id.clone(),
+        }]
     }
 
     pub fn tmdb_id(&self) -> Option<i32> {

@@ -1,4 +1,5 @@
 //! The ids a media has in outside systems (`docs/spec/external-ids.md`).
+use crate::events::ExternalId;
 use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use sqlx::{PgConnection, PgExecutor};
 
@@ -34,6 +35,20 @@ pub async fn find(
     )
     .fetch_optional(db)
     .await
+}
+
+/// Every id the media holds, by provider, as the domain events name them.
+pub async fn refs(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<ExternalId>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT provider, value FROM media_external_ids WHERE "mediaId" = $1 ORDER BY provider"#,
+    )
+    .bind(media_id)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(provider, value)| ExternalId { provider, value })
+        .collect())
 }
 
 /// `find` for an integer id.
@@ -151,6 +166,19 @@ impl Ids {
             (ExternalProvider::Tvdb, self.tvdb.map(|v| v.to_string())),
             (ExternalProvider::Imdb, self.imdb.clone()),
         ]
+    }
+
+    /// The ids present, by provider.
+    pub fn refs(&self) -> Vec<ExternalId> {
+        self.entries()
+            .into_iter()
+            .filter_map(|(p, v)| {
+                Some(ExternalId {
+                    provider: p.as_str().into(),
+                    value: p.normalize(&v?)?,
+                })
+            })
+            .collect()
     }
 
     /// Links every id present and leaves the others.
@@ -370,5 +398,31 @@ mod tests {
             .await
             .unwrap();
         assert!(all.fill(&mut c, m, MediaKind::Series).await.unwrap().gone);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_event_refs_list_every_stored_id_by_provider(db: sqlx::PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let m = media(&db, MediaKind::Movie).await;
+        let ids = Ids {
+            tmdb: Some(603),
+            tvdb: None,
+            imdb: Some("tt1".into()),
+        };
+        ids.fill(&mut c, m, MediaKind::Movie).await.unwrap();
+        let want = vec![
+            ExternalId {
+                provider: "imdb".into(),
+                value: "tt1".into(),
+            },
+            ExternalId {
+                provider: "tmdb".into(),
+                value: "603".into(),
+            },
+        ];
+        assert_eq!(refs(&db, m).await.unwrap(), want);
+        assert_eq!(ids.refs(), [want[1].clone(), want[0].clone()]);
+        assert!(Ids::default().refs().is_empty());
     }
 }

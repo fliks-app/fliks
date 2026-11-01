@@ -171,17 +171,19 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 
 | Event | Payload |
 |---|---|
-| `media.imported` | `{mediaId: number, tmdbId: number|null, mediaType: string, libraryId: number|null, addedByUserId: number|null}` |
+| `media.imported` | `{mediaId: number, externalIds: ExternalId[], mediaType: string, libraryId: number|null, addedByUserId: number|null}` |
 | `media.monitored.changed` | `{mediaId: number, monitored: boolean}` |
 | `media.season.monitored.changed` | `{mediaId: number, seasonNumber: number, monitored: boolean}` |
-| `media.removed` | `{mediaId: number, tmdbId: number|null, mediaType: string}` |
+| `media.removed` | `{mediaId: number, externalIds: ExternalId[], mediaType: string}` |
 | `media.files.imported` | `{mediaId: number, seasonNumber?: number, episodeNumber?: number, source: 'download'|'disk'}` |
 | `media.acquisition.requested` | `{mediaIds: number[], reason: string}` |
 | `acquisition.grabbed` | `{mediaId: number, seasonNumber?: number, episodeNumber?: number}` |
-| `request.created` | `{requestId: number, mediaType: string, tmdbId: number, userId: number|null, kind: string, seasons: number[]|null}` |
-| `request.approved` | `{requestId: number, mediaId: number|null, mediaType: string, tmdbId: number, seasons: number[]|null, approvedByUserId: number|null}` |
+| `request.created` | `{requestId: number, mediaType: string, externalIds: ExternalId[], userId: number|null, kind: string, seasons: number[]|null}` |
+| `request.approved` | `{requestId: number, mediaId: number|null, mediaType: string, externalIds: ExternalId[], seasons: number[]|null, approvedByUserId: number|null}` |
 | `library.scan.completed` | `{libraryId: number, added: number, updated: number}` |
 | `settings.changed` | `{key: string}` |
+
+`ExternalId` = `{provider: string, value: string}`, the open provider set of `external-ids.md`. `externalIds` names the work by every id it has: for `media.imported` and `media.removed` all the rows of the media's `media_external_ids` (ordered by provider; `[]` for a media with none, such as one created from the disk or by hand without ids), for `request.created` and `request.approved` the one entry `(provider, externalId)` of the request. A kind with no TMDB id, such as a book, is named by its own providers (`isbn`, `asin`) with no change to the shape. The events carry no `tmdbId`: a consumer reads the entry whose `provider` is `tmdb`, and a plugin webhook or process consumer that read `tmdbId` must be updated (a breaking change of the Fliks 6.0.0 release, with pluginApi 3).
 
 ### In-process subscribers
 
