@@ -544,3 +544,47 @@ describe('BrowserDeviceProfileService, extra sample entries', () => {
     expect(codecs).toEqual(expect.arrayContaining(['avc3', 'hev1', 'dvh1', 'dvhe', 'dav1']));
   });
 });
+
+describe('BrowserDeviceProfileService: TV codec detection', () => {
+  const tv = (tvPlatform: 'tizen' | 'webos') =>
+    configure({ isTv: () => true, tvPlatform: () => tvPlatform, isDesktopNative: () => false } as DeviceService);
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    delete (window as any).webapis;
+    delete (globalThis as unknown as { MediaSource?: unknown }).MediaSource;
+  });
+
+  it('declares AV1 and the panel levels on Tizen from the Samsung APIs, not the MSE probe', () => {
+    (globalThis as unknown as { MediaSource: unknown }).MediaSource = {
+      isTypeSupported: (mime: string) => !mime.includes('av01'),
+    };
+    (window as any).webapis = {
+      systeminfo: { isSupportedVideoCodec: (c: string) => c === 'AV1' || c === 'HEVC' },
+      productinfo: { isUdPanelSupported: () => true, is8KPanelSupported: () => false },
+    };
+    const profile = tv('tizen').getProfile();
+    expect(profile.directPlayProfiles[0].videoCodecs).toContain('av1');
+    const cond = (c: string) => profile.codecConditions.find((x) => x.codec === c);
+    expect(cond('av1')).toMatchObject({ maxBitDepth: 10 });
+    expect(cond('h264')?.maxLevel).toBe(51);
+    expect(cond('hevc')?.maxLevel).toBe(153);
+  });
+
+  it('leaves AV1 out on Tizen when the API says no or is missing', () => {
+    (globalThis as unknown as { MediaSource: unknown }).MediaSource = { isTypeSupported: () => true };
+    expect(tv('tizen').getProfile().directPlayProfiles[0].videoCodecs).not.toContain('av1');
+  });
+
+  it('probes AV1 on webOS, whose MSE is the playback pipeline', () => {
+    (globalThis as unknown as { MediaSource: unknown }).MediaSource = { isTypeSupported: () => true };
+    expect(tv('webos').getProfile().directPlayProfiles[0].videoCodecs).toContain('av1');
+  });
+
+  it('caps Opus and FLAC at stereo on both TVs', () => {
+    for (const p of ['tizen', 'webos'] as const) {
+      expect(tv(p).getProfile().audioChannelsByCodec).toEqual({ opus: 2, flac: 2 });
+      TestBed.resetTestingModule();
+    }
+  });
+});

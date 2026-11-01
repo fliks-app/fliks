@@ -7,7 +7,7 @@ import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { ENGINE_TRAITS, engineKindFor, type EngineTraits } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
-import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
+import { applyTizenAudioCodecs, tizenDecoderLevels, tizenSupportsVideoCodec } from './tizen-capabilities';
 import { isTizenCropSupported } from './playback-engine/tizen-engine';
 import { getDeviceName } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
@@ -367,8 +367,13 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // AV1 off on TV: AVPlay's HLS demuxer accepts it inconsistently across firmware.
-    if (!isTv && this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.08')) {
+    // AVPlay, not the WebView's FHD-only MSE, decodes on Tizen: its own API answers there.
+    if (tvPlatform === 'tizen') {
+      if (tizenSupportsVideoCodec('AV1')) {
+        videoCodecs.push('av1');
+        codecConditions.push({ codec: 'av1', maxBitDepth: 10, profiles: ['main'] });
+      }
+    } else if (this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.08')) {
       videoCodecs.push('av1');
       const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.10') ? 10 : 8;
       codecConditions.push({
@@ -436,7 +441,7 @@ export class BrowserDeviceProfileService {
     } else if (
       (tvPlatform === 'tizen' || tvPlatform === 'webos') &&
       !videoCodecs.includes('hevc') &&
-      (tvPlatform !== 'tizen' || tizenSupportsHevc() !== false)
+      (tvPlatform !== 'tizen' || tizenSupportsVideoCodec('HEVC') !== false)
     ) {
       videoCodecs.push('hevc', 'h265', 'hvc1');
       codecConditions.push({
@@ -446,10 +451,16 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // Tizen: use Samsung's published demuxer containers; the WebView probe answers for a pipeline that never plays.
+    // Tizen: use Samsung's published demuxer containers and decoder levels; the WebView probe answers for a pipeline that never plays.
     if (tvPlatform === 'tizen') {
       for (const c of TIZEN_CONTAINERS) {
         if (!containers.includes(c)) containers.push(c);
+      }
+      const levels = tizenDecoderLevels();
+      if (levels) {
+        for (const c of codecConditions) {
+          if (c.codec === 'h264' || c.codec === 'hevc') c.maxLevel = levels[c.codec];
+        }
       }
     }
 
@@ -501,9 +512,12 @@ export class BrowserDeviceProfileService {
     }
     // A browser decodes 7.1 AAC, Opus and FLAC and downmixes them to its output
     // itself, so their cap is the decoder's, not AudioContext's output count.
+    // TV specs list multichannel only for Dolby and AAC; AVPlay plays a 5.1 Opus copy silent.
     let audioChannelsByCodec =
       this.nativeAudio?.channelsByCodec ??
-      (tvPlatform ? undefined : { aac: 8, opus: 8, flac: 8 });
+      (tvPlatform === 'tizen' || tvPlatform === 'webos'
+        ? { opus: 2, flac: 2 }
+        : tvPlatform ? undefined : { aac: 8, opus: 8, flac: 8 });
     if (sink?.codecs.length) {
       audioChannelsByCodec = { ...audioChannelsByCodec };
       for (const c of sink.codecs) {

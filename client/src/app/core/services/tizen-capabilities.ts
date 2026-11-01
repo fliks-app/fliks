@@ -6,7 +6,12 @@ interface TizenSystemInfo {
   isSupportedVideoCodec?(codec: string): boolean;
 }
 
-/** Fliks codec id to Samsung enum, for codecs the backend can copy into HLS; absent ones (flac, alac, mp3) keep the MSE probe answer. */
+interface TizenProductInfo {
+  isUdPanelSupported?(): boolean;
+  is8KPanelSupported?(): boolean;
+}
+
+/** Fliks codec id to Samsung enum, for codecs the backend can copy into HLS. */
 const AUDIO_ENUM: Record<string, string> = {
   aac: 'AAC',
   ac3: 'AC3',
@@ -14,15 +19,18 @@ const AUDIO_ENUM: Record<string, string> = {
   opus: 'OPUS',
 };
 
-function systemInfo(): TizenSystemInfo | null {
-  const w = window as unknown as { webapis?: { systeminfo?: TizenSystemInfo } };
-  return w.webapis?.systeminfo ?? null;
+/** Absent from AVPlay's container audio list (Samsung media spec), whatever the MSE probe says. */
+const AVPLAY_UNSUPPORTED_AUDIO = ['flac', 'alac'];
+
+function webapis(): { systeminfo?: TizenSystemInfo; productinfo?: TizenProductInfo } | null {
+  return (window as unknown as { webapis?: { systeminfo?: TizenSystemInfo; productinfo?: TizenProductInfo } })
+    .webapis ?? null;
 }
 
 /** `null` when the firmware doesn't expose the call, so callers keep their
  *  existing answer instead of treating a missing API as "unsupported". */
 function isSupported(kind: 'audio' | 'video', name: string): boolean | null {
-  const si = systemInfo();
+  const si = webapis()?.systeminfo;
   const fn = kind === 'audio' ? si?.isSupportedAudioCodec : si?.isSupportedVideoCodec;
   if (typeof fn !== 'function') return null;
   try {
@@ -34,21 +42,34 @@ function isSupported(kind: 'audio' | 'video', name: string): boolean | null {
 
 /** The API decides every codec it enumerates, the rest pass through; returns the input unchanged when the API is unavailable. */
 export function applyTizenAudioCodecs(probed: string[]): string[] {
-  const merged = probed.filter((c) => !(c in AUDIO_ENUM));
+  const kept = probed.filter((c) => !AVPLAY_UNSUPPORTED_AUDIO.includes(c));
+  const merged = kept.filter((c) => !(c in AUDIO_ENUM));
   let answered = false;
   for (const [codec, samsungName] of Object.entries(AUDIO_ENUM)) {
     const supported = isSupported('audio', samsungName);
     if (supported === null) {
-      if (probed.includes(codec)) merged.push(codec);
+      if (kept.includes(codec)) merged.push(codec);
       continue;
     }
     answered = true;
     if (supported) merged.push(codec);
   }
-  return answered ? merged : probed;
+  return answered ? merged : kept;
 }
 
-/** Whether AVPlay decodes HEVC. `null` keeps the caller's assumption. */
-export function tizenSupportsHevc(): boolean | null {
-  return isSupported('video', 'HEVC');
+/** Whether AVPlay decodes this video codec (Samsung enum name). `null` keeps the caller's assumption. */
+export function tizenSupportsVideoCodec(name: 'HEVC' | 'AV1'): boolean | null {
+  return isSupported('video', name);
+}
+
+/** AVPlay decoder levels per panel class (Samsung media spec); `null` when productinfo is unavailable. */
+export function tizenDecoderLevels(): { h264: number; hevc: number } | null {
+  const pi = webapis()?.productinfo;
+  if (typeof pi?.isUdPanelSupported !== 'function') return null;
+  try {
+    if (pi.is8KPanelSupported?.()) return { h264: 51, hevc: 183 };
+    return pi.isUdPanelSupported() ? { h264: 51, hevc: 153 } : { h264: 42, hevc: 123 };
+  } catch {
+    return null;
+  }
 }
