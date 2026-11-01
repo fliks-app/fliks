@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.year, m.monitored, ids.imdb AS imdb_id, m.overview,\n                  m.\"qualityProfileId\" AS quality_profile_id\n           FROM media m\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $4)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $5) AS imdb\n             FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = (SELECT \"mediaId\" FROM media_external_ids\n             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)",
+  "query": "SELECT m.id, m.year, m.monitored, ids.imdb AS imdb_id, m.overview,\n                  w.\"qualityProfileId\" AS quality_profile_id\n           FROM media m\n           LEFT JOIN wants w ON w.\"mediaId\" = m.id AND w.family = 'video'\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $4)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $5) AS imdb\n             FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = (SELECT \"mediaId\" FROM media_external_ids\n             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)",
   "describe": {
     "columns": [
       {
@@ -59,7 +59,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "media",
+            "table": "wants",
             "name": "qualityProfileId"
           }
         }
@@ -83,5 +83,5 @@
       true
     ]
   },
-  "hash": "6e64e12e333c2b2c522438bd1f51740fae95056e127d44ece29bc4d91004bbc9"
+  "hash": "f03aed1d7075275f01fda802e9135695aa37b85473c8425c2b955a43fea5959c"
 }

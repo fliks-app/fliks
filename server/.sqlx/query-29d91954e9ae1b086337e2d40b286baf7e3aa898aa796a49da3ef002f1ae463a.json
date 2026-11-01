@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET\n             \"languageProfileId\" = CASE WHEN $2 THEN $3 ELSE \"languageProfileId\" END\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "29d91954e9ae1b086337e2d40b286baf7e3aa898aa796a49da3ef002f1ae463a"
+}

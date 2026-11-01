@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.type AS \"kind!\", m.monitored, qp.id AS \"profile_id?\", qp.cutoff AS \"cutoff?\"\n           FROM media m LEFT JOIN quality_profiles qp ON qp.id = m.\"qualityProfileId\" WHERE m.id = $1",
+  "query": "SELECT m.type AS \"kind!\", m.monitored, qp.id AS \"profile_id?\", qp.cutoff AS \"cutoff?\"\n           FROM media m\n           LEFT JOIN wants w ON w.\"mediaId\" = m.id AND w.family = 'video'\n           LEFT JOIN quality_profiles qp ON qp.id = w.\"qualityProfileId\" WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -60,5 +60,5 @@
       true
     ]
   },
-  "hash": "7159c2c7e5544e630fc507406f29bbfde97310e8a4d01f0ea5e425f4173b82a5"
+  "hash": "861e7cf80305369921b3d29275f9bc362039437a2146616c2f5c61bfb6ffc7d0"
 }

@@ -200,9 +200,10 @@ impl TryFrom<RawMediaRow> for MediaRow {
 pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<MediaRow>> {
     sqlx::query_as!(
         RawMediaRow,
-        r#"SELECT id, type AS "media_type!", "libraryId" AS library_id,
-        "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "posterUrl" AS poster_url, "fanartUrl" AS fanart_url FROM media WHERE id = $1"#,
+        r#"SELECT m.id, m.type AS "media_type!", m."libraryId" AS library_id,
+        w."qualityProfileId" AS quality_profile_id, m."languageProfileId" AS language_profile_id,
+        m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url FROM media m
+        LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video' WHERE m.id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -709,7 +710,7 @@ pub async fn rows(
     || jsonb_build_object('rating', m.rating, 'genres', m.genres, 'tmdbCollectionId', coll.tmdb_id,
       'tmdbCollectionName', coll.name, 'runtime', m.runtime, 'releaseDate', dates.release_date,
       'inCinemas', dates.cinema_date, 'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
-      'minimumAvailability', m."minimumAvailability", 'qualityProfileId', m."qualityProfileId",
+      'minimumAvailability', w."minimumAvailability", 'qualityProfileId', w."qualityProfileId",
       'languageProfileId', m."languageProfileId", 'addedById', m."addedById", 'path', NULL) END,
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
 ) AS "json!: Value"
@@ -719,6 +720,7 @@ LEFT JOIN users ab ON ab.id = r."approvedById"
 LEFT JOIN media m ON m.id = (SELECT e."mediaId" FROM media_external_ids e
   WHERE e.kind = r."mediaType" AND e.provider = r.provider AND e.value = r."externalId"
   ORDER BY e."mediaId" LIMIT 1)
+LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $10)::int AS tmdb,
   max(value) FILTER (WHERE provider = $11)::int AS tvdb,
   max(value) FILTER (WHERE provider = $12) AS imdb

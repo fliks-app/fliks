@@ -12,6 +12,7 @@ mod related;
 mod routes;
 mod streams;
 mod tracking;
+pub mod wants;
 pub mod write;
 
 pub use routes::*;

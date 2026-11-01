@@ -118,6 +118,7 @@ async fn ctx_with(pool: PgPool, engine: bool, features: &[&str]) -> Ctx {
         &mut conn,
         media,
         fliks_domain::media::kind::MediaKind::Movie,
+        Default::default(),
     )
     .await
     .unwrap();

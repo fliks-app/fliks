@@ -88,6 +88,7 @@ print('INSERT INTO media (id, title, year, type, overview, status, monitored, "f
 print('INSERT INTO media_release_dates ("mediaId", kind, date) VALUES\n ' + ",\n ".join(dates) + ";")
 print('INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES\n ' + ",\n ".join(ext_ids) + ";")
 print('INSERT INTO editions (id, "mediaId", family) SELECT id, id, \'video\' FROM media ORDER BY id;')
+print('INSERT INTO wants ("mediaId", family) SELECT id, \'video\' FROM media ORDER BY id;')
 print('INSERT INTO item_groups (id, "number", "mediaId") VALUES\n ' + ",\n ".join(seasons) + ";")
 print('INSERT INTO items (id, "number", title, "groupId", "mediaId", "editionId") VALUES\n ' + ",\n ".join(episodes) + ";")
 print('INSERT INTO items (id, "mediaId", "editionId") SELECT 12 + id, id, id FROM media WHERE type = \'movie\' ORDER BY id;')

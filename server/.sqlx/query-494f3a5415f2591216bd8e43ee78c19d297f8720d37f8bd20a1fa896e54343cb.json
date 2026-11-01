@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE wants SET \"qualityProfileId\" = $2 WHERE \"mediaId\" = $1 AND family = 'video'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "494f3a5415f2591216bd8e43ee78c19d297f8720d37f8bd20a1fa896e54343cb"
+}

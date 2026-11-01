@@ -60,8 +60,29 @@ pub async fn cover_ranges(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<(
     .map(drop)
 }
 
-/// Gives a new media its `video` edition and, when it has no seasons, its sole item.
-pub async fn create_shell(c: &mut PgConnection, media: i32, kind: MediaKind) -> sqlx::Result<()> {
+/// What a new media is wished with: the quality profile of each of its wants.
+#[derive(Clone, Copy, Default)]
+pub struct NewWant {
+    pub quality_profile_id: Option<i32>,
+}
+
+/// Gives a new media its `video` edition, one want per family of its kind and, when it has no seasons, its sole item.
+pub async fn create_shell(
+    c: &mut PgConnection,
+    media: i32,
+    kind: MediaKind,
+    want: NewWant,
+) -> sqlx::Result<()> {
+    for family in kind.families() {
+        sqlx::query!(
+            r#"INSERT INTO wants ("mediaId", family, "qualityProfileId") VALUES ($1, $2, $3)"#,
+            media,
+            family.as_str(),
+            want.quality_profile_id
+        )
+        .execute(&mut *c)
+        .await?;
+    }
     let edition = sqlx::query_scalar!(
         r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id"#,
         media

@@ -32,10 +32,13 @@ SELECT setval('custom_formats_id_seq', 4);
 -- references that a delete must null (rule 11)
 ALTER TABLE libraries DISABLE TRIGGER set_updated_at;
 ALTER TABLE media DISABLE TRIGGER set_updated_at;
+ALTER TABLE wants DISABLE TRIGGER set_updated_at;
 ALTER TABLE requests DISABLE TRIGGER set_updated_at;
 UPDATE libraries SET "defaultQualityProfileId" = 1, "defaultLanguageProfileId" = 2 WHERE id = 1;
-UPDATE media SET "qualityProfileId" = 1, "languageProfileId" = 2 WHERE id = 1;
+UPDATE media SET "languageProfileId" = 2 WHERE id = 1;
+UPDATE wants SET "qualityProfileId" = 1 WHERE "mediaId" = 1 AND family = 'video';
 UPDATE requests SET "qualityProfileId" = 1, "languageProfileId" = 2 WHERE id = 1;
 ALTER TABLE libraries ENABLE TRIGGER set_updated_at;
 ALTER TABLE media ENABLE TRIGGER set_updated_at;
+ALTER TABLE wants ENABLE TRIGGER set_updated_at;
 ALTER TABLE requests ENABLE TRIGGER set_updated_at;

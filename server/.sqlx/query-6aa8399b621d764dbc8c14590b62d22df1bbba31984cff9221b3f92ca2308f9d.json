@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO media (title, \"originalTitle\", year, type, status, monitored, \"alternativeTitles\", overview,\n             genres, runtime, rating, \"libraryId\", \"folderName\", \"qualityProfileId\",\n             \"languageProfileId\", \"addedById\")\n           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,\n             $9, $10, $11, $12, $13)\n           RETURNING id",
+  "query": "INSERT INTO media (title, \"originalTitle\", year, type, status, monitored, \"alternativeTitles\", overview,\n             genres, runtime, rating, \"libraryId\", \"folderName\",\n             \"languageProfileId\", \"addedById\")\n           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,\n             $9, $10, $11, $12)\n           RETURNING id",
   "describe": {
     "columns": [
       {
@@ -28,7 +28,6 @@
         "Int4",
         "Varchar",
         "Int4",
-        "Int4",
         "Int4"
       ]
     },
@@ -36,5 +35,5 @@
       false
     ]
   },
-  "hash": "54af089e92063353a929a778951d262c52cd6371ead1e79631535ffeed684628"
+  "hash": "6aa8399b621d764dbc8c14590b62d22df1bbba31984cff9221b3f92ca2308f9d"
 }

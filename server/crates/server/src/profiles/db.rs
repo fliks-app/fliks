@@ -2,7 +2,7 @@
 use super::dto::{DefinitionValues, FormatValues, LanguageValues, QualityValues};
 use crate::http::json::iso_ms;
 use chrono::{DateTime, Utc};
-use fliks_domain::profiles::seed_rows;
+use fliks_domain::{media::family::Family, profiles::seed_rows};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
@@ -299,7 +299,7 @@ pub async fn format_delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
 pub async fn seed_quality_definitions(db: &PgPool) -> sqlx::Result<()> {
     let (mut ids, mut titles, mut min, mut preferred, mut max) =
         (vec![], vec![], vec![], vec![], vec![]);
-    for (id, title, s) in seed_rows() {
+    for (id, title, s) in seed_rows(Family::Video) {
         ids.push(id);
         titles.push(title.to_owned());
         min.push(s.min);
@@ -309,8 +309,8 @@ pub async fn seed_quality_definitions(db: &PgPool) -> sqlx::Result<()> {
     sqlx::query!(
         r#"INSERT INTO quality_definitions ("qualityId", title, "minSize", "preferredSize", "maxSize")
         SELECT * FROM unnest($1::int4[], $2::text[], $3::float8[], $4::float8[], $5::float8[])
-        WHERE NOT EXISTS (SELECT 1 FROM quality_definitions)
-        ON CONFLICT ("qualityId") DO NOTHING"#,
+        WHERE NOT EXISTS (SELECT 1 FROM quality_definitions WHERE family = 'video')
+        ON CONFLICT (family, "qualityId") DO NOTHING"#,
         &ids,
         &titles,
         &min,
@@ -327,7 +327,7 @@ pub async fn definition_list(db: &PgPool) -> sqlx::Result<Vec<QualityDefinition>
         QualityDefinition,
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, "qualityId" AS quality_id,
         title, "minSize" AS min_size, "preferredSize" AS preferred_size, "maxSize" AS max_size
-        FROM quality_definitions ORDER BY "qualityId" ASC"#
+        FROM quality_definitions WHERE family = 'video' ORDER BY "qualityId" ASC"#
     )
     .fetch_all(db)
     .await
@@ -339,7 +339,7 @@ pub async fn definitions_update(db: &PgPool, items: Vec<DefinitionValues>) -> sq
     for it in items {
         sqlx::query!(
             r#"UPDATE quality_definitions SET title = COALESCE($2, title), "minSize" = $3,
-            "preferredSize" = $4, "maxSize" = $5 WHERE "qualityId" = $1"#,
+            "preferredSize" = $4, "maxSize" = $5 WHERE family = 'video' AND "qualityId" = $1"#,
             it.quality_id,
             it.title,
             it.sizes[0],
