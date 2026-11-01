@@ -206,6 +206,7 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<
                 let (season, episode) = (season.map(i64::from), episode.map(i64::from));
                 st.hub.emit_domain(DomainEvent::AcquisitionGrabbed {
                     media_id: g.media_id.into(),
+                    family: g.family.into(),
                     season_number: season,
                     episode_number: episode,
                 });

@@ -10,7 +10,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    media::{VIDEO_EXTS, kind::MediaKind},
+    media::{VIDEO_EXTS, family::Family, kind::MediaKind},
     naming::{
         self, EpisodeNumbers, HasTitle, MovieFile, SeriesFile, extract_release_group,
         match_special_by_title, parse_episode_numbers,
@@ -148,6 +148,7 @@ pub async fn ingest(
     let one = (out.imported.len() == 1).then(|| &out.imported[0]);
     st.hub.emit_domain(DomainEvent::MediaFilesImported {
         media_id: i64::from(media.id),
+        family: Family::Video,
         season_number: one.and_then(|i| i.season_number).map(i64::from),
         episode_number: one.and_then(|i| i.episode_number).map(i64::from),
         source: if req.release_name.is_some() {

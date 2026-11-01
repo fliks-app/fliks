@@ -1,6 +1,6 @@
 //! Wire events (`docs/spec/events-hub.md`, Events): the 50 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -551,6 +551,7 @@ pub enum DomainEvent {
     #[serde(rename = "media.files.imported")]
     MediaFilesImported {
         media_id: i64,
+        family: Family,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         season_number: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -562,6 +563,7 @@ pub enum DomainEvent {
     #[serde(rename = "acquisition.grabbed")]
     AcquisitionGrabbed {
         media_id: i64,
+        family: Family,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         season_number: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -727,9 +729,9 @@ mod tests {
             json!({"type":"media.monitored.changed","mediaId":1,"monitored":true}),
             json!({"type":"media.season.monitored.changed","mediaId":1,"seasonNumber":2,"monitored":false}),
             json!({"type":"media.removed","mediaId":1,"externalIds":[{"provider":"tmdb","value":"3"},{"provider":"imdb","value":"tt1"}],"mediaType":"series"}),
-            json!({"type":"media.files.imported","mediaId":1,"episodeNumber":2,"source":"disk"}),
+            json!({"type":"media.files.imported","mediaId":1,"family":"video","episodeNumber":2,"source":"disk"}),
             json!({"type":"media.acquisition.requested","mediaIds":[1,2],"reason":"r"}),
-            json!({"type":"acquisition.grabbed","mediaId":1}),
+            json!({"type":"acquisition.grabbed","mediaId":1,"family":"video"}),
             json!({"type":"request.created","requestId":1,"mediaType":"movie","externalIds":[{"provider":"tmdb","value":"2"}],"userId":null,"kind":"k","seasons":null}),
             json!({"type":"request.approved","requestId":1,"mediaId":null,"mediaType":"movie","externalIds":[{"provider":"tmdb","value":"2"}],"seasons":[1],"approvedByUserId":null}),
             json!({"type":"library.scan.completed","libraryId":1,"added":2,"updated":3}),
