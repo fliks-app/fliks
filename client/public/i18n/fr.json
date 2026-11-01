@@ -3829,5 +3829,30 @@
     "taken_propose": "Déjà proposé",
     "propose_count_one": "Proposer {{count}} épisode",
     "propose_count_other": "Proposer {{count}} épisodes"
+  },
+  "reader": {
+    "back": "Retour",
+    "contents": "Table des matières",
+    "no_contents": "Ce livre n'a pas de table des matières.",
+    "settings": "Réglages de lecture",
+    "progress": "Progression de lecture",
+    "font_size": "Taille du texte",
+    "font_family": "Police",
+    "font_publisher": "Livre",
+    "font_serif": "Serif",
+    "font_sans": "Sans serif",
+    "theme": "Thème",
+    "theme_light": "Clair",
+    "theme_sepia": "Sépia",
+    "theme_dark": "Sombre",
+    "line_spacing": "Interligne",
+    "margins": "Marges",
+    "margins_narrow": "Étroites",
+    "margins_normal": "Moyennes",
+    "margins_wide": "Larges",
+    "layout": "Mise en page",
+    "layout_paginated": "Pages",
+    "layout_scroll": "Défilement",
+    "open_failed": "Impossible d'ouvrir ce livre."
   }
 }

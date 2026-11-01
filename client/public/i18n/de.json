@@ -3829,5 +3829,30 @@
     "taken_propose": "Bereits vorgeschlagen",
     "propose_count_one": "{{count}} Folge vorschlagen",
     "propose_count_other": "{{count}} Folgen vorschlagen"
+  },
+  "reader": {
+    "back": "Zurück",
+    "contents": "Inhaltsverzeichnis",
+    "no_contents": "Dieses Buch hat kein Inhaltsverzeichnis.",
+    "settings": "Leseeinstellungen",
+    "progress": "Lesefortschritt",
+    "font_size": "Textgröße",
+    "font_family": "Schriftart",
+    "font_publisher": "Buch",
+    "font_serif": "Serif",
+    "font_sans": "Sans-Serif",
+    "theme": "Design",
+    "theme_light": "Hell",
+    "theme_sepia": "Sepia",
+    "theme_dark": "Dunkel",
+    "line_spacing": "Zeilenabstand",
+    "margins": "Ränder",
+    "margins_narrow": "Schmal",
+    "margins_normal": "Mittel",
+    "margins_wide": "Breit",
+    "layout": "Layout",
+    "layout_paginated": "Seiten",
+    "layout_scroll": "Scrollen",
+    "open_failed": "Dieses Buch konnte nicht geöffnet werden."
   }
 }
