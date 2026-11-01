@@ -2,6 +2,7 @@
 use super::{already_running, body::Body, entity_or_404, gate, subject};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
+    field_sources::set_field_sources,
     items,
 };
 use crate::{
@@ -18,13 +19,17 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
-use fliks_domain::{acl::Action, media::release::ReleaseKind, metadata::limiter::Priority};
+use fliks_domain::{
+    acl::Action,
+    media::release::ReleaseKind,
+    metadata::{field::Field, limiter::Priority},
+};
 use serde_json::{Value, json};
 use sqlx::PgConnection;
 use std::collections::HashSet;
 
 /// `downloadMediaImages` (rule 58): local URLs replace the provider's when the store succeeded.
-pub async fn download_media_images(st: &AppState, id: i32, d: &Details) {
+pub async fn download_media_images(st: &AppState, id: i32, d: &Details, locked: &[Field]) {
     let one = async |url: &Option<String>, v: Variant| match url {
         Some(u) if !u.is_empty() => st.images.download_and_store(u, &Target::media(id, v)).await,
         _ => None,
@@ -41,12 +46,13 @@ pub async fn download_media_images(st: &AppState, id: i32, d: &Details) {
     }
     if let Err(e) = sqlx::query!(
         r#"UPDATE media SET "posterUrl" = COALESCE($2, "posterUrl"), "fanartUrl" = COALESCE($3, "fanartUrl"),
-             "logoUrl" = COALESCE($4, "logoUrl"), "additionalFanartUrls" = $5 WHERE id = $1"#,
+             "logoUrl" = COALESCE($4, "logoUrl"), "additionalFanartUrls" = COALESCE($5, "additionalFanartUrls")
+           WHERE id = $1"#,
         id,
         poster,
         fanart,
         logo,
-        &extra
+        (!locked.contains(&Field::FanartUrl)).then_some(&extra[..])
     )
     .execute(&st.db)
     .await
@@ -290,26 +296,34 @@ pub async fn refresh_metadata(
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let found = service::for_media(st, id, prio).await?;
     let d = &found.details;
+    let free = |f: Field| !found.locked.contains(&f);
+    let original = if free(Field::OriginalTitle) {
+        let title = free(Field::Title).then(|| d.title.clone());
+        d.original_title.clone().or(title)
+    } else {
+        None
+    };
     let mut tx = st.db.begin().await?;
     sqlx::query!(
-        r#"UPDATE media SET title = $2, "originalTitle" = $3, "alternativeTitles" = $4,
+        r#"UPDATE media SET title = COALESCE($2, title), "originalTitle" = COALESCE($3, "originalTitle"),
+             "alternativeTitles" = COALESCE($4, "alternativeTitles"),
              year = COALESCE($5, year), overview = COALESCE($6, overview),
-             status = $7::text::media_status_enum, "posterUrl" = COALESCE($8, "posterUrl"),
+             status = COALESCE($7::text::media_status_enum, status), "posterUrl" = COALESCE($8, "posterUrl"),
              "fanartUrl" = COALESCE($9, "fanartUrl"), "logoUrl" = COALESCE($10, "logoUrl"),
-             rating = COALESCE($11, rating), genres = $12, runtime = COALESCE($13, runtime)
+             rating = COALESCE($11, rating), genres = COALESCE($12, genres), runtime = COALESCE($13, runtime)
            WHERE id = $1"#,
         id,
-        d.title,
-        d.original_title.clone().unwrap_or_else(|| d.title.clone()),
-        json!(d.alternative_titles),
+        free(Field::Title).then(|| d.title.clone()),
+        original,
+        free(Field::AlternativeTitles).then(|| json!(d.alternative_titles)),
         d.year.filter(|y| y.is_finite()).map(|y| y as i32),
         d.overview,
-        super::map_status(media.media_type, &d.status),
+        free(Field::Status).then(|| super::map_status(media.media_type, &d.status)),
         d.poster_url,
         d.fanart_url,
         d.logo_url,
         d.rating,
-        json!(d.genres),
+        free(Field::Genres).then(|| json!(d.genres)),
         d.runtime
     )
     .execute(&mut *tx)
@@ -326,7 +340,10 @@ pub async fn refresh_metadata(
         true,
     )
     .await?;
-    set_tmdb_collection(&mut tx, id, d.tmdb_collection()).await?;
+    if free(Field::Collection) {
+        set_tmdb_collection(&mut tx, id, d.tmdb_collection()).await?;
+    }
+    set_field_sources(&mut tx, id, &found.provenance).await?;
     tx.commit().await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
@@ -345,8 +362,8 @@ pub async fn refresh_metadata(
             media.title
         );
     }
-    download_media_images(st, id, d).await;
-    service::persist_credits(st, id, media.media_type, d).await?;
+    download_media_images(st, id, d, &found.locked).await;
+    service::persist_credits(st, id, media.media_type, d, &found.locked).await?;
     if media.has_seasons() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {

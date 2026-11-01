@@ -1,11 +1,20 @@
 //! What the media services read from the providers and write back (`media-write.md` rules 16, 17, 53-58):
 //! provider choice per library, media and season, cross-references, season overrides and credits.
-use super::{Override, Upstream};
-use crate::{http::AppError, media::external_ids, state::AppState};
+use super::{MetaError, Override, Upstream};
+use crate::{
+    http::AppError,
+    media::{external_ids, field_sources::locked_fields},
+    state::AppState,
+};
 use fliks_domain::external_id::ExternalProvider;
 use fliks_domain::media::kind::MediaKind;
-use fliks_domain::metadata::{language::Resolved, limiter::Priority};
-use serde_json::Value;
+use fliks_domain::metadata::{
+    field::Field,
+    language::Resolved,
+    limiter::Priority,
+    merge::{FieldOrder, Provenance, merge},
+};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 pub use super::credits::persist_credits;
@@ -148,6 +157,9 @@ impl EpisodeDetails {
 pub struct Found {
     pub details: Details,
     pub seasons: Vec<SeasonDetails>,
+    /// The media's locked fields, left out of `details`.
+    pub locked: Vec<Field>,
+    pub provenance: Provenance,
 }
 
 /// What `importMedia` / `importFromTmdb` look up (`media-write.md` rules 16-17).
@@ -167,6 +179,13 @@ fn fail(p: ExternalProvider, e: Upstream) -> AppError {
         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
         "Internal server error",
     )
+}
+
+fn fail_meta(p: ExternalProvider, e: MetaError) -> AppError {
+    match e {
+        MetaError::Upstream(e) => fail(p, e),
+        MetaError::Db(e) => e.into(),
+    }
 }
 
 fn ext_i64(external_id: &str) -> Result<i64, AppError> {
@@ -202,6 +221,26 @@ async fn language(st: &AppState, lib: Option<&Lib>) -> Result<Resolved, sqlx::Er
     st.metadata.lang.resolve(lib.map(|l| &l.over)).await
 }
 
+async fn read_record(
+    st: &AppState,
+    p: ExternalProvider,
+    kind: MediaKind,
+    external_id: &str,
+    lang: &Resolved,
+    prio: Priority,
+) -> Result<Map<String, Value>, AppError> {
+    ext_i64(external_id)?;
+    let v = st
+        .metadata
+        .work(p, kind, external_id, lang, prio)
+        .await
+        .map_err(|e| fail_meta(p, e))?;
+    Ok(match v {
+        Value::Object(o) => o,
+        _ => Map::new(),
+    })
+}
+
 async fn read_details(
     st: &AppState,
     p: ExternalProvider,
@@ -210,14 +249,8 @@ async fn read_details(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Details, AppError> {
-    ext_i64(external_id)?;
-    let v = st
-        .metadata
-        .of(p)
-        .fetch_work(kind, external_id, lang, prio)
-        .await
-        .map_err(|e| fail(p, e))?;
-    Ok(Details::from_value(&v))
+    let record = read_record(st, p, kind, external_id, lang, prio).await?;
+    Ok(Details::from_value(&Value::Object(record)))
 }
 
 async fn read_seasons(
@@ -230,10 +263,9 @@ async fn read_seasons(
     ext_i64(external_id)?;
     let v = st
         .metadata
-        .of(p)
-        .fetch_children(MediaKind::Series, external_id, lang, prio)
+        .children(p, external_id, lang, prio)
         .await
-        .map_err(|e| fail(p, e))?;
+        .map_err(|e| fail_meta(p, e))?;
     Ok(v.iter().map(SeasonDetails::from_value).collect())
 }
 
@@ -262,6 +294,17 @@ async fn cross_reference_id(
     Ok(found.map(|(id, _)| id))
 }
 
+/// The details and provenance of `records` merged in the order of `first`.
+fn merged(
+    kind: MediaKind,
+    records: &[(ExternalProvider, Map<String, Value>)],
+    first: ExternalProvider,
+    locked: &[Field],
+) -> (Details, Provenance) {
+    let (m, provenance) = merge(records, &FieldOrder::new(kind, &[first]), locked);
+    (Details::from_value(&Value::Object(m)), provenance)
+}
+
 /// `readForLibrary` (rule 16): the details from the provider the library prefers, ids kept from the finder.
 async fn read_for_library(
     st: &AppState,
@@ -271,17 +314,21 @@ async fn read_for_library(
     lib: Option<&Lib>,
     lang: &Resolved,
     prio: Priority,
-) -> Result<(ExternalProvider, String, Details), AppError> {
-    let details = read_details(st, found, kind, external_id, lang, prio).await?;
-    let keep = (found, external_id.to_owned(), details.clone());
+) -> Result<(ExternalProvider, String, Details, Provenance), AppError> {
+    let record = read_record(st, found, kind, external_id, lang, prio).await?;
+    let details = Details::from_value(&Value::Object(record.clone()));
+    let keep = |record| {
+        let (d, p) = merged(kind, &[(found, record)], found, &[]);
+        (found, external_id.to_owned(), d, p)
+    };
     let Some(pref) = lib
         .and_then(|l| l.preferred.as_deref())
         .filter(|p| !p.is_empty())
     else {
-        return Ok(keep);
+        return Ok(keep(record));
     };
     let target = match ExternalProvider::parse(pref) {
-        Some(p) if p == found => return Ok(keep),
+        Some(p) if p == found => return Ok(keep(record)),
         Some(p) if st.metadata.available(p) => p,
         _ => {
             tracing::warn!(
@@ -289,7 +336,7 @@ async fn read_for_library(
                 details.title,
                 found.as_str()
             );
-            return Ok(keep);
+            return Ok(keep(record));
         }
     };
     let Some(target_id) = cross_reference_id(st, target, &details, lang, prio).await? else {
@@ -298,19 +345,27 @@ async fn read_for_library(
             details.title,
             found.as_str()
         );
-        return Ok(keep);
+        return Ok(keep(record));
     };
-    let mut preferred = read_details(st, target, kind, &target_id, lang, prio).await?;
+    let preferred = read_record(st, target, kind, &target_id, lang, prio).await?;
     tracing::info!(
         "import: \"{}\" read from {pref} (id={target_id}) - library preference",
         details.title
     );
-    if preferred.tmdb_id.is_none_or(|t| t == 0) {
-        preferred.tmdb_id = details.tmdb_id;
-    }
-    preferred.tvdb_id = preferred.tvdb_id.or(details.tvdb_id);
-    preferred.imdb_id = preferred.imdb_id.or(details.imdb_id);
-    Ok((target, target_id, preferred))
+    let ids = |r: &Map<String, Value>| -> Map<String, Value> {
+        let own = |k: &String| Field::Ids.keys().contains(&k.as_str());
+        r.iter()
+            .filter(|(k, _)| own(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    };
+    let (d, p) = merged(
+        kind,
+        &[(target, preferred), (found, ids(&record))],
+        target,
+        &[],
+    );
+    Ok((target, target_id, d, p))
 }
 
 /// `importMedia` / `importFromTmdb` reads (rules 16, 17): the title, every season for a series, a missing
@@ -320,7 +375,7 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
     let finder = st.metadata.resolve(l.provider.as_deref());
     let lib = library(st, Some(l.library_id)).await?;
     let lang = language(st, lib.as_ref()).await?;
-    let (p, id, mut details) =
+    let (p, id, mut details, provenance) =
         read_for_library(st, kind, finder, &l.external_id, lib.as_ref(), &lang, prio).await?;
     let seasons = if kind.has_seasons() {
         read_seasons(st, p, &id, &lang, prio).await?
@@ -341,7 +396,12 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
             details.tmdb_id = tmdb.parse().ok();
         }
     }
-    Ok(Found { details, seasons })
+    Ok(Found {
+        details,
+        seasons,
+        locked: vec![],
+        provenance,
+    })
 }
 
 /// The columns of a media row the resolution reads.
@@ -680,13 +740,20 @@ pub async fn for_media(st: &AppState, media_id: i32, prio: Priority) -> Result<F
         media.0.as_str(),
         media.1
     );
-    let details = read_details(st, media.0, m.kind, &media.1, &lang, prio).await?;
+    let record = read_record(st, media.0, m.kind, &media.1, &lang, prio).await?;
+    let locked = locked_fields(&st.db, m.id).await?;
+    let (details, provenance) = merged(m.kind, &[(media.0, record)], media.0, &locked);
     let seasons = if m.kind.has_seasons() {
         seasons_of(st, &m, lib.as_ref(), &lang, &media, prio).await?
     } else {
         vec![]
     };
-    Ok(Found { details, seasons })
+    Ok(Found {
+        details,
+        seasons,
+        locked,
+        provenance,
+    })
 }
 
 /// Rule 55: the episode as its season's provider lists it; `None` when the provider has no such episode.

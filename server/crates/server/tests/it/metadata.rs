@@ -12,6 +12,8 @@ use std::{
 };
 use tower::ServiceExt;
 
+mod snapshots;
+
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 #[derive(Default)]
@@ -211,13 +213,13 @@ async fn search_marks_media_the_caller_can_read(pool: PgPool) {
             .map(|r| r["existingMediaId"].clone())
             .collect()
     };
-    let (s, admin) = call(&c, "/api/metadata/search/movie?q=matrix", Some(&c.admin)).await;
+    let (s, admin) = call(&c, "/api/metadata/search/movie?q=sample", Some(&c.admin)).await;
     assert_eq!(s, 200);
     assert_eq!(ids(&admin), [json!(1), json!(2), Value::Null, Value::Null]);
     assert_eq!(admin[0]["existingMediaType"], "movie");
     assert_eq!(admin[0]["year"], 2020);
     assert!(admin[0].get("tvdbId").is_none() && admin[0]["provider"] == "tmdb");
-    let (_, reader) = call(&c, "/api/metadata/search/movie?q=matrix", Some(&c.reader)).await;
+    let (_, reader) = call(&c, "/api/metadata/search/movie?q=sample", Some(&c.reader)).await;
     assert_eq!(
         ids(&reader),
         [json!(1), Value::Null, Value::Null, Value::Null],
@@ -438,14 +440,14 @@ async fn details_seasons_and_stubs(pool: PgPool) {
     c.stub.json(
         "/tmdb/3/movie/603",
         200,
-        json!({"id": 603, "title": "The Matrix", "release_date": "1999-03-30", "budget": 0, "status": "Released",
+        json!({"id": 603, "title": "Sample Film", "release_date": "1999-03-30", "budget": 0, "status": "Released",
                "genres": [{"id": 28, "name": "Action"}], "poster_path": "/p.jpg", "belongs_to_collection": {"id": 2, "name": "C"}}),
     );
     let (s, d) = call(&c, "/api/metadata/movie/603", Some(&c.reader)).await;
     assert_eq!(s, 200);
     assert_eq!(
         (d["title"].clone(), d["year"].clone(), d["budget"].clone()),
-        (json!("The Matrix"), json!(1999), Value::Null)
+        (json!("Sample Film"), json!(1999), Value::Null)
     );
     assert_eq!(d["tmdbCollectionName"], "C");
     assert_eq!(d["status"], "released");
@@ -932,7 +934,7 @@ async fn persisting_credits_does_not_fetch_person_details(pool: PgPool) {
         "cast": [{"externalId": 5, "name": "A", "character": "X", "order": 0}],
         "crew": [{"externalId": 6, "name": "B", "job": "Director", "department": "Directing"}],
     }));
-    fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &d)
+    fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &d, &[])
         .await
         .unwrap();
     let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM persons")
@@ -954,12 +956,12 @@ async fn persisting_details_writes_the_table_of_the_kind(pool: PgPool) {
         "voteCount": 3, "keywords": ["a"]}),
     );
     for (id, kind) in [(1, MediaKind::Movie), (2, MediaKind::Series)] {
-        fliks_server::metadata::service::persist_credits(&c.st, id, kind, &first)
+        fliks_server::metadata::service::persist_credits(&c.st, id, kind, &first, &[])
             .await
             .unwrap();
     }
     let again = d(json!({"provider": "tmdb", "title": "T", "voteCount": 4}));
-    fliks_server::metadata::service::persist_credits(&c.st, 2, MediaKind::Series, &again)
+    fliks_server::metadata::service::persist_credits(&c.st, 2, MediaKind::Series, &again, &[])
         .await
         .unwrap();
     let movie: (Option<i64>, Option<String>) =
@@ -1008,8 +1010,8 @@ async fn concurrent_credit_persists_make_one_person_per_id(pool: PgPool) {
     };
     let (a, b) = (cast(1), cast(2));
     let (ra, rb) = tokio::join!(
-        fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &a),
-        fliks_server::metadata::service::persist_credits(&c.st, 2, MediaKind::Movie, &b)
+        fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &a, &[]),
+        fliks_server::metadata::service::persist_credits(&c.st, 2, MediaKind::Movie, &b, &[])
     );
     ra.unwrap();
     rb.unwrap();
@@ -1057,7 +1059,7 @@ async fn persisting_credits_skips_person_ids_the_table_refuses(pool: PgPool) {
             {"externalId": -3, "name": "Neg", "character": "X", "order": 3}
         ],
     }));
-    fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &d)
+    fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &d, &[])
         .await
         .unwrap();
     let (persons, credits): (i64, i64) = sqlx::query_as(

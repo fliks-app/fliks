@@ -2,7 +2,7 @@
 use super::service::{Details, n, s};
 use crate::media::details;
 use crate::{http::AppError, images::paths::Target, persons::service::Person, state::AppState};
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{media::kind::MediaKind, metadata::field::Field};
 use futures_util::{StreamExt, stream};
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap};
@@ -21,14 +21,19 @@ fn ext(c: &Value) -> Option<i32> {
     n(c, "externalId")
 }
 
-/// `persistMediaMetadata` (rule 58): the details row of the media's kind, persons, cast and crew.
+/// `persistMediaMetadata` (rule 58): the details row of the media's kind, persons, cast and crew,
+/// the credits untouched while their field is locked.
 pub async fn persist_credits(
     st: &AppState,
     media_id: i32,
     kind: MediaKind,
     d: &Details,
+    locked: &[Field],
 ) -> Result<(), AppError> {
     details::write_details(&mut *st.db.acquire().await?, media_id, kind, d).await?;
+    if locked.contains(&Field::Credits) {
+        return Ok(());
+    }
     let provider = d
         .raw
         .get("provider")
