@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"type\" AS kind, \"startSeconds\" AS start, \"endSeconds\" AS \"end\"\n           FROM episode_markers WHERE \"episodeId\" = $1 AND \"type\" IN ('intro', 'outro')",
+  "query": "SELECT kind, \"startSeconds\" AS start, \"endSeconds\" AS \"end\"\n           FROM item_markers WHERE \"itemId\" = $1 AND kind IN ('intro', 'outro')",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "kind",
-        "type_info": "Varchar",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "episode_markers",
-            "name": "type"
+            "table": "item_markers",
+            "name": "kind"
           }
         }
       },
@@ -20,7 +20,7 @@
         "type_info": "Float8",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "startSeconds"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Float8",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "endSeconds"
           }
         }
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "ad3c6f7ac40cba7ede76c6fa3ffddde925de5e2f606075a1f6e2d1dca832efc3"
+  "hash": "c58cff7ddc659dfe4bb7a1100c60c87cf4641849fb2984e4556a01cefad9d4fa"
 }

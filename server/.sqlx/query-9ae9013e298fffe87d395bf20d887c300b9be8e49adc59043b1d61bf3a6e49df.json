@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM episode_markers WHERE id = $1",
+  "query": "DELETE FROM item_markers WHERE id = $1 AND kind <> 'chapter'",
   "describe": {
     "columns": [],
     "parameters": {
@@ -10,5 +10,5 @@
     },
     "nullable": []
   },
-  "hash": "51c9c7bb8ba54fe6efdf14c72fe8c3d088e5eece621dcc24f6536a5f5705086b"
+  "hash": "9ae9013e298fffe87d395bf20d887c300b9be8e49adc59043b1d61bf3a6e49df"
 }

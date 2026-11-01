@@ -1038,6 +1038,87 @@ fn sql_files() -> i64 {
 const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
+async fn m1789000090_turns_episode_markers_into_item_markers(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_090).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 's', 'series');
+          INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media;
+          INSERT INTO items (id, "mediaId", "editionId")
+            SELECT 5, "mediaId", id FROM editions WHERE "mediaId" = 1;
+          INSERT INTO item_groups (id, "number", "mediaId") VALUES (1, 1, 2);
+          INSERT INTO items (id, "groupId", "mediaId", "editionId", "number") VALUES
+            (10, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 1),
+            (11, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 2);
+          INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "streamInfo") VALUES
+            (1, 1, 'v1', 1, 'q', '{"chapters": [{"startSeconds": 0, "endSeconds": 5, "title": "One"},
+                                                {"startSeconds": 5, "endSeconds": 9, "title": ""}]}'),
+            (2, 1, 'v2', 1, 'q', '{"chapters": [{"startSeconds": 0, "endSeconds": 9, "title": "Cut"}]}'),
+            (3, 2, 'range', 1, 'q', '{"chapters": [{"startSeconds": 0, "endSeconds": 7},
+                                                   {"startSeconds": "x", "endSeconds": 8}]}'),
+            (4, 2, 'loose', 1, 'q', '{"chapters": [{"startSeconds": 0, "endSeconds": 7}]}'),
+            (5, 2, 'none', 1, 'q', '{"video": []}');
+          INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES
+            (5, 1, 1), (5, 2, 1), (10, 3, 2), (11, 3, 2), (10, 5, 2);
+          INSERT INTO episode_markers (id, "episodeId", type, "startSeconds", "endSeconds", manual) VALUES
+            (1, 10, 'intro', 1, 2, true), (2, 11, 'outro', 3, 4, false),
+            (3, 11, 'recap', 5, 5, false), (4, NULL, 'intro', 1, 2, false);
+          SELECT setval('episode_markers_id_seq', 4)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_090).await;
+
+    // ids are kept; the null item and the empty range are dropped
+    let markers: Vec<(i32, i32, String, bool)> = rows(
+        &pool,
+        r#"SELECT id, "itemId", kind, manual FROM item_markers WHERE kind <> 'chapter' ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(
+        markers,
+        [
+            (1, 10, "intro".into(), true),
+            (2, 11, "outro".into(), false)
+        ]
+    );
+    // every part carries its file's chapters, in file order, a blank title kept and a bad entry skipped
+    type Chapter = (i32, i32, f64, f64, Option<String>);
+    let chapters: Vec<Chapter> = rows(
+        &pool,
+        r#"SELECT "itemId", "mediaFileId", "startSeconds", "endSeconds", title
+           FROM item_markers WHERE kind = 'chapter' ORDER BY "itemId", "mediaFileId", id"#,
+    )
+    .await;
+    let want: Vec<Chapter> = vec![
+        (5, 1, 0.0, 5.0, Some("One".into())),
+        (5, 1, 5.0, 9.0, Some(String::new())),
+        (5, 2, 0.0, 9.0, Some("Cut".into())),
+        (10, 3, 0.0, 7.0, None),
+        (11, 3, 0.0, 7.0, None),
+    ];
+    assert_eq!(chapters, want);
+
+    for bad in [
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (NULL, 'recap', 1, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'chapter', 1, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'intro', 1, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'bogus', 1, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds") VALUES (10, 'recap', 2, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", "mediaFileId", kind, "startSeconds", "endSeconds") VALUES (10, 3, 'outro', 1, 2)"#,
+        r#"INSERT INTO item_markers ("itemId", "mediaFileId", kind, "startSeconds", "endSeconds") VALUES (11, 1, 'chapter', 1, 2)"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(&pool, "DELETE FROM media_files WHERE id = 3").await;
+    let left: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM item_markers WHERE "mediaFileId" = 3"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
     fliks_server::db::migrate(&pool).await.unwrap();
 

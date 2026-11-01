@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.\"createdAt\" AS created_at, m.\"updatedAt\" AS updated_at, m.type AS \"type!\",\n                  m.\"startSeconds\" AS start_seconds, m.\"endSeconds\" AS end_seconds, m.confidence,\n                  m.manual, m.\"episodeId\" AS episode_id\n           FROM episode_markers m JOIN items e ON e.id = m.\"episodeId\" WHERE e.\"groupId\" = $1\n           ORDER BY m.\"episodeId\", m.\"startSeconds\", m.id",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, kind AS \"type!\",\n                  \"startSeconds\" AS start_seconds, \"endSeconds\" AS end_seconds, confidence,\n                  manual, \"itemId\" AS episode_id\n           FROM item_markers WHERE \"itemId\" = $1 AND kind <> 'chapter'\n           ORDER BY \"startSeconds\", id",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "createdAt"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "updatedAt"
           }
         }
@@ -39,11 +39,11 @@
       {
         "ordinal": 3,
         "name": "type!",
-        "type_info": "Varchar",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "episode_markers",
-            "name": "type"
+            "table": "item_markers",
+            "name": "kind"
           }
         }
       },
@@ -53,7 +53,7 @@
         "type_info": "Float8",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "startSeconds"
           }
         }
@@ -64,7 +64,7 @@
         "type_info": "Float8",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "endSeconds"
           }
         }
@@ -75,7 +75,7 @@
         "type_info": "Float8",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "confidence"
           }
         }
@@ -86,7 +86,7 @@
         "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "episode_markers",
+            "table": "item_markers",
             "name": "manual"
           }
         }
@@ -97,8 +97,8 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "episode_markers",
-            "name": "episodeId"
+            "table": "item_markers",
+            "name": "itemId"
           }
         }
       }
@@ -117,8 +117,8 @@
       false,
       false,
       false,
-      true
+      false
     ]
   },
-  "hash": "865bda530a0424b984535cc8aaffaa5a1050f61a1c6f4a5cdf05509e7eb083a2"
+  "hash": "e7fb7490e2a5a8d89386f1fea57a8a4b62115c6eea4b357e1413aced3e4274a0"
 }

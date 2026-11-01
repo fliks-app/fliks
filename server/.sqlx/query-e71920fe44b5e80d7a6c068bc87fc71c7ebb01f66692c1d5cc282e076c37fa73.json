@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE item_markers SET \"startSeconds\" = $2, \"endSeconds\" = $3, manual = true, confidence = 1\n           WHERE id = $1 AND kind <> 'chapter'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e71920fe44b5e80d7a6c068bc87fc71c7ebb01f66692c1d5cc282e076c37fa73"
+}

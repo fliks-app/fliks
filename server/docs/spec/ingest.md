@@ -178,6 +178,7 @@ Parameters `$n`:
 - Relink: media by `(kind, provider, value)` in `media_external_ids`; media by `(library, type, "folderName")`; `UPDATE media SET "libraryId" = $1, "folderName" = $2 WHERE id = $3`; `DELETE FROM media WHERE id = $1` (rule 87); `SELECT count(*) FROM media_files WHERE "mediaId" = $1`.
 - Settings: `SELECT value FROM app_settings WHERE key = 'companion_file_extensions' LIMIT 1`.
 - FK facts the rules rely on (baseline): `media_files."mediaId"` CASCADE, `item_parts."mediaFileId"` and `item_parts."itemId"` CASCADE, `playback_states."mediaFileId"` SET NULL, `subtitle_files."mediaFileId"` CASCADE, `media_file_scans."mediaFileId"` CASCADE, `media."libraryId"` RESTRICT; unique `(mediaId, relativePath)` on `media_files`.
+- Chapters: nothing in ingest writes them. Inserting an `item_parts` row or changing `media_files."streamInfo".chapters` makes triggers copy the probe chapters into `item_markers` (`items.md`, rules 25-27).
 
 ## Events
 

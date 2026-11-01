@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"episodeId\" AS \"episode_id!\" FROM episode_markers\n           WHERE \"episodeId\" = ANY($1) AND type = $2 AND manual = true",
+  "query": "SELECT \"itemId\" AS \"episode_id!\" FROM item_markers\n           WHERE \"itemId\" = ANY($1) AND kind = $2 AND manual = true",
   "describe": {
     "columns": [
       {
@@ -9,8 +9,8 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "episode_markers",
-            "name": "episodeId"
+            "table": "item_markers",
+            "name": "itemId"
           }
         }
       }
@@ -22,8 +22,8 @@
       ]
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "63bc278ec386894e9a4c888ba229a44a221053346a6fa38a183a99108a0ac77b"
+  "hash": "c13817bd138cf3cc550e036755ea392f793adbc9640c7c18625d1b29ffe33fda"
 }
