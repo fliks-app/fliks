@@ -90,6 +90,31 @@ pub fn normalize(path: &str) -> String {
     out.to_string_lossy().into_owned()
 }
 
+/// Boot check: warns for every pair of folders of different libraries that name one directory
+/// (case, symlink or bind-mount variants); nothing is changed.
+pub async fn warn_overlapping_folders(db: &sqlx::PgPool) -> sqlx::Result<()> {
+    let folders =
+        sqlx::query!(r#"SELECT "libraryId" AS library_id, path FROM library_folders ORDER BY id"#)
+            .fetch_all(db)
+            .await?;
+    for (i, a) in folders.iter().enumerate() {
+        for b in &folders[i + 1..] {
+            if a.library_id != b.library_id
+                && crate::ingest::fsx::same_dir(Path::new(&a.path), Path::new(&b.path))
+            {
+                tracing::warn!(
+                    "library #{} \"{}\" and library #{} \"{}\" are one directory: media there is listed twice",
+                    a.library_id,
+                    a.path,
+                    b.library_id,
+                    b.path
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 /// `assignPath` (rule 13): the directory is created last, right before the write.
 pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppError> {
     let exists = sqlx::query_scalar!(
@@ -127,7 +152,7 @@ pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppE
         return Err(AppError::bad_request(vec!["path must be an absolute path"]));
     }
     let path = normalize(&path);
-    if current.as_deref() == Some(&path) {
+    if current.as_deref().map(normalize).as_deref() == Some(&path) {
         return Ok(());
     }
     let others = sqlx::query_scalar!(

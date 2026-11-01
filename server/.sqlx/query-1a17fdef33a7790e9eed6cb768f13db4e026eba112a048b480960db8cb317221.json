@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"libraryId\" AS library_id, path FROM library_folders ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "library_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "libraryId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1a17fdef33a7790e9eed6cb768f13db4e026eba112a048b480960db8cb317221"
+}

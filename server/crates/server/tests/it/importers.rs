@@ -413,7 +413,7 @@ async fn radarr_import_writes_media_profiles_and_subtitles(pool: PgPool) {
     .unwrap();
     assert_eq!(
         (m.0, m.1, m.2.as_str()),
-        (2019, false, "Parity Movie 01 (2020)")
+        (2019, false, "Old") // a media with files keeps its folder
     );
     assert!(m.3.is_some());
     let langs: Vec<(String, bool, String)> = sqlx::query_as(

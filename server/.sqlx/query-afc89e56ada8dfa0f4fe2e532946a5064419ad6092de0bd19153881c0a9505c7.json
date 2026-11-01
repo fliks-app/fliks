@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"libraryId\" = $2 WHERE id = $1 AND \"libraryId\" IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "afc89e56ada8dfa0f4fe2e532946a5064419ad6092de0bd19153881c0a9505c7"
+}

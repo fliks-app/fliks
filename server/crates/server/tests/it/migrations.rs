@@ -2259,6 +2259,8 @@ async fn m195_error(pool: &PgPool) -> String {
         .expect_err("the migration refuses")
         .to_string()
 }
+const PREFLIGHT: i64 = 1_789_000_000_015;
+const FOLDERS: i64 = 1_789_000_000_195;
 
 async fn count(pool: &PgPool, table: &str) -> i64 {
     sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
@@ -2267,25 +2269,212 @@ async fn count(pool: &PgPool, table: &str) -> i64 {
         .unwrap()
 }
 
+/// The error of the first migration from `from` on that refuses, with the migrations applied before it.
+async fn first_refusal(pool: &PgPool, from: i64) -> Option<(i64, String)> {
+    for m in MIGRATOR.iter().filter(|m| m.version >= from) {
+        if let Err(e) = sqlx::raw_sql(m.sql.as_ref()).execute(pool).await {
+            return Some((m.version, e.to_string()));
+        }
+    }
+    None
+}
+
 #[sqlx::test(migrations = false)]
-async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool: PgPool) {
-    apply_until(&pool, 1_789_000_000_195).await;
+async fn m1789000015_normalises_paths_and_places_orphans(pool: PgPool) {
+    apply_until(&pool, PREFLIGHT).await;
     sql(
         &pool,
-        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m/a/'), (2, 'b', ''), (3, 'c', NULL), (4, 'd', '//m//d//'), (5, 'e', '/');
+        r#"INSERT INTO libraries (id, name, path, "mediaTypes") VALUES
+             (1, 'a', '/m/a/', '["movie"]'), (2, 'b', '/m/b', '["series"]'), (3, 'c', '/m/b/', '["series"]'),
+             (4, 'd', '//m//d//', '["movie","series"]'), (5, 'e', '/m/e', '["movie"]'), (6, 'f', '/m/f/', '["movie"]'),
+             (7, 'g', '/m/f', '["movie"]');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+             (1, 'orphan', 'movie', NULL, 'O'), (2, 'bare', 'movie', NULL, 'P'), (3, 'in-d', 'movie', 4, 'D');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (1, 1, 'o.mkv', 1, 'q'), (2, 3, '/m/d/D/abs.mkv', 1, 'q'), (3, 3, 'a\b.mkv', 1, 'q')"#,
+    )
+    .await;
+    // A film no single library takes: libraries 1, 5, 6 and 7 accept movies, 4 does too.
+    let e = first_refusal(&pool, PREFLIGHT).await.expect("refused");
+    assert_eq!(e.0, PREFLIGHT);
+    assert!(
+        e.1.contains("belong to no library") && e.1.contains("UPDATE media SET"),
+        "{e:?}"
+    );
+    assert_eq!(
+        count(&pool, "media_files").await,
+        3,
+        "a refusal changes nothing"
+    );
+    let raw: Vec<(String,)> = rows(&pool, "SELECT path FROM libraries ORDER BY id").await;
+    assert_eq!(
+        raw[0].0, "/m/a/",
+        "the normalisation is rolled back with the refusal"
+    );
+
+    sql(&pool, r#"UPDATE media SET "libraryId" = 5 WHERE id = 1"#).await;
+    sql(&pool, r#"DELETE FROM media_files WHERE id = 1"#).await;
+    apply_only(&pool, PREFLIGHT).await;
+    let libs: Vec<(i32, String)> = rows(&pool, "SELECT id, path FROM libraries ORDER BY id").await;
+    assert_eq!(
+        libs,
+        vec![
+            (1, "/m/a".into()),
+            (2, "/m/b".into()),
+            (3, "/m/b/".into()),
+            (4, "/m/d".into()),
+            (5, "/m/e".into()),
+            (6, "/m/f/".into()),
+            (7, "/m/f".into()),
+        ],
+        "the library already written normalised, else the lowest id, takes the normalised path"
+    );
+
+    apply(&pool, |v| v > PREFLIGHT && v < FOLDERS).await;
+    apply_only(&pool, FOLDERS).await;
+    let files: Vec<(i32, String)> = rows(
+        &pool,
+        r#"SELECT id, "relativePath" FROM media_files ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(
+        files,
+        vec![(2, "D/abs.mkv".into()), (3, "D/a\\b.mkv".into())],
+        "an absolute path under the library root loses it; a backslash is kept"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000015_assigns_the_sole_library_that_takes_the_type(pool: PgPool) {
+    apply_until(&pool, PREFLIGHT).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path, "mediaTypes") VALUES (1, 'm', '/m', '["movie"]'), (2, 's', '/s', '["series"]'), (3, 'n', NULL, '["movie"]');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (1, 'orphan', 'movie', NULL, 'O');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "updatedAt") VALUES (1, 1, 'o.mkv', 1, 'q', '2026-01-02')"#,
+    )
+    .await;
+    apply_only(&pool, PREFLIGHT).await;
+    let lib: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = 1"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(lib, Some(1), "a library without a path does not take it");
+    apply(&pool, |v| v > PREFLIGHT && v < FOLDERS).await;
+    apply_only(&pool, FOLDERS).await;
+    let got: (String, String, bool) = sqlx::query_as(
+        r#"SELECT f."relativePath", lf.path, f."updatedAt" = '2026-01-02' FROM media_files f JOIN library_folders lf ON lf.id = f."folderId""#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(got, ("O/o.mkv".into(), "/m".into(), true));
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000015_refuses_what_it_cannot_place_with_the_sql_to_fix_it(pool: PgPool) {
+    apply_until(&pool, PREFLIGHT).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m'), (2, 'b', NULL);
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+             (1, 'x', 'movie', 2, 'X'), (2, 'y', 'movie', 1, 'Y'), (3, 'z', 'movie', 1, 'Y');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (1, 1, 'x.mkv', 1, 'q')"#,
+    )
+    .await;
+    let e = m15_error(&pool).await;
+    assert!(
+        e.contains("library(ies) 2 hold files but have no path")
+            && e.contains("UPDATE libraries SET path"),
+        "{e}"
+    );
+
+    sql(&pool, "DELETE FROM media_files").await;
+    sql(
+        &pool,
+        r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (2, 2, 'a.mkv', 1, 'q'), (3, 3, 'a.mkv', 1, 'q'), (4, 2, 'b.mkv', 1, 'q'), (5, 3, 'b.mkv', 1, 'q')"#,
+    )
+    .await;
+    let e = m15_error(&pool).await;
+    assert!(
+        e.contains("2 media file(s) would share one path")
+            && e.contains("DELETE FROM media_files WHERE id IN (3, 5)"),
+        "{e}"
+    );
+
+    sql(&pool, "DELETE FROM media_files WHERE id IN (3, 5)").await;
+    sql(
+        &pool,
+        r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (6, 2, '/elsewhere/c.mkv', 1, 'q'), (7, 2, 'a/../d.mkv', 1, 'q'), (8, 2, 'e//f.mkv', 1, 'q'), (9, 2, '', 1, 'q')"#,
+    )
+    .await;
+    let e = m15_error(&pool).await;
+    assert!(
+        e.contains("4 media file(s) have a relativePath") && e.contains("(first ids: 6, 7, 8, 9)"),
+        "{e}"
+    );
+    assert_eq!(
+        count(&pool, "media_files").await,
+        6,
+        "a refusal changes nothing"
+    );
+}
+
+async fn m15_error(pool: &PgPool) -> String {
+    let m = MIGRATOR.iter().find(|m| m.version == PREFLIGHT).unwrap();
+    let e = sqlx::raw_sql(m.sql.as_ref())
+        .execute(pool)
+        .await
+        .expect_err("the preflight refuses")
+        .to_string();
+    assert!(e.contains("psql") && e.contains("cannot start"), "{e}");
+    e
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refusal_comes_before_any_other_6_migration_commits(pool: PgPool) {
+    apply_until(&pool, PREFLIGHT).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', NULL);
+           INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'x', 'movie', 1);
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (1, 1, 'x.mkv', 1, 'q')"#,
+    )
+    .await;
+    let (version, _) = first_refusal(&pool, PREFLIGHT).await.expect("refused");
+    assert_eq!(version, PREFLIGHT);
+    let items: Option<String> = sqlx::query_scalar("SELECT to_regclass('items')::text")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        items, None,
+        "the item tables of 1789000000050 were never created"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool: PgPool) {
+    apply_until(&pool, FOLDERS).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m/a'), (2, 'b', ''), (3, 'c', NULL), (4, 'd', '/m/d'), (5, 'e', '/');
            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
              (1, 'root movie', 'movie', 1, ''), (2, 'show', 'series', 1, 'Show'), (3, 'other', 'movie', 4, 'Other'),
              (4, 'unfiled', 'movie', 3, 'X');
            INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "createdAt", "updatedAt") VALUES
              (1, 1, 'r.mkv', 1, 'q', '2026-01-01', '2026-01-02'), (2, 2, 'Season 01/e1.mkv', 1, 'q', '2026-01-01', '2026-01-02'),
-             (3, 3, 'r.mkv', 1, 'q', '2026-01-01', '2026-01-02'), (4, 3, 'a..b/..c.mkv', 1, 'q', '2026-01-01', '2026-01-02');
+             (3, 3, 'r.mkv', 1, 'q', '2026-01-01', '2026-01-02'), (4, 3, 'a..b/..c.mkv', 1, 'q', '2026-01-01', '2026-01-02'),
+             (5, 1, '/m/a/abs.mkv', 1, 'q', '2026-01-01', '2026-01-02');
            INSERT INTO subtitle_files (id, language, "providerType", "filePath", "mediaId") VALUES
              (1, 'en', 'disk', 'r.en.srt', 1), (2, 'en', 'disk', 'Season 01/e1.en.srt', 2), (3, 'en', 'embedded', NULL, 2),
              (4, 'en', 'disk', '/m/a/Show/abs.srt', 2), (5, 'en', 'disk', '  ', 2), (6, 'en', 'disk', E' x.srt　', 2);
            INSERT INTO wants ("mediaId", family) VALUES (1, 'video'), (2, 'video'), (4, 'video')"#,
     )
     .await;
-    apply_only(&pool, 1_789_000_000_195).await;
+    apply_only(&pool, FOLDERS).await;
 
     let folders: Vec<(i32, String, i32)> = rows(
         &pool,
@@ -2299,7 +2488,7 @@ async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool:
             (4, "/m/d".into(), 0),
             (5, "/".into(), 0)
         ],
-        "an empty or null path is no folder; slashes collapse and the trailing one goes, except the root"
+        "an empty or null path is no folder"
     );
     let files: Vec<(i32, String, String, bool)> = rows(
         &pool,
@@ -2314,6 +2503,7 @@ async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool:
             (2, "/m/a".into(), "Show/Season 01/e1.mkv".into(), true),
             (3, "/m/d".into(), "Other/r.mkv".into(), true),
             (4, "/m/d".into(), "Other/a..b/..c.mkv".into(), true),
+            (5, "/m/a".into(), "abs.mkv".into(), true),
         ],
         "a media folder becomes a prefix of its files; updatedAt is kept; `..` inside a name is fine"
     );
@@ -2366,24 +2556,16 @@ async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool:
     ] {
         assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
     }
-    for rel in [
-        "/abs.mkv",
-        "../x.mkv",
-        "a/../x.mkv",
-        "a/..",
-        "a//b.mkv",
-        "a\\b.mkv",
-    ] {
+    for rel in ["/abs.mkv", "../x.mkv", "a/../x.mkv", "a/..", "a//b.mkv", ""] {
         let q = format!(
-            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality) VALUES (1, 1, '{}', 1, 'q')"#,
-            rel.replace('\\', "\\\\")
+            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality) VALUES (1, 1, '{rel}', 1, 'q')"#
         );
         assert!(
             sqlx::raw_sql(sqlx::AssertSqlSafe(q))
                 .execute(&pool)
                 .await
                 .is_err(),
-            "{rel}"
+            "{rel:?}"
         );
     }
     sql(&pool, "DELETE FROM media WHERE id = 3").await;
@@ -2395,97 +2577,69 @@ async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool:
     );
 }
 
+const V4_LIBRARIES: &str = r#"INSERT INTO libraries (id, name, path, "mediaTypes") VALUES
+    (1, 'Movies', '/data/movies/', '["movie"]'), (2, 'Shows', '/data/shows', '["series"]');
+  INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+    (1, 'Film', 'movie', 1, 'Film (2020)'), (2, 'Loose', 'movie', NULL, 'Loose (2021)'), (3, 'Show', 'series', 2, 'Show');
+  INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+    (1, 1, 'Film (2020).mkv', 1, 'q'), (2, 2, 'Loose (2021).mkv', 1, 'q'), (3, 3, 'Season 01/Show - S01E01.mkv', 1, 'q')"#;
+
 #[sqlx::test(migrations = false)]
-async fn m1789000195_refuses_rows_it_cannot_place_and_changes_nothing(pool: PgPool) {
-    apply_until(&pool, 1_789_000_000_195).await;
-    sql(
-        &pool,
-        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m'), (2, 'b', '/m/')"#,
-    )
-    .await;
-    let e = m195_error(&pool).await;
-    assert!(
-        e.contains("libraries 1, 2 share one path") && e.contains("psql"),
-        "{e}"
-    );
+async fn adopting_a_v4_database_places_its_files_in_folders(pool: PgPool) {
+    sqlx::raw_sql(include_str!("fixtures/typeorm-81.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sql(&pool, V4_LIBRARIES).await;
+    fliks_server::db::migrate(&pool).await.unwrap();
 
-    sql(
+    let got: Vec<(i32, String, String)> = rows(
         &pool,
-        r#"UPDATE libraries SET path = '/n' WHERE id = 2;
-           INSERT INTO libraries (id, name) VALUES (3, 'c');
-           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
-             (1, 'a', 'movie', 3, 'A'), (2, 'b', 'movie', NULL, 'B'), (3, 'c', 'movie', 1, 'C');
-           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
-             (1, 1, 'a.mkv', 1, 'q'), (2, 2, 'b.mkv', 1, 'q'), (3, 3, 'c.mkv', 1, 'q');
-           INSERT INTO subtitle_files (id, language, "providerType", "filePath", "mediaId") VALUES (1, 'en', 'disk', 'c.en.srt', 3);
-           INSERT INTO wants ("mediaId", family) VALUES (3, 'video')"#,
+        r#"SELECT f.id, lf.path, f."relativePath" FROM media_files f JOIN library_folders lf ON lf.id = f."folderId" ORDER BY f.id"#,
     )
     .await;
-    let e = m195_error(&pool).await;
-    assert!(
-        e.contains("2 media file(s) belong to no library folder (first ids: 1, 2)")
-            && e.contains("psql"),
-        "{e}"
+    assert_eq!(
+        got,
+        vec![
+            (
+                1,
+                "/data/movies".into(),
+                "Film (2020)/Film (2020).mkv".into()
+            ),
+            (
+                2,
+                "/data/movies".into(),
+                "Loose (2021)/Loose (2021).mkv".into()
+            ),
+            (
+                3,
+                "/data/shows".into(),
+                "Show/Season 01/Show - S01E01.mkv".into()
+            ),
+        ],
+        "the paths are normalised, the media outside any library joins the one that takes movies"
     );
+    let lib: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = 2"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(lib, Some(1));
+}
 
-    sql(
-        &pool,
-        r#"DELETE FROM media_files WHERE id IN (1, 2);
-           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
-             (4, 'd', 'movie', 1, 'C'), (5, 'e', 'movie', 1, '');
-           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
-             (4, 4, 'c.mkv', 1, 'q'), (5, 5, 'C/c.mkv', 1, 'q')"#,
-    )
-    .await;
-    let e = m195_error(&pool).await;
-    assert!(
-        e.contains("3 media file(s) would share one path in their folder (first ids: 3, 4, 5)")
-            && e.contains("psql"),
-        "{e}"
-    );
-
-    sql(
-        &pool,
-        r#"DELETE FROM media_files WHERE id IN (4, 5);
-           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
-             (6, 5, '/abs.mkv', 1, 'q'), (7, 5, 'a/../b.mkv', 1, 'q'), (8, 5, 'a//b.mkv', 1, 'q'),
-             (9, 5, 'a\b.mkv', 1, 'q'), (10, 4, '../c.mkv', 1, 'q')"#,
-    )
-    .await;
-    let e = m195_error(&pool).await;
-    assert!(
-        e.contains("5 media file(s) have a relativePath that is absolute")
-            && e.contains("(first ids: 6, 7, 8, 9, 10)")
-            && e.contains("psql"),
-        "{e}"
-    );
-
-    for (table, rows) in [
-        ("libraries", 3),
-        ("media", 5),
-        ("media_files", 6),
-        ("subtitle_files", 1),
-        ("wants", 1),
-    ] {
-        assert_eq!(count(&pool, table).await, rows, "{table}");
-    }
-    let paths: Vec<(String,)> = rows(
-        &pool,
-        "SELECT path FROM libraries WHERE path IS NOT NULL ORDER BY id",
-    )
-    .await;
-    assert_eq!(paths, vec![("/m".to_string(),), ("/n".to_string(),)]);
-    let rel: Vec<(String,)> = rows(
-        &pool,
-        r#"SELECT "relativePath" FROM media_files ORDER BY id"#,
-    )
-    .await;
-    assert_eq!(rel[0].0, "c.mkv");
-    let folders: i64 = sqlx::query_scalar(
-        r#"SELECT count(*) FROM information_schema.tables WHERE table_name = 'library_folders'"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(folders, 0, "a refused migration is rolled back whole");
+#[sqlx::test(migrations = false)]
+async fn a_refused_adoption_leaves_the_4x_database_as_it_was(pool: PgPool) {
+    sqlx::raw_sql(include_str!("fixtures/typeorm-81.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sql(&pool, V4_LIBRARIES).await;
+    sql(&pool, "UPDATE libraries SET path = NULL WHERE id = 2").await;
+    let e = fliks_server::db::migrate(&pool).await.expect_err("refused");
+    assert!(e.to_string().contains("hold files but have no path"), "{e}");
+    let newest: i64 = sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(newest < PREFLIGHT, "no 6.0.0 migration committed");
+    assert_eq!(count(&pool, "media_files").await, 3);
 }

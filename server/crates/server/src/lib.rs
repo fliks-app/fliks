@@ -89,6 +89,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     roles::seed(&pool).await?;
     profiles::seed_quality_definitions(&pool).await?;
     profiles::warn_invalid_regexes(&pool).await?;
+    libraries::warn_overlapping_folders(&pool).await?;
     let secret = jwt_secret::resolve(&cfg);
     let mut cfg = cfg;
     if !cfg.engine_url.is_empty() {

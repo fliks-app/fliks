@@ -375,7 +375,7 @@ fn reference(raw: Option<&str>, dirs: &Dirs) -> Result<SyncReference, String> {
     } else {
         std::path::PathBuf::from(
             fliks_domain::subtitle_path::resolve_subtitle_absolute_path(
-                &dirs.m.to_string_lossy(),
+                &dirs.l.to_string_lossy(),
                 path,
             )
             .ok_or_else(bad)?,

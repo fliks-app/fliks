@@ -321,6 +321,11 @@ impl Ctx<'_> {
                     "{name}: destination outside the library root"
                 )));
             }
+            if let Some(other) = self.owner(&dest).await?.filter(|o| *o != self.media.id) {
+                return Ok(Placed::Error(format!(
+                    "{name}: destination belongs to media #{other}"
+                )));
+            }
             let scanned = scan_source(self.st, &src, &probed.info).await;
             if let Some((scan, _)) = &scanned
                 && let Some((end, declared)) = truncated(&probed.info, scan)
@@ -450,6 +455,22 @@ impl Ctx<'_> {
             f => Ok(self.mdir.join(f)),
         };
         (dir, base)
+    }
+
+    /// The media whose file row sits at `dest`, if any.
+    async fn owner(&self, dest: &Path) -> Result<Option<i32>, String> {
+        let Some(rel) = fsx::rel_under(self.root.path(), dest) else {
+            return Ok(None);
+        };
+        sqlx::query_scalar!(
+            r#"SELECT "mediaId" FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2"#,
+            self.folder_id,
+            rel
+        )
+        .fetch_optional(&self.st.db)
+        .await
+        .map(Option::flatten)
+        .map_err(|e| e.to_string())
     }
 
     async fn collides(&self, dir: &Path, file: &str) -> Result<bool, String> {

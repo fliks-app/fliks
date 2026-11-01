@@ -57,7 +57,6 @@ pub fn router() -> Router<AppState> {
 struct Lib {
     id: i32,
     name: String,
-    folder_id: i32,
     path: String,
     types: Vec<MediaKind>,
     provider: Option<String>,
@@ -68,7 +67,7 @@ struct Lib {
 /// `requirePathFor`: 404 unknown, 400 without a root path.
 async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
     let r = sqlx::query!(
-        r#"SELECT l.id, l.name, df."folderId" AS "folder_id?", df.path AS "path?", l."mediaTypes" AS types,
+        r#"SELECT l.id, l.name, df.path AS "path?", l."mediaTypes" AS types,
                   l."preferredProvider" AS provider, l."defaultQualityProfileId" AS dq,
                   l."defaultLanguageProfileId" AS dl
            FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id WHERE l.id = $1"#,
@@ -77,7 +76,7 @@ async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(|| AppError::not_found(format!("Library #{id} not found")))?;
-    let (Some(folder_id), Some(path)) = (r.folder_id, r.path.filter(|p| !p.is_empty())) else {
+    let Some(path) = r.path.filter(|p| !p.is_empty()) else {
         return Err(AppError::bad_request(format!(
             "Library #{id} has no root path configured"
         )));
@@ -85,7 +84,6 @@ async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
     Ok(Lib {
         id: r.id,
         name: r.name,
-        folder_id,
         path,
         types: serde_json::from_value::<Vec<String>>(r.types)
             .unwrap_or_default()

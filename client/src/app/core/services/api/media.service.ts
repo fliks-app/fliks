@@ -94,7 +94,8 @@ export interface Media {
   /** On-disk folder name under the library root; empty for a movie file that sits directly at the root. */
   folderName?: string;
   libraryId?: number | null;
-  library?: { id: number; name: string } | null;
+  /** `path` is the library folder root; managers only. */
+  library?: { id: number; name: string; path?: string | null } | null;
   posterUrl: string | null;
   fanartUrl: string | null;
   /** Transparent PNG clearlogo (title treatment), or null. */

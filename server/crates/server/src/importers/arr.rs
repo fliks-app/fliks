@@ -564,6 +564,7 @@ async fn radarr_movie_subtitles(
     let Some(file) = db::latest_file(&st.db, media.id).await.map_err(db_err)? else {
         return Ok(0);
     };
+    let folder = file.folder_name.as_deref().filter(|f| !f.is_empty());
     let url = format!("{}/api/v3/extrafile?movieId={id}", req.base);
     let res = fetch(url, &req.key, ITEM_TIMEOUT)
         .await
@@ -594,16 +595,17 @@ async fn radarr_movie_subtitles(
             Some(name) => language_from_name(name),
             None => parse_language_from_path(rel),
         };
+        let stored = folder.map_or_else(|| rel.to_owned(), |f| format!("{f}/{rel}"));
         count += subtitles::upsert(
             &st.db,
             req.update,
             &subtitles::Sidecar {
                 media_id: media.id,
-                media_file_id: file,
+                media_file_id: file.id,
                 episode_id: None,
                 provider: "radarr",
                 language: &language,
-                relative_path: rel,
+                relative_path: &stored,
             },
         )
         .await

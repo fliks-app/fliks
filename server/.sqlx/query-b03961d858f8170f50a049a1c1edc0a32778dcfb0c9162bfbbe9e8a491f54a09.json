@@ -1,28 +1,29 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM media_files WHERE \"mediaId\" = $1 ORDER BY id DESC LIMIT 1",
+  "query": "SELECT \"mediaId\" FROM media_files WHERE \"folderId\" = $1 AND \"relativePath\" = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "mediaId",
         "type_info": "Int4",
         "origin": {
           "Table": {
             "table": "media_files",
-            "name": "id"
+            "name": "mediaId"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Text"
       ]
     },
     "nullable": [
-      false
+      true
     ]
   },
-  "hash": "54ea8d02d9ca24174de601ccae5460b386c5f1a2ae2a110bc2040132e65e1126"
+  "hash": "b03961d858f8170f50a049a1c1edc0a32778dcfb0c9162bfbbe9e8a491f54a09"
 }

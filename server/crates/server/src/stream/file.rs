@@ -118,7 +118,7 @@ pub async fn resolve_file(
     });
     Ok(ResolvedFile {
         id: id as i32,
-        absolute,
+        absolute: real,
         size: meta.len(),
         content_type: content_type(&ext),
         ext,

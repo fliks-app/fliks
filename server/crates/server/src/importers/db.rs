@@ -162,8 +162,11 @@ pub async fn update_media(
 ) -> Result<(), WriteError> {
     let mut tx = db.begin().await?;
     sqlx::query!(
-        r#"UPDATE media SET title = $2, year = $3, "folderName" = $4,
-                  overview = $5, "libraryId" = $6, "updatedAt" = now()
+        r#"UPDATE media SET title = $2, year = $3,
+                  "folderName" = CASE WHEN has.files THEN "folderName" ELSE $4 END,
+                  overview = $5,
+                  "libraryId" = CASE WHEN has.files THEN "libraryId" ELSE $6 END, "updatedAt" = now()
+           FROM (SELECT EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1) AS files) has
            WHERE id = $1"#,
         m.id,
         m.title,
@@ -231,10 +234,17 @@ pub async fn series_by_tmdb(db: &PgPool, tmdb_id: i32) -> sqlx::Result<Option<Se
     .await
 }
 
-/// The highest-id file of a movie.
-pub async fn latest_file(db: &PgPool, media_id: i32) -> sqlx::Result<Option<i32>> {
-    sqlx::query_scalar!(
-        r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id DESC LIMIT 1"#,
+/// The highest-id file of a movie and the folder name its media lives under.
+pub struct LatestFile {
+    pub id: i32,
+    pub folder_name: Option<String>,
+}
+
+pub async fn latest_file(db: &PgPool, media_id: i32) -> sqlx::Result<Option<LatestFile>> {
+    sqlx::query_as!(
+        LatestFile,
+        r#"SELECT f.id, m."folderName" AS folder_name FROM media_files f JOIN media m ON m.id = f."mediaId"
+           WHERE f."mediaId" = $1 ORDER BY f.id DESC LIMIT 1"#,
         media_id
     )
     .fetch_optional(db)

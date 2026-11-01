@@ -384,7 +384,7 @@ async fn resolve_file(
     if !real.starts_with(&root) {
         return Err(Fail::Denied);
     }
-    Ok(absolute)
+    Ok(real)
 }
 
 /// An external subtitle's file: under the media directory by realpath, a regular file, never a link.

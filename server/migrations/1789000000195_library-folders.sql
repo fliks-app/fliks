@@ -21,49 +21,16 @@ SELECT DISTINCT ON ("libraryId") "libraryId", "id" AS "folderId", "path"
 CREATE FUNCTION pg_temp.js_trim(text) RETURNS text LANGUAGE sql IMMUTABLE AS
 $$ SELECT btrim($1, E'\t\n\x0b\f\r                  　﻿') $$;
 
--- Paths as `assignPath` stores them: doubled slashes collapsed, no trailing slash except the root.
-CREATE TEMP TABLE "lf_paths" ON COMMIT DROP AS
-SELECT "id" AS "libraryId", regexp_replace(regexp_replace("path", '/{2,}', '/', 'g'), '(.)/+$', '\1') AS "path"
-  FROM "libraries" WHERE COALESCE("path", '') <> '';
+-- The preflight (`1789000000015`) left every path normalised and every file placeable.
+INSERT INTO "library_folders" ("libraryId", "path") SELECT "id", "path" FROM "libraries" WHERE COALESCE("path", '') <> '' ORDER BY "id";
 
-DO $$ DECLARE ids text; BEGIN
-  SELECT string_agg(l."libraryId"::text, ', ' ORDER BY l."libraryId") INTO ids FROM "lf_paths" l
-   WHERE EXISTS (SELECT 1 FROM "lf_paths" o WHERE o."path" = l."path" AND o."libraryId" <> l."libraryId");
-  IF ids IS NOT NULL THEN
-    RAISE EXCEPTION 'library_folders: libraries % share one path. The server cannot start until each has its own path: fix them with psql (UPDATE libraries SET path = ... WHERE id = ...), then restart', ids;
-  END IF;
-END $$;
-
-INSERT INTO "library_folders" ("libraryId", "path") SELECT "libraryId", "path" FROM "lf_paths" ORDER BY "libraryId";
-
-DO $$ DECLARE n bigint; ids text; BEGIN
-  SELECT count(*), string_agg(x."id"::text, ', ' ORDER BY x."id") FILTER (WHERE x."rn" <= 100) INTO n, ids
-    FROM (SELECT f."id", row_number() OVER (ORDER BY f."id") AS "rn" FROM "media_files" f
-           WHERE NOT EXISTS (SELECT 1 FROM "media" m JOIN "library_folders" lf ON lf."libraryId" = m."libraryId"
-                              WHERE m."id" = f."mediaId")) x;
-  IF n > 0 THEN
-    RAISE EXCEPTION 'library_folders: % media file(s) belong to no library folder (first ids: %). The server cannot start until their media are in a library with a path: fix them with psql, then restart', n, ids;
-  END IF;
-
-  CREATE TEMP TABLE "lf_moved" ON COMMIT DROP AS
-  SELECT f."id", lf."id" AS "folder",
-         CASE WHEN COALESCE(m."folderName", '') = '' THEN f."relativePath" ELSE m."folderName" || '/' || f."relativePath" END AS "rel"
-    FROM "media_files" f JOIN "media" m ON m."id" = f."mediaId" JOIN "library_folders" lf ON lf."libraryId" = m."libraryId";
-
-  SELECT count(*), string_agg(x."id"::text, ', ' ORDER BY x."id") FILTER (WHERE x."rn" <= 100) INTO n, ids
-    FROM (SELECT "id", row_number() OVER (ORDER BY "id") AS "rn" FROM "lf_moved"
-           WHERE "rel" ~ '(^/|(^|/)\.\.(/|$)|//|\\)') x;
-  IF n > 0 THEN
-    RAISE EXCEPTION 'library_folders: % media file(s) have a relativePath that is absolute, holds a .. segment, an empty segment or a backslash (first ids: %). The server cannot start until they are corrected: fix them with psql, then restart', n, ids;
-  END IF;
-
-  SELECT count(*), string_agg(d."id"::text, ', ' ORDER BY d."id") FILTER (WHERE d."rn" <= 100) INTO n, ids
-    FROM (SELECT "id", row_number() OVER (ORDER BY "id") AS "rn" FROM
-           (SELECT "id", count(*) OVER (PARTITION BY "folder", "rel") AS "c" FROM "lf_moved") y WHERE "c" > 1) d;
-  IF n > 0 THEN
-    RAISE EXCEPTION 'library_folders: % media file(s) would share one path in their folder (first ids: %). The server cannot start until the duplicates are removed: fix them with psql, then restart', n, ids;
-  END IF;
-END $$;
+CREATE TEMP TABLE "lf_moved" ON COMMIT DROP AS
+SELECT f."id", lf."id" AS "folder",
+       CASE WHEN f."relativePath" LIKE '/%'
+              THEN substr(f."relativePath", length(rtrim(lf."path", '/')) + 2)
+            WHEN COALESCE(m."folderName", '') = '' THEN f."relativePath"
+            ELSE m."folderName" || '/' || f."relativePath" END AS "rel"
+  FROM "media_files" f JOIN "media" m ON m."id" = f."mediaId" JOIN "library_folders" lf ON lf."libraryId" = m."libraryId";
 
 ALTER TABLE "media_files" ADD COLUMN "folderId" integer;
 ALTER TABLE "media_files" DISABLE TRIGGER set_updated_at;
@@ -72,7 +39,7 @@ ALTER TABLE "media_files" ENABLE TRIGGER set_updated_at;
 ALTER TABLE "media_files"
   ALTER COLUMN "folderId" SET NOT NULL,
   ADD CONSTRAINT "FK_media_files_folder" FOREIGN KEY ("folderId") REFERENCES "library_folders"("id") ON DELETE RESTRICT,
-  ADD CONSTRAINT "CK_media_files_relative_path" CHECK ("relativePath" !~ '(^/|(^|/)\.\.(/|$)|//|\\)'),
+  ADD CONSTRAINT "CK_media_files_relative_path" CHECK ("relativePath" <> '' AND "relativePath" !~ '(^/|(^|/)\.\.(/|$)|//)'),
   DROP CONSTRAINT "UQ_89a6bf94332e9f2715c4d06b36c",
   ADD CONSTRAINT "UQ_media_files_folder_path" UNIQUE ("folderId", "relativePath");
 CREATE INDEX "IDX_media_files_mediaId" ON "media_files" ("mediaId");
