@@ -83,6 +83,7 @@ The stream-lifetime cache TTL and max bytes are fixed constants, not env.
 |---|---|---|
 | `SERVE_STATIC_PATH` | none (when set, a static root served at `/`) | string, truthiness (empty = unset) |
 | `FLIKS_GITHUB_REPO` | `'fliks-app/fliks'` | string as-is (`??`) |
+| `FLIKS_SKIP_PRE_MIGRATION_BACKUP` | `''` (skips the dump taken before pending migrations when `1`, `true`, or `yes`, case-insensitive; `system.md` rule 35) | `.trim.toLowerCase` in `1`/`true`/`yes` |
 | `FLIKS_DISABLE_UPDATE_CHECK` | `''` (disabled when `1`, `true`, or `yes`, case-insensitive) | `.trim.toLowerCase` in `1`/`true`/`yes` |
 | `FLIKS_SUPERVISED` | none (truthy → supervisor) | truthiness (empty = unset) |
 | `pm_id` | none (truthy → pm2) | truthiness |

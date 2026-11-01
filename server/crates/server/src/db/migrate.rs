@@ -99,6 +99,31 @@ VALUES ($1, $2, TRUE, $3, 0)
     Ok(())
 }
 
+/// Newest applied version when an embedded migration is pending; `None` for an empty or up-to-date database.
+pub async fn pending_version(pool: &PgPool) -> Result<Option<i64>, MigrateError> {
+    let applied: Vec<i64> = if table_exists(pool, "_sqlx_migrations").await? {
+        sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success")
+    } else if table_exists(pool, "migrations").await? {
+        sqlx::query_scalar("SELECT timestamp FROM migrations")
+    } else {
+        sqlx::query_scalar("SELECT 0::bigint WHERE false")
+    }
+    .fetch_all(pool)
+    .await
+    .map_err(MigrateError::Execute)?;
+    if applied.is_empty() {
+        let any: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public')",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(MigrateError::Execute)?;
+        return Ok(any.then_some(0));
+    }
+    let behind = MIGRATOR.iter().any(|m| !applied.contains(&m.version));
+    Ok(behind.then(|| applied.into_iter().max().unwrap_or(0)))
+}
+
 pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
     adopt_typeorm(pool).await?;
     MIGRATOR.run(pool).await

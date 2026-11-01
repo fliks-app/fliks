@@ -75,6 +75,8 @@ services:
       # TVDB_API_KEY: ''
       # Skip the GitHub release check.
       # FLIKS_DISABLE_UPDATE_CHECK: '1'
+      # Skip the database dump taken before pending migrations (data/backups/pre-migration, last 3 kept).
+      # FLIKS_SKIP_PRE_MIGRATION_BACKUP: '1'
 
       # ---- Streaming (optional) ----
       # Session timings. Everything an admin tunes day to day, including the

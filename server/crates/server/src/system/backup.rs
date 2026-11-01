@@ -18,6 +18,9 @@ use tokio::{
 /// The `Backup` job keeps this many (rule 20).
 pub const KEEP: usize = 7;
 
+/// The pre-migration folder keeps this many (rule 33).
+const PRE_MIGRATION_KEEP: usize = 3;
+
 pub fn dir() -> PathBuf {
     let dir = paths::data_dir().join("backups");
     std::path::absolute(&dir).unwrap_or(dir)
@@ -114,10 +117,16 @@ async fn run_tool(cfg: &Config, cmd: &str, args: &[String], stdout: Stdio) -> Re
     )))
 }
 
+fn stamp() -> String {
+    fliks_domain::js::iso(Utc::now()).replace([':', '.'], "-")
+}
+
 /// Rule 17.
 pub async fn create(cfg: &Config, dir: &Path) -> Result<Made, AppError> {
-    let stamp = fliks_domain::js::iso(Utc::now()).replace([':', '.'], "-");
-    let filename = format!("fliks-backup-{stamp}.sql");
+    dump(cfg, dir, format!("fliks-backup-{}.sql", stamp())).await
+}
+
+async fn dump(cfg: &Config, dir: &Path, filename: String) -> Result<Made, AppError> {
     tracing::info!("Creating backup: {filename}");
     mkdir_private(dir).map_err(|e| internal(format!("cannot create the backup directory: {e}")))?;
     let path = dir.join(&filename);
@@ -134,6 +143,40 @@ pub async fn create(cfg: &Config, dir: &Path) -> Result<Made, AppError> {
     partial.0 = None;
     tracing::info!("Backup created: {filename} ({size} bytes)");
     Ok(Made { filename, size })
+}
+
+/// Rules 31-35: dump before pending migrations, so a destructive one can be rolled back by a restore.
+pub async fn before_migration(
+    cfg: &Config,
+    pool: &PgPool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let skip = std::env::var("FLIKS_SKIP_PRE_MIGRATION_BACKUP")
+        .is_ok_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"));
+    if skip {
+        tracing::warn!("FLIKS_SKIP_PRE_MIGRATION_BACKUP is set: no backup before migrations");
+        return Ok(());
+    }
+    before_migration_in(cfg, pool, &dir().join("pre-migration")).await
+}
+
+pub async fn before_migration_in(
+    cfg: &Config,
+    pool: &PgPool,
+    dir: &Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let Some(version) = db::pending_version(pool).await? else {
+        return Ok(());
+    };
+    let filename = format!("fliks-pre-migration-v{version}-{}.sql", stamp());
+    tracing::info!("Migrations pending, backing up to {}", dir.display());
+    dump(cfg, dir, filename).await.map_err(|e| {
+        format!(
+            "pre-migration backup failed, migrations not applied: {e} \
+             (set FLIKS_SKIP_PRE_MIGRATION_BACKUP=1 to skip it)"
+        )
+    })?;
+    prune(dir, PRE_MIGRATION_KEEP).await?;
+    Ok(())
 }
 
 /// Removes an unfinished dump, also when the future is dropped mid-run (shutdown).
