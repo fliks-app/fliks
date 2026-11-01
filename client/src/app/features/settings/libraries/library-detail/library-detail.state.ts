@@ -40,7 +40,10 @@ export class LibraryDetailState {
   readonly formMetadataRegion = signal<string | null>(null);
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
+  /** First folder: only the creation wizard edits it, a saved library's folders have their own routes. */
   readonly formPath = signal('');
+  /** Further folders of a library being created, added once it exists. */
+  readonly formExtraPaths = signal<string[]>([]);
   readonly formUserIds = signal<ReadonlySet<number>>(new Set());
 
   /** Populate every form signal from a freshly loaded library. */
@@ -56,7 +59,6 @@ export class LibraryDetailState {
     this.formMetadataRegion.set(lib.metadataRegion);
     this.formQualityProfileId.set(lib.defaultQualityProfileId);
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
-    this.formPath.set(lib.path ?? '');
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
   }
@@ -90,14 +92,16 @@ export class LibraryDetailState {
       const lib = await this.api.create({
         ...this.payload(),
         name: this.formName().trim(),
+        path: this.formPath().trim(),
         userIds: [...this.formUserIds()],
       });
       this.libraryId.set(lib.id);
+      await this.addExtraFolders(lib.id);
       this.hydrate(lib);
       this.toast.success(this.translate.instant('settings.libraries.saved'));
       return lib.id;
-    } catch (err: unknown) {
-      this.saveError.set(this.httpMessage(err));
+    } catch {
+      // The global interceptor toasts the server's reason.
       return null;
     } finally {
       this.saving.set(false);
@@ -116,11 +120,21 @@ export class LibraryDetailState {
       this.library.set(await this.api.get(id));
       this.toast.success(this.translate.instant('settings.libraries.saved'));
       return true;
-    } catch (err: unknown) {
-      this.saveError.set(this.httpMessage(err));
+    } catch {
       return false;
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /** One by one: the server checks each against the folders already saved. A refused one is toasted globally and the library is kept. */
+  private async addExtraFolders(libraryId: number) {
+    for (const path of this.formExtraPaths().map((p) => p.trim()).filter(Boolean)) {
+      try {
+        await this.api.addFolder(libraryId, path);
+      } catch {
+        /* reported by the global interceptor */
+      }
     }
   }
 
@@ -142,15 +156,6 @@ export class LibraryDetailState {
       metadataRegion: this.formMetadataRegion(),
       defaultQualityProfileId: this.formQualityProfileId(),
       defaultLanguageProfileId: this.formLanguageProfileId(),
-      path: this.formPath().trim(),
     };
-  }
-
-  private httpMessage(err: unknown): string {
-    const httpErr = err as { error?: { message?: string | string[] } };
-    const msg = Array.isArray(httpErr.error?.message)
-      ? httpErr.error.message.join(', ')
-      : httpErr.error?.message;
-    return msg ?? this.translate.instant('settings.libraries.save_error');
   }
 }

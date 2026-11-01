@@ -6,6 +6,7 @@ import {
   Library,
   LibrariesApiService,
 } from '../../../core/services/api/libraries-api.service';
+import { formatBytes } from '../../../core/utils/format-bytes';
 
 @Component({
   selector: 'app-libraries-settings',
@@ -36,25 +37,5 @@ export class LibrariesSettingsComponent implements OnInit {
     }
   }
 
-  formatBytes(bytes: number): string {
-    if (bytes < 0) return '-';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let val = bytes;
-    let i = 0;
-    while (val >= 1024 && i < units.length - 1) {
-      val /= 1024;
-      i++;
-    }
-    return `${val.toFixed(1)} ${units[i]}`;
-  }
-
-  freeSpace(lib: Library): number {
-    const d = lib.disk;
-    return d && d.freeSpace > 0 ? d.freeSpace : 0;
-  }
-
-  totalCapacity(lib: Library): number {
-    const d = lib.disk;
-    return d && d.totalSpace > 0 ? d.totalSpace : 0;
-  }
+  protected readonly formatBytes = formatBytes;
 }
