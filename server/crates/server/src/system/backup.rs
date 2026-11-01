@@ -235,16 +235,32 @@ pub async fn list(dir: &Path) -> Vec<Entry> {
     out
 }
 
-/// Rule 20: delete all but the newest `keep`; returns how many went.
+/// Rules 20 and 33: delete all but the newest `keep`, sparing the oldest dump of the newest `v<version>`.
 pub async fn prune(dir: &Path, keep: usize) -> std::io::Result<usize> {
-    let old = list(dir).await.into_iter().skip(keep);
+    let all = list(dir).await;
+    let anchor = all
+        .first()
+        .and_then(|e| version_of(&e.filename))
+        .and_then(|v| all.iter().rfind(|e| version_of(&e.filename) == Some(v)));
     let mut n = 0;
-    for e in old {
+    for e in all.iter().skip(keep) {
+        if anchor.is_some_and(|a| a.filename == e.filename) {
+            continue;
+        }
         tokio::fs::remove_file(dir.join(&e.filename)).await?;
         tracing::info!("Backup deleted: {}", e.filename);
         n += 1;
     }
     Ok(n)
+}
+
+/// The `<version>` of `fliks-pre-migration-v<version>-<stamp>.sql`.
+fn version_of(filename: &str) -> Option<&str> {
+    let v = filename
+        .strip_prefix("fliks-pre-migration-v")?
+        .split('-')
+        .next()?;
+    (!v.is_empty() && v.bytes().all(|b| b.is_ascii_digit())).then_some(v)
 }
 
 pub async fn delete(dir: &Path, name: &str) -> Result<(), AppError> {
@@ -395,6 +411,113 @@ async fn replay(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn put(dir: &Path, name: &str, age_s: u64) {
+        let f = std::fs::File::create(dir.join(name)).unwrap();
+        f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(age_s))
+            .unwrap();
+    }
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut v: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        v.sort();
+        v
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "fliks-prune-{tag}-{}",
+            crate::config::random_hex(6)
+        ));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[tokio::test]
+    async fn prune_spares_the_oldest_dump_of_the_newest_version() {
+        let dir = scratch("pre");
+        put(&dir, "fliks-pre-migration-v10-a.sql", 900);
+        put(&dir, "fliks-pre-migration-v123-a.sql", 800);
+        // A crash loop on v123: a dump per restart, pruned to 3 each time.
+        for (i, stamp) in ["b", "c", "d", "e", "f"].into_iter().enumerate() {
+            put(
+                &dir,
+                &format!("fliks-pre-migration-v123-{stamp}.sql"),
+                700 - i as u64 * 100,
+            );
+            prune(&dir, 3).await.unwrap();
+            assert!(names(&dir).contains(&"fliks-pre-migration-v123-a.sql".into()));
+        }
+        assert_eq!(
+            names(&dir),
+            [
+                "fliks-pre-migration-v123-a.sql",
+                "fliks-pre-migration-v123-d.sql",
+                "fliks-pre-migration-v123-e.sql",
+                "fliks-pre-migration-v123-f.sql",
+            ]
+        );
+        // A newer version moves the exception: v123-a goes, v124-a stays.
+        put(&dir, "fliks-pre-migration-v124-a.sql", 100);
+        for (i, stamp) in ["b", "c", "d"].into_iter().enumerate() {
+            put(
+                &dir,
+                &format!("fliks-pre-migration-v124-{stamp}.sql"),
+                90 - i as u64 * 10,
+            );
+        }
+        prune(&dir, 3).await.unwrap();
+        assert_eq!(
+            names(&dir),
+            [
+                "fliks-pre-migration-v124-a.sql",
+                "fliks-pre-migration-v124-b.sql",
+                "fliks-pre-migration-v124-c.sql",
+                "fliks-pre-migration-v124-d.sql",
+            ]
+        );
+        // keep = 0 still spares it.
+        assert_eq!(prune(&dir, 0).await.unwrap(), 3);
+        assert_eq!(names(&dir), ["fliks-pre-migration-v124-a.sql"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn prune_leaves_manual_backups_as_before() {
+        let dir = scratch("manual");
+        for i in 0..5u64 {
+            put(&dir, &format!("fliks-backup-{i}.sql"), 500 - i * 100);
+        }
+        assert_eq!(prune(&dir, 3).await.unwrap(), 2);
+        assert_eq!(
+            names(&dir),
+            [
+                "fliks-backup-2.sql",
+                "fliks-backup-3.sql",
+                "fliks-backup-4.sql"
+            ]
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn version_is_read_from_pre_migration_names_only() {
+        assert_eq!(
+            version_of("fliks-pre-migration-v123-2026-10-16T02-00-00-123Z.sql"),
+            Some("123")
+        );
+        for bad in [
+            "fliks-backup-2026-10-16T02-00-00-123Z.sql",
+            "fliks-pre-migration-v-x.sql",
+            "fliks-pre-migration-vx1-x.sql",
+            "fliks-pre-migration-v12.sql",
+        ] {
+            assert_eq!(version_of(bad), None, "{bad}");
+        }
+    }
 
     #[test]
     fn names_follow_the_ascii_pattern() {

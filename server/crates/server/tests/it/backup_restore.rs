@@ -665,14 +665,17 @@ async fn pre_migration_backup_on_scratch_databases() {
     assert_eq!(pre_files(&dir).len(), 1);
     behind.drop_db().await;
 
-    // Retention keeps 3.
+    // A crash loop keeps the newest 3 and the oldest dump of the version.
+    let oldest = files[0].clone();
     for _ in 0..4 {
         let s = Scratch::create(&url, Some(total - 1)).await;
         pre_backup(&url, &s.name, &s.pool, &dir).await.unwrap();
         s.drop_db().await;
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
-    assert_eq!(pre_files(&dir).len(), 3);
+    let kept = pre_files(&dir);
+    assert_eq!(kept.len(), 4);
+    assert!(kept.contains(&oldest), "{kept:?}");
 
     // Up to date and empty databases dump nothing.
     let before = pre_files(&dir);
