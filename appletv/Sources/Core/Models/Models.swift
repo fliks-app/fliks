@@ -93,8 +93,7 @@ struct Library: Codable, Identifiable, Hashable {
     let name: String
     let icon: String?
     let color: String?
-    /// Raw MediaType values: "movie" | "series".
-    let mediaTypes: [String]
+    let mediaTypes: [MediaKind]
 }
 
 // MARK: - Media file / stream info
@@ -196,9 +195,9 @@ extension Media {
 extension Media {
     /// Released but nothing on disk (monitored or not); mirrors the web `computeMediaBarStatus`.
     var isMissing: Bool {
-        let hasFiles = type == "series" ? (episodeStats?.downloadedEpisodes ?? 0) > 0 : !(files ?? []).isEmpty
+        let hasFiles = type.hasChildren ? (episodeStats?.downloadedEpisodes ?? 0) > 0 : !(files ?? []).isEmpty
         if hasFiles { return false }
-        if type == "series" { return status == "continuing" || status == "ended" }
+        if type.hasChildren { return status == "continuing" || status == "ended" }
         let today = String(ISO8601DateFormatter().string(from: Date()).prefix(10))
         return [releaseDate, inCinemas, digitalRelease, physicalRelease]
             .contains { d in d.map { String($0.prefix(10)) <= today } ?? false }
@@ -265,8 +264,7 @@ struct Media: Codable, Identifiable, Hashable {
     let title: String
     let originalTitle: String?
     let year: Int?
-    /// "movie" | "series"
-    let type: String
+    let type: MediaKind
     let tmdbId: Int?
     let overview: String?
     let status: String?
@@ -332,8 +330,7 @@ struct ContinueWatchingItem: Codable, Identifiable {
     let progressPercent: Double
     let lastPlayedAt: Date
     let mediaTitle: String
-    /// "movie" | "series"
-    let mediaType: String
+    let mediaType: MediaKind
     let posterUrl: String?
     let fanartUrl: String?
     /// Episode still — nil for movie rows or when TMDB had no still.
@@ -349,7 +346,7 @@ struct RecommendationItem: Codable, Identifiable {
     struct MediaSummary: Codable, Hashable {
         let id: Int
         let title: String
-        let type: String
+        let type: MediaKind
         let year: Int?
         let posterUrl: String?
         let fanartUrl: String?

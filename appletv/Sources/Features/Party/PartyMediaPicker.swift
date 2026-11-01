@@ -142,7 +142,7 @@ struct PartyMediaPicker: View {
     }
 
     private func choose(_ media: Media) {
-        guard media.type == "series" else { return onPick([PartyPick(mediaId: media.id, episodeId: nil, title: media.title)]) }
+        guard media.type.hasChildren else { return onPick([PartyPick(mediaId: media.id, episodeId: nil, title: media.title)]) }
         Task {
             // The search rows carry no episodes: fetch the full series.
             let full: Media = (try? await APIClient.shared.get("/api/media/\(media.id)")) ?? media

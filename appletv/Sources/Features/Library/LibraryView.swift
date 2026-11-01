@@ -20,7 +20,7 @@ struct LibraryView: View {
     @State private var isLoadingMore = false
     @State private var sortBy = "title"
     @State private var sortOrder = "ASC"
-    @State private var typeFilter: String?
+    @State private var typeFilter: MediaKind?
     @State private var library: Library?
     @Environment(Backdrop.self) private var backdrop
 
@@ -76,9 +76,8 @@ struct LibraryView: View {
             Spacer()
             if let types = library?.mediaTypes, types.count > 1 {
                 Picker(tr("library.type_filter"), selection: $typeFilter) {
-                    Text(tr("library.type.all")).tag(String?.none)
-                    Text(tr("library.type.movie")).tag(String?.some("movie"))
-                    Text(tr("library.type.series")).tag(String?.some("series"))
+                    Text(tr("library.type.all")).tag(MediaKind?.none)
+                    ForEach(MediaKind.filterable, id: \.self) { Text(tr($0.labelKey)).tag(MediaKind?.some($0)) }
                 }
                 .pickerStyle(.menu)
                 .onChange(of: typeFilter) { _, _ in Task { await load(reset: true) } }
@@ -125,7 +124,7 @@ struct LibraryView: View {
             "page": String(page),
             "limit": String(pageSize),
         ]
-        if let typeFilter { query["type"] = typeFilter }
+        if let typeFilter { query["type"] = typeFilter.rawValue }
         do {
             let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
             items = reset ? res.data : items + res.data

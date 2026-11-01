@@ -6,7 +6,7 @@ struct SearchView: View {
     var onSelectMedia: (Int) -> Void
 
     @State private var query = ""
-    @State private var typeFilter: String?
+    @State private var typeFilter: MediaKind?
     @State private var results: [Media] = []
     @State private var total = 0
     @State private var page = 1
@@ -34,9 +34,8 @@ struct SearchView: View {
 
     @ViewBuilder private var typePicker: some View {
         Picker(tr("library.type_filter"), selection: $typeFilter) {
-            Text(tr("library.type.all")).tag(String?.none)
-            Text(tr("library.type.movie")).tag(String?.some("movie"))
-            Text(tr("library.type.series")).tag(String?.some("series"))
+            Text(tr("library.type.all")).tag(MediaKind?.none)
+            ForEach(MediaKind.filterable, id: \.self) { Text(tr($0.labelKey)).tag(MediaKind?.some($0)) }
         }
         .pickerStyle(.menu)
         .focusSection()
@@ -107,7 +106,7 @@ struct SearchView: View {
         if page == 1 { loading = true }
         defer { loading = false }
         var params = ["q": q, "page": String(page), "limit": String(pageSize)]
-        if let type { params["type"] = type }
+        if let type { params["type"] = type.rawValue }
         do {
             let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: params)
             // Drop a stale response superseded by a newer query/filter change.
