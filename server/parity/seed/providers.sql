@@ -52,8 +52,9 @@ INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "gr
 INSERT INTO items ("mediaId", "editionId", monitored)
   SELECT m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
   WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;
-INSERT INTO persons (id, "createdAt", "updatedAt", "tmdbId", name, biography, "knownForDepartment", departments, "metadataRefreshedAt", provider) VALUES
- (201, '2026-01-01', '2026-01-01', 102, 'Claude Old Name', 'Old bio', 'Acting', '["Writing"]', now() - interval '30 days', 'tmdb');
+INSERT INTO persons (id, "createdAt", "updatedAt", name, biography, "knownForDepartment", departments, "metadataRefreshedAt") VALUES
+ (201, '2026-01-01', '2026-01-01', 'Claude Old Name', 'Old bio', 'Acting', '["Writing"]', now() - interval '30 days');
+INSERT INTO person_external_ids ("personId", provider, value) VALUES (201, 'tmdb', '102');
 DO $$
 DECLARE r record;
 BEGIN

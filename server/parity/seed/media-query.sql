@@ -207,22 +207,23 @@ INSERT INTO media_metadata (id, "createdAt", "updatedAt", budget, revenue, tagli
  (3, '2026-01-01', '2026-01-01', 0, 0, NULL, 1.5, 10, 'fr', '[]', '[]', '[]', '["space","war"]', 7),
  (4, '2026-01-01', '2026-01-01', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '["love"]', 9),
  (5, '2026-01-01', '2026-01-01', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '["Heist"]', 13);
-INSERT INTO persons (id, "createdAt", "updatedAt", "tmdbId", name, "avatarUrl", biography, birthday, deathday, "placeOfBirth", "knownForDepartment", departments, "metadataRefreshedAt") VALUES
- (1, '2026-01-01', '2026-01-01', 101, 'Alice Actor', '/api/persons/1/avatar', 'Biography of Alice', '1980-02-03', NULL, 'Paris', 'Acting', '["Acting"]', '2026-01-05T10:00:00Z'),
- (2, '2026-01-01', '2026-01-01', 102, 'Bob Actor', NULL, NULL, NULL, NULL, NULL, NULL, '[]', NULL),
- (3, '2026-01-01', '2026-01-01', 103, 'Carol Director', NULL, NULL, '1970-07-08', '2020-01-02', 'Lyon', 'Directing', '["Directing","Writing"]', NULL),
- (4, '2026-01-01', '2026-01-01', 104, 'Dan Director', NULL, NULL, NULL, NULL, NULL, 'Directing', '["Directing"]', NULL);
-INSERT INTO media_cast (id, "createdAt", "updatedAt", character, "order", "mediaId", "personId") VALUES
- (1, '2026-01-01', '2026-01-01', 'Hero', 0, 3, 1),
- (2, '2026-01-01', '2026-01-01', 'Villain', 1, 3, 2),
- (3, '2026-01-01', '2026-01-01', 'Cameo', 1, 3, 3);
-INSERT INTO media_crew (id, "createdAt", "updatedAt", job, department, "mediaId", "personId") VALUES
- (1, '2026-01-01', '2026-01-01', 'Director', 'Directing', 3, 3),
- (2, '2026-01-01', '2026-01-01', 'Writer', 'Writing', 3, 1),
- (3, '2026-01-01', '2026-01-01', 'Director', 'Directing', 5, 3),
- (4, '2026-01-01', '2026-01-01', 'Producer', 'Production', 9, 3),
- (5, '2026-01-01', '2026-01-01', 'Director', 'Directing', 11, 4),
- (6, '2026-01-01', '2026-01-01', 'Director', 'Directing', 23, 4);
+INSERT INTO persons (id, "createdAt", "updatedAt", name, "avatarUrl", biography, birthday, deathday, "placeOfBirth", "knownForDepartment", departments, "metadataRefreshedAt") VALUES
+ (1, '2026-01-01', '2026-01-01', 'Alice Actor', '/api/persons/1/avatar', 'Biography of Alice', '1980-02-03', NULL, 'Paris', 'Acting', '["Acting"]', '2026-01-05T10:00:00Z'),
+ (2, '2026-01-01', '2026-01-01', 'Bob Actor', NULL, NULL, NULL, NULL, NULL, NULL, '[]', NULL),
+ (3, '2026-01-01', '2026-01-01', 'Carol Director', NULL, NULL, '1970-07-08', '2020-01-02', 'Lyon', 'Directing', '["Directing","Writing"]', NULL),
+ (4, '2026-01-01', '2026-01-01', 'Dan Director', NULL, NULL, NULL, NULL, NULL, 'Directing', '["Directing"]', NULL);
+INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'tmdb', '101'), (2, 'tmdb', '102'), (3, 'tmdb', '103'), (4, 'tmdb', '104');
+INSERT INTO media_credits (id, "createdAt", "updatedAt", role, character, position, "mediaId", "personId") VALUES
+ (1, '2026-01-01', '2026-01-01', 'cast', 'Hero', 0, 3, 1),
+ (2, '2026-01-01', '2026-01-01', 'cast', 'Villain', 1, 3, 2),
+ (3, '2026-01-01', '2026-01-01', 'cast', 'Cameo', 1, 3, 3);
+INSERT INTO media_credits (id, "createdAt", "updatedAt", role, job, department, position, "mediaId", "personId") VALUES
+ (4, '2026-01-01', '2026-01-01', 'crew', 'Director', 'Directing', 0, 3, 3),
+ (5, '2026-01-01', '2026-01-01', 'crew', 'Writer', 'Writing', 1, 3, 1),
+ (6, '2026-01-01', '2026-01-01', 'crew', 'Director', 'Directing', 0, 5, 3),
+ (7, '2026-01-01', '2026-01-01', 'crew', 'Producer', 'Production', 0, 9, 3),
+ (8, '2026-01-01', '2026-01-01', 'crew', 'Director', 'Directing', 0, 11, 4),
+ (9, '2026-01-01', '2026-01-01', 'crew', 'Director', 'Directing', 0, 23, 4);
 
 
 INSERT INTO playback_states ("createdAt", "updatedAt", "positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "itemId", "mediaFileId") VALUES

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO person_external_ids (\"personId\", provider, value)\n               SELECT t.id, $1, t.value FROM UNNEST($2::int[], $3::text[]) AS t(id, value)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4Array",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ce26998e1c090c90b9690c34f0d0d4c80ad317a424b82d922d1957545eca463b"
+}

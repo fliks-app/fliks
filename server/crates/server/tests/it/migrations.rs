@@ -1119,6 +1119,112 @@ async fn m1789000090_turns_episode_markers_into_item_markers(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn m1789000100_folds_cast_and_crew_into_credits_and_moves_person_ids(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_100).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 'n', 'movie');
+          INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media;
+          INSERT INTO persons (id, provider, "tmdbId", name) VALUES
+            (1, 'tmdb', 101, 'a'), (2, 'tvdb', 101, 'b'), (3, 'x', 5, 'c'), (4, 'tmdb', 0, 'd');
+          INSERT INTO media_cast (id, character, "order", "mediaId", "personId") VALUES
+            (7, 'A', 2, 1, 1), (3, '', 0, 1, 2), (8, 'Z', 0, NULL, 1), (9, 'Y', 0, 1, NULL);
+          INSERT INTO media_crew (id, job, department, "mediaId", "personId") VALUES
+            (1, 'Writer', 'Writing', 1, 1), (2, 'Director', 'Directing', 1, 2),
+            (4, 'Editor', 'Editing', 2, 1), (5, 'Gaffer', 'Lighting', NULL, 1),
+            (6, 'Grip', 'Camera', 1, 3);
+          SELECT setval('media_cast_id_seq', 9), setval('media_crew_id_seq', 6)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_100).await;
+
+    // cast keeps its ids, crew is numbered after them in its old order with a per-media position
+    type Credit = (i32, i32, i32, String, i32, Option<String>, Option<String>);
+    let credits: Vec<Credit> = rows(
+        &pool,
+        r#"SELECT id, "mediaId", "personId", role, position, character, job FROM media_credits ORDER BY id"#,
+    )
+    .await;
+    let want: Vec<Credit> = vec![
+        (3, 1, 2, "cast".into(), 0, Some(String::new()), None),
+        (7, 1, 1, "cast".into(), 2, Some("A".into()), None),
+        (8, 1, 1, "crew".into(), 0, None, Some("Writer".into())),
+        (9, 1, 2, "crew".into(), 1, None, Some("Director".into())),
+        (10, 2, 1, "crew".into(), 0, None, Some("Editor".into())),
+        (11, 1, 3, "crew".into(), 2, None, Some("Grip".into())),
+    ];
+    assert_eq!(credits, want);
+    let next: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media_credits ("mediaId", "personId", role, character)
+           VALUES (1, 1, 'cast', 'N') RETURNING id"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(next, 12);
+
+    // a number under both providers is two persons, an unusable provider or id leaves no id row
+    let ids: Vec<(i32, String, String)> = rows(
+        &pool,
+        r#"SELECT "personId", provider, value FROM person_external_ids ORDER BY "personId""#,
+    )
+    .await;
+    assert_eq!(
+        ids,
+        [
+            (1, "tmdb".into(), "101".into()),
+            (2, "tvdb".into(), "101".into())
+        ]
+    );
+    let shown: Vec<(i32, String, String)> = rows(
+        &pool,
+        r#"SELECT "personId", provider, value FROM person_ids ORDER BY 1"#,
+    )
+    .await;
+    assert_eq!(shown, ids);
+    sql(
+        &pool,
+        r#"INSERT INTO person_external_ids VALUES (1, 'tvdb', '7'), (3, 'tmdb', '7')"#,
+    )
+    .await;
+    let shown: String =
+        sqlx::query_scalar(r#"SELECT provider FROM person_ids WHERE "personId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(shown, "tmdb", "tmdb wins when a person has both");
+
+    for bad in [
+        r#"INSERT INTO person_external_ids VALUES (4, 'tmdb', '101')"#,
+        r#"INSERT INTO person_external_ids VALUES (4, 'imdb', '9')"#,
+        r#"INSERT INTO person_external_ids VALUES (4, 'tmdb', '0123')"#,
+        r#"INSERT INTO person_external_ids VALUES (99, 'tmdb', '9')"#,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role) VALUES (1, 1, 'cast')"#,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role, job) VALUES (1, 1, 'crew', 'x')"#,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role) VALUES (1, 1, 'bogus')"#,
+        r#"INSERT INTO media_credits ("mediaId", "editionId", "personId", role)
+           VALUES (1, (SELECT id FROM editions WHERE "mediaId" = 2), 1, 'narrator')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(
+        &pool,
+        r#"INSERT INTO media_credits ("mediaId", "editionId", "personId", role)
+           VALUES (1, (SELECT id FROM editions WHERE "mediaId" = 1), 1, 'narrator')"#,
+    )
+    .await;
+    sql(&pool, "DELETE FROM persons WHERE id = 1").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM media_credits WHERE "personId" = 1)
+                + (SELECT COUNT(*) FROM person_external_ids WHERE "personId" = 1)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "credits and ids go with their person");
+}
+
+#[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
     fliks_server::db::migrate(&pool).await.unwrap();
 

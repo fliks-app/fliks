@@ -1,29 +1,24 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT provider, \"tmdbId\" AS tmdb_id, name, \"metadataRefreshedAt\" AS refreshed FROM persons WHERE id = $1",
+  "query": "SELECT x.provider AS \"provider?\", x.value::int AS \"tmdb_id?\", p.name, p.\"metadataRefreshedAt\" AS refreshed\nFROM persons p LEFT JOIN person_ids x ON x.\"personId\" = p.id WHERE p.id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "provider",
-        "type_info": "Varchar",
+        "name": "provider?",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "persons",
+            "table": "person_ids",
             "name": "provider"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "tmdb_id",
+        "name": "tmdb_id?",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "persons",
-            "name": "tmdbId"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 2,
@@ -54,11 +49,11 @@
       ]
     },
     "nullable": [
-      false,
-      false,
+      true,
+      null,
       false,
       true
     ]
   },
-  "hash": "f0956ac1d704e7c2e4719b45d129da4796ee729979e2290e324c2d20d2899d0f"
+  "hash": "da8a1415ceaa60b426639732710289a15ec66fc93e26ce46ff4f4476789d5c3f"
 }

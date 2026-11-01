@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media_credits\n           WHERE \"mediaId\" = $1 AND role IN ('cast', 'crew') AND \"editionId\" IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "49f7c782f886e1022db780c34ceee235e8de2b7322a5256d33cdf4ba263b7338"
+}

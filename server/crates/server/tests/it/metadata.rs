@@ -534,8 +534,11 @@ async fn discover_and_language(pool: PgPool) {
 
 async fn person(pool: &PgPool, id: i32, provider: &str, tmdb: i32, name: &str, refreshed: &str) {
     sqlx::query(
-        r#"INSERT INTO persons (id, provider, "tmdbId", name, biography, birthday, "metadataRefreshedAt")
-           VALUES ($1, $2, $3, $4, 'stored', '1970-01-01', CASE WHEN $5 = 'never' THEN NULL ELSE now() - ($5)::interval END)"#,
+        r#"WITH p AS (
+             INSERT INTO persons (id, name, biography, birthday, "metadataRefreshedAt")
+             VALUES ($1, $4, 'stored', '1970-01-01', CASE WHEN $5 = 'never' THEN NULL ELSE now() - ($5)::interval END)
+             RETURNING id)
+           INSERT INTO person_external_ids ("personId", provider, value) SELECT id, $2, ($3)::text FROM p"#,
     )
     .bind(id)
     .bind(provider)
@@ -587,9 +590,9 @@ async fn person_search(pool: PgPool) {
     assert_eq!(names(&search("?q=jean%20luc").await.1), ["Jean-Luc Godard"]);
     assert_eq!(names(&search("?q=am%C3%A9lie").await.1), ["Amélie Poulain"]);
     assert_eq!(names(&search("").await.1).len(), 5);
-    sqlx::query(
-        r#"INSERT INTO persons (id, provider, "tmdbId", name)
-           SELECT 10000 + g, 'tmdb', 10000 + g, 'Zz ' || g FROM generate_series(1, 1000) g"#,
+    sqlx::raw_sql(
+        r#"INSERT INTO persons (id, name) SELECT 10000 + g, 'Zz ' || g FROM generate_series(1, 1000) g;
+           INSERT INTO person_external_ids SELECT 10000 + g, 'tmdb', (10000 + g)::text FROM generate_series(1, 1000) g"#,
     )
     .execute(&pool)
     .await
@@ -636,8 +639,10 @@ async fn seed_credits(pool: &PgPool) {
     media(pool, 1, "movie", Some(11), None, 1).await;
     media(pool, 2, "movie", Some(22), None, 2).await;
     sqlx::raw_sql(
-        r#"INSERT INTO media_cast (character, "order", "mediaId", "personId") VALUES ('A', 1, 1, 1), ('B', 0, 2, 1);
-           INSERT INTO media_crew (job, department, "mediaId", "personId") VALUES ('Director', 'Directing', 2, 1)"#,
+        r#"INSERT INTO media_credits (role, character, position, "mediaId", "personId")
+             VALUES ('cast', 'A', 1, 1, 1), ('cast', 'B', 0, 2, 1);
+           INSERT INTO media_credits (role, job, department, "mediaId", "personId")
+             VALUES ('crew', 'Director', 'Directing', 2, 1)"#,
     )
     .execute(pool)
     .await
@@ -810,10 +815,11 @@ async fn a_404_asks_the_other_provider_and_pins_the_row(pool: PgPool) {
         (Some("From Tvdb"), Some("tvdb"))
     );
     assert_eq!(d["person"]["knownForDepartment"], "Directing");
-    let stored: String = sqlx::query_scalar("SELECT provider FROM persons WHERE id = 1")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let stored: String =
+        sqlx::query_scalar(r#"SELECT provider FROM person_external_ids WHERE "personId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(stored, "tvdb");
 }
 
@@ -934,4 +940,59 @@ async fn persisting_credits_does_not_fetch_person_details(pool: PgPool) {
         .unwrap();
     assert_eq!(rows, 2);
     assert!(c.stub.seen("/tmdb/3/person/").is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_credit_persists_make_one_person_per_id(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    for id in 1..=2 {
+        media(&pool, id, "movie", Some(600 + id), None, id).await;
+    }
+    let cast = |extra: i64| {
+        let mut rows: Vec<Value> = (1..=40)
+            .map(
+                |i| json!({"externalId": i, "name": format!("P{i}"), "character": "X", "order": i}),
+            )
+            .collect();
+        rows.push(json!({"externalId": 100 + extra, "name": "Own", "character": "Y", "order": 41}));
+        fliks_server::metadata::service::Details::from_value(
+            &json!({"provider": "tmdb", "title": "T", "cast": rows}),
+        )
+    };
+    let (a, b) = (cast(1), cast(2));
+    let (ra, rb) = tokio::join!(
+        fliks_server::metadata::service::persist_credits(&c.st, 1, &a),
+        fliks_server::metadata::service::persist_credits(&c.st, 2, &b)
+    );
+    ra.unwrap();
+    rb.unwrap();
+    let (persons, ids): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM persons), (SELECT COUNT(DISTINCT value) FROM person_external_ids)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((persons, ids), (42, 42));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_person_without_an_id_is_served_and_never_refreshed(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query("INSERT INTO persons (id, name, \"metadataRefreshedAt\") VALUES (1, 'Solo', NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        (
+            &d["person"]["provider"],
+            &d["person"]["tmdbId"],
+            &d["person"]["metadataRefreshedAt"]
+        ),
+        (&Value::Null, &Value::Null, &Value::Null)
+    );
+    let (s, d) = call(&c, "/api/persons/1/provider-credits", Some(&c.reader)).await;
+    assert_eq!(s, 200);
+    assert_eq!(d, json!({"provider": null, "cast": [], "crew": []}));
 }

@@ -54,7 +54,7 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
     let genres = strings(src.genres.clone());
     let keywords = strings(src.keywords.clone());
     let directors = sqlx::query_scalar!(
-        r#"SELECT "personId" AS "person_id!" FROM media_crew WHERE "mediaId" = $1 AND job = 'Director' AND "personId" IS NOT NULL"#,
+        r#"SELECT "personId" AS "person_id!" FROM media_credits WHERE "mediaId" = $1 AND role = 'crew' AND job = 'Director'"#,
         id
     )
     .fetch_all(db)
@@ -63,8 +63,8 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
         vec![]
     } else {
         sqlx::query_scalar!(
-            r#"SELECT DISTINCT "mediaId" AS "media_id!" FROM media_crew
-               WHERE "personId" = ANY($1) AND job = 'Director' AND "mediaId" != $2 AND "mediaId" IS NOT NULL"#,
+            r#"SELECT DISTINCT "mediaId" AS "media_id!" FROM media_credits
+               WHERE "personId" = ANY($1) AND role = 'crew' AND job = 'Director' AND "mediaId" != $2"#,
             &directors,
             id
         )
@@ -196,13 +196,14 @@ ORDER BY m."releaseDate" ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
 pub async fn cast(db: &PgPool, id: i32) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"), 'updatedAt', iso_ms(mc."updatedAt"),
-  'character', mc.character, 'order', mc."order",
+  'character', mc.character, 'order', mc.position,
   'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt"))) AS "json!: Value"
-FROM media_cast mc JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = $1 ORDER BY mc."order" ASC, mc.id ASC"#,
+FROM media_credits mc JOIN persons p ON p.id = mc."personId" LEFT JOIN person_ids x ON x."personId" = p.id
+WHERE mc."mediaId" = $1 AND mc.role = 'cast' ORDER BY mc.position ASC, mc.id ASC"#,
         id
     )
     .fetch_all(db)
@@ -214,11 +215,12 @@ pub async fn crew(db: &PgPool, id: i32) -> Result<Vec<Value>, sqlx::Error> {
         r#"SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"), 'updatedAt', iso_ms(mc."updatedAt"),
   'job', mc.job, 'department', mc.department,
   'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt"))) AS "json!: Value"
-FROM media_crew mc JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = $1 ORDER BY mc.id ASC"#,
+FROM media_credits mc JOIN persons p ON p.id = mc."personId" LEFT JOIN person_ids x ON x."personId" = p.id
+WHERE mc."mediaId" = $1 AND mc.role = 'crew' ORDER BY mc.position ASC, mc.id ASC"#,
         id
     )
     .fetch_all(db)

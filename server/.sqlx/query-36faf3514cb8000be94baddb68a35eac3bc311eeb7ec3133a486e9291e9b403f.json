@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT mc.\"mediaId\" AS media_id, jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc.\"createdAt\"),\n  'updatedAt', iso_ms(mc.\"updatedAt\"), 'character', mc.character, 'order', mc.\"order\") AS \"json!: Value\"\nFROM media_cast mc WHERE mc.\"personId\" = $1 ORDER BY mc.\"order\" ASC, mc.id ASC",
+  "query": "SELECT mc.\"mediaId\" AS media_id, jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc.\"createdAt\"),\n  'updatedAt', iso_ms(mc.\"updatedAt\"), 'job', mc.job, 'department', mc.department) AS \"json!: Value\"\nFROM media_credits mc WHERE mc.\"personId\" = $1 AND mc.role = 'crew' ORDER BY mc.position ASC, mc.id ASC",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "media_cast",
+            "table": "media_credits",
             "name": "mediaId"
           }
         }
@@ -27,9 +27,9 @@
       ]
     },
     "nullable": [
-      true,
+      false,
       null
     ]
   },
-  "hash": "71aea80386315e1958735dcc0e27676ae216efad1b78cb1b5856dc3905eca908"
+  "hash": "36faf3514cb8000be94baddb68a35eac3bc311eeb7ec3133a486e9291e9b403f"
 }
