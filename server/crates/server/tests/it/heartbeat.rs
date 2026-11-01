@@ -170,6 +170,7 @@ impl Ctx {
             position: 0.0,
             state: fliks_server::events::event::PlayState::Playing,
             episode_label: None,
+            item_id: None,
             supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
@@ -226,7 +227,7 @@ async fn completion_zone_writes_every_beat_and_cleans_auto_playlists(pool: PgPoo
     .await
     .unwrap();
     sqlx::query(
-        r#"INSERT INTO playlist_items ("playlistId", "mediaId", position) VALUES ($1, $2, 0)"#,
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES ($1, item_of($2, NULL), 0)"#,
     )
     .bind(pl)
     .bind(c.media)

@@ -21,6 +21,21 @@ struct Ctx {
     pool: PgPool,
 }
 
+/// A movie's edition and item sit at `1000 + media`, clear of the hand-numbered episodes.
+async fn movie_items(pool: &PgPool) {
+    sqlx::raw_sql(
+        r#"INSERT INTO editions (id, "mediaId", family)
+             SELECT 1000 + id, id, 'video' FROM media m
+             WHERE type = 'movie' AND NOT EXISTS (SELECT 1 FROM items WHERE "mediaId" = m.id);
+           INSERT INTO items (id, "mediaId", "editionId")
+             SELECT 1000 + id, id, 1000 + id FROM media m
+             WHERE type = 'movie' AND NOT EXISTS (SELECT 1 FROM items WHERE "mediaId" = m.id)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
     sqlx::raw_sql(
@@ -31,6 +46,7 @@ async fn ctx(pool: PgPool) -> Ctx {
     .execute(&pool)
     .await
     .unwrap();
+    movie_items(&pool).await;
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     Ctx {
         app: party::router().with_state(st.clone()),
@@ -155,6 +171,7 @@ async fn more_media(c: &Ctx, n: usize) {
         .await
         .unwrap();
     }
+    movie_items(&c.pool).await;
 }
 
 fn msg(v: &Value) -> Option<&str> {
@@ -1115,10 +1132,17 @@ async fn playlist_setup(c: &Ctx, owner: i32) {
            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
              SELECT v.item, f.id, f."mediaId" FROM media_files f
              JOIN (VALUES ('e1', 1)) AS v(path, item) ON v.path = f."relativePath";
-           INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'Night', {owner});
-           INSERT INTO playlist_items ("playlistId", "mediaId", "episodeId", position) VALUES
-             (1, 1, NULL, 0), (1, 2, NULL, 1), (1, 3, 1, 2), (1, 3, 2, 3);"#
+           INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'Night', {owner});"#
     )))
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    movie_items(&c.pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position)
+           SELECT 1, item_of(v.m, v.e), v.p
+           FROM (VALUES (1, NULL::int, 0), (2, NULL, 1), (3, 1, 2), (3, 2, 3)) AS v(m, e, p)"#,
+    )
     .execute(&c.pool)
     .await
     .unwrap();
@@ -1222,7 +1246,7 @@ async fn creating_a_playlist_party_needs_a_readable_playlist_and_opens_on_its_fi
         )
     );
     // the rows were copied: the playlist changing does not change the party
-    sqlx::query("DELETE FROM playlist_items WHERE \"mediaId\" = 1")
+    sqlx::query("DELETE FROM playlist_items WHERE \"itemId\" = item_of(1, NULL)")
         .execute(&c.pool)
         .await
         .unwrap();
@@ -1690,6 +1714,7 @@ async fn the_programme_is_edited_during_playback_by_the_host_only(pool: PgPool) 
     .execute(&c.pool)
     .await
     .unwrap();
+    movie_items(&c.pool).await;
     sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, 2)"#)
         .bind(alice)
         .execute(&c.pool)
@@ -1968,7 +1993,7 @@ async fn an_item_a_user_cannot_open_is_not_named_to_them(pool: PgPool) {
     let id = party_with(&c, &a, vec![bob]).await;
     let (_, before) = c.call("GET", "/api/parties", &b, None).await;
     assert_eq!(before[0]["item"]["title"], "Film");
-    sqlx::query(r#"UPDATE watch_parties SET "mediaId" = 2 WHERE id = $1"#)
+    sqlx::query(r#"UPDATE watch_parties SET "itemId" = item_of(2, NULL) WHERE id = $1"#)
         .bind(id as i32)
         .execute(&c.pool)
         .await
@@ -2236,7 +2261,7 @@ async fn the_programme_is_the_source_of_truth_when_the_start_follows_a_head_the_
     let id = p["id"].as_i64().unwrap();
     let url = format!("/api/parties/{id}");
     sqlx::query(
-        r#"INSERT INTO watch_party_items ("partyId", position, "mediaId") VALUES ($1, 0, 2)"#,
+        r#"INSERT INTO watch_party_items ("partyId", position, "itemId") VALUES ($1, 0, item_of(2, NULL))"#,
     )
     .bind(id as i32)
     .execute(&c.pool)
@@ -2474,8 +2499,8 @@ async fn a_party_holds_thirty_proposals_and_a_user_is_rate_limited(pool: PgPool)
     let url = bare_party(&c, &a, &[]).await;
     let id: i32 = url.rsplit('/').next().unwrap().parse().unwrap();
     sqlx::query(
-        r#"INSERT INTO watch_party_proposals ("partyId", "mediaId", "proposedBy")
-           SELECT $1, m.id, 1 FROM media m WHERE m.id BETWEEN 2 AND 31"#,
+        r#"INSERT INTO watch_party_proposals ("partyId", "itemId", "proposedBy")
+           SELECT $1, item_of(m.id, NULL), 1 FROM media m WHERE m.id BETWEEN 2 AND 31"#,
     )
     .bind(id)
     .execute(&c.pool)
@@ -2721,6 +2746,7 @@ async fn hidden_film(c: &Ctx, alice: i32) {
     .execute(&c.pool)
     .await
     .unwrap();
+    movie_items(&c.pool).await;
 }
 
 async fn put_programme(c: &Ctx, url: &str, tok: &str, media: &[i32]) -> (u16, Value) {
@@ -2870,6 +2896,7 @@ async fn nothing_without_a_file_is_picked_or_started_and_a_series_needs_its_epis
     .execute(&c.pool)
     .await
     .unwrap();
+    movie_items(&c.pool).await;
     let invalid = |(s, e): (u16, Value)| (s, msg(&e).map(str::to_owned));
     let bad = (400, Some("party.error_invalid_item".to_owned()));
     let create = |body: Value| c.call("POST", "/api/parties", &a, Some(body));
@@ -2958,6 +2985,7 @@ async fn a_programme_holds_five_hundred_items_whoever_adds_them(pool: PgPool) {
     .execute(&c.pool)
     .await
     .unwrap();
+    movie_items(&c.pool).await;
     sqlx::query(
         r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality)
            SELECT id, 'f' || id, 1, 'q' FROM media WHERE id > 1"#,

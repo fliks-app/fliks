@@ -295,7 +295,7 @@ fn row_of(
 async fn episode_labels(st: &AppState, ids: &[i32]) -> sqlx::Result<HashMap<i32, String>> {
     let rows = sqlx::query!(
         r#"SELECT e.id AS "id!", e."number" AS "number!", e.title, s."number" AS "season?"
-           FROM items e LEFT JOIN item_groups s ON s.id = e."groupId" WHERE e.id = ANY($1)"#,
+           FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = ANY($1)"#,
         ids
     )
     .fetch_all(&st.db)
@@ -408,16 +408,21 @@ pub async fn streams(
             )
         })
         .collect();
+    let played: Vec<Option<i32>> = live.iter().map(|s| s.live.item_id).collect();
     let mut eps: Vec<i32> = rows
         .iter()
         .filter_map(|r| r.episode_id)
+        .chain(played.iter().flatten().copied())
         .filter(|e| *e != 0)
         .collect();
     eps.sort_unstable();
     eps.dedup();
     if !eps.is_empty() {
         let labels = episode_labels(&st, &eps).await?;
-        for r in &mut rows {
+        for (r, played) in rows.iter_mut().zip(played) {
+            if let Some(p) = played.filter(|p| labels.contains_key(p)) {
+                r.episode_id = Some(p);
+            }
             r.episode_label = r.episode_id.and_then(|e| labels.get(&e).cloned());
         }
     }

@@ -123,13 +123,7 @@ pub async fn toggle_watched(
         .ok_or_else(|| AppError::internal("playback state vanished"))?;
     if completing {
         log_play(db, user, item).await?;
-        remove_watched_from_auto_playlists(
-            db,
-            user,
-            media,
-            episode.as_ref().map(std::slice::from_ref),
-        )
-        .await;
+        remove_watched_from_auto_playlists(db, user, &[item]).await;
     }
     if existing.is_some() {
         row.media_file_id = prev_file;
@@ -211,7 +205,7 @@ pub async fn toggle_series_watched(
     )
     .fetch_all(db)
     .await?;
-    remove_watched_from_auto_playlists(db, user, media, Some(&done)).await;
+    remove_watched_from_auto_playlists(db, user, &done).await;
     Ok(())
 }
 
@@ -257,7 +251,7 @@ pub async fn toggle_season_watched(
     )
     .fetch_all(db)
     .await?;
-    remove_watched_from_auto_playlists(db, user, media, Some(&inserted)).await;
+    remove_watched_from_auto_playlists(db, user, &inserted).await;
     Ok(())
 }
 
@@ -414,14 +408,14 @@ pub async fn record_watch(
     }
     if completed && !was_completed && !stale {
         log_play(db, user, w.item).await?;
-        let mut episodes: Option<Vec<i32>> = w.episode.map(|e| vec![e]);
+        let mut done = vec![w.item];
         if w.episode.is_some() {
             for id in complete_covered(db, user, w).await? {
                 log_play(db, user, id).await?;
-                episodes.get_or_insert_default().push(id);
+                done.push(id);
             }
         }
-        remove_watched_from_auto_playlists(db, user, media, episodes.as_deref()).await;
+        remove_watched_from_auto_playlists(db, user, &done).await;
     }
     let mut row = find_state(db, user, w.item)
         .await?

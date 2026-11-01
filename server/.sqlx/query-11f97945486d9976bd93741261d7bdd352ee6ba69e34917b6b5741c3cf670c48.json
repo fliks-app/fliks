@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"itemId\" FROM playlist_items WHERE \"playlistId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "itemId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playlist_items",
+            "name": "itemId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "11f97945486d9976bd93741261d7bdd352ee6ba69e34917b6b5741c3cf670c48"
+}

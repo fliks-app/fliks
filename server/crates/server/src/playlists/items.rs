@@ -156,7 +156,7 @@ pub async fn items(
                   to_jsonb(q) AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
                   to_jsonb(md) - 'mediaId' AS "metadata: Jsonb<Value>",
-                  CASE WHEN e.id IS NOT NULL THEN jsonb_build_object(
+                  CASE WHEN e."groupId" IS NOT NULL THEN jsonb_build_object(
                     'id', e.id, 'createdAt', e."createdAt", 'updatedAt', e."updatedAt",
                     'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
                     'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime,
@@ -170,7 +170,8 @@ pub async fn items(
                   ps.completed AS "completed?", ps."positionSeconds" AS "position_seconds?",
                   ps."durationSeconds" AS duration_seconds
            FROM playlist_items pi
-           JOIN media m ON m.id = pi."mediaId"
+           JOIN items e ON e.id = pi."itemId"
+           JOIN media m ON m.id = e."mediaId"
            JOIN libraries l ON l.id = m."libraryId" AND l.id = ANY($2)
            LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $4)::int AS tmdb,
              max(value) FILTER (WHERE provider = $5)::int AS tvdb,
@@ -179,10 +180,8 @@ pub async fn items(
            LEFT JOIN quality_profiles q ON q.id = m."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
            LEFT JOIN media_metadata md ON md."mediaId" = m.id
-           LEFT JOIN items e ON e.id = pi."episodeId"
            LEFT JOIN item_groups s ON s.id = e."groupId"
-           LEFT JOIN playback_states ps ON ps."userId" = $3
-                AND ps."itemId" = COALESCE(pi."episodeId", item_of(pi."mediaId", NULL))
+           LEFT JOIN playback_states ps ON ps."userId" = $3 AND ps."itemId" = pi."itemId"
            WHERE pi."playlistId" = $1
            ORDER BY pi.position, pi.id"#,
         id,
@@ -226,11 +225,6 @@ pub async fn items(
     ))
 }
 
-struct Target {
-    media: i32,
-    episode: Option<i32>,
-}
-
 async fn assert_series(c: &mut PgConnection, id: i32, accessible: &[i32]) -> Result<(), AppError> {
     let ok = sqlx::query_scalar!(
         r#"SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series' AND "libraryId" = ANY($2)) AS "e!""#,
@@ -243,12 +237,12 @@ async fn assert_series(c: &mut PgConnection, id: i32, accessible: &[i32]) -> Res
         .ok_or_else(|| AppError::not_found(format!("Series #{id} not found")))
 }
 
-/// The rows to insert and whether the add is a season/series expansion (rule 29).
+/// The items to insert and whether the add is a season/series expansion (rule 29).
 async fn resolve(
     c: &mut PgConnection,
     dto: &AddDto,
     accessible: &[i32],
-) -> Result<(Vec<Target>, bool), AppError> {
+) -> Result<(Vec<i32>, bool), AppError> {
     if let Some(episode) = dto.episode_id {
         let series = sqlx::query_scalar!(
             r#"SELECT s."mediaId" AS "media_id!" FROM items e JOIN item_groups s ON s.id = e."groupId"
@@ -259,13 +253,7 @@ async fn resolve(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Episode #{episode} not found")))?;
         assert_series(c, series, accessible).await?;
-        return Ok((
-            vec![Target {
-                media: series,
-                episode: Some(episode),
-            }],
-            false,
-        ));
+        return Ok((vec![episode], false));
     }
     if let Some(season) = dto.season_id {
         let eps = sqlx::query!(
@@ -279,14 +267,7 @@ async fn resolve(
             return Ok((vec![], true));
         };
         assert_series(c, first.media_id, accessible).await?;
-        let targets = eps
-            .iter()
-            .map(|e| Target {
-                media: e.media_id,
-                episode: Some(e.id),
-            })
-            .collect();
-        return Ok((targets, true));
+        return Ok((eps.iter().map(|e| e.id).collect(), true));
     }
     let Some(media) = dto.media_id else {
         return Err(AppError::bad_request("errors.playlist_add_target_required"));
@@ -300,13 +281,11 @@ async fn resolve(
     .await?
     .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
     if !crate::db::kind(&kind)?.has_seasons() {
-        return Ok((
-            vec![Target {
-                media,
-                episode: None,
-            }],
-            false,
-        ));
+        let item = sqlx::query_scalar!(r#"SELECT item_of($1, NULL) AS "item""#, media)
+            .fetch_one(&mut *c)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
+        return Ok((vec![item], false));
     }
     let eps = sqlx::query_scalar!(
         r#"SELECT e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
@@ -315,14 +294,7 @@ async fn resolve(
     )
     .fetch_all(&mut *c)
     .await?;
-    let targets = eps
-        .into_iter()
-        .map(|e| Target {
-            media,
-            episode: Some(e),
-        })
-        .collect();
-    Ok((targets, true))
+    Ok((eps, true))
 }
 
 async fn lock(c: &mut PgConnection, id: i32) -> Result<(), AppError> {
@@ -359,24 +331,17 @@ pub async fn add_item(
     if targets.is_empty() {
         return added(0);
     }
-    let present = sqlx::query!(
-        r#"SELECT "mediaId" AS media_id, "episodeId" AS episode_id FROM playlist_items WHERE "playlistId" = $1"#,
+    let present: HashSet<i32> = sqlx::query_scalar!(
+        r#"SELECT "itemId" FROM playlist_items WHERE "playlistId" = $1"#,
         id
     )
     .fetch_all(&mut *tx)
-    .await?;
-    let movies: HashSet<i32> = present
-        .iter()
-        .filter(|p| p.episode_id.is_none())
-        .map(|p| p.media_id)
-        .collect();
-    let episodes: HashSet<i32> = present.iter().filter_map(|p| p.episode_id).collect();
-    let fresh: Vec<&Target> = targets
-        .iter()
-        .filter(|t| match t.episode {
-            Some(e) => !episodes.contains(&e),
-            None => !movies.contains(&t.media),
-        })
+    .await?
+    .into_iter()
+    .collect();
+    let fresh: Vec<i32> = targets
+        .into_iter()
+        .filter(|t| !present.contains(t))
         .collect();
     if fresh.is_empty() {
         return if bulk {
@@ -385,17 +350,14 @@ pub async fn add_item(
             Err(AppError::bad_request(DUPLICATE))
         };
     }
-    let media: Vec<i32> = fresh.iter().map(|t| t.media).collect();
-    let eps: Vec<Option<i32>> = fresh.iter().map(|t| t.episode).collect();
     sqlx::query!(
-        r#"INSERT INTO playlist_items ("playlistId", "mediaId", "episodeId", "addedById", position)
-           SELECT $1, t.m, t.e, $2,
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", "addedById", position)
+           SELECT $1, t.i, $2,
                   (COALESCE((SELECT MAX(position) + 1 FROM playlist_items WHERE "playlistId" = $1), 0) + t.n - 1)::int
-           FROM unnest($3::int[], $4::int[]) WITH ORDINALITY AS t(m, e, n)"#,
+           FROM unnest($3::int[]) WITH ORDINALITY AS t(i, n)"#,
         id,
         a.user.id,
-        &media,
-        &eps as &[Option<i32>]
+        &fresh
     )
     .execute(&mut *tx)
     .await?;
@@ -438,7 +400,8 @@ pub async fn remove_by_media(
     assert_role(&st.db, a.user.id, id, Role::Editor).await?;
     let mut tx = st.db.begin().await?;
     let removed = sqlx::query!(
-        r#"DELETE FROM playlist_items WHERE "playlistId" = $1 AND "mediaId" = $2"#,
+        r#"DELETE FROM playlist_items
+           WHERE "playlistId" = $1 AND "itemId" IN (SELECT id FROM items WHERE "mediaId" = $2)"#,
         id,
         media
     )

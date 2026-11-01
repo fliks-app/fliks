@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playlist_items\n           WHERE \"playlistId\" = $1 AND \"itemId\" IN (SELECT id FROM items WHERE \"mediaId\" = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "65ee427636abf785edc5ae1a9ee1ab4f0ff2ffd947f5743d4d852ed69a2fcdc1"
+}

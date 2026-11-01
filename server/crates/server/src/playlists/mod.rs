@@ -53,29 +53,22 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-/// Drops the finished items from the user's own auto-remove playlists; `episodes` is `None` for a movie.
+/// Drops the finished items from the user's own auto-remove playlists.
 /// A failure is logged, never returned: it must not break recording the watch.
-pub async fn remove_watched_from_auto_playlists(
-    db: &PgPool,
-    user: i32,
-    media: i32,
-    episodes: Option<&[i32]>,
-) {
-    if episodes.is_some_and(<[i32]>::is_empty) {
+pub async fn remove_watched_from_auto_playlists(db: &PgPool, user: i32, items: &[i32]) {
+    if items.is_empty() {
         return;
     }
     let done = sqlx::query!(
         r#"DELETE FROM playlist_items
-           WHERE "mediaId" = $2
-             AND "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1 AND "autoRemoveWatched")
-             AND ("episodeId" = ANY($3) OR ($3::int4[] IS NULL AND "episodeId" IS NULL))"#,
+           WHERE "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1 AND "autoRemoveWatched")
+             AND "itemId" = ANY($2)"#,
         user,
-        media,
-        episodes
+        items
     )
     .execute(db)
     .await;
     if let Err(e) = done {
-        tracing::warn!(media, error = %e, "playlist auto-remove failed");
+        tracing::warn!(user, error = %e, "playlist auto-remove failed");
     }
 }

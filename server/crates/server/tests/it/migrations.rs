@@ -930,6 +930,103 @@ async fn m1789000070_keys_progress_and_history_by_item(pool: PgPool) {
     assert_eq!(left, 0, "progress and history go with their item");
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000080_keys_playlists_and_parties_by_item(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_080).await;
+    sql(
+        &pool,
+        r#"INSERT INTO users (id, username) VALUES (1, 'u');
+          INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 's', 'series');
+          INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media;
+          INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM editions WHERE "mediaId" = 1;
+          INSERT INTO item_groups (id, "number", "mediaId") VALUES (1, 1, 2);
+          INSERT INTO items (id, "groupId", "mediaId", "editionId", "number") VALUES
+            (10, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 1),
+            (11, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 2);
+          INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (1, 1, 'a', 1, 'q');
+          INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 1), (2, 'q', 1);
+          INSERT INTO playlist_items (id, "playlistId", "mediaId", "episodeId", position, "updatedAt") VALUES
+            (1, 1, 1, NULL, 0, '2020-01-01'), (2, 1, 2, 10, 1, '2020-01-01'),
+            (3, 1, 2, 11, 2, '2020-01-01'), (4, 2, 1, 10, 0, '2020-01-01');
+          INSERT INTO watch_parties (id, name, "ownerId", "inviteToken", status, "mediaId", "episodeId", "mediaFileId") VALUES
+            (1, 'a', 1, 't1', 'live', 1, NULL, 1), (2, 'b', 1, 't2', 'live', 2, 11, NULL),
+            (3, 'c', 1, 't3', 'live', 2, 999, NULL), (4, 'd', 1, 't4', 'scheduled', NULL, NULL, NULL),
+            (5, 'e', 1, 't5', 'ended', 2, 999, 1);
+          INSERT INTO watch_party_items ("partyId", position, "mediaId", "episodeId") VALUES
+            (4, 0, 1, NULL), (4, 1, 2, 10);
+          INSERT INTO watch_party_proposals ("partyId", "mediaId", "episodeId", "proposedBy") VALUES
+            (4, 1, NULL, 1), (4, 2, 10, 1)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_080).await;
+
+    let movie_item: i32 = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = 1"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let playlist: Vec<(i32, i32)> = rows(
+        &pool,
+        r#"SELECT "playlistId", "itemId" FROM playlist_items ORDER BY id"#,
+    )
+    .await;
+    // The row of another media's episode keeps its episode.
+    assert_eq!(playlist, [(1, movie_item), (1, 10), (1, 11), (2, 10)]);
+    let bumped: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM playlist_items WHERE "updatedAt" > '2021-01-01'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(bumped, 0, "the migration keeps the rows' updatedAt");
+
+    let parties: Vec<(i32, Option<i32>, String, Option<i32>)> = rows(
+        &pool,
+        r#"SELECT id, "itemId", status, "mediaFileId" FROM watch_parties ORDER BY id"#,
+    )
+    .await;
+    // A live party whose episode is gone ends; an ended one drops its file with its item.
+    assert_eq!(
+        parties,
+        [
+            (1, Some(movie_item), "live".into(), Some(1)),
+            (2, Some(11), "live".into(), None),
+            (3, None, "ended".into(), None),
+            (4, None, "scheduled".into(), None),
+            (5, None, "ended".into(), None),
+        ]
+    );
+    let programme: Vec<(i32, i32, i32)> = rows(
+        &pool,
+        r#"SELECT "partyId", position, "itemId" FROM watch_party_items ORDER BY position"#,
+    )
+    .await;
+    assert_eq!(programme, [(4, 0, movie_item), (4, 1, 10)]);
+    let proposals: Vec<(i32, i32)> = rows(
+        &pool,
+        r#"SELECT "partyId", "itemId" FROM watch_party_proposals ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(proposals, [(4, movie_item), (4, 10)]);
+
+    for bad in [
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (1, 10, 9)"#,
+        r#"INSERT INTO watch_party_items ("partyId", position, "itemId") VALUES (4, 9, 10)"#,
+        r#"INSERT INTO watch_party_proposals ("partyId", "itemId", "proposedBy") VALUES (4, 10, 1)"#,
+        r#"UPDATE watch_parties SET "itemId" = NULL WHERE id = 1"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(&pool, "DELETE FROM items WHERE id = 11").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM playlist_items WHERE "itemId" = 11)
+              + (SELECT COUNT(*) FROM watch_parties WHERE id = 2)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "rows and a live party go with their item");
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64

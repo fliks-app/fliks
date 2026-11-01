@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playlist_items\n           WHERE \"playlistId\" IN (SELECT id FROM playlists WHERE \"ownerId\" = $1 AND \"autoRemoveWatched\")\n             AND \"itemId\" = ANY($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b5595b269a026c61500e51627dac6d200d324289817ee0c40cd25e8f5cb1e7a"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT item_of($1, NULL) AS \"item\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3350cf9d72c25676b422f8b57575abde3a2a719e13673219cf43886d5bb1bf7b"
+}

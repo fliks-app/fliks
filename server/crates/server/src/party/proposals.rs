@@ -48,13 +48,14 @@ type Raw = (i32, i32, Option<i32>, i32, Vec<i32>, Vec<i32>);
 
 async fn raw(db: &PgPool, party: i32) -> sqlx::Result<Vec<Raw>> {
     sqlx::query_as(
-        r#"SELECT p.id, p."mediaId", p."episodeId", p."proposedBy",
+        r#"SELECT p.id, it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END, p."proposedBy",
                   COALESCE(array_agg(v."userId" ORDER BY v."userId") FILTER (WHERE v."value" = 1), '{}'),
                   COALESCE(array_agg(v."userId" ORDER BY v."userId") FILTER (WHERE v."value" = -1), '{}')
            FROM watch_party_proposals p
+           JOIN items it ON it.id = p."itemId"
            LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
            WHERE p."partyId" = $1
-           GROUP BY p.id ORDER BY p."createdAt", p.id"#,
+           GROUP BY p.id, it.id ORDER BY p."createdAt", p.id"#,
     )
     .bind(party)
     .fetch_all(db)
@@ -125,10 +126,11 @@ async fn announce(st: &AppState, row: &db::Row) -> Result<(), AppError> {
 /// 409 the host settles by accepting one.
 pub(super) async fn top(db: &PgPool, party: i32) -> R<Option<Item>> {
     let rows: Vec<(i32, Option<i32>, i64, i64)> = sqlx::query_as(
-        r#"SELECT p."mediaId", p."episodeId",
+        r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
                   count(*) FILTER (WHERE v."value" = 1), count(*) FILTER (WHERE v."value" = -1)
-           FROM watch_party_proposals p LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
-           WHERE p."partyId" = $1 GROUP BY p.id
+           FROM watch_party_proposals p JOIN items it ON it.id = p."itemId"
+           LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
+           WHERE p."partyId" = $1 GROUP BY p.id, it.id
            ORDER BY 3 DESC, 4 ASC LIMIT 2"#,
     )
     .bind(party)
@@ -260,7 +262,7 @@ async fn add_proposals(
     for item in &items {
         let existing: Option<i32> = sqlx::query_scalar(
             r#"SELECT id FROM watch_party_proposals
-               WHERE "partyId" = $1 AND "mediaId" = $2 AND COALESCE("episodeId", 0) = COALESCE($3, 0)"#,
+               WHERE "partyId" = $1 AND "itemId" = item_of($2, $3)"#,
         )
         .bind(id)
         .bind(item.media_id)
@@ -281,8 +283,8 @@ async fn add_proposals(
                 }
                 added += 1;
                 sqlx::query_scalar(
-                    r#"INSERT INTO watch_party_proposals ("partyId", "mediaId", "episodeId", "proposedBy")
-                       VALUES ($1, $2, $3, $4) RETURNING id"#,
+                    r#"INSERT INTO watch_party_proposals ("partyId", "itemId", "proposedBy")
+                       VALUES ($1, item_of($2, $3), $4) RETURNING id"#,
                 )
                 .bind(id)
                 .bind(item.media_id)
@@ -332,8 +334,9 @@ fn item_args(item: &Item, mut extra: Value) -> Value {
 /// Who proposed `pid` of party `id` and its title, 404 when it is not one of its proposals.
 async fn proposal(st: &AppState, id: i32, pid: i32) -> R<(i32, Item)> {
     let (by, media_id, episode_id): (i32, i32, Option<i32>) = sqlx::query_as(
-        r#"SELECT "proposedBy", "mediaId", "episodeId" FROM watch_party_proposals
-           WHERE id = $1 AND "partyId" = $2"#,
+        r#"SELECT p."proposedBy", it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END
+           FROM watch_party_proposals p JOIN items it ON it.id = p."itemId"
+           WHERE p.id = $1 AND p."partyId" = $2"#,
     )
     .bind(pid)
     .bind(id)
