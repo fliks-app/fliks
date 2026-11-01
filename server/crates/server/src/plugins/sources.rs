@@ -215,6 +215,11 @@ impl Plugins {
 
     /// Rule 29: the newest installable version, unattended only when official and consent-free.
     pub async fn auto_update(&self) -> Value {
+        self.auto_update_of(None).await
+    }
+
+    /// Rule 29 for `only` (the plugins that failed at boot), or every installed package.
+    pub async fn auto_update_of(&self, only: Option<&[String]>) -> Value {
         let mut updated = vec![];
         let mut skipped = vec![];
         let off = crate::settings::setting_value(&self.db, "plugins.auto_update")
@@ -233,6 +238,9 @@ impl Plugins {
             return json!({"updated": updated, "skipped": skipped});
         };
         for pkg in installed {
+            if only.is_some_and(|o| !o.contains(&pkg.plugin_id)) {
+                continue;
+            }
             let mut best: Option<(&Source, String)> = None;
             for s in &sources {
                 let Some(v) = catalog::newest(s.cached_catalog.as_ref(), &pkg.plugin_id) else {
