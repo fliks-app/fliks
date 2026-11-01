@@ -114,10 +114,16 @@ UPDATE media SET "searchVector" = NULL WHERE id = 24;
 
 -- the base movies' items move out of the episode id range the scenarios record
 ALTER TABLE item_parts DROP CONSTRAINT "FK_item_parts_item";
+ALTER TABLE playback_states DROP CONSTRAINT "FK_playback_states_item";
+ALTER TABLE playback_history DROP CONSTRAINT "FK_playback_history_item";
 UPDATE items SET id = -id WHERE "groupId" IS NULL;
 UPDATE item_parts SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
+UPDATE playback_states SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
+UPDATE playback_history SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
 ALTER TABLE item_parts ADD CONSTRAINT "FK_item_parts_item" FOREIGN KEY ("itemId", "mediaId")
   REFERENCES items (id, "mediaId") ON DELETE CASCADE;
+ALTER TABLE playback_states ADD CONSTRAINT "FK_playback_states_item" FOREIGN KEY ("itemId") REFERENCES items (id) ON DELETE CASCADE;
+ALTER TABLE playback_history ADD CONSTRAINT "FK_playback_history_item" FOREIGN KEY ("itemId") REFERENCES items (id) ON DELETE CASCADE;
 INSERT INTO editions ("mediaId", family)
   SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
 INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId", "posterUrl", overview, "airDate") VALUES
@@ -221,13 +227,13 @@ INSERT INTO media_crew (id, "createdAt", "updatedAt", job, department, "mediaId"
  (6, '2026-01-01', '2026-01-01', 'Director', 'Directing', 23, 4);
 
 
-INSERT INTO playback_states ("createdAt", "updatedAt", "positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "mediaId", "mediaFileId", "episodeId") VALUES
- ('2026-02-01', '2026-02-01', 450, 3600, false, '2026-02-01', NULL, 2, 6, 6, NULL),
- ('2026-02-01', '2026-02-01', 3500, 3600, true, '2026-02-03', '2026-02-03', 2, 44, 58, (SELECT id FROM items WHERE "groupId" = (SELECT id FROM item_groups WHERE "mediaId" = 44 AND "number" = 1) AND "number" = 1)),
+INSERT INTO playback_states ("createdAt", "updatedAt", "positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "itemId", "mediaFileId") VALUES
+ ('2026-02-01', '2026-02-01', 450, 3600, false, '2026-02-01', NULL, 2, (SELECT id FROM items WHERE "mediaId" = 6 AND "groupId" IS NULL), 6),
+ ('2026-02-01', '2026-02-01', 3500, 3600, true, '2026-02-03', '2026-02-03', 2, (SELECT id FROM items WHERE "groupId" = (SELECT id FROM item_groups WHERE "mediaId" = 44 AND "number" = 1) AND "number" = 1), 58),
  -- finishing the range file of episode 1 completes episode 2 with it
- ('2026-02-01', '2026-02-01', 0, 3600, true, '2026-02-03', NULL, 2, 44, 58, 21),
- ('2026-02-01', '2026-02-01', 1700, 1800, true, '2026-02-04', '2026-02-04', 2, 45, 59, 23),
- ('2026-02-01', '2026-02-01', 200, 1800, false, '2026-02-05', NULL, 2, 45, 60, 24);
+ ('2026-02-01', '2026-02-01', 0, 3600, true, '2026-02-03', NULL, 2, 21, 58),
+ ('2026-02-01', '2026-02-01', 1700, 1800, true, '2026-02-04', '2026-02-04', 2, 23, 59),
+ ('2026-02-01', '2026-02-01', 200, 1800, false, '2026-02-05', NULL, 2, 24, 60);
 
 UPDATE media SET "searchVector" = NULL WHERE id = 24;
 ALTER TABLE media ENABLE TRIGGER set_updated_at;

@@ -82,18 +82,19 @@ pub async fn following_popular(
         None => accessible,
     };
     let ids = sqlx::query_scalar!(
-        r#"SELECT ps."mediaId" AS "id!"
+        r#"SELECT pi."mediaId" AS "id!"
            FROM playback_states ps
-           JOIN media m ON m.id = ps."mediaId"
+           JOIN items pi ON pi.id = ps."itemId"
+           JOIN media m ON m.id = pi."mediaId"
            WHERE ps."userId" = ANY($1)
              AND ps.completed = true
              AND m."libraryId" = ANY($2)
              AND NOT EXISTS (
-               SELECT 1 FROM playback_states mine
-               WHERE mine."userId" = $3 AND mine."mediaId" = ps."mediaId"
+               SELECT 1 FROM playback_states mine JOIN items mi ON mi.id = mine."itemId"
+               WHERE mine."userId" = $3 AND mi."mediaId" = pi."mediaId"
              )
-           GROUP BY ps."mediaId"
-           ORDER BY COUNT(DISTINCT ps."userId") DESC, ps."mediaId" DESC
+           GROUP BY pi."mediaId"
+           ORDER BY COUNT(DISTINCT ps."userId") DESC, pi."mediaId" DESC
            LIMIT $4"#,
         &followed,
         &libs,

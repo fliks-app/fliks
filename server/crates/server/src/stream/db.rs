@@ -43,50 +43,26 @@ pub async fn markers(db: &PgPool, episode_id: i32) -> sqlx::Result<Option<Marker
 }
 
 /// The saved position worth resuming: more than 10 s in and not finished.
-pub async fn resume_position(
-    db: &PgPool,
-    user: i32,
-    media: i32,
-    episode: Option<i32>,
-) -> sqlx::Result<Option<f64>> {
-    Ok(find_state(db, user, media, episode)
+pub async fn resume_position(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<f64>> {
+    Ok(find_state(db, user, item)
         .await?
         .filter(|r| !r.completed && r.position_seconds > 10.0)
         .map(|r| r.position_seconds))
 }
 
-/// Ensures the history row exists, links it to `file` and bumps `lastPlayedAt`; never sets `playedAt`.
-pub async fn mark_started(
-    db: &PgPool,
-    user: i32,
-    media: i32,
-    file: i32,
-    episode: Option<i32>,
-) -> sqlx::Result<()> {
-    match find_state(db, user, media, episode).await? {
-        Some(row) => {
-            sqlx::query!(
-                r#"UPDATE playback_states SET "mediaFileId" = $2, "lastPlayedAt" = now(), "updatedAt" = now()
-                   WHERE id = $1"#,
-                row.id,
-                file
-            )
-            .execute(db)
-            .await?;
-        }
-        None => {
-            sqlx::query!(
-                r#"INSERT INTO playback_states ("userId", "mediaId", "mediaFileId", "episodeId",
-                       "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
-                   VALUES ($1, $2, $3, $4, 0, 0, false, now())"#,
-                user,
-                media,
-                file,
-                episode
-            )
-            .execute(db)
-            .await?;
-        }
-    }
-    Ok(())
+/// Ensures the progress row exists, links it to `file` and bumps `lastPlayedAt`; never sets `playedAt`.
+pub async fn mark_started(db: &PgPool, user: i32, item: i32, file: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId",
+               "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
+           VALUES ($1, $2, $3, 0, 0, false, now())
+           ON CONFLICT ("userId", "itemId")
+           DO UPDATE SET "mediaFileId" = $3, "lastPlayedAt" = now(), "updatedAt" = now()"#,
+        user,
+        item,
+        file
+    )
+    .execute(db)
+    .await
+    .map(drop)
 }

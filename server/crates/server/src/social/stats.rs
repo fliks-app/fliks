@@ -22,11 +22,12 @@ pub async fn user_stats(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {
     };
     let p = sqlx::query!(
         r#"SELECT ROUND(COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0)::numeric)::bigint AS "total_watch_time_seconds!",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "movies_watched!",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN ps."mediaId" END) AS "series_started!",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND ps."episodeId" IS NOT NULL THEN ps."episodeId" END) AS "episodes_watched!",
+                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN it."mediaId" END) AS "movies_watched!",
+                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN it."mediaId" END) AS "series_started!",
+                  COUNT(DISTINCT CASE WHEN ps.completed AND it."groupId" IS NOT NULL THEN it.id END) AS "episodes_watched!",
                   MAX(ps."lastPlayedAt") AS last_played_at
-           FROM playback_states ps LEFT JOIN media ON media.id = ps."mediaId"
+           FROM playback_states ps JOIN items it ON it.id = ps."itemId"
+                LEFT JOIN media ON media.id = it."mediaId"
            WHERE ps."userId" = $1"#,
         id
     )

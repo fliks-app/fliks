@@ -111,7 +111,7 @@ Facts used: `V` = viewer (`me`), `T` = target user, `follows` = edge `V -> T` is
 
 37. `followingIds` = accepted edges `me -> *`; empty -> `[]`; `accessible` = caller's library ids, empty -> `[]`; `libs = [libraryId]` when `libraryId` truthy and in `accessible`, else `accessible` (an inaccessible `libraryId` silently widens to all accessible, unlike `playback-state.md` rule 1 which narrows to `[]`).
 38. Query parsing: `libraryId ? +libraryId: undefined` (NaN, `0` -> no filter); `limit ? Math.min(+limit, 50): 20`. `limit=0` -> `Math.min(0,50)=0` -> `LIMIT 0` -> `[]`. A non-numeric, negative or fractional `limit` is 400V and a `limit` above 50 is clamped to 50.
-39. Rows: media completed by at least one followed user, within `libs`, not touched by the caller (no `playback_states` row of the caller for that media, completed or not), ranked by number of distinct followed users then newest media id; loaded media are mapped to `RecommendationItem` in row order, a row whose media does not load is dropped: `{media: {id, title, type, year, posterUrl, fanartUrl, additionalFanartUrls: string[] (null -> []), genres: string[] (null -> []), available: true}, becauseTitle: '', score: 0}` (`available` is always `true`, `score` always `0`). Only followed users with `shareWatchHistory` count (rule 51).
+39. Rows: media completed by at least one followed user, within `libs`, not touched by the caller (no `playback_states` row of the caller for any item of that media, completed or not), ranked by number of distinct followed users then newest media id; loaded media are mapped to `RecommendationItem` in row order, a row whose media does not load is dropped: `{media: {id, title, type, year, posterUrl, fanartUrl, additionalFanartUrls: string[] (null -> []), genres: string[] (null -> []), available: true}, becauseTitle: '', score: 0}` (`available` is always `true`, `score` always `0`). Only followed users with `shareWatchHistory` count (rule 51).
 
 ### H. Member-to-member recommendations
 
@@ -142,18 +142,19 @@ Tables: `likes`, `user_follows`, `content_recommendations`, `users`, `media`, `i
 - Liked items: `SELECT l.id, l."seasonId", l."episodeId", m.id, m.type, m.title, m."posterUrl", m."fanartUrl", m."libraryId", s."number", e."number", e.title, e."stillUrl", es."number" FROM likes l LEFT JOIN media m ON m.id = l."mediaId" LEFT JOIN item_groups s ON s.id = l."seasonId" LEFT JOIN items e ON e.id = l."episodeId" LEFT JOIN item_groups es ON es.id = e."groupId" WHERE l."userId" = $1 ORDER BY l."createdAt" DESC, l.id ASC LIMIT $limit` (ACL and `libraryId` filters applied after the LIMIT, rule 5).
 - Followed users' popular media, verbatim (`$1` followed ids int[], `$2` library ids int[], `$3` caller id, `$4` limit):
   ```sql
-  SELECT ps."mediaId" AS "mediaId", COUNT(DISTINCT ps."userId")::int AS cnt
+  SELECT pi."mediaId" AS "mediaId", COUNT(DISTINCT ps."userId")::int AS cnt
   FROM playback_states ps
-  JOIN media m ON m.id = ps."mediaId"
+  JOIN items pi ON pi.id = ps."itemId"
+  JOIN media m ON m.id = pi."mediaId"
   WHERE ps."userId" = ANY($1)
     AND ps.completed = true
     AND m."libraryId" = ANY($2)
     AND NOT EXISTS (
-      SELECT 1 FROM playback_states mine
-      WHERE mine."userId" = $3 AND mine."mediaId" = ps."mediaId"
+      SELECT 1 FROM playback_states mine JOIN items mi ON mi.id = mine."itemId"
+      WHERE mine."userId" = $3 AND mi."mediaId" = pi."mediaId"
 )
-  GROUP BY ps."mediaId"
-  ORDER BY cnt DESC, ps."mediaId" DESC
+  GROUP BY pi."mediaId"
+  ORDER BY cnt DESC, pi."mediaId" DESC
   LIMIT $4
   ```
   followed by `SELECT m.id, m.title, m.type, m.year, m."posterUrl", m."fanartUrl", m."additionalFanartUrls", m.genres FROM media m WHERE m.id = ANY($ids)`. The ordering is total (`cnt DESC, mediaId DESC`).
@@ -162,11 +163,11 @@ Tables: `likes`, `user_follows`, `content_recommendations`, `users`, `media`, `i
 - Stats (`$1` target id, `'movie'`/`'series'` the `media.type` values):
   ```sql
   SELECT COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0) AS "totalWatchTimeSeconds",
-         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "moviesWatched",
-         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN ps."mediaId" END) AS "seriesStarted",
-         COUNT(DISTINCT CASE WHEN ps.completed AND ps."episodeId" IS NOT NULL THEN ps."episodeId" END) AS "episodesWatched",
+         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN it."mediaId" END) AS "moviesWatched",
+         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN it."mediaId" END) AS "seriesStarted",
+         COUNT(DISTINCT CASE WHEN ps.completed AND it."groupId" IS NOT NULL THEN it.id END) AS "episodesWatched",
          MAX(ps."lastPlayedAt") AS "lastPlayedAt"
-  FROM playback_states ps LEFT JOIN media ON media.id = ps."mediaId"
+  FROM playback_states ps JOIN items it ON it.id = ps."itemId" LEFT JOIN media ON media.id = it."mediaId"
   WHERE ps."userId" = $1
   ```
   and: `SELECT r.status AS status, COUNT(*) AS count FROM requests r WHERE r."userId" = $1 GROUP BY r.status` (map `pending`, `approved`, `declined`; absent = 0). The `SUM` is a float, `COUNT` values bigint -> numbers; `Math.round` on the sum.

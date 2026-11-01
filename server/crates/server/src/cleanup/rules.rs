@@ -37,8 +37,7 @@ pub struct Match {
 const ONE_GB: f64 = 1_073_741_824.0;
 const FILE_SIZE: &str =
     r#"COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0)"#;
-const LAST_PLAYED: &str =
-    r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps WHERE ps."mediaId" = media.id)"#;
+const LAST_PLAYED: &str = r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN items it ON it.id = ps."itemId" WHERE it."mediaId" = media.id)"#;
 const REQUESTER: &str = r#"r."mediaId" = media.id AND r.kind = 'add' AND r.status <> 'declined' AND r."userId" IS NOT NULL"#;
 
 fn int(c: &Value, k: &str) -> Option<i64> {
@@ -83,7 +82,7 @@ impl Scope {
                     size: FILE_SIZE.into(),
                     last_played: LAST_PLAYED.into(),
                     played:
-                        r#"EXISTS (SELECT 1 FROM playback_states ps WHERE ps."mediaId" = media.id)"#
+                        r#"EXISTS (SELECT 1 FROM playback_states ps JOIN items it ON it.id = ps."itemId" WHERE it."mediaId" = media.id)"#
                             .into(),
                     added: r#"media."createdAt""#.into(),
                     released: r#"media."releaseDate""#.into(),
@@ -98,10 +97,10 @@ impl Scope {
         Scope {
             size: format!("COALESCE((SELECT SUM(f.size) FROM {files}), 0)"),
             last_played: format!(
-                r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN items ep ON ep.id = ps."episodeId" WHERE {ep})"#
+                r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN items ep ON ep.id = ps."itemId" WHERE {ep})"#
             ),
             played: format!(
-                r#"EXISTS (SELECT 1 FROM playback_states ps JOIN items ep ON ep.id = ps."episodeId" WHERE {ep})"#
+                r#"EXISTS (SELECT 1 FROM playback_states ps JOIN items ep ON ep.id = ps."itemId" WHERE {ep})"#
             ),
             added: format!(r#"(SELECT MAX(f."createdAt") FROM {files})"#),
             released: format!(r#"(SELECT MAX(ep."airDate") FROM items ep WHERE {ep})"#),
@@ -193,17 +192,17 @@ pub fn compile(
         .push(")");
     }
     if let Some(n) = int(c, "playCountBelow") {
-        q.push(r#" AND (SELECT COUNT(*) FROM playback_history h WHERE h."mediaId" = media.id) < "#)
+        q.push(r#" AND (SELECT COUNT(*) FROM playback_history h JOIN items it ON it.id = h."itemId" WHERE it."mediaId" = media.id) < "#)
             .push_bind(n);
     }
     if let Some(n) = int(c, "playCountByUsersBelow") {
-        q.push(r#" AND (SELECT COUNT(DISTINCT h."userId") FROM playback_history h WHERE h."mediaId" = media.id) < "#)
+        q.push(r#" AND (SELECT COUNT(DISTINCT h."userId") FROM playback_history h JOIN items it ON it.id = h."itemId" WHERE it."mediaId" = media.id) < "#)
             .push_bind(n);
     }
     if let Some(d) = int32(c, "notPlayedInLastDays") {
         q.push(
-            r#" AND NOT EXISTS (SELECT 1 FROM playback_history h WHERE h."mediaId" = media.id
-            AND h."playedAt" >= now() - make_interval(days => "#,
+            r#" AND NOT EXISTS (SELECT 1 FROM playback_history h JOIN items it ON it.id = h."itemId"
+            WHERE it."mediaId" = media.id AND h."playedAt" >= now() - make_interval(days => "#,
         )
         .push_bind(d)
         .push("))");
@@ -219,7 +218,7 @@ pub fn compile(
             AND NOT EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER}
               AND EXISTS (SELECT 1 FROM items ep WHERE {ep} AND {EP_FILE}
                 AND NOT EXISTS (SELECT 1 FROM playback_states ps WHERE ps."userId" = r."userId"
-                  AND ps."episodeId" = ep.id AND ps.completed)))"#
+                  AND ps."itemId" = ep.id AND ps.completed)))"#
         ));
     } else if flag(c, "watchedByRequester") {
         q.push(format!(

@@ -15,14 +15,14 @@ What a media is made of. A movie is one item; a series is items (its episodes) g
 
 7. `media::items::create_shell(conn, media, kind)` inserts the media's `video` edition and, when the kind has no seasons, its item (`monitored = true`, everything else null). Every `INSERT INTO media` calls it in the same transaction: `POST /api/media`, the title import, the unmatched media a disk import creates, and the Radarr and Sonarr importers. A route that creates a media without it breaks rule 4.
 8. A group is inserted with its `"mediaId"`; an item of a series with the `"groupId"`, the group's `"mediaId"` and the media's `video` edition (`media::items::video_edition`).
-9. `PUT /api/media/:id` changing `type` follows it (`media::items::follow_kind`): a media that becomes a series loses its ungrouped item; a media that becomes a movie gains one if it has none. Groups and grouped items are kept.
+9. `PUT /api/media/:id` changing `type` follows it (`media::items::follow_kind`): a media that becomes a series loses its ungrouped item, and with it the progress and history of that item; a media that becomes a movie gains one if it has none. Groups and grouped items are kept.
 10. Deleting a media removes its editions, groups and items by cascade.
 
 ## Reads and wire
 
 11. The wire is unchanged: `seasonId` is the group id, `seasonNumber` the group `number`, `episodeId` the id of a grouped item, `episodeNumber` its `number`, `endEpisodeNumber` its `"endNumber"`. SQL that builds those payloads names the keys (`jsonb_build_object` or an alias); no query serialises a whole `items` or `item_groups` row.
 12. An ungrouped item is not an episode. A query about episodes joins `item_groups` on `"groupId"` or filters `"groupId" IS NOT NULL`, so the item of a movie never appears in an episode list, count or lookup (the episode gates of `PATCH /api/media/episodes/:episodeId` and of the markers routes answer `404` for it).
-13. Progress and every other reference keep their columns (`playback_states."episodeId"`, ...); a movie's progress carries a null `episodeId`. A file carries no item: its items are its parts (rules 17-23).
+13. Progress and history belong to an item: `playback_states` is unique on `(userId, itemId)` and `playback_history` rows carry an `itemId`, both cascading with the item. The other references keep their columns. The SQL function `item_of(media, episode)` turns the wire pair `(mediaId, episodeId?)` into an item: an absent episode names the media's ungrouped item, an episode id names that item when it belongs to the media, any other pair names none. A file carries no item: its items are its parts (rules 17-23).
 
 ## Versions and editions
 

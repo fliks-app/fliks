@@ -15,7 +15,8 @@ async fn window(
     let rows = sqlx::query!(
         r#"SELECT m.id AS "id?", m.title AS "title?", m.genres AS "genres?: Json<Vec<String>>"
            FROM playback_states ps
-           LEFT JOIN media m ON m.id = ps."mediaId"
+           JOIN items i ON i.id = ps."itemId"
+           JOIN media m ON m.id = i."mediaId"
            WHERE ps."userId" = $1 AND ps.completed = true
              AND ($2::int[] IS NULL OR m."libraryId" = ANY($2))
            ORDER BY ps."lastPlayedAt" DESC
@@ -63,13 +64,12 @@ pub async fn recommendations(
     let mut excluded: HashSet<i32> = taste.kept_ids().map(|id| id as i32).collect();
     excluded.extend(
         sqlx::query_scalar!(
-            r#"SELECT DISTINCT ps."mediaId" FROM playback_states ps WHERE ps."userId" = $1"#,
+            r#"SELECT DISTINCT i."mediaId" FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+               WHERE ps."userId" = $1"#,
             user
         )
         .fetch_all(db)
-        .await?
-        .into_iter()
-        .flatten(),
+        .await?,
     );
     excluded.extend(
         sqlx::query_scalar!(

@@ -1,0 +1,184 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             ps.id, e.\"mediaId\" AS \"media_id!\", ps.\"mediaFileId\" AS media_file_id,\n             CASE WHEN e.\"groupId\" IS NOT NULL THEN e.id END AS episode_id,\n             ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n             ps.completed,\n             ps.\"lastPlayedAt\" AS last_played_at,\n             m.title AS media_title, m.type AS \"media_type!\",\n             m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, e.\"stillUrl\" AS still_url,\n             CASE WHEN ps.\"durationSeconds\" > 0\n                  THEN ROUND((ps.\"positionSeconds\" / ps.\"durationSeconds\") * 100)\n                  ELSE 0 END AS \"progress_percent!\",\n             CASE WHEN e.\"groupId\" IS NOT NULL\n                  THEN 'S' || LPAD(s.\"number\"::text, 2, '0') || 'E' || LPAD(e.\"number\"::text, 2, '0')\n                       || COALESCE(' - ' || e.title, '')\n                  ELSE NULL END AS episode_label\n           FROM playback_states ps\n           JOIN items e ON e.id = ps.\"itemId\"\n           JOIN media m ON m.id = e.\"mediaId\"\n           LEFT JOIN item_groups s ON s.id = e.\"groupId\"\n           WHERE ps.\"userId\" = $1 AND ps.\"playedAt\" IS NOT NULL\n             AND m.\"libraryId\" = ANY($4)\n           ORDER BY ps.\"playedAt\" DESC\n           LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "mediaId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "media_file_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "position_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "positionSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "durationSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "completed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "completed"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_played_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "lastPlayedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "media_title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "media_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "poster_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "fanart_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "still_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "stillUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "progress_percent!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "episode_label",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "f46f4f63791be1fd115e1b6041798156a479d3bac64383f0544044e3ee8439b8"
+}

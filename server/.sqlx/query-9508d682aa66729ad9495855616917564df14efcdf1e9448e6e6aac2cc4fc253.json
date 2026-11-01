@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states (\"userId\", \"itemId\", \"mediaFileId\",\n               \"positionSeconds\", \"durationSeconds\", completed, \"lastPlayedAt\")\n           VALUES ($1, $2, $3, 0, 0, false, now())\n           ON CONFLICT (\"userId\", \"itemId\")\n           DO UPDATE SET \"mediaFileId\" = $3, \"lastPlayedAt\" = now(), \"updatedAt\" = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9508d682aa66729ad9495855616917564df14efcdf1e9448e6e6aac2cc4fc253"
+}

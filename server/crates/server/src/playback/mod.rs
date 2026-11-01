@@ -9,6 +9,6 @@ mod tests;
 mod watched;
 
 pub use beat::{__path_heartbeat, Debounce, heartbeat};
-pub use db::{find_state, history as user_history};
+pub use db::{find_state, history as user_history, item_of};
 pub use recommend::{recommendations as user_recommendations, top_genres};
 pub use routes::*;

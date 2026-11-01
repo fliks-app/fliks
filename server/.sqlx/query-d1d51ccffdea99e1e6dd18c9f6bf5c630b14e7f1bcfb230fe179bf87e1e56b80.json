@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states (\"userId\", \"itemId\", \"positionSeconds\", \"durationSeconds\",\n               completed, \"hiddenFromContinueWatching\", \"lastPlayedAt\", \"playedAt\")\n           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)\n           ON CONFLICT (\"userId\", \"itemId\") DO UPDATE SET\n               \"positionSeconds\" = EXCLUDED.\"positionSeconds\",\n               \"durationSeconds\" = CASE WHEN EXCLUDED.\"durationSeconds\" > 0\n                   THEN EXCLUDED.\"durationSeconds\" ELSE playback_states.\"durationSeconds\" END,\n               completed = EXCLUDED.completed,\n               \"hiddenFromContinueWatching\" = EXCLUDED.\"hiddenFromContinueWatching\",\n               \"lastPlayedAt\" = EXCLUDED.\"lastPlayedAt\", \"playedAt\" = EXCLUDED.\"playedAt\"\n           WHERE playback_states.\"lastPlayedAt\" <= EXCLUDED.\"lastPlayedAt\"\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Float8",
+        "Float8",
+        "Bool",
+        "Bool",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d1d51ccffdea99e1e6dd18c9f6bf5c630b14e7f1bcfb230fe179bf87e1e56b80"
+}

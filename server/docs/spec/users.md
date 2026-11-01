@@ -134,11 +134,11 @@ Tables `users`, `roles`, `library_user_access` (`"userId"`, `"libraryId"`, uniqu
 - Stats:
   ```sql
   SELECT COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0) AS "totalWatchTimeSeconds",
-         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "moviesWatched",
-         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN ps."mediaId" END) AS "seriesStarted",
-         COUNT(DISTINCT CASE WHEN ps.completed AND ps."episodeId" IS NOT NULL THEN ps."episodeId" END) AS "episodesWatched",
+         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN it."mediaId" END) AS "moviesWatched",
+         COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN it."mediaId" END) AS "seriesStarted",
+         COUNT(DISTINCT CASE WHEN ps.completed AND it."groupId" IS NOT NULL THEN it.id END) AS "episodesWatched",
          MAX(ps."lastPlayedAt") AS "lastPlayedAt"
-  FROM playback_states ps LEFT JOIN media ON media.id = ps."mediaId"
+  FROM playback_states ps JOIN items it ON it.id = ps."itemId" LEFT JOIN media ON media.id = it."mediaId"
   WHERE ps."userId" = $1
   ```
   and: `SELECT r.status AS status, COUNT(*) AS count FROM requests r WHERE r."userId" = $1 GROUP BY r.status` (map `pending`, `approved`, `declined`; absent = 0).

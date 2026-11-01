@@ -78,7 +78,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | `missing` | `!== undefined` | rule 22 | |
     | `unidentified` | `=== true` | `NOT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = media.id)` | identified means any external id (`external-ids.md` rule 7); an empty `imdbId` is not stored, so it does not count |
     | `letter` | truthy | rule 23 | |
-20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `media.id <op> (<watched subquery>)` with `op = onlyWatched ? IN : NOT IN` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below: a movie is watched when any `playback_states` row of the user for it is `completed`; a series when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; a series with no file-backed episodes is never watched).
+20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `media.id <op> (<watched subquery>)` with `op = onlyWatched ? IN : NOT IN` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below: a movie is watched when the user's `playback_states` row for its item is `completed`; a series when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; a series with no file-backed episodes is never watched).
 21. `total` = number of distinct media matching all clauses above (not reduced by `cutoffUnmet`, rule 26, nor by `limit`).
 22. `missing` (rule 19) is, with `today` = the **UTC** date `YYYY-MM-DD` computed in application code (not `CURRENT_DATE`): `missing=true` → `(files.id IS NULL OR <ME>)`, `missing=false` → `(files.id IS NOT NULL AND NOT <ME>)`, where `files.id IS NULL` means the media has no `media_files` row (`NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = media.id)`) and `<ME>` is Q-M below ("a monitored season (> 0) holds a monitored episode, aired on or before today, not on disk"). An episode with `airDate IS NULL` is never missing; an unmonitored series with gaps is still missing; a movie is missing iff it has no file. "On disk" = the episode has an item part (`items.md` rule 21): a multi-episode file gives a part to every existing episode of its range, so the episodes inside it are on disk without any range arithmetic.
 23. `letter`: `letter = query.letter.toUpperCase()` (Unicode upper-casing); `'#'` → `media.title !~ '^[A-Za-z]'` (title not starting with an ASCII letter, evaluated by Postgres); a single ASCII `A`-`Z` → `UPPER(LEFT(media.title, 1)) = $letter` (database `UPPER`; titles starting with an accented letter do not match their base letter); anything else (two characters, `1`, `É`, lowercase that does not upper-case into `A-Z`) adds **no filter** and no error.
@@ -89,7 +89,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     - Order: by rank when `sortBy` is absent, else the requested sort (rule 18).
 25. `attachEpisodeStats` runs on the page: `sizeOnDisk = Σ Number(file.size)` over the loaded `files` (number, `0` when none); for series, one query (Q-S below, `"downloaded"` counts the episodes with a part, season 0 excluded) gives `episodeStats: { totalEpisodes: number, downloadedEpisodes: number }`, **absent** (key omitted) for movies and for series without episodes in seasons `> 0`.
 26. `cutoffUnmet === true` is applied in SQL before pagination: `page`, `limit` and `total` count only the media that pass. A media is kept only if it has a quality profile whose `cutoff` id resolves in the quality table (`cutoffRank`; no profile or unknown id = dropped). Movies: kept when the best `rankFromQualityString(file.quality)` over `files` (0 with none) is `< cutoffRank`. Series: per monitored episode of seasons `> 0`, the best file rank (`rankFromQualityString`, 0 for no file or empty quality, Q-C below); a series with no such episodes is dropped; `shadowedEpisodeNumbers` is computed over **all** those episodes of the media pooled across seasons (a multi-episode range in season 1 also shadows the same numbers in season 2); kept when some non-shadowed episode has `rank < cutoffRank`. `rankFromQualityString` = `0` for null/empty else `parseReleaseQuality(q).quality.rank` (rule 69). Ranks come from `parseReleaseQuality`, not from an exact name match, so SQL cannot rank by itself: the filtering uses a `(quality text, rank int)` mapping built from the distinct `media_files.quality` strings of the filtered media, or a pre-filter of the ids before paging. A page is full unless it is the last.
-27. `attachWatchedProgress` runs last on the (post-cutoff) page: for each media `watched: boolean` (`=== true`) and `progressPercent: number` from the SQL of Q-P: movies resume % = `ROUND(positionSeconds / durationSeconds * 100)::int` of the **most recent** incomplete whole-media row (`episodeId IS NULL`, `completed = false`, `durationSeconds > 0`, `ORDER BY "lastPlayedAt" DESC LIMIT 1`), `0` otherwise and always `0` for series; `watched` uses the same definition as rule 20. The percentage stays in SQL: `positionSeconds`/`durationSeconds` are `float8` and `round(float8)` rounds half to even (`450/3600` gives 12, not 13), unlike `f64::round`.
+27. `attachWatchedProgress` runs last on the (post-cutoff) page: for each media `watched: boolean` (`=== true`) and `progressPercent: number` from the SQL of Q-P: movies resume % = `ROUND(positionSeconds / durationSeconds * 100)::int` of the **most recent** incomplete row of the media's ungrouped item (`groupId IS NULL`, `completed = false`, `durationSeconds > 0`, `ORDER BY "lastPlayedAt" DESC LIMIT 1`), `0` otherwise and always `0` for series; `watched` uses the same definition as rule 20. The percentage stays in SQL: `positionSeconds`/`durationSeconds` are `float8` and `round(float8)` rounds half to even (`450/3600` gives 12, not 13), unlike `f64::round`.
 28. Response `{ data, total }`; media serialise as the `MLI` of rule 30.
 29. Per request: ACL ids; page ids; count; hydrate (media + the three many-to-one joins + `files` by `ANY(ids)` ordered `id ASC`, rule 30); episode stats; cutoff queries only when requested; watched/progress.
 
@@ -198,8 +198,9 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
 **Q-W (watched subquery, verbatim)**:
 
 ```sql
-  SELECT DISTINCT ps."mediaId" AS id FROM playback_states ps
-  INNER JOIN media m ON m.id = ps."mediaId"
+  SELECT DISTINCT i."mediaId" AS id FROM playback_states ps
+  INNER JOIN items i ON i.id = ps."itemId"
+  INNER JOIN media m ON m.id = i."mediaId"
   WHERE ps."userId" = :userId AND ps.completed = true AND m.type = 'movie'
   UNION
   SELECT m2.id FROM media m2
@@ -215,7 +216,7 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
     WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
     AND NOT EXISTS (
       SELECT 1 FROM playback_states ps2
-      WHERE ps2."userId" = :userId AND ps2."episodeId" = e.id AND ps2.completed = true
+      WHERE ps2."userId" = :userId AND ps2."itemId" = e.id AND ps2.completed = true
     )
   )
 ```
@@ -266,8 +267,8 @@ SELECT s."mediaId" AS "mediaId",
 SELECT m.id::int AS id,
   (
     (m.type = 'movie' AND EXISTS (
-      SELECT 1 FROM playback_states ps
-      WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps.completed = true
+      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+      WHERE ps."userId" = $1 AND i."mediaId" = m.id AND ps.completed = true
     ))
     OR
     (m.type = 'series'
@@ -280,15 +281,15 @@ SELECT m.id::int AS id,
         WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
           AND NOT EXISTS (
             SELECT 1 FROM playback_states ps2
-            WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true
+            WHERE ps2."userId" = $1 AND ps2."itemId" = e.id AND ps2.completed = true
           )
       )
     )
   ) AS watched,
   CASE WHEN m.type = 'movie' THEN COALESCE((
     SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
-    FROM playback_states ps
-    WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps."episodeId" IS NULL
+    FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+    WHERE ps."userId" = $1 AND i."mediaId" = m.id AND i."groupId" IS NULL
       AND ps.completed = false AND ps."durationSeconds" > 0
     ORDER BY ps."lastPlayedAt" DESC LIMIT 1
   ), 0) ELSE 0 END AS progress

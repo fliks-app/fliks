@@ -23,6 +23,30 @@ async fn scalar(pool: &PgPool, sql: &str) -> i32 {
         .unwrap()
 }
 
+/// The item a play of `media` lands on: its movie item, or the first episode of a series.
+async fn item_for(pool: &PgPool, media: i32) -> i32 {
+    let found: Option<i32> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT id FROM items WHERE "mediaId" = {media} ORDER BY id LIMIT 1"#
+    )))
+    .fetch_optional(pool)
+    .await
+    .unwrap();
+    if let Some(id) = found {
+        return id;
+    }
+    scalar(
+        pool,
+        &format!(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ({media}, 'video') RETURNING id),
+                    g AS (INSERT INTO item_groups ("mediaId", "number")
+                          SELECT {media}, 1 FROM media WHERE id = {media} AND type = 'series' RETURNING id)
+               INSERT INTO items ("mediaId", "editionId", "groupId", "number")
+               SELECT {media}, e.id, (SELECT id FROM g), (SELECT 1 FROM g) FROM e RETURNING id"#
+        ),
+    )
+    .await
+}
+
 async fn ids(pool: &PgPool, c: Value) -> Vec<i32> {
     let mut v = vec![];
     for level in ["movie", "series"] {
@@ -97,11 +121,12 @@ async fn seed(pool: &PgPool) -> Seed {
         ),
     )
     .await;
+    let m2_item = item_for(pool, m2).await;
     exec(
         pool,
         &format!(
-            r#"INSERT INTO playback_states ("userId", "mediaId", completed, "lastPlayedAt")
-            VALUES ({user}, {m2}, true, now() - interval '1 day')"#
+            r#"INSERT INTO playback_states ("userId", "itemId", completed, "lastPlayedAt")
+            VALUES ({user}, {m2_item}, true, now() - interval '1 day')"#
         ),
     )
     .await;
@@ -183,10 +208,11 @@ async fn each_criterion_filters(pool: PgPool) {
         ),
     )
     .await;
+    let c_item = item_for(&pool, c).await;
     exec(
         &pool,
         &format!(
-            r#"INSERT INTO playback_states ("userId", "mediaId", completed) VALUES ({}, {c}, true)"#,
+            r#"INSERT INTO playback_states ("userId", "itemId", completed) VALUES ({}, {c_item}, true)"#,
             s.user
         ),
     )
@@ -343,11 +369,12 @@ async fn a_media_that_stops_matching_is_unflagged(pool: PgPool) {
     let id = rule(&pool, json!({"neverPlayed": true}), "delete", Some(7)).await;
     job::run(&st).await.unwrap();
     assert_eq!(candidates(&pool).await, vec![s.m1, s.m3]);
+    let m1_item = item_for(&pool, s.m1).await;
     exec(
         &pool,
         &format!(
-            r#"INSERT INTO playback_states ("userId", "mediaId") VALUES ({}, {})"#,
-            s.user, s.m1
+            r#"INSERT INTO playback_states ("userId", "itemId") VALUES ({}, {m1_item})"#,
+            s.user
         ),
     )
     .await;
@@ -575,9 +602,8 @@ async fn played(pool: &PgPool, ep: i32, days_ago: i32) {
     exec(
         pool,
         &format!(
-            r#"INSERT INTO playback_states ("userId", "mediaId", "episodeId", completed, "lastPlayedAt")
-            SELECT {user}, s."mediaId", {ep}, true, now() - interval '{days_ago} days'
-            FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = {ep}"#
+            r#"INSERT INTO playback_states ("userId", "itemId", completed, "lastPlayedAt")
+            VALUES ({user}, {ep}, true, now() - interval '{days_ago} days')"#
         ),
     )
     .await;
@@ -996,10 +1022,11 @@ async fn play_history_criteria(pool: PgPool) {
         (u2, s.m1, 60),
         (s.user, s.m2, 1),
     ] {
+        let item = item_for(&pool, m).await;
         exec(
             &pool,
             &format!(
-                r#"INSERT INTO playback_history ("userId", "mediaId", "playedAt") VALUES ({u}, {m}, now() - interval '{ago} days')"#
+                r#"INSERT INTO playback_history ("userId", "itemId", "playedAt") VALUES ({u}, {item}, now() - interval '{ago} days')"#
             ),
         )
         .await;

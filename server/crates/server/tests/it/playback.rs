@@ -62,6 +62,15 @@ impl Ctx {
             .await
             .unwrap()
     }
+
+    /// The media's `video` edition and its ungrouped item.
+    async fn shell(&self, media: i32) -> i32 {
+        self.id(&format!(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ({media}, 'video') RETURNING id)
+               INSERT INTO items ("mediaId", "editionId") SELECT {media}, id FROM e RETURNING items.id"#
+        ))
+        .await
+    }
 }
 
 #[sqlx::test(migrations = false)]
@@ -95,6 +104,11 @@ async fn toggles_check_the_media_and_the_season(pool: PgPool) {
         .await;
     let toggle = |m: i32| format!("/api/playback/media/{m}/toggle-watched");
     assert_eq!(c.api("POST", &toggle(9999), None).await.0, 404);
+    assert_eq!(
+        c.api("POST", &toggle(a), None).await.0,
+        404,
+        "a series names no item"
+    );
     let season_uri = |m: i32| format!("/api/playback/media/{m}/seasons/{season}/toggle-watched");
     let w = Some(json!({"watched": true}));
     assert_eq!(c.api("POST", &season_uri(a), w.clone()).await.0, 404);
@@ -109,10 +123,13 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
         .await;
+    let item = c.shell(m).await;
     let f = c
         .id(&format!(
-            r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
-               VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id"#
+            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
+                 VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               RETURNING "mediaFileId""#
         ))
         .await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
@@ -159,6 +176,7 @@ async fn toggle_watched_without_a_file_keeps_duration_null(pool: PgPool) {
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
         .await;
+    c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
     for completed in [true, false] {
         let (s, row) = c.api("POST", &uri, None).await;
@@ -180,11 +198,12 @@ async fn recommendation_ties_break_by_media_id(pool: PgPool) {
             r#"INSERT INTO media (title, type, genres, "libraryId") VALUES ('w', 'movie', '["Drama"]', {lib}) RETURNING id"#
         ))
         .await;
+    let item = c.shell(watched).await;
     sqlx::query(
-        r#"INSERT INTO playback_states ("userId", "mediaId", completed) VALUES ($1, $2, true)"#,
+        r#"INSERT INTO playback_states ("userId", "itemId", completed) VALUES ($1, $2, true)"#,
     )
     .bind(c.user)
-    .bind(watched)
+    .bind(item)
     .execute(&c.pool)
     .await
     .unwrap();
@@ -225,6 +244,7 @@ async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
         .await;
+    c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
     let plays = || c.id("SELECT count(*)::int FROM playback_history");
     c.api("POST", &uri, None).await;
@@ -282,4 +302,115 @@ async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) 
         .await;
     c.api("POST", &season_uri, w).await;
     assert_eq!(plays().await, 4);
+}
+
+/// A series with one episode that has a part, and its media id.
+async fn series_with_episode(c: &Ctx, library: i32) -> (i32, i32, i32) {
+    let m = c
+        .id(&format!(
+            r#"INSERT INTO media (title, type, "libraryId") VALUES ('s', 'series', {library}) RETURNING id"#
+        ))
+        .await;
+    c.id(&format!(
+        r#"INSERT INTO editions ("mediaId", family) VALUES ({m}, 'video') RETURNING id"#
+    ))
+    .await;
+    let season = c
+        .id(&format!(
+            r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, {m}) RETURNING id"#
+        ))
+        .await;
+    let item = c
+        .id(&format!(
+            r#"INSERT INTO items ("number", "groupId", "mediaId", "editionId")
+               SELECT 1, {season}, {m}, id FROM editions WHERE "mediaId" = {m} RETURNING items.id"#
+        ))
+        .await;
+    c.id(&format!(
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
+             VALUES ({m}, 'e.mkv', 1, 'q') RETURNING id)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+           RETURNING "mediaFileId""#
+    ))
+    .await;
+    (m, season, item)
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_season_toggle_keeps_played_at(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c
+        .id(r#"INSERT INTO libraries (name) VALUES ('l') RETURNING id"#)
+        .await;
+    let (m, season, item) = series_with_episode(&c, lib).await;
+    c.id(&format!(
+        r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", completed, "playedAt")
+           VALUES ({}, {item}, 40, false, '2025-01-01') RETURNING id"#,
+        c.user
+    ))
+    .await;
+    let uri = format!("/api/playback/media/{m}/seasons/{season}/toggle-watched");
+    let (s, _) = c.api("POST", &uri, Some(json!({"watched": true}))).await;
+    assert_eq!(s, 201);
+    let (completed, played): (bool, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as(r#"SELECT completed, "playedAt" FROM playback_states WHERE "itemId" = $1"#)
+            .bind(item)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert!(completed);
+    assert_eq!(played.unwrap().format("%Y").to_string(), "2025");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c
+        .id(r#"INSERT INTO libraries (name) VALUES ('l') RETURNING id"#)
+        .await;
+    let (series, _, ep) = series_with_episode(&c, lib).await;
+    let movie = c
+        .id(&format!(
+            r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', {lib}) RETURNING id"#
+        ))
+        .await;
+    let item = c.shell(movie).await;
+    let file = c
+        .id(&format!(
+            r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
+                 VALUES ({movie}, 'm.mkv', 1, 'q') RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {movie} FROM f
+               RETURNING "mediaFileId""#
+        ))
+        .await;
+    for it in [ep, item] {
+        c.id(&format!(
+            r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
+               VALUES ({}, {it}, 100, 3600, false, '2026-01-01T00:00:00Z') RETURNING id"#,
+            c.user
+        ))
+        .await;
+    }
+    let (s, got) = c.api("GET", "/api/playback/continue-watching", None).await;
+    let ids: Vec<i64> = got
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["mediaId"].as_i64().unwrap())
+        .collect();
+    assert_eq!((s, ids), (200, vec![i64::from(movie), i64::from(series)]));
+
+    // A movie whose only file is gone cannot be played, so it leaves the row.
+    c.id(&format!(
+        "DELETE FROM media_files WHERE id = {file} RETURNING id"
+    ))
+    .await;
+    let (_, got) = c.api("GET", "/api/playback/continue-watching", None).await;
+    let ids: Vec<i64> = got
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["mediaId"].as_i64().unwrap())
+        .collect();
+    assert_eq!(ids, vec![i64::from(series)]);
 }

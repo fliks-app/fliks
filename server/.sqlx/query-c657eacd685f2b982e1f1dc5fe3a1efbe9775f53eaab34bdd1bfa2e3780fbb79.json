@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mediaFileId\" FROM item_parts WHERE \"itemId\" = $1\n               ORDER BY \"mediaFileId\" LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mediaFileId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "mediaFileId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c657eacd685f2b982e1f1dc5fe3a1efbe9775f53eaab34bdd1bfa2e3780fbb79"
+}

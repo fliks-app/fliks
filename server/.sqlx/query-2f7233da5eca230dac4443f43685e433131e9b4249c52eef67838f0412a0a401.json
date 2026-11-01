@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playback_states WHERE \"userId\" = $1 AND \"itemId\" = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f7233da5eca230dac4443f43685e433131e9b4249c52eef67838f0412a0a401"
+}

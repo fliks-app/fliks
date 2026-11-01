@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_history (\"userId\", \"itemId\")\n           SELECT $1, e.id FROM items e JOIN item_groups s ON s.id = e.\"groupId\"\n           WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = e.id)\n             AND CASE WHEN $3::int IS NULL THEN s.\"mediaId\" = $2 AND s.\"number\" > 0\n                      ELSE s.id = $3 END\n             AND NOT EXISTS (SELECT 1 FROM playback_states ps\n                             WHERE ps.\"userId\" = $1 AND ps.\"itemId\" = e.id AND ps.completed)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "caa4c3953bf6c8e5a491c56bd96170d60b68f4a4f098cea9b0ad8fbaa972e493"
+}

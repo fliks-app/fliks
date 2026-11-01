@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pi.\"mediaId\" AS \"id!\"\n           FROM playback_states ps\n           JOIN items pi ON pi.id = ps.\"itemId\"\n           JOIN media m ON m.id = pi.\"mediaId\"\n           WHERE ps.\"userId\" = ANY($1)\n             AND ps.completed = true\n             AND m.\"libraryId\" = ANY($2)\n             AND NOT EXISTS (\n               SELECT 1 FROM playback_states mine JOIN items mi ON mi.id = mine.\"itemId\"\n               WHERE mine.\"userId\" = $3 AND mi.\"mediaId\" = pi.\"mediaId\"\n             )\n           GROUP BY pi.\"mediaId\"\n           ORDER BY COUNT(DISTINCT ps.\"userId\") DESC, pi.\"mediaId\" DESC\n           LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "mediaId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "293bc79c3182f928a7132ce41304dd822f751bf6695f104769fc23c0ec71633f"
+}

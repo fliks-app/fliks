@@ -21,6 +21,8 @@ pub struct ResolvedFile {
     pub info: Option<MediaInfo>,
     pub media_id: Option<i32>,
     pub episode_id: Option<i32>,
+    /// The first item the file plays; `None` for a file no item plays.
+    pub item_id: Option<i32>,
     pub media_title: Option<String>,
     pub media_type: Option<MediaKind>,
     pub poster_url: Option<String>,
@@ -64,6 +66,7 @@ pub async fn resolve_file(
             r#"SELECT mf."relativePath" AS "relative_path!", mf."streamInfo" AS stream_info,
                       mf."mediaId" AS media_id,
                       (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS episode_id,
+                      (SELECT fi."itemId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS item_id,
                       m.title AS "title?", m."type" AS media_type,
                       m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
                       m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path
@@ -131,6 +134,7 @@ pub async fn resolve_file(
         info,
         media_id: row.media_id,
         episode_id: row.episode_id,
+        item_id: row.item_id,
         media_title: row.title,
         media_type: row.media_type.as_deref().map(crate::db::kind).transpose()?,
         poster_url: row.poster_url,

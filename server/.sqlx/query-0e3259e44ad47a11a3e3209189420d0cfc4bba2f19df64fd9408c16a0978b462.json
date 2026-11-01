@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states\n               SET completed = false,\n                   \"positionSeconds\" = 0,\n                   \"lastPlayedAt\" = NOW()\n               WHERE \"userId\" = $1\n                 AND \"itemId\" IN (SELECT id FROM items WHERE \"mediaId\" = $2 AND \"groupId\" IS NOT NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e3259e44ad47a11a3e3209189420d0cfc4bba2f19df64fd9408c16a0978b462"
+}
