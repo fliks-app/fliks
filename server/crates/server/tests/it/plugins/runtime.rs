@@ -262,6 +262,8 @@ async fn proxy_routes_and_lifecycle() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_released_call_is_not_due_again_at_once() {
     use fliks_server::plugins::scheduled;
+    // An id with no live runtime: the fixture's claimer would otherwise claim the due row first.
+    const ID: &str = "fliks.unpolled";
     let Some((s, h)) = setup("release", |_| {}).await else {
         return;
     };
