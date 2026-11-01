@@ -13,9 +13,33 @@ use axum::{
     http::{HeaderMap, StatusCode, header::AUTHORIZATION, request::Parts},
 };
 use chrono::{DateTime, Utc};
-use fliks_domain::acl::{Action, Permissions, Subject};
-use serde::Serialize;
+use fliks_domain::{
+    acl::{Action, Permissions, Subject},
+    media::kind::MediaKind,
+};
+use serde::{Serialize, Serializer, ser::SerializeMap};
 use sqlx::{PgPool, types::Json};
+use std::collections::HashMap;
+
+/// A user's request limit per media kind, written flat as `<kind>QuotaLimit`; no entry is 0.
+#[derive(Debug, Clone, Default)]
+pub struct Quotas(HashMap<MediaKind, i32>);
+
+impl Quotas {
+    pub fn limit(&self, kind: MediaKind) -> i32 {
+        self.0.get(&kind).copied().unwrap_or(0)
+    }
+}
+
+impl Serialize for Quotas {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut m = s.serialize_map(Some(MediaKind::ALL.len()))?;
+        for k in MediaKind::ALL {
+            m.serialize_entry(&format!("{k}QuotaLimit"), &self.limit(k))?;
+        }
+        m.end()
+    }
+}
 
 /// A `users` row without `passwordHash`; enums are read as text and JSON columns as typed lists.
 #[derive(Debug, Clone, Serialize)]
@@ -37,8 +61,8 @@ pub struct UserRow {
     pub is_admin: bool,
     pub enabled: bool,
     pub require_password_change: bool,
-    pub movie_quota_limit: i32,
-    pub series_quota_limit: i32,
+    #[serde(flatten)]
+    pub quotas: Quotas,
     pub quota_period_days: i32,
     pub library_order: Json<Vec<i32>>,
     pub hidden_library_ids: Json<Vec<i32>>,
@@ -93,7 +117,8 @@ pub async fn load_users(
         u."mediaServerId" AS media_server_id, u."avatar" AS avatar,
         u."lastLogin" AS last_login, u."isAdmin" AS is_admin, u."enabled" AS enabled,
         u."requirePasswordChange" AS require_password_change,
-        u."movieQuotaLimit" AS movie_quota_limit, u."seriesQuotaLimit" AS series_quota_limit,
+        COALESCE((SELECT jsonb_object_agg(q."kind", q."limit") FROM user_quotas q
+            WHERE q."userId" = u."id"), '{}'::jsonb) AS "quotas!: Json<HashMap<MediaKind, i32>>",
         u."quotaPeriodDays" AS quota_period_days,
         u."libraryOrder" AS "library_order: Json<Vec<i32>>",
         u."hiddenLibraryIds" AS "hidden_library_ids: Json<Vec<i32>>",
@@ -142,8 +167,7 @@ pub async fn load_users(
                 is_admin: r.is_admin,
                 enabled: r.enabled,
                 require_password_change: r.require_password_change,
-                movie_quota_limit: r.movie_quota_limit,
-                series_quota_limit: r.series_quota_limit,
+                quotas: Quotas(r.quotas.0),
                 quota_period_days: r.quota_period_days,
                 library_order: r.library_order,
                 hidden_library_ids: r.hidden_library_ids,

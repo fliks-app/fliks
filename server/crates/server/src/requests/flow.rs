@@ -120,10 +120,7 @@ async fn resolve_sole_library(st: &AppState, a: &Authed, media_type: MediaKind) 
 
 /// Rule 13: the ADD requests of the window still pending or approved count against the limit.
 async fn check_quota(st: &AppState, a: &Authed, media_type: MediaKind) -> Res<()> {
-    let limit = match media_type {
-        MediaKind::Movie => a.user.movie_quota_limit,
-        MediaKind::Series => a.user.series_quota_limit,
-    };
+    let limit = a.user.quotas.limit(media_type);
     if limit == 0 {
         return Ok(());
     }

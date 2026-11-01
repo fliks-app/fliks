@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_quotas (\"userId\", \"kind\", \"limit\") VALUES ($1, $2, $3)\n            ON CONFLICT (\"userId\", \"kind\") DO UPDATE SET \"limit\" = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2fdd7f7d6949d2b1bf4414ad52e4a36f152444583de3cb65e65069213f5e631f"
+}

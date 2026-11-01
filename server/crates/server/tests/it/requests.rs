@@ -500,7 +500,8 @@ async fn quota_counts_only_pending_and_approved_adds_and_blocks_at_the_limit(poo
     let c = ctx(pool).await;
     q(
         &c.pool(),
-        r#"UPDATE users SET "movieQuotaLimit" = 2 WHERE username = 'user'"#,
+        r#"INSERT INTO user_quotas ("userId", kind, "limit")
+        SELECT id, 'movie', 2 FROM users WHERE username = 'user'"#,
     )
     .await;
     for t in [50, 51] {
@@ -532,7 +533,8 @@ async fn the_quota_window_is_the_period_in_24_hour_days(pool: PgPool) {
     let c = ctx(pool).await;
     q(
         &c.pool(),
-        r#"UPDATE users SET "movieQuotaLimit" = 1, "quotaPeriodDays" = 3 WHERE username = 'user'"#,
+        r#"WITH u AS (UPDATE users SET "quotaPeriodDays" = 3 WHERE username = 'user' RETURNING id)
+        INSERT INTO user_quotas ("userId", kind, "limit") SELECT id, 'movie', 1 FROM u"#,
     )
     .await;
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(55)).await;

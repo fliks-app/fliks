@@ -204,6 +204,50 @@ async fn a_quota_period_below_one_day_is_refused(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn quota_limits_are_rows_per_kind_and_zero_clears_one(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (admin, t) = c.user("admin", "[]", true).await;
+    let rows = || async {
+        sqlx::query_as::<_, (String, i32)>(
+            r#"SELECT kind, "limit" FROM user_quotas WHERE "userId" = $1 ORDER BY kind"#,
+        )
+        .bind(admin)
+        .fetch_all(&c.pool)
+        .await
+        .unwrap()
+    };
+    let (s, b) = put(
+        &c,
+        &t,
+        admin,
+        json!({"movieQuotaLimit": 3, "seriesQuotaLimit": 2}),
+    )
+    .await;
+    assert_eq!(
+        (s, &b["movieQuotaLimit"], &b["seriesQuotaLimit"]),
+        (200, &json!(3), &json!(2))
+    );
+    assert_eq!(rows().await, [("movie".into(), 3), ("series".into(), 2)]);
+    let (_, b) = put(&c, &t, admin, json!({"movieQuotaLimit": 0})).await;
+    assert_eq!(
+        (&b["movieQuotaLimit"], &b["seriesQuotaLimit"]),
+        (&json!(0), &json!(2))
+    );
+    assert_eq!(rows().await, [("series".into(), 2)]);
+    assert_eq!(
+        put(&c, &t, admin, json!({"seriesQuotaLimit": -1})).await.0,
+        400
+    );
+    let (_, me) = c
+        .call("GET", &format!("/api/users/{admin}"), &t, None)
+        .await;
+    assert_eq!(
+        (&me["movieQuotaLimit"], &me["seriesQuotaLimit"]),
+        (&json!(0), &json!(2))
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn admin_guards(pool: PgPool) {
     let c = ctx(pool).await;
     let (admin, tadmin) = c.user("admin", "[]", true).await;

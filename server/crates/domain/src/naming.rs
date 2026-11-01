@@ -1,5 +1,6 @@
 //! Library file and folder naming (`naming.service.ts`); no IO, the caller joins and confines.
 use crate::js::{rx, trim};
+use crate::media::kind::MediaKind;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use unicode_normalization::UnicodeNormalization;
@@ -12,6 +13,30 @@ pub struct NamingFormats {
     pub series: String,
     pub series_folder: String,
     pub season_folder: String,
+}
+
+/// What a format names: a file, the title's folder, or the folder of one group of items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    File,
+    Folder,
+    GroupFolder,
+}
+
+impl Scope {
+    pub const ALL: [Self; 3] = [Self::File, Self::Folder, Self::GroupFolder];
+}
+
+/// The `app_settings` key of a format; `None` where the kind has no such scope.
+pub const fn setting_key(kind: MediaKind, scope: Scope) -> Option<&'static str> {
+    match (kind, scope) {
+        (MediaKind::Movie, Scope::File) => Some("naming_movie_format"),
+        (MediaKind::Movie, Scope::Folder) => Some("naming_movie_folder_format"),
+        (MediaKind::Series, Scope::File) => Some("naming_series_format"),
+        (MediaKind::Series, Scope::Folder) => Some("naming_series_folder_format"),
+        (MediaKind::Series, Scope::GroupFolder) => Some("naming_season_folder_format"),
+        (MediaKind::Movie, Scope::GroupFolder) => None,
+    }
 }
 
 pub fn default_formats() -> NamingFormats {
@@ -27,20 +52,21 @@ pub fn default_formats() -> NamingFormats {
 
 /// `app_settings` rows (`key`, nullable `value`): a stored value, even empty, else the default.
 pub fn formats_from_rows(rows: &[(String, Option<String>)]) -> NamingFormats {
-    let get = |key: &str, default: String| {
+    let get = |kind, scope, default: String| {
+        let key = setting_key(kind, scope);
         rows.iter()
             .rev()
-            .find(|(k, _)| k == key)
+            .find(|(k, _)| Some(k.as_str()) == key)
             .and_then(|(_, v)| v.clone())
             .unwrap_or(default)
     };
     let d = default_formats();
     NamingFormats {
-        movie: get("naming_movie_format", d.movie),
-        movie_folder: get("naming_movie_folder_format", d.movie_folder),
-        series: get("naming_series_format", d.series),
-        series_folder: get("naming_series_folder_format", d.series_folder),
-        season_folder: get("naming_season_folder_format", d.season_folder),
+        movie: get(MediaKind::Movie, Scope::File, d.movie),
+        movie_folder: get(MediaKind::Movie, Scope::Folder, d.movie_folder),
+        series: get(MediaKind::Series, Scope::File, d.series),
+        series_folder: get(MediaKind::Series, Scope::Folder, d.series_folder),
+        season_folder: get(MediaKind::Series, Scope::GroupFolder, d.season_folder),
     }
 }
 
