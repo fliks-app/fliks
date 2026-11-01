@@ -153,9 +153,9 @@ struct FileRow {
 
 async fn file_rows(st: &AppState, ids: &[i32]) -> sqlx::Result<HashMap<i32, FileRow>> {
     let rows = sqlx::query!(
-        r#"SELECT id, "mediaId" AS media_id, "episodeId" AS episode_id, "relativePath" AS relative_path,
-                  "streamInfo" AS stream_info
-           FROM media_files WHERE id = ANY($1)"#,
+        r#"SELECT f.id, f."mediaId" AS media_id, f."relativePath" AS relative_path, f."streamInfo" AS stream_info,
+                  (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) AS episode_id
+           FROM media_files f WHERE f.id = ANY($1)"#,
         ids
     )
     .fetch_all(&st.db)

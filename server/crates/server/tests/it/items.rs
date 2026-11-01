@@ -77,6 +77,11 @@ async fn create_and_type_change_keep_the_shell(pool: PgPool) {
         .await
         .unwrap();
 
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES ($1, 'a.mkv', 1, 'q')"#)
+        .bind(made[1])
+        .execute(&pool)
+        .await
+        .unwrap();
     for (id, kind) in [(made[0], "series"), (made[1], "movie")] {
         let (s, b) = call(
             &app,
@@ -89,6 +94,18 @@ async fn create_and_type_change_keep_the_shell(pool: PgPool) {
         assert_eq!(s, 200, "{b}");
     }
     assert_media_have_shells(&pool, &[]).await;
+    let parts: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM item_parts p JOIN items i ON i.id = p."itemId"
+           WHERE p."mediaId" = $1 AND i."groupId" IS NULL"#,
+    )
+    .bind(made[1])
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        parts, 1,
+        "a series that becomes a movie plays its files through its new item"
+    );
 
     // A series that becomes a movie again keeps a single item.
     let (s, _) = call(

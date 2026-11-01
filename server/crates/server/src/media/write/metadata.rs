@@ -195,7 +195,7 @@ pub async fn apply_season(
 }
 
 /// `refreshSeriesEpisodes` applied to provider seasons (rule 56); returns the inserted episode count.
-async fn apply_seasons(
+pub(crate) async fn apply_seasons(
     st: &AppState,
     media_id: i32,
     seasons: &[SeasonDetails],
@@ -239,6 +239,7 @@ async fn apply_seasons(
         }
         applied.push((sid, stills, sd.poster_url.clone()));
     }
+    crate::media::items::cover_ranges(&mut *tx, media_id).await?;
     tx.commit().await?;
     let inserted = (count_episodes(st, media_id).await? - before).max(0);
     for (sid, stills, poster) in applied {

@@ -104,6 +104,66 @@ async fn replay_creates_a_missing_row_and_never_uncompletes(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn finishing_a_range_file_completes_every_episode_it_plays(pool: PgPool) {
+    let (user, _, _) = seed(&pool).await;
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "folderName") VALUES ('S', 'series', 'S') RETURNING id"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let ids: Vec<i32> = sqlx::query_scalar(
+        r#"WITH ed AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id),
+                g AS (INSERT INTO item_groups ("mediaId", "number") VALUES ($1, 1) RETURNING id),
+                i AS (INSERT INTO items ("groupId", "mediaId", "editionId", "number", monitored)
+                      SELECT g.id, $1, ed.id, n, true FROM g, ed, generate_series(1, 3) n RETURNING id, "number")
+           SELECT id FROM i ORDER BY "number""#,
+    )
+    .bind(media)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let file: i32 = sqlx::query_scalar(
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
+                      VALUES ($1, 'S01E01-E03.mkv', 1, 'x') RETURNING id),
+                p AS (INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
+                      SELECT i, f.id, $1 FROM f, UNNEST($2::int[]) i RETURNING 1)
+           SELECT id FROM f"#,
+    )
+    .bind(media)
+    .bind(&ids)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let w = |position| Watch {
+        position,
+        duration: 3600.0,
+        file,
+        episode: Some(ids[0]),
+        client_played_at: None,
+    };
+    record_watch(&pool, user, media, &w(100.0)).await.unwrap();
+    let done = || async {
+        sqlx::query_scalar::<_, i64>(r#"SELECT count(*) FROM playback_states WHERE completed"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(done().await, 0, "a partial play completes nothing");
+    record_watch(&pool, user, media, &w(3590.0)).await.unwrap();
+    assert_eq!(
+        done().await,
+        3,
+        "the owner and the two episodes the file also plays"
+    );
+    let history: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM playback_history"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(history, 3);
+}
+
+#[sqlx::test(migrations = false)]
 async fn live_beat_still_stamps_now(pool: PgPool) {
     let ids = seed(&pool).await;
     let t0 = Utc::now();

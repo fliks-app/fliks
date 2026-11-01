@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states\n             (\"userId\", \"mediaId\", \"mediaFileId\", \"episodeId\", \"positionSeconds\",\n              \"durationSeconds\", completed, \"lastPlayedAt\", \"playedAt\")\n           SELECT $1::int4, $2::int4, f.id, e.id, 0,\n                  COALESCE((f.\"streamInfo\"->>'durationSeconds')::float8, 0), true, now(), NULL\n           FROM items e\n           CROSS JOIN LATERAL (SELECT mf.id, mf.\"streamInfo\" FROM media_files mf\n                               JOIN item_parts p ON p.\"mediaFileId\" = mf.id\n                               WHERE p.\"itemId\" = e.id ORDER BY mf.id DESC LIMIT 1) f\n           WHERE e.\"groupId\" = $3\n           RETURNING \"episodeId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "episodeId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "episodeId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ab9a307b60855a7c58595c541124a834c7c77b3d0e9b794886698d028a96cd96"
+}

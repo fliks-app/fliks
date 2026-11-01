@@ -167,7 +167,7 @@ async fn match_one(
                 ));
             }
         }
-        MediaKind::Movie => file_qualities(db, "mediaId", m.id)
+        MediaKind::Movie => file_qualities(db, false, m.id)
             .await?
             .into_iter()
             .map(Some)

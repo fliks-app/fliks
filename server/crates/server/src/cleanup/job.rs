@@ -283,8 +283,8 @@ async fn act_scope(
     .map_err(err)?;
     let files: Vec<i32> = sqlx::query_scalar(
         r#"SELECT f.id FROM media_files f WHERE f."mediaId" = $1
-        AND ($2::int IS NULL OR f."episodeId" = $2)
-        AND ($3::int IS NULL OR f."episodeId" IN (SELECT id FROM items WHERE "groupId" = $3))
+        AND ($2::int IS NULL OR EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaFileId" = f.id AND p."itemId" = $2))
+        AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId" WHERE p."mediaFileId" = f.id AND i."groupId" = $3))
         ORDER BY f.id"#,
     )
     .bind(id)

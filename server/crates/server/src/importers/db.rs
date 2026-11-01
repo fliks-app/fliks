@@ -248,7 +248,8 @@ pub struct SeriesFile {
 pub async fn series_files(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<SeriesFile>> {
     sqlx::query_as!(
         SeriesFile,
-        r#"SELECT id, "relativePath" AS relative_path, "episodeId" AS episode_id
+        r#"SELECT id, "relativePath" AS relative_path,
+                  (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = media_files.id) AS episode_id
            FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
         media_id
     )

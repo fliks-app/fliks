@@ -749,7 +749,7 @@ async fn episode_json(st: &AppState, id: i32) -> Result<Value, AppError> {
         r#"SELECT jsonb_build_object('id', e.id, 'createdAt', iso_ms(e."createdAt"), 'updatedAt', iso_ms(e."updatedAt"),
              'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
              'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime, 'monitored', e.monitored,
-             'hasFile', e."hasFile", 'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"),
+             'hasFile', EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id), 'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"),
              'seasonId', e."groupId") AS "j!: Value" FROM items e WHERE e.id = $1"#,
         id
     )

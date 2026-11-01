@@ -222,29 +222,6 @@ pub fn is_video(name: &str) -> bool {
     fliks_domain::media::VIDEO_EXTS.contains(&ext_lower(name).as_str())
 }
 
-/// `hasFile = false` once no file of the episode remains.
-pub async fn clear_has_file(db: &PgPool, episode_id: i32) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"UPDATE items SET "hasFile" = false
-           WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media_files WHERE "episodeId" = $1)"#,
-        episode_id
-    )
-    .execute(db)
-    .await
-    .map(drop)
-}
-
-pub async fn clear_has_file_many(db: &PgPool, episodes: &[i32]) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"UPDATE items e SET "hasFile" = false
-           WHERE e.id = ANY($1) AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = e.id)"#,
-        episodes
-    )
-    .execute(db)
-    .await
-    .map(drop)
-}
-
 /// W11 `thumbnails.deleteForFile`, detached: engine invalidate then the sprite cache dir.
 pub fn drop_thumbnails(st: &AppState, file_id: i32) {
     let st = st.clone();

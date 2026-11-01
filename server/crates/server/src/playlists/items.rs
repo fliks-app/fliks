@@ -160,7 +160,7 @@ pub async fn items(
                     'id', e.id, 'createdAt', e."createdAt", 'updatedAt', e."updatedAt",
                     'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
                     'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime,
-                    'monitored', e.monitored, 'hasFile', e."hasFile", 'stillUrl', e."stillUrl",
+                    'monitored', e.monitored, 'hasFile', EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id), 'stillUrl', e."stillUrl",
                     'markersScannedAt', e."markersScannedAt", 'seasonId', e."groupId") END AS "episode: Jsonb<Value>",
                   CASE WHEN s.id IS NOT NULL THEN jsonb_build_object(
                     'id', s.id, 'createdAt', s."createdAt", 'updatedAt', s."updatedAt",

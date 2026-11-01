@@ -56,7 +56,7 @@ def fx(name):
     return json.dumps(d["expected"]["info"], sort_keys=True).replace("'", "''"), d["fileSize"]
 info = {"mkv": fx("h264-aac-mkv"), "mp4": fx("h264-aac-mp4")}
 q = lambda s: "'" + s.replace("'", "''") + "'"
-media, ext_ids, files, seasons, episodes = [], [], [], [], []
+media, ext_ids, files, parts, seasons, episodes = [], [], [], [], [], []
 fid = 0
 for n in range(1, 18):
     title = f"Parity Movie {n:02d}"
@@ -66,7 +66,8 @@ for n in range(1, 18):
     ext = "mp4" if n % 2 == 0 else "mkv"
     fid += 1
     i, size = info[ext]
-    files.append(f"({fid}, {n}, NULL, {q(folder+'.'+ext)}, {size}, 'WEBDL-1080p', 'en', '{i}')")
+    files.append(f"({fid}, {n}, {q(folder+'.'+ext)}, {size}, 'WEBDL-1080p', 'en', '{i}')")
+    parts.append(f"({12 + n}, {fid}, {n})")
 sid = eid = 0
 for k, s in enumerate("ABC"):
     mid = 18 + k
@@ -78,16 +79,18 @@ for k, s in enumerate("ABC"):
         seasons.append(f"({sid}, {se}, {mid})")
         for ep in (1, 2):
             eid += 1; fid += 1
-            episodes.append(f"({eid}, {ep}, {q(f'Episode {ep}')}, true, {sid}, {mid}, {mid})")
+            episodes.append(f"({eid}, {ep}, {q(f'Episode {ep}')}, {sid}, {mid}, {mid})")
             i, size = info["mkv"]
-            files.append(f"({fid}, {mid}, {eid}, {q(f'Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
+            files.append(f"({fid}, {mid}, {q(f'Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
+            parts.append(f"({eid}, {fid}, {mid})")
 print('INSERT INTO media (id, title, year, type, overview, status, monitored, "folderName", rating, genres, runtime, "releaseDate", "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
 print('INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES\n ' + ",\n ".join(ext_ids) + ";")
 print('INSERT INTO editions (id, "mediaId", family) SELECT id, id, \'video\' FROM media ORDER BY id;')
 print('INSERT INTO item_groups (id, "number", "mediaId") VALUES\n ' + ",\n ".join(seasons) + ";")
-print('INSERT INTO items (id, "number", title, "hasFile", "groupId", "mediaId", "editionId") VALUES\n ' + ",\n ".join(episodes) + ";")
-print('INSERT INTO items (id, "mediaId", "editionId", "hasFile") SELECT 12 + id, id, id, true FROM media WHERE type = \'movie\' ORDER BY id;')
-print('INSERT INTO media_files (id, "mediaId", "episodeId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
+print('INSERT INTO items (id, "number", title, "groupId", "mediaId", "editionId") VALUES\n ' + ",\n ".join(episodes) + ";")
+print('INSERT INTO items (id, "mediaId", "editionId") SELECT 12 + id, id, id FROM media WHERE type = \'movie\' ORDER BY id;')
+print('INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
+print('INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES\n ' + ",\n ".join(parts) + ";")
 PY
 cat <<'SQL'
 INSERT INTO requests (id, "mediaType", provider, "externalId", title, status, "userId", "libraryId") VALUES

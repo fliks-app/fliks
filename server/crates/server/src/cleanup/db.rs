@@ -110,8 +110,8 @@ pub async fn candidates(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<Valu
           'seasonNumber', s."number", 'episodeNumber', e."number", 'title', m.title,
           'type', m."type", 'posterUrl', m."posterUrl", 'ruleId', r.id, 'ruleName', r.name, 'action', r.action,
           'size', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = m.id
-            AND (c."episodeId" IS NULL OR f."episodeId" = c."episodeId")
-            AND (c."seasonId" IS NULL OR f."episodeId" IN (SELECT id FROM items WHERE "groupId" = c."seasonId"))), 0),
+            AND (c."episodeId" IS NULL OR EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaFileId" = f.id AND p."itemId" = c."episodeId"))
+            AND (c."seasonId" IS NULL OR EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId" WHERE p."mediaFileId" = f.id AND i."groupId" = c."seasonId"))), 0),
           'flaggedAt', iso_ms(c."flaggedAt"), 'deleteAt', iso_ms(c."deleteAt"))
         FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId" JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
         LEFT JOIN item_groups s ON s.id = c."seasonId" LEFT JOIN items e ON e.id = c."episodeId"

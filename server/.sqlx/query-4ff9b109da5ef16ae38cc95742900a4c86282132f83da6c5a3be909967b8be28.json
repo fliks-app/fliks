@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM item_parts WHERE \"mediaFileId\" = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4ff9b109da5ef16ae38cc95742900a4c86282132f83da6c5a3be909967b8be28"
+}

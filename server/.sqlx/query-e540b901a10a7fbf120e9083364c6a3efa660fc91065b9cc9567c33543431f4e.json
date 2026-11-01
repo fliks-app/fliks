@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playback_states\n           WHERE \"userId\" = $1\n             AND \"episodeId\" IN (SELECT i.id FROM items i WHERE i.\"groupId\" = $2\n                                 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = i.id))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e540b901a10a7fbf120e9083364c6a3efa660fc91065b9cc9567c33543431f4e"
+}

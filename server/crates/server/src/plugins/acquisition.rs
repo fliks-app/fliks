@@ -196,7 +196,8 @@ struct EpisodeRow {
 }
 
 const EPISODE_SELECT: &str = r#"SELECT id, "groupId" AS season_id, "number" AS episode_number,
-    "endNumber" AS end_episode_number, title, "airDate" AS air_date, "hasFile" AS has_file, monitored
+    "endNumber" AS end_episode_number, title, "airDate" AS air_date,
+    EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = items.id) AS has_file, monitored
   FROM items"#;
 
 async fn episodes_of(db: &PgPool, season_id: i32) -> sqlx::Result<Vec<EpisodeRow>> {
@@ -209,10 +210,10 @@ async fn episodes_of(db: &PgPool, season_id: i32) -> sqlx::Result<Vec<EpisodeRow
 }
 
 fn on_disk(eps: &[EpisodeRow]) -> BTreeSet<i32> {
-    fliks_domain::media::episodes_on_disk(
-        eps.iter()
-            .map(|e| (e.episode_number, e.end_episode_number, e.has_file)),
-    )
+    eps.iter()
+        .filter(|e| e.has_file)
+        .map(|e| e.episode_number)
+        .collect()
 }
 
 /// The highest-ranked quality; the first of equal ranks wins.
@@ -226,18 +227,19 @@ fn best(qualities: Vec<String>) -> Option<String> {
     })
 }
 
-/// `(owner id, quality)` rows of `media_files` grouped by owner, in row order.
+/// `(owner id, quality)` rows of `media_files` grouped by media (or by item parts), in row order.
 async fn qualities_by(
     db: &PgPool,
-    column: &str,
+    by_item: bool,
     ids: &[i32],
 ) -> sqlx::Result<HashMap<i32, Vec<String>>> {
-    let rows: Vec<(i32, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"SELECT "{column}", quality FROM media_files WHERE "{column}" = ANY($1) ORDER BY id"#
-    )))
-    .bind(ids)
-    .fetch_all(db)
-    .await?;
+    let sql = if by_item {
+        r#"SELECT p."itemId", f.quality FROM media_files f JOIN item_parts p ON p."mediaFileId" = f.id
+           WHERE p."itemId" = ANY($1) ORDER BY f.id"#
+    } else {
+        r#"SELECT "mediaId", quality FROM media_files WHERE "mediaId" = ANY($1) ORDER BY id"#
+    };
+    let rows: Vec<(i32, String)> = sqlx::query_as(sql).bind(ids).fetch_all(db).await?;
     let mut out: HashMap<i32, Vec<String>> = HashMap::new();
     for (id, q) in rows {
         out.entry(id).or_default().push(q);
@@ -245,13 +247,11 @@ async fn qualities_by(
     Ok(out)
 }
 
-async fn file_qualities(db: &PgPool, column: &str, id: i32) -> sqlx::Result<Vec<String>> {
-    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        r#"SELECT quality FROM media_files WHERE "{column}" = $1 ORDER BY id"#
-    )))
-    .bind(id)
-    .fetch_all(db)
-    .await
+async fn file_qualities(db: &PgPool, by_item: bool, id: i32) -> sqlx::Result<Vec<String>> {
+    Ok(qualities_by(db, by_item, &[id])
+        .await?
+        .remove(&id)
+        .unwrap_or_default())
 }
 
 async fn files_for_episode(
@@ -262,7 +262,7 @@ async fn files_for_episode(
     if !disk.contains(&e.episode_number) {
         return Ok(vec![]);
     }
-    let q = file_qualities(db, "episodeId", e.id).await?;
+    let q = file_qualities(db, true, e.id).await?;
     if q.is_empty() {
         return Ok(vec![None]);
     }
@@ -300,7 +300,7 @@ async fn files_for(
     episode: Option<&EpisodeRow>,
 ) -> sqlx::Result<Files> {
     match m.kind {
-        MediaKind::Movie => Ok(file_qualities(db, "mediaId", m.id)
+        MediaKind::Movie => Ok(file_qualities(db, false, m.id)
             .await?
             .into_iter()
             .map(Some)

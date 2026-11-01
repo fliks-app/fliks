@@ -730,8 +730,8 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
                AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN item_groups s ON s.id = e."groupId"
                                                WHERE e.id = $3 AND s."mediaId" = $1))
                AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series'))
-               AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1
-                           AND ($3::int IS NULL OR f."episodeId" = $3))"#,
+               AND ($3::int IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1)
+                    OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = $3 AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))"#,
     )
     .bind(item.media_id)
     .bind(item.media_file_id)
@@ -760,8 +760,8 @@ pub struct QueueRow {
 pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, Option<i32>, bool)> = sqlx::query_as(
         r#"SELECT i."mediaId", i."mediaFileId", i."episodeId",
-                  EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = i."mediaId"
-                          AND (i."episodeId" IS NULL OR f."episodeId" = i."episodeId"))
+                  (i."episodeId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = i."mediaId")
+                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."episodeId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
            FROM watch_party_items i WHERE i."partyId" = $1 ORDER BY i.position"#,
     )
     .bind(party)
@@ -784,8 +784,8 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
 pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, bool)> = sqlx::query_as(
         r#"SELECT pi."mediaId", pi."episodeId",
-                  EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = pi."mediaId"
-                          AND (pi."episodeId" IS NULL OR f."episodeId" = pi."episodeId"))
+                  (pi."episodeId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = pi."mediaId")
+                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = pi."episodeId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
            FROM playlist_items pi WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
     )
     .bind(playlist)

@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{
     events::{DomainEvent, event::ImportSource},
+    media::items::{self, Link},
     state::AppState,
 };
 use fliks_domain::{
@@ -541,17 +542,14 @@ impl Ctx<'_> {
         probed: &Probed,
     ) -> Result<i32, String> {
         let db = &self.st.db;
-        let ep_id = ep.map(|e| e.0.id);
         let info = serde_json::to_value(&probed.info).map_err(|e| e.to_string())?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality, "streamInfo")
-               VALUES ($1, $2, $3, $4, $5, $6)
+            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "streamInfo")
+               VALUES ($1, $2, $3, $4, $5)
                ON CONFLICT ("mediaId", "relativePath") DO UPDATE
-               SET "episodeId" = EXCLUDED."episodeId", size = EXCLUDED.size, quality = EXCLUDED.quality,
-                   "streamInfo" = EXCLUDED."streamInfo"
+               SET size = EXCLUDED.size, quality = EXCLUDED.quality, "streamInfo" = EXCLUDED."streamInfo"
                RETURNING id"#,
             self.media.id,
-            ep_id,
             rel,
             size,
             quality,
@@ -560,31 +558,16 @@ impl Ctx<'_> {
         .fetch_one(db)
         .await
         .map_err(|e| e.to_string())?;
-        if let Some(e) = ep_id {
-            set_has_file(db, e).await.map_err(|e| e.to_string())?;
-        }
+        let link = Link {
+            file: id,
+            owner: ep.map(|e| e.0.id),
+            last: ep.and_then(|e| e.1),
+        };
+        items::attach(db, self.media.id, &[link])
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(id)
     }
-}
-
-pub async fn set_has_file(db: &sqlx::PgPool, episode: i32) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"UPDATE items SET "hasFile" = true WHERE id = $1"#,
-        episode
-    )
-    .execute(db)
-    .await
-    .map(drop)
-}
-
-pub async fn set_has_file_many(db: &sqlx::PgPool, episodes: &[i32]) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"UPDATE items SET "hasFile" = true WHERE id = ANY($1)"#,
-        episodes
-    )
-    .execute(db)
-    .await
-    .map(drop)
 }
 
 /// W6: the replaced video's old sidecar, so it is not applied to the new cut.
@@ -668,10 +651,12 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
     let new_ids: Vec<i32> = imported.iter().map(|i| i.file_id).collect();
     let olds = sqlx::query_as!(
         Old,
-        r#"SELECT mf.id, mf."relativePath" AS relative_path, mf."episodeId" AS episode_id,
+        r#"SELECT mf.id, mf."relativePath" AS relative_path, fi."episodeId" AS episode_id,
                   s."number" AS "season_number?", e."number" AS "episode_number?",
                   e."endNumber" AS end
-           FROM media_files mf LEFT JOIN items e ON e.id = mf."episodeId"
+           FROM media_files mf
+           LEFT JOIN LATERAL (SELECT "episodeId" FROM media_file_items WHERE "mediaFileId" = mf.id) fi ON true
+           LEFT JOIN items e ON e.id = fi."episodeId"
            LEFT JOIN item_groups s ON s.id = e."groupId"
            WHERE mf."mediaId" = $1 AND mf.id <> ALL($2) ORDER BY mf.id"#,
         media.id,

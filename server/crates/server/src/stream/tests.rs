@@ -492,11 +492,14 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
     .fetch_one(&c.pool)
     .await
     .unwrap();
-    sqlx::query(r#"UPDATE media_files SET "episodeId" = $1"#)
-        .bind(ep)
-        .execute(&c.pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
+           SELECT $1, id, "mediaId" FROM media_files"#,
+    )
+    .bind(ep)
+    .execute(&c.pool)
+    .await
+    .unwrap();
     sqlx::query(r#"INSERT INTO episode_markers ("type", "startSeconds", "endSeconds", "episodeId") VALUES ('intro', 1, 8, $1)"#)
         .bind(ep).execute(&c.pool).await.unwrap();
     let (s, b) = info(&c, "").await;

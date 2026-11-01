@@ -138,7 +138,8 @@ impl Queue {
             // Whatever the probe returned: the embedded tracks and the search still run.
             if let Ok(Some((Some(media), episode))) =
                 sqlx::query_as::<_, (Option<i32>, Option<i32>)>(
-                    r#"SELECT "mediaId", "episodeId" FROM media_files WHERE id = $1"#,
+                    r#"SELECT f."mediaId", fi."episodeId" FROM media_files f
+                       LEFT JOIN media_file_items fi ON fi."mediaFileId" = f.id WHERE f.id = $1"#,
                 )
                 .bind(id)
                 .fetch_optional(&st.db)

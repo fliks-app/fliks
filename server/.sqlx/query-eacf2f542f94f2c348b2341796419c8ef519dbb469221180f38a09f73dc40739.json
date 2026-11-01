@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE items SET \"markersScannedAt\" = now() WHERE \"groupId\" = $1\n           AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = items.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eacf2f542f94f2c348b2341796419c8ef519dbb469221180f38a09f73dc40739"
+}

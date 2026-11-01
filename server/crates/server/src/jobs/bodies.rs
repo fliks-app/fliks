@@ -215,7 +215,8 @@ const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type" FROM media m JOIN 
     WHERE l.path IS NOT NULL AND l.path <> '' AND (
         (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AND COALESCE(m."folderName", '') <> '')
         OR (m."type" = 'series'
-            AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."episodeId" IS NULL)))
+            AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id
+                AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaFileId" = f.id))))
     ORDER BY m.id"#;
 
 async fn rescan(st: &AppState, job: &str, select: &'static str) -> Outcome {
@@ -372,7 +373,7 @@ async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
         let rows: Vec<Row> = sqlx::query_as(
             r#"SELECT f.id, m.id, m."type", m.title, e.id, e."number", e.title, s."number"
                FROM media_files f JOIN media m ON m.id = f."mediaId"
-               LEFT JOIN items e ON e.id = f."episodeId" LEFT JOIN item_groups s ON s.id = e."groupId"
+               LEFT JOIN items e ON e.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) LEFT JOIN item_groups s ON s.id = e."groupId"
                WHERE f.id = ANY($1)"#,
         )
         .bind(chunk)

@@ -525,8 +525,8 @@ async fn show(pool: &PgPool) -> Show {
             let ep = scalar(
                 pool,
                 &format!(
-                    r#"INSERT INTO items ("number", "groupId", "hasFile", "airDate", "mediaId", "editionId")
-                    VALUES ({}, {season}, true, '2020-01-0{}', {media}, (SELECT id FROM editions WHERE "mediaId" = {media}))
+                    r#"INSERT INTO items ("number", "groupId", "airDate", "mediaId", "editionId")
+                    VALUES ({}, {season}, '2020-01-0{}', {media}, (SELECT id FROM editions WHERE "mediaId" = {media}))
                     RETURNING id"#,
                     n + 1,
                     k + 1
@@ -538,8 +538,9 @@ async fn show(pool: &PgPool) -> Show {
             exec(
                 pool,
                 &format!(
-                    r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality)
-                    VALUES ({media}, {ep}, '{name}', 1073741824, 'x')"#
+                    r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
+                      VALUES ({media}, '{name}', 1073741824, 'x') RETURNING id)
+                    INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {ep}, id, {media} FROM f"#
                 ),
             )
             .await;
@@ -639,7 +640,7 @@ async fn episode_level_matches_one_episode(pool: PgPool) {
     );
     exec(
         &pool,
-        &format!(r#"DELETE FROM media_files WHERE "episodeId" = {a}"#),
+        &format!(r#"DELETE FROM media_files WHERE id IN (SELECT "mediaFileId" FROM item_parts WHERE "itemId" = {a})"#),
     )
     .await;
     assert_eq!(
@@ -662,7 +663,7 @@ async fn keep_latest_episodes_keeps_the_newest_on_disk(pool: PgPool) {
     );
     exec(
         &pool,
-        &format!(r#"DELETE FROM media_files WHERE "episodeId" = {d}"#),
+        &format!(r#"DELETE FROM media_files WHERE id IN (SELECT "mediaFileId" FROM item_parts WHERE "itemId" = {d})"#),
     )
     .await;
     assert_eq!(

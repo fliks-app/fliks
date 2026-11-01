@@ -215,7 +215,8 @@ pub async fn seasons_for_scan(
            WHERE s."number" > 0 AND m.type = 'series'
              AND ($1::int IS NULL OR s."mediaId" = $1)
              AND (NOT $2 OR EXISTS (SELECT 1 FROM items e WHERE e."groupId" = s.id
-                                    AND e."hasFile" = true AND e."markersScannedAt" IS NULL))
+                                    AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
+                                    AND e."markersScannedAt" IS NULL))
            ORDER BY m.title ASC, s."number" ASC, s.id ASC"#,
         media,
         only_missing
@@ -244,12 +245,13 @@ pub struct EpisodeFile {
 /// Episodes of the season with a file, by episode number; each with its highest-id file.
 pub async fn episodes_with_files(db: &PgPool, season: i32) -> sqlx::Result<Vec<EpisodeFile>> {
     let rows = sqlx::query!(
-        r#"SELECT e.id, e."number" AS "number!", f.id AS "file_id?", f."relativePath" AS "rel?",
-                  f."streamInfo" AS "info?"
-           FROM items e
-           LEFT JOIN LATERAL (SELECT id, "relativePath", "streamInfo" FROM media_files
-                              WHERE "episodeId" = e.id ORDER BY id DESC LIMIT 1) f ON true
-           WHERE e."groupId" = $1 AND e."hasFile" = true ORDER BY e."number", e.id"#,
+        r#"SELECT "id!", "number!", "file_id?", "rel?", "info?" FROM (
+             SELECT DISTINCT ON (e.id) e.id AS "id!", e."number" AS "number!", f.id AS "file_id?",
+                    f."relativePath" AS "rel?", f."streamInfo" AS "info?"
+             FROM items e JOIN media_file_items fi ON fi."episodeId" = e.id
+             JOIN media_files f ON f.id = fi."mediaFileId"
+             WHERE e."groupId" = $1 ORDER BY e.id, f.id DESC) x
+           ORDER BY "number!", "id!""#,
         season
     )
     .fetch_all(db)
@@ -305,7 +307,8 @@ pub async fn upsert_detected(
 
 pub async fn stamp_scanned(db: &PgPool, season: i32) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"UPDATE items SET "markersScannedAt" = now() WHERE "groupId" = $1 AND "hasFile" = true"#,
+        r#"UPDATE items SET "markersScannedAt" = now() WHERE "groupId" = $1
+           AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = items.id)"#,
         season
     )
     .execute(db)

@@ -9,6 +9,7 @@ use crate::{
 use fliks_domain::media::kind::MediaKind;
 use serde_json::json;
 use sqlx::PgConnection;
+use std::collections::BTreeSet;
 use tokio::sync::broadcast::error::RecvError;
 
 type Res<T> = Result<T, AppError>;
@@ -237,11 +238,11 @@ pub(super) fn scope_covered(scope: Option<&[i64]>, eps: &[db::Ep]) -> bool {
             continue;
         }
         checked = true;
-        let disk = fliks_domain::media::episodes_on_disk(
-            in_season
-                .iter()
-                .map(|e| (e.number, e.end_number, e.has_file)),
-        );
+        let disk: BTreeSet<i32> = in_season
+            .iter()
+            .filter(|e| e.has_file)
+            .map(|e| e.number)
+            .collect();
         if !monitored.iter().all(|e| disk.contains(&e.number)) {
             return false;
         }

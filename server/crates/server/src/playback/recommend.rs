@@ -112,14 +112,7 @@ pub async fn recommendations(
         r#"SELECT mf."mediaId"
            FROM media_files mf
            WHERE mf."mediaId" = ANY($1)
-           GROUP BY mf."mediaId"
-           UNION
-           SELECT s."mediaId"
-           FROM media_files mf
-           JOIN items e ON e.id = mf."episodeId"
-           JOIN item_groups s ON s.id = e."groupId"
-           WHERE s."mediaId" = ANY($1)
-           GROUP BY s."mediaId""#,
+           GROUP BY mf."mediaId""#,
         &ids
     )
     .fetch_all(db)

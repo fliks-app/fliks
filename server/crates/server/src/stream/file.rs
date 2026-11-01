@@ -62,7 +62,8 @@ pub async fn resolve_file(
     let row = match i32::try_from(id) {
         Ok(id) => sqlx::query!(
             r#"SELECT mf."relativePath" AS "relative_path!", mf."streamInfo" AS stream_info,
-                      mf."mediaId" AS media_id, mf."episodeId" AS episode_id,
+                      mf."mediaId" AS media_id,
+                      (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS episode_id,
                       m.title AS "title?", m."type" AS media_type,
                       m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
                       m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path

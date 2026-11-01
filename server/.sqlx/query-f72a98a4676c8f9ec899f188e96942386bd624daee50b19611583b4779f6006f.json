@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO item_parts (\"itemId\", \"mediaFileId\", \"mediaId\")\n           SELECT i.id, f.id, $1 FROM items i JOIN media_files f ON f.\"mediaId\" = i.\"mediaId\"\n           WHERE i.\"mediaId\" = $1 AND i.\"groupId\" IS NULL\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f72a98a4676c8f9ec899f188e96942386bd624daee50b19611583b4779f6006f"
+}

@@ -251,10 +251,18 @@ async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) 
         ))
         .await;
     for n in 1..=2 {
-        c.id(&format!(
-            r#"INSERT INTO items ("number", "groupId", "hasFile", "mediaId", "editionId")
-               SELECT {n}, g.id, true, g."mediaId", ed.id FROM item_groups g
+        let item = c
+            .id(&format!(
+                r#"INSERT INTO items ("number", "groupId", "mediaId", "editionId")
+               SELECT {n}, g.id, g."mediaId", ed.id FROM item_groups g
                JOIN editions ed ON ed."mediaId" = g."mediaId" WHERE g.id = {season} RETURNING items.id"#
+            ))
+            .await;
+        c.id(&format!(
+            r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
+                 VALUES ({m}, 'e{n}.mkv', 1, 'q') RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               RETURNING "itemId""#
         ))
         .await;
     }

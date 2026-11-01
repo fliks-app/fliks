@@ -52,7 +52,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | `watchedByRequester` | bool | it has at least one requester (`requests.kind = 'add'`, user set, not declined: a declined requester was never served; pending and later states count) and every requester has watched it: a movie completed, a series with every episode on disk completed (the `exclude watched` predicate of `media-query.md` rule 20; season, episode: every episode of the scope on disk completed by every requester) |
     | `ratingBelow` | number >= 0 | `media.rating` is above 0 and below the value; a null or 0 rating is unknown and never matches (the TVDB provider stores 0) |
     | `minVotes` | int >= 1, needs `ratingBelow` | `media_metadata.voteCount` is at least the value; an unknown count fails |
-    | `sizeAboveGb` | number >= 0 | the sum of its `media_files.size` exceeds the value (1 GB = 2^30 bytes; season, episode: the files of the scope) |
+    | `sizeAboveGb` | number >= 0 | the sum of its `media_files.size` exceeds the value (1 GB = 2^30 bytes; season, episode: the files that play an item of the scope, each counted once) |
     | `genres` | string[] | `media.genres` holds any of them |
     | `excludeGenres` | string[] | `media.genres` holds none of them (no genres matches) |
     | `seriesEnded` | bool | it is a series with `status = 'ended'` |

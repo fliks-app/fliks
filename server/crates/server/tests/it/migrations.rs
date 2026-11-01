@@ -764,6 +764,92 @@ async fn m1789000050_turns_seasons_and_episodes_into_items(pool: PgPool) {
     assert_eq!(left, 0);
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000060_links_files_to_items_through_parts(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_060).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 's', 'series'), (3, 't', 'series');
+          INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media;
+          INSERT INTO items ("mediaId", "editionId", monitored, "hasFile")
+            SELECT 1, id, true, true FROM editions WHERE "mediaId" = 1;
+          INSERT INTO item_groups (id, "number", "mediaId") VALUES (1, 1, 2);
+          INSERT INTO items (id, "groupId", "mediaId", "editionId", "number", "endNumber", "hasFile") VALUES
+            (10, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 1, 3, true),
+            (11, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 3, NULL, false);
+          INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "episodeId") VALUES
+            (1, 1, 'a', 1, 'q', NULL), (2, 1, 'b', 1, 'q', NULL),
+            (3, 2, 'range', 1, 'q', 10), (4, 2, 'version', 1, 'q', 11),
+            (5, 2, 'loose', 1, 'q', NULL), (6, 3, 'foreign', 1, 'q', 10),
+            (7, 1, 'stale', 1, 'q', 10)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_060).await;
+
+    let parts: Vec<(i32, i32, i32)> = rows(
+        &pool,
+        r#"SELECT "itemId", "mediaFileId", position FROM item_parts ORDER BY 1, 2"#,
+    )
+    .await;
+    let movie_item: i32 = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = 1"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // Every file of a movie is a version of its item, even one with a stale episode; a range reaches the existing item inside it
+    // and not the missing one; a loose file and one of another media get no part.
+    assert_eq!(
+        parts,
+        [
+            (movie_item, 1, 0),
+            (movie_item, 2, 0),
+            (movie_item, 7, 0),
+            (10, 3, 0),
+            (11, 3, 0),
+            (11, 4, 0)
+        ]
+    );
+    let owners: Vec<(i32, i32, Option<i32>)> = rows(
+        &pool,
+        r#"SELECT "mediaFileId", "itemId", "episodeId" FROM media_file_items ORDER BY 1"#,
+    )
+    .await;
+    assert_eq!(
+        owners,
+        [
+            (1, movie_item, None),
+            (2, movie_item, None),
+            (3, 10, Some(10)),
+            (4, 11, Some(11)),
+            (7, movie_item, None)
+        ]
+    );
+    let dropped: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public'
+           AND ((table_name = 'media_files' AND column_name = 'episodeId')
+             OR (table_name = 'items' AND column_name = 'hasFile'))"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(dropped, 0);
+
+    for bad in [
+        // a part joins a file and an item of one media
+        r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES (10, 6, 3)"#,
+        r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES (10, 6, 2)"#,
+        r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", position) VALUES (10, 5, 2, -1)"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(&pool, "DELETE FROM media_files WHERE id = 3").await;
+    sql(&pool, "DELETE FROM items WHERE id = 11").await;
+    let left: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM item_parts WHERE "mediaId" = 2"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0, "parts go with their file or their item");
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64
