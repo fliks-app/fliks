@@ -34,8 +34,8 @@ INSERT INTO "editions" ("mediaId", "family") SELECT "id", 'video' FROM "media" O
 
 ALTER TABLE "items" DISABLE TRIGGER set_updated_at;
 ALTER TABLE "items" ADD COLUMN "mediaId" integer, ADD COLUMN "editionId" integer;
-UPDATE "items" i SET "mediaId" = g."mediaId" FROM "item_groups" g WHERE g."id" = i."groupId";
-UPDATE "items" i SET "editionId" = e."id" FROM "editions" e WHERE e."mediaId" = i."mediaId";
+UPDATE "items" i SET "mediaId" = g."mediaId", "editionId" = e."id"
+  FROM "item_groups" g JOIN "editions" e ON e."mediaId" = g."mediaId" WHERE g."id" = i."groupId";
 INSERT INTO "items" ("mediaId", "editionId", "monitored", "hasFile")
 SELECT m."id", e."id", true, EXISTS (SELECT 1 FROM "media_files" f WHERE f."mediaId" = m."id")
   FROM "media" m JOIN "editions" e ON e."mediaId" = m."id"

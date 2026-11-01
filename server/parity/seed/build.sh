@@ -86,7 +86,7 @@ print('INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES\
 print('INSERT INTO editions (id, "mediaId", family) SELECT id, id, \'video\' FROM media ORDER BY id;')
 print('INSERT INTO item_groups (id, "number", "mediaId") VALUES\n ' + ",\n ".join(seasons) + ";")
 print('INSERT INTO items (id, "number", title, "hasFile", "groupId", "mediaId", "editionId") VALUES\n ' + ",\n ".join(episodes) + ";")
-print('INSERT INTO items ("mediaId", "editionId", "hasFile") SELECT id, id, true FROM media WHERE type = \'movie\' ORDER BY id;')
+print('INSERT INTO items (id, "mediaId", "editionId", "hasFile") SELECT 12 + id, id, id, true FROM media WHERE type = \'movie\' ORDER BY id;')
 print('INSERT INTO media_files (id, "mediaId", "episodeId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
 PY
 cat <<'SQL'

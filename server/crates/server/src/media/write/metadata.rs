@@ -1,5 +1,6 @@
 //! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
 use super::{already_running, body::Body, entity_or_404, gate, subject};
+use crate::media::items;
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{
@@ -152,19 +153,24 @@ pub async fn apply_season(
     )
     .execute(&mut *c)
     .await?;
+    let media = sqlx::query_scalar!(r#"SELECT "mediaId" FROM item_groups WHERE id = $1"#, sid)
+        .fetch_one(&mut *c)
+        .await?;
+    let edition = items::video_edition(&mut *c, media).await?;
     sqlx::query!(
         r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", title, overview, "airDate", runtime, monitored)
-           SELECT g.id, g."mediaId", ed.id, v.n, v.title, v.overview, v.air::date, v.runtime, true
-           FROM item_groups g JOIN editions ed ON ed."mediaId" = g."mediaId",
-             UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
-               AS v(n, title, overview, air, runtime)
-           WHERE g.id = $1 AND NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)"#,
+           SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, true
+           FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
+             AS v(n, title, overview, air, runtime)
+           WHERE NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)"#,
         sid,
         &numbers,
         &titles as &[Option<String>],
         &overviews as &[Option<String>],
         &airs as &[Option<String>],
-        &runtimes as &[Option<i32>]
+        &runtimes as &[Option<i32>],
+        media,
+        edition
     )
     .execute(&mut *c)
     .await?;

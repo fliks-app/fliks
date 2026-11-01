@@ -101,7 +101,7 @@ pub async fn context(
     let (mut season, mut episode) = (None, None);
     if let Some(eid) = episode_id {
         let e: Option<EpisodeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "{EPISODE_SELECT} WHERE id = $1"
+            r#"{EPISODE_SELECT} WHERE id = $1 AND "groupId" IS NOT NULL"#
         )))
         .bind(eid as i32)
         .fetch_optional(db)

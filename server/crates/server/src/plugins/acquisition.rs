@@ -363,6 +363,38 @@ mod tests {
         assert_eq!(seen, want);
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn the_context_of_a_movie_item_is_null(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+               INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'm', 'movie', 1)"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut c = db.acquire().await.unwrap();
+        crate::media::items::create_shell(&mut c, 1, fliks_domain::media::kind::MediaKind::Movie)
+            .await
+            .unwrap();
+        drop(c);
+        let item = crate::media::items::sole_item(&db, 1)
+            .await
+            .unwrap()
+            .unwrap();
+        let st = AppState::new(
+            db.clone(),
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        assert!(
+            context(&st, 1, None, Some(item as u32))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
     #[test]
     fn published_dates() {
         let at = |s: &str| published(s).map(|d| d.to_rfc3339());

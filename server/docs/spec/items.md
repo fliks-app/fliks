@@ -1,6 +1,6 @@
 # Spec: items, item groups and editions
 
-What a media is made of. A movie is one item; a series is items (its episodes) gathered in item groups (its seasons). Every media also has an edition, the content variant its items and files belong to. The HTTP payloads still speak of seasons and episodes (rule 11); only the tables are generic, so a later media kind reuses them.
+What a media is made of. A movie is one item; a series is items (its episodes) gathered in item groups (its seasons). Every media also has an edition, the content variant its items and files belong to. The HTTP payloads speak of seasons and episodes (rule 11); only the tables are generic, so a later media kind reuses them.
 
 ## Tables
 
@@ -13,7 +13,7 @@ What a media is made of. A movie is one item; a series is items (its episodes) g
 
 ## Writes
 
-7. `media::items::create_shell(conn, media, kind)` inserts the media's `video` edition and, when the kind has no seasons, its item (`monitored = true`, `hasFile = false`, everything else null). Every `INSERT INTO media` calls it in the same transaction: `POST /api/media`, the title import, the unmatched media a disk import creates, and the importers (Radarr, Sonarr, Seerr). A route that creates a media without it breaks rule 4.
+7. `media::items::create_shell(conn, media, kind)` inserts the media's `video` edition and, when the kind has no seasons, its item (`monitored = true`, `hasFile = false`, everything else null). Every `INSERT INTO media` calls it in the same transaction: `POST /api/media`, the title import, the unmatched media a disk import creates, and the Radarr and Sonarr importers. A route that creates a media without it breaks rule 4.
 8. A group is inserted with its `"mediaId"`; an item of a series with the `"groupId"`, the group's `"mediaId"` and the media's `video` edition (`media::items::video_edition`).
 9. `PUT /api/media/:id` changing `type` follows it (`media::items::follow_kind`): a media that becomes a series loses its ungrouped item; a media that becomes a movie gains one if it has none. Groups and grouped items are kept.
 10. Deleting a media removes its editions, groups and items by cascade.
@@ -22,7 +22,7 @@ What a media is made of. A movie is one item; a series is items (its episodes) g
 
 11. The wire is unchanged: `seasonId` is the group id, `seasonNumber` the group `number`, `episodeId` the id of a grouped item, `episodeNumber` its `number`, `endEpisodeNumber` its `"endNumber"`. SQL that builds those payloads names the keys (`jsonb_build_object` or an alias); no query serialises a whole `items` or `item_groups` row.
 12. An ungrouped item is not an episode. A query about episodes joins `item_groups` on `"groupId"` or filters `"groupId" IS NOT NULL`, so the item of a movie never appears in an episode list, count or lookup (the episode gates of `PATCH /api/media/episodes/:episodeId` and of the markers routes answer `404` for it).
-13. Files, progress and every other reference keep their columns (`media_files."episodeId"`, `playback_states."episodeId"`, ...); a movie's files and progress still carry a null `episodeId`.
+13. Files, progress and every other reference keep their columns (`media_files."episodeId"`, `playback_states."episodeId"`, ...); a movie's files and progress carry a null `episodeId`.
 
 ## Versions and editions
 
