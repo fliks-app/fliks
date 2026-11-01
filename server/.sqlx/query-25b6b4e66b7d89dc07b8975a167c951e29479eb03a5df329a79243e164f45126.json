@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH left_ AS (\n             DELETE FROM collection_entries e\n              WHERE e.\"mediaId\" = $1 AND e.\"itemId\" IS NULL AND e.\"collectionId\" IS DISTINCT FROM $2\n                AND EXISTS (SELECT 1 FROM collection_external_ids x\n                             WHERE x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb')\n              RETURNING e.\"collectionId\")\n           DELETE FROM collections c WHERE c.id IN (SELECT \"collectionId\" FROM left_)\n             AND NOT EXISTS (SELECT 1 FROM collection_entries e\n                              WHERE e.\"collectionId\" = c.id AND e.\"mediaId\" <> $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "25b6b4e66b7d89dc07b8975a167c951e29479eb03a5df329a79243e164f45126"
+}

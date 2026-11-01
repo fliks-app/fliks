@@ -598,7 +598,7 @@ async fn show(pool: &PgPool) -> Show {
                 &format!(
                     r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
                       VALUES ({media}, '{name}', 1073741824, 'x') RETURNING id)
-                    INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {ep}, id, {media} FROM f"#
+                    INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {ep}, id, {media}, 0 FROM f"#
                 ),
             )
             .await;

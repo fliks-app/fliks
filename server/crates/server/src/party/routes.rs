@@ -490,6 +490,7 @@ async fn initial_programme(st: &AppState, a: &Authed, b: &Create) -> R<Vec<Item>
         media_id,
         media_file_id: b.media_file_id,
         episode_id: b.episode_id,
+        item_id: None,
     };
     let invalid_item = || fail(StatusCode::BAD_REQUEST, "party.error_invalid_item");
     let (media_id, playlist) = match (b.media_id, b.playlist_id) {

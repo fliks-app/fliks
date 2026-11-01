@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT item_of($1, $2) AS \"item\",\n                  (SELECT count(*) FROM items WHERE \"mediaId\" = $1 AND \"groupId\" IS NULL) AS \"ungrouped!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "ungrouped!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "383fa0ce3a598b9d83f228401ba59f9f17863e7526bc1afcc0037a2a89a44546"
+}

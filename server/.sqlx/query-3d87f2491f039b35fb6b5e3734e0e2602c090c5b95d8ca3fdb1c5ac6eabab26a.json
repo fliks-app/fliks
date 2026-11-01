@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"mediaFileId\" FROM item_parts WHERE \"itemId\" = $1\n               ORDER BY \"mediaFileId\" LIMIT 1",
+  "query": "SELECT \"mediaFileId\" FROM item_parts WHERE \"itemId\" = $1\n               ORDER BY \"version\" DESC, \"position\" LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "c657eacd685f2b982e1f1dc5fe3a1efbe9775f53eaab34bdd1bfa2e3780fbb79"
+  "hash": "3d87f2491f039b35fb6b5e3734e0e2602c090c5b95d8ca3fdb1c5ac6eabab26a"
 }

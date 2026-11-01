@@ -21,6 +21,7 @@ impl Ref {
         Item {
             media_id: self.media_id,
             media_file_id: None,
+            item_id: None,
             episode_id: self.episode_id,
         }
     }
@@ -157,6 +158,7 @@ mod tests {
         Item {
             media_id,
             media_file_id: None,
+            item_id: None,
             episode_id: None,
         }
     }

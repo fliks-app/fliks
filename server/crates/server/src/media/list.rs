@@ -113,7 +113,7 @@ fn push_scope(
         qb.push(" AND media.genres @> ").push_bind(json!(p.genres));
     }
     if let Some(v) = p.collection_id.filter(|v| *v != 0) {
-        qb.push(" AND EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb' WHERE e.\"mediaId\" = media.id AND x.value = ")
+        qb.push(" AND EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb' WHERE e.\"mediaId\" = media.id AND e.\"itemId\" IS NULL AND x.value = ")
             .push_bind(v.to_string())
             .push(")");
     }

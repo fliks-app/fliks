@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m\nJOIN collection_entries ce ON ce.\"mediaId\" = m.id\nLEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d.\"mediaId\" = m.id AND d.kind = 'release') dates ON true\nWHERE m.\"libraryId\" = $1 AND ce.\"collectionId\" = $2\nORDER BY ce.position ASC NULLS LAST, dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, meta.keywords AS \"keywords?\",\n       EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m LEFT JOIN movie_details meta ON meta.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = $1 AND m.type = $7 AND m.id != $2\n  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))\n       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))\n       OR m.id = ANY($5))\n  AND ($6::int IS NULL OR NOT EXISTS (\n        SELECT 1 FROM collection_entries e JOIN collection_external_ids x\n          ON x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb'\n        WHERE e.\"mediaId\" = m.id AND e.\"itemId\" IS NULL AND x.value = $6::int::text))\nORDER BY m.id",
   "describe": {
     "columns": [
       {
@@ -82,6 +82,17 @@
       },
       {
         "ordinal": 7,
+        "name": "keywords?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "movie_details",
+            "name": "keywords"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
         "name": "has_file!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -90,7 +101,12 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Int4"
+        "Int4",
+        "TextArray",
+        "TextArray",
+        "Int4Array",
+        "Int4",
+        "Text"
       ]
     },
     "nullable": [
@@ -101,8 +117,9 @@
       true,
       true,
       true,
+      true,
       null
     ]
   },
-  "hash": "c11f4994780880977d1aad38bc3bc66c3c605de9f7e11cc04eab270107c4d7af"
+  "hash": "a215d1fe6cc2fd96da319003f74dc0504067da8e38370b6897fa15ceb6c3b4e8"
 }

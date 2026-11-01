@@ -1,0 +1,146 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH st AS (\n             SELECT ps.id, ps.\"itemId\", ps.\"mediaFileId\", ps.\"version\", ps.\"positionSeconds\",\n                    ps.\"durationSeconds\", ps.completed, ps.\"hiddenFromContinueWatching\" AS hidden, ps.\"lastPlayedAt\",\n                    i.\"mediaId\", i.\"groupId\", i.\"number\" AS inum, g.\"number\" AS gnum\n             FROM playback_states ps\n             JOIN items i ON i.id = ps.\"itemId\"\n             LEFT JOIN item_groups g ON g.id = i.\"groupId\"\n             WHERE ps.\"userId\" = $1\n           ),\n           user_series AS (\n             SELECT \"mediaId\", max(\"lastPlayedAt\") AS \"lastPlayedAt\"\n             FROM st WHERE \"groupId\" IS NOT NULL AND NOT hidden GROUP BY \"mediaId\"\n           ),\n           last_completed AS (\n             -- Highest (group, number) among completed items: lastPlayedAt ties when the user\n             -- bulk-marks a season.\n             SELECT DISTINCT ON (\"mediaId\") \"mediaId\", gnum, inum\n             FROM st WHERE completed AND \"groupId\" IS NOT NULL\n             ORDER BY \"mediaId\", gnum DESC, inum DESC\n           ),\n           in_progress AS (\n             SELECT DISTINCT ON (\"mediaId\") id, \"mediaId\", \"itemId\", \"mediaFileId\", \"version\",\n                    \"positionSeconds\", \"durationSeconds\"\n             FROM st\n             WHERE NOT completed AND \"positionSeconds\" >= 5 AND \"groupId\" IS NOT NULL\n             ORDER BY \"mediaId\", \"lastPlayedAt\" DESC\n           ),\n           next_item AS (\n             SELECT lc.\"mediaId\",\n                    (SELECT e.id FROM items e JOIN item_groups s ON s.id = e.\"groupId\"\n                     WHERE s.\"mediaId\" = lc.\"mediaId\" AND s.\"number\" > 0\n                       AND (s.\"number\" > lc.gnum OR (s.\"number\" = lc.gnum AND e.\"number\" > lc.inum))\n                     ORDER BY s.\"number\", e.\"number\" LIMIT 1) AS \"itemId\"\n             FROM last_completed lc\n             WHERE lc.\"mediaId\" NOT IN (SELECT \"mediaId\" FROM in_progress)\n           ),\n           picked AS (\n             SELECT st.id, st.\"mediaId\", st.\"itemId\", st.\"mediaFileId\", st.\"version\",\n                    st.\"positionSeconds\", st.\"durationSeconds\", st.\"lastPlayedAt\"\n             FROM st\n             WHERE st.\"groupId\" IS NULL AND NOT st.completed AND NOT st.hidden\n               AND st.\"positionSeconds\" >= 5\n             UNION ALL\n             SELECT ip.id, ip.\"mediaId\", ip.\"itemId\", ip.\"mediaFileId\", ip.\"version\",\n                    ip.\"positionSeconds\", ip.\"durationSeconds\", us.\"lastPlayedAt\"\n             FROM in_progress ip\n             JOIN user_series us ON us.\"mediaId\" = ip.\"mediaId\"\n             UNION ALL\n             SELECT COALESCE(ps.id, 0), ni.\"mediaId\", ni.\"itemId\", NULL::int, NULL::int,\n                    COALESCE(ps.\"positionSeconds\", 0), COALESCE(ps.\"durationSeconds\", 0),\n                    us.\"lastPlayedAt\"\n             FROM next_item ni\n             JOIN user_series us ON us.\"mediaId\" = ni.\"mediaId\"\n             LEFT JOIN playback_states ps ON ps.\"userId\" = $1 AND ps.\"itemId\" = ni.\"itemId\"\n             WHERE ni.\"itemId\" IS NOT NULL AND COALESCE(NOT ps.completed, true)\n           )\n           SELECT x.id AS \"id!\", x.\"mediaId\" AS \"media_id!\", x.file AS media_file_id,\n                  x.\"episodeId\" AS episode_id, x.pos AS \"position_seconds!\",\n                  x.dur AS duration_seconds, x.\"lastPlayedAt\" AS \"last_played_at!\",\n                  x.title AS media_title, x.poster AS poster_url, x.fanart AS fanart_url,\n                  x.kind AS \"media_type!\", x.still AS still_url, x.label AS episode_label,\n                  CASE WHEN COALESCE(x.dur, 0) > 0 THEN ROUND((x.pos / x.dur) * 100)\n                       ELSE 0 END AS \"progress_percent!\"\n           FROM (\n             SELECT c.id, c.\"mediaId\", f.id AS file, c.pos, c.dur, c.\"lastPlayedAt\",\n                    CASE WHEN e.\"groupId\" IS NOT NULL THEN e.id END AS \"episodeId\",\n                    m.title, m.\"posterUrl\" AS poster, m.\"fanartUrl\" AS fanart,\n                    m.type AS kind,\n                    e.\"stillUrl\" AS still,\n                    CASE WHEN e.\"groupId\" IS NOT NULL\n                         THEN 'S' || LPAD(s.\"number\"::text, 2, '0') || 'E' || LPAD(e.\"number\"::text, 2, '0')\n                              || COALESCE(' - ' || e.title, '') END AS label\n             FROM (SELECT id, \"mediaId\", \"itemId\", \"mediaFileId\", \"version\", \"positionSeconds\" AS pos,\n                          \"durationSeconds\" AS dur, \"lastPlayedAt\" FROM picked) c\n             JOIN media m ON m.id = c.\"mediaId\" AND m.\"libraryId\" = ANY($2)\n             JOIN items e ON e.id = c.\"itemId\"\n             LEFT JOIN item_groups s ON s.id = e.\"groupId\"\n             LEFT JOIN LATERAL (\n               SELECT p.\"mediaFileId\" AS id FROM item_parts p WHERE p.\"itemId\" = e.id\n               ORDER BY (p.\"mediaFileId\" = c.\"mediaFileId\") DESC NULLS LAST,\n                        (p.\"version\" = c.\"version\") DESC NULLS LAST, p.\"version\" DESC, p.\"position\"\n               LIMIT 1) f ON true\n             WHERE f.id IS NOT NULL\n           ) x\n           ORDER BY date_trunc('milliseconds', x.\"lastPlayedAt\") DESC, x.kind, x.\"mediaId\"\n           LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_file_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "position_seconds!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_seconds",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_played_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "media_title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "poster_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "fanart_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "media_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "still_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "stillUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "episode_label",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "progress_percent!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      null,
+      null,
+      null,
+      null,
+      false,
+      true,
+      true,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "1f53d631ca3d72cc972f1675091fd1d38a6c476c3ea95ec877026eb130a13149"
+}

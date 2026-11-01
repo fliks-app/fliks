@@ -115,7 +115,7 @@ pub async fn collections(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error>
          ARRAY[]::text[]
        ) AS "posters!"
 FROM media m
-JOIN collection_entries e ON e."mediaId" = m.id
+JOIN collection_entries e ON e."mediaId" = m.id AND e."itemId" IS NULL
 JOIN collections c ON c.id = e."collectionId"
 JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
 WHERE m."libraryId" = ANY($1)

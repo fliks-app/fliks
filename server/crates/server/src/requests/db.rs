@@ -728,7 +728,7 @@ LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $10)::int AS tmdb,
 LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
   FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
   JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
-  WHERE e."mediaId" = m.id ORDER BY c.id LIMIT 1) coll ON true
+  WHERE e."mediaId" = m.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
 LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_date,
              max(date) FILTER (WHERE kind = 'digital') AS digital_date,
              max(date) FILTER (WHERE kind = 'physical') AS physical_date,

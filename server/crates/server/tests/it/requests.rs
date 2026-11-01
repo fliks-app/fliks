@@ -1141,7 +1141,7 @@ async fn episode(
            f AS (
              INSERT INTO media_files ("mediaId", "relativePath", size, quality)
              SELECT 15, 's' || $5 || 'e' || $1, 1, 'q' FROM i WHERE $3 RETURNING id)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT i.id, f.id, 15 FROM i, f"#,
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT i.id, f.id, 15, 0 FROM i, f"#,
     ).bind(number).bind(end).bind(has_file).bind(monitored).bind(season).execute(pool).await.unwrap();
 }
 
@@ -1162,7 +1162,7 @@ async fn import_complete_makes_requests_available_when_the_scope_is_on_disk(pool
     episode(&p, 2, 1, None, true, true).await;
     episode(&p, 2, 2, None, false, true).await;
     q(&p, r#"UPDATE items SET "endNumber" = 2 WHERE "number" = 1 AND "groupId" = (SELECT id FROM item_groups WHERE "number" = 1)"#).await;
-    fliks_server::media::items::cover_ranges(&p, 15)
+    fliks_server::media::items::cover_ranges(&mut p.acquire().await.unwrap(), 15)
         .await
         .unwrap();
     for seasons in ["'[1]'", "'[2]'", "'[3]'", "NULL"] {

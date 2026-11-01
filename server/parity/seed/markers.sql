@@ -16,7 +16,7 @@ WITH f AS (
   SELECT "mediaId", 'Season 01/Parity Series A - S01E03.mkv', size, quality, language, "streamInfo"
   FROM media_files WHERE id = (SELECT "mediaFileId" FROM item_parts WHERE "itemId" = 1 LIMIT 1)
   RETURNING id, "mediaId")
-INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT (SELECT max(id) FROM items), id, "mediaId" FROM f;
+INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT (SELECT max(id) FROM items), id, "mediaId", 0 FROM f;
 INSERT INTO item_groups ("number", "mediaId") VALUES (0, 18);
 INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds", confidence, manual) VALUES
  (1, 'intro', 10, 40, 0.8, false),

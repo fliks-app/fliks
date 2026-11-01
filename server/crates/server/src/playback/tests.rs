@@ -146,8 +146,8 @@ async fn finishing_a_range_file_completes_every_episode_it_plays(pool: PgPool) {
     let file: i32 = sqlx::query_scalar(
         r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
                       VALUES ($1, 'S01E01-E03.mkv', 1, 'x') RETURNING id),
-                p AS (INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
-                      SELECT i, f.id, $1 FROM f, UNNEST($2::int[]) i RETURNING 1)
+                p AS (INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+                      SELECT i, f.id, $1, 0 FROM f, UNNEST($2::int[]) i RETURNING 1)
            SELECT id FROM f"#,
     )
     .bind(media)

@@ -76,7 +76,7 @@ LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"
 LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
   FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
   JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
-  WHERE e."mediaId" = media.id ORDER BY c.id LIMIT 1) coll ON true
+  WHERE e."mediaId" = media.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb

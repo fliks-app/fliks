@@ -211,6 +211,7 @@ pub(crate) async fn apply_seasons(
 ) -> Result<i64, AppError> {
     let before: i64 = count_episodes(st, media_id).await?;
     let mut tx = st.db.begin().await?;
+    crate::media::items::lock_versions(&mut tx, media_id).await?;
     let mut applied = vec![];
     for sd in seasons {
         let n = sd.season_number;
@@ -256,7 +257,7 @@ pub(crate) async fn apply_seasons(
         }
         applied.push((sid, stills, sd.poster_url.clone()));
     }
-    crate::media::items::cover_ranges(&mut *tx, media_id).await?;
+    crate::media::items::cover_ranges(&mut tx, media_id).await?;
     tx.commit().await?;
     let inserted = (count_episodes(st, media_id).await? - before).max(0);
     for (sid, stills, poster) in applied {

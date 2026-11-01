@@ -515,8 +515,8 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
     .unwrap();
     sqlx::query(
         r#"WITH gone AS (DELETE FROM item_parts)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
-           SELECT $1, id, "mediaId" FROM media_files"#,
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+           SELECT $1, id, "mediaId", 0 FROM media_files"#,
     )
     .bind(ep)
     .execute(&c.pool)
@@ -744,7 +744,7 @@ async fn the_admin_streams_name_the_episode_the_session_plays(pool: PgPool) {
                       SELECT n, g.id, $1, (SELECT id FROM editions WHERE "mediaId" = $1)
                       FROM g, generate_series(1, 2) n RETURNING id),
                 gone AS (DELETE FROM item_parts)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT e.id, $2, $1 FROM e"#,
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT e.id, $2, $1, 0 FROM e"#,
     )
     .bind(c.media)
     .bind(c.file)

@@ -128,7 +128,7 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
         .id(&format!(
             r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
                  VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id)
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
                RETURNING "mediaFileId""#
         ))
         .await;
@@ -281,7 +281,7 @@ async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) 
         c.id(&format!(
             r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
                  VALUES ({m}, 'e{n}.mkv', 1, 'q') RETURNING id)
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
                RETURNING "itemId""#
         ))
         .await;
@@ -329,7 +329,7 @@ async fn series_with_episode(c: &Ctx, library: i32) -> (i32, i32, i32) {
     c.id(&format!(
         r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
              VALUES ({m}, 'e.mkv', 1, 'q') RETURNING id)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
            RETURNING "mediaFileId""#
     ))
     .await;
@@ -379,7 +379,7 @@ async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
         .id(&format!(
             r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
                  VALUES ({movie}, 'm.mkv', 1, 'q') RETURNING id)
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {movie} FROM f
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {movie}, 0 FROM f
                RETURNING "mediaFileId""#
         ))
         .await;
@@ -432,7 +432,7 @@ async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
           VALUES (31, 1, 13, 3, 3), (32, 2, 13, 3, 3), (41, 1, 14, 4, 4), (42, 2, 14, 4, 4), (61, 1, 16, 6, 6);
         INSERT INTO media_files (id, "mediaId", "relativePath", size, quality)
           SELECT i.id, i."mediaId", 'f' || i.id, 1, 'q' FROM items i WHERE i.id IN (31, 32, 41, 42);
-        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT id, id, "mediaId" FROM items WHERE id IN (31, 32, 41, 42);
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT id, id, "mediaId", 0 FROM items WHERE id IN (31, 32, 41, 42);
         INSERT INTO playback_states ("userId", "itemId", completed) VALUES
           ({u}, 1, true), ({u}, 2, false), ({u}, 31, true), ({u}, 32, true), ({u}, 41, true),
           ({u}, 42, false), ({u}, 5, true), ({u}, 61, true);"#
@@ -449,4 +449,53 @@ async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
         .collect();
     ids.sort();
     assert_eq!((s, ids), (200, vec![1, 3, 5]));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = c
+        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .await;
+    let item = c.shell(m).await;
+    let state = format!("/api/playback/media/{m}/state");
+    let file = c
+        .id(&format!(
+            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId")
+                 VALUES ('x', 1, 'q', {m}) RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+               SELECT {item}, id, {m}, 0 FROM f RETURNING "mediaFileId""#
+        ))
+        .await;
+    let beat = json!({"mediaFileId": file, "positionSeconds": 1, "durationSeconds": 10});
+
+    c.id(&format!(
+        r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ({m}, 'video') RETURNING id)
+           INSERT INTO items ("mediaId", "editionId") SELECT {m}, id FROM e RETURNING items.id"#
+    ))
+    .await;
+    for (method, uri, body) in [
+        ("PUT", state.clone(), Some(beat)),
+        ("DELETE", state.clone(), None),
+        ("GET", state.clone(), None),
+        (
+            "POST",
+            format!("/api/playback/media/{m}/toggle-watched"),
+            None,
+        ),
+    ] {
+        let (s, b) = c.api(method, &uri, body).await;
+        assert_eq!(s, 409, "{method} {uri}: {b}");
+        assert_eq!(b["message"], "ambiguous_item");
+    }
+    let named = format!("{state}?episodeId={item}");
+    assert_eq!(
+        c.api("GET", &named, None).await.0,
+        200,
+        "an item id still names it"
+    );
+    assert_eq!(
+        c.api("GET", "/api/playback/media/9999/state", None).await.0,
+        200
+    );
 }

@@ -40,7 +40,7 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
            LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
              FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
              JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
-             WHERE e."mediaId" = m.id ORDER BY c.id LIMIT 1) coll ON true WHERE m.id = $1"#,
+             WHERE e."mediaId" = m.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true WHERE m.id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -90,7 +90,7 @@ WHERE m."libraryId" = $1 AND m.type = $7 AND m.id != $2
   AND ($6::int IS NULL OR NOT EXISTS (
         SELECT 1 FROM collection_entries e JOIN collection_external_ids x
           ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb'
-        WHERE e."mediaId" = m.id AND x.value = $6::int::text))
+        WHERE e."mediaId" = m.id AND e."itemId" IS NULL AND x.value = $6::int::text))
 ORDER BY m.id"#,
         library,
         id,
@@ -161,7 +161,7 @@ pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError>
            FROM media m LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
              FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
              JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
-             WHERE e."mediaId" = m.id ORDER BY c.id LIMIT 1) coll ON true WHERE m.id = $1"#,
+             WHERE e."mediaId" = m.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true WHERE m.id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -177,7 +177,7 @@ pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError>
         r#"SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
        m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
 FROM media m
-JOIN collection_entries ce ON ce."mediaId" = m.id
+JOIN collection_entries ce ON ce."mediaId" = m.id AND ce."itemId" IS NULL
 LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d.kind = 'release') dates ON true
 WHERE m."libraryId" = $1 AND ce."collectionId" = $2
 ORDER BY ce.position ASC NULLS LAST, dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
