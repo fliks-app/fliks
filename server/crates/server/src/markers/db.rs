@@ -32,10 +32,11 @@ pub struct Marker {
 pub async fn for_episode(db: &PgPool, episode: i32) -> sqlx::Result<Vec<Marker>> {
     sqlx::query_as!(
         Marker,
-        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, type AS "type!",
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, kind AS "type!",
                   "startSeconds" AS start_seconds, "endSeconds" AS end_seconds, confidence,
-                  manual, "episodeId" AS episode_id
-           FROM episode_markers WHERE "episodeId" = $1 ORDER BY "startSeconds", id"#,
+                  manual, "itemId" AS episode_id
+           FROM item_markers WHERE "itemId" = $1 AND kind <> 'chapter'
+           ORDER BY "startSeconds", id"#,
         episode
     )
     .fetch_all(db)
@@ -45,11 +46,12 @@ pub async fn for_episode(db: &PgPool, episode: i32) -> sqlx::Result<Vec<Marker>>
 pub async fn for_season(db: &PgPool, season: i32) -> sqlx::Result<Vec<Marker>> {
     sqlx::query_as!(
         Marker,
-        r#"SELECT m.id, m."createdAt" AS created_at, m."updatedAt" AS updated_at, m.type AS "type!",
+        r#"SELECT m.id, m."createdAt" AS created_at, m."updatedAt" AS updated_at, m.kind AS "type!",
                   m."startSeconds" AS start_seconds, m."endSeconds" AS end_seconds, m.confidence,
-                  m.manual, m."episodeId" AS episode_id
-           FROM episode_markers m JOIN items e ON e.id = m."episodeId" WHERE e."groupId" = $1
-           ORDER BY m."episodeId", m."startSeconds", m.id"#,
+                  m.manual, m."itemId" AS episode_id
+           FROM item_markers m JOIN items e ON e.id = m."itemId"
+           WHERE e."groupId" = $1 AND m.kind <> 'chapter'
+           ORDER BY m."itemId", m."startSeconds", m.id"#,
         season
     )
     .fetch_all(db)
@@ -59,10 +61,10 @@ pub async fn for_season(db: &PgPool, season: i32) -> sqlx::Result<Vec<Marker>> {
 pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Marker>> {
     sqlx::query_as!(
         Marker,
-        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, type AS "type!",
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, kind AS "type!",
                   "startSeconds" AS start_seconds, "endSeconds" AS end_seconds, confidence,
-                  manual, "episodeId" AS episode_id
-           FROM episode_markers WHERE id = $1"#,
+                  manual, "itemId" AS episode_id
+           FROM item_markers WHERE id = $1 AND kind <> 'chapter'"#,
         id
     )
     .fetch_optional(db)
@@ -102,7 +104,7 @@ pub async fn episode_exists(db: &PgPool, episode: i32) -> sqlx::Result<bool> {
     .map(|r| r.is_some())
 }
 
-/// A manual marker replaces the `(episode, type)` one in one statement.
+/// A manual marker replaces the `(item, kind)` one in one statement.
 pub async fn upsert_manual(
     db: &PgPool,
     episode: i32,
@@ -111,9 +113,9 @@ pub async fn upsert_manual(
     end: f64,
 ) -> sqlx::Result<Marker> {
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds", confidence, manual)
            VALUES ($1, $2, $3, $4, 1, true)
-           ON CONFLICT ("episodeId", type) DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
+           ON CONFLICT ("itemId", kind) WHERE kind <> 'chapter' DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
              "endSeconds" = EXCLUDED."endSeconds", confidence = 1, manual = true
            RETURNING id"#,
         episode,
@@ -128,8 +130,8 @@ pub async fn upsert_manual(
 
 pub async fn set_range(db: &PgPool, id: i32, start: f64, end: f64) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"UPDATE episode_markers SET "startSeconds" = $2, "endSeconds" = $3, manual = true, confidence = 1
-           WHERE id = $1"#,
+        r#"UPDATE item_markers SET "startSeconds" = $2, "endSeconds" = $3, manual = true, confidence = 1
+           WHERE id = $1 AND kind <> 'chapter'"#,
         id,
         start,
         end
@@ -140,10 +142,13 @@ pub async fn set_range(db: &PgPool, id: i32, start: f64, end: f64) -> sqlx::Resu
 }
 
 pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
-    sqlx::query!("DELETE FROM episode_markers WHERE id = $1", id)
-        .execute(db)
-        .await
-        .map(|r| r.rows_affected() > 0)
+    sqlx::query!(
+        "DELETE FROM item_markers WHERE id = $1 AND kind <> 'chapter'",
+        id
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected() > 0)
 }
 
 pub struct SeasonInfo {
@@ -270,8 +275,8 @@ pub async fn episodes_with_files(db: &PgPool, season: i32) -> sqlx::Result<Vec<E
 
 pub async fn manual_episodes(db: &PgPool, episodes: &[i32], kind: &str) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar!(
-        r#"SELECT "episodeId" AS "episode_id!" FROM episode_markers
-           WHERE "episodeId" = ANY($1) AND type = $2 AND manual = true"#,
+        r#"SELECT "itemId" AS "episode_id!" FROM item_markers
+           WHERE "itemId" = ANY($1) AND kind = $2 AND manual = true"#,
         episodes,
         kind
     )
@@ -289,11 +294,11 @@ pub async fn upsert_detected(
     confidence: f64,
 ) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds", confidence, manual)
            VALUES ($1, $2, $3, $4, $5, false)
-           ON CONFLICT ("episodeId", type) DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
+           ON CONFLICT ("itemId", kind) WHERE kind <> 'chapter' DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
              "endSeconds" = EXCLUDED."endSeconds", confidence = EXCLUDED.confidence, manual = false
-           WHERE episode_markers.manual = false"#,
+           WHERE item_markers.manual = false"#,
         episode,
         kind,
         start,

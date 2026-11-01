@@ -521,7 +521,7 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
     .execute(&c.pool)
     .await
     .unwrap();
-    sqlx::query(r#"INSERT INTO episode_markers ("type", "startSeconds", "endSeconds", "episodeId") VALUES ('intro', 1, 8, $1)"#)
+    sqlx::query(r#"INSERT INTO item_markers ("kind", "startSeconds", "endSeconds", "itemId") VALUES ('intro', 1, 8, $1)"#)
         .bind(ep).execute(&c.pool).await.unwrap();
     let (s, b) = info(&c, "").await;
     assert_eq!(s, 201);
@@ -545,13 +545,39 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
         e,
         json!({"ranges": [{"start": 5.0, "end": 10.0, "action": "cut"}]})
     );
-    sqlx::query("DROP TABLE episode_markers")
+    sqlx::query("DROP TABLE item_markers")
         .execute(&c.pool)
         .await
         .unwrap();
     let (s, b) = info(&c, "").await;
     assert_eq!(s, 201);
     assert!(b.get("markers").is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn chapters_come_from_the_item_markers_in_order(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    assert!(info(&c, "").await.1.get("chapters").is_none());
+    let mut blob = stream_info();
+    blob["chapters"] = json!([
+        {"startSeconds": 5.0, "endSeconds": 9.0, "title": "Second"},
+        {"startSeconds": 0.0, "endSeconds": 5.0},
+    ]);
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = $1 WHERE id = $2"#)
+        .bind(blob)
+        .bind(c.file)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, b) = info(&c, "").await;
+    assert_eq!(s, 201);
+    assert_eq!(
+        b["chapters"],
+        json!([
+            {"startSeconds": 0.0, "endSeconds": 5.0},
+            {"startSeconds": 5.0, "endSeconds": 9.0, "title": "Second"},
+        ])
+    );
 }
 
 #[sqlx::test(migrations = false)]

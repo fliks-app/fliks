@@ -205,8 +205,8 @@ async fn call(c: &Ctx, method: &str, uri: &str, token: &str, body: Option<Value>
 
 async fn marker_row(c: &Ctx, ep: i32, kind: &str) -> Option<(f64, f64, f64, bool)> {
     sqlx::query_as(
-        r#"SELECT "startSeconds", "endSeconds", confidence, manual FROM episode_markers
-           WHERE "episodeId" = $1 AND type = $2"#,
+        r#"SELECT "startSeconds", "endSeconds", confidence, manual FROM item_markers
+           WHERE "itemId" = $1 AND kind = $2"#,
     )
     .bind(ep)
     .bind(kind)
@@ -217,7 +217,7 @@ async fn marker_row(c: &Ctx, ep: i32, kind: &str) -> Option<(f64, f64, f64, bool
 
 async fn put_marker(c: &Ctx, ep: i32, kind: &str, start: f64, end: f64, manual: bool) {
     sqlx::query(
-        r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
+        r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds", confidence, manual)
            VALUES ($1, $2, $3, $4, 0.5, $5)"#,
     )
     .bind(ep)
@@ -763,7 +763,7 @@ async fn writes_are_atomic_and_validated(pool: PgPool) {
 async fn updates_protect_the_marker_and_deletes_404(pool: PgPool) {
     let c = ctx(pool, true).await;
     put_marker(&c, c.eps[0], "outro", 100.0, 200.0, false).await;
-    let id: i32 = one(&c.pool, "SELECT id FROM episode_markers").await;
+    let id: i32 = one(&c.pool, "SELECT id FROM item_markers").await;
     let uri = format!("/api/markers/{id}");
     let (s, b) = call(&c, "PUT", &uri, &c.admin, Some(json!({}))).await;
     assert_eq!(
@@ -814,4 +814,136 @@ async fn updates_protect_the_marker_and_deletes_404(pool: PgPool) {
         (s, b["message"].clone()),
         (404, json!(format!("Marker #{id} not found")))
     );
+}
+
+async fn file_of(c: &Ctx, ep: i32) -> i32 {
+    sqlx::query_scalar(r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1"#)
+        .bind(ep)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap()
+}
+
+async fn set_chapters(c: &Ctx, file: i32, chapters: Value) {
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = "streamInfo" || jsonb_build_object('chapters', $1::jsonb) WHERE id = $2"#)
+        .bind(chapters)
+        .bind(file)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+}
+
+async fn chapters_of(c: &Ctx, item: i32, file: i32) -> Vec<(f64, f64, Option<String>)> {
+    sqlx::query_as(
+        r#"SELECT "startSeconds", "endSeconds", title FROM item_markers
+           WHERE "itemId" = $1 AND "mediaFileId" = $2 AND kind = 'chapter' ORDER BY id"#,
+    )
+    .bind(item)
+    .bind(file)
+    .fetch_all(&c.pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_chapter_is_invisible_to_the_marker_routes(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let ep = c.eps[0];
+    let file = file_of(&c, ep).await;
+    set_chapters(&c, file, json!([{"startSeconds": 0, "endSeconds": 30}])).await;
+    put_marker(&c, ep, "intro", 10.0, 20.0, true).await;
+    let id: i32 = one(
+        &c.pool,
+        "SELECT id FROM item_markers WHERE kind = 'chapter'",
+    )
+    .await;
+    let uri = format!("/api/markers/episode/{ep}");
+    let (_, list) = call(&c, "GET", &uri, &c.admin, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    let uri = format!("/api/markers/season/{}", c.season);
+    let (_, list) = call(&c, "GET", &uri, &c.admin, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    let uri = format!("/api/markers/{id}");
+    let edit = Some(json!({"endSeconds": 40}));
+    assert_eq!(call(&c, "PUT", &uri, &c.admin, edit).await.0, 404);
+    assert_eq!(call(&c, "DELETE", &uri, &c.admin, None).await.0, 404);
+    let body = json!({"episodeId": ep, "type": "intro", "startSeconds": 1, "endSeconds": 5});
+    assert_eq!(
+        call(&c, "POST", "/api/markers", &c.admin, Some(body))
+            .await
+            .0,
+        201
+    );
+    assert_eq!(marker_row(&c, ep, "intro").await.unwrap().0, 1.0);
+    assert_eq!(chapters_of(&c, ep, file).await.len(), 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn chapters_follow_the_probe_through_the_triggers(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let ep = c.eps[0];
+    let file = file_of(&c, ep).await;
+    assert!(chapters_of(&c, ep, file).await.is_empty());
+
+    // a malformed entry is skipped, an empty title is null, the file order is kept
+    set_chapters(
+        &c,
+        file,
+        json!([
+            {"startSeconds": 10, "endSeconds": 20, "title": "B"},
+            {"startSeconds": "x", "endSeconds": 5},
+            {"startSeconds": 5, "endSeconds": 5},
+            {"startSeconds": -1, "endSeconds": 5},
+            {"startSeconds": 0, "endSeconds": 10, "title": ""},
+            "junk"
+        ]),
+    )
+    .await;
+    let want = vec![(10.0, 20.0, Some("B".to_string())), (0.0, 10.0, None)];
+    assert_eq!(chapters_of(&c, ep, file).await, want);
+
+    // another key of the blob leaves them alone
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = jsonb_set("streamInfo", '{timestampBreakSeconds}', '1.5') WHERE id = $1"#)
+        .bind(file)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(chapters_of(&c, ep, file).await, want);
+
+    // new chapters replace the old ones
+    set_chapters(&c, file, json!([{"startSeconds": 1, "endSeconds": 2}])).await;
+    assert_eq!(chapters_of(&c, ep, file).await, vec![(1.0, 2.0, None)]);
+
+    // a multi-episode file gives every part the chapters, and a re-link rebuilds them
+    let media = c.series;
+    let link = crate::media::items::Link {
+        file,
+        owner: Some(ep),
+        last: Some(2),
+    };
+    crate::media::items::attach(&c.pool, media, &[link])
+        .await
+        .unwrap();
+    assert_eq!(chapters_of(&c, ep, file).await, vec![(1.0, 2.0, None)]);
+    assert_eq!(
+        chapters_of(&c, c.eps[1], file).await,
+        vec![(1.0, 2.0, None)]
+    );
+
+    // a removed part takes its chapters
+    sqlx::query(r#"DELETE FROM item_parts WHERE "itemId" = $1"#)
+        .bind(c.eps[1])
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert!(chapters_of(&c, c.eps[1], file).await.is_empty());
+    assert_eq!(chapters_of(&c, ep, file).await.len(), 1);
+
+    // the database refuses a chapter on a file that is not a part of its item
+    let stray = sqlx::query(r#"INSERT INTO item_markers ("itemId", "mediaFileId", kind, "startSeconds", "endSeconds") VALUES ($1, $2, 'chapter', 0, 1)"#)
+        .bind(c.eps[1])
+        .bind(file)
+        .execute(&c.pool)
+        .await;
+    assert!(stray.is_err());
 }

@@ -14,9 +14,9 @@ WITH f AS (
   RETURNING id, "mediaId")
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT (SELECT max(id) FROM items), id, "mediaId" FROM f;
 INSERT INTO item_groups ("number", "mediaId") VALUES (0, 18);
-INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual) VALUES
+INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds", confidence, manual) VALUES
  (1, 'intro', 10, 40, 0.8, false),
  (1, 'outro', 8.5, 9.5, 1, true),
  (2, 'intro', 12, 41, 1, true),
  (3, 'intro', 11, 39, 0.75, false);
-UPDATE episode_markers SET "createdAt" = '2026-01-01', "updatedAt" = '2026-01-01';
+UPDATE item_markers SET "createdAt" = '2026-01-01', "updatedAt" = '2026-01-01';

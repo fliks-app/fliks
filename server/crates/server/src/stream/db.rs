@@ -1,5 +1,6 @@
 //! The reads and writes playback-info makes outside the media tables: markers and the saved position.
 use crate::playback::find_state;
+use fliks_engine_core::api::Chapter;
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -10,7 +11,7 @@ pub struct Range {
     pub end_seconds: f64,
 }
 
-/// `{intro?, outro?}` of an episode; the keys of an absent side are omitted.
+/// `{intro?, outro?}` of an item; the keys of an absent side are omitted.
 #[derive(Debug, Default, Serialize, PartialEq)]
 pub struct Markers {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -19,12 +20,12 @@ pub struct Markers {
     pub outro: Option<Range>,
 }
 
-/// `None` when the episode has neither; recap markers are never read here.
-pub async fn markers(db: &PgPool, episode_id: i32) -> sqlx::Result<Option<Markers>> {
+/// `None` when the item has neither; recap markers are never read here.
+pub async fn markers(db: &PgPool, item: i32) -> sqlx::Result<Option<Markers>> {
     let rows = sqlx::query!(
-        r#"SELECT "type" AS kind, "startSeconds" AS start, "endSeconds" AS "end"
-           FROM episode_markers WHERE "episodeId" = $1 AND "type" IN ('intro', 'outro')"#,
-        episode_id
+        r#"SELECT kind, "startSeconds" AS start, "endSeconds" AS "end"
+           FROM item_markers WHERE "itemId" = $1 AND kind IN ('intro', 'outro')"#,
+        item
     )
     .fetch_all(db)
     .await?;
@@ -40,6 +41,28 @@ pub async fn markers(db: &PgPool, episode_id: i32) -> sqlx::Result<Option<Marker
         }
     }
     Ok((m.intro.is_some() || m.outro.is_some()).then_some(m))
+}
+
+/// The chapters of `file` as a part of `item`, in file order.
+pub async fn chapters(db: &PgPool, item: i32, file: i32) -> sqlx::Result<Vec<Chapter>> {
+    sqlx::query!(
+        r#"SELECT "startSeconds" AS start, "endSeconds" AS "end", title FROM item_markers
+           WHERE "itemId" = $1 AND "mediaFileId" = $2 AND kind = 'chapter'
+           ORDER BY "startSeconds", id"#,
+        item,
+        file
+    )
+    .fetch_all(db)
+    .await
+    .map(|rows| {
+        rows.into_iter()
+            .map(|r| Chapter {
+                start_seconds: r.start,
+                end_seconds: r.end,
+                title: r.title,
+            })
+            .collect()
+    })
 }
 
 /// The saved position worth resuming: more than 10 s in and not finished.

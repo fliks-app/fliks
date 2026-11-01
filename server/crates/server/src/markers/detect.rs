@@ -271,6 +271,9 @@ async fn detect_segments(
         else {
             continue;
         };
+        if seg.end_seconds <= seg.start_seconds {
+            continue;
+        }
         db::upsert_detected(
             &st.db,
             p.episode.episode_id,

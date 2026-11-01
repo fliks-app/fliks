@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO item_markers (\"itemId\", kind, \"startSeconds\", \"endSeconds\", confidence, manual)\n           VALUES ($1, $2, $3, $4, 1, true)\n           ON CONFLICT (\"itemId\", kind) WHERE kind <> 'chapter' DO UPDATE SET \"startSeconds\" = EXCLUDED.\"startSeconds\",\n             \"endSeconds\" = EXCLUDED.\"endSeconds\", confidence = 1, manual = true\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_markers",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "14a1585819472dc472588f2a14074fff6548b85c206ba55eb7661e963e5a3c7a"
+}

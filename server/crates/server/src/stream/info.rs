@@ -24,8 +24,8 @@ use axum::{
 use fliks_domain::{edl::shift_ranges, track_markers};
 use fliks_engine_core::{
     api::{
-        ClientInfo, DecideMedia, DecideRequest, DecideSelection, DeviceProfile, JobPriority,
-        OpenSessionRequest, OpenSessionResponse,
+        Chapter, ClientInfo, DecideMedia, DecideRequest, DecideSelection, DeviceProfile,
+        JobPriority, OpenSessionRequest, OpenSessionResponse,
     },
     jsnum,
 };
@@ -278,7 +278,7 @@ async fn run(
         .and_then(|i| i.video.first())
         .and_then(|v| v.frame_rate.as_deref())
         .and_then(parse_source_fps);
-    let (open, (markers, pre_roll, edl)) = tokio::join!(
+    let (open, (markers, chapters, pre_roll, edl)) = tokio::join!(
         async {
             let open = st.engine.open_session(&request).await?;
             if let (false, Some(item)) = (q.download, file.item_id)
@@ -309,7 +309,9 @@ async fn run(
         position,
     );
     rescan_hint(st, &open, &file, held.version);
-    Ok(assemble(&open, &file, position, markers, pre_roll, edl))
+    Ok(assemble(
+        &open, &file, position, markers, chapters, pre_roll, edl,
+    ))
 }
 
 fn check_engine(st: &AppState) -> Result<(), AppError> {
@@ -407,7 +409,7 @@ pub(super) fn defers_open(
     asked?.as_ref().filter(|_| position == 0.0)
 }
 
-/// The markers, the pre-roll (`asked` when already read) and the EDL of a file.
+/// The markers, chapters, pre-roll (`asked` when already read) and EDL of a file.
 async fn side_reads(
     st: &AppState,
     a: &crate::http::auth::Authed,
@@ -416,17 +418,27 @@ async fn side_reads(
     asked: Option<Option<Vec<preroll::Item>>>,
 ) -> (
     Option<db::Markers>,
+    Vec<Chapter>,
     Option<Vec<preroll::Item>>,
     Option<Vec<fliks_domain::edl::EdlRange>>,
 ) {
-    let (markers, pre_roll, edl) = tokio::join!(
+    let (markers, chapters, pre_roll, edl) = tokio::join!(
         async {
-            let episode = file.episode_id.filter(|e| *e != 0)?;
-            db::markers(&st.db, episode)
+            let item = file.item_id?;
+            db::markers(&st.db, item)
                 .await
-                .map_err(|e| tracing::warn!("markers not read for episode #{episode}: {e}"))
+                .map_err(|e| tracing::warn!("markers not read for item #{item}: {e}"))
                 .ok()
                 .flatten()
+        },
+        async {
+            let Some(item) = file.item_id else {
+                return Vec::new();
+            };
+            db::chapters(&st.db, item, file.id)
+                .await
+                .map_err(|e| tracing::warn!("chapters not read for item #{item}: {e}"))
+                .unwrap_or_default()
         },
         async {
             match asked {
@@ -442,7 +454,7 @@ async fn side_reads(
             }
         },
     );
-    (markers, pre_roll, edl)
+    (markers, chapters, pre_roll, edl)
 }
 
 /// The engine's hints: the scan a remux open ran is kept; a stale probe is re-probed (which chains
@@ -488,6 +500,7 @@ fn assemble(
     file: &ResolvedFile,
     position: f64,
     markers: Option<db::Markers>,
+    chapters: Vec<Chapter>,
     pre_roll: Option<Vec<preroll::Item>>,
     edl: Option<Vec<fliks_domain::edl::EdlRange>>,
 ) -> Value {
@@ -543,13 +556,8 @@ fn assemble(
     if let Some(m) = markers {
         put("markers", json!(m));
     }
-    if let Some(c) = file
-        .info
-        .as_ref()
-        .and_then(|i| i.chapters.as_ref())
-        .filter(|c| !c.is_empty())
-    {
-        put("chapters", json!(c));
+    if !chapters.is_empty() {
+        put("chapters", json!(chapters));
     }
     if let Some(p) = pre_roll {
         put("preRoll", json!(p));
