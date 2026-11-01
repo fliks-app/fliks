@@ -19,8 +19,8 @@ use std::collections::HashSet;
 #[derive(Debug, Clone)]
 pub struct Person {
     pub id: i32,
-    pub provider: String,
-    pub tmdb_id: i32,
+    pub provider: Option<String>,
+    pub tmdb_id: Option<i32>,
     pub name: String,
     pub refreshed_ms: Option<i64>,
 }
@@ -31,7 +31,8 @@ fn not_found(id: i32) -> AppError {
 
 pub async fn find(db: &PgPool, id: i32) -> Result<Person, AppError> {
     sqlx::query!(
-        r#"SELECT provider, "tmdbId" AS tmdb_id, name, "metadataRefreshedAt" AS refreshed FROM persons WHERE id = $1"#,
+        r#"SELECT x.provider AS "provider?", x.value::int AS "tmdb_id?", p.name, p."metadataRefreshedAt" AS refreshed
+FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p.id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -50,11 +51,11 @@ pub async fn find(db: &PgPool, id: i32) -> Result<Person, AppError> {
 async fn person_json(db: &PgPool, id: i32) -> Result<Value, sqlx::Error> {
     sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt")) AS "json!: Value"
-FROM persons p WHERE p.id = $1"#,
+FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p.id = $1"#,
         id
     )
     .fetch_one(db)
@@ -66,11 +67,11 @@ pub async fn search(db: &PgPool, q: &str) -> Result<Vec<Value>, sqlx::Error> {
     if q.is_empty() {
         return sqlx::query_scalar!(
             r#"SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt")) AS "json!: Value"
-FROM persons p ORDER BY p.name ASC, p.id ASC LIMIT 1000"#
+FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id ORDER BY p.name ASC, p.id ASC LIMIT 1000"#
         )
         .fetch_all(db)
         .await;
@@ -80,11 +81,11 @@ FROM persons p ORDER BY p.name ASC, p.id ASC LIMIT 1000"#
     };
     sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt")) AS "json!: Value"
-FROM persons p WHERE p."searchVector" @@ to_tsquery('simple', $1)
+FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p."searchVector" @@ to_tsquery('simple', $1)
 ORDER BY ts_rank(p."searchVector", to_tsquery('simple', $1)) DESC, p.name ASC, p.id ASC LIMIT 50"#,
         tsq
     )
@@ -92,7 +93,7 @@ ORDER BY ts_rank(p."searchVector", to_tsquery('simple', $1)) DESC, p.name ASC, p
     .await
 }
 
-/// Rule 11: the stored provider (TMDB when its key is missing); a 404 asks the other one and pins the row to it.
+/// Rule 11: the stored provider (TMDB when its key is missing); a 404 asks the other one and pins the id row to it.
 async fn call_provider<T, Fut>(
     md: &Metadata,
     db: &PgPool,
@@ -102,7 +103,7 @@ async fn call_provider<T, Fut>(
 where
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
-    let primary = md.resolve(Some(&p.provider));
+    let primary = md.resolve(p.provider.as_deref());
     let e = match call(primary).await {
         Ok(v) => return Ok((v, primary)),
         Err(e) => e,
@@ -112,16 +113,17 @@ where
     };
     let v = call(other).await.map_err(|e| (other, e))?;
     tracing::info!("person {} is known to {}, pinning", p.id, other.name());
-    // Another row may already hold that (provider, tmdbId): keep this one's provider.
+    // Another person may already hold that (provider, value): keep this one's provider.
     match sqlx::query!(
-        "UPDATE persons SET provider = $2 WHERE id = $1",
+        r#"UPDATE person_external_ids SET provider = $2 WHERE "personId" = $1 AND provider = $3"#,
         p.id,
-        other.name()
+        other.name(),
+        p.provider
     )
     .execute(db)
     .await
     {
-        Ok(_) => p.provider = other.name().to_owned(),
+        Ok(_) => p.provider = Some(other.name().to_owned()),
         Err(e) => tracing::warn!("person {} not pinned to {}: {e}", p.id, other.name()),
     }
     Ok((v, other))
@@ -134,7 +136,9 @@ async fn try_refresh(
     lang: &Resolved,
     p: &mut Person,
 ) -> Result<(), String> {
-    let ext = i64::from(p.tmdb_id);
+    let Some(ext) = p.tmdb_id.map(i64::from) else {
+        return Ok(());
+    };
     let (d, _) = call_provider(md, db, p, |pr| md.person_details(pr, ext, lang))
         .await
         .map_err(|(pr, e)| format!("{}: {e}", pr.name()))?;
@@ -187,34 +191,34 @@ async fn credit_rows(
     person_json: &Value,
     crew: bool,
 ) -> Result<Vec<Value>, AppError> {
-    let rows = if crew {
+    let rows: Vec<(i32, Value)> = if crew {
         sqlx::query!(
             r#"SELECT mc."mediaId" AS media_id, jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"),
   'updatedAt', iso_ms(mc."updatedAt"), 'job', mc.job, 'department', mc.department) AS "json!: Value"
-FROM media_crew mc WHERE mc."personId" = $1 ORDER BY mc.id ASC"#,
+FROM media_credits mc WHERE mc."personId" = $1 AND mc.role = 'crew' ORDER BY mc.position ASC, mc.id ASC"#,
             person
         )
         .fetch_all(&st.db)
         .await?
         .into_iter()
         .map(|r| (r.media_id, r.json))
-        .collect::<Vec<_>>()
+        .collect()
     } else {
         sqlx::query!(
             r#"SELECT mc."mediaId" AS media_id, jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"),
-  'updatedAt', iso_ms(mc."updatedAt"), 'character', mc.character, 'order', mc."order") AS "json!: Value"
-FROM media_cast mc WHERE mc."personId" = $1 ORDER BY mc."order" ASC, mc.id ASC"#,
+  'updatedAt', iso_ms(mc."updatedAt"), 'character', mc.character, 'order', mc.position) AS "json!: Value"
+FROM media_credits mc WHERE mc."personId" = $1 AND mc.role = 'cast' ORDER BY mc.position ASC, mc.id ASC"#,
             person
         )
         .fetch_all(&st.db)
         .await?
         .into_iter()
         .map(|r| (r.media_id, r.json))
-        .collect::<Vec<_>>()
+        .collect()
     };
     let wanted: Vec<i32> = rows
         .iter()
-        .filter_map(|r| r.0)
+        .map(|r| r.0)
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -230,7 +234,7 @@ FROM media_cast mc WHERE mc."personId" = $1 ORDER BY mc."order" ASC, mc.id ASC"#
     // A media can appear on several rows: serialise it once per row.
     let mut out = vec![];
     for (media_id, mut row) in rows {
-        let Some(m) = media_id.and_then(|id| media.get(&id)) else {
+        let Some(m) = media.get(&media_id) else {
             continue;
         };
         row["media"] = m.clone();
@@ -325,7 +329,9 @@ async fn link_credits(
 pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
     let mut p = find(&st.db, id).await?;
     let lang = st.metadata.lang.resolve(None).await?;
-    let ext = i64::from(p.tmdb_id);
+    let Some(ext) = p.tmdb_id.map(i64::from) else {
+        return Ok(json!({"provider": null, "cast": [], "crew": []}));
+    };
     let md = &*st.metadata;
     let (credits, served) =
         call_provider(md, &st.db, &mut p, |pr| md.person_credits(pr, ext, &lang))

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT nextval('persons_id_seq')::int AS \"id!\" FROM generate_series(1, $1::int)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2d74a99723c62bbabdbd5a25ff97f7c7e59b811006cd7cb3fda2513607aa2b9d"
+}

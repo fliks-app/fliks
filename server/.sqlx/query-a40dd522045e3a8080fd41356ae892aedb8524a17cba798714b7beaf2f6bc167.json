@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE person_external_ids SET provider = $2 WHERE \"personId\" = $1 AND provider = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a40dd522045e3a8080fd41356ae892aedb8524a17cba798714b7beaf2f6bc167"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"personId\" AS \"person_id!\" FROM media_crew WHERE \"mediaId\" = $1 AND job = 'Director' AND \"personId\" IS NOT NULL",
+  "query": "SELECT \"personId\" AS \"person_id!\" FROM media_credits WHERE \"mediaId\" = $1 AND role = 'crew' AND job = 'Director'",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "media_crew",
+            "table": "media_credits",
             "name": "personId"
           }
         }
@@ -21,8 +21,8 @@
       ]
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "bcce9b5bd648ef43168137ea23682d9b3d824831da735adc0f6a3168d20c6cc3"
+  "hash": "d69cddb22550d09287d2ba1fe3fc7344fd13eb0197673d43ecfbeaa5d7ef9c1c"
 }

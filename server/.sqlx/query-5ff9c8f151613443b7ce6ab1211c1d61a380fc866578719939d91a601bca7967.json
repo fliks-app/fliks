@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT \"mediaId\" AS \"media_id!\" FROM media_crew\n               WHERE \"personId\" = ANY($1) AND job = 'Director' AND \"mediaId\" != $2 AND \"mediaId\" IS NOT NULL",
+  "query": "SELECT DISTINCT \"mediaId\" AS \"media_id!\" FROM media_credits\n               WHERE \"personId\" = ANY($1) AND role = 'crew' AND job = 'Director' AND \"mediaId\" != $2",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "media_crew",
+            "table": "media_credits",
             "name": "mediaId"
           }
         }
@@ -22,8 +22,8 @@
       ]
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "22d47023e0a7714f16bbf1ee858e713cd1c828ff9f480e574715def2a18657a7"
+  "hash": "5ff9c8f151613443b7ce6ab1211c1d61a380fc866578719939d91a601bca7967"
 }

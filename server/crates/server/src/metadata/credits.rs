@@ -30,7 +30,9 @@ pub async fn persist_credits(st: &AppState, media_id: i32, d: &Details) -> Resul
     let (cast, crew) = (credits(d, "cast"), credits(d, "crew"));
     let all: Vec<&Value> = cast.iter().chain(&crew).collect();
     let mut unique: Vec<i32> = vec![];
-    for id in all.iter().filter_map(|c| ext(c)) {
+    // person_external_ids refuses ids outside 1..=999999999.
+    let valid = |i: &i32| (1..=999_999_999).contains(i);
+    for id in all.iter().filter_map(|c| ext(c)).filter(valid) {
         if !unique.contains(&id) {
             unique.push(id);
         }
@@ -105,8 +107,8 @@ async fn persist_metadata_row(st: &AppState, media_id: i32, d: &Details) -> Resu
     Ok(())
 }
 
-/// Existing persons by `(provider, tmdbId)`, the missing ones inserted in one statement, avatars and
-/// changed names written with a concurrency of 8.
+/// Existing persons by `(provider, value)`, the missing ones inserted with their id row under a
+/// per-provider lock, avatars and changed names written with a concurrency of 8.
 async fn upsert_persons(
     st: &AppState,
     provider: &str,
@@ -115,35 +117,64 @@ async fn upsert_persons(
 ) -> Result<HashMap<i32, Person>, AppError> {
     let credit_of = |id: i32| credits.iter().find(|c| ext(c) == Some(id)).copied();
     let name_of = |id: i32| credit_of(id).and_then(|c| s(c, "name")).unwrap_or_default();
-    let mut rows = person_rows(st, provider, ids).await?;
+    let mut tx = st.db.begin().await?;
+    sqlx::query!(
+        "SELECT pg_advisory_xact_lock(hashtext('persons:' || $1::text))",
+        provider
+    )
+    .execute(&mut *tx)
+    .await?;
+    let mut rows = person_rows(&mut *tx, provider, ids).await?;
     let missing: Vec<i32> = ids
         .iter()
         .copied()
         .filter(|i| !rows.contains_key(i))
         .collect();
-    let mut fresh: Vec<i32> = vec![];
     if !missing.is_empty() {
         let names: Vec<String> = missing.iter().map(|i| name_of(*i)).collect();
+        let values: Vec<String> = missing.iter().map(i32::to_string).collect();
+        let new_ids = sqlx::query_scalar!(
+            r#"SELECT nextval('persons_id_seq')::int AS "id!" FROM generate_series(1, $1::int)"#,
+            missing.len() as i32
+        )
+        .fetch_all(&mut *tx)
+        .await?;
         sqlx::query!(
-            r#"INSERT INTO persons (provider, "tmdbId", name)
-               SELECT $1, t.id, t.name FROM UNNEST($2::int[], $3::text[]) AS t(id, name)
-               ON CONFLICT (provider, "tmdbId") DO NOTHING"#,
-            provider,
-            &missing,
+            "INSERT INTO persons (id, name) SELECT * FROM UNNEST($1::int[], $2::text[])",
+            &new_ids,
             &names
         )
-        .execute(&st.db)
+        .execute(&mut *tx)
         .await?;
-        let inserted = person_rows(st, provider, &missing).await?;
-        fresh = inserted.keys().copied().collect();
-        rows.extend(inserted);
+        sqlx::query!(
+            r#"INSERT INTO person_external_ids ("personId", provider, value)
+               SELECT t.id, $1, t.value FROM UNNEST($2::int[], $3::text[]) AS t(id, value)"#,
+            provider,
+            &new_ids,
+            &values
+        )
+        .execute(&mut *tx)
+        .await?;
+        for ((ext_id, id), name) in missing.iter().zip(new_ids).zip(names) {
+            rows.insert(
+                *ext_id,
+                Person {
+                    id,
+                    provider: Some(provider.to_owned()),
+                    tmdb_id: Some(*ext_id),
+                    name,
+                    refreshed_ms: None,
+                },
+            );
+        }
     }
+    tx.commit().await?;
     let jobs: Vec<(i32, Option<String>, Option<String>)> = ids
         .iter()
         .filter_map(|ext_id| {
             let p = rows.get(ext_id)?;
             let c = credit_of(*ext_id)?;
-            let name = s(c, "name").filter(|n| !fresh.contains(ext_id) && *n != p.name);
+            let name = s(c, "name").filter(|n| !missing.contains(ext_id) && *n != p.name);
             let avatar = s(c, "avatarUrl").filter(|a| !a.is_empty());
             (name.is_some() || avatar.is_some()).then_some((p.id, name, avatar))
         })
@@ -173,18 +204,20 @@ async fn upsert_persons(
     Ok(rows)
 }
 
-async fn person_rows(
-    st: &AppState,
+async fn person_rows<'e>(
+    db: impl sqlx::PgExecutor<'e>,
     provider: &str,
     ids: &[i32],
 ) -> Result<HashMap<i32, Person>, sqlx::Error> {
+    let values: Vec<String> = ids.iter().map(i32::to_string).collect();
     Ok(sqlx::query!(
-        r#"SELECT id, "tmdbId" AS tmdb_id, name, "metadataRefreshedAt" AS refreshed FROM persons
-           WHERE provider = $1 AND "tmdbId" = ANY($2)"#,
+        r#"SELECT p.id, x.value::int AS "tmdb_id!", p.name, p."metadataRefreshedAt" AS refreshed
+           FROM person_external_ids x JOIN persons p ON p.id = x."personId"
+           WHERE x.provider = $1 AND x.value = ANY($2)"#,
         provider,
-        ids
+        &values
     )
-    .fetch_all(&st.db)
+    .fetch_all(db)
     .await?
     .into_iter()
     .map(|r| {
@@ -192,8 +225,8 @@ async fn person_rows(
             r.tmdb_id,
             Person {
                 id: r.id,
-                provider: provider.to_owned(),
-                tmdb_id: r.tmdb_id,
+                provider: Some(provider.to_owned()),
+                tmdb_id: Some(r.tmdb_id),
                 name: r.name,
                 refreshed_ms: r.refreshed.map(|t| t.timestamp_millis()),
             },
@@ -202,7 +235,17 @@ async fn person_rows(
     .collect())
 }
 
-/// `media_cast` and `media_crew` replaced in one transaction.
+#[derive(Default)]
+struct Credit {
+    person: i32,
+    role: &'static str,
+    position: i32,
+    character: Option<String>,
+    job: Option<String>,
+    department: Option<String>,
+}
+
+/// The cast and crew `media_credits` of a media replaced in one transaction.
 async fn replace_credits(
     st: &AppState,
     media_id: i32,
@@ -212,6 +255,31 @@ async fn replace_credits(
 ) -> Result<(), sqlx::Error> {
     let person = |c: &Value| ext(c).and_then(|e| people.get(&e)).map(|p| p.id);
     let text = |c: &Value, k: &str| s(c, k).unwrap_or_default();
+    let mut rows: Vec<Credit> = cast
+        .iter()
+        .filter_map(|c| {
+            Some(Credit {
+                person: person(c)?,
+                role: "cast",
+                position: n(c, "order").unwrap_or(0),
+                character: Some(text(c, "character")),
+                ..Credit::default()
+            })
+        })
+        .collect();
+    let crew_rows = crew.iter().filter_map(|c| {
+        Some(Credit {
+            person: person(c)?,
+            role: "crew",
+            job: Some(text(c, "job")),
+            department: Some(text(c, "department")),
+            ..Credit::default()
+        })
+    });
+    for (i, mut r) in crew_rows.enumerate() {
+        r.position = i as i32;
+        rows.push(r);
+    }
     let mut tx = st.db.begin().await?;
     // Two writers of one media's credits queue here instead of interleaving their rows.
     sqlx::query!(
@@ -220,40 +288,31 @@ async fn replace_credits(
     )
     .fetch_optional(&mut *tx)
     .await?;
-    sqlx::query!(r#"DELETE FROM media_cast WHERE "mediaId" = $1"#, media_id)
-        .execute(&mut *tx)
-        .await?;
-    if !cast.is_empty() {
-        let (ids, chars, order): (Vec<Option<i32>>, Vec<String>, Vec<i32>) = cast
-            .iter()
-            .map(|c| (person(c), text(c, "character"), n(c, "order").unwrap_or(0)))
-            .collect();
+    sqlx::query!(
+        r#"DELETE FROM media_credits
+           WHERE "mediaId" = $1 AND role IN ('cast', 'crew') AND "editionId" IS NULL"#,
+        media_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    if !rows.is_empty() {
+        let persons: Vec<i32> = rows.iter().map(|r| r.person).collect();
+        let roles: Vec<&str> = rows.iter().map(|r| r.role).collect();
+        let positions: Vec<i32> = rows.iter().map(|r| r.position).collect();
+        let characters: Vec<Option<&str>> = rows.iter().map(|r| r.character.as_deref()).collect();
+        let jobs: Vec<Option<&str>> = rows.iter().map(|r| r.job.as_deref()).collect();
+        let depts: Vec<Option<&str>> = rows.iter().map(|r| r.department.as_deref()).collect();
         sqlx::query!(
-            r#"INSERT INTO media_cast ("mediaId", "personId", character, "order")
-               SELECT $1, t.p, t.c, t.o FROM UNNEST($2::int[], $3::text[], $4::int[]) AS t(p, c, o)"#,
+            r#"INSERT INTO media_credits ("mediaId", "personId", role, position, character, job, department)
+               SELECT $1, t.p, t.r, t.o, t.c, t.j, t.d
+               FROM UNNEST($2::int[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[]) AS t(p, r, o, c, j, d)"#,
             media_id,
-            &ids as &[Option<i32>],
-            &chars,
-            &order
-        )
-        .execute(&mut *tx)
-        .await?;
-    }
-    sqlx::query!(r#"DELETE FROM media_crew WHERE "mediaId" = $1"#, media_id)
-        .execute(&mut *tx)
-        .await?;
-    if !crew.is_empty() {
-        let (ids, jobs, depts): (Vec<Option<i32>>, Vec<String>, Vec<String>) = crew
-            .iter()
-            .map(|c| (person(c), text(c, "job"), text(c, "department")))
-            .collect();
-        sqlx::query!(
-            r#"INSERT INTO media_crew ("mediaId", "personId", job, department)
-               SELECT $1, t.p, t.j, t.d FROM UNNEST($2::int[], $3::text[], $4::text[]) AS t(p, j, d)"#,
-            media_id,
-            &ids as &[Option<i32>],
-            &jobs,
-            &depts
+            &persons,
+            &roles as &[&str],
+            &positions,
+            &characters as &[Option<&str>],
+            &jobs as &[Option<&str>],
+            &depts as &[Option<&str>]
         )
         .execute(&mut *tx)
         .await?;

@@ -1,6 +1,6 @@
 # Spec: external ids
 
-The identity a media has in an outside system: a TMDB id, an IMDb id, later an OpenLibrary work, an ISBN, an ASIN, a MusicBrainz id. One table holds them, so a title can carry several providers and the same lookup serves every kind. The HTTP payloads still name the three video ids (`tmdbId`, `tvdbId`, `imdbId`, rule 13); only the tables changed. Persons get their own table when they move off `persons."tmdbId"`.
+The identity a media has in an outside system: a TMDB id, an IMDb id, later an OpenLibrary work, an ISBN, an ASIN, a MusicBrainz id. One table holds them, so a title can carry several providers and the same lookup serves every kind. The HTTP payloads still name the three video ids (`tmdbId`, `tvdbId`, `imdbId`, rule 13); only the tables changed. Persons have their own table, `person_external_ids` (section "Persons").
 
 ## Table
 
@@ -36,4 +36,8 @@ The identity a media has in an outside system: a TMDB id, an IMDb id, later an O
 
 ## Not in scope
 
-`persons."tmdbId"` and `persons.provider`, and `media."tmdbCollectionId"` (a collection's id, not the title's) keep their columns. Where one of them looks a media up by `tmdbId` it goes through rule 6's lookup.
+`media."tmdbCollectionId"` (a collection's id, not the title's) keeps its column. Where it looks a media up by `tmdbId` it goes through rule 6's lookup.
+
+## Persons
+
+A person's ids live in `person_external_ids`, FK-backed like `media_external_ids` but unique per `(provider, value)` for every provider (a person id names one person). The shape, the view `person_ids` and the lookup lock are in `persons.md` ("Credits and person ids").
