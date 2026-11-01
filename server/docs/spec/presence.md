@@ -59,7 +59,7 @@ Readers
 
 ## SQL
 
-none (presence is in memory). Readers that join presence with the database (admin streams: `media_files` by id, `episodes` + `seasons`) are specified with the system controller.
+none (presence is in memory). Readers that join presence with the database (admin streams: `media_files` by id, `items` + `item_groups`) are specified with the system controller.
 
 ## Events
 

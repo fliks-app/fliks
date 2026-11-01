@@ -7,3 +7,4 @@ Per-domain specs live under [`spec/`](spec/), one file per domain. The parity sc
 Watch party: [`spec/watch-party.md`](spec/watch-party.md) (routes, state machine, events).
 
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash).
+Items: [`spec/items.md`](spec/items.md) (item groups, items and editions: what a media is made of).
