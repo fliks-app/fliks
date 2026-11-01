@@ -1,6 +1,6 @@
-# Spec: metadata providers behind one trait, and the rate limiter
+# Spec: metadata providers behind one trait, the rate limiter, snapshots and the field merge
 
-Scope: how the server reaches a metadata provider. The per-provider mappings stay in `metadata.md` (TMDB, TVDB) and `book-providers.md` (books). Snapshots, field merge, provenance and locks, and the book providers, are specified with the orchestrator and the book clients.
+Scope: how the server reaches a metadata provider. The per-provider mappings stay in `metadata.md` (TMDB, TVDB) and `book-providers.md` (books). Out of scope here: the book providers (1.2).
 
 ## Provider trait
 
@@ -39,6 +39,61 @@ Scope: how the server reaches a metadata provider. The per-provider mappings sta
 21. The breaker records one outcome per call, the last attempt's, so a retried 429 counts once. It counts 429 and 5xx as transient (`metadata.md` rule 18) and stays the last line.
 22. Starting limits: TMDB 40 req/s, burst 40; TVDB 10 req/s, burst 10; neither has a daily quota. A call that waited more than a second logs one warning per process and provider.
 
+## Fields and merge
+
+23. `fliks_domain::metadata::field::Field` is the closed set of fields a provider record fills, checked in Rust (a `CHECK` would need a migration per field). Each owns the record keys of `metadata.md` rules 24, 25, 31 and 32 listed here:
+
+    | Field | Record keys |
+    |---|---|
+    | `title` | `title` |
+    | `originalTitle` | `originalTitle` |
+    | `overview` | `overview` |
+    | `year` | `year` |
+    | `posterUrl` | `posterUrl` |
+    | `fanartUrl` | `fanartUrl`, `additionalFanartUrls` |
+    | `logoUrl` | `logoUrl` |
+    | `rating` | `rating` |
+    | `genres` | `genres` |
+    | `runtime` | `runtime` |
+    | `status` | `status` |
+    | `alternativeTitles` | `alternativeTitles` |
+    | `releaseDates` | `releaseDate`, `inCinemas`, `digitalRelease`, `physicalRelease` |
+    | `collection` | `tmdbCollectionId`, `tmdbCollectionName` |
+    | `credits` | `cast`, `crew` |
+    | `details` | `budget`, `revenue`, `tagline`, `popularity`, `voteCount`, `originalLanguage`, `productionCountries`, `productionCompanies`, `videos`, `keywords` |
+    | `ids` | `tmdbId`, `tvdbId`, `imdbId` |
+
+    A key no field owns (`provider`, `mediaType`, `genreIds`, `seasonCount`, `episodeCount`) is not merged: the first record that has it supplies it.
+24. A value is empty when it is `null`, `""` or `[]`; under `ids` a `0` is empty too (TVDB answers `tmdbId: 0` for a title it has no TMDB link for).
+25. `merge(records, order, locked)` takes `(ExternalProvider, Map)` records, a `FieldOrder` and the locked fields, and answers the merged map and the provenance `[(Field, ExternalProvider)]`:
+    - the keys of a field merge independently: for each, the first provider of the field's order whose record has a non-empty value wins; when none has, the first record that has the key supplies it as it is, so one record merges to itself, `null` and `""` included;
+    - a locked field's keys are left out of the map and the provenance;
+    - the provenance names, for every unlocked field with a non-empty winner, the provider of its first non-empty key in the order of rule 23.
+26. `FieldOrder::new(kind, first)`: the providers of `first` (the season's, the media's, the library's preferred provider, most specific first), then the kind's default `[tmdb, tvdb]`, duplicates dropped. `providers(field)` answers the order of one field; every field has the same order today.
+27. Video reads one provider per media (`metadata.md` rule 46), so the merge there is over one record and is the identity: refresh and import write what they wrote before. An import whose library prefers another provider (`metadata.md` rule 49) merges `[(preferred, its record), (found, the finder's record restricted to the `ids` keys)]`: every field comes from the preferred record, and an id it lacks comes from the finder's. Merging whole video records from several providers is a later switch.
+28. Golden vectors: `fixtures/metadata-merge/cases.json` (`BLESS=1`): one record, two records with gaps, a locked field, an empty list against a missing key, the ids merge of rule 27.
+
+## Snapshots
+
+29. `metadata_snapshots(provider, resource, kind, "externalId", language, body, "fetchedAt", "expiresAt")`, `PRIMARY KEY (provider, resource, kind, "externalId", language)`, an index on `"expiresAt"`. `resource` is `work` or `children` (`person` and `chapters` come with the book providers); `kind` is the media kind the id is read as (TMDB numbers movies and shows apart); `language` is the resolved TMDB locale (`fr-FR`). `body` is the provider's mapped record, or the mapped list for `children`, never the raw HTTP body. `"expiresAt"` is `NULL` for a record that never expires.
+30. `Metadata::work` and `Metadata::children` (the media services' reads of `fetch_work` and `fetch_children`) go through `snapshot(key, ttl, fetch)`: a row not expired answers without a call; otherwise the call runs and the row is upserted with `"expiresAt" = now() + ttl`. The routes under `/api/metadata/*` and the request facts keep calling the provider.
+31. `MetadataProvider::snapshot_ttl()` is `Some(ttl)` or `None` (never expires); the default is `Some(0)`, which TMDB and TVDB keep: every refresh still calls the provider, and the row it writes is `"expiresAt" = "fetchedAt"`. A provider failure fails the call whatever snapshot exists (`metadata.md` rule 45).
+32. Single-flight: concurrent calls for one `(provider, resource, kind, id, language)` share one provider call; the shared result is the provider's answer or its `Upstream`, and each caller then writes the row.
+33. The `RefreshMetadata` job (04:00, `scheduler.md` rule 23) first deletes the snapshots whose `"expiresAt"` is older than 30 days; a failure of that delete is logged and does not stop the refresh.
+
+## Provenance and locks
+
+34. `media_field_sources("mediaId", field, provider, locked, "updatedAt")`, `PRIMARY KEY ("mediaId", field)`, `FOREIGN KEY ("mediaId") REFERENCES media (id) ON DELETE CASCADE`. `field` is a `Field` name, checked in Rust; `provider` is `NULL` when the value was set by hand; `locked` defaults to `false`. No row is backfilled: a media never refreshed has none, which reads as an unknown source.
+35. `refreshMetadata` replaces the media's rows that are not locked with the provenance of rule 25, in the transaction that writes the media columns; the import writes them in the transaction that inserts the media. A locked row is never touched.
+36. A locked field keeps its stored value: the merge leaves it out and the writers skip it. `title`, `originalTitle`, `status`, `genres` and `alternativeTitles` keep their column (`COALESCE` over a `NULL` parameter); `year`, `overview`, `posterUrl`, `logoUrl`, `rating` and `runtime` already keep theirs on a `NULL`; `fanartUrl` also keeps `additionalFanartUrls`; `releaseDates` keeps the stored dates; `collection` keeps the media's collection entries; `details` keeps the detail row; `credits` leaves the persons and `media_credits` untouched; `ids` keeps the external ids. Seasons and episodes have no field and are not locked.
+37. Nothing sets a lock yet: `PUT /api/media/:id` keeps its meaning (an edit is overwritten at the next refresh) and there is no lock route. The table and the rule are tested with seeded locks.
+
+## Migration
+
+38. `1789000000130_metadata-snapshots.sql` creates `metadata_snapshots` and `media_field_sources`. Tables only; the wire is unchanged.
+
 ## Tests
 
 Rust unit tests: the limiter scripted over a fake clock (burst then steady rate, background capped at its share while interactive passes, pause and its emptied buckets, backoff doubling, reset and one step per pause, quota spent then reset at UTC midnight, refused calls not counted, new limits, 100 background calls never above the rate); `Guarded` against a stub answering 429 with and without `Retry-After`, 503 and `Retry-After: 0`, on a fake clock with no real sleep (background retry and cap, interactive single retry and 5 s budget, the throttle answer returned when the budget runs out, spent quota without a request, the observer, an open breaker taking no token); TMDB `seasons` against a stub (a missing season dropped, a throttled one failing the list); the `Retry-After` parser.
+
+Domain: the merge over the golden vectors of rule 28, plus unit tests of the empty rule and of `FieldOrder`. Integration (`tests/it/metadata.rs`): a second `snapshot` inside its TTL makes no call and one past it does, concurrent calls make one, a refresh calls TMDB every time and leaves one snapshot and the provenance rows, a locked `overview` and a locked `credits` survive a refresh, the cleanup. `tests/it/migrations.rs`: the two tables.
