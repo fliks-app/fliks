@@ -3,6 +3,7 @@ pub(crate) mod aggregates;
 mod calendar;
 pub mod details;
 pub mod external_ids;
+pub mod field_sources;
 pub mod hydrate;
 pub mod items;
 pub(crate) mod list;

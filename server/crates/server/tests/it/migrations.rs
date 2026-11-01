@@ -1390,6 +1390,38 @@ async fn m1789000120_splits_details_by_kind_and_moves_collections(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = false)]
+async fn m1789000130_creates_snapshots_and_field_sources(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_130).await;
+    sql(
+        &pool,
+        "INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie')",
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_130).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media_field_sources ("mediaId", field, provider) VALUES (1, 'title', 'tmdb');
+           INSERT INTO metadata_snapshots (provider, resource, kind, "externalId", body)
+             VALUES ('tmdb', 'work', 'movie', '603', '{}')"#,
+    )
+    .await;
+    let (locked, language, expires): (bool, String, Option<String>) = sqlx::query_as(
+        r#"SELECT (SELECT locked FROM media_field_sources), (SELECT language FROM metadata_snapshots),
+                  (SELECT "expiresAt"::text FROM metadata_snapshots)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((locked, language.as_str(), expires), (false, "", None));
+    sql(&pool, "DELETE FROM media WHERE id = 1").await;
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media_field_sources")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0, "sources go with their media");
+}
+
+#[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
     fliks_server::db::migrate(&pool).await.unwrap();
 

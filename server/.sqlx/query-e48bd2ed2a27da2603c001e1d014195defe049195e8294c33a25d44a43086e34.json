@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_field_sources (\"mediaId\", field, provider)\n           SELECT $1, f, p FROM UNNEST($2::text[], $3::text[]) AS t(f, p)\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e48bd2ed2a27da2603c001e1d014195defe049195e8294c33a25d44a43086e34"
+}

@@ -6,7 +6,7 @@ pub const MAX_PAUSE_MS: u64 = 300_000;
 const BACKOFF_START_MS: u64 = 1_000;
 const BACKOFF_MAX_MS: u64 = 60_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Priority {
     /// A person is waiting for the answer.
     Interactive,

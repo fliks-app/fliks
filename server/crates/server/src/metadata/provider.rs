@@ -10,6 +10,7 @@ use fliks_domain::{
 };
 use futures_util::future::BoxFuture;
 use serde_json::Value;
+use std::time::Duration;
 
 pub type Call<'a, T> = BoxFuture<'a, Result<T, Upstream>>;
 
@@ -27,6 +28,10 @@ pub trait MetadataProvider: Send + Sync {
     /// Whether `fetch_person` and `person_credits` are answered.
     fn has_persons(&self) -> bool;
     fn limits(&self) -> Limits;
+    /// How long a fetched record answers without a call; `None` never expires.
+    fn snapshot_ttl(&self) -> Option<Duration> {
+        Some(Duration::ZERO)
+    }
     fn search<'a>(
         &'a self,
         q: &'a Search<'a>,

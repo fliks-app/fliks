@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET title = COALESCE($2, title), \"originalTitle\" = COALESCE($3, \"originalTitle\"),\n             \"alternativeTitles\" = COALESCE($4, \"alternativeTitles\"),\n             year = COALESCE($5, year), overview = COALESCE($6, overview),\n             status = COALESCE($7::text::media_status_enum, status), \"posterUrl\" = COALESCE($8, \"posterUrl\"),\n             \"fanartUrl\" = COALESCE($9, \"fanartUrl\"), \"logoUrl\" = COALESCE($10, \"logoUrl\"),\n             rating = COALESCE($11, rating), genres = COALESCE($12, genres), runtime = COALESCE($13, runtime)\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Int4",
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Float8",
+        "Jsonb",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b4fe0eda3bd73194cd1383a6f65c923038e44cf0576ab3ce0dc3338ee720e404"
+}

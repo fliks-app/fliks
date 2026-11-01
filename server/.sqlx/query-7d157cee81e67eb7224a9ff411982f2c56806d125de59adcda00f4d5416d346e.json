@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO metadata_snapshots (provider, resource, kind, \"externalId\", language, body, \"expiresAt\")\n               VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))\n               ON CONFLICT (provider, resource, kind, \"externalId\", language) DO UPDATE\n               SET body = EXCLUDED.body, \"fetchedAt\" = now(), \"expiresAt\" = EXCLUDED.\"expiresAt\"",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7d157cee81e67eb7224a9ff411982f2c56806d125de59adcda00f4d5416d346e"
+}

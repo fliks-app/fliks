@@ -4,6 +4,7 @@ use super::{body::Body, entity_or_404, metadata, resolve_profile};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
     external_ids::{self, Ids},
+    field_sources::set_field_sources,
     items,
 };
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
     images::paths::{Target as Art, Variant},
     ingest::load_media,
     libraries::accessible_library_ids,
-    metadata::service::{self, Details, Lookup},
+    metadata::service::{self, Details, Found, Lookup},
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -163,13 +164,15 @@ pub async fn import_title(
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{}\"", d.title)))?
         .to_owned();
     let mut tx = st.db.begin().await?;
-    let (id, free) = insert_media(&mut tx, &imp, d, &folder).await.map_err(|e| {
-        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
-            AppError::conflict("This title is already in the library")
-        } else {
-            e.into()
-        }
-    })?;
+    let (id, free) = insert_media(&mut tx, &imp, &found, &folder)
+        .await
+        .map_err(|e| {
+            if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
+                AppError::conflict("This title is already in the library")
+            } else {
+                e.into()
+            }
+        })?;
     if !free {
         return Err(AppError::conflict("This title is already in the library"));
     }
@@ -202,7 +205,7 @@ pub async fn import_title(
     );
     let (st2, details) = (st.clone(), found.details.clone());
     tokio::spawn(async move {
-        metadata::download_media_images(&st2, id, &details).await;
+        metadata::download_media_images(&st2, id, &details, &[]).await;
         for (sid, stills, poster) in stills {
             metadata::download_season_images(&st2, sid, stills, poster).await;
         }
@@ -221,7 +224,7 @@ pub async fn import_title(
     });
     let (st2, details) = (st.clone(), d.clone());
     tokio::spawn(async move {
-        if let Err(e) = service::persist_credits(&st2, id, imp.media_type, &details).await {
+        if let Err(e) = service::persist_credits(&st2, id, imp.media_type, &details, &[]).await {
             tracing::warn!("cast/metadata persist of media #{id} failed: {e}");
         }
     });
@@ -298,9 +301,10 @@ fn day(s: &Option<String>) -> Option<String> {
 async fn insert_media(
     tx: &mut PgConnection,
     imp: &Import,
-    d: &Details,
+    found: &Found,
     folder: &str,
 ) -> Result<(i32, bool), sqlx::Error> {
+    let d = &found.details;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type,
              overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime,
@@ -350,7 +354,9 @@ async fn insert_media(
         tvdb: d.tvdb_id,
         imdb: d.imdb_id.clone(),
     };
-    Ok((id, ids.fill(tx, id, imp.media_type).await?.taken.is_empty()))
+    let free = ids.fill(tx, id, imp.media_type).await?.taken.is_empty();
+    set_field_sources(tx, id, &found.provenance).await?;
+    Ok((id, free))
 }
 
 const TMDB_FIELDS: [&str; 5] = [

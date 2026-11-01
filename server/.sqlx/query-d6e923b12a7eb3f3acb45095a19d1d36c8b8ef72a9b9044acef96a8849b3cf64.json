@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT body AS \"body!\" FROM metadata_snapshots\n               WHERE provider = $1 AND resource = $2 AND kind = $3 AND \"externalId\" = $4 AND language = $5\n                 AND (\"expiresAt\" IS NULL OR \"expiresAt\" > now())",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "body!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "metadata_snapshots",
+            "name": "body"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d6e923b12a7eb3f3acb45095a19d1d36c8b8ef72a9b9044acef96a8849b3cf64"
+}

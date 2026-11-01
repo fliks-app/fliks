@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM metadata_snapshots WHERE \"expiresAt\" < now() - interval '30 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "5304d5a41f3a001dda70cecd18b2f40a81082ecbec5891bbb79ebe2cfbd898c6"
+}
