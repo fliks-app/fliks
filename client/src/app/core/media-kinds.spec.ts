@@ -11,7 +11,8 @@ import {
 
 describe('media kind registry', () => {
   it('describes every kind', () => {
-    expect(MEDIA_KINDS).toEqual(['movie', 'series']);
+    expect(MEDIA_KINDS).toEqual(['movie', 'series', 'book']);
+    expect(KIND_REGISTRY.book).toMatchObject({ segment: 'books', providerSegment: 'book', hasSeasons: false });
     expect(KIND_REGISTRY.movie).toMatchObject({ segment: 'movies', providerSegment: 'movie', hasSeasons: false });
     expect(KIND_REGISTRY.series).toMatchObject({ segment: 'series', providerSegment: 'tv', hasSeasons: true });
   });
