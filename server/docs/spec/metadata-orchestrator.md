@@ -63,13 +63,13 @@ Scope: how the server reaches a metadata provider. The per-provider mappings sta
     | `details` | `budget`, `revenue`, `tagline`, `popularity`, `voteCount`, `originalLanguage`, `productionCountries`, `productionCompanies`, `videos`, `keywords` |
     | `ids` | `tmdbId`, `tvdbId`, `imdbId` |
 
-    A key no field owns (`provider`, `mediaType`, `genreIds`, `seasonCount`, `episodeCount`) is not merged: the first record that has it supplies it.
+    A key no field owns (`provider`, `mediaType`, `genreIds`, `seasonCount`, `episodeCount`) is merged by the same order and has no provenance.
 24. A value is empty when it is `null`, `""` or `[]`; under `ids` a `0` is empty too (TVDB answers `tmdbId: 0` for a title it has no TMDB link for).
 25. `merge(records, order, locked)` takes `(ExternalProvider, Map)` records, a `FieldOrder` and the locked fields, and answers the merged map and the provenance `[(Field, ExternalProvider)]`:
     - the keys of a field merge independently: for each, the first provider of the field's order whose record has a non-empty value wins; when none has, the first record that has the key supplies it as it is, so one record merges to itself, `null` and `""` included;
     - a locked field's keys are left out of the map and the provenance;
     - the provenance names, for every unlocked field with a non-empty winner, the provider of its first non-empty key in the order of rule 23.
-26. `FieldOrder::new(kind, first)`: the providers of `first` (the season's, the media's, the library's preferred provider, most specific first), then the kind's default `[tmdb, tvdb]`, duplicates dropped. `providers(field)` answers the order of one field; every field has the same order today.
+26. `FieldOrder::new(kind, first)`: the providers of `first` (the season's, the media's, the library's preferred provider, most specific first), then the kind's default `[tmdb, tvdb]`, duplicates dropped. `providers()` is that order, the same for every field today.
 27. Video reads one provider per media (`metadata.md` rule 46), so the merge there is over one record and is the identity: refresh and import write what they wrote before. An import whose library prefers another provider (`metadata.md` rule 49) merges `[(preferred, its record), (found, the finder's record restricted to the `ids` keys)]`: every field comes from the preferred record, and an id it lacks comes from the finder's. Merging whole video records from several providers is a later switch.
 28. Golden vectors: `fixtures/metadata-merge/cases.json` (`BLESS=1`): one record, two records with gaps, a locked field, an empty list against a missing key, the ids merge of rule 27.
 
