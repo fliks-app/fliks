@@ -287,7 +287,7 @@ impl Harness {
         st.plugins = Arc::new(Plugins::new(
             pool.clone(),
             Options {
-                version: "5.0.0".into(),
+                version: "6.0.0".into(),
                 runtime_dir: dir,
                 disabled: false,
                 pg: fliks_server::plugins::db::PgTarget {
