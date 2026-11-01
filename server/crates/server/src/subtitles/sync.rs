@@ -161,7 +161,7 @@ pub fn progress_subject(media: &MediaCtx, ep: Option<(i32, i32, i32, Option<Stri
 /// The episode of a subtitle row: `(id, seasonNumber, episodeNumber, title)`.
 pub async fn episode_of(st: &AppState, id: i32) -> Option<(i32, i32, i32, Option<String>)> {
     sqlx::query_as(
-        r#"SELECT e.id, s."seasonNumber", e."episodeNumber", e.title FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE e.id = $1"#,
+        r#"SELECT e.id, s."number", e."number", e.title FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = $1"#,
     )
     .bind(id)
     .fetch_optional(&st.db)

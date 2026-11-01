@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM items WHERE \"groupId\" = $1 AND NOT (\"number\" = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "731504df9b9010da807f114fc9492f43cd4b436c255582e3ff4148fc744095a9"
+}

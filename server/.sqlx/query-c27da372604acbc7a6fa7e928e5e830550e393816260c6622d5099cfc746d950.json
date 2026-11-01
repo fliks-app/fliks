@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE items SET monitored = $1 WHERE id = $2 AND monitored IS DISTINCT FROM $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c27da372604acbc7a6fa7e928e5e830550e393816260c6622d5099cfc746d950"
+}

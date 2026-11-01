@@ -1,5 +1,6 @@
 //! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
 use super::{already_running, body::Body, entity_or_404, gate, subject};
+use crate::media::items;
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{
@@ -64,7 +65,7 @@ pub async fn download_season_images(
             .download_and_store(&url, &Target::episode(ep))
             .await
             && let Err(e) = sqlx::query!(
-                r#"UPDATE episodes SET "stillUrl" = $2 WHERE id = $1"#,
+                r#"UPDATE items SET "stillUrl" = $2 WHERE id = $1"#,
                 ep,
                 local
             )
@@ -80,7 +81,7 @@ pub async fn download_season_images(
             .download_and_store(&p, &Target::season(season))
             .await
         && let Err(e) = sqlx::query!(
-            r#"UPDATE seasons SET "posterUrl" = $2 WHERE id = $1"#,
+            r#"UPDATE item_groups SET "posterUrl" = $2 WHERE id = $1"#,
             season,
             local
         )
@@ -104,7 +105,7 @@ pub async fn apply_season(
     sd: &SeasonDetails,
 ) -> Result<Vec<(i32, String)>, sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE seasons SET overview = COALESCE($2, overview), "airDate" = COALESCE($3, "airDate")
+        r#"UPDATE item_groups SET overview = COALESCE($2, overview), "airDate" = COALESCE($3, "airDate")
            WHERE id = $1 AND (overview IS DISTINCT FROM COALESCE($2, overview)
              OR "airDate" IS DISTINCT FROM COALESCE($3, "airDate"))"#,
         sid,
@@ -134,11 +135,11 @@ pub async fn apply_season(
         .collect();
     let runtimes: Vec<Option<i32>> = eps.iter().map(|e| e.runtime).collect();
     sqlx::query!(
-        r#"UPDATE episodes e SET title = COALESCE(v.title, e.title), overview = COALESCE(v.overview, e.overview),
+        r#"UPDATE items e SET title = COALESCE(v.title, e.title), overview = COALESCE(v.overview, e.overview),
              "airDate" = COALESCE(v.air::date, e."airDate"), runtime = COALESCE(v.runtime, e.runtime)
            FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
              AS v(n, title, overview, air, runtime)
-           WHERE e."seasonId" = $1 AND e."episodeNumber" = v.n
+           WHERE e."groupId" = $1 AND e."number" = v.n
              AND (e.title IS DISTINCT FROM COALESCE(v.title, e.title)
                OR e.overview IS DISTINCT FROM COALESCE(v.overview, e.overview)
                OR e."airDate" IS DISTINCT FROM COALESCE(v.air::date, e."airDate")
@@ -152,24 +153,30 @@ pub async fn apply_season(
     )
     .execute(&mut *c)
     .await?;
+    let media = sqlx::query_scalar!(r#"SELECT "mediaId" FROM item_groups WHERE id = $1"#, sid)
+        .fetch_one(&mut *c)
+        .await?;
+    let edition = items::video_edition(&mut *c, media).await?;
     sqlx::query!(
-        r#"INSERT INTO episodes ("seasonId", "episodeNumber", title, overview, "airDate", runtime, monitored)
-           SELECT $1, v.n, v.title, v.overview, v.air::date, v.runtime, true
+        r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", title, overview, "airDate", runtime, monitored)
+           SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, true
            FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
              AS v(n, title, overview, air, runtime)
-           WHERE NOT EXISTS (SELECT 1 FROM episodes e WHERE e."seasonId" = $1 AND e."episodeNumber" = v.n)"#,
+           WHERE NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)"#,
         sid,
         &numbers,
         &titles as &[Option<String>],
         &overviews as &[Option<String>],
         &airs as &[Option<String>],
-        &runtimes as &[Option<i32>]
+        &runtimes as &[Option<i32>],
+        media,
+        edition
     )
     .execute(&mut *c)
     .await?;
     let ids: std::collections::HashMap<i32, i32> = sqlx::query!(
-        r#"SELECT min(id) AS "id!", "episodeNumber" AS n FROM episodes
-           WHERE "seasonId" = $1 AND "episodeNumber" = ANY($2) GROUP BY "episodeNumber""#,
+        r#"SELECT min(id) AS "id!", "number" AS "n!" FROM items
+           WHERE "groupId" = $1 AND "number" = ANY($2) GROUP BY "number""#,
         sid,
         &numbers
     )
@@ -199,7 +206,7 @@ async fn apply_seasons(
     for sd in seasons {
         let n = sd.season_number;
         let sid = match sqlx::query_scalar!(
-            r#"SELECT id FROM seasons WHERE "mediaId" = $1 AND "seasonNumber" = $2 ORDER BY id LIMIT 1"#,
+            r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2 ORDER BY id LIMIT 1"#,
             media_id,
             n
         )
@@ -209,7 +216,7 @@ async fn apply_seasons(
             Some(id) => id,
             None => {
                 sqlx::query_scalar!(
-                    r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored) VALUES ($1, $2, $3) RETURNING id"#,
+                    r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3) RETURNING id"#,
                     media_id,
                     n,
                     n > 0
@@ -223,7 +230,7 @@ async fn apply_seasons(
         if !live.is_empty() {
             let listed: Vec<i32> = live.into_iter().collect();
             sqlx::query!(
-                r#"DELETE FROM episodes WHERE "seasonId" = $1 AND NOT ("episodeNumber" = ANY($2))"#,
+                r#"DELETE FROM items WHERE "groupId" = $1 AND NOT ("number" = ANY($2))"#,
                 sid,
                 &listed
             )
@@ -242,7 +249,7 @@ async fn apply_seasons(
 
 async fn count_episodes(st: &AppState, media_id: i32) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE s."mediaId" = $1"#,
+        r#"SELECT count(*) AS "n!" FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE s."mediaId" = $1"#,
         media_id
     )
     .fetch_one(&st.db)
@@ -339,7 +346,7 @@ async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::
     }
     let live: Vec<i32> = found.seasons.iter().map(|s| s.season_number).collect();
     sqlx::query!(
-        r#"DELETE FROM seasons WHERE "mediaId" = $1 AND NOT ("seasonNumber" = ANY($2))"#,
+        r#"DELETE FROM item_groups WHERE "mediaId" = $1 AND NOT ("number" = ANY($2))"#,
         id,
         &live
     )
@@ -574,7 +581,7 @@ async fn refresh_one_episode(st: &AppState, episode: i32) -> Result<(), AppError
         return Ok(());
     };
     sqlx::query!(
-        r#"UPDATE episodes SET title = COALESCE($2, title), overview = COALESCE($3, overview),
+        r#"UPDATE items SET title = COALESCE($2, title), overview = COALESCE($3, overview),
              "airDate" = COALESCE($4::text::date, "airDate"), runtime = COALESCE($5, runtime)
            WHERE id = $1 AND (title IS DISTINCT FROM COALESCE($2, title)
              OR overview IS DISTINCT FROM COALESCE($3, overview)
@@ -595,7 +602,7 @@ async fn refresh_one_episode(st: &AppState, episode: i32) -> Result<(), AppError
             .await
     {
         sqlx::query!(
-            r#"UPDATE episodes SET "stillUrl" = $2 WHERE id = $1"#,
+            r#"UPDATE items SET "stillUrl" = $2 WHERE id = $1"#,
             episode,
             local
         )

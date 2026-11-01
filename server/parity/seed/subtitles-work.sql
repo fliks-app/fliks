@@ -14,10 +14,15 @@ INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
  (101, 'movie', 'imdb', 'tt9000101'),
  (103, 'series', 'tmdb', '5103'),
  (103, 'series', 'imdb', 'tt9000103');
-INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "mediaId") VALUES
+INSERT INTO editions ("mediaId", family)
+  SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
+INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId") VALUES
  (101, '2026-01-01', '2026-01-01', 1, true, 103);
-INSERT INTO episodes (id, "createdAt", "updatedAt", "episodeNumber", title, monitored, "hasFile", "seasonId") VALUES
- (101, '2026-01-01', '2026-01-01', 1, 'Pilot', true, true, 101);
+INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "hasFile", "groupId", "mediaId", "editionId") VALUES
+ (101, '2026-01-01', '2026-01-01', 1, 'Pilot', true, true, 101, 103, (SELECT id FROM editions WHERE "mediaId" = 103));
+INSERT INTO items ("mediaId", "editionId", monitored)
+  SELECT m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
+  WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;
 INSERT INTO media_files (id, "createdAt", "updatedAt", "mediaId", "episodeId", "relativePath", size, quality, language) VALUES
  (101, '2026-01-01', '2026-01-01', 101, NULL, 'Work.Movie.2020.1080p.BluRay.x264-GRP.mkv', 73237, 'Bluray-1080p', 'en'),
  (102, '2026-01-01', '2026-01-01', 103, 101, 'Season 01/Work.Show.S01E01.1080p.WEB-DL.x264-GRP.mkv', 73237, 'WEBDL-1080p', 'en');

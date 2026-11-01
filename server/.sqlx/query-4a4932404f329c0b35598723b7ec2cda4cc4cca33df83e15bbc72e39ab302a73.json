@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, s.\"mediaId\" AS \"media_id!\" FROM items e JOIN item_groups s ON s.id = e.\"groupId\"\n               WHERE s.id = $1 AND s.\"mediaId\" IS NOT NULL ORDER BY e.\"number\", e.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "mediaId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4a4932404f329c0b35598723b7ec2cda4cc4cca33df83e15bbc72e39ab302a73"
+}

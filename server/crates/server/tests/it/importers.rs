@@ -433,6 +433,12 @@ async fn radarr_import_writes_media_profiles_and_subtitles(pool: PgPool) {
     )
     .await;
     assert_eq!(b["imported"], 0, "skip mode keeps every title");
+    let made: Vec<i32> = sqlx::query_scalar("SELECT id FROM media WHERE id <> 50")
+        .fetch_all(&c.pool)
+        .await
+        .unwrap();
+    assert!(!made.is_empty());
+    crate::items::assert_media_have_shells(&c.pool, &made).await;
 }
 
 #[sqlx::test(migrations = false)]
@@ -521,6 +527,7 @@ async fn sonarr_import_needs_v4_and_refreshes_new_series(pool: PgPool) {
         rows[0],
         (2000, "continuing".into(), "Parity Series A".into())
     );
+    crate::items::assert_media_have_shells(&c.pool, &[]).await;
 }
 
 #[sqlx::test(migrations = false)]

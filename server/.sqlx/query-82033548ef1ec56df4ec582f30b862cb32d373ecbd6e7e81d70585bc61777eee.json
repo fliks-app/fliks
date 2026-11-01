@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mf.id, mf.\"relativePath\" AS relative_path, mf.\"episodeId\" AS episode_id,\n                  s.\"number\" AS \"season_number?\", e.\"number\" AS \"episode_number?\",\n                  e.\"endNumber\" AS end\n           FROM media_files mf LEFT JOIN items e ON e.id = mf.\"episodeId\"\n           LEFT JOIN item_groups s ON s.id = e.\"groupId\"\n           WHERE mf.\"mediaId\" = $1 AND mf.id <> ALL($2) ORDER BY mf.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "relative_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "episodeId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "season_number?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "episode_number?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "end",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "endNumber"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "82033548ef1ec56df4ec582f30b862cb32d373ecbd6e7e81d70585bc61777eee"
+}

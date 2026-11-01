@@ -627,8 +627,12 @@ async fn seed_library(pool: &PgPool) {
             .bind(format!("Movie {n}")).bind(1000 + n).execute(pool).await.unwrap();
     }
     q(r#"WITH m AS (INSERT INTO media (title, type, "libraryId", "folderName") VALUES ('Show', 'series', 2, 'Show') RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (2000)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).execute(pool).await.unwrap();
-    q(r#"INSERT INTO seasons ("seasonNumber", "mediaId") SELECT 1, id FROM media WHERE type = 'series'"#).execute(pool).await.unwrap();
-    q(r#"INSERT INTO episodes ("episodeNumber", title, "seasonId") SELECT n, 'E' || n, s.id FROM seasons s, generate_series(1,2) n"#).execute(pool).await.unwrap();
+    q(r#"INSERT INTO item_groups ("number", "mediaId") SELECT 1, id FROM media WHERE type = 'series'"#).execute(pool).await.unwrap();
+    q(r#"INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    q(r#"INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") SELECT n, 'E' || n, s.id, s."mediaId", ed.id FROM item_groups s JOIN editions ed ON ed."mediaId" = s."mediaId", generate_series(1,2) n"#).execute(pool).await.unwrap();
 }
 
 async fn wait_for(

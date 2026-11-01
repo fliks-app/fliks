@@ -1,0 +1,85 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, s.\"number\" AS season_number, e.\"number\" AS \"episode_number!\",\n                  e.\"endNumber\" AS end, e.title, e.\"airDate\"::text AS air_date\n           FROM item_groups s JOIN items e ON e.\"groupId\" = s.id\n           WHERE s.\"mediaId\" = $1 AND s.\"number\" = $2 AND e.\"number\" = $3\n           ORDER BY s.id, e.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "season_number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "episode_number!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "end",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "endNumber"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "air_date",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "531f3c805438a4064154057d580cacda36497ff33f6aa242ac25239d086e244d"
+}

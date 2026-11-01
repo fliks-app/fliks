@@ -57,7 +57,7 @@ type Two = Result<PathParams<(i32, i32)>, AppError>;
 /// `(season, episode)` of an episode row of the media.
 pub async fn episode_numbers(st: &AppState, media: i32, episode: i32) -> Res<Option<(i64, i64)>> {
     let r: Option<(i32, i32)> = sqlx::query_as(
-        r#"SELECT s."seasonNumber", e."episodeNumber" FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+        r#"SELECT s."number", e."number" FROM items e JOIN item_groups s ON s.id = e."groupId"
            WHERE s."mediaId" = $1 AND e.id = $2"#,
     )
     .bind(media)

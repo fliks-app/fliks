@@ -504,13 +504,18 @@ async fn show(pool: &PgPool) -> Show {
     )
     .await;
     fs::create_dir_all(dir.join("Show")).unwrap();
+    exec(
+        pool,
+        &format!(r#"INSERT INTO editions ("mediaId", family) VALUES ({media}, 'video')"#),
+    )
+    .await;
     let mut seasons = [0; 2];
     let mut eps = [0; 4];
     for (i, season) in seasons.iter_mut().enumerate() {
         *season = scalar(
             pool,
             &format!(
-                r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES ({}, {media}) RETURNING id"#,
+                r#"INSERT INTO item_groups ("number", "mediaId") VALUES ({}, {media}) RETURNING id"#,
                 i + 1
             ),
         )
@@ -520,8 +525,9 @@ async fn show(pool: &PgPool) -> Show {
             let ep = scalar(
                 pool,
                 &format!(
-                    r#"INSERT INTO episodes ("episodeNumber", "seasonId", "hasFile", "airDate")
-                    VALUES ({}, {season}, true, '2020-01-0{}') RETURNING id"#,
+                    r#"INSERT INTO items ("number", "groupId", "hasFile", "airDate", "mediaId", "editionId")
+                    VALUES ({}, {season}, true, '2020-01-0{}', {media}, (SELECT id FROM editions WHERE "mediaId" = {media}))
+                    RETURNING id"#,
                     n + 1,
                     k + 1
                 ),
@@ -570,7 +576,7 @@ async fn played(pool: &PgPool, ep: i32, days_ago: i32) {
         &format!(
             r#"INSERT INTO playback_states ("userId", "mediaId", "episodeId", completed, "lastPlayedAt")
             SELECT {user}, s."mediaId", {ep}, true, now() - interval '{days_ago} days'
-            FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE e.id = {ep}"#
+            FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = {ep}"#
         ),
     )
     .await;
@@ -719,12 +725,12 @@ async fn a_season_is_deleted_and_unmonitored_but_the_series_stays(pool: PgPool) 
     assert_eq!(files_left(&pool).await, ["S01E01.mkv", "S01E02.mkv"]);
     assert!(!s.dir.join("Show/S02E01.mkv").exists());
     assert!(s.dir.join("Show/S01E01.mkv").exists());
-    let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM episodes ORDER BY id")
+    let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM items ORDER BY id")
         .fetch_all(&pool)
         .await
         .unwrap();
     assert_eq!(m, [true, true, false, false]);
-    let sm: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM seasons ORDER BY id")
+    let sm: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM item_groups ORDER BY id")
         .fetch_all(&pool)
         .await
         .unwrap();
@@ -756,16 +762,17 @@ async fn an_episode_is_deleted_alone(pool: PgPool) {
         files_left(&pool).await,
         ["S01E02.mkv", "S02E01.mkv", "S02E02.mkv"]
     );
-    let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM episodes ORDER BY id")
+    let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM items ORDER BY id")
         .fetch_all(&pool)
         .await
         .unwrap();
     assert_eq!(m, [false, true, true, true]);
-    let season_monitored: bool = sqlx::query_scalar("SELECT monitored FROM seasons WHERE id = $1")
-        .bind(s.seasons[0])
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let season_monitored: bool =
+        sqlx::query_scalar("SELECT monitored FROM item_groups WHERE id = $1")
+            .bind(s.seasons[0])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(season_monitored);
     assert_eq!(media_ids(&pool).await, vec![s.media]);
 }

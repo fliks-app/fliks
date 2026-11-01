@@ -40,13 +40,18 @@ INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
  (208, 'series', 'tmdb', '3003'),
  (209, 'movie', 'tmdb', '1004'),
  (210, 'series', 'tmdb', '3004');
-INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "mediaId", "preferredProvider") VALUES
+INSERT INTO editions ("mediaId", family)
+  SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
+INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId", "preferredProvider") VALUES
  (201, '2026-01-01', '2026-01-01', 0, false, 202, NULL),
  (202, '2026-01-01', '2026-01-01', 1, true, 202, 'tvdb'),
  (203, '2026-01-01', '2026-01-01', 2, true, 202, NULL);
-INSERT INTO episodes (id, "createdAt", "updatedAt", "episodeNumber", title, monitored, "hasFile", "seasonId") VALUES
- (201, '2026-01-01', '2026-01-01', 1, 'Old Ep 1', true, false, 202),
- (202, '2026-01-01', '2026-01-01', 9, 'Gone', true, false, 202);
+INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "hasFile", "groupId", "mediaId", "editionId") VALUES
+ (201, '2026-01-01', '2026-01-01', 1, 'Old Ep 1', true, false, 202, 202, (SELECT id FROM editions WHERE "mediaId" = 202)),
+ (202, '2026-01-01', '2026-01-01', 9, 'Gone', true, false, 202, 202, (SELECT id FROM editions WHERE "mediaId" = 202));
+INSERT INTO items ("mediaId", "editionId", monitored)
+  SELECT m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
+  WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;
 INSERT INTO persons (id, "createdAt", "updatedAt", "tmdbId", name, biography, "knownForDepartment", departments, "metadataRefreshedAt", provider) VALUES
  (201, '2026-01-01', '2026-01-01', 102, 'Claude Old Name', 'Old bio', 'Acting', '["Writing"]', now() - interval '30 days', 'tmdb');
 DO $$

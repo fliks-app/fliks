@@ -455,8 +455,8 @@ async fn resolve(
         ));
     }
     let rows: Vec<(i32, i32, String, String, Option<i32>)> = sqlx::query_as(
-        r#"SELECT s.id, s."seasonNumber", m.title, m.type, m."libraryId"
-             FROM seasons s JOIN media m ON m.id = s."mediaId" WHERE s.id = ANY($1) ORDER BY s.id"#,
+        r#"SELECT s.id, s."number", m.title, m.type, m."libraryId"
+             FROM item_groups s JOIN media m ON m.id = s."mediaId" WHERE s.id = ANY($1) ORDER BY s.id"#,
     )
     .bind(ids(&q.season_ids))
     .fetch_all(core)
@@ -476,8 +476,8 @@ async fn resolve(
     }
     type Row = (i32, i32, i32, Option<String>, String, String, Option<i32>);
     let rows: Vec<Row> = sqlx::query_as(
-        r#"SELECT e.id, s."seasonNumber", e."episodeNumber", e.title, m.title, m.type, m."libraryId"
-             FROM episodes e JOIN seasons s ON s.id = e."seasonId" JOIN media m ON m.id = s."mediaId"
+        r#"SELECT e.id, s."number", e."number", e.title, m.title, m.type, m."libraryId"
+             FROM items e JOIN item_groups s ON s.id = e."groupId" JOIN media m ON m.id = s."mediaId"
             WHERE e.id = ANY($1) ORDER BY e.id"#,
     )
     .bind(ids(&q.episode_ids))

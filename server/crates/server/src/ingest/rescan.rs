@@ -4,7 +4,7 @@ use super::{
     library::{Ep, file_name, season_episodes, set_has_file, set_has_file_many},
     load_media, probe,
 };
-use crate::{http::AppError, state::AppState};
+use crate::{http::AppError, media::items, state::AppState};
 use fliks_domain::{
     media::bonus::{is_bonus_dir, is_sample_file},
     naming::{EpisodeNumbers, match_special_by_title, parse_episode_numbers},
@@ -523,10 +523,10 @@ struct Slots {
 impl Slots {
     async fn load(db: &sqlx::PgPool, media: i32) -> Result<Self, sqlx::Error> {
         let rows = sqlx::query!(
-            r#"SELECT s.id AS season_id, s."seasonNumber" AS season, e.id AS "ep_id?",
-                      e."episodeNumber" AS "ep?", e."endEpisodeNumber" AS end, e.title,
+            r#"SELECT s.id AS season_id, s."number" AS season, e.id AS "ep_id?",
+                      e."number" AS "ep?", e."endNumber" AS end, e.title,
                       e."airDate"::text AS air_date
-               FROM seasons s LEFT JOIN episodes e ON e."seasonId" = s.id
+               FROM item_groups s LEFT JOIN items e ON e."groupId" = s.id
                WHERE s."mediaId" = $1 ORDER BY s.id, e.id"#,
             media
         )
@@ -574,8 +574,8 @@ impl Slots {
         if created {
             let nums: Vec<i32> = seasons.into_iter().collect();
             let rows = sqlx::query!(
-                r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored)
-                   SELECT $1, n, n > 0 FROM UNNEST($2::int[]) AS n RETURNING id, "seasonNumber" AS n"#,
+                r#"INSERT INTO item_groups ("mediaId", "number", monitored)
+                   SELECT $1, n, n > 0 FROM UNNEST($2::int[]) AS n RETURNING id, "number" AS n"#,
                 media,
                 &nums
             )
@@ -606,14 +606,17 @@ impl Slots {
             let sids: Vec<i32> = fresh.keys().map(|k| self.seasons[&k.0]).collect();
             let nums: Vec<i32> = fresh.keys().map(|k| k.1).collect();
             let es: Vec<Option<i32>> = fresh.values().copied().collect();
+            let edition = items::video_edition(db, media).await?;
             let rows = sqlx::query!(
-                r#"INSERT INTO episodes ("seasonId", "episodeNumber", "endEpisodeNumber", monitored)
-                   SELECT v.s, v.n, v.e, true
+                r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
+                   SELECT v.s, $4, $5, v.n, v.e, true
                    FROM UNNEST($1::int[], $2::int[], $3::int[]) AS v(s, n, e)
-                   RETURNING id, "seasonId" AS "season_id!", "episodeNumber" AS "n!""#,
+                   RETURNING id, "groupId" AS "season_id!", "number" AS "n!""#,
                 &sids,
                 &nums,
-                &es as &[Option<i32>]
+                &es as &[Option<i32>],
+                media,
+                edition
             )
             .fetch_all(db)
             .await?;
@@ -689,9 +692,9 @@ async fn set_ends(db: &sqlx::PgPool, ends: &[(i32, i32)]) -> Result<(), sqlx::Er
     }
     let (ids, ends): (Vec<i32>, Vec<i32>) = ends.iter().copied().unzip();
     sqlx::query!(
-        r#"UPDATE episodes e SET "endEpisodeNumber" = v.e
+        r#"UPDATE items e SET "endNumber" = v.e
            FROM UNNEST($1::int[], $2::int[]) AS v(id, e)
-           WHERE e.id = v.id AND e."endEpisodeNumber" IS DISTINCT FROM v.e"#,
+           WHERE e.id = v.id AND e."endNumber" IS DISTINCT FROM v.e"#,
         &ids,
         &ends
     )
@@ -743,7 +746,7 @@ pub async fn ensure_season_and_episode(
     );
     let mut created = false;
     let sid = match sqlx::query_scalar!(
-        r#"SELECT id FROM seasons WHERE "mediaId" = $1 AND "seasonNumber" = $2 ORDER BY id LIMIT 1"#,
+        r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2 ORDER BY id LIMIT 1"#,
         media,
         season
     )
@@ -754,7 +757,7 @@ pub async fn ensure_season_and_episode(
         None => {
             created = true;
             sqlx::query_scalar!(
-                r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored) VALUES ($1, $2, $3) RETURNING id"#,
+                r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3) RETURNING id"#,
                 media,
                 season,
                 season > 0
@@ -764,7 +767,7 @@ pub async fn ensure_season_and_episode(
         }
     };
     let ep = sqlx::query!(
-        r#"SELECT id, "endEpisodeNumber" AS end FROM episodes WHERE "seasonId" = $1 AND "episodeNumber" = $2
+        r#"SELECT id, "endNumber" AS end FROM items WHERE "groupId" = $1 AND "number" = $2
            ORDER BY id LIMIT 1"#,
         sid,
         episode
@@ -775,7 +778,7 @@ pub async fn ensure_season_and_episode(
         Some(e) => {
             if end.is_some() && e.end != end {
                 sqlx::query!(
-                    r#"UPDATE episodes SET "endEpisodeNumber" = $2 WHERE id = $1"#,
+                    r#"UPDATE items SET "endNumber" = $2 WHERE id = $1"#,
                     e.id,
                     end
                 )
@@ -786,10 +789,13 @@ pub async fn ensure_season_and_episode(
         }
         None => {
             created = true;
+            let edition = items::video_edition(db, media).await?;
             sqlx::query_scalar!(
-                r#"INSERT INTO episodes ("seasonId", "episodeNumber", "endEpisodeNumber", monitored)
-                   VALUES ($1, $2, $3, true) RETURNING id"#,
+                r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
+                   VALUES ($1, $2, $3, $4, $5, true) RETURNING id"#,
                 sid,
+                media,
+                edition,
                 episode,
                 end
             )

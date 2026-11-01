@@ -39,7 +39,9 @@ async fn one(pool: &PgPool, sql: &str) -> i32 {
 
 async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {
     let id: i32 = sqlx::query_scalar(
-        r#"INSERT INTO episodes ("episodeNumber", "hasFile", "seasonId") VALUES ($1, true, $2) RETURNING id"#,
+        r#"INSERT INTO items ("number", "hasFile", "groupId", "mediaId", "editionId")
+           SELECT $1, true, g.id, g."mediaId", ed.id FROM item_groups g
+           JOIN editions ed ON ed."mediaId" = g."mediaId" WHERE g.id = $2 RETURNING items.id"#,
     )
     .bind(n)
     .bind(season)
@@ -48,7 +50,7 @@ async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {
     .unwrap();
     sqlx::query(
         r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "episodeId")
-           VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM seasons WHERE id = $2), $3)"#,
+           VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM item_groups WHERE id = $2), $3)"#,
     )
     .bind(file)
     .bind(season)
@@ -133,8 +135,13 @@ async fn ctx(pool: PgPool, intro_detect: bool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
+        sqlx::query(r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'video')"#)
+            .bind(m)
+            .execute(&pool)
+            .await
+            .unwrap();
         let s: i32 = sqlx::query_scalar(
-            r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, $1) RETURNING id"#,
+            r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, $1) RETURNING id"#,
         )
         .bind(m)
         .fetch_one(&pool)
@@ -316,7 +323,7 @@ async fn segments_follow_the_persistence_rules(pool: PgPool) {
         "a stale detected marker is kept"
     );
     let stamped: i64 = sqlx::query_scalar(
-        r#"SELECT count(*) FROM episodes WHERE "seasonId" = $1 AND "markersScannedAt" IS NOT NULL"#,
+        r#"SELECT count(*) FROM items WHERE "groupId" = $1 AND "markersScannedAt" IS NOT NULL"#,
     )
     .bind(c.season)
     .fetch_one(&c.pool)
@@ -355,7 +362,7 @@ async fn a_failed_outro_pass_still_stamps_and_the_run_completes(pool: PgPool) {
         .unwrap();
     assert_eq!((intros, outros), (1, 0));
     let stamped: i64 = sqlx::query_scalar(
-        r#"SELECT count(*) FROM episodes WHERE "seasonId" = $1 AND "markersScannedAt" IS NOT NULL"#,
+        r#"SELECT count(*) FROM items WHERE "groupId" = $1 AND "markersScannedAt" IS NOT NULL"#,
     )
     .bind(c.season)
     .fetch_one(&c.pool)
@@ -533,7 +540,7 @@ async fn a_running_season_is_refused(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn detect_all_skips_specials_and_404s_an_unknown_media(pool: PgPool) {
     let c = ctx(pool, true).await;
-    sqlx::query(r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (0, $1)"#)
+    sqlx::query(r#"INSERT INTO item_groups ("number", "mediaId") VALUES (0, $1)"#)
         .bind(c.series)
         .execute(&c.pool)
         .await
@@ -567,7 +574,7 @@ async fn scan_list_filters(pool: PgPool) {
         .unwrap();
     assert_eq!(all.len(), 3);
     assert_eq!(all[0].media_title, "Orphan");
-    sqlx::query(r#"UPDATE episodes SET "markersScannedAt" = now() WHERE "seasonId" = $1"#)
+    sqlx::query(r#"UPDATE items SET "markersScannedAt" = now() WHERE "groupId" = $1"#)
         .bind(c.season)
         .execute(&c.pool)
         .await

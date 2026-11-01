@@ -166,7 +166,7 @@ All tables are in the schema (`server/migrations`).
     LIMIT 1
     ```
 11. **Re-probe write**: `SELECT * FROM media_files WHERE id = $1 LIMIT 1`; `UPDATE media_files SET "streamInfo" = $json WHERE id = $1`.
-12. **Admin streams batch reads**: `SELECT * FROM media_files WHERE id IN (...distinct session file ids)`; `SELECT e.*, s.* FROM episodes e LEFT JOIN seasons s ON s.id = e."seasonId" WHERE e.id IN (...)`.
+12. **Admin streams batch reads**: `SELECT * FROM media_files WHERE id IN (...distinct session file ids)`; `SELECT e.*, s.* FROM items e LEFT JOIN item_groups s ON s.id = e."groupId" WHERE e.id IN (...)`.
 
 ## Events
 

@@ -96,7 +96,7 @@ async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
         r#"SELECT m.id, m.title, m."type" AS kind, m.status::text AS status, m."releaseDate" AS release_date,
                   m.year, m."metadataRefreshedAt" AS refreshed_at, m."posterUrl" AS poster, m.overview,
                   ids.tmdb AS tmdb, ids.tvdb AS tvdb, ids.imdb AS imdb,
-                  (m."type" = 'series' AND NOT EXISTS (SELECT 1 FROM seasons s WHERE s."mediaId" = m.id)) AS no_seasons
+                  (m."type" = 'series' AND NOT EXISTS (SELECT 1 FROM item_groups s WHERE s."mediaId" = m.id)) AS no_seasons
            FROM media m {} ORDER BY m.id"#,
         crate::media::external_ids::ids_join("m")
     )))
@@ -370,9 +370,9 @@ async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
     let mut out = HashMap::new();
     for chunk in ids.chunks(1000) {
         let rows: Vec<Row> = sqlx::query_as(
-            r#"SELECT f.id, m.id, m."type", m.title, e.id, e."episodeNumber", e.title, s."seasonNumber"
+            r#"SELECT f.id, m.id, m."type", m.title, e.id, e."number", e.title, s."number"
                FROM media_files f JOIN media m ON m.id = f."mediaId"
-               LEFT JOIN episodes e ON e.id = f."episodeId" LEFT JOIN seasons s ON s.id = e."seasonId"
+               LEFT JOIN items e ON e.id = f."episodeId" LEFT JOIN item_groups s ON s.id = e."groupId"
                WHERE f.id = ANY($1)"#,
         )
         .bind(chunk)

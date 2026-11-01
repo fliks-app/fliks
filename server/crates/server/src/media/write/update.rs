@@ -9,7 +9,10 @@ use crate::{
     },
     ingest::{MediaRow, load_media},
     libraries::{accessible_library_ids, assert_media_accessible},
-    media::external_ids::{self, Link},
+    media::{
+        external_ids::{self, Link},
+        items,
+    },
     requests::MediaRef,
     state::AppState,
 };
@@ -231,6 +234,7 @@ pub async fn create(
     q.push(") RETURNING id");
     let mut tx = st.db.begin().await?;
     let id: i32 = q.build_query_scalar().fetch_one(&mut *tx).await?;
+    items::create_shell(&mut tx, id, media_type).await?;
     if ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? != Link::Linked {
         return Err(clash());
     }
@@ -310,15 +314,15 @@ pub async fn apply_media_monitored(
     .execute(&mut *c)
     .await?;
     sqlx::query!(
-        r#"UPDATE seasons SET monitored = $1 WHERE "mediaId" = ANY($2)"#,
+        r#"UPDATE item_groups SET monitored = $1 WHERE "mediaId" = ANY($2)"#,
         monitored,
         ids
     )
     .execute(&mut *c)
     .await?;
     sqlx::query!(
-        r#"UPDATE episodes SET monitored = $1
-           WHERE "seasonId" IN (SELECT id FROM seasons WHERE "mediaId" = ANY($2))"#,
+        r#"UPDATE items SET monitored = $1
+           WHERE "groupId" IN (SELECT id FROM item_groups WHERE "mediaId" = ANY($2))"#,
         monitored,
         ids
     )
@@ -338,9 +342,9 @@ pub async fn apply_season_monitored(
     monitored: bool,
 ) -> Result<MonitoredChange, sqlx::Error> {
     let was = sqlx::query!(
-        r#"SELECT s."seasonNumber" AS number, s.monitored AS was, m.id AS "media_id?",
+        r#"SELECT s."number" AS number, s.monitored AS was, m.id AS "media_id?",
              m.type AS media_type
-           FROM seasons s LEFT JOIN media m ON m.id = s."mediaId"
+           FROM item_groups s LEFT JOIN media m ON m.id = s."mediaId"
            WHERE s.id = $1"#,
         season_id
     )
@@ -351,14 +355,14 @@ pub async fn apply_season_monitored(
         None => None,
     };
     sqlx::query!(
-        "UPDATE seasons SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
+        "UPDATE item_groups SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
         season_id,
         monitored
     )
     .execute(&mut *c)
     .await?;
     sqlx::query!(
-        r#"UPDATE episodes SET monitored = $1 WHERE "seasonId" = $2"#,
+        r#"UPDATE items SET monitored = $1 WHERE "groupId" = $2"#,
         monitored,
         season_id
     )
@@ -452,6 +456,9 @@ pub async fn update(
             _ => None,
         })
         .unwrap_or(media.media_type);
+    if kind != media.media_type {
+        items::follow_kind(&mut tx, id, kind).await?;
+    }
     if ids.differ(&media) {
         match ids.apply(&mut tx, id, kind).await.map_err(clash_or)? {
             Link::Linked => {}
@@ -722,9 +729,9 @@ pub async fn bulk(
 async fn season_json(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
     let mut s = sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('id', s.id, 'createdAt', iso_ms(s."createdAt"), 'updatedAt', iso_ms(s."updatedAt"),
-             'seasonNumber', s."seasonNumber", 'monitored', s.monitored, 'preferredProvider', s."preferredProvider",
+             'seasonNumber', s."number", 'monitored', s.monitored, 'preferredProvider', s."preferredProvider",
              'posterUrl', s."posterUrl", 'overview', s.overview, 'airDate', s."airDate", 'mediaId', s."mediaId")
-             AS "j!: Value" FROM seasons s WHERE s.id = $1"#,
+             AS "j!: Value" FROM item_groups s WHERE s.id = $1"#,
         id
     )
     .fetch_one(&st.db)
@@ -740,10 +747,10 @@ async fn season_json(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppErr
 async fn episode_json(st: &AppState, id: i32) -> Result<Value, AppError> {
     Ok(sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('id', e.id, 'createdAt', iso_ms(e."createdAt"), 'updatedAt', iso_ms(e."updatedAt"),
-             'episodeNumber', e."episodeNumber", 'endEpisodeNumber', e."endEpisodeNumber", 'title', e.title,
+             'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
              'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime, 'monitored', e.monitored,
              'hasFile', e."hasFile", 'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"),
-             'seasonId', e."seasonId") AS "j!: Value" FROM episodes e WHERE e.id = $1"#,
+             'seasonId', e."groupId") AS "j!: Value" FROM items e WHERE e.id = $1"#,
         id
     )
     .fetch_one(&st.db)
@@ -759,17 +766,14 @@ async fn season_gate(
     a.require(Action::Update, Subject::Media)?;
     let PathParams(id) = id?;
     let s = sqlx::query!(
-        r#"SELECT "mediaId" AS media_id FROM seasons WHERE id = $1"#,
+        r#"SELECT "mediaId" AS media_id FROM item_groups WHERE id = $1"#,
         id
     )
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(|| AppError::not_found(format!("Season #{id} not found")))?;
-    let media = s
-        .media_id
-        .ok_or_else(|| AppError::not_found(format!("Season #{id} not found")))?;
     let libs = accessible_library_ids(&st.db, a).await?;
-    assert_media_accessible(&st.db, media, &libs).await?;
+    assert_media_accessible(&st.db, s.media_id, &libs).await?;
     Ok(id)
 }
 
@@ -804,7 +808,7 @@ pub async fn patch_season(
     let mut tx = st.db.begin().await?;
     if let Some(p) = provider {
         sqlx::query!(
-            r#"UPDATE seasons SET "preferredProvider" = $2
+            r#"UPDATE item_groups SET "preferredProvider" = $2
                WHERE id = $1 AND "preferredProvider" IS DISTINCT FROM $2"#,
             id,
             p
@@ -834,19 +838,18 @@ pub async fn patch_episode(
     a.require(Action::Update, Subject::Media)?;
     let PathParams(id) = id?;
     let media = sqlx::query_scalar!(
-        r#"SELECT s."mediaId" FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE e.id = $1"#,
+        r#"SELECT s."mediaId" FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = $1"#,
         id
     )
     .fetch_optional(&st.db)
     .await?
-    .flatten()
     .ok_or_else(|| AppError::not_found(format!("Episode #{id} not found")))?;
     let libs = accessible_library_ids(&st.db, &a).await?;
     assert_media_accessible(&st.db, media, &libs).await?;
     let b = Body::new(v, &["monitored"])?;
     let m = b.required(b.bool("monitored")?, "monitored", "must be a boolean value")?;
     sqlx::query!(
-        r#"UPDATE episodes SET monitored = $1 WHERE id = $2 AND monitored IS DISTINCT FROM $1"#,
+        r#"UPDATE items SET monitored = $1 WHERE id = $2 AND monitored IS DISTINCT FROM $1"#,
         m,
         id
     )

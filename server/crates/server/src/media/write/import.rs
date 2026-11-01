@@ -1,7 +1,10 @@
 //! Metadata imports (rules 10-17, 19-22): the provider reads happen first, the rows in one
 //! transaction; images and credits follow detached.
 use super::{body::Body, entity_or_404, metadata, resolve_profile};
-use crate::media::external_ids::{self, Ids};
+use crate::media::{
+    external_ids::{self, Ids},
+    items,
+};
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed, validate::ValidJson},
@@ -176,7 +179,7 @@ pub async fn import_title(
             let n = sd.season_number;
             let monitored = scope.as_ref().map_or(n > 0, |s| s.contains(&n));
             let sid = sqlx::query_scalar!(
-                r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored) VALUES ($1, $2, $3) RETURNING id"#,
+                r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3) RETURNING id"#,
                 id,
                 n,
                 monitored
@@ -334,6 +337,7 @@ async fn insert_media(
     )
     .fetch_one(&mut *tx)
     .await?;
+    items::create_shell(tx, id, imp.media_type).await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
         tvdb: d.tvdb_id,
@@ -544,6 +548,7 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         .clone()
         .filter(|o| !o.is_empty())
         .unwrap_or_else(|| title.clone());
+    let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles", overview,
              genres, runtime, rating, "releaseDate", "libraryId", "folderName", "qualityProfileId",
@@ -566,8 +571,10 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         l,
         Some(added_by).filter(|u| *u != 0)
     )
-    .fetch_one(&st.db)
+    .fetch_one(&mut *tx)
     .await?;
+    items::create_shell(&mut tx, id, u.media_type).await?;
+    tx.commit().await?;
     store_local_artwork(st, id, &u.artwork).await;
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),

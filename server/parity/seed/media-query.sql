@@ -40,9 +40,9 @@ UPDATE media m SET year = v.year, rating = v.rating, genres = v.genres FROM (VAL
 UPDATE media SET "posterUrl" = '/api/images/' || id || '/poster' WHERE id <= 8;
 UPDATE media SET "fanartUrl" = '/api/images/' || id || '/fanart' WHERE id IN (2, 4);
 -- a file-backed episode whose column says false (GET :id heals hasFile)
-ALTER TABLE episodes DISABLE TRIGGER set_updated_at;
-UPDATE episodes SET "hasFile" = false WHERE id = 1;
-ALTER TABLE episodes ENABLE TRIGGER set_updated_at;
+ALTER TABLE items DISABLE TRIGGER set_updated_at;
+UPDATE items SET "hasFile" = false WHERE id = 1;
+ALTER TABLE items ENABLE TRIGGER set_updated_at;
 -- updated before any insert so the heap order stays the id order
 UPDATE media_files SET "createdAt" = '2026-02-01'::timestamptz + (id * 37 % 101) * interval '1 hour' WHERE id <= 29;
 
@@ -116,7 +116,11 @@ UPDATE media SET "createdAt" = '2026-01-01'::timestamptz + id * interval '1 day'
 UPDATE media SET "posterUrl" = '/api/images/' || id || '/poster' WHERE id IN (21, 22, 24, 32, 33, 34);
 UPDATE media SET "searchVector" = NULL WHERE id = 24;
 
-INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "mediaId", "posterUrl", overview, "airDate") VALUES
+-- the base movies' items move out of the episode id range the scenarios record
+UPDATE items SET id = -id WHERE "groupId" IS NULL;
+INSERT INTO editions ("mediaId", family)
+  SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
+INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId", "posterUrl", overview, "airDate") VALUES
  (7, '2026-01-01', '2026-01-01', 1, true, 43, '/api/images/43/season-1', 'Season one overview', '2022-01-01'),
  (8, '2026-01-01', '2026-01-01', 0, true, 43, NULL, NULL, NULL),
  (9, '2026-01-01', '2026-01-01', 2, false, 43, NULL, NULL, NULL),
@@ -127,27 +131,30 @@ INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "m
  (14, '2026-01-01', '2026-01-01', 1, true, 47, NULL, NULL, NULL),
  (15, '2026-01-01', '2026-01-01', 0, true, 47, NULL, NULL, NULL),
  (16, '2026-01-01', '2026-01-01', 2, true, 47, NULL, NULL, NULL);
-INSERT INTO episodes (id, "createdAt", "updatedAt", "episodeNumber", "endEpisodeNumber", title, "airDate", runtime, monitored, "hasFile", "stillUrl", "markersScannedAt", "seasonId") VALUES
- (13, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', 45, true, true, '/api/images/43/still-1', '2026-01-10T00:00:00Z', 7),
- (14, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 7),
- (15, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, false, false, NULL, NULL, 7),
- (16, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2099-01-01', NULL, true, false, NULL, NULL, 7),
- (17, '2026-01-01', '2026-01-01', 1, NULL, 'Special', '2000-01-01', NULL, true, false, NULL, NULL, 8),
- (18, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, false, NULL, NULL, 9),
- (19, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 9),
- (20, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', NULL, true, true, NULL, NULL, 10),
- (21, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 10),
- (22, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 11),
- (23, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, true, NULL, NULL, 12),
- (24, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, true, NULL, NULL, 12),
- (25, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, true, false, NULL, NULL, 12),
- (26, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, false, NULL, NULL, 13),
- (27, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2026-03-03', NULL, true, true, NULL, NULL, 14),
- (28, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2026-03-10', NULL, false, false, NULL, NULL, 14),
- (29, '2026-01-01', '2026-01-01', 3, 4, 'Episode 3', '2026-03-17', NULL, true, true, NULL, NULL, 14),
- (30, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2026-03-17', NULL, true, false, NULL, NULL, 14),
- (31, '2026-01-01', '2026-01-01', 1, NULL, 'Calendar Special', '2026-03-07', NULL, true, false, NULL, NULL, 15),
- (32, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', NULL, NULL, true, false, NULL, NULL, 16);
+INSERT INTO items (id, "createdAt", "updatedAt", "number", "endNumber", title, "airDate", runtime, monitored, "hasFile", "stillUrl", "markersScannedAt", "groupId", "mediaId", "editionId") VALUES
+ (13, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', 45, true, true, '/api/images/43/still-1', '2026-01-10T00:00:00Z', 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (14, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (15, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, false, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (16, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2099-01-01', NULL, true, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (17, '2026-01-01', '2026-01-01', 1, NULL, 'Special', '2000-01-01', NULL, true, false, NULL, NULL, 8, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (18, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, false, NULL, NULL, 9, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (19, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 9, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (20, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', NULL, true, true, NULL, NULL, 10, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
+ (21, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 10, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
+ (22, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 11, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
+ (23, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
+ (24, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
+ (25, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, true, false, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
+ (26, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, false, NULL, NULL, 13, 46, (SELECT id FROM editions WHERE "mediaId" = 46)),
+ (27, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2026-03-03', NULL, true, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (28, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2026-03-10', NULL, false, false, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (29, '2026-01-01', '2026-01-01', 3, 4, 'Episode 3', '2026-03-17', NULL, true, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (30, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2026-03-17', NULL, true, false, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (31, '2026-01-01', '2026-01-01', 1, NULL, 'Calendar Special', '2026-03-07', NULL, true, false, NULL, NULL, 15, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (32, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', NULL, NULL, true, false, NULL, NULL, 16, 47, (SELECT id FROM editions WHERE "mediaId" = 47));
+INSERT INTO items (id, "mediaId", "editionId", monitored)
+  SELECT -1000 - m.id, m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
+  WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;
 INSERT INTO media_files (id, "createdAt", "updatedAt", "relativePath", size, quality, language, "streamInfo", "mediaId", "episodeId", "osdbHash", "osdbBytesize") VALUES
  (30, '2026-02-01'::timestamptz + (30 * 37 % 101) * interval '1 hour', '2026-01-01', 'alpha test (2020)/alpha test (2020).mkv', 1000030, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 21, NULL, '8e245d9679d31e12', 12345678901),
  (31, '2026-02-01'::timestamptz + (31 * 37 % 101) * interval '1 hour', '2026-01-01', '12 Angry Men (2020)/12 Angry Men (2020).mkv', 1000031, 'WEBDL-1080p', 'en', NULL, 22, NULL, NULL, NULL),
@@ -209,7 +216,7 @@ INSERT INTO media_crew (id, "createdAt", "updatedAt", job, department, "mediaId"
 
 INSERT INTO playback_states ("createdAt", "updatedAt", "positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "mediaId", "mediaFileId", "episodeId") VALUES
  ('2026-02-01', '2026-02-01', 450, 3600, false, '2026-02-01', NULL, 2, 6, 6, NULL),
- ('2026-02-01', '2026-02-01', 3500, 3600, true, '2026-02-03', '2026-02-03', 2, 44, 58, (SELECT id FROM episodes WHERE "seasonId" = (SELECT id FROM seasons WHERE "mediaId" = 44 AND "seasonNumber" = 1) AND "episodeNumber" = 1)),
+ ('2026-02-01', '2026-02-01', 3500, 3600, true, '2026-02-03', '2026-02-03', 2, 44, 58, (SELECT id FROM items WHERE "groupId" = (SELECT id FROM item_groups WHERE "mediaId" = 44 AND "number" = 1) AND "number" = 1)),
  ('2026-02-01', '2026-02-01', 1700, 1800, true, '2026-02-04', '2026-02-04', 2, 45, 59, 23),
  ('2026-02-01', '2026-02-01', 200, 1800, false, '2026-02-05', NULL, 2, 45, 60, 24);
 

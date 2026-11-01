@@ -574,7 +574,7 @@ async fn seasons_of(
 ) -> Result<Vec<SeasonDetails>, AppError> {
     let mut seasons = read_seasons(st, media.0, &media.1, lang).await?;
     let overridden: Vec<(i32, String)> = sqlx::query!(
-        r#"SELECT "seasonNumber" AS n, "preferredProvider" AS "pref!" FROM seasons
+        r#"SELECT "number" AS n, "preferredProvider" AS "pref!" FROM item_groups
            WHERE "mediaId" = $1 AND "preferredProvider" IS NOT NULL AND "preferredProvider" <> ''
            ORDER BY id"#,
         m.id
@@ -646,9 +646,9 @@ pub async fn for_media(st: &AppState, media_id: i32) -> Result<Found, AppError> 
 /// Rule 55: the episode as its season's provider lists it; `None` when the provider has no such episode.
 pub async fn episode(st: &AppState, episode_id: i32) -> Result<Option<EpisodeDetails>, AppError> {
     let row = sqlx::query!(
-        r#"SELECT e."episodeNumber" AS number, s."seasonNumber" AS season, s."preferredProvider" AS pref,
+        r#"SELECT e."number" AS "number!", s."number" AS season, s."preferredProvider" AS pref,
                   s."mediaId" AS "media_id!"
-           FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE e.id = $1"#,
+           FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = $1"#,
         episode_id
     )
     .fetch_optional(&st.db)

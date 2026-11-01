@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n  COALESCE((SELECT jsonb_agg(\n      jsonb_build_object('id', s.id, 'createdAt', iso_ms(s.\"createdAt\"), 'updatedAt', iso_ms(s.\"updatedAt\"),\n        'seasonNumber', s.\"number\", 'monitored', s.monitored, 'preferredProvider', s.\"preferredProvider\",\n        'posterUrl', s.\"posterUrl\", 'overview', s.overview, 'airDate', s.\"airDate\", 'mediaId', s.\"mediaId\",\n        'episodes', COALESCE((SELECT jsonb_agg(\n            jsonb_build_object('id', e.id, 'createdAt', iso_ms(e.\"createdAt\"), 'updatedAt', iso_ms(e.\"updatedAt\"),\n              'episodeNumber', e.\"number\", 'endEpisodeNumber', e.\"endNumber\", 'title', e.title,\n              'overview', e.overview, 'airDate', e.\"airDate\", 'runtime', e.runtime, 'monitored', e.monitored,\n              'hasFile', (e.\"hasFile\" OR EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = $1 AND f.\"episodeId\" = e.id)),\n              'stillUrl', e.\"stillUrl\", 'markersScannedAt', iso_ms(e.\"markersScannedAt\"), 'seasonId', e.\"groupId\")\n            ORDER BY e.\"number\", e.id)\n          FROM items e WHERE e.\"groupId\" = s.id), '[]'::jsonb))\n      ORDER BY (s.\"number\" = 0), s.\"number\", s.id)\n    FROM item_groups s WHERE s.\"mediaId\" = $1), '[]'::jsonb) AS \"seasons!: Value\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seasons!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d51474c78862ad54cb911472f1436b9442275195d8f72b7c707b603fa049e4c8"
+}

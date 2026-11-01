@@ -91,16 +91,16 @@ struct ItemRow {
 }
 
 const ITEM_SELECT: &str = r#"SELECT sf.id, sf."mediaId" AS media_id, m.title AS media_title, m."type" AS media_type,
-  COALESCE(sf."episodeId", fe.id) AS episode_id, COALESCE(es."seasonNumber", fs."seasonNumber") AS season_number,
-  COALESCE(e."episodeNumber", fe."episodeNumber") AS episode_number, COALESCE(e.title, fe.title) AS episode_title,
+  COALESCE(sf."episodeId", fe.id) AS episode_id, COALESCE(es."number", fs."number") AS season_number,
+  COALESCE(e."number", fe."number") AS episode_number, COALESCE(e.title, fe.title) AS episode_title,
   sf.language, sf."providerType"::text AS provider_type, sf.score, sf.status::text AS status, sf.forced,
   sf."hearingImpaired" AS hearing_impaired, sf.synced, sf."syncFailed" AS sync_failed,
   sf."errorMessage" AS error_message, sf."createdAt" AS created_at
   FROM subtitle_files sf
   LEFT JOIN media m ON m.id = sf."mediaId"
-  LEFT JOIN episodes e ON e.id = sf."episodeId" LEFT JOIN seasons es ON es.id = e."seasonId"
+  LEFT JOIN items e ON e.id = sf."episodeId" LEFT JOIN item_groups es ON es.id = e."groupId"
   LEFT JOIN media_files mf ON mf.id = sf."mediaFileId"
-  LEFT JOIN episodes fe ON fe.id = mf."episodeId" LEFT JOIN seasons fs ON fs.id = fe."seasonId""#;
+  LEFT JOIN items fe ON fe.id = mf."episodeId" LEFT JOIN item_groups fs ON fs.id = fe."groupId""#;
 
 impl ItemRow {
     fn json(&self, full: bool) -> Value {
@@ -302,12 +302,12 @@ pub async fn missing(
                AND ($4::int[] IS NULL OR m."libraryId" = ANY($4))
            )
            SELECT r.media_id, r.media_title, r.media_type, r.language, r.forced, f.id AS file_id,
-                  f."relativePath" AS file_path, f."episodeId" AS episode_id, s."seasonNumber" AS season_number,
-                  e."episodeNumber" AS episode_number, COUNT(*) OVER () AS total
+                  f."relativePath" AS file_path, f."episodeId" AS episode_id, s."number" AS season_number,
+                  e."number" AS episode_number, COUNT(*) OVER () AS total
            FROM required r
            JOIN media_files f ON f."mediaId" = r.media_id
-           LEFT JOIN episodes e ON e.id = f."episodeId"
-           LEFT JOIN seasons s ON s.id = e."seasonId"
+           LEFT JOIN items e ON e.id = f."episodeId"
+           LEFT JOIN item_groups s ON s.id = e."groupId"
            WHERE NOT EXISTS (
              SELECT 1 FROM subtitle_files sf
              WHERE sf."mediaFileId" = f.id AND sf.language = r.language AND sf.forced = r.forced

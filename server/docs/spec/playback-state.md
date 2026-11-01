@@ -89,10 +89,10 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 SELECT
    ps."mediaFileId", ps."episodeId",
    ps."positionSeconds", ps."durationSeconds",
-   s."seasonNumber", e."episodeNumber"
+   s."number", e."number"
  FROM playback_states ps
- LEFT JOIN episodes e ON e.id = ps."episodeId"
- LEFT JOIN seasons s ON s.id = e."seasonId"
+ LEFT JOIN items e ON e.id = ps."episodeId"
+ LEFT JOIN item_groups s ON s.id = e."groupId"
  WHERE ps."userId" = $1
    AND ps."mediaId" = $2
    AND ps.completed = false
@@ -158,12 +158,12 @@ last_completed AS (
   -- which would make next_ep target an arbitrary earlier episode.
   SELECT DISTINCT ON (ps."mediaId")
          ps."mediaId", ps."episodeId",
-         s."seasonNumber", e."episodeNumber"
+         s."number" AS "seasonNumber", e."number" AS "episodeNumber"
   FROM playback_states ps
-  JOIN episodes e ON e.id = ps."episodeId"
-  JOIN seasons s ON s.id = e."seasonId"
+  JOIN items e ON e.id = ps."episodeId"
+  JOIN item_groups s ON s.id = e."groupId"
   WHERE ps."userId" = $1 AND ps.completed = true AND ps."episodeId" IS NOT NULL
-  ORDER BY ps."mediaId", s."seasonNumber" DESC, e."episodeNumber" DESC
+  ORDER BY ps."mediaId", s."number" DESC, e."number" DESC
 ),
 in_progress AS (
   SELECT DISTINCT ON (ps."mediaId")
@@ -177,12 +177,12 @@ in_progress AS (
 ),
 next_ep AS (
   SELECT lc."mediaId",
-         (SELECT e.id FROM episodes e
-          JOIN seasons s ON s.id = e."seasonId"
-          WHERE s."mediaId" = lc."mediaId" AND s."seasonNumber" > 0
-            AND (s."seasonNumber" > lc."seasonNumber"
-                 OR (s."seasonNumber" = lc."seasonNumber" AND e."episodeNumber" > lc."episodeNumber"))
-          ORDER BY s."seasonNumber", e."episodeNumber" LIMIT 1
+         (SELECT e.id FROM items e
+          JOIN item_groups s ON s.id = e."groupId"
+          WHERE s."mediaId" = lc."mediaId" AND s."number" > 0
+            AND (s."number" > lc."seasonNumber"
+                 OR (s."number" = lc."seasonNumber" AND e."number" > lc."episodeNumber"))
+          ORDER BY s."number", e."number" LIMIT 1
          ) AS "episodeId"
   FROM last_completed lc
   WHERE lc."mediaId" NOT IN (SELECT "mediaId" FROM in_progress)
@@ -205,7 +205,7 @@ SELECT
   m.title AS "mediaTitle",
   m."posterUrl", m."fanartUrl",
   e."stillUrl",
-  'S' || LPAD(s."seasonNumber"::text, 2, '0') || 'E' || LPAD(e."episodeNumber"::text, 2, '0')
+  'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
     || COALESCE(' - ' || e.title, '') AS "episodeLabel",
   CASE WHEN COALESCE(ps_next."durationSeconds", c."durationSeconds", 0) > 0
        THEN ROUND((COALESCE(ps_next."positionSeconds", c."positionSeconds", 0)
@@ -214,8 +214,8 @@ SELECT
 FROM combined c
 JOIN user_series us ON us."mediaId" = c."mediaId"
 JOIN media m ON m.id = c."mediaId"
-JOIN episodes e ON e.id = c."episodeId"
-JOIN seasons s ON s.id = e."seasonId"
+JOIN items e ON e.id = c."episodeId"
+JOIN item_groups s ON s.id = e."groupId"
 LEFT JOIN LATERAL (
   SELECT mf2.id FROM media_files mf2
   WHERE mf2."mediaId" = c."mediaId" AND mf2."episodeId" = c."episodeId"
@@ -246,13 +246,13 @@ SELECT
         THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)
         ELSE 0 END AS "progressPercent",
    CASE WHEN ps."episodeId" IS NOT NULL
-        THEN 'S' || LPAD(s."seasonNumber"::text, 2, '0') || 'E' || LPAD(e."episodeNumber"::text, 2, '0')
+        THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
              || COALESCE(' - ' || e.title, '')
         ELSE NULL END AS "episodeLabel"
  FROM playback_states ps
  JOIN media m ON m.id = ps."mediaId"
- LEFT JOIN episodes e ON e.id = ps."episodeId"
- LEFT JOIN seasons s ON s.id = e."seasonId"
+ LEFT JOIN items e ON e.id = ps."episodeId"
+ LEFT JOIN item_groups s ON s.id = e."groupId"
  WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
    AND m."libraryId" = ANY($4)
  ORDER BY ps."playedAt" DESC
@@ -270,11 +270,11 @@ WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'
 UNION
 
 SELECT s."mediaId" AS id
-FROM seasons s
-JOIN episodes e ON e."seasonId" = s.id
+FROM item_groups s
+JOIN items e ON e."groupId" = s.id
 LEFT JOIN playback_states ps
   ON ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
-WHERE s."seasonNumber" > 0 AND e."hasFile" = true
+WHERE s."number" > 0 AND e."hasFile" = true
   AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))
 GROUP BY s."mediaId"
 HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)
@@ -299,10 +299,10 @@ SELECT $1, $2,
        ),
        true,
        NOW()
-FROM episodes e
-JOIN seasons s ON s.id = e."seasonId"
+FROM items e
+JOIN item_groups s ON s.id = e."groupId"
 WHERE s."mediaId" = $2
-  AND s."seasonNumber" > 0
+  AND s."number" > 0
   AND e."hasFile" = true
 ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL
 DO UPDATE SET
@@ -322,7 +322,7 @@ UPDATE playback_states
 ```
 After the upsert: `SELECT * FROM playback_states WHERE "userId" = $1 AND "mediaId" = $2 AND completed = true`.
 
-**Season toggle** (equivalent SQL): `SELECT * FROM episodes WHERE "seasonId" = $1`; `SELECT * FROM media_files WHERE "episodeId" IN (...) ORDER BY id DESC`; `DELETE FROM playback_states WHERE "userId" = $1 AND "episodeId" IN (...)`; `INSERT INTO playback_states ("userId","mediaId","mediaFileId","episodeId","positionSeconds","durationSeconds",completed,"lastPlayedAt","playedAt") VALUES (...)` (bulk, `playedAt` NULL); unwatched: `UPDATE playback_states SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = $now, "updatedAt" = now WHERE "userId" = $1 AND "mediaId" = $2 AND "episodeId" IN (...)`.
+**Season toggle** (equivalent SQL): `SELECT * FROM items WHERE "groupId" = $1`; `SELECT * FROM media_files WHERE "episodeId" IN (...) ORDER BY id DESC`; `DELETE FROM playback_states WHERE "userId" = $1 AND "episodeId" IN (...)`; `INSERT INTO playback_states ("userId","mediaId","mediaFileId","episodeId","positionSeconds","durationSeconds",completed,"lastPlayedAt","playedAt") VALUES (...)` (bulk, `playedAt` NULL); unwatched: `UPDATE playback_states SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = $now, "updatedAt" = now WHERE "userId" = $1 AND "mediaId" = $2 AND "episodeId" IN (...)`.
 
 **toggleWatched file lookups**: `SELECT * FROM media_files WHERE "episodeId" = $1 LIMIT 1` (episode) or `... WHERE "mediaId" = $1 AND "episodeId" IS NULL LIMIT 1` (movie); `SELECT * FROM media_files WHERE id = $1`. No `ORDER BY` on the first two (any matching row).
 
@@ -342,8 +342,8 @@ SELECT mf."mediaId" AS "mediaId"
  UNION
  SELECT s."mediaId" AS "mediaId"
  FROM media_files mf
- JOIN episodes e ON e.id = mf."episodeId"
- JOIN seasons s ON s.id = e."seasonId"
+ JOIN items e ON e.id = mf."episodeId"
+ JOIN item_groups s ON s.id = e."groupId"
  WHERE s."mediaId" = ANY($1)
  GROUP BY s."mediaId"
 ```

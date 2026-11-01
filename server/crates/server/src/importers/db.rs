@@ -1,5 +1,8 @@
 //! Queries of the importers (`importers.md` SQL 1-7).
-use crate::media::external_ids::{self, Ids};
+use crate::media::{
+    external_ids::{self, Ids},
+    items,
+};
 use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
@@ -123,6 +126,7 @@ pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteErr
     )
     .fetch_one(&mut *tx)
     .await?;
+    items::create_shell(&mut tx, id, m.media_type).await?;
     let ids = Ids {
         tmdb: Some(m.tmdb_id),
         imdb: m.imdb_id.map(str::to_owned),

@@ -111,7 +111,7 @@ async fn match_one(
             };
             let Some((sid, _, number, monitored)) = season_row(
                 db,
-                r#""mediaId" = $1 AND "seasonNumber" = $2"#,
+                r#""mediaId" = $1 AND "number" = $2"#,
                 m.id,
                 Some(sn as i32),
             )
@@ -233,8 +233,8 @@ pub(super) async fn runtime_minutes(
         return Ok(m.runtime.unwrap_or(0).into());
     };
     let total: i64 = sqlx::query_scalar(
-        r#"SELECT COALESCE(SUM(ep.runtime), 0)::bigint FROM episodes ep JOIN seasons s ON s.id = ep."seasonId"
-            WHERE s."mediaId" = $1 AND s."seasonNumber" = $2 AND ($3::int IS NULL OR ep."episodeNumber" = $3)"#,
+        r#"SELECT COALESCE(SUM(ep.runtime), 0)::bigint FROM items ep JOIN item_groups s ON s.id = ep."groupId"
+            WHERE s."mediaId" = $1 AND s."number" = $2 AND ($3::int IS NULL OR ep."number" = $3)"#,
     )
     .bind(m.id)
     .bind(season as i32)
@@ -249,7 +249,7 @@ pub(super) async fn runtime_minutes(
         return Ok(per.into());
     }
     let count: i64 = sqlx::query_scalar(
-        r#"SELECT count(*) FROM episodes ep JOIN seasons s ON s.id = ep."seasonId" WHERE s."mediaId" = $1 AND s."seasonNumber" = $2"#,
+        r#"SELECT count(*) FROM items ep JOIN item_groups s ON s.id = ep."groupId" WHERE s."mediaId" = $1 AND s."number" = $2"#,
     )
     .bind(m.id)
     .bind(season as i32)
@@ -398,14 +398,14 @@ async fn season_and_episode(
     {
         season = season_row(
             db,
-            r#""mediaId" = $1 AND "seasonNumber" = $2"#,
+            r#""mediaId" = $1 AND "number" = $2"#,
             m.id,
             Some(sn as i32),
         )
         .await?;
         if let (Some(s), Some(en)) = (season, episode_n) {
             episode = sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(format!(
-                r#"{EPISODE_SELECT} WHERE "seasonId" = $1 AND "episodeNumber" = $2"#
+                r#"{EPISODE_SELECT} WHERE "groupId" = $1 AND "number" = $2"#
             )))
             .bind(s.0)
             .bind(en as i32)

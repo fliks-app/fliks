@@ -140,13 +140,13 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 43. `hasProfile`, `state` ∈ `unmonitored|no-profile|missing|below|met` are client-matched strings.
 44. `parseReleaseQuality` and `getAppQualityById` serve `tracking` and `cutoffUnmet` (rule 69). `parseReleaseQuality`: lower-cased, `.` replaced by space, source/resolution regexes, candidate selection, fuzzy fallback; a resolution with no table bucket (`4320p`/`8K`, `576p`, `360p`) leaves the fuzzy list empty and returns **`WORKPRINT`** (id 1, rank 5, resolution 0) as `quality`, with a display-only label `<res>p (<nearest>)` (`4320p (HDTV-2160p)`, `576p (DVD)`) that neither `tracking` nor `cutoffUnmet` reads.
 45. Neither `tracking` nor the detail route is cached; both are recomputed per request.
-46. `TrackingEpisode.title` comes from `episodes.title` (nullable).
+46. `TrackingEpisode.title` comes from `items.title` (nullable).
 
 ### G. Calendar
 
 47. Window: both `start` and `end` given → each `.slice(0, 10)`; otherwise (including only one of them) the **current month in the server's local time zone** (first day to the last day of that month; the process local zone, not UTC). The sliced strings go to Postgres unparsed (`BETWEEN :start AND :end` against `date` columns), so what Postgres accepts decides: `2026-03-01`, compact `20260301`, ordinal `2026-060` work; `2026-03`, `2026`, `2026031`, week dates and `2026-02-30` pass the DTO (rule 8) but are a Postgres error, answered 400 (rule 9). The raw strings are bound as text cast to `date` in SQL, the cast error is mapped to 400, and they are not reformatted (rule 48 compares the raw strings).
 48. Movies (when `type` unset or `movie`): `m.type = 'movie' AND (m.inCinemas BETWEEN $s AND $e OR m.digitalRelease BETWEEN ... OR m.physicalRelease BETWEEN ... OR m.releaseDate BETWEEN ...)` (inclusive, `date` columns), `+ m.monitored = true` when `monitoredOnly`, `+ m."addedById" = $user` when `requestedByMe`, ACL (`1 = 0` when empty else `m."libraryId" IN ids`), with `files` left-joined (`hasFile = files.length > 0`). For each movie one entry per specific date inside the window in the order `cinema` (`inCinemas`), `digital` (`digitalRelease`), `physical` (`physicalRelease`); if **none** of the three is inside the window and `releaseDate` is, one entry `event: 'release'`. "Inside the window" is a **string** comparison `d >= start && d <= end` of the `YYYY-MM-DD` column value against the raw sliced `start`/`end`, not the SQL `BETWEEN`: with `start=20260301` SQL selects the movies but `'2026-03-05' < '20260301'` lexically, so no movie entry is emitted (episodes, filtered in SQL only, still are).
-49. Episodes (when `type` unset or `series`): `episodes ep INNER JOIN seasons season INNER JOIN media media WHERE ep."airDate" BETWEEN $s AND $e`, `+ media.monitored = true AND ep.monitored = true` when `monitoredOnly`, `+ media."addedById" = $user` when `requestedByMe`, ACL as above, `ORDER BY ep."airDate" ASC`; season 0 episodes are **included**. `hasFile` = coverage on disk (`onDiskSql('ep')`, SQL in Q-D), falling back to `ep.hasFile`.
+49. Episodes (when `type` unset or `series`): `episodes ep INNER JOIN item_groups season INNER JOIN media media WHERE ep."airDate" BETWEEN $s AND $e`, `+ media.monitored = true AND ep.monitored = true` when `monitoredOnly`, `+ media."addedById" = $user` when `requestedByMe`, ACL as above, `ORDER BY ep."airDate" ASC`; season 0 episodes are **included**. `hasFile` = coverage on disk (`onDiskSql('ep')`, SQL in Q-D), falling back to `ep.hasFile`.
 50. Entry shape (undefined keys omitted): movie `{ id: media.id, mediaId: media.id, title, type: 'movie', event, date: 'YYYY-MM-DD', posterUrl, fanartUrl, status, year, hasFile }`; episode `{ id: episode.id, mediaId, title: <series title>, type: 'series', event: 'airing', date, posterUrl, fanartUrl, status, year, seasonNumber, episodeNumber, episodeTitle: episode.title, hasFile }`. `posterUrl`/`fanartUrl`/`year` may be `null`; `id` collides across kinds (the client keys on type).
 51. Final order: `results.sort((a, b) => a.date.localeCompare(b.date))` (stable, ISO dates so plain lexical): ties keep insertion order = movies `ORDER BY m.id` (per movie cinema, digital, physical, release) then episodes `ORDER BY ep."airDate", ep.id`.
 
@@ -205,14 +205,14 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
   SELECT m2.id FROM media m2
   WHERE m2.type = 'series'
   AND EXISTS (
-    SELECT 1 FROM seasons s
-    JOIN episodes e ON e."seasonId" = s.id
-    WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+    SELECT 1 FROM item_groups s
+    JOIN items e ON e."groupId" = s.id
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
   )
   AND NOT EXISTS (
-    SELECT 1 FROM seasons s
-    JOIN episodes e ON e."seasonId" = s.id
-    WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+    SELECT 1 FROM item_groups s
+    JOIN items e ON e."groupId" = s.id
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
     AND NOT EXISTS (
       SELECT 1 FROM playback_states ps2
       WHERE ps2."userId" = :userId AND ps2."episodeId" = e.id AND ps2.completed = true
@@ -224,16 +224,16 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
 
 ```sql
 EXISTS (
-  SELECT 1 FROM seasons ms JOIN episodes me ON me."seasonId" = ms.id
-  WHERE ms."mediaId" = media.id AND ms."seasonNumber" > 0
+  SELECT 1 FROM item_groups ms JOIN items me ON me."groupId" = ms.id
+  WHERE ms."mediaId" = media.id AND ms."number" > 0
     AND ms.monitored = true AND me.monitored = true
     AND me."airDate" <= $today AND NOT ("me"."hasFile" = true OR EXISTS (
-      SELECT 1 FROM "episodes" cov
-      WHERE cov."seasonId" = "me"."seasonId"
+      SELECT 1 FROM "items" cov
+      WHERE cov."groupId" = "me"."groupId"
         AND cov."hasFile" = true
-        AND cov."endEpisodeNumber" IS NOT NULL
-        AND "me"."episodeNumber" > cov."episodeNumber"
-        AND "me"."episodeNumber" <= cov."endEpisodeNumber"
+        AND cov."endNumber" IS NOT NULL
+        AND "me"."number" > cov."number"
+        AND "me"."number" <= cov."endNumber"
     ))
 )
 ```
@@ -244,9 +244,9 @@ EXISTS (
 SELECT s."mediaId",
        COUNT(e.id) AS total,
        COUNT(e.id) FILTER (WHERE <onDiskSql('e')>) AS downloaded
-FROM seasons s
-JOIN episodes e ON e."seasonId" = s.id
-WHERE s."mediaId" = ANY($1) AND s."seasonNumber" > 0
+FROM item_groups s
+JOIN items e ON e."groupId" = s.id
+WHERE s."mediaId" = ANY($1) AND s."number" > 0
 GROUP BY s."mediaId"
 ```
 
@@ -255,14 +255,14 @@ GROUP BY s."mediaId"
 ```sql
 SELECT s."mediaId" AS "mediaId",
        e.id      AS "epId",
-       e."episodeNumber" AS "episodeNumber",
-       e."endEpisodeNumber" AS "endEpisodeNumber",
+       e."number" AS "episodeNumber",
+       e."endNumber" AS "endEpisodeNumber",
        f."quality" AS "quality"
-  FROM seasons s
-  JOIN episodes e ON e."seasonId" = s.id
+  FROM item_groups s
+  JOIN items e ON e."groupId" = s.id
   LEFT JOIN media_files f ON f."episodeId" = e.id
  WHERE s."mediaId" = ANY($1)
-   AND s."seasonNumber" > 0
+   AND s."number" > 0
    AND e.monitored = true
 ```
 
@@ -278,12 +278,12 @@ SELECT m.id::int AS id,
     OR
     (m.type = 'series'
       AND EXISTS (
-        SELECT 1 FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-        WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
       )
       AND NOT EXISTS (
-        SELECT 1 FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-        WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
           AND NOT EXISTS (
             SELECT 1 FROM playback_states ps2
             WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true
@@ -370,12 +370,12 @@ WHERE m.type = 'movie'
        OR m."physicalRelease" BETWEEN $s AND $e OR m."releaseDate" BETWEEN $s AND $e)
   [AND m.monitored = true] [AND m."addedById" = $user] AND m."libraryId" = ANY($ids)
 -- episodes
-SELECT ep.id, ep."episodeNumber", ep.title, ep."airDate", ep."hasFile",
-       season."seasonNumber", media.id AS "mediaId", media.title AS "mediaTitle",
+SELECT ep.id, ep."number", ep.title, ep."airDate", ep."hasFile",
+       season."number", media.id AS "mediaId", media.title AS "mediaTitle",
        media."posterUrl", media."fanartUrl", media.status, media.year,
        <onDiskSql('ep')> AS "onDisk"
-FROM episodes ep
-INNER JOIN seasons season ON season.id = ep."seasonId"
+FROM items ep
+INNER JOIN item_groups season ON season.id = ep."groupId"
 INNER JOIN media media ON media.id = season."mediaId"
 WHERE ep."airDate" BETWEEN $s AND $e
   [AND media.monitored = true AND ep.monitored = true] [AND media."addedById" = $user]
@@ -400,7 +400,7 @@ Director lookups: `SELECT crew.*, person.* FROM media_crew crew JOIN persons per
 
 **Q-F (collection)** `SELECT m.*, (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = m.id) AS "fileCount" FROM media m WHERE m."libraryId" = $lib AND m."tmdbCollectionId" = $c ORDER BY m."releaseDate" ASC NULLS LAST, m.year ASC NULLS LAST`.
 
-**Q-O (detail)** `SELECT * FROM media WHERE id = $1` then one query per relation (strategy `query`): `seasons WHERE "mediaId"`, `episodes WHERE "seasonId" = ANY`, `media_files WHERE "mediaId"`, `quality_profiles`, `language_profiles`, `libraries`, `media_metadata WHERE "mediaId"`.
+**Q-O (detail)** `SELECT * FROM media WHERE id = $1` then one query per relation (strategy `query`): `item_groups WHERE "mediaId"`, `items WHERE "groupId" = ANY`, `media_files WHERE "mediaId"`, `quality_profiles`, `language_profiles`, `libraries`, `media_metadata WHERE "mediaId"`.
 
 **Q-CC (cast / crew)** `SELECT mc.*, p.* FROM media_cast mc JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = $1 ORDER BY mc."order" ASC` (`, mc.id ASC`); crew same on `media_crew` with `ORDER BY mc.id ASC`.
 

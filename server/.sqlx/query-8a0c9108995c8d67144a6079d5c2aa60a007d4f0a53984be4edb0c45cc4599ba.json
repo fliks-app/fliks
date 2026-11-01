@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO items (\"groupId\", \"mediaId\", \"editionId\", \"number\", \"endNumber\", monitored)\n                   SELECT v.s, $4, $5, v.n, v.e, true\n                   FROM UNNEST($1::int[], $2::int[], $3::int[]) AS v(s, n, e)\n                   RETURNING id, \"groupId\" AS \"season_id!\", \"number\" AS \"n!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "season_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "groupId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "n!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array",
+        "Int4Array",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "8a0c9108995c8d67144a6079d5c2aa60a007d4f0a53984be4edb0c45cc4599ba"
+}

@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.\"number\" AS \"number!\", f.id AS \"file_id?\", f.\"relativePath\" AS \"rel?\",\n                  f.\"streamInfo\" AS \"info?\"\n           FROM items e\n           LEFT JOIN LATERAL (SELECT id, \"relativePath\", \"streamInfo\" FROM media_files\n                              WHERE \"episodeId\" = e.id ORDER BY id DESC LIMIT 1) f ON true\n           WHERE e.\"groupId\" = $1 AND e.\"hasFile\" = true ORDER BY e.\"number\", e.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "number!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "file_id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rel?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "info?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ff3c56e31fff8384f2a5dfd16dd124fdb7c592708f0b3f533bdbce45c2e8df29"
+}

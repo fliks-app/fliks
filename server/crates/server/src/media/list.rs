@@ -23,14 +23,14 @@ pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
   SELECT m2.id FROM media m2
   WHERE m2.type = 'series'
   AND EXISTS (
-    SELECT 1 FROM seasons s
-    JOIN episodes e ON e."seasonId" = s.id
-    WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+    SELECT 1 FROM item_groups s
+    JOIN items e ON e."groupId" = s.id
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
   )
   AND NOT EXISTS (
-    SELECT 1 FROM seasons s
-    JOIN episodes e ON e."seasonId" = s.id
-    WHERE s."mediaId" = m2.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+    SELECT 1 FROM item_groups s
+    JOIN items e ON e."groupId" = s.id
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
     AND NOT EXISTS (
       SELECT 1 FROM playback_states ps2
       WHERE ps2."userId" = {uid} AND ps2."episodeId" = e.id AND ps2.completed = true
@@ -41,17 +41,17 @@ pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
 
 /// Rule 22's `<ME>`: a monitored season holds a monitored, aired, not-on-disk episode.
 const MISSING_EPISODE: &str = r#"EXISTS (
-  SELECT 1 FROM seasons ms JOIN episodes me ON me."seasonId" = ms.id
-  WHERE ms."mediaId" = media.id AND ms."seasonNumber" > 0
+  SELECT 1 FROM item_groups ms JOIN items me ON me."groupId" = ms.id
+  WHERE ms."mediaId" = media.id AND ms."number" > 0
     AND ms.monitored = true AND me.monitored = true
     AND me."airDate" <= "#;
 const MISSING_EPISODE_TAIL: &str = r#" AND NOT ("me"."hasFile" = true OR EXISTS (
-      SELECT 1 FROM "episodes" cov
-      WHERE cov."seasonId" = "me"."seasonId"
+      SELECT 1 FROM "items" cov
+      WHERE cov."groupId" = "me"."groupId"
         AND cov."hasFile" = true
-        AND cov."endEpisodeNumber" IS NOT NULL
-        AND "me"."episodeNumber" > cov."episodeNumber"
-        AND "me"."episodeNumber" <= cov."endEpisodeNumber"
+        AND cov."endNumber" IS NOT NULL
+        AND "me"."number" > cov."number"
+        AND "me"."number" <= cov."endNumber"
     ))
 )"#;
 
@@ -241,9 +241,9 @@ fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
     };
     qb.push(" AND ((media.type = 'movie' AND ");
     rank(qb, "f.\"mediaId\" = media.id");
-    qb.push(" < c.cr) OR (media.type = 'series' AND EXISTS (SELECT 1 FROM seasons s JOIN episodes e ON e.\"seasonId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"seasonNumber\" > 0 AND e.monitored = true AND ");
+    qb.push(" < c.cr) OR (media.type = 'series' AND EXISTS (SELECT 1 FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0 AND e.monitored = true AND ");
     rank(qb, "f.\"episodeId\" = e.id");
-    qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM seasons s2 JOIN episodes o ON o.\"seasonId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"seasonNumber\" > 0 AND o.monitored = true AND o.\"endEpisodeNumber\" IS NOT NULL AND e.\"episodeNumber\" > o.\"episodeNumber\" AND e.\"episodeNumber\" <= o.\"endEpisodeNumber\")))) ");
+    qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM item_groups s2 JOIN items o ON o.\"groupId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"number\" > 0 AND o.monitored = true AND o.\"endNumber\" IS NOT NULL AND e.\"number\" > o.\"number\" AND e.\"number\" <= o.\"endNumber\")))) ");
 }
 
 fn order_sql(p: &Search) -> &'static str {
@@ -337,12 +337,12 @@ async fn attach_watched(
     OR
     (m.type = 'series'
       AND EXISTS (
-        SELECT 1 FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-        WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
       )
       AND NOT EXISTS (
-        SELECT 1 FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-        WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
           AND NOT EXISTS (
             SELECT 1 FROM playback_states ps2
             WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true

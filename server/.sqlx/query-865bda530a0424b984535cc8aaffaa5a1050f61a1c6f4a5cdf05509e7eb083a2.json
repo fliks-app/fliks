@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id, m.\"createdAt\" AS created_at, m.\"updatedAt\" AS updated_at, m.type AS \"type!\",\n                  m.\"startSeconds\" AS start_seconds, m.\"endSeconds\" AS end_seconds, m.confidence,\n                  m.manual, m.\"episodeId\" AS episode_id\n           FROM episode_markers m JOIN items e ON e.id = m.\"episodeId\" WHERE e.\"groupId\" = $1\n           ORDER BY m.\"episodeId\", m.\"startSeconds\", m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "updatedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "type!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "start_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "startSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "end_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "endSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "confidence",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "confidence"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "manual",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "manual"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "episodeId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "865bda530a0424b984535cc8aaffaa5a1050f61a1c6f4a5cdf05509e7eb083a2"
+}

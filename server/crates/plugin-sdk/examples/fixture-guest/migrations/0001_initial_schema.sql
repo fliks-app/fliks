@@ -48,8 +48,8 @@ CREATE TABLE "download_history" (
   "statusMessage" text,
   "grabSource" varchar(8) NOT NULL DEFAULT 'auto',
   "mediaId" integer REFERENCES public."media"("id") ON DELETE CASCADE,
-  "episodeId" integer REFERENCES public."episodes"("id") ON DELETE SET NULL,
-  "seasonId" integer REFERENCES public."seasons"("id") ON DELETE SET NULL,
+  "episodeId" integer REFERENCES public."items"("id") ON DELETE SET NULL,
+  "seasonId" integer REFERENCES public."item_groups"("id") ON DELETE SET NULL,
   "indexerId" integer REFERENCES "indexers"("id") ON DELETE SET NULL,
   "downloadClientId" integer REFERENCES "download_clients"("id") ON DELETE SET NULL
 );

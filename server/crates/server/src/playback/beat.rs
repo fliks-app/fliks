@@ -277,8 +277,8 @@ async fn check_bound_file(
     let owned = sqlx::query_scalar::<_, bool>(
         r#"SELECT EXISTS(
              SELECT 1 FROM media_files mf
-             LEFT JOIN episodes e ON e.id = mf."episodeId"
-             LEFT JOIN seasons s ON s.id = e."seasonId"
+             LEFT JOIN items e ON e.id = mf."episodeId"
+             LEFT JOIN item_groups s ON s.id = e."groupId"
              WHERE mf.id = $1 AND COALESCE(s."mediaId", mf."mediaId") = $2
                AND mf."episodeId" IS NOT DISTINCT FROM $3)"#,
     )

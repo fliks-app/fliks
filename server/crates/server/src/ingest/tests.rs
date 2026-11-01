@@ -261,13 +261,23 @@ async fn library(c: &Ctx, name: &str, path: &Path, types: &str) -> i32 {
 }
 
 async fn media(c: &Ctx, lib: i32, folder: &str, t: &str) -> i32 {
-    sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ($1, $2, $3, $1) RETURNING id"#)
+    let mut tx = c.st.db.begin().await.unwrap();
+    let id = sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ($1, $2, $3, $1) RETURNING id"#)
         .bind(folder)
         .bind(t)
         .bind(lib)
-        .fetch_one(&c.st.db)
+        .fetch_one(&mut *tx)
         .await
-        .unwrap()
+        .unwrap();
+    crate::media::items::create_shell(
+        &mut tx,
+        id,
+        fliks_domain::media::kind::MediaKind::parse(t).unwrap(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    id
 }
 
 async fn file_row(c: &Ctx, m: i32, rel: &str) -> i32 {
@@ -467,7 +477,7 @@ async fn rescan_refuses_a_missing_folder_and_reconciles(pool: PgPool) {
             .unwrap();
     assert_eq!(rows, ["Season 01/Show - S01E02.mkv"]);
     assert_eq!(
-        count(&c, r#"SELECT count(*) FROM episodes WHERE "hasFile""#).await,
+        count(&c, r#"SELECT count(*) FROM items WHERE "hasFile""#).await,
         1
     );
     // A media with no rows and no folder: nothing to remove.
@@ -491,16 +501,16 @@ async fn rescan_batches_slots_links_and_removals(pool: PgPool) {
     ] {
         touch(&lib.join("Show").join(n), b"x");
     }
-    let sp: i32 = sqlx::query_scalar(r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored) VALUES ($1, 0, false) RETURNING id"#)
+    let sp: i32 = sqlx::query_scalar(r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 0, false) RETURNING id"#)
         .bind(s).fetch_one(&c.st.db).await.unwrap();
-    let special: i32 = sqlx::query_scalar(r#"INSERT INTO episodes ("seasonId", "episodeNumber", title, monitored) VALUES ($1, 1, 'Making Of', true) RETURNING id"#)
-        .bind(sp).fetch_one(&c.st.db).await.unwrap();
+    let special: i32 = sqlx::query_scalar(r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", title, monitored) VALUES ($1, $2, (SELECT id FROM editions WHERE "mediaId" = $2), 1, 'Making Of', true) RETURNING id"#)
+        .bind(sp).bind(s).fetch_one(&c.st.db).await.unwrap();
     touch(&lib.join("Show/Making Of.mkv"), b"m");
     let r = rescan(&c, s).await.unwrap();
     assert_eq!((r.added, r.removed), (3, 1));
     let has: Vec<(i32, i32, Option<i32>, bool)> = sqlx::query_as(
-        r#"SELECT s."seasonNumber", e."episodeNumber", e."endEpisodeNumber", e."hasFile"
-           FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE s."mediaId" = $1
+        r#"SELECT s."number", e."number", e."endNumber", e."hasFile"
+           FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE s."mediaId" = $1
            ORDER BY 1, 2"#,
     )
     .bind(s)
@@ -842,6 +852,13 @@ async fn a_complete_file_is_imported(pool: PgPool) {
         "{b}"
     );
     assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
+    let bare = count(
+        &c,
+        r#"SELECT count(*) FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id)
+           OR NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id AND i."groupId" IS NULL)"#,
+    )
+    .await;
+    assert_eq!(bare, 0, "the unmatched media has its edition and item");
 }
 
 #[sqlx::test(migrations = false)]

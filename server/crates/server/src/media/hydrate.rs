@@ -75,11 +75,11 @@ LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
 LEFT JOIN LATERAL (
   SELECT COUNT(e.id) AS total,
          COUNT(e.id) FILTER (WHERE (e."hasFile" = true OR EXISTS (
-           SELECT 1 FROM episodes cov WHERE cov."seasonId" = e."seasonId" AND cov."hasFile" = true
-             AND cov."endEpisodeNumber" IS NOT NULL AND e."episodeNumber" > cov."episodeNumber"
-             AND e."episodeNumber" <= cov."endEpisodeNumber"))) AS downloaded
-  FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-  WHERE s."mediaId" = media.id AND s."seasonNumber" > 0) st ON media.type = 'series'
+           SELECT 1 FROM items cov WHERE cov."groupId" = e."groupId" AND cov."hasFile" = true
+             AND cov."endNumber" IS NOT NULL AND e."number" > cov."number"
+             AND e."number" <= cov."endNumber"))) AS downloaded
+  FROM item_groups s JOIN items e ON e."groupId" = s.id
+  WHERE s."mediaId" = media.id AND s."number" > 0) st ON media.type = 'series'
 WHERE media.id = ANY($1)"#,
         ids,
         grid,
@@ -129,18 +129,18 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
         r#"SELECT
   COALESCE((SELECT jsonb_agg(
       jsonb_build_object('id', s.id, 'createdAt', iso_ms(s."createdAt"), 'updatedAt', iso_ms(s."updatedAt"),
-        'seasonNumber', s."seasonNumber", 'monitored', s.monitored, 'preferredProvider', s."preferredProvider",
+        'seasonNumber', s."number", 'monitored', s.monitored, 'preferredProvider', s."preferredProvider",
         'posterUrl', s."posterUrl", 'overview', s.overview, 'airDate', s."airDate", 'mediaId', s."mediaId",
         'episodes', COALESCE((SELECT jsonb_agg(
             jsonb_build_object('id', e.id, 'createdAt', iso_ms(e."createdAt"), 'updatedAt', iso_ms(e."updatedAt"),
-              'episodeNumber', e."episodeNumber", 'endEpisodeNumber', e."endEpisodeNumber", 'title', e.title,
+              'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
               'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime, 'monitored', e.monitored,
               'hasFile', (e."hasFile" OR EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1 AND f."episodeId" = e.id)),
-              'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"), 'seasonId', e."seasonId")
-            ORDER BY e."episodeNumber", e.id)
-          FROM episodes e WHERE e."seasonId" = s.id), '[]'::jsonb))
-      ORDER BY (s."seasonNumber" = 0), s."seasonNumber", s.id)
-    FROM seasons s WHERE s."mediaId" = $1), '[]'::jsonb) AS "seasons!: Value""#,
+              'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"), 'seasonId', e."groupId")
+            ORDER BY e."number", e.id)
+          FROM items e WHERE e."groupId" = s.id), '[]'::jsonb))
+      ORDER BY (s."number" = 0), s."number", s.id)
+    FROM item_groups s WHERE s."mediaId" = $1), '[]'::jsonb) AS "seasons!: Value""#,
         id
     )
     .fetch_one(db)
