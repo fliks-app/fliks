@@ -3,6 +3,7 @@ use crate::http::{
     AppError,
     auth::{RoleRow, UserRow, load_users},
 };
+use fliks_domain::media::kind::MediaKind;
 use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
 use std::collections::HashMap;
@@ -95,6 +96,35 @@ pub async fn lock_user(c: &mut PgConnection, id: i32) -> Result<Option<UserRow>,
         Some(id) => Ok(load_users(c, Some(id), false).await?.pop().map(|(u, _)| u)),
         None => Ok(None),
     }
+}
+
+/// A limit of 0 is no row: unlimited.
+pub async fn set_quota(
+    c: &mut PgConnection,
+    user_id: i32,
+    kind: MediaKind,
+    limit: i32,
+) -> Result<(), sqlx::Error> {
+    if limit == 0 {
+        sqlx::query!(
+            r#"DELETE FROM user_quotas WHERE "userId" = $1 AND "kind" = $2"#,
+            user_id,
+            kind.as_str()
+        )
+        .execute(c)
+        .await?;
+    } else {
+        sqlx::query!(
+            r#"INSERT INTO user_quotas ("userId", "kind", "limit") VALUES ($1, $2, $3)
+            ON CONFLICT ("userId", "kind") DO UPDATE SET "limit" = $3"#,
+            user_id,
+            kind.as_str(),
+            limit
+        )
+        .execute(c)
+        .await?;
+    }
+    Ok(())
 }
 
 /// True when no other enabled admin exists; locks the admin rows so concurrent demotions serialise.

@@ -17,7 +17,10 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use fliks_domain::acl::{Action, Subject};
+use fliks_domain::{
+    acl::{Action, Subject},
+    media::kind::MediaKind,
+};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json as Jsonb};
 
@@ -200,6 +203,11 @@ pub async fn update(
     };
     merge_fields(&mut t, &dto);
     save_user(&mut tx, id, &t, hashed.as_deref()).await?;
+    for kind in MediaKind::ALL {
+        if let Some(limit) = dto.quota_limit(kind) {
+            db::set_quota(&mut tx, id, kind, limit).await?;
+        }
+    }
     if dto.share_disabled == Some(true) && !target.share_disabled {
         crate::social::leave_social(&mut tx, id).await?;
     }
@@ -243,12 +251,9 @@ fn authorize_update(a: &Authed, dto: &UpdateUser, target: &UserRow) -> Result<()
     if admin_changing && !is_admin {
         return Err(forbidden());
     }
-    let quota = [
-        dto.movie_quota_limit,
-        dto.series_quota_limit,
-        dto.quota_period_days,
-    ];
-    if !is_manager && quota.iter().any(Option::is_some) {
+    let quota_sent = dto.quota_period_days.is_some()
+        || MediaKind::ALL.iter().any(|k| dto.quota_limit(*k).is_some());
+    if !is_manager && quota_sent {
         return Err(forbidden());
     }
     if !is_manager && dto.library_ids.is_some() {
@@ -268,8 +273,6 @@ fn merge_fields(t: &mut UserRow, dto: &UpdateUser) {
         is_admin,
         enabled,
         require_password_change,
-        movie_quota_limit,
-        series_quota_limit,
         quota_period_days,
         profile_visibility,
         share_tastes,
@@ -302,12 +305,12 @@ async fn save_user(
     sqlx::query!(
         r#"UPDATE users SET "username" = $2, "email" = $3,
         "passwordHash" = COALESCE($4, "passwordHash"), "roleId" = $5, "isAdmin" = $6, "enabled" = $7,
-        "requirePasswordChange" = $8, "movieQuotaLimit" = $9, "seriesQuotaLimit" = $10,
-        "quotaPeriodDays" = $11, "libraryOrder" = $12, "hiddenLibraryIds" = $13,
-        "profileVisibility" = $14::text::users_profilevisibility_enum, "shareTastes" = $15,
-        "shareRecommendations" = $16, "shareWatchHistory" = $17, "shareLikes" = $18, "shareStats" = $19,
-        "shareDisabled" = $20, "hideSpoilers" = $21, "edlEnabled" = $22, "edlAutoSkipCommercials" = $23,
-        "spoilerHideStills" = $24, "spoilerHideOverviews" = $25, "spoilerHideTitles" = $26,
+        "requirePasswordChange" = $8, "quotaPeriodDays" = $9, "libraryOrder" = $10,
+        "hiddenLibraryIds" = $11, "profileVisibility" = $12::text::users_profilevisibility_enum,
+        "shareTastes" = $13, "shareRecommendations" = $14, "shareWatchHistory" = $15,
+        "shareLikes" = $16, "shareStats" = $17, "shareDisabled" = $18, "hideSpoilers" = $19,
+        "edlEnabled" = $20, "edlAutoSkipCommercials" = $21, "spoilerHideStills" = $22,
+        "spoilerHideOverviews" = $23, "spoilerHideTitles" = $24,
         "updatedAt" = now() WHERE "id" = $1"#,
         id,
         &t.username,
@@ -317,8 +320,6 @@ async fn save_user(
         t.is_admin,
         t.enabled,
         t.require_password_change,
-        t.movie_quota_limit,
-        t.series_quota_limit,
         t.quota_period_days,
         &t.library_order as _,
         &t.hidden_library_ids as _,

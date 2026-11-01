@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM user_quotas WHERE \"userId\" = $1 AND \"kind\" = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9cee19398ceef027d3db749d0f48aa78e62d50e50fec66a790eee9bccf18e7ac"
+}

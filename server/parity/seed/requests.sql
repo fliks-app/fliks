@@ -17,9 +17,7 @@ INSERT INTO language_profiles (id, "createdAt", "updatedAt", name, "audioLanguag
 SELECT setval('quality_profiles_id_seq', 1);
 SELECT setval('language_profiles_id_seq', 2);
 
-ALTER TABLE users DISABLE TRIGGER set_updated_at;
-UPDATE users SET "movieQuotaLimit" = 1, "quotaPeriodDays" = 7 WHERE id = 4;
-ALTER TABLE users ENABLE TRIGGER set_updated_at;
+INSERT INTO user_quotas ("userId", kind, "limit") VALUES (4, 'movie', 1);
 
 INSERT INTO requests (id, "createdAt", "updatedAt", "mediaType", kind, provider, "externalId", title, status, "declinedReason", seasons,
                       "userId", "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "mediaId", "posterUrl", "fanartUrl") VALUES

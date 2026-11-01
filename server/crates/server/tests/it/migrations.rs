@@ -1644,3 +1644,42 @@ async fn m1787200_normalises_media_server_urls_and_events(pool: PgPool) {
         ]
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1789000150_moves_request_quotas_to_user_quotas(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_150).await;
+    sql(
+        &pool,
+        r#"INSERT INTO users (id, username, "movieQuotaLimit", "seriesQuotaLimit") VALUES
+            (1, 'a', 5, 0), (2, 'b', 0, 0), (3, 'c', -1, 2), (4, 'd', 0, 7)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_150).await;
+    let got: Vec<(i32, String, i32)> = rows(
+        &pool,
+        r#"SELECT "userId", kind, "limit" FROM user_quotas ORDER BY "userId", kind"#,
+    )
+    .await;
+    assert_eq!(
+        got,
+        vec![
+            (1, "movie".into(), 5),
+            (3, "movie".into(), -1),
+            (3, "series".into(), 2),
+            (4, "series".into(), 7)
+        ],
+        "a zero is no row, a negative limit is kept"
+    );
+    assert!(
+        sqlx::raw_sql(r#"INSERT INTO user_quotas VALUES (1, 'series', 0)"#)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    sql(&pool, "DELETE FROM users WHERE id = 3").await;
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM user_quotas")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 2, "deleting a user deletes its rows");
+}

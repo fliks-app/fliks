@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET \"username\" = $2, \"email\" = $3,\n        \"passwordHash\" = COALESCE($4, \"passwordHash\"), \"roleId\" = $5, \"isAdmin\" = $6, \"enabled\" = $7,\n        \"requirePasswordChange\" = $8, \"quotaPeriodDays\" = $9, \"libraryOrder\" = $10,\n        \"hiddenLibraryIds\" = $11, \"profileVisibility\" = $12::text::users_profilevisibility_enum,\n        \"shareTastes\" = $13, \"shareRecommendations\" = $14, \"shareWatchHistory\" = $15,\n        \"shareLikes\" = $16, \"shareStats\" = $17, \"shareDisabled\" = $18, \"hideSpoilers\" = $19,\n        \"edlEnabled\" = $20, \"edlAutoSkipCommercials\" = $21, \"spoilerHideStills\" = $22,\n        \"spoilerHideOverviews\" = $23, \"spoilerHideTitles\" = $24,\n        \"updatedAt\" = now() WHERE \"id\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Int4",
+        "Jsonb",
+        "Jsonb",
+        "Text",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "42bd75bc4250adfeb84a03b476bf2ec08fce12e2ce811df32e4f1eff748512c4"
+}

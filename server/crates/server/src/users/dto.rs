@@ -1,5 +1,6 @@
 //! Request bodies. `null` on a non-nullable field is a 400.
 use crate::http::AppError;
+use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Deserializer};
 
 /// `Some(v)` for a present non-null value; `null` is a type error.
@@ -168,6 +169,14 @@ impl UpdateUser {
                 "profileVisibility must be one of the following values: public, private",
             ),
         ])
+    }
+
+    /// The quota limit sent for `kind`.
+    pub fn quota_limit(&self, kind: MediaKind) -> Option<i32> {
+        match kind {
+            MediaKind::Movie => self.movie_quota_limit,
+            MediaKind::Series => self.series_quota_limit,
+        }
     }
 
     /// Fields only `users.manage` may send (rule 14).
