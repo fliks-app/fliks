@@ -70,15 +70,15 @@ mod tests {
     #[test]
     fn both_forms_normalise_to_the_same_pair() {
         let want = Isbn {
-            isbn13: "9780306406157".into(),
-            isbn10: Some("0306406152".into()),
+            isbn13: "9782999990036".into(),
+            isbn10: Some("2999990030".into()),
         };
         for raw in [
-            "9780306406157",
-            "978-0-306-40615-7",
-            "urn:isbn:9780306406157",
-            "ISBN 0-306-40615-2",
-            "isbn:0306406152",
+            "9782999990036",
+            "978-2-99999-003-6",
+            "urn:isbn:9782999990036",
+            "ISBN 2-99999-003-0",
+            "isbn:2999990030",
         ] {
             assert_eq!(parse(raw), Some(want.clone()), "{raw}");
         }
@@ -86,14 +86,14 @@ mod tests {
 
     #[test]
     fn bad_checksums_and_shapes_are_refused() {
-        for raw in ["9780306406158", "0306406153", "12345", "", "979123", "abc"] {
+        for raw in ["9782999990037", "2999990031", "12345", "", "979123", "abc"] {
             assert_eq!(parse(raw), None, "{raw}");
         }
     }
 
     #[test]
     fn x_check_digit_and_979_prefix() {
-        assert_eq!(parse("080442957x").unwrap().isbn13, "9780804429573");
-        assert_eq!(parse("979-10-90636-07-1").unwrap().isbn10, None);
+        assert_eq!(parse("299999009x").unwrap().isbn13, "9782999990098");
+        assert_eq!(parse("979-10-99999-01-6").unwrap().isbn10, None);
     }
 }

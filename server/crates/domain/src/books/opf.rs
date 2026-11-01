@@ -8,7 +8,7 @@ use quick_xml::{
     events::{BytesStart, Event},
 };
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -82,7 +82,9 @@ fn decode_xml(bytes: &[u8]) -> String {
     let head = String::from_utf8_lossy(&bytes[..bytes.len().min(200)]);
     let declared = rx!(i r#"^\s*<\?xml[^>]*encoding\s*=\s*["']([A-Za-z0-9._-]+)["']"#)
         .captures(&head)
-        .and_then(|c| encoding_rs::Encoding::for_label(c[1].as_bytes()));
+        .and_then(|c| encoding_rs::Encoding::for_label(c[1].as_bytes()))
+        // The declaration was read as ASCII, so a UTF-16 label is wrong.
+        .filter(|e| *e != encoding_rs::UTF_16LE && *e != encoding_rs::UTF_16BE);
     match declared {
         Some(enc) if enc != encoding_rs::UTF_8 => {
             enc.decode_without_bom_handling(bytes).0.into_owned()
@@ -119,13 +121,17 @@ fn decode_entities(raw: &str) -> String {
         .into_owned()
 }
 
-/// A parsed element: lowercase local name, attributes by local name, and all the text beneath it.
+enum Node {
+    Text(String),
+    El(El),
+}
+
+/// A parsed element: lowercase local name, attributes by local name, text and child elements in order.
 #[derive(Default)]
 struct El {
     name: String,
     attrs: Vec<(String, String)>,
-    text: String,
-    kids: Vec<El>,
+    nodes: Vec<Node>,
 }
 
 impl El {
@@ -136,15 +142,41 @@ impl El {
             .map(|(_, v)| v.as_str())
     }
 
+    fn elems(&self) -> impl Iterator<Item = &El> {
+        self.nodes.iter().filter_map(|n| match n {
+            Node::El(e) => Some(e),
+            Node::Text(_) => None,
+        })
+    }
+
     fn find(&self, name: &str) -> Option<&El> {
         if self.name == name {
             return Some(self);
         }
-        self.kids.iter().find_map(|k| k.find(name))
+        self.elems().find_map(|k| k.find(name))
+    }
+
+    fn push_text(&mut self, s: &str) {
+        match self.nodes.last_mut() {
+            Some(Node::Text(t)) => t.push_str(s),
+            _ => self.nodes.push(Node::Text(s.to_owned())),
+        }
+    }
+
+    /// All the text beneath the element, in document order.
+    fn raw_text(&self) -> String {
+        let mut out = String::new();
+        for n in &self.nodes {
+            match n {
+                Node::Text(t) => out.push_str(t),
+                Node::El(e) => out.push_str(&e.raw_text()),
+            }
+        }
+        out
     }
 
     fn text(&self) -> String {
-        collapse(&self.text)
+        collapse(&self.raw_text())
     }
 }
 
@@ -170,6 +202,16 @@ fn open(e: &BytesStart) -> El {
     }
 }
 
+/// Deeper start tags are not kept: their text stays with the element at this depth.
+const MAX_DEPTH: usize = 64;
+
+fn close(stack: &mut Vec<El>) {
+    if stack.len() > 1 {
+        let el = stack.pop().unwrap();
+        stack.last_mut().unwrap().nodes.push(Node::El(el));
+    }
+}
+
 /// The document as a tree. A malformed tail ends the read and keeps what was read.
 fn parse_tree(xml: &str) -> El {
     let mut reader = Reader::from_str(xml);
@@ -177,49 +219,42 @@ fn parse_tree(xml: &str) -> El {
     cfg.check_end_names = false;
     cfg.allow_unmatched_ends = true;
     let mut stack = vec![El::default()];
-    let close = |stack: &mut Vec<El>| {
-        if stack.len() > 1 {
-            let el = stack.pop().unwrap();
-            let parent = stack.last_mut().unwrap();
-            parent.text.push_str(&el.text);
-            parent.kids.push(el);
-        }
-    };
+    let mut skipped = 0usize;
     loop {
         match reader.read_event() {
+            Ok(Event::Start(_)) if stack.len() > MAX_DEPTH => skipped += 1,
             Ok(Event::Start(e)) => stack.push(open(&e)),
             Ok(Event::Empty(e)) => {
-                stack.push(open(&e));
-                close(&mut stack);
+                if stack.len() <= MAX_DEPTH {
+                    stack.last_mut().unwrap().nodes.push(Node::El(open(&e)));
+                }
             }
             // An end tag closes the nearest open element of that name, and nothing when none is open.
+            Ok(Event::End(_)) if skipped > 0 => skipped -= 1,
             Ok(Event::End(e)) => {
                 let name = local(e.name().as_ref());
-                if let Some(depth) = stack
-                    .iter()
-                    .rposition(|el| el.name == name)
-                    .filter(|d| *d > 0)
-                {
+                let depth = if stack.len() > 1 && stack.last().is_some_and(|el| el.name == name) {
+                    Some(stack.len() - 1)
+                } else {
+                    stack
+                        .iter()
+                        .rposition(|el| el.name == name)
+                        .filter(|d| *d > 0)
+                };
+                if let Some(depth) = depth {
                     while stack.len() > depth {
                         close(&mut stack);
                     }
                 }
             }
-            Ok(Event::Text(t)) => {
-                stack
-                    .last_mut()
-                    .unwrap()
-                    .text
-                    .push_str(&decode_entities(&t));
-            }
-            Ok(Event::CData(c)) => stack.last_mut().unwrap().text.push_str(&c),
+            Ok(Event::Text(t)) => stack.last_mut().unwrap().push_text(&decode_entities(&t)),
+            Ok(Event::CData(c)) => stack.last_mut().unwrap().push_text(&c),
             Ok(Event::GeneralRef(r)) => {
                 let whole = format!("&{};", &*r);
                 stack
                     .last_mut()
                     .unwrap()
-                    .text
-                    .push_str(&decode_entities(&whole));
+                    .push_text(&decode_entities(&whole));
             }
             Ok(Event::Eof) | Err(_) => break,
             Ok(_) => {}
@@ -256,7 +291,7 @@ fn collect<'a>(el: &'a El, name: &str, out: &mut Vec<&'a El>) {
     if el.name == name {
         out.push(el);
     }
-    for k in &el.kids {
+    for k in el.elems() {
         collect(k, name, out);
     }
 }
@@ -329,8 +364,7 @@ fn role_of(code: &str) -> Option<Role> {
 
 fn first_text(metadata: &El, name: &str) -> Option<String> {
     metadata
-        .kids
-        .iter()
+        .elems()
         .filter(|k| k.name == name)
         .map(El::text)
         .find(|t| !t.is_empty())
@@ -345,12 +379,18 @@ fn year_of(date: &str) -> Option<i32> {
     (1000..=2100).contains(&y).then_some(y)
 }
 
-fn push_identifier(out: &mut OpfMetadata, scheme: &str, value: &str) {
+fn push_isbn(out: &mut OpfMetadata, seen: &mut HashSet<String>, i: Isbn) {
+    if seen.insert(i.isbn13.clone()) {
+        out.isbns.push(i);
+    }
+}
+
+fn push_identifier(out: &mut OpfMetadata, seen: &mut HashSet<String>, scheme: &str, value: &str) {
     let (mut scheme, mut value) = (scheme.trim().to_lowercase(), value.trim().to_owned());
-    if let Some(c) =
-        rx!(i r"^(?:urn:)?([A-Za-z][A-Za-z0-9-]*)[:=]\s*(.+)$").captures(&value.clone())
-    {
-        let prefix = c[1].to_lowercase();
+    let prefixed = rx!(i r"^(?:urn:)?([A-Za-z][A-Za-z0-9-]*)[:=]\s*(.+)$")
+        .captures(&value)
+        .map(|c| (c[1].to_lowercase(), c[2].trim().to_owned()));
+    if let Some((prefix, rest)) = prefixed {
         let known = [
             "isbn",
             "uuid",
@@ -360,11 +400,12 @@ fn push_identifier(out: &mut OpfMetadata, scheme: &str, value: &str) {
             "google",
             "goodreads",
         ];
-        if known.contains(&prefix.as_str()) || value.to_lowercase().starts_with("urn:") {
-            if scheme.is_empty() || known.contains(&prefix.as_str()) {
+        let is_known = known.contains(&prefix.as_str());
+        if is_known || value.to_lowercase().starts_with("urn:") {
+            if scheme.is_empty() || is_known {
                 scheme = prefix;
             }
-            value = c[2].trim().to_owned();
+            value = rest;
         }
     }
     let slot = match scheme.as_str() {
@@ -374,9 +415,7 @@ fn push_identifier(out: &mut OpfMetadata, scheme: &str, value: &str) {
         "uuid" => &mut out.uuid,
         _ => {
             if let Some(i) = isbn::parse(&value) {
-                if !out.isbns.iter().any(|x| x.isbn13 == i.isbn13) {
-                    out.isbns.push(i);
-                }
+                push_isbn(out, seen, i);
             } else if scheme.is_empty()
                 && rx!(
                     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -418,8 +457,7 @@ pub fn parse(bytes: &[u8]) -> OpfMetadata {
     };
 
     let titles: Vec<&El> = metadata
-        .kids
-        .iter()
+        .elems()
         .filter(|k| k.name == "title" && !k.text().is_empty())
         .collect();
     let kind = |t: &El| refines.get(t, "title-type").map(str::to_lowercase);
@@ -442,9 +480,9 @@ pub fn parse(bytes: &[u8]) -> OpfMetadata {
         .find(|t| kind(t).as_deref() == Some("subtitle"))
         .map(|t| t.text());
 
+    let mut seen_creators = HashSet::new();
     for k in metadata
-        .kids
-        .iter()
+        .elems()
         .filter(|k| k.name == "creator" || k.name == "contributor")
     {
         let name = k.text();
@@ -457,11 +495,7 @@ pub fn parse(bytes: &[u8]) -> OpfMetadata {
         let Some(role) = role.filter(|_| !name.is_empty()) else {
             continue;
         };
-        if out
-            .creators
-            .iter()
-            .any(|c| c.name == name && c.role == role)
-        {
+        if !seen_creators.insert((name.clone(), role as u8)) {
             continue;
         }
         let file_as = k
@@ -480,7 +514,7 @@ pub fn parse(bytes: &[u8]) -> OpfMetadata {
         .map(|l| normalize_language_code(Some(&l)))
         .filter(|l| l != "und");
     out.publisher = first_text(metadata, "publisher");
-    let dates: Vec<&El> = metadata.kids.iter().filter(|k| k.name == "date").collect();
+    let dates: Vec<&El> = metadata.elems().filter(|k| k.name == "date").collect();
     let event = |d: &El| d.attr("event").unwrap_or("").to_lowercase();
     let date = dates
         .iter()
@@ -497,31 +531,30 @@ pub fn parse(bytes: &[u8]) -> OpfMetadata {
         out.year = Some(y);
     }
     out.description = metadata
-        .kids
-        .iter()
+        .elems()
         .filter(|k| k.name == "description")
-        .map(|k| k.text.trim().to_owned())
+        .map(|k| k.raw_text().trim().to_owned())
         .find(|t| !t.is_empty());
-    for k in metadata.kids.iter().filter(|k| k.name == "subject") {
+    let mut seen_subjects = HashSet::new();
+    for k in metadata.elems().filter(|k| k.name == "subject") {
         let s = k.text();
-        if !s.is_empty() && !out.subjects.contains(&s) {
+        if !s.is_empty() && seen_subjects.insert(s.clone()) {
             out.subjects.push(s);
         }
     }
 
-    for k in metadata.kids.iter().filter(|k| k.name == "identifier") {
+    let mut seen_isbns = HashSet::new();
+    for k in metadata.elems().filter(|k| k.name == "identifier") {
         let scheme = k
             .attr("scheme")
             .or_else(|| refines.get(k, "identifier-type"))
             .unwrap_or("");
-        push_identifier(&mut out, scheme, &k.text());
+        push_identifier(&mut out, &mut seen_isbns, scheme, &k.text());
     }
     // EPUB 3 keeps the print edition's ISBN in dc:source.
-    for k in metadata.kids.iter().filter(|k| k.name == "source") {
-        if let Some(i) =
-            isbn::parse(&k.text()).filter(|i| !out.isbns.iter().any(|x| x.isbn13 == i.isbn13))
-        {
-            out.isbns.push(i);
+    for k in metadata.elems().filter(|k| k.name == "source") {
+        if let Some(i) = isbn::parse(&k.text()) {
+            push_isbn(&mut out, &mut seen_isbns, i);
         }
     }
 

@@ -1237,6 +1237,7 @@ dependencies = [
  "image",
  "jsonwebtoken",
  "libc",
+ "md-5",
  "mimalloc",
  "miniz_oxide 0.9.1",
  "nodejs-semver",

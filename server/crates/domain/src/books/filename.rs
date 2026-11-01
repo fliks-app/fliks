@@ -60,7 +60,11 @@ fn tidy(s: &str) -> String {
 
 fn trim_edges(s: &str) -> String {
     s.trim_matches(|c: char| {
-        c.is_whitespace() || matches!(c, '-' | '_' | '.' | ',' | ';' | ':' | '–' | '—')
+        c.is_whitespace()
+            || matches!(
+                c,
+                '-' | '_' | '.' | ',' | ';' | ':' | '\u{2013}' | '\u{2014}'
+            )
     })
     .to_owned()
 }
@@ -161,7 +165,12 @@ fn looks_like_name(s: &str, min_words: usize) -> bool {
             "de" | "du" | "del" | "della" | "di" | "da" | "van" | "von" | "der" | "den"
         )
     };
-    let elided = |w: &str| w.len() > 2 && matches!(&w[..2].to_lowercase()[..], "d'" | "l'");
+    let elided = |w: &str| {
+        let mut c = w.chars();
+        matches!(c.next(), Some('d' | 'D' | 'l' | 'L'))
+            && c.next() == Some('\'')
+            && c.next().is_some()
+    };
     let article = |w: &str| {
         matches!(
             w.to_lowercase().as_str(),
@@ -290,7 +299,7 @@ fn parse_name(raw: &str) -> Parsed {
         }
     }
 
-    let segs: Vec<String> = rx!(r"\s+[-–—]\s+")
+    let segs: Vec<String> = rx!(r"\s+[-\x{2013}\x{2014}]\s+")
         .split(&s)
         .map(trim_edges)
         .filter(|t| !t.is_empty())
@@ -373,10 +382,10 @@ fn part_of(stem: &str, multi_part_ext: bool) -> Option<PartGuess> {
             title,
         })
     };
-    if let Some(c) = rx!(i r"^(?:part|partie|pt|chapter|chapitre|chap|track|piste|disc|disque|cd)\s*\.?\s*0*(\d+)\s*(?:[-–:._]\s*(.+))?$").captures(&s) {
+    if let Some(c) = rx!(i r"^(?:part|partie|pt|chapter|chapitre|chap|track|piste|disc|disque|cd)\s*\.?\s*0*(\d+)\s*(?:[-\x{2013}:._]\s*(.+))?$").captures(&s) {
         return part(c, 1, 2);
     }
-    let c = rx!(r"^0*(\d{1,4})(?:\s*[-–._]\s*|\s+)(.+)$").captures(&s);
+    let c = rx!(r"^0*(\d{1,4})(?:\s*[-\x{2013}._]\s*|\s+)(.+)$").captures(&s);
     if let Some(c) = c {
         let generic =
             rx!(i r"^(?:chapter|chapitre|chap\.?|track|piste|part|partie)\b").is_match(&c[2]);
