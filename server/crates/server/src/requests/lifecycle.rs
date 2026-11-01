@@ -18,7 +18,6 @@ type Res<T> = Result<T, AppError>;
 pub struct MediaRef {
     pub id: i32,
     pub media_type: MediaKind,
-    pub tmdb_id: Option<i32>,
     pub monitored: bool,
 }
 
@@ -81,10 +80,7 @@ impl Lifecycle {
     }
 
     async fn media_imported(&self, media: &MediaRef, added_by: Option<i32>) -> Res<()> {
-        let Some(tmdb_id) = media.tmdb_id else {
-            return Ok(());
-        };
-        let open = db::in_flight_by_title(&self.st.db, tmdb_id, media.media_type).await?;
+        let open = db::in_flight_for_media(&self.st.db, media.id).await?;
         let Some(row) = db::media_by_id(&self.st.db, media.id).await? else {
             return Ok(());
         };

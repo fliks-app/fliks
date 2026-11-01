@@ -623,6 +623,56 @@ async fn m1789000030_moves_the_provider_ids_into_media_external_ids(pool: PgPool
     assert_eq!(left, 0);
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000040_names_request_titles_by_provider_and_external_id(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_040).await;
+    sql(
+        &pool,
+        r#"INSERT INTO requests ("mediaType", kind, "tmdbId", title, status) VALUES
+          ('movie', 'add', 603, 'a', 'approved'), ('series', 'delete', 1396, 'b', 'pending'),
+          ('movie', 'add', 0, 'c', 'pending'), ('movie', 'add', 1000000000, 'd', 'pending')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_040).await;
+
+    let got: Vec<(String, String, String, String)> = rows(
+        &pool,
+        r#"SELECT "mediaType", kind::text, provider, "externalId" FROM requests ORDER BY id"#,
+    )
+    .await;
+    // A pending request for a title outside the library keeps its row; ids no provider issues go.
+    let want = [
+        ("movie", "add", "tmdb", "603"),
+        ("series", "delete", "tmdb", "1396"),
+    ];
+    let want: Vec<_> = want
+        .iter()
+        .map(|(a, b, c, d)| (a.to_string(), b.to_string(), c.to_string(), d.to_string()))
+        .collect();
+    assert_eq!(got, want);
+    let gone: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'requests' AND column_name = 'tmdbId'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(gone, 0);
+    for bad in [
+        r#"INSERT INTO requests ("mediaType", provider, "externalId", title) VALUES ('movie', 'isbn', '5', 'x')"#,
+        r#"INSERT INTO requests ("mediaType", provider, "externalId", title) VALUES ('movie', 'tmdb', '0603', 'x')"#,
+        r#"INSERT INTO requests ("mediaType", provider, "externalId", title) VALUES ('movie', 'imdb', '', 'x')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    // Requests are not unique per title: several users can ask for one.
+    sql(
+        &pool,
+        r#"INSERT INTO requests ("mediaType", provider, "externalId", title) VALUES
+          ('movie', 'tmdb', '603', 'again'), ('movie', 'imdb', 'tt0133093', 'imdb')"#,
+    )
+    .await;
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64

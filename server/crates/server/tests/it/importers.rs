@@ -660,7 +660,9 @@ async fn seerr_import_creates_users_requests_and_refuses_a_second_run(pool: PgPo
     ).fetch_all(&c.pool).await.unwrap();
     assert_eq!(users, [("seerr_alice".into(), 2), ("seerr_bob".into(), 2)]);
     let reqs: Vec<(i32, String, String)> =
-        sqlx::query_as(r#"SELECT "tmdbId", status::text, title FROM requests ORDER BY "tmdbId""#)
+        sqlx::query_as(
+            r#"SELECT "externalId"::int, status::text, title FROM requests WHERE provider = 'tmdb' ORDER BY 1"#,
+        )
             .fetch_all(&c.pool)
             .await
             .unwrap();

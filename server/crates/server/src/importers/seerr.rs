@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use fliks_domain::{
     acl::{Action, Subject},
     arr_import::map_status,
+    external_id::MAX_NUMERIC_ID,
     media::kind::MediaKind,
 };
 use serde_json::{Value, json};
@@ -210,7 +211,7 @@ impl Run<'_> {
         };
         let Some(tmdb) = req["media"]["tmdbId"]
             .as_i64()
-            .filter(|n| *n >= 1)
+            .filter(|n| (1..=i64::from(MAX_NUMERIC_ID)).contains(n))
             .and_then(|n| i32::try_from(n).ok())
         else {
             return Ok(Outcome::Skipped);
@@ -274,23 +275,25 @@ impl Run<'_> {
         let existing = sqlx::query!(
             r#"SELECT id, status::text AS "status!", seasons, "mediaId" AS media_id, title,
                       "createdAt" AS created_at, "updatedAt" AS updated_at
-               FROM requests WHERE "userId" = $1 AND "tmdbId" = $2 AND "mediaType" = $3
-                 AND kind = 'add' ORDER BY id LIMIT 1"#,
+               FROM requests WHERE "userId" = $1 AND "mediaType" = $2 AND provider = $3
+                 AND "externalId" = $4 AND kind = 'add' ORDER BY id LIMIT 1"#,
             user,
-            tmdb,
-            media_type.as_str()
+            media_type.as_str(),
+            crate::media::external_ids::TMDB,
+            tmdb.to_string()
         )
         .fetch_optional(self.db)
         .await
         .map_err(db_err)?;
         let Some(e) = existing else {
             sqlx::query!(
-                r#"INSERT INTO requests ("userId", "mediaType", "tmdbId", title, status, seasons, "mediaId",
-                                         "createdAt", "updatedAt")
-                   VALUES ($1, $2, $3, $4, $5::text::requests_status_enum, $6, $7, $8, $9)"#,
+                r#"INSERT INTO requests ("userId", "mediaType", provider, "externalId", title, status, seasons,
+                                         "mediaId", "createdAt", "updatedAt")
+                   VALUES ($1, $2, $3, $4, $5, $6::text::requests_status_enum, $7, $8, $9, $10)"#,
                 user,
                 media_type.as_str(),
-                tmdb,
+                crate::media::external_ids::TMDB,
+                tmdb.to_string(),
                 title,
                 status,
                 seasons,

@@ -1,5 +1,5 @@
 //! The media services the request flows call: TMDB, the image store, `importFromTmdb`, the media delete and the notifications.
-use super::{Art, ImportSpec, PortError, Removed, TitleFacts};
+use super::{Art, ImportSpec, PortError, Removed, TitleFacts, TitleKey};
 use crate::{
     http::AppError,
     images::paths::{Target, Variant},
@@ -62,12 +62,9 @@ pub async fn title_facts(
     })
 }
 
-/// Stores the art of a title (`request/<mediaType>-<tmdbId>`) unless already stored; best effort.
-pub async fn request_art(
-    st: &AppState,
-    media_type: MediaKind,
-    tmdb_id: i32,
-) -> Result<Art, String> {
+/// Stores the art of a title (`request/<key>`) unless already stored; best effort.
+pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
+    let media_type = key.media_type;
     let slots = [
         (Variant::Poster, "posterUrl"),
         (Variant::Fanart, "fanartUrl"),
@@ -75,12 +72,17 @@ pub async fn request_art(
     let mut details: Option<Details> = None;
     let mut out = [None, None];
     for (i, (variant, field)) in slots.into_iter().enumerate() {
-        let t = Target::request(media_type, i64::from(tmdb_id), variant);
+        let Some(t) = Target::request(media_type, key.provider, &key.external_id, variant) else {
+            return Ok(Art::default());
+        };
         if st.images.has_image(&t) {
             out[i] = Some(t.api_path());
             continue;
         }
         if details.is_none() {
+            let tmdb_id = key
+                .tmdb_id()
+                .ok_or_else(|| format!("no metadata provider for {}", key.provider))?;
             details = Some(Details::from_value(
                 &tmdb_details(st, media_type, tmdb_id).await?,
             ));
@@ -123,10 +125,14 @@ pub async fn import_from_tmdb(
             .filter_map(|n| i32::try_from(n).ok())
             .collect()
     });
+    let tmdb_id = spec.title.tmdb_id().ok_or_else(|| PortError {
+        status: 400,
+        message: format!("No metadata provider for {}", spec.title.provider),
+    })?;
     import_for_request(
         st,
-        spec.media_type,
-        spec.tmdb_id,
+        spec.title.media_type,
+        tmdb_id,
         (spec.quality_profile_id, spec.language_profile_id),
         spec.library_id,
         added_by,

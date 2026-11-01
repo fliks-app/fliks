@@ -1,0 +1,30 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-tmdb-id-above-nine-digits",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "movie",
+        "title": "x",
+        "tmdbId": 1000000000
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "tmdbId must not be greater than 999999999"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

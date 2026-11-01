@@ -55,7 +55,9 @@ pub async fn title_state(
 ) -> Res<Json<Value>> {
     a.require(Action::Create, Subject::FliksRequest)?;
     let (tmdb_id, media_type) = dto::title_state(&q)?;
-    Ok(Json(flow::title_state(&st, tmdb_id, media_type).await?))
+    Ok(Json(
+        flow::title_state(&st, &super::TitleKey::tmdb(media_type, tmdb_id)).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/requests/{id}", responses((status = 200)))]

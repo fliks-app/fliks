@@ -1,6 +1,7 @@
 //! Queries of the `requests`, `request_comments` and `auto_approval_rules` tables (`requests.md` SQL section).
+use super::TitleKey;
 use crate::media::external_ids;
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool, types::Json};
 
@@ -18,7 +19,8 @@ pub struct Req {
     pub user_id: Option<i32>,
     pub media_type: MediaKind,
     pub kind: String,
-    pub tmdb_id: i32,
+    pub provider: ExternalProvider,
+    pub external_id: String,
     pub title: String,
     pub status: String,
     pub seasons: Option<Json<Vec<i64>>>,
@@ -34,7 +36,8 @@ struct RawReq {
     user_id: Option<i32>,
     media_type: String,
     kind: String,
-    tmdb_id: i32,
+    provider: String,
+    external_id: String,
     title: String,
     status: String,
     seasons: Option<Json<Vec<i64>>>,
@@ -53,7 +56,10 @@ impl TryFrom<RawReq> for Req {
             user_id: r.user_id,
             media_type: crate::db::kind(&r.media_type)?,
             kind: r.kind,
-            tmdb_id: r.tmdb_id,
+            provider: ExternalProvider::parse(&r.provider).ok_or_else(|| {
+                sqlx::Error::Decode(format!("unknown provider {}", r.provider).into())
+            })?,
+            external_id: r.external_id,
             title: r.title,
             status: r.status,
             seasons: r.seasons,
@@ -66,6 +72,14 @@ impl TryFrom<RawReq> for Req {
 }
 
 impl Req {
+    pub fn key(&self) -> TitleKey {
+        TitleKey {
+            media_type: self.media_type,
+            provider: self.provider,
+            external_id: self.external_id.clone(),
+        }
+    }
+
     /// `seasonScopeOf`: `None` covers everything (null or empty `seasons`).
     pub fn scope(&self) -> Option<&[i64]> {
         self.seasons
@@ -79,7 +93,7 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
     sqlx::query_as!(
         RawReq,
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
-        "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
+        provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
         FROM requests WHERE id = $1"#,
@@ -92,22 +106,19 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
 }
 
 /// Active ADD rows of a title, oldest first (the guard, `title-state` and the series profile lock).
-pub async fn active_adds(
-    db: &PgPool,
-    tmdb_id: i32,
-    media_type: MediaKind,
-) -> sqlx::Result<Vec<Req>> {
+pub async fn active_adds(db: &PgPool, t: &TitleKey) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
         RawReq,
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
-        "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
+        provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
         FROM requests
-        WHERE "tmdbId" = $1 AND "mediaType" = $2 AND kind = 'add' AND status::text = ANY($3)
-        ORDER BY "createdAt" ASC, id ASC"#,
-        tmdb_id,
-        media_type.as_str(),
+        WHERE "mediaType" = $1 AND provider = $2 AND "externalId" = $3 AND kind = 'add'
+        AND status::text = ANY($4) ORDER BY "createdAt" ASC, id ASC"#,
+        t.media_type.as_str(),
+        t.provider.as_str(),
+        t.external_id,
         &strs(&ACTIVE)
     )
     .fetch_all(db)
@@ -117,16 +128,13 @@ pub async fn active_adds(
     .collect()
 }
 
-pub async fn pending_delete_exists(
-    db: &PgPool,
-    tmdb_id: i32,
-    media_type: MediaKind,
-) -> sqlx::Result<bool> {
+pub async fn pending_delete_exists(db: &PgPool, t: &TitleKey) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM requests WHERE "tmdbId" = $1 AND "mediaType" = $2
-        AND kind = 'delete' AND status = 'pending') AS "e!""#,
-        tmdb_id,
-        media_type.as_str()
+        r#"SELECT EXISTS(SELECT 1 FROM requests WHERE "mediaType" = $1 AND provider = $2
+        AND "externalId" = $3 AND kind = 'delete' AND status = 'pending') AS "e!""#,
+        t.media_type.as_str(),
+        t.provider.as_str(),
+        t.external_id
     )
     .fetch_one(db)
     .await
@@ -203,26 +211,12 @@ pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Optio
     .transpose()
 }
 
-pub async fn media_by_tmdb(
-    db: &PgPool,
-    tmdb_id: i32,
-    media_type: MediaKind,
-) -> sqlx::Result<Option<MediaRow>> {
-    sqlx::query_as!(
-        RawMediaRow,
-        r#"SELECT id, type AS "media_type!", "libraryId" AS library_id,
-        "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "posterUrl" AS poster_url, "fanartUrl" AS fanart_url
-        FROM media WHERE id = (SELECT "mediaId" FROM media_external_ids
-          WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
-        tmdb_id,
-        media_type.as_str(),
-        external_ids::TMDB
-    )
-    .fetch_optional(db)
-    .await?
-    .map(MediaRow::try_from)
-    .transpose()
+/// The library media holding the title (rule 8).
+pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> sqlx::Result<Option<MediaRow>> {
+    match external_ids::find(db, t.media_type, t.provider, &t.external_id).await? {
+        Some(id) => media_by_id(db, id).await,
+        None => Ok(None),
+    }
 }
 
 /// Libraries accepting `media_type`, by name, limited to `ids` when given (`findAccepting`).
@@ -252,13 +246,12 @@ pub async fn library_exists(db: &PgPool, id: i32) -> sqlx::Result<bool> {
 }
 
 /// Serialises the duplicate check and the insert of one title's ADD requests until the transaction ends.
-pub async fn lock_title(
-    tx: &mut PgConnection,
-    tmdb_id: i32,
-    media_type: MediaKind,
-) -> sqlx::Result<()> {
+pub async fn lock_title(tx: &mut PgConnection, t: &TitleKey) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(format!("requests:{media_type}:{tmdb_id}"))
+        .bind(format!(
+            "requests:{}:{}:{}",
+            t.media_type, t.provider, t.external_id
+        ))
         .execute(tx)
         .await?;
     Ok(())
@@ -267,8 +260,7 @@ pub async fn lock_title(
 pub struct New<'a> {
     pub user_id: i32,
     pub kind: &'a str,
-    pub media_type: MediaKind,
-    pub tmdb_id: i32,
+    pub title_key: &'a TitleKey,
     pub title: &'a str,
     pub seasons: Option<&'a [i64]>,
     pub status: &'a str,
@@ -283,14 +275,15 @@ pub struct New<'a> {
 
 pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
-        r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, seasons, status,
+        r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, seasons, status,
         "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "mediaId", "posterUrl", "fanartUrl")
-        VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6,
-        $7::text::requests_status_enum, $8, $9, $10, $11, $12, $13, $14) RETURNING id"#,
+        VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,
+        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15) RETURNING id"#,
         n.user_id,
         n.kind,
-        n.media_type.as_str(),
-        n.tmdb_id,
+        n.title_key.media_type.as_str(),
+        n.title_key.provider.as_str(),
+        n.title_key.external_id,
         n.title,
         n.seasons.map(|s| Json(s.to_vec())) as Option<Json<Vec<i64>>>,
         n.status,
@@ -422,21 +415,19 @@ pub async fn link_if_unlinked(db: &PgPool, id: i32, media_id: i32) -> sqlx::Resu
     Ok(())
 }
 
-pub async fn in_flight_by_title(
-    db: &PgPool,
-    tmdb_id: i32,
-    media_type: MediaKind,
-) -> sqlx::Result<Vec<Req>> {
+/// In-flight requests whose title the media holds (`onMediaImported`).
+pub async fn in_flight_for_media(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
         RawReq,
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
-        "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
+        provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
-        FROM requests WHERE "tmdbId" = $1 AND "mediaType" = $2 AND status::text = ANY($3)
+        FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e
+          WHERE e."mediaId" = $1 AND e.kind = r."mediaType" AND e.provider = r.provider
+          AND e.value = r."externalId")
         ORDER BY id"#,
-        tmdb_id,
-        media_type.as_str(),
+        media_id,
         &strs(&IN_FLIGHT)
     )
     .fetch_all(db)
@@ -456,7 +447,7 @@ pub async fn linked(
     sqlx::query_as!(
         RawReq,
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
-        "tmdbId" AS tmdb_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
+        provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "mediaId" AS media_id
         FROM requests WHERE "mediaId" = $1 AND ($2::text IS NULL OR kind::text = $2)
@@ -671,21 +662,23 @@ pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
         WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
         AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
         AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-        AND ($6::int IS NULL OR r."tmdbId" = $6) AND ($7::text IS NULL OR r."mediaType" = $7)"#,
+        AND ($6::text IS NULL OR (r.provider = $8 AND r."externalId" = $6))
+        AND ($7::text IS NULL OR r."mediaType" = $7)"#,
         f.id,
         f.user_id,
         f.libraries,
         f.status,
         f.kind,
-        f.tmdb_id,
-        f.media_type.map(MediaKind::as_str)
+        f.tmdb_id.map(|t| t.to_string()),
+        f.media_type.map(MediaKind::as_str),
+        external_ids::TMDB
     )
     .fetch_one(db)
     .await
 }
 
 /// Request rows as JSON with the embedded public identities and the library media joined by
-/// `(tmdbId, type)` (rules 5, 6, 8), newest first.
+/// the title they name (rules 5, 6, 8), newest first.
 pub async fn rows(
     db: &PgPool,
     f: &Filter<'_>,
@@ -697,7 +690,8 @@ pub async fn rows(
   'id', r.id, 'createdAt', iso_ms(r."createdAt"), 'updatedAt', iso_ms(r."updatedAt"),
   'user', CASE WHEN u.id IS NULL THEN 'null'::jsonb
     ELSE jsonb_build_object('id', u.id, 'username', u.username, 'avatar', u.avatar) END,
-  'userId', r."userId", 'mediaType', r."mediaType", 'kind', r.kind::text, 'tmdbId', r."tmdbId",
+  'userId', r."userId", 'mediaType', r."mediaType", 'kind', r.kind::text,
+  'tmdbId', CASE WHEN r.provider = $10 THEN r."externalId"::int END,
   'title', r.title, 'status', r.status::text,
   'approvedBy', CASE WHEN ab.id IS NULL THEN 'null'::jsonb
     ELSE jsonb_build_object('id', ab.id, 'username', ab.username, 'avatar', ab.avatar) END,
@@ -723,7 +717,8 @@ FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"
 LEFT JOIN media m ON m.id = (SELECT e."mediaId" FROM media_external_ids e
-  WHERE e.kind = r."mediaType" AND e.provider = $10 AND e.value = r."tmdbId"::text)
+  WHERE e.kind = r."mediaType" AND e.provider = r.provider AND e.value = r."externalId"
+  ORDER BY e."mediaId" LIMIT 1)
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $10)::int AS tmdb,
   max(value) FILTER (WHERE provider = $11)::int AS tvdb,
   max(value) FILTER (WHERE provider = $12) AS imdb
@@ -731,14 +726,15 @@ LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $10)::int AS tmdb,
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-AND ($6::int IS NULL OR r."tmdbId" = $6) AND ($7::text IS NULL OR r."mediaType" = $7)
+AND ($6::text IS NULL OR (r.provider = $10 AND r."externalId" = $6))
+AND ($7::text IS NULL OR r."mediaType" = $7)
 ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.id,
         f.user_id,
         f.libraries,
         f.status,
         f.kind,
-        f.tmdb_id,
+        f.tmdb_id.map(|t| t.to_string()),
         f.media_type.map(MediaKind::as_str),
         limit,
         offset,
