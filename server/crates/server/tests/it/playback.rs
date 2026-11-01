@@ -128,7 +128,7 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
         .id(&format!(
             r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
                  VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id)
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
                RETURNING "mediaFileId""#
         ))
         .await;
@@ -281,7 +281,7 @@ async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) 
         c.id(&format!(
             r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
                  VALUES ({m}, 'e{n}.mkv', 1, 'q') RETURNING id)
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
                RETURNING "itemId""#
         ))
         .await;
@@ -329,7 +329,7 @@ async fn series_with_episode(c: &Ctx, library: i32) -> (i32, i32, i32) {
     c.id(&format!(
         r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
              VALUES ({m}, 'e.mkv', 1, 'q') RETURNING id)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
            RETURNING "mediaFileId""#
     ))
     .await;
@@ -379,7 +379,7 @@ async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
         .id(&format!(
             r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
                  VALUES ({movie}, 'm.mkv', 1, 'q') RETURNING id)
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {movie} FROM f
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {movie}, 0 FROM f
                RETURNING "mediaFileId""#
         ))
         .await;

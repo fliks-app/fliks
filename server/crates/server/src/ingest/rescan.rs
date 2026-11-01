@@ -401,7 +401,7 @@ async fn refresh_existing(
     }
     items::attach(&st.db, media_id, &links).await?;
     set_ends(&st.db, &ends).await?;
-    items::cover_ranges(&st.db, media_id).await?;
+    items::cover_ranges(&mut *st.db.acquire().await?, media_id).await?;
     Ok(())
 }
 
@@ -652,7 +652,7 @@ impl Slots {
             }
         }
         set_ends(db, &ends).await?;
-        items::cover_ranges(db, media).await?;
+        items::cover_ranges(&mut *db.acquire().await?, media).await?;
         Ok(created)
     }
 
@@ -813,7 +813,7 @@ pub async fn ensure_season_and_episode(
             .await?
         }
     };
-    items::cover_ranges(db, media).await?;
+    items::cover_ranges(&mut *db.acquire().await?, media).await?;
     Ok((id, created))
 }
 

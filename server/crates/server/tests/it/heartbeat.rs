@@ -51,7 +51,7 @@ async fn give_item(pool: &PgPool, media: i32, file: i32) {
     sqlx::query(
         r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id),
                 i AS (INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT i.id, $2, $1 FROM i"#,
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT i.id, $2, $1, 0 FROM i"#,
     )
     .bind(media)
     .bind(file)

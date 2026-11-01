@@ -740,8 +740,8 @@ pub async fn media_libraries(db: &PgPool, media: &[i32]) -> sqlx::Result<HashMap
         .collect())
 }
 
-/// True when the file and the episode (if given) belong to the media, and something plays for it; a
-/// series needs its episode.
+/// True when the file and the episode (if given) belong to the media, something plays for it and the pair
+/// names an item; a series needs its episode.
 pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
     sqlx::query_scalar(
         r#"SELECT ($2::int IS NULL OR EXISTS (SELECT 1 FROM media_files WHERE id = $2 AND "mediaId" = $1))
@@ -749,7 +749,8 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
                                                WHERE e.id = $3 AND s."mediaId" = $1))
                AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = ANY($4)))
                AND (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId"
-                            WHERE (e.id = $3 OR ($3 IS NULL AND e."mediaId" = $1 AND e."groupId" IS NULL)) AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))"#,
+                            WHERE (e.id = $3 OR ($3 IS NULL AND e."mediaId" = $1 AND e."groupId" IS NULL)) AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+               AND item_of($1, $3) IS NOT NULL"#,
     )
     .bind(item.media_id)
     .bind(item.media_file_id)

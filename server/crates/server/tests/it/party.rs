@@ -1134,8 +1134,8 @@ async fn playlist_setup(c: &Ctx, owner: i32) {
            INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES (1, 'e1', 1, 3, 1), (2, 'e2', 1, 3, 1);
            INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES
              (1, 'f', 1, 'q'), (2, 'g', 1, 'q'), (3, 'e1', 1, 'q');
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
-             SELECT v.item, f.id, f."mediaId" FROM media_files f
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+             SELECT v.item, f.id, f."mediaId", 0 FROM media_files f
              JOIN (VALUES ('e1', 1)) AS v(path, item) ON v.path = f."relativePath";
            INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'Night', {owner});"#
     )))
@@ -1522,8 +1522,8 @@ async fn series_setup(c: &Ctx) {
              (1, 'sp', 1, 2, 1), (2, 'e2', 2, 2, 1), (1, 'e1', 2, 2, 1), (3, 'e3', 2, 2, 1), (1, 'f1', 3, 2, 1);
            INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES
              (2, 's', 1, 'q'), (2, 'b', 1, 'q'), (2, 'a', 1, 'q'), (2, 'd', 1, 'q');
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
-             SELECT v.item, f.id, f."mediaId" FROM media_files f
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+             SELECT v.item, f.id, f."mediaId", 0 FROM media_files f
              JOIN (VALUES ('s', 1), ('b', 2), ('a', 3), ('d', 5)) AS v(path, item) ON v.path = f."relativePath";"#,
     )
     .execute(&c.pool)
@@ -1563,7 +1563,7 @@ async fn next_and_previous_walk_the_programme_and_skip_an_episode_without_a_file
     let (_, q) = c.call("GET", &format!("{path}/queue"), &a, None).await;
     assert_eq!(eps(&q), vec![json!(3)]);
     sqlx::query(r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (2, 'c', 1, 'q') RETURNING id)
-             INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT 4, id, 2 FROM f"#)
+             INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT 4, id, 2, 0 FROM f"#)
         .execute(&c.pool)
         .await
         .unwrap();
@@ -2336,7 +2336,7 @@ async fn select_replaces_the_copied_playlist_programme_by_one_item(pool: PgPool)
         .await;
     let id = p["id"].clone();
     sqlx::query(r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (3, 'e2', 1, 'q') RETURNING id)
-             INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT 2, id, 3 FROM f"#)
+             INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT 2, id, 3, 0 FROM f"#)
         .execute(&c.pool)
         .await
         .unwrap();
@@ -2896,7 +2896,7 @@ async fn nothing_without_a_file_is_picked_or_started_and_a_series_needs_its_epis
            INSERT INTO editions ("mediaId", family) VALUES (3, 'video');
            INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES (1, 'e1', 1, 3, 1), (2, 'e2', 1, 3, 1);
            WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (3, 'e1', 1, 'q') RETURNING id)
-             INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT 1, id, 3 FROM f"#,
+             INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT 1, id, 3, 0 FROM f"#,
     )
     .execute(&c.pool)
     .await

@@ -60,7 +60,7 @@ pub async fn toggle_watched(
     if file.is_none() && existing.is_none() {
         file = sqlx::query_scalar!(
             r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1
-               ORDER BY "mediaFileId" LIMIT 1"#,
+               ORDER BY "version", "position" LIMIT 1"#,
             item
         )
         .fetch_optional(db)
@@ -170,13 +170,13 @@ pub async fn toggle_series_watched(
            SELECT $1::int4, e.id,
                   (SELECT p."mediaFileId" FROM item_parts p
                     WHERE p."itemId" = e.id
-                    ORDER BY p."mediaFileId" DESC LIMIT 1),
+                    ORDER BY p."version" DESC, p."position" LIMIT 1),
                   0,
                   COALESCE(
                     (SELECT (mf2."streamInfo"->>'durationSeconds')::float
                        FROM media_files mf2 JOIN item_parts p2 ON p2."mediaFileId" = mf2.id
                       WHERE p2."itemId" = e.id
-                      ORDER BY mf2.id DESC LIMIT 1),
+                      ORDER BY p2."version" DESC, p2."position" LIMIT 1),
                     0
                   ),
                   true,
@@ -239,7 +239,7 @@ pub async fn toggle_season_watched(
            FROM items e
            CROSS JOIN LATERAL (SELECT mf.id, mf."streamInfo" FROM media_files mf
                                JOIN item_parts p ON p."mediaFileId" = mf.id
-                               WHERE p."itemId" = e.id ORDER BY mf.id DESC LIMIT 1) f
+                               WHERE p."itemId" = e.id ORDER BY p."version" DESC, p."position" LIMIT 1) f
            WHERE e."groupId" = $2
            ON CONFLICT ("userId", "itemId") DO UPDATE SET
              "mediaFileId" = EXCLUDED."mediaFileId", "positionSeconds" = 0,

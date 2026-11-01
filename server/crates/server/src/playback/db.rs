@@ -148,7 +148,8 @@ pub async fn resume_info(db: &PgPool, user: i32, media: i32) -> sqlx::Result<Opt
            LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN LATERAL (
              SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
-             ORDER BY (p."mediaFileId" = ps."mediaFileId") DESC NULLS LAST, p."mediaFileId" DESC
+             ORDER BY (p."mediaFileId" = ps."mediaFileId") DESC NULLS LAST,
+                      (p."version" = ps."version") DESC NULLS LAST, p."version" DESC, p."position"
              LIMIT 1) f ON true
            WHERE ps."userId" = $1
              AND e."mediaId" = $2
@@ -222,8 +223,8 @@ pub async fn continue_watching(
     let mut items = sqlx::query_as!(
         ContinueItem,
         r#"WITH st AS (
-             SELECT ps.id, ps."itemId", ps."mediaFileId", ps."positionSeconds", ps."durationSeconds",
-                    ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
+             SELECT ps.id, ps."itemId", ps."mediaFileId", ps."version", ps."positionSeconds",
+                    ps."durationSeconds", ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
                     i."mediaId", i."groupId", i."number" AS inum, g."number" AS gnum
              FROM playback_states ps
              JOIN items i ON i.id = ps."itemId"
@@ -242,7 +243,7 @@ pub async fn continue_watching(
              ORDER BY "mediaId", gnum DESC, inum DESC
            ),
            in_progress AS (
-             SELECT DISTINCT ON ("mediaId") id, "mediaId", "itemId", "mediaFileId",
+             SELECT DISTINCT ON ("mediaId") id, "mediaId", "itemId", "mediaFileId", "version",
                     "positionSeconds", "durationSeconds"
              FROM st
              WHERE NOT completed AND "positionSeconds" >= 5 AND "groupId" IS NOT NULL
@@ -258,18 +259,18 @@ pub async fn continue_watching(
              WHERE lc."mediaId" NOT IN (SELECT "mediaId" FROM in_progress)
            ),
            picked AS (
-             SELECT st.id, st."mediaId", st."itemId", st."mediaFileId", st."positionSeconds",
-                    st."durationSeconds", st."lastPlayedAt"
+             SELECT st.id, st."mediaId", st."itemId", st."mediaFileId", st."version",
+                    st."positionSeconds", st."durationSeconds", st."lastPlayedAt"
              FROM st
              WHERE st."groupId" IS NULL AND NOT st.completed AND NOT st.hidden
                AND st."positionSeconds" >= 5
              UNION ALL
-             SELECT ip.id, ip."mediaId", ip."itemId", ip."mediaFileId",
+             SELECT ip.id, ip."mediaId", ip."itemId", ip."mediaFileId", ip."version",
                     ip."positionSeconds", ip."durationSeconds", us."lastPlayedAt"
              FROM in_progress ip
              JOIN user_series us ON us."mediaId" = ip."mediaId"
              UNION ALL
-             SELECT COALESCE(ps.id, 0), ni."mediaId", ni."itemId", NULL::int,
+             SELECT COALESCE(ps.id, 0), ni."mediaId", ni."itemId", NULL::int, NULL::int,
                     COALESCE(ps."positionSeconds", 0), COALESCE(ps."durationSeconds", 0),
                     us."lastPlayedAt"
              FROM next_item ni
@@ -293,14 +294,15 @@ pub async fn continue_watching(
                     CASE WHEN e."groupId" IS NOT NULL
                          THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
                               || COALESCE(' - ' || e.title, '') END AS label
-             FROM (SELECT id, "mediaId", "itemId", "mediaFileId", "positionSeconds" AS pos,
+             FROM (SELECT id, "mediaId", "itemId", "mediaFileId", "version", "positionSeconds" AS pos,
                           "durationSeconds" AS dur, "lastPlayedAt" FROM picked) c
              JOIN media m ON m.id = c."mediaId" AND m."libraryId" = ANY($2)
              JOIN items e ON e.id = c."itemId"
              LEFT JOIN item_groups s ON s.id = e."groupId"
              LEFT JOIN LATERAL (
                SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
-               ORDER BY (p."mediaFileId" = c."mediaFileId") DESC NULLS LAST, p."mediaFileId" DESC
+               ORDER BY (p."mediaFileId" = c."mediaFileId") DESC NULLS LAST,
+                        (p."version" = c."version") DESC NULLS LAST, p."version" DESC, p."position"
                LIMIT 1) f ON true
              WHERE f.id IS NOT NULL
            ) x

@@ -53,7 +53,7 @@ async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {
              INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId")
              VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM item_groups WHERE id = $2))
              RETURNING id, "mediaId")
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT $3, id, "mediaId" FROM f"#,
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT $3, id, "mediaId", 0 FROM f"#,
     )
     .bind(file)
     .bind(season)
