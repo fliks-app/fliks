@@ -247,6 +247,7 @@ async fn run(
                 path: file.absolute.to_string_lossy().into_owned(),
                 ext: file.ext.clone(),
                 content_type: file.content_type.to_owned(),
+                parts: vec![],
             },
             info: file.info.clone().unwrap_or_default(),
             scan: held.scan,
