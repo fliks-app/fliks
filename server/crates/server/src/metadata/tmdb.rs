@@ -5,12 +5,18 @@ use super::{
         arr, get, image, nn, num_or_null, or, pluck, put, score, str_lower_or, text, text_or_null,
         year_of,
     },
+    provider::{Call, MetadataProvider, Search, numeric},
     types::{Credits, PersonDetails},
 };
 use crate::sync::MutexExt;
 use fliks_domain::{
+    external_id::ExternalProvider,
     media::kind::MediaKind,
-    metadata::{discover::Options, language::Resolved},
+    metadata::{
+        discover::Options,
+        language::Resolved,
+        limiter::{Limits, Priority},
+    },
 };
 use futures_util::{StreamExt, stream};
 use serde_json::{Map, Value, json};
@@ -20,6 +26,13 @@ pub const API_URL: &str = "https://api.themoviedb.org/3";
 pub const IMAGE_URL: &str = "https://image.tmdb.org/t/p";
 const MAX_ADDITIONAL_FANARTS: usize = 5;
 const SEASON_FETCH_CONCURRENCY: usize = 8;
+/// TMDB documents about 50 requests a second.
+const LIMITS: Limits = Limits {
+    rate_per_sec: 40.0,
+    burst: 40,
+    daily_quota: None,
+    background_share: 0.75,
+};
 
 pub struct Tmdb {
     http: Guarded,
@@ -52,14 +65,15 @@ impl Tmdb {
                 base,
                 timeout,
                 vec![("api_key".into(), key.to_owned())],
+                LIMITS,
             ),
             img: img.trim_end_matches('/').to_owned(),
             stale: Mutex::default(),
         }
     }
 
-    async fn get(&self, path: &str, query: Query) -> Result<Value, Upstream> {
-        self.http.get_json(path, &query).await
+    async fn get(&self, path: &str, query: Query, p: Priority) -> Result<Value, Upstream> {
+        self.http.get_json(path, &query, p).await
     }
 
     /// Serves the last good copy of `key` when a live fetch fails; a cold failure propagates.
@@ -117,22 +131,23 @@ impl Tmdb {
         Value::Object(o)
     }
 
-    pub async fn search(
+    pub async fn search_titles(
         &self,
         tv: bool,
         query: &str,
         year: Option<i64>,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<Vec<Value>, Upstream> {
-        let mut p = q(&[("query", query), ("language", &lang.tmdb_locale)]);
+        let mut params = q(&[("query", query), ("language", &lang.tmdb_locale)]);
         if let Some(y) = year {
-            p.push((
+            params.push((
                 if tv { "first_air_date_year" } else { "year" }.into(),
                 y.to_string(),
             ));
         }
         let data = self
-            .get(if tv { "/search/tv" } else { "/search/movie" }, p)
+            .get(if tv { "/search/tv" } else { "/search/movie" }, params, p)
             .await?;
         results(&data)?
             .iter()
@@ -145,20 +160,21 @@ impl Tmdb {
         tv: bool,
         window: &str,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<Value, Upstream> {
         let kind = if tv { "tv" } else { "movie" };
         let key = format!("trending:{kind}:{window}:{}", lang.tmdb_locale);
         let path = format!("/trending/{kind}/{window}");
         self.with_stale(key, async {
             let d = self
-                .get(&path, q(&[("language", &lang.tmdb_locale)]))
+                .get(&path, q(&[("language", &lang.tmdb_locale)]), p)
                 .await?;
             self.list(&d, tv)
         })
         .await
     }
 
-    pub async fn popular(&self, tv: bool, lang: &Resolved) -> Result<Value, Upstream> {
+    pub async fn popular(&self, tv: bool, lang: &Resolved, p: Priority) -> Result<Value, Upstream> {
         let kind = if tv { "tv" } else { "movie" };
         let key = format!("popular:{kind}:{}", lang.tmdb_locale);
         self.with_stale(key, async {
@@ -166,6 +182,7 @@ impl Tmdb {
                 .get(
                     &format!("/{kind}/popular"),
                     q(&[("language", &lang.tmdb_locale)]),
+                    p,
                 )
                 .await?;
             self.list(&d, tv)
@@ -173,8 +190,13 @@ impl Tmdb {
         .await
     }
 
-    pub async fn upcoming(&self, tv: bool, lang: &Resolved) -> Result<Value, Upstream> {
-        let (key, path, p) = if tv {
+    pub async fn upcoming(
+        &self,
+        tv: bool,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Value, Upstream> {
+        let (key, path, params) = if tv {
             (
                 format!("upcoming:tv:{}", lang.tmdb_locale),
                 "/tv/on_the_air",
@@ -188,13 +210,13 @@ impl Tmdb {
             )
         };
         self.with_stale(key, async {
-            let d = self.get(path, p).await?;
+            let d = self.get(path, params, p).await?;
             self.list(&d, tv)
         })
         .await
     }
 
-    pub async fn genres(&self, tv: bool, lang: &Resolved) -> Result<Value, Upstream> {
+    pub async fn genres(&self, tv: bool, lang: &Resolved, p: Priority) -> Result<Value, Upstream> {
         let kind = if tv { "tv" } else { "movie" };
         let key = format!("genres:{kind}:{}", lang.tmdb_locale);
         self.with_stale(key, async {
@@ -202,6 +224,7 @@ impl Tmdb {
                 .get(
                     &format!("/genre/{kind}/list"),
                     q(&[("language", &lang.tmdb_locale)]),
+                    p,
                 )
                 .await?;
             Ok(d.get("genres").cloned().unwrap_or(Value::Null))
@@ -214,8 +237,9 @@ impl Tmdb {
         tv: bool,
         opts: &Options,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<Vec<Value>, Upstream> {
-        let p = fliks_domain::metadata::discover::params(opts, &lang.tmdb_locale, tv);
+        let params = fliks_domain::metadata::discover::params(opts, &lang.tmdb_locale, tv);
         let d = self
             .get(
                 if tv {
@@ -223,6 +247,7 @@ impl Tmdb {
                 } else {
                     "/discover/movie"
                 },
+                params,
                 p,
             )
             .await?;
@@ -232,7 +257,13 @@ impl Tmdb {
             .collect()
     }
 
-    pub async fn details(&self, tv: bool, id: i64, lang: &Resolved) -> Result<Value, Upstream> {
+    pub async fn details(
+        &self,
+        tv: bool,
+        id: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Value, Upstream> {
         let (path, append) = if tv {
             (
                 format!("/tv/{id}"),
@@ -252,6 +283,7 @@ impl Tmdb {
                     ("include_image_language", &lang.include_image_language),
                     ("append_to_response", append),
                 ]),
+                p,
             )
             .await?;
         Ok(if tv {
@@ -456,9 +488,18 @@ impl Tmdb {
     }
 
     /// Season numbers and episode counts in one call; season 0 is kept.
-    pub async fn season_stubs(&self, id: i64, lang: &Resolved) -> Result<Vec<Value>, Upstream> {
+    pub async fn season_stubs(
+        &self,
+        id: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Vec<Value>, Upstream> {
         let d = self
-            .get(&format!("/tv/{id}"), q(&[("language", &lang.tmdb_locale)]))
+            .get(
+                &format!("/tv/{id}"),
+                q(&[("language", &lang.tmdb_locale)]),
+                p,
+            )
             .await?;
         Ok(arr(&d, "seasons")
             .iter()
@@ -466,11 +507,18 @@ impl Tmdb {
             .collect())
     }
 
-    pub async fn season(&self, id: i64, n: i64, lang: &Resolved) -> Result<Value, Upstream> {
+    pub async fn season(
+        &self,
+        id: i64,
+        n: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Value, Upstream> {
         let s = self
             .get(
                 &format!("/tv/{id}/season/{n}"),
                 q(&[("language", &lang.tmdb_locale)]),
+                p,
             )
             .await?;
         let episodes: Vec<Value> = arr(&s, "episodes")
@@ -497,12 +545,17 @@ impl Tmdb {
     }
 
     /// Every season; at most 8 in flight, stub order kept, a failing season is dropped.
-    pub async fn seasons(&self, id: i64, lang: &Resolved) -> Result<Vec<Value>, Upstream> {
-        let stubs = self.season_stubs(id, lang).await?;
+    pub async fn seasons(
+        &self,
+        id: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Vec<Value>, Upstream> {
+        let stubs = self.season_stubs(id, lang, p).await?;
         let fetched = stream::iter(stubs)
             .map(|stub| async move {
                 let n = stub["seasonNumber"].as_i64().unwrap_or_default();
-                match self.season(id, n, lang).await {
+                match self.season(id, n, lang, p).await {
                     Ok(s) => Some(s),
                     Err(e) => {
                         tracing::warn!("failed to fetch season {n} for TV {id}: {e}");
@@ -518,14 +571,15 @@ impl Tmdb {
 
     pub async fn find_by_external_id(
         &self,
-        source: &str,
+        source: ExternalProvider,
         id: &str,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<Option<(String, bool)>, Upstream> {
         let external = match source {
-            "imdb" => "imdb_id",
-            "tvdb" => "tvdb_id",
-            _ => return Ok(None),
+            ExternalProvider::Imdb => "imdb_id",
+            ExternalProvider::Tvdb => "tvdb_id",
+            ExternalProvider::Tmdb => return Ok(None),
         };
         let d = self
             .get(
@@ -534,6 +588,7 @@ impl Tmdb {
                     ("external_source", external),
                     ("language", &lang.tmdb_locale),
                 ]),
+                p,
             )
             .await?;
         let first = |k: &str| arr(&d, k).first().and_then(|m| id_string(get(m, "id")));
@@ -546,11 +601,13 @@ impl Tmdb {
         &self,
         id: i64,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<PersonDetails, Upstream> {
         let d = self
             .get(
                 &format!("/person/{id}"),
                 q(&[("language", &lang.tmdb_locale)]),
+                p,
             )
             .await?;
         let s = |k: &str| get(&d, k).as_str().map(str::to_owned);
@@ -560,16 +617,22 @@ impl Tmdb {
             birthday: s("birthday"),
             deathday: s("deathday"),
             place_of_birth: s("place_of_birth"),
-            avatar_url: text(&d, "profile_path").map(|p| format!("{}/w500{p}", self.img)),
+            avatar_url: text(&d, "profile_path").map(|path| format!("{}/w500{path}", self.img)),
             known_for_department: s("known_for_department"),
         })
     }
 
-    pub async fn person_credits(&self, id: i64, lang: &Resolved) -> Result<Credits, Upstream> {
+    pub async fn credits_of(
+        &self,
+        id: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Credits, Upstream> {
         let d = self
             .get(
                 &format!("/person/{id}/combined_credits"),
                 q(&[("language", &lang.tmdb_locale)]),
+                p,
             )
             .await?;
         let item = |c: &Value, extra: &[&str]| {
@@ -610,6 +673,94 @@ impl Tmdb {
             cast: list("cast", &["character"])?,
             crew: list("crew", &["job", "department"])?,
         })
+    }
+}
+
+impl MetadataProvider for Tmdb {
+    fn id(&self) -> ExternalProvider {
+        ExternalProvider::Tmdb
+    }
+
+    fn supports(&self, _kind: MediaKind) -> bool {
+        true
+    }
+
+    fn limits(&self) -> Limits {
+        LIMITS
+    }
+
+    fn search<'a>(
+        &'a self,
+        q: &'a Search<'a>,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        let tv = q.kind.has_seasons();
+        Box::pin(self.search_titles(tv, q.query, q.year, lang, p))
+    }
+
+    fn fetch_work<'a>(
+        &'a self,
+        kind: MediaKind,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Value> {
+        Box::pin(async move {
+            self.details(kind.has_seasons(), numeric(id)?, lang, p)
+                .await
+        })
+    }
+
+    fn fetch_children<'a>(
+        &'a self,
+        _kind: MediaKind,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        Box::pin(async move { self.seasons(numeric(id)?, lang, p).await })
+    }
+
+    fn child_stubs<'a>(
+        &'a self,
+        _kind: MediaKind,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        Box::pin(async move { self.season_stubs(numeric(id)?, lang, p).await })
+    }
+
+    fn find_by<'a>(
+        &'a self,
+        source: ExternalProvider,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Option<(String, MediaKind)>> {
+        Box::pin(async move {
+            let found = self.find_by_external_id(source, id, lang, p).await?;
+            Ok(found.map(|(id, tv)| (id, MediaKind::from_tv(tv))))
+        })
+    }
+
+    fn fetch_person<'a>(
+        &'a self,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, PersonDetails> {
+        Box::pin(async move { self.person_details(numeric(id)?, lang, p).await })
+    }
+
+    fn person_credits<'a>(
+        &'a self,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Credits> {
+        Box::pin(async move { self.credits_of(numeric(id)?, lang, p).await })
     }
 }
 

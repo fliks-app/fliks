@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
-use fliks_domain::{acl::Action, media::release::ReleaseKind};
+use fliks_domain::{acl::Action, media::release::ReleaseKind, metadata::limiter::Priority};
 use serde_json::{Value, json};
 use sqlx::PgConnection;
 use std::collections::HashSet;
@@ -270,16 +270,21 @@ async fn count_episodes(st: &AppState, media_id: i32) -> Result<i64, sqlx::Error
 
 /// Rescan and relink entry point: the bare rows a walk invented gain titles and stills.
 pub async fn refresh_series_episodes(st: &AppState, media: &MediaRow) -> Result<i64, AppError> {
-    let seasons = service::seasons_for_media(st, media.id).await?;
+    let seasons = service::seasons_for_media(st, media.id, Priority::Background).await?;
     apply_seasons(st, media.id, &seasons).await
 }
 
 /// `refreshMetadata` (rule 53).
-pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Result<Found, AppError> {
+pub async fn refresh_metadata(
+    st: &AppState,
+    id: i32,
+    defer_kick: bool,
+    prio: Priority,
+) -> Result<Found, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    let found = service::for_media(st, id).await?;
+    let found = service::for_media(st, id, prio).await?;
     let d = &found.details;
     let mut tx = st.db.begin().await?;
     sqlx::query!(
@@ -382,7 +387,7 @@ async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::
 }
 
 async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
-    let found = refresh_metadata(st, id, true).await?;
+    let found = refresh_metadata(st, id, true, Priority::Interactive).await?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -551,7 +556,7 @@ pub async fn refresh(
     }
     let st2 = st.clone();
     tokio::spawn(async move {
-        let r = refresh_metadata(&st2, id, false)
+        let r = refresh_metadata(&st2, id, false, Priority::Interactive)
             .await
             .map(|_| media.title.clone());
         settle(&st2, key, id, media.title, r);
@@ -603,7 +608,7 @@ pub async fn refresh_episode(
 }
 
 async fn refresh_one_episode(st: &AppState, episode: i32) -> Result<(), AppError> {
-    let Some(ep) = service::episode(st, episode).await? else {
+    let Some(ep) = service::episode(st, episode, Priority::Interactive).await? else {
         return Ok(());
     };
     sqlx::query!(

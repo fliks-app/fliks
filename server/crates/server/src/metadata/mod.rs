@@ -3,6 +3,7 @@ mod credits;
 mod http;
 mod language;
 mod map;
+mod provider;
 mod routes;
 pub mod service;
 pub mod tmdb;
@@ -11,150 +12,84 @@ mod types;
 
 pub use http::Upstream;
 pub use language::{LanguageCache, Override};
+pub use provider::{MetadataProvider, Search};
 pub use routes::*;
-pub use types::{Credits, MetaError, PersonDetails, Provider};
+pub use types::{Credits, MetaError, PersonDetails};
 
 use crate::config::MetadataConfig;
-use fliks_domain::{media::kind::MediaKind, metadata::language::Resolved};
-use serde_json::Value;
-use sqlx::PgPool;
-use std::time::Duration;
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 const TMDB_TIMEOUT: Duration = Duration::from_secs(10);
 const TVDB_TIMEOUT: Duration = Duration::from_secs(15);
 
+struct Entry {
+    /// Its key is configured (`metadata.md` rule 20).
+    on: bool,
+    provider: Arc<dyn MetadataProvider>,
+}
+
+/// The providers by registry key (`metadata-orchestrator.md` rules 8-9).
 pub struct Metadata {
     pub lang: LanguageCache,
-    pub tmdb: tmdb::Tmdb,
-    pub tvdb: tvdb::Tvdb,
-    tmdb_on: bool,
-    tvdb_on: bool,
+    /// TMDB's lists (trending, popular, upcoming, genres, discover) are not part of the trait.
+    pub tmdb: Arc<tmdb::Tmdb>,
+    providers: HashMap<ExternalProvider, Entry>,
 }
 
 impl Metadata {
-    pub fn new(db: PgPool, c: &MetadataConfig) -> Self {
+    pub fn new(db: sqlx::PgPool, c: &MetadataConfig) -> Self {
+        let tmdb = Arc::new(tmdb::Tmdb::new(
+            &c.tmdb_url,
+            &c.tmdb_image_url,
+            &c.tmdb_key,
+            TMDB_TIMEOUT,
+        ));
+        let tvdb = Arc::new(tvdb::Tvdb::new(&c.tvdb_url, &c.tvdb_key, TVDB_TIMEOUT));
+        let entry = |on: bool, provider: Arc<dyn MetadataProvider>| Entry { on, provider };
         Self {
             lang: LanguageCache::new(db),
-            tmdb: tmdb::Tmdb::new(&c.tmdb_url, &c.tmdb_image_url, &c.tmdb_key, TMDB_TIMEOUT),
-            tvdb: tvdb::Tvdb::new(&c.tvdb_url, &c.tvdb_key, TVDB_TIMEOUT),
-            tmdb_on: !c.tmdb_key.is_empty(),
-            tvdb_on: !c.tvdb_key.is_empty(),
+            providers: HashMap::from([
+                (
+                    ExternalProvider::Tmdb,
+                    entry(!c.tmdb_key.is_empty(), tmdb.clone()),
+                ),
+                (ExternalProvider::Tvdb, entry(!c.tvdb_key.is_empty(), tvdb)),
+            ]),
+            tmdb,
         }
     }
 
-    pub fn available(&self, p: Provider) -> bool {
-        match p {
-            Provider::Tmdb => self.tmdb_on,
-            Provider::Tvdb => self.tvdb_on,
-        }
+    /// The provider registered under `id`, available or not.
+    pub fn get(&self, id: ExternalProvider) -> Option<&dyn MetadataProvider> {
+        self.providers.get(&id).map(|e| &*e.provider)
     }
 
-    pub async fn search(
-        &self,
-        p: Provider,
-        tv: bool,
-        query: &str,
-        year: Option<i64>,
-        lang: &Resolved,
-    ) -> Result<Vec<Value>, Upstream> {
-        match p {
-            Provider::Tmdb => self.tmdb.search(tv, query, year, lang).await,
-            Provider::Tvdb => self.tvdb.search(tv, query, year, lang).await,
-        }
+    /// A provider `resolve` or `fallback` returned.
+    pub fn of(&self, id: ExternalProvider) -> &dyn MetadataProvider {
+        self.get(id).expect("a registered provider")
     }
 
-    pub async fn details(
-        &self,
-        p: Provider,
-        kind: MediaKind,
-        id: i64,
-        lang: &Resolved,
-    ) -> Result<Value, Upstream> {
-        let tv = match kind {
-            MediaKind::Movie => false,
-            MediaKind::Series => true,
-        };
-        match p {
-            Provider::Tmdb => self.tmdb.details(tv, id, lang).await,
-            Provider::Tvdb => self.tvdb.details(tv, id, lang).await,
-        }
-    }
-
-    pub async fn season_stubs(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> Result<Vec<Value>, Upstream> {
-        match p {
-            Provider::Tmdb => self.tmdb.season_stubs(id, lang).await,
-            Provider::Tvdb => self.tvdb.season_stubs(id).await,
-        }
-    }
-
-    pub async fn seasons(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> Result<Vec<Value>, Upstream> {
-        match p {
-            Provider::Tmdb => self.tmdb.seasons(id, lang).await,
-            Provider::Tvdb => self.tvdb.seasons(id, lang).await,
-        }
-    }
-
-    pub async fn find_by_external_id(
-        &self,
-        p: Provider,
-        source: &str,
-        id: &str,
-        lang: &Resolved,
-    ) -> Result<Option<(String, bool)>, Upstream> {
-        match p {
-            Provider::Tmdb => self.tmdb.find_by_external_id(source, id, lang).await,
-            Provider::Tvdb => self.tvdb.find_by_external_id(id).await,
-        }
-    }
-
-    pub async fn person_details(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> Result<PersonDetails, Upstream> {
-        match p {
-            Provider::Tmdb => self.tmdb.person_details(id, lang).await,
-            Provider::Tvdb => self.tvdb.person_details(id, lang).await,
-        }
-    }
-
-    pub async fn person_credits(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> Result<Credits, Upstream> {
-        match p {
-            Provider::Tmdb => self.tmdb.person_credits(id, lang).await,
-            Provider::Tvdb => self.tvdb.person_credits(id).await,
-        }
+    pub fn available(&self, id: ExternalProvider) -> bool {
+        self.providers.get(&id).is_some_and(|e| e.on)
     }
 
     /// The provider named, if its key is configured, else TMDB (`registry.resolve`).
-    pub fn resolve(&self, name: Option<&str>) -> Provider {
-        match name.and_then(Provider::parse) {
+    pub fn resolve(&self, name: Option<&str>) -> ExternalProvider {
+        match name.and_then(ExternalProvider::parse) {
             Some(p) if self.available(p) => p,
-            _ => Provider::Tmdb,
+            _ => ExternalProvider::Tmdb,
         }
     }
 
-    /// The other provider when it is configured.
-    pub fn fallback(&self, p: Provider) -> Option<Provider> {
-        let other = match p {
-            Provider::Tmdb => Provider::Tvdb,
-            Provider::Tvdb => Provider::Tmdb,
-        };
-        self.available(other).then_some(other)
+    /// The other provider that is configured and supports `kind` (any when `None`).
+    pub fn fallback(
+        &self,
+        id: ExternalProvider,
+        kind: Option<MediaKind>,
+    ) -> Option<ExternalProvider> {
+        ExternalProvider::ALL.into_iter().find(|o| {
+            *o != id && self.available(*o) && kind.is_none_or(|k| self.of(*o).supports(k))
+        })
     }
 }

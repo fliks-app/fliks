@@ -3,13 +3,14 @@ use crate::{
     events::{Hub, Num, SseEvent, Subject},
     ingest::rescan::rescan_files,
     markers::{self, ScanSeason},
-    metadata::Provider,
     state::AppState,
     stream::{self, sprite},
     system::backup,
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use fliks_domain::{media::kind::MediaKind, refresh};
+use fliks_domain::{
+    external_id::ExternalProvider, media::kind::MediaKind, metadata::limiter::Priority, refresh,
+};
 use fliks_engine_core::api::JobPriority;
 use sqlx::{FromRow, PgPool};
 use std::collections::HashMap;
@@ -56,7 +57,7 @@ async fn backup_job(st: &AppState) -> Outcome {
 }
 
 fn tmdb_configured(st: &AppState, job: &str) -> bool {
-    let set = st.metadata.available(Provider::Tmdb);
+    let set = st.metadata.available(ExternalProvider::Tmdb);
     if !set {
         tracing::warn!("{job}: TMDB_API_KEY not configured");
     }
@@ -202,7 +203,7 @@ async fn refresh_loop(
         if chatty {
             tracing::info!("{job}: refreshing \"{}\" ({}/{total})", m.title, i + 1);
         }
-        match crate::media::write::refresh_metadata(st, m.id, false).await {
+        match crate::media::write::refresh_metadata(st, m.id, false, Priority::Background).await {
             Ok(_) => updated += 1,
             Err(e) => tracing::warn!("{job}: failed for \"{}\": {e}", m.title),
         }

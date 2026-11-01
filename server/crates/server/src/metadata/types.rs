@@ -1,38 +1,6 @@
 //! Shapes the clients share with their callers (`metadata.md` rules 6, 10, 34).
 use super::http::Upstream;
-use fliks_domain::external_id::ExternalProvider;
 use serde_json::Value;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Provider {
-    Tmdb,
-    Tvdb,
-}
-
-impl Provider {
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Tmdb => "tmdb",
-            Self::Tvdb => "tvdb",
-        }
-    }
-
-    pub fn external(self) -> ExternalProvider {
-        match self {
-            Self::Tmdb => ExternalProvider::Tmdb,
-            Self::Tvdb => ExternalProvider::Tvdb,
-        }
-    }
-
-    /// Exact `tmdb` or `tvdb`; availability is not checked.
-    pub fn parse(name: &str) -> Option<Self> {
-        match name {
-            "tmdb" => Some(Self::Tmdb),
-            "tvdb" => Some(Self::Tvdb),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum MetaError {

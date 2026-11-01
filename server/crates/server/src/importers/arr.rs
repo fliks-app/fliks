@@ -16,6 +16,7 @@ use fliks_domain::{
         kind::MediaKind,
         path::{join, media_path, normalize},
     },
+    metadata::limiter::Priority,
     naming::validate_folder_name,
 };
 use serde_json::{Value, json};
@@ -335,7 +336,10 @@ pub(super) async fn import(
         let st = st.clone();
         tokio::spawn(async move {
             for id in new_series {
-                if let Err(e) = crate::media::write::refresh_metadata(&st, id, false).await {
+                if let Err(e) =
+                    crate::media::write::refresh_metadata(&st, id, false, Priority::Background)
+                        .await
+                {
                     tracing::warn!(media_id = id, error = %e, "metadata refresh after Sonarr import");
                 }
             }

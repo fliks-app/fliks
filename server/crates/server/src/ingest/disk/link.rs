@@ -1,6 +1,6 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
-use fliks_domain::external_id::ExternalProvider;
+use fliks_domain::{external_id::ExternalProvider, metadata::limiter::Priority};
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -359,7 +359,7 @@ pub(super) async fn find_or_import(
             added_by: Some(a.user.id),
             monitored_seasons: None,
         };
-        mw::import_title(st, provider, ext.clone(), imp).await
+        mw::import_title(st, provider, ext.clone(), imp, Priority::Background).await
     }
     .await;
     match imported {

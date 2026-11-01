@@ -2,11 +2,16 @@
 use super::{
     http::{Guarded, Upstream},
     map::{arr, get, nn, or, pluck, put, score, str_lower_or, text, year_of},
+    provider::{Call, MetadataProvider, Search, numeric},
     types::{Credits, PersonDetails},
 };
 use fliks_domain::{
+    external_id::ExternalProvider,
     media::{kind::MediaKind, query::js_parse_int},
-    metadata::language::Resolved,
+    metadata::{
+        language::Resolved,
+        limiter::{Limits, Priority},
+    },
 };
 use futures_util::{StreamExt, stream};
 use serde_json::{Map, Value, json};
@@ -16,6 +21,13 @@ use std::{
 };
 
 pub const API_URL: &str = "https://api4.thetvdb.com/v4";
+/// TVDB publishes no limit.
+const LIMITS: Limits = Limits {
+    rate_per_sec: 10.0,
+    burst: 10,
+    daily_quota: None,
+    background_share: 0.75,
+};
 const ART_POSTER: i64 = 2;
 const ART_BACKGROUND: i64 = 3;
 const ART_CLEARLOGO_SERIES: i64 = 23;
@@ -67,13 +79,13 @@ fn remote_id(remote_ids: &Value, source: &str) -> Option<Value> {
 impl Tvdb {
     pub fn new(base: &str, key: &str, timeout: Duration) -> Self {
         Self {
-            http: Guarded::new("tvdb", base, timeout, vec![]),
+            http: Guarded::new("tvdb", base, timeout, vec![], LIMITS),
             key: key.to_owned(),
             auth: tokio::sync::Mutex::new(None),
         }
     }
 
-    async fn token(&self, stale: Option<&str>) -> Result<String, Upstream> {
+    async fn token(&self, stale: Option<&str>, p: Priority) -> Result<String, Upstream> {
         let mut slot = self.auth.lock().await;
         if let Some(t) = slot.as_ref()
             && t.expires > Instant::now()
@@ -86,7 +98,10 @@ impl Tvdb {
         }
         let data = self
             .http
-            .send(self.http.post("/login").json(&json!({"apikey": self.key})))
+            .send(
+                self.http.post("/login").json(&json!({"apikey": self.key})),
+                p,
+            )
             .await?;
         let value = get(get(&data, "data"), "token")
             .as_str()
@@ -100,20 +115,25 @@ impl Tvdb {
     }
 
     /// `data.data` of an authenticated GET; one re-login when the token is refused (401).
-    async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, Upstream> {
+    async fn get(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+        p: Priority,
+    ) -> Result<Value, Upstream> {
         let query: Vec<(String, String)> = query
             .iter()
             .map(|(k, v)| ((*k).to_owned(), v.clone()))
             .collect();
-        let mut token = self.token(None).await?;
+        let mut token = self.token(None, p).await?;
         for attempt in 0..2 {
             match self
                 .http
-                .send(self.http.get(path, &query).bearer_auth(&token))
+                .send(self.http.get(path, &query).bearer_auth(&token), p)
                 .await
             {
                 Err(e) if e.is_unauthorized() && attempt == 0 => {
-                    token = self.token(Some(&token)).await?
+                    token = self.token(Some(&token), p).await?
                 }
                 other => return other,
             }
@@ -121,26 +141,32 @@ impl Tvdb {
         unreachable!("the second attempt returns")
     }
 
-    async fn data(&self, path: &str, query: &[(&str, String)]) -> Result<Value, Upstream> {
-        Ok(nn(&self.get(path, query).await?, "data"))
+    async fn data(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+        p: Priority,
+    ) -> Result<Value, Upstream> {
+        Ok(nn(&self.get(path, query, p).await?, "data"))
     }
 
-    pub async fn search(
+    pub async fn search_titles(
         &self,
         tv: bool,
         query: &str,
         year: Option<i64>,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<Vec<Value>, Upstream> {
-        self.token(None).await?;
-        let mut p = vec![
+        self.token(None, p).await?;
+        let mut params = vec![
             ("q", query.to_owned()),
             ("type", MediaKind::from_tv(tv).as_str().into()),
         ];
         if let Some(y) = year {
-            p.push(("year", y.to_string()));
+            params.push(("year", y.to_string()));
         }
-        let d = self.data("/search", &p).await?;
+        let d = self.data("/search", &params, p).await?;
         Ok(d.as_array()
             .map(|a| {
                 a.iter()
@@ -150,13 +176,21 @@ impl Tvdb {
             .unwrap_or_default())
     }
 
-    pub async fn details(&self, tv: bool, id: i64, lang: &Resolved) -> Result<Value, Upstream> {
+    pub async fn details(
+        &self,
+        tv: bool,
+        id: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Value, Upstream> {
         let path = if tv {
             format!("/series/{id}/extended")
         } else {
             format!("/movies/{id}/extended")
         };
-        let m = self.data(&path, &[("meta", "translations".into())]).await?;
+        let m = self
+            .data(&path, &[("meta", "translations".into())], p)
+            .await?;
         if m.is_null() {
             return Err(missing("translations"));
         }
@@ -164,13 +198,14 @@ impl Tvdb {
     }
 
     /// Every episode, following the 500-per-page cursor (a full page asks for the next).
-    async fn all_episodes(&self, id: i64) -> Result<Vec<Value>, Upstream> {
+    async fn all_episodes(&self, id: i64, p: Priority) -> Result<Vec<Value>, Upstream> {
         let mut all = vec![];
         for page in 0..MAX_EPISODE_PAGES {
             let d = self
                 .data(
                     &format!("/series/{id}/episodes/default"),
                     &[("page", page.to_string())],
+                    p,
                 )
                 .await?;
             let eps = arr(&d, "episodes");
@@ -182,10 +217,10 @@ impl Tvdb {
         Ok(all)
     }
 
-    pub async fn season_stubs(&self, id: i64) -> Result<Vec<Value>, Upstream> {
-        self.token(None).await?;
+    pub async fn season_stubs(&self, id: i64, p: Priority) -> Result<Vec<Value>, Upstream> {
+        self.token(None, p).await?;
         let mut counts: BTreeMap<i64, i64> = BTreeMap::new();
-        for ep in self.all_episodes(id).await? {
+        for ep in self.all_episodes(id, p).await? {
             *counts
                 .entry(get(&ep, "seasonNumber").as_i64().unwrap_or_default())
                 .or_default() += 1;
@@ -196,14 +231,20 @@ impl Tvdb {
             .collect())
     }
 
-    pub async fn seasons(&self, id: i64, lang: &Resolved) -> Result<Vec<Value>, Upstream> {
-        self.token(None).await?;
+    pub async fn seasons(
+        &self,
+        id: i64,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Vec<Value>, Upstream> {
+        self.token(None, p).await?;
         let code = lang.tvdb_code;
-        let episodes = self.all_episodes(id).await?;
+        let episodes = self.all_episodes(id, p).await?;
         let series = self
             .data(
                 &format!("/series/{id}/extended"),
                 &[("short", "true".into())],
+                p,
             )
             .await?;
         let bases: Vec<&Value> = arr(&series, "seasons")
@@ -226,7 +267,7 @@ impl Tvdb {
         let translations: BTreeMap<i64, Value> = stream::iter(wanted)
             .map(|eid| async move {
                 let d = self
-                    .data(&format!("/episodes/{eid}/translations/{code}"), &[])
+                    .data(&format!("/episodes/{eid}/translations/{code}"), &[], p)
                     .await
                     .ok()?;
                 Some((eid, d))
@@ -283,21 +324,23 @@ impl Tvdb {
         &self,
         id: i64,
         lang: &Resolved,
+        p: Priority,
     ) -> Result<PersonDetails, Upstream> {
-        self.token(None).await?;
-        let p = self
+        self.token(None, p).await?;
+        let person = self
             .data(
                 &format!("/people/{id}/extended"),
                 &[("meta", "translations".into())],
+                p,
             )
             .await?;
         let bio = |code: &str| {
-            arr(&p, "biographies")
+            arr(&person, "biographies")
                 .iter()
                 .find(|b| get(b, "language") == code)
                 .and_then(|b| get(b, "biography").as_str())
         };
-        let s = |k: &str| get(&p, k).as_str().map(str::to_owned);
+        let s = |k: &str| get(&person, k).as_str().map(str::to_owned);
         Ok(PersonDetails {
             name: s("name"),
             biography: Some(
@@ -310,14 +353,14 @@ impl Tvdb {
             deathday: s("death"),
             place_of_birth: s("birthPlace"),
             avatar_url: s("image"),
-            known_for_department: Some(infer_department(arr(&p, "characters"))),
+            known_for_department: Some(infer_department(arr(&person, "characters"))),
         })
     }
 
-    pub async fn person_credits(&self, id: i64) -> Result<Credits, Upstream> {
-        self.token(None).await?;
-        let p = self.data(&format!("/people/{id}/extended"), &[]).await?;
-        let chars = arr(&p, "characters");
+    pub async fn credits_of(&self, id: i64, p: Priority) -> Result<Credits, Upstream> {
+        self.token(None, p).await?;
+        let person = self.data(&format!("/people/{id}/extended"), &[], p).await?;
+        let chars = arr(&person, "characters");
         let credit = |c: &Value| {
             let work = match get(c, "series") {
                 Value::Null => get(c, "movie"),
@@ -381,9 +424,13 @@ impl Tvdb {
     }
 
     /// First `series` then `movie` of the remote-id lookup; a failed call is `None`, a failed login is not.
-    pub async fn find_by_external_id(&self, id: &str) -> Result<Option<(String, bool)>, Upstream> {
-        self.token(None).await?;
-        let Ok(d) = self.data(&format!("/search/remoteid/{id}"), &[]).await else {
+    pub async fn find_by_external_id(
+        &self,
+        id: &str,
+        p: Priority,
+    ) -> Result<Option<(String, bool)>, Upstream> {
+        self.token(None, p).await?;
+        let Ok(d) = self.data(&format!("/search/remoteid/{id}"), &[], p).await else {
             return Ok(None);
         };
         for r in d.as_array().map(Vec::as_slice).unwrap_or_default() {
@@ -395,6 +442,95 @@ impl Tvdb {
             }
         }
         Ok(None)
+    }
+}
+
+impl MetadataProvider for Tvdb {
+    fn id(&self) -> ExternalProvider {
+        ExternalProvider::Tvdb
+    }
+
+    fn supports(&self, _kind: MediaKind) -> bool {
+        true
+    }
+
+    fn limits(&self) -> Limits {
+        LIMITS
+    }
+
+    fn search<'a>(
+        &'a self,
+        q: &'a Search<'a>,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        let tv = q.kind.has_seasons();
+        Box::pin(self.search_titles(tv, q.query, q.year, lang, p))
+    }
+
+    fn fetch_work<'a>(
+        &'a self,
+        kind: MediaKind,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Value> {
+        Box::pin(async move {
+            self.details(kind.has_seasons(), numeric(id)?, lang, p)
+                .await
+        })
+    }
+
+    fn fetch_children<'a>(
+        &'a self,
+        _kind: MediaKind,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        Box::pin(async move { self.seasons(numeric(id)?, lang, p).await })
+    }
+
+    fn child_stubs<'a>(
+        &'a self,
+        _kind: MediaKind,
+        id: &'a str,
+        _lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        Box::pin(async move { self.season_stubs(numeric(id)?, p).await })
+    }
+
+    /// TVDB's remote-id lookup takes the id alone, whatever namespace it is in.
+    fn find_by<'a>(
+        &'a self,
+        _source: ExternalProvider,
+        id: &'a str,
+        _lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Option<(String, MediaKind)>> {
+        Box::pin(async move {
+            let found = self.find_by_external_id(id, p).await?;
+            Ok(found.map(|(id, tv)| (id, MediaKind::from_tv(tv))))
+        })
+    }
+
+    fn fetch_person<'a>(
+        &'a self,
+        id: &'a str,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, PersonDetails> {
+        Box::pin(async move { self.person_details(numeric(id)?, lang, p).await })
+    }
+
+    fn person_credits<'a>(
+        &'a self,
+        id: &'a str,
+        _lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Credits> {
+        Box::pin(async move { self.credits_of(numeric(id)?, p).await })
     }
 }
 

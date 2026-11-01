@@ -3,12 +3,13 @@ use crate::{
     images::{ImageStore, paths::Target},
     libraries::{accessible_library_ids, paths_visible},
     media::hydrate,
-    metadata::{Credits, Metadata, Provider, Upstream},
+    metadata::{Credits, Metadata, Upstream},
     state::AppState,
 };
 use fliks_domain::{
+    external_id::ExternalProvider,
     media::kind::MediaKind,
-    metadata::language::Resolved,
+    metadata::{language::Resolved, limiter::Priority},
     persons::{Owned, link, needs_refresh, tsquery},
 };
 use serde_json::{Value, json};
@@ -98,8 +99,8 @@ async fn call_provider<T, Fut>(
     md: &Metadata,
     db: &PgPool,
     p: &mut Person,
-    call: impl Fn(Provider) -> Fut,
-) -> Result<(T, Provider), (Provider, Upstream)>
+    call: impl Fn(ExternalProvider) -> Fut,
+) -> Result<(T, ExternalProvider), (ExternalProvider, Upstream)>
 where
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
@@ -108,23 +109,23 @@ where
         Ok(v) => return Ok((v, primary)),
         Err(e) => e,
     };
-    let Some(other) = md.fallback(primary).filter(|_| e.is_not_found()) else {
+    let Some(other) = md.fallback(primary, None).filter(|_| e.is_not_found()) else {
         return Err((primary, e));
     };
     let v = call(other).await.map_err(|e| (other, e))?;
-    tracing::info!("person {} is known to {}, pinning", p.id, other.name());
+    tracing::info!("person {} is known to {}, pinning", p.id, other.as_str());
     // Another person may already hold that (provider, value): keep this one's provider.
     match sqlx::query!(
         r#"UPDATE person_external_ids SET provider = $2 WHERE "personId" = $1 AND provider = $3"#,
         p.id,
-        other.name(),
+        other.as_str(),
         p.provider
     )
     .execute(db)
     .await
     {
-        Ok(_) => p.provider = Some(other.name().to_owned()),
-        Err(e) => tracing::warn!("person {} not pinned to {}: {e}", p.id, other.name()),
+        Ok(_) => p.provider = Some(other.as_str().to_owned()),
+        Err(e) => tracing::warn!("person {} not pinned to {}: {e}", p.id, other.as_str()),
     }
     Ok((v, other))
 }
@@ -136,12 +137,14 @@ async fn try_refresh(
     lang: &Resolved,
     p: &mut Person,
 ) -> Result<(), String> {
-    let Some(ext) = p.tmdb_id.map(i64::from) else {
+    let Some(ext) = p.tmdb_id.map(|id| id.to_string()) else {
         return Ok(());
     };
-    let (d, _) = call_provider(md, db, p, |pr| md.person_details(pr, ext, lang))
-        .await
-        .map_err(|(pr, e)| format!("{}: {e}", pr.name()))?;
+    let (d, _) = call_provider(md, db, p, |pr| {
+        md.of(pr).fetch_person(&ext, lang, Priority::Interactive)
+    })
+    .await
+    .map_err(|(pr, e)| format!("{}: {e}", pr.as_str()))?;
     let avatar = match d.avatar_url.as_deref().filter(|u| !u.is_empty()) {
         Some(url) => images.download_and_store(url, &Target::person(p.id)).await,
         None => None,
@@ -261,7 +264,7 @@ pub async fn detail(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppErro
 async fn link_credits(
     st: &AppState,
     a: &Authed,
-    served: Provider,
+    served: ExternalProvider,
     credits: Credits,
 ) -> Result<(Vec<Value>, Vec<Value>), AppError> {
     let ids: Vec<i32> = credits
@@ -285,7 +288,7 @@ async fn link_credits(
                ORDER BY m.id ASC"#,
             &wanted,
             &libs,
-            served.external().as_str()
+            served.as_str()
         )
         .fetch_all(&st.db)
         .await?
@@ -329,19 +332,20 @@ async fn link_credits(
 pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
     let mut p = find(&st.db, id).await?;
     let lang = st.metadata.lang.resolve(None).await?;
-    let Some(ext) = p.tmdb_id.map(i64::from) else {
+    let Some(ext) = p.tmdb_id.map(|id| id.to_string()) else {
         return Ok(json!({"provider": null, "cast": [], "crew": []}));
     };
     let md = &*st.metadata;
-    let (credits, served) =
-        call_provider(md, &st.db, &mut p, |pr| md.person_credits(pr, ext, &lang))
-            .await
-            .map_err(|(pr, e)| {
-                AppError::with_message(
-                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Metadata request failed on {}: {}", pr.name(), e.reason()),
-                )
-            })?;
+    let (credits, served) = call_provider(md, &st.db, &mut p, |pr| {
+        md.of(pr).person_credits(&ext, &lang, Priority::Interactive)
+    })
+    .await
+    .map_err(|(pr, e)| {
+        AppError::with_message(
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            format!("Metadata request failed on {}: {}", pr.as_str(), e.reason()),
+        )
+    })?;
     let (cast, crew) = link_credits(st, a, served, credits).await?;
     Ok(json!({"provider": p.provider, "cast": cast, "crew": crew}))
 }
