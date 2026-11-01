@@ -512,7 +512,7 @@ export class BrowserDeviceProfileService {
     }
     // A browser decodes 7.1 AAC, Opus and FLAC and downmixes them to its output
     // itself, so their cap is the decoder's, not AudioContext's output count.
-    // TV specs list multichannel only for Dolby and AAC; AVPlay plays a 5.1 Opus copy silent.
+    // No TV spec lists multichannel Opus or FLAC (Samsung: DD+ 5.1); AVPlay plays a 5.1 Opus copy silent.
     let audioChannelsByCodec =
       this.nativeAudio?.channelsByCodec ??
       (tvPlatform === 'tizen' || tvPlatform === 'webos'
