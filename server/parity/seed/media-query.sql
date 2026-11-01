@@ -212,13 +212,13 @@ INSERT INTO media_files (id, "createdAt", "updatedAt", "relativePath", size, qua
  (60, '2026-02-01'::timestamptz + (60 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e24.mkv', 1000060, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 45, NULL, NULL),
  (61, '2026-02-01'::timestamptz + (61 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e27.mkv', 1000061, 'WEBDL-1080p', 'en', NULL, 47, NULL, NULL),
  (62, '2026-02-01'::timestamptz + (62 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e29.mkv', 1000062, 'WEBDL-1080p', 'en', NULL, 47, NULL, NULL);
-INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
-  SELECT i.id, f.id, f."mediaId" FROM media_files f
+INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+  SELECT i.id, f.id, f."mediaId", 0 FROM media_files f
   JOIN items i ON i."mediaId" = f."mediaId" AND i."groupId" IS NULL WHERE f.id BETWEEN 30 AND 56;
 -- a multi-episode file (13, 20, 29) plays the item inside its range
-INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES
- (13, 57, 43), (14, 57, 43), (20, 58, 44), (21, 58, 44), (23, 59, 45), (24, 60, 45),
- (27, 61, 47), (29, 62, 47), (30, 62, 47);
+INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES
+ (13, 57, 43, 0), (14, 57, 43, 0), (20, 58, 44, 0), (21, 58, 44, 0), (23, 59, 45, 0), (24, 60, 45, 0),
+ (27, 61, 47, 0), (29, 62, 47, 0), (30, 62, 47, 0);
 
 INSERT INTO movie_details (id, "createdAt", "updatedAt", budget, revenue, tagline, popularity, "voteCount", "originalLanguage", "productionCountries", "productionCompanies", videos, keywords, "mediaId") VALUES
  (1, '2026-01-01', '2026-01-01', 150000000000, 9007199254740993, 'A tagline', 12.5, 1234, 'en', '[{"iso_3166_1":"US","name":"United States"}]', '[{"id":1,"name":"Studio"}]', '[{"key":"abc","site":"YouTube"}]', '["heist","space"]', 3),

@@ -72,7 +72,7 @@ for n in range(1, 18):
     fid += 1
     i, size = info[ext]
     files.append(f"({fid}, {n}, {q(folder+'.'+ext)}, {size}, 'WEBDL-1080p', 'en', '{i}')")
-    parts.append(f"({12 + n}, {fid}, {n})")
+    parts.append(f"({12 + n}, {fid}, {n}, 0)")
 sid = eid = 0
 for k, s in enumerate("ABC"):
     mid = 18 + k
@@ -87,7 +87,7 @@ for k, s in enumerate("ABC"):
             episodes.append(f"({eid}, {ep}, {q(f'Episode {ep}')}, {sid}, {mid}, {mid})")
             i, size = info["mkv"]
             files.append(f"({fid}, {mid}, {q(f'Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
-            parts.append(f"({eid}, {fid}, {mid})")
+            parts.append(f"({eid}, {fid}, {mid}, 0)")
 print('INSERT INTO media (id, title, year, type, overview, status, monitored, "folderName", rating, genres, runtime, "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
 print('INSERT INTO media_release_dates ("mediaId", kind, date) VALUES\n ' + ",\n ".join(dates) + ";")
 print('INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES\n ' + ",\n ".join(ext_ids) + ";")
@@ -97,7 +97,7 @@ print('INSERT INTO item_groups (id, "number", "mediaId") VALUES\n ' + ",\n ".joi
 print('INSERT INTO items (id, "number", title, "groupId", "mediaId", "editionId") VALUES\n ' + ",\n ".join(episodes) + ";")
 print('INSERT INTO items (id, "mediaId", "editionId") SELECT 12 + id, id, id FROM media WHERE type = \'movie\' ORDER BY id;')
 print('INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
-print('INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES\n ' + ",\n ".join(parts) + ";")
+print('INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES\n ' + ",\n ".join(parts) + ";")
 PY
 cat <<'SQL'
 INSERT INTO requests (id, "mediaType", provider, "externalId", title, status, "userId", "libraryId") VALUES
