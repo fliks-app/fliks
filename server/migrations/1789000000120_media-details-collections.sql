@@ -39,7 +39,7 @@ ALTER TABLE "series_details"
     REFERENCES "media" ("id", "type") ON DELETE CASCADE;
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON "series_details" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-CREATE FUNCTION media_details_json(media integer) RETURNS jsonb LANGUAGE sql STABLE AS $$
+CREATE FUNCTION media_details_json(media integer) RETURNS jsonb LANGUAGE sql STABLE PARALLEL SAFE AS $$
   SELECT jsonb_build_object('id', d.id, 'createdAt', iso_ms(d."createdAt"), 'updatedAt', iso_ms(d."updatedAt"),
     'budget', d.budget::text, 'revenue', d.revenue::text, 'tagline', d.tagline, 'popularity', d.popularity,
     'voteCount', d."voteCount", 'originalLanguage', d."originalLanguage",
@@ -64,18 +64,23 @@ CREATE TABLE "collections" (
 );
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON "collections" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TABLE "collection_external_ids" (
-  "collectionId" integer NOT NULL REFERENCES "collections" ("id") ON DELETE CASCADE,
+  "collectionId" integer NOT NULL,
   "provider" text NOT NULL,
   "value" text NOT NULL,
+  CONSTRAINT "FK_collection_external_ids_collections" FOREIGN KEY ("collectionId")
+    REFERENCES "collections" ("id") ON DELETE CASCADE,
   CONSTRAINT "PK_collection_external_ids" PRIMARY KEY ("collectionId", "provider"),
   CONSTRAINT "UQ_collection_external_ids" UNIQUE ("provider", "value"),
   CONSTRAINT "CK_collection_external_ids_provider" CHECK ("provider" IN ('tmdb')),
   CONSTRAINT "CK_collection_external_ids_value" CHECK ("value" ~ '^[1-9][0-9]{0,8}$')
 );
 CREATE TABLE "collection_entries" (
-  "collectionId" integer NOT NULL REFERENCES "collections" ("id") ON DELETE CASCADE,
-  "mediaId" integer NOT NULL REFERENCES "media" ("id") ON DELETE CASCADE,
+  "collectionId" integer NOT NULL,
+  "mediaId" integer NOT NULL,
   "position" numeric CONSTRAINT "CK_collection_entries_position" CHECK ("position" >= 0),
+  CONSTRAINT "FK_collection_entries_collections" FOREIGN KEY ("collectionId")
+    REFERENCES "collections" ("id") ON DELETE CASCADE,
+  CONSTRAINT "FK_collection_entries_media" FOREIGN KEY ("mediaId") REFERENCES "media" ("id") ON DELETE CASCADE,
   CONSTRAINT "PK_collection_entries" PRIMARY KEY ("collectionId", "mediaId")
 );
 CREATE INDEX "IDX_collection_entries_media" ON "collection_entries" ("mediaId");
@@ -93,10 +98,3 @@ INSERT INTO "collection_entries" ("collectionId", "mediaId")
 SELECT c.id, m."id" FROM "media" m JOIN "_tmdb_collections" c ON c.tid = m."tmdbCollectionId";
 DROP TABLE "_tmdb_collections";
 ALTER TABLE "media" DROP COLUMN "tmdbCollectionId", DROP COLUMN "tmdbCollectionName";
-
-CREATE VIEW "media_tmdb_collection" AS
-SELECT DISTINCT ON (e."mediaId") e."mediaId", c."id" AS "collectionId", x."value"::int AS "tmdbId", c."name"
-  FROM "collection_entries" e
-  JOIN "collections" c ON c."id" = e."collectionId"
-  JOIN "collection_external_ids" x ON x."collectionId" = c."id" AND x."provider" = 'tmdb'
- ORDER BY e."mediaId", c."id";

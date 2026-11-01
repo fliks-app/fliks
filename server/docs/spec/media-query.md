@@ -72,7 +72,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | `voteMin` | `!== undefined` | `media.rating >= $n` | float, NULL excluded |
     | `genre` | truthy | `media.genres @> $n::jsonb` with `$n = JSON.stringify([genre])` | jsonb array containment: exact element, case-sensitive, NULL `genres` excluded |
     | `genres` | `length > 0` | `media.genres @> $n::jsonb` with `$n = JSON.stringify(genres)` | all listed genres must be present (AND); combines with `genre` by AND |
-    | `collectionId` | truthy | `EXISTS (SELECT 1 FROM media_tmdb_collection c WHERE c."mediaId" = media.id AND c."tmdbId" = $n)` | |
+    | `collectionId` | truthy | `EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb' WHERE e."mediaId" = media.id AND x.value = $n::text)` | |
     | `qualityProfileId` | truthy | `media."qualityProfileId" = $n` | |
     | `languageProfileId` | truthy | `media."languageProfileId" = $n` | |
     | `missing` | `!== undefined` | rule 22 | |
@@ -96,7 +96,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 ### D. Entity shapes (list and detail)
 
 30. `MLI` (list and `recently-added` item) = the media as a JSON object:
-    - all `media` columns **except** `searchVector` (`select: false`) and the three provider ids, which are assembled from `media_external_ids` (`external-ids.md` rules 5 and 13): `id, createdAt, updatedAt` (ISO `%Y-%m-%dT%H:%M:%S%.3fZ`), `title, originalTitle` (string\|null), `alternativeTitles` (string[]), `year` (int\|null), `type`, `tmdbId, imdbId, tvdbId` (\|null), `overview`, `status`, `monitored`, `preferredProvider`, `folderName`, `posterUrl, fanartUrl, logoUrl` (\|null), `additionalFanartUrls` (string[]), `metadataRefreshedAt` (ISO\|null), `rating` (float\|null), `genres` (string[]\|null), `tmdbCollectionId, tmdbCollectionName` (from the view `media_tmdb_collection`, `media-details.md` rule 18, `null` without a collection), `runtime`, `releaseDate, inCinemas, digitalRelease, physicalRelease` (`YYYY-MM-DD` strings\|null, assembled from `media_release_dates`, `media-details.md` rules 2-3), `minimumAvailability`; nullable columns are present as `null`;
+    - all `media` columns **except** `searchVector` (`select: false`) and the three provider ids, which are assembled from `media_external_ids` (`external-ids.md` rules 5 and 13): `id, createdAt, updatedAt` (ISO `%Y-%m-%dT%H:%M:%S%.3fZ`), `title, originalTitle` (string\|null), `alternativeTitles` (string[]), `year` (int\|null), `type`, `tmdbId, imdbId, tvdbId` (\|null), `overview`, `status`, `monitored`, `preferredProvider`, `folderName`, `posterUrl, fanartUrl, logoUrl` (\|null), `additionalFanartUrls` (string[]), `metadataRefreshedAt` (ISO\|null), `rating` (float\|null), `genres` (string[]\|null), `tmdbCollectionId, tmdbCollectionName` (`media-details.md` rule 18, `null` without a collection), `runtime`, `releaseDate, inCinemas, digitalRelease, physicalRelease` (`YYYY-MM-DD` strings\|null, assembled from `media_release_dates`, `media-details.md` rules 2-3), `minimumAvailability`; nullable columns are present as `null`;
     - `path`: `null` unless `library.path` is truthy; when `folderName` is truthy `path.join(library.path, folderName)` (POSIX normalisation: `//` collapsed, `.`/`..` resolved), else `library.path` verbatim;
     - relation-id fields `libraryId, qualityProfileId, languageProfileId, addedById`: always present, `null` when the foreign key is null ;
     - joined relations: `library` (object\|null: all `libraries` columns + `defaultQualityProfileId`/`defaultLanguageProfileId`, `null` when unset), `qualityProfile` (object\|null: `id, createdAt, updatedAt, name, cutoff, items, upgradeAllowed, resolutionUpgradeOnly, minCustomFormatScore`), `languageProfile` (object\|null: `id, createdAt, updatedAt, name, audioLanguages, subtitleLanguages`), `files` (array, `[]` when none): `id, createdAt, updatedAt, relativePath, size` (**JSON number**, transformer `Number(v)`), `quality` (string), `language` (string\|null), `streamInfo` (jsonb\|null, returned whole, plus an additive `trackMarkers` string array on every `audio[]`/`subtitles[]` entry: `playback-info.md` rule 23a), `osdbHash` (string\|null, varchar 16), `osdbBytesize` (**number**\|null, bigint with transformer), `mediaId` (always), `episodeId` (`null` for a movie file);
@@ -129,7 +129,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | 12 | WEBDL-720p | 720 | web | 45 | | 24 | Remux-2160p | 2160 | remux | 95 |
 
     The constant is pinned by the golden fixture `app-qualities` (Vectors).
-38. `genres` and `collections`: `libraryId` handling: `libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null` (`parseInt` semantics); when truthy and finite the scope is `[libraryId]` if it is in `ids`, else `[]`; `''`, `0`, `NaN` (`abc`) leave the scope at `ids`; `12abc` parses to 12; a repeated key (`libraryId=1&libraryId=2`) is read as the string `'1,2'`, so `parseInt` gives 1. Empty scope returns `[]` without SQL. `genres` = Q-G (one row per distinct genre string, **case-sensitive**, ordered `genre ASC` by database collation; `count` counts occurrences, so a genre repeated inside one media's array counts twice; `posters` = up to 4 non-null `posterUrl`s ordered by `media.id`, `[]` when none). `collections` = Q-K (only named collections of the view `media_tmdb_collection` with `COUNT(*) >= 2` within the scope; grouped by collection, `id` its tmdb value, ordered by name `ASC`, equal names break on `id ASC`).
+38. `genres` and `collections`: `libraryId` handling: `libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null` (`parseInt` semantics); when truthy and finite the scope is `[libraryId]` if it is in `ids`, else `[]`; `''`, `0`, `NaN` (`abc`) leave the scope at `ids`; `12abc` parses to 12; a repeated key (`libraryId=1&libraryId=2`) is read as the string `'1,2'`, so `parseInt` gives 1. Empty scope returns `[]` without SQL. `genres` = Q-G (one row per distinct genre string, **case-sensitive**, ordered `genre ASC` by database collation; `count` counts occurrences, so a genre repeated inside one media's array counts twice; `posters` = up to 4 non-null `posterUrl`s ordered by `media.id`, `[]` when none). `collections` = Q-K (only named collections that have a `tmdb` id, with `COUNT(*) >= 2` within the scope; grouped by collection, `id` its tmdb value, ordered by name `ASC`, equal names break on `id ASC`).
 
 ### F. Tracking
 
@@ -154,10 +154,10 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 
 52. `GET :id/similar`: loads the source with `metadata`; `type !== 'movie'` or no library → `[]`; `genres = source.genres ?? []`, `keywords = metadata?.keywords ?? []`, `directors` = person ids of the `media_credits` rows of the source with `role = 'crew'` and `job = 'Director'` (exact, case-sensitive), `sameDirectorIds` = distinct `media_credits."mediaId"` of other media with `role = 'crew'`, `job = 'Director'` and `"personId" IN directors` (any library; excludes the source id); no genres, no keywords and no same-director ids → `[]`.
 53. `limit` query (bare string): `Number(limit)`; finite and `> 0` → `Math.min(parsed, 30)` (fractional kept, then `Array.slice` truncates), anything else (absent, `''`, `0`, negative, `abc`) → default **12**.
-54. Candidates (Q-X below): media with the **same library and `type = 'movie'`, `id != source`**, where `jsonb_exists_any(m.genres, <source genres>)` (exact, case-sensitive element match) **OR** `jsonb_exists_any(meta.keywords, <source keywords>)` **OR** `m.id IN sameDirectorIds` (each branch only if its list is non-empty), and, when the source has a collection in `media_tmdb_collection`, no candidate of that collection (collection mates excluded); the keywords are those of `movie_details` (rule 54 only reads movies). `hasFile` = media has at least one `media_files` row.
+54. Candidates (Q-X below): media with the **same library and `type = 'movie'`, `id != source`**, where `jsonb_exists_any(m.genres, <source genres>)` (exact, case-sensitive element match) **OR** `jsonb_exists_any(meta.keywords, <source keywords>)` **OR** `m.id IN sameDirectorIds` (each branch only if its list is non-empty), and, when the source has a collection with a `tmdb` id (`media-details.md` rule 18), no candidate of that collection (collection mates excluded); the keywords are those of `movie_details` (rule 54 only reads movies). `hasFile` = media has at least one `media_files` row.
 55. Score (f64, evaluate in exactly this order so floats match): `score = 0`; `+= min(keywordHits * 1.6, 4.8)` where `keywordHits` = number of candidate keywords whose lower-case is in the lower-cased set of the source keywords (candidate duplicates counted); `+= cosine(sourceGenres, candidateGenres) * 2.5` where `cosine = shared / sqrt(a.length * b.length)` (0 when `shared = 0`, `shared` counted like `keywordHits`); `+= 2` when same director; when both years are truthy `+= max(0, 1 - |Δyear| / 20) * 0.5`. Keep when `score >= 1`; sort `score DESC`, then `(rating ?? 0) DESC`, **stable over the SQL row order** (`m.id ASC`); take `limit`. Item `RI` = `{ id, title, year, posterUrl: posterUrl ?? null, fanartUrl: fanartUrl ?? null, rating: rating ?? null, genres: genres ?? [], hasFile: boolean }` (`year` may be `null`). Lower-casing is Unicode `str::to_lowercase`; vectors cover non-ASCII.
 56. 404 `Media #<id> not found` when the source vanished after the gate.
-57. `GET :id/collection`: source without a collection in `media_tmdb_collection` or without library → `null` (**200, empty body**, rule 10); else every media of the **same library** in the same collection (any `type`), `ORDER BY` the `release` date of `media_release_dates` `ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC`, including the source itself; fewer than 2 rows → `null`; else `{ id: <the collection's tmdb id>, name: <its name>, items: RI[] }`.
+57. `GET :id/collection`: source without a collection with a `tmdb` id (`media-details.md` rule 18) or without library → `null` (**200, empty body**, rule 10); else every media of the **same library** in the same collection (any `type`), `ORDER BY` the entry's `position ASC NULLS LAST`, then the `release` date of `media_release_dates` `ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC`, including the source itself; fewer than 2 rows → `null`; else `{ id: <the collection's tmdb id>, name: <its name, `''` when it has none>, items: RI[] }`.
 58. `cast`: the `media_credits` of the media with `role = 'cast'` and its `person`, `ORDER BY position ASC, id ASC`; `crew`: those with `role = 'crew'`, same order. Cast row `{ id, createdAt, updatedAt, character, order, person }`, crew row `{ id, createdAt, updatedAt, job, department, person }` (no `media` key); `order` is `position`; `person` = all `persons` columns except `searchVector`, with `provider` and `tmdbId` read from the view `person_ids`: `id, createdAt, updatedAt, provider, tmdbId, name, avatarUrl, biography, birthday, deathday` (`YYYY-MM-DD`\|null), `placeOfBirth, knownForDepartment, departments` (string[]), `metadataRefreshedAt` (ISO\|null). A media without credits gives `[]`.
 
 ### I. Streams
@@ -336,8 +336,8 @@ ORDER BY g.genre ASC
 **Q-K (collections, verbatim)**:
 
 ```sql
-SELECT tc."tmdbId"            AS id,
-       tc.name                AS name,
+SELECT x.value::int            AS id,
+       c.name                 AS name,
        COUNT(*)::int          AS count,
        COALESCE(
          (ARRAY_AGG(m."posterUrl" ORDER BY m.id)
@@ -345,12 +345,14 @@ SELECT tc."tmdbId"            AS id,
          ARRAY[]::text[]
        ) AS posters
 FROM media m
-JOIN media_tmdb_collection tc ON tc."mediaId" = m.id
+JOIN collection_entries e ON e."mediaId" = m.id
+JOIN collections c ON c.id = e."collectionId"
+JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
 WHERE m."libraryId" = ANY($1)
-  AND tc.name <> ''
-GROUP BY tc."collectionId", tc."tmdbId", tc.name
+  AND c.name <> ''
+GROUP BY c.id, x.value, c.name
 HAVING COUNT(*) >= 2
-ORDER BY tc.name ASC, tc."tmdbId" ASC
+ORDER BY c.name ASC, x.value::int ASC
 ```
 
 **Q-N (counts)** `SELECT type, COUNT(*) FROM media WHERE "libraryId" = ANY($ids) GROUP BY type` (`1 = 0` when `$ids` empty), folded into `{movies, series}`.
@@ -388,12 +390,12 @@ WHERE m."libraryId" = $source_library AND m.type = 'movie' AND m.id != $source
         OR jsonb_exists_any(m.genres, ARRAY[$genres...])          -- if source genres
         OR jsonb_exists_any(meta.keywords, ARRAY[$keywords...])   -- if source keywords
         OR m.id IN ($sameDirectorIds...) )                        -- if any
-  AND NOT EXISTS (SELECT 1 FROM media_tmdb_collection c WHERE c."mediaId" = m.id AND c."tmdbId" = $source_collection)   -- if source has one
+  AND NOT EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb' WHERE e."mediaId" = m.id AND x.value = $source_collection::text)   -- if source has one
 ```
 
 Director lookups: `SELECT crew."personId" FROM media_credits crew WHERE crew."mediaId" = $1 AND crew.role = 'crew' AND crew.job = 'Director'`; `SELECT crew."mediaId" FROM media_credits crew WHERE crew."personId" IN (...) AND crew.role = 'crew' AND crew.job = 'Director' AND crew."mediaId" != $1`.
 
-**Q-F (collection)** `SELECT m.*, (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = m.id) AS "fileCount" FROM media m LEFT JOIN LATERAL (<the dates>) dates ON true JOIN media_tmdb_collection c ON c."mediaId" = m.id WHERE m."libraryId" = $lib AND c."tmdbId" = $c ORDER BY dates.release_date ASC NULLS LAST, m.year ASC NULLS LAST`.
+**Q-F (collection)** `SELECT m.*, (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = m.id) AS "fileCount" FROM media m LEFT JOIN LATERAL (<the dates>) dates ON true JOIN collection_entries ce ON ce."mediaId" = m.id WHERE m."libraryId" = $lib AND ce."collectionId" = $source_collection_id ORDER BY ce.position ASC NULLS LAST, dates.release_date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC`.
 
 **Q-O (detail)** `SELECT * FROM media WHERE id = $1` then one query per relation (strategy `query`): `item_groups WHERE "mediaId"`, `items WHERE "groupId" = ANY`, `media_files WHERE "mediaId"`, `quality_profiles`, `language_profiles`, `libraries`, `media_details_json(id)`.
 

@@ -1,5 +1,6 @@
 //! The persons and credits half of `persistMediaMetadata` (`media-write.md` rule 58).
 use super::service::{Details, n, s};
+use crate::media::details;
 use crate::{http::AppError, images::paths::Target, persons::service::Person, state::AppState};
 use fliks_domain::media::kind::MediaKind;
 use futures_util::{StreamExt, stream};
@@ -27,7 +28,7 @@ pub async fn persist_credits(
     kind: MediaKind,
     d: &Details,
 ) -> Result<(), AppError> {
-    write_details(st, media_id, kind, d).await?;
+    details::write_details(&mut *st.db.acquire().await?, media_id, kind, d).await?;
     let provider = d
         .raw
         .get("provider")
@@ -52,104 +53,6 @@ pub async fn persist_credits(
         return Ok(());
     }
     merge_departments(st, &cast, &crew, &people).await?;
-    Ok(())
-}
-
-async fn write_details(
-    st: &AppState,
-    media_id: i32,
-    kind: MediaKind,
-    d: &Details,
-) -> Result<(), AppError> {
-    let r = &d.raw;
-    let big = |k: &str| r.get(k).and_then(Value::as_i64);
-    let set = |k: &str| r.get(k).is_some();
-    let val = |k: &str| r.get(k).filter(|v| !v.is_null()).cloned();
-    let (budget, revenue) = (big("budget"), big("revenue"));
-    let tagline = s(r, "tagline");
-    let popularity = r.get("popularity").and_then(Value::as_f64);
-    let votes = n(r, "voteCount");
-    let language = s(r, "originalLanguage");
-    let (countries, companies, videos, keywords) = (
-        val("productionCountries"),
-        val("productionCompanies"),
-        val("videos"),
-        val("keywords"),
-    );
-    let flags = [
-        set("productionCountries"),
-        set("productionCompanies"),
-        set("videos"),
-        set("keywords"),
-    ];
-    match kind {
-        MediaKind::Movie => {
-            sqlx::query!(
-                r#"INSERT INTO movie_details ("mediaId", budget, revenue, tagline, popularity, "voteCount",
-                     "originalLanguage", "productionCountries", "productionCompanies", videos, keywords)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                   ON CONFLICT ("mediaId") DO UPDATE SET
-                     budget = COALESCE(EXCLUDED.budget, movie_details.budget),
-                     revenue = COALESCE(EXCLUDED.revenue, movie_details.revenue),
-                     tagline = COALESCE(EXCLUDED.tagline, movie_details.tagline),
-                     popularity = COALESCE(EXCLUDED.popularity, movie_details.popularity),
-                     "voteCount" = COALESCE(EXCLUDED."voteCount", movie_details."voteCount"),
-                     "originalLanguage" = COALESCE(EXCLUDED."originalLanguage", movie_details."originalLanguage"),
-                     "productionCountries" = CASE WHEN $12 THEN EXCLUDED."productionCountries" ELSE movie_details."productionCountries" END,
-                     "productionCompanies" = CASE WHEN $13 THEN EXCLUDED."productionCompanies" ELSE movie_details."productionCompanies" END,
-                     videos = CASE WHEN $14 THEN EXCLUDED.videos ELSE movie_details.videos END,
-                     keywords = CASE WHEN $15 THEN EXCLUDED.keywords ELSE movie_details.keywords END"#,
-                media_id,
-                budget,
-                revenue,
-                tagline,
-                popularity,
-                votes,
-                language,
-                countries,
-                companies,
-                videos,
-                keywords,
-                flags[0],
-                flags[1],
-                flags[2],
-                flags[3]
-            )
-            .execute(&st.db)
-            .await?;
-        }
-        MediaKind::Series => {
-            sqlx::query!(
-                r#"INSERT INTO series_details ("mediaId", tagline, popularity, "voteCount",
-                     "originalLanguage", "productionCountries", "productionCompanies", videos, keywords)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                   ON CONFLICT ("mediaId") DO UPDATE SET
-                     tagline = COALESCE(EXCLUDED.tagline, series_details.tagline),
-                     popularity = COALESCE(EXCLUDED.popularity, series_details.popularity),
-                     "voteCount" = COALESCE(EXCLUDED."voteCount", series_details."voteCount"),
-                     "originalLanguage" = COALESCE(EXCLUDED."originalLanguage", series_details."originalLanguage"),
-                     "productionCountries" = CASE WHEN $10 THEN EXCLUDED."productionCountries" ELSE series_details."productionCountries" END,
-                     "productionCompanies" = CASE WHEN $11 THEN EXCLUDED."productionCompanies" ELSE series_details."productionCompanies" END,
-                     videos = CASE WHEN $12 THEN EXCLUDED.videos ELSE series_details.videos END,
-                     keywords = CASE WHEN $13 THEN EXCLUDED.keywords ELSE series_details.keywords END"#,
-                media_id,
-                tagline,
-                popularity,
-                votes,
-                language,
-                countries,
-                companies,
-                videos,
-                keywords,
-                flags[0],
-                flags[1],
-                flags[2],
-                flags[3]
-            )
-            .execute(&st.db)
-            .await?;
-        }
-    }
     Ok(())
 }
 

@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coll.cid AS \"cid?\", coll.tmdb_id AS \"collection_id?\", coll.name AS \"collection_name?\",\n                  m.\"libraryId\" AS library_id\n           FROM media m LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name\n             FROM collection_entries e JOIN collections c ON c.id = e.\"collectionId\"\n             JOIN collection_external_ids x ON x.\"collectionId\" = c.id AND x.provider = 'tmdb'\n             WHERE e.\"mediaId\" = m.id ORDER BY c.id LIMIT 1) coll ON true WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cid?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "collections",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "collection_id?",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "collection_name?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "library_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "69dc06afc97cea9342f2a43a93af8dba285d438a3e66c54fa831859a8faddb6f"
+}

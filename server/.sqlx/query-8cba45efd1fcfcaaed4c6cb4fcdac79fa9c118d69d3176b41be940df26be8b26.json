@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, meta.keywords AS \"keywords?\",\n       EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m LEFT JOIN movie_details meta ON meta.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = $1 AND m.type = 'movie' AND m.id != $2\n  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))\n       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))\n       OR m.id = ANY($5))\n  AND ($6::int IS NULL OR NOT EXISTS (\n        SELECT 1 FROM media_tmdb_collection tc WHERE tc.\"mediaId\" = m.id AND tc.\"tmdbId\" = $6))\nORDER BY m.id",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, meta.keywords AS \"keywords?\",\n       EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m LEFT JOIN movie_details meta ON meta.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = $1 AND m.type = 'movie' AND m.id != $2\n  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))\n       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))\n       OR m.id = ANY($5))\n  AND ($6::int IS NULL OR NOT EXISTS (\n        SELECT 1 FROM collection_entries e JOIN collection_external_ids x\n          ON x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb'\n        WHERE e.\"mediaId\" = m.id AND x.value = $6::int::text))\nORDER BY m.id",
   "describe": {
     "columns": [
       {
@@ -120,5 +120,5 @@
       null
     ]
   },
-  "hash": "a9ec1315a4458610b06b4d6d25e2c933a12559351711a818c5d611c4d5f30dfa"
+  "hash": "8cba45efd1fcfcaaed4c6cb4fcdac79fa9c118d69d3176b41be940df26be8b26"
 }

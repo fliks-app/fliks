@@ -34,14 +34,14 @@ pub struct Details {
     pub alternative_titles: Vec<String>,
     pub tmdb_collection_id: Option<i32>,
     pub tmdb_collection_name: Option<String>,
-    pub(super) raw: Value,
+    pub(crate) raw: Value,
 }
 
-pub(super) fn s(v: &Value, k: &str) -> Option<String> {
+pub(crate) fn s(v: &Value, k: &str) -> Option<String> {
     v.get(k).and_then(Value::as_str).map(str::to_owned)
 }
 
-pub(super) fn n(v: &Value, k: &str) -> Option<i32> {
+pub(crate) fn n(v: &Value, k: &str) -> Option<i32> {
     v.get(k)
         .and_then(Value::as_i64)
         .and_then(|n| i32::try_from(n).ok())

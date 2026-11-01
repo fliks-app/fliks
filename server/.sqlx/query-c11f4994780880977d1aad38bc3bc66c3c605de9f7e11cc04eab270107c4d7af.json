@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m\nJOIN media_tmdb_collection tc ON tc.\"mediaId\" = m.id\nJOIN collection_entries ce ON ce.\"collectionId\" = tc.\"collectionId\" AND ce.\"mediaId\" = m.id\nLEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d.\"mediaId\" = m.id AND d.kind = 'release') dates ON true\nWHERE m.\"libraryId\" = $1 AND tc.\"tmdbId\" = $2\nORDER BY ce.position ASC NULLS LAST, dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m\nJOIN collection_entries ce ON ce.\"mediaId\" = m.id\nLEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d.\"mediaId\" = m.id AND d.kind = 'release') dates ON true\nWHERE m.\"libraryId\" = $1 AND ce.\"collectionId\" = $2\nORDER BY ce.position ASC NULLS LAST, dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC",
   "describe": {
     "columns": [
       {
@@ -104,5 +104,5 @@
       null
     ]
   },
-  "hash": "5b67fcee217d8dec274c9c90a207497281b40947de3a6f28228e79656baa18c7"
+  "hash": "c11f4994780880977d1aad38bc3bc66c3c605de9f7e11cc04eab270107c4d7af"
 }

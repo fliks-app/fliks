@@ -1358,19 +1358,6 @@ async fn m1789000120_splits_details_by_kind_and_moves_collections(pool: PgPool) 
             .await
             .unwrap();
     assert_eq!(pos, 0);
-    let view: Vec<(i32, i32, String)> = rows(
-        &pool,
-        r#"SELECT "mediaId", "tmdbId", name FROM media_tmdb_collection ORDER BY 1"#,
-    )
-    .await;
-    assert_eq!(
-        view,
-        vec![
-            (1, 500, "New Name".into()),
-            (2, 500, "New Name".into()),
-            (4, 501, String::new())
-        ]
-    );
     let json: Option<serde_json::Value> = sqlx::query_scalar("SELECT media_details_json(3)")
         .fetch_one(&pool)
         .await

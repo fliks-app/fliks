@@ -106,8 +106,8 @@ ORDER BY g.genre ASC"#,
 
 pub async fn collections(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
     let rows = sqlx::query!(
-        r#"SELECT tc."tmdbId" AS "id!",
-       tc.name AS "name!",
+        r#"SELECT x.value::int AS "id!",
+       c.name AS "name!",
        COUNT(*)::int          AS "count!",
        COALESCE(
          (ARRAY_AGG(m."posterUrl" ORDER BY m.id)
@@ -115,12 +115,14 @@ pub async fn collections(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error>
          ARRAY[]::text[]
        ) AS "posters!"
 FROM media m
-JOIN media_tmdb_collection tc ON tc."mediaId" = m.id
+JOIN collection_entries e ON e."mediaId" = m.id
+JOIN collections c ON c.id = e."collectionId"
+JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
 WHERE m."libraryId" = ANY($1)
-  AND tc.name <> ''
-GROUP BY tc."collectionId", tc."tmdbId", tc.name
+  AND c.name <> ''
+GROUP BY c.id, x.value, c.name
 HAVING COUNT(*) >= 2
-ORDER BY tc.name ASC, tc."tmdbId" ASC"#,
+ORDER BY c.name ASC, x.value::int ASC"#,
         ids
     )
     .fetch_all(db)
