@@ -15,7 +15,7 @@ use crate::state::AppState;
 use crate::sync::MutexExt;
 use fliks_domain::{
     media::kind::MediaKind,
-    naming::{NamingFormats, formats_from_rows},
+    naming::{NamingFormats, Scope, formats_from_rows, setting_key},
 };
 use fliks_engine_core::api::MediaInfo;
 use sqlx::PgPool;
@@ -139,16 +139,15 @@ pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::
 }
 
 pub async fn naming_formats(db: &PgPool) -> Result<NamingFormats, sqlx::Error> {
+    let keys: Vec<String> = MediaKind::ALL
+        .into_iter()
+        .flat_map(|k| Scope::ALL.map(|s| setting_key(k, s)))
+        .flatten()
+        .map(String::from)
+        .collect();
     let rows = sqlx::query!(
         r#"SELECT key, value FROM app_settings WHERE key = ANY($1)"#,
-        &[
-            "naming_movie_format",
-            "naming_movie_folder_format",
-            "naming_series_format",
-            "naming_series_folder_format",
-            "naming_season_folder_format",
-        ]
-        .map(String::from)[..]
+        &keys
     )
     .fetch_all(db)
     .await?;

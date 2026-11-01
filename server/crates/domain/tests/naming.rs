@@ -105,6 +105,31 @@ fn empty_formats_render_empty() {
 }
 
 #[test]
+fn setting_keys_are_derived_from_kind_and_scope() {
+    use fliks_domain::media::kind::MediaKind;
+    let keys: Vec<_> = MediaKind::ALL
+        .into_iter()
+        .flat_map(|k| Scope::ALL.map(|s| setting_key(k, s)))
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            Some("naming_movie_format"),
+            Some("naming_movie_folder_format"),
+            None,
+            Some("naming_series_format"),
+            Some("naming_series_folder_format"),
+            Some("naming_season_folder_format"),
+        ]
+    );
+    let rows = [(
+        "naming_season_folder_format".into(),
+        Some("S{season}".into()),
+    )];
+    assert_eq!(formats_from_rows(&rows).season_folder, "S{season}");
+}
+
+#[test]
 fn folder_name_validator() {
     assert_eq!(validate_folder_name("Show (2020)"), Ok("Show (2020)"));
     assert_eq!(validate_folder_name(""), Err(FolderNameError::Empty));

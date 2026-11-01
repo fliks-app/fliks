@@ -233,12 +233,10 @@ pub async fn import_title(
 
 /// The stored folder format, else the import's own default (not the naming service's, rule 13).
 async fn folder_format(db: &sqlx::PgPool, media_type: MediaKind) -> Result<String, sqlx::Error> {
-    let (key, default) = match media_type {
-        MediaKind::Movie => (
-            "naming_movie_folder_format",
-            "{Original Title} ({Release Year})",
-        ),
-        MediaKind::Series => ("naming_series_folder_format", "{Series Title}"),
+    let key = naming::setting_key(media_type, naming::Scope::Folder);
+    let default = match media_type {
+        MediaKind::Movie => "{Original Title} ({Release Year})",
+        MediaKind::Series => "{Series Title}",
     };
     let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
         .fetch_optional(db)
