@@ -1,5 +1,5 @@
-# Rust server and plugin SDK: fmt, clippy (Linux, and Windows debug), tests (plugins on the wasm fixture), sqlx
-# offline cache and openapi.json drift. Tests run on Linux; parity runs locally.
+# Rust server and plugin SDK, in parallel jobs: lint (fmt, clippy, sqlx offline cache), test (nextest with the plugin
+# wasm fixture, openapi.json drift), plugin SDK tests, and Windows clippy. Parity runs locally.
 name: Server
 
 on:
@@ -27,18 +27,20 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
-  rust:
+  lint:
     # Release PRs only bump versions; main re-runs this after the merge.
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
-      postgres:
+      postgres: &postgres
         image: postgres:18
         env:
           POSTGRES_USER: fliks
           POSTGRES_PASSWORD: fliks
           POSTGRES_DB: fliks
+          # Throwaway DB: no fsync, and room for the per-test pools of the parallel nextest run.
+          POSTGRES_INITDB_ARGS: -c max_connections=500 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
         ports:
           - 5432:5432
         options: >-
@@ -53,23 +55,18 @@ jobs:
       DATABASE_URL: postgres://fliks:fliks@localhost:5432/fliks
       # With DATABASE_URL set, query! would compile against the unmigrated DB; prepare --check forces online itself.
       SQLX_OFFLINE: 'true'
-      S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
-      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
       # One target dir for both workspaces: the plugin SDK reuses the compiled dependencies (455 of 477 crates).
       CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
-      # Where `cargo xtask build` leaves the fixture.
-      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/target/wasm32-wasip2/release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-rust
+      - uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           # PR caches would evict main's from the repository's 10 GB.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: server-lint
           workspaces: server
-      # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
-      - name: PostgreSQL 18 client tools
-        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: plugin SDK fmt and clippy (native and wasm32-wasip2)
@@ -78,34 +75,88 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo clippy --workspace --all-targets --target wasm32-wasip2 -- -D warnings
+      # sqlx-cli lands in ~/.cargo/bin, which rust-cache restores: the install is a no-op after the first main run.
+      # The migrations are plain SQL, so sqlx-cli applies them without building the server binary.
+      - name: sqlx offline cache is current
+        run: |
+          if [ -d .sqlx ]; then
+            cargo install sqlx-cli@0.9.0 --no-default-features --features postgres,rustls
+            sqlx migrate run --source migrations
+            cargo sqlx prepare --check --workspace -- --all-targets
+          else
+            echo "::notice::no .sqlx directory, sqlx prepare check skipped"
+          fi
+
+  test:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres: *postgres
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgres://fliks:fliks@localhost:5432/fliks
+      SQLX_OFFLINE: 'true'
+      S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
+      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+      # Where `cargo xtask build` leaves the fixture.
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/target/wasm32-wasip2/release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: server-test
+          workspaces: server
+      # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
+      - name: PostgreSQL 18 client tools
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - name: build the fixture component
         working-directory: server/crates/plugin-sdk
         run: cargo xtask build examples/fixture-guest
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
       # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
       # nextest pools every test binary instead of running them one after another; this workspace has no doctests.
-      - run: cargo nextest run --workspace --no-fail-fast
-      - name: plugin SDK tests (harness on the fixture)
-        working-directory: server/crates/plugin-sdk
-        run: cargo test --workspace
+      - run: cargo nextest run --workspace --no-fail-fast --profile ci
       # The binary `cargo nextest` built: `cargo run` would rebuild the deps without the dev-dependency features.
       - name: openapi.json is current
         run: target/debug/fliks-server openapi | diff - openapi.json
-      - name: sqlx offline cache is current
-        run: |
-          if [ -d .sqlx ]; then
-            cargo install sqlx-cli@0.9.0 --no-default-features --features postgres,rustls
-            target/debug/fliks-server migrate
-            cargo sqlx prepare --check --workspace -- --all-targets
-          else
-            echo "::notice::no .sqlx directory, sqlx prepare check skipped"
-          fi
-        env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USERNAME: fliks
-          DB_PASSWORD: fliks
-          DB_NAME: fliks
+
+  plugin-sdk:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres: *postgres
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgres://fliks:fliks@localhost:5432/fliks
+      SQLX_OFFLINE: 'true'
+      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/target/wasm32-wasip2/release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: server-plugin-sdk
+          workspaces: server
+      - name: build the fixture component
+        working-directory: server/crates/plugin-sdk
+        run: cargo xtask build examples/fixture-guest
+      - name: plugin SDK tests (harness on the fixture)
+        working-directory: server/crates/plugin-sdk
+        run: cargo test --workspace
 
   # Release builds only run on main and tags; this keeps a Linux-only edit from breaking the Windows target.
   windows-clippy:
