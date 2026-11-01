@@ -1,14 +1,14 @@
 # HTTP parity
 
-Scenarios replayed against `fliks-server`. A behaviour change edits the `expect`s it affects. Local only.
-Needs docker (a PostgreSQL container, `fliks-postgres-1` unless `PARITY_PG` names another), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
+Scenarios replayed against `fliks-server`. A behaviour change edits the `expect`s it affects. CI runs all of it (`parity` jobs of `.github/workflows/server.yml`, one per mode and shard, not required): `PGHOST` set makes `run-all.sh` and the runner use the local `psql` and the `PG*` environment.
+Locally it needs docker (a PostgreSQL container, `fliks-postgres-1` unless `PARITY_PG` names another), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
 
 ## Run everything
 
 ```bash
 CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target/<worktree> server/parity/run-all.sh [filter]
-# PARITY_MODES limits the modes; a PR touching server SQL runs PARITY_MODES="up0 down1" over its touched groups in one call
-# (provider scenarios are `engine: down`: `up0` alone leaves their `expect`s stale); PARITY_ENGINE_VERSION=<x.y.z> tests another engine release than engine.lock
+# PARITY_MODES limits the modes (provider scenarios are `engine: down`: `up0` alone leaves their `expect`s stale);
+# PARITY_SHARD=<k>/<n> runs the k-th of n size-balanced shares of the groups (CI); PARITY_ENGINE_VERSION=<x.y.z> tests another engine release than engine.lock
 ```
 
 It builds Rust (parity feature) once, downloads the engine pinned in `engine.lock`, creates its own
