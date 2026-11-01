@@ -5,6 +5,14 @@ import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import type { MediaType } from '../../enums/media-type.enum';
 
+/** A folder a user can choose for new files. No path: only managers see those. */
+export interface LibraryFolderChoice {
+  id: number;
+  name: string;
+  /** Present for managers only. */
+  freeSpace?: number | null;
+}
+
 /** Lightweight library projection for non-admin users (sidebar, route resolution). */
 export interface LibrarySummary {
   id: number;
@@ -14,6 +22,8 @@ export interface LibrarySummary {
   mediaTypes: MediaType[];
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
+  /** In order, the first being the default one. */
+  folders: LibraryFolderChoice[];
 }
 
 export interface LibraryDiskMetrics {

@@ -30,6 +30,8 @@ export interface CreateRequestBody {
   qualityProfileId?: number;
   languageProfileId?: number;
   libraryId?: number;
+  /** One of the library's folders; omitted means its default one. */
+  folderId?: number;
   seasons?: number[];
 }
 

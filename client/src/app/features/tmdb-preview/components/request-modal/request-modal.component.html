@@ -37,7 +37,10 @@
     }
 
     @if (
-      qualityProfiles().length || languageProfiles().length || compatibleLibraries().length > 1
+      qualityProfiles().length ||
+      languageProfiles().length ||
+      compatibleLibraries().length > 1 ||
+      folderChoices().length > 1
     ) {
       <div class="mt-6">
         <h3 class="text-base font-semibold mb-3">{{ 'discover.advanced_options' | translate }}</h3>
@@ -59,6 +62,7 @@
               </select>
             </label>
           }
+          <app-library-folder-select [folders]="folderChoices()" [(folderId)]="folderId" />
           @if (qualityProfiles().length && !profilesLocked()) {
             <label class="form-control w-full">
               <span class="label-text text-base-content/60">{{
