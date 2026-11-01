@@ -64,6 +64,12 @@ pub struct CreateRequest {
     pub library_id: Option<i32>,
 }
 
+impl CreateRequest {
+    pub fn key(&self) -> super::TitleKey {
+        super::TitleKey::tmdb(self.media_type, self.tmdb_id)
+    }
+}
+
 pub fn create_request(v: Value) -> Res<CreateRequest> {
     let o = object(v);
     let mut c = Check::new(

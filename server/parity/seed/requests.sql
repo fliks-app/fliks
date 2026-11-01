@@ -21,16 +21,16 @@ ALTER TABLE users DISABLE TRIGGER set_updated_at;
 UPDATE users SET "movieQuotaLimit" = 1, "quotaPeriodDays" = 7 WHERE id = 4;
 ALTER TABLE users ENABLE TRIGGER set_updated_at;
 
-INSERT INTO requests (id, "createdAt", "updatedAt", "mediaType", kind, "tmdbId", title, status, "declinedReason", seasons,
+INSERT INTO requests (id, "createdAt", "updatedAt", "mediaType", kind, provider, "externalId", title, status, "declinedReason", seasons,
                       "userId", "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "mediaId", "posterUrl", "fanartUrl") VALUES
- (3, '2026-01-02', '2026-01-02', 'movie', 'add', 9003, 'Declined Movie', 'declined', 'Not now', NULL, 2, 1, NULL, NULL, 1, NULL, NULL, NULL),
- (4, '2026-01-03', '2026-01-03', 'series', 'add', 9004, 'Seasons Series', 'pending', NULL, '[1,2]', 2, NULL, 1, 2, 2, NULL, '/api/images/request/series-9004/poster', NULL),
- (5, '2026-01-04', '2026-01-04', 'series', 'add', 9005, 'Whole Series', 'pending', NULL, NULL, 4, NULL, NULL, NULL, 2, NULL, NULL, NULL),
- (6, '2026-01-05', '2026-01-05', 'movie', 'add', 1001, 'Parity Movie 01', 'available', NULL, NULL, 2, 1, NULL, NULL, 1, 1, NULL, NULL),
- (7, '2026-01-06', '2026-01-06', 'movie', 'add', 1002, 'Parity Movie 02', 'pending', NULL, NULL, 2, NULL, NULL, NULL, 1, NULL, NULL, NULL),
- (8, '2026-01-07', '2026-01-07', 'movie', 'add', 9008, 'Unassigned Movie', 'pending', NULL, NULL, 4, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (9, '2026-01-08', '2026-01-08', 'movie', 'delete', 1003, 'Parity Movie 03', 'pending', NULL, NULL, 2, NULL, NULL, NULL, 1, 3, NULL, NULL),
- (10, now() - interval '1 hour', now() - interval '1 hour', 'movie', 'add', 9010, 'Recent Movie', 'pending', NULL, NULL, 4, NULL, NULL, NULL, 1, NULL, NULL, NULL);
+ (3, '2026-01-02', '2026-01-02', 'movie', 'add', 'tmdb', '9003', 'Declined Movie', 'declined', 'Not now', NULL, 2, 1, NULL, NULL, 1, NULL, NULL, NULL),
+ (4, '2026-01-03', '2026-01-03', 'series', 'add', 'tmdb', '9004', 'Seasons Series', 'pending', NULL, '[1,2]', 2, NULL, 1, 2, 2, NULL, '/api/images/request/series-9004/poster', NULL),
+ (5, '2026-01-04', '2026-01-04', 'series', 'add', 'tmdb', '9005', 'Whole Series', 'pending', NULL, NULL, 4, NULL, NULL, NULL, 2, NULL, NULL, NULL),
+ (6, '2026-01-05', '2026-01-05', 'movie', 'add', 'tmdb', '1001', 'Parity Movie 01', 'available', NULL, NULL, 2, 1, NULL, NULL, 1, 1, NULL, NULL),
+ (7, '2026-01-06', '2026-01-06', 'movie', 'add', 'tmdb', '1002', 'Parity Movie 02', 'pending', NULL, NULL, 2, NULL, NULL, NULL, 1, NULL, NULL, NULL),
+ (8, '2026-01-07', '2026-01-07', 'movie', 'add', 'tmdb', '9008', 'Unassigned Movie', 'pending', NULL, NULL, 4, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+ (9, '2026-01-08', '2026-01-08', 'movie', 'delete', 'tmdb', '1003', 'Parity Movie 03', 'pending', NULL, NULL, 2, NULL, NULL, NULL, 1, 3, NULL, NULL),
+ (10, now() - interval '1 hour', now() - interval '1 hour', 'movie', 'add', 'tmdb', '9010', 'Recent Movie', 'pending', NULL, NULL, 4, NULL, NULL, NULL, 1, NULL, NULL, NULL);
 SELECT setval('requests_id_seq', 10);
 
 INSERT INTO request_comments (id, "createdAt", "updatedAt", message, "requestId", "userId") VALUES

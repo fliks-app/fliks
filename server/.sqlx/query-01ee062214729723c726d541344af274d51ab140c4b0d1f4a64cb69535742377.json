@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO requests (\"userId\", \"mediaType\", provider, \"externalId\", title, status, seasons,\n                                         \"mediaId\", \"createdAt\", \"updatedAt\")\n                   VALUES ($1, $2, $3, $4, $5, $6::text::requests_status_enum, $7, $8, $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Varchar",
+        "Text",
+        "Jsonb",
+        "Int4",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "01ee062214729723c726d541344af274d51ab140c4b0d1f4a64cb69535742377"
+}

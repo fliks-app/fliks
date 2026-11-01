@@ -88,9 +88,9 @@ print('INSERT INTO episodes (id, "episodeNumber", title, "hasFile", "seasonId") 
 print('INSERT INTO media_files (id, "mediaId", "episodeId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
 PY
 cat <<'SQL'
-INSERT INTO requests (id, "mediaType", "tmdbId", title, status, "userId", "libraryId") VALUES
- (1, 'movie', 9001, 'Requested Movie', 'pending', 2, 1),
- (2, 'series', 9002, 'Requested Series', 'approved', 4, 2);
+INSERT INTO requests (id, "mediaType", provider, "externalId", title, status, "userId", "libraryId") VALUES
+ (1, 'movie', 'tmdb', '9001', 'Requested Movie', 'pending', 2, 1),
+ (2, 'series', 'tmdb', '9002', 'Requested Series', 'approved', 4, 2);
 INSERT INTO playlists (id, name, "ownerId", visibility) VALUES (1, 'Parity Playlist', 2, 'private');
 INSERT INTO playlist_items ("playlistId", "mediaId", position, "addedById") VALUES (1,1,0,2),(1,2,1,2),(1,3,2,2);
 INSERT INTO likes ("userId", "mediaId") VALUES (2,1),(2,18),(4,2);

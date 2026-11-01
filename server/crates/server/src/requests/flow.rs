@@ -1,6 +1,6 @@
 //! The request flows (`requests.md` rules 1-27): gates, create, approve, decline, comments.
 use super::{
-    Art, ImportSpec, PortError, db,
+    Art, ImportSpec, PortError, TitleKey, db,
     dto::{self, CreateRequest, Field, UpdateRequest},
     rules, services,
 };
@@ -143,7 +143,7 @@ async fn check_quota(st: &AppState, a: &Authed, media_type: MediaKind) -> Res<()
 
 /// Rule 12a.
 async fn assert_no_active_duplicate(st: &AppState, dto: &CreateRequest) -> Res<()> {
-    let existing = db::active_adds(&st.db, dto.tmdb_id, dto.media_type).await?;
+    let existing = db::active_adds(&st.db, &dto.key()).await?;
     if existing.is_empty() {
         return Ok(());
     }
@@ -179,21 +179,18 @@ async fn assert_no_active_duplicate(st: &AppState, dto: &CreateRequest) -> Res<(
 type Profiles = (Option<i32>, Option<i32>);
 
 /// Rule 12b: the profiles of the earliest active request, else of the library row.
-async fn existing_series_profiles(st: &AppState, tmdb_id: i32) -> Res<Option<Profiles>> {
-    if let Some(r) = db::active_adds(&st.db, tmdb_id, MediaKind::Series)
-        .await?
-        .first()
-    {
+async fn existing_series_profiles(st: &AppState, key: &TitleKey) -> Res<Option<Profiles>> {
+    if let Some(r) = db::active_adds(&st.db, key).await?.first() {
         return Ok(Some((r.quality_profile_id, r.language_profile_id)));
     }
-    Ok(db::media_by_tmdb(&st.db, tmdb_id, MediaKind::Series)
+    Ok(db::media_by_ref(&st.db, key)
         .await?
         .map(|m| (m.quality_profile_id, m.language_profile_id)))
 }
 
-pub async fn title_state(st: &AppState, tmdb_id: i32, media_type: MediaKind) -> Res<Value> {
-    let active = db::active_adds(&st.db, tmdb_id, media_type).await?;
-    let series = media_type.has_seasons();
+pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
+    let active = db::active_adds(&st.db, key).await?;
+    let series = key.media_type.has_seasons();
     let whole = series && active.iter().any(|r| r.scope().is_none());
     let mut seasons: Vec<i64> = active
         .iter()
@@ -202,7 +199,7 @@ pub async fn title_state(st: &AppState, tmdb_id: i32, media_type: MediaKind) -> 
     seasons.sort_unstable();
     seasons.dedup();
     let locked = if series {
-        existing_series_profiles(st, tmdb_id).await?
+        existing_series_profiles(st, key).await?
     } else {
         None
     };
@@ -247,7 +244,8 @@ pub async fn ensure_media(
         Ok(id) => id,
         Err(e) if e.status != 409 => return Err(e.into()),
         Err(_) => {
-            let Some(existing) = db::media_by_tmdb(&st.db, spec.tmdb_id, spec.media_type).await?
+            let Some(existing) =
+                db::media_by_ref(&st.db, &TitleKey::tmdb(spec.media_type, spec.tmdb_id)).await?
             else {
                 return Ok(None);
             };
@@ -322,7 +320,8 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     }
     check_quota(st, a, dto.media_type).await?;
     let mut tx = st.db.begin().await?;
-    db::lock_title(&mut tx, dto.tmdb_id, dto.media_type).await?;
+    let key = dto.key();
+    db::lock_title(&mut tx, &key).await?;
     assert_no_active_duplicate(st, &dto).await?;
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
@@ -333,7 +332,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         None => resolve_sole_library(st, a, dto.media_type).await?,
     };
     if dto.media_type.has_seasons()
-        && let Some((q, l)) = existing_series_profiles(st, dto.tmdb_id).await?
+        && let Some((q, l)) = existing_series_profiles(st, &key).await?
     {
         (dto.quality_profile_id, dto.language_profile_id) = (q, l);
     }
@@ -362,8 +361,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         db::New {
             user_id: a.user.id,
             kind: "add",
-            media_type: dto.media_type,
-            tmdb_id: dto.tmdb_id,
+            title_key: &key,
             title: &dto.title,
             seasons: dto.seasons.as_deref(),
             status: if auto { "approved" } else { "pending" },
@@ -408,7 +406,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         json!({"title": dto.title, "mediaType": dto.media_type}),
     );
 
-    let art = art_wait(st, id, dto.media_type, dto.tmdb_id).await;
+    let art = art_wait(st, id, key).await;
     let mut row = row_json(st, id).await?;
     put(&mut row, "qualityProfile", id_obj(quality));
     put(&mut row, "languageProfile", id_obj(language));
@@ -428,10 +426,10 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
 }
 
 /// Rule 16: at most 5 s on the art; the download goes on in the background after that.
-async fn art_wait(st: &AppState, id: i32, media_type: MediaKind, tmdb_id: i32) -> Option<Art> {
+async fn art_wait(st: &AppState, id: i32, key: TitleKey) -> Option<Art> {
     let st = st.clone();
     let task = tokio::spawn(async move {
-        match services::request_art(&st, media_type, tmdb_id).await {
+        match services::request_art(&st, &key).await {
             Ok(art) if art.poster.is_none() && art.fanart.is_none() => None,
             Ok(art) => {
                 match db::set_art(&st.db, id, art.poster.as_deref(), art.fanart.as_deref()).await {
@@ -453,12 +451,13 @@ async fn art_wait(st: &AppState, id: i32, media_type: MediaKind, tmdb_id: i32) -
 
 /// Rule 19.
 async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Value> {
-    let Some(media) = db::media_by_tmdb(&st.db, dto.tmdb_id, dto.media_type).await? else {
+    let key = dto.key();
+    let Some(media) = db::media_by_ref(&st.db, &key).await? else {
         return Err(AppError::bad_request(
             "This title is not in the library and cannot be deleted",
         ));
     };
-    if db::pending_delete_exists(&st.db, dto.tmdb_id, dto.media_type).await? {
+    if db::pending_delete_exists(&st.db, &key).await? {
         return Err(AppError::conflict(
             "A deletion request for this title is already pending",
         ));
@@ -468,8 +467,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
         db::New {
             user_id: a.user.id,
             kind: "delete",
-            media_type: dto.media_type,
-            tmdb_id: dto.tmdb_id,
+            title_key: &key,
             title: &dto.title,
             seasons: None,
             status: "pending",
@@ -594,7 +592,11 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     if row.kind == "delete" {
         return approve_delete(st, a, &row).await;
     }
-    let existing = db::media_by_tmdb(&st.db, row.tmdb_id, row.media_type).await?;
+    let key = row.key();
+    let tmdb_id = key.tmdb_id().ok_or_else(|| {
+        AppError::bad_request(format!("No metadata provider for {}", row.provider))
+    })?;
+    let existing = db::media_by_ref(&st.db, &key).await?;
     if existing.is_none() {
         services::assert_import_target(st, row.media_type, row.library_id).await?;
     }
@@ -603,7 +605,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     }
     let spec = ImportSpec {
         media_type: row.media_type,
-        tmdb_id: row.tmdb_id,
+        tmdb_id,
         quality_profile_id: row.quality_profile_id,
         language_profile_id: row.language_profile_id,
         library_id: row.library_id,
@@ -627,7 +629,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         request_id: i64::from(id),
         media_id: media.map(i64::from),
         media_type: row.media_type,
-        tmdb_id: i64::from(row.tmdb_id),
+        tmdb_id: i64::from(tmdb_id),
         seasons: row.seasons.map(|s| s.0),
         approved_by_user_id: Some(i64::from(a.user.id)),
     });
@@ -637,7 +639,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
 
 /// Rule 26: the request is done once the title is removed.
 async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> {
-    let media = db::media_by_tmdb(&st.db, row.tmdb_id, row.media_type).await?;
+    let media = db::media_by_ref(&st.db, &row.key()).await?;
     let id = row.id;
     if !db::claim_approval(&st.db, id, a.user.id, media.as_ref().map(|m| m.id)).await? {
         return Err(AppError::conflict("Request is not pending"));

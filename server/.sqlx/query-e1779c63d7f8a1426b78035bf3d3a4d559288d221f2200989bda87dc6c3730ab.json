@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, status::text AS \"status!\", seasons, \"mediaId\" AS media_id, title,\n                      \"createdAt\" AS created_at, \"updatedAt\" AS updated_at\n               FROM requests WHERE \"userId\" = $1 AND \"tmdbId\" = $2 AND \"mediaType\" = $3\n                 AND kind = 'add' ORDER BY id LIMIT 1",
+  "query": "SELECT id, status::text AS \"status!\", seasons, \"mediaId\" AS media_id, title,\n                      \"createdAt\" AS created_at, \"updatedAt\" AS updated_at\n               FROM requests WHERE \"userId\" = $1 AND \"mediaType\" = $2 AND provider = $3\n                 AND \"externalId\" = $4 AND kind = 'add' ORDER BY id LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -79,7 +79,8 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Int4",
+        "Text",
+        "Text",
         "Text"
       ]
     },
@@ -93,5 +94,5 @@
       false
     ]
   },
-  "hash": "c9ecedcd26f36d01d8aafd3de6bf9ab79c6923d6e011a32afc8f71452ad73f9d"
+  "hash": "e1779c63d7f8a1426b78035bf3d3a4d559288d221f2200989bda87dc6c3730ab"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO requests (\"userId\", kind, \"mediaType\", \"tmdbId\", title, seasons, status,\n        \"approvedById\", \"qualityProfileId\", \"languageProfileId\", \"libraryId\", \"mediaId\", \"posterUrl\", \"fanartUrl\")\n        VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6,\n        $7::text::requests_status_enum, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
+  "query": "INSERT INTO requests (\"userId\", kind, \"mediaType\", provider, \"externalId\", title, seasons, status,\n        \"approvedById\", \"qualityProfileId\", \"languageProfileId\", \"libraryId\", \"mediaId\", \"posterUrl\", \"fanartUrl\")\n        VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,\n        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -20,7 +20,8 @@
         "Int4",
         "Text",
         "Text",
-        "Int4",
+        "Text",
+        "Text",
         "Varchar",
         "Jsonb",
         "Text",
@@ -37,5 +38,5 @@
       false
     ]
   },
-  "hash": "1a7c78f16b82644697259f04234519d7abe2f7d5485c16ec342c2dbe1d0c3271"
+  "hash": "b7380bcf3941b83508bc5eaa7075cca445c463c91c1b1986de78b152e2b81e28"
 }

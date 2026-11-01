@@ -14,7 +14,7 @@ use axum::{
     Router,
     routing::{get, post},
 };
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 
 pub use lifecycle::{Lifecycle, MediaRef, spawn, spawn_reconcile};
 pub use routes::*;
@@ -28,6 +28,30 @@ pub use rules::{
 pub struct PortError {
     pub status: u16,
     pub message: String,
+}
+
+/// The title a request names: its kind and an id of a provider whose ids are unique per kind (rule 5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TitleKey {
+    pub media_type: MediaKind,
+    pub provider: ExternalProvider,
+    pub external_id: String,
+}
+
+impl TitleKey {
+    pub fn tmdb(media_type: MediaKind, tmdb_id: i32) -> Self {
+        Self {
+            media_type,
+            provider: ExternalProvider::Tmdb,
+            external_id: tmdb_id.to_string(),
+        }
+    }
+
+    pub fn tmdb_id(&self) -> Option<i32> {
+        (self.provider == ExternalProvider::Tmdb)
+            .then(|| self.external_id.parse().ok())
+            .flatten()
+    }
 }
 
 /// The TMDB facts auto-approval reads (rule 29).

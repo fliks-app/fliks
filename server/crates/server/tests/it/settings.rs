@@ -480,8 +480,8 @@ async fn sidebar_counts(pool: PgPool) {
         r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1, 'M', '["movie"]', '/nonexistent/m');
            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (1, 'A', 'movie', 1, 'a'), (2, 'B', 'movie', 1, 'b');
            INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (1, 'movie', 'tmdb', '1'), (2, 'movie', 'tmdb', '2');
-           INSERT INTO requests ("userId", "mediaType", "tmdbId", title, status)
-             SELECT id, 'movie', 9, 'R', 'pending' FROM users WHERE username = 'admin';"#,
+           INSERT INTO requests ("userId", "mediaType", provider, "externalId", title, status)
+             SELECT id, 'movie', 'tmdb', '9', 'R', 'pending' FROM users WHERE username = 'admin';"#,
     )
     .execute(&pool)
     .await

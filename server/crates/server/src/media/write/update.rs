@@ -285,12 +285,10 @@ pub async fn apply_media_monitored(
     monitored: bool,
 ) -> Result<MonitoredChange, sqlx::Error> {
     let media = sqlx::query!(
-        r#"SELECT m.id, m.type AS "media_type!", t.value::int AS tmdb_id
-           FROM media m LEFT JOIN media_external_ids t ON t."mediaId" = m.id AND t.provider = $3
+        r#"SELECT m.id, m.type AS "media_type!" FROM media m
            WHERE m.id = ANY($1) AND m.monitored IS DISTINCT FROM $2"#,
         ids,
-        monitored,
-        external_ids::TMDB
+        monitored
     )
     .fetch_all(&mut *c)
     .await?
@@ -299,7 +297,6 @@ pub async fn apply_media_monitored(
         Ok(MediaRef {
             id: r.id,
             media_type: crate::db::kind(&r.media_type)?,
-            tmdb_id: r.tmdb_id,
             monitored,
         })
     })
@@ -342,12 +339,10 @@ pub async fn apply_season_monitored(
 ) -> Result<MonitoredChange, sqlx::Error> {
     let was = sqlx::query!(
         r#"SELECT s."seasonNumber" AS number, s.monitored AS was, m.id AS "media_id?",
-             m.type AS media_type, t.value::int AS tmdb_id
+             m.type AS media_type
            FROM seasons s LEFT JOIN media m ON m.id = s."mediaId"
-           LEFT JOIN media_external_ids t ON t."mediaId" = m.id AND t.provider = $2
            WHERE s.id = $1"#,
-        season_id,
-        external_ids::TMDB
+        season_id
     )
     .fetch_optional(&mut *c)
     .await?;
@@ -376,7 +371,6 @@ pub async fn apply_season_monitored(
                 MediaRef {
                     id: w.media_id?,
                     media_type: was_kind?,
-                    tmdb_id: w.tmdb_id,
                     monitored: true,
                 },
                 w.number,

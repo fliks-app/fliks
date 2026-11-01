@@ -1,5 +1,5 @@
 //! The media services the request flows call: TMDB, the image store, `importFromTmdb`, the media delete and the notifications.
-use super::{Art, ImportSpec, PortError, Removed, TitleFacts};
+use super::{Art, ImportSpec, PortError, Removed, TitleFacts, TitleKey};
 use crate::{
     http::AppError,
     images::paths::{Target, Variant},
@@ -62,12 +62,12 @@ pub async fn title_facts(
     })
 }
 
-/// Stores the art of a title (`request/<mediaType>-<tmdbId>`) unless already stored; best effort.
-pub async fn request_art(
-    st: &AppState,
-    media_type: MediaKind,
-    tmdb_id: i32,
-) -> Result<Art, String> {
+/// Stores the art of a title (`request/<key>`) unless already stored; best effort.
+pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
+    let tmdb_id = key
+        .tmdb_id()
+        .ok_or_else(|| format!("no metadata provider for {}", key.provider))?;
+    let media_type = key.media_type;
     let slots = [
         (Variant::Poster, "posterUrl"),
         (Variant::Fanart, "fanartUrl"),

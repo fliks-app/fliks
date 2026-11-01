@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        \"tmdbId\" AS tmdb_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"mediaId\" AS media_id\n        FROM requests WHERE id = $1",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"mediaId\" AS media_id\n        FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e\n          WHERE e.\"mediaId\" = $1 AND e.kind = r.\"mediaType\" AND e.provider = r.provider\n          AND e.value = r.\"externalId\")\n        ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -44,17 +44,28 @@
       },
       {
         "ordinal": 4,
-        "name": "tmdb_id",
-        "type_info": "Int4",
+        "name": "provider",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "requests",
-            "name": "tmdbId"
+            "name": "provider"
           }
         }
       },
       {
         "ordinal": 5,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "externalId"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "title",
         "type_info": "Varchar",
         "origin": {
@@ -65,13 +76,13 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "status!",
         "type_info": "Text",
         "origin": "Expression"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "seasons: Json<Vec<i64>>",
         "type_info": "Jsonb",
         "origin": {
@@ -82,7 +93,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "quality_profile_id",
         "type_info": "Int4",
         "origin": {
@@ -93,7 +104,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "language_profile_id",
         "type_info": "Int4",
         "origin": {
@@ -104,7 +115,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "library_id",
         "type_info": "Int4",
         "origin": {
@@ -115,7 +126,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "media_id",
         "type_info": "Int4",
         "origin": {
@@ -128,7 +139,8 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -136,6 +148,7 @@
       true,
       false,
       null,
+      false,
       false,
       false,
       null,
@@ -146,5 +159,5 @@
       true
     ]
   },
-  "hash": "06bb1944d09a70980c0bbd19c629388005fc12878d405c265c18a3d31184b936"
+  "hash": "c3d888ec97e12549a088364410eb36ed36c8dc41a4bc92d91e52fb85b8f7c758"
 }

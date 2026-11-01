@@ -93,7 +93,6 @@ impl MediaRow {
         crate::requests::MediaRef {
             id: self.id,
             media_type: self.media_type,
-            tmdb_id: self.tmdb_id,
             monitored: self.monitored,
         }
     }
