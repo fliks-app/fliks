@@ -300,6 +300,8 @@ export class MetadataService {
     qualityProfileId?: number;
     languageProfileId?: number;
     libraryId?: number;
+    /** One of the library's folders; omitted means its default one. */
+    folderId?: number;
     /** Series only: seasons to monitor. Omitted monitors every season but the
      *  specials. */
     monitoredSeasons?: number[];

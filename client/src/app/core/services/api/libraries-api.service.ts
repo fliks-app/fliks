@@ -1,8 +1,17 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import type { MediaType } from '../../enums/media-type.enum';
+
+/** A folder a user can choose for new files. No path: only managers see those. */
+export interface LibraryFolderChoice {
+  id: number;
+  name: string;
+  /** Present for managers only. */
+  freeSpace?: number | null;
+}
 
 /** Lightweight library projection for non-admin users (sidebar, route resolution). */
 export interface LibrarySummary {
@@ -13,12 +22,29 @@ export interface LibrarySummary {
   mediaTypes: MediaType[];
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
+  /** In order, the first being the default one. */
+  folders: LibraryFolderChoice[];
 }
 
 export interface LibraryDiskMetrics {
   freeSpace: number;
   totalSpace: number;
   accessible: boolean;
+}
+
+/** One root folder of a library; the first by `position` is where new files go. */
+export interface LibraryFolder {
+  id: number;
+  path: string;
+  position: number;
+  disk: LibraryDiskMetrics | null;
+  mediaCount: number;
+}
+
+export interface UpdateLibraryFolderBody {
+  path?: string;
+  /** Zero-based index in the folder list. */
+  position?: number;
 }
 
 export interface Library {
@@ -32,9 +58,11 @@ export interface Library {
   metadataRegion: string | null;
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
+  /** First folder, kept for older clients: `folders` is the list. */
   path: string | null;
   label: string | null;
   disk: LibraryDiskMetrics | null;
+  folders: LibraryFolder[];
   userIds: number[];
 }
 
@@ -86,6 +114,28 @@ export class LibrariesApiService {
 
   remove(id: number) {
     return firstValueFrom(this.http.delete<void>(`/api/libraries/${id}`));
+  }
+
+  addFolder(libraryId: number, path: string) {
+    return firstValueFrom(
+      this.http.post<LibraryFolder>(`/api/libraries/${libraryId}/folders`, { path }),
+    );
+  }
+
+  updateFolder(libraryId: number, folderId: number, body: UpdateLibraryFolderBody) {
+    return firstValueFrom(
+      this.http.patch<LibraryFolder>(`/api/libraries/${libraryId}/folders/${folderId}`, body),
+    );
+  }
+
+  /** Answers 409 `folder_in_use` while files are linked; `removeMedia` drops those media from Fliks instead, files kept. The caller reports the failure. */
+  removeFolder(libraryId: number, folderId: number, removeMedia = false) {
+    return firstValueFrom(
+      this.http.delete<void>(`/api/libraries/${libraryId}/folders/${folderId}`, {
+        params: removeMedia ? { removeMedia: true } : {},
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
+    );
   }
 
   getAccess(id: number) {

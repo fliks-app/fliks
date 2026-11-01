@@ -18,6 +18,10 @@ import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import {
+  LibraryFolderSelectComponent,
+  defaultFolderId,
+} from '../../../../shared/components/library-folder-select/library-folder-select';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
 import { KIND_REGISTRY } from '../../../../core/media-kinds';
 
@@ -28,6 +32,7 @@ import { KIND_REGISTRY } from '../../../../core/media-kinds';
     ModalFooterComponent,
     ModalHeaderComponent,
     SeasonPickerComponent,
+    LibraryFolderSelectComponent,
     FormsModule,
     TranslatePipe,
   ],
@@ -51,6 +56,10 @@ export class RequestModalComponent {
     this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
 
+  readonly folderChoices = computed(
+    () => this.libraries().find((l) => l.id === this.libraryId())?.folders ?? [],
+  );
+
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly title = signal('');
@@ -59,6 +68,7 @@ export class RequestModalComponent {
   readonly qualityProfileId = signal<number | null>(null);
   readonly languageProfileId = signal<number | null>(null);
   readonly libraryId = signal<number | null>(null);
+  readonly folderId = signal<number | null>(null);
   readonly requesting = signal(false);
 
   readonly seasons = signal<SeasonStub[]>([]);
@@ -91,6 +101,7 @@ export class RequestModalComponent {
     const prev = this.profilePrefill(this.libraryId());
     const next = this.profilePrefill(id);
     this.libraryId.set(id);
+    this.folderId.set(defaultFolderId(this.libraries().find((l) => l.id === id)?.folders));
     if (this.profilesLocked()) return;
     if (this.qualityProfileId() === prev.qp) this.qualityProfileId.set(next.qp);
     if (this.languageProfileId() === prev.lp) this.languageProfileId.set(next.lp);
@@ -128,6 +139,7 @@ export class RequestModalComponent {
     // choice to make, so a hidden one must still submit its single library.
     const target = this.libraries().find((l) => l.mediaTypes.includes(params.mediaType));
     this.libraryId.set(target?.id ?? null);
+    this.folderId.set(defaultFolderId(target?.folders));
     const prefill = this.profilePrefill(target?.id ?? null);
     this.qualityProfileId.set(locked ? (params.lockedQualityProfileId ?? null) : prefill.qp);
     this.languageProfileId.set(locked ? (params.lockedLanguageProfileId ?? null) : prefill.lp);
@@ -193,6 +205,7 @@ export class RequestModalComponent {
         qualityProfileId: this.qualityProfileId() ?? undefined,
         languageProfileId: this.languageProfileId() ?? undefined,
         libraryId: this.libraryId() ?? undefined,
+        folderId: this.folderId() ?? undefined,
         ...(isSeries && this.selectedSeasons().size > 0
           ? { seasons: [...this.selectedSeasons()].sort((a, b) => a - b) }
           : {}),

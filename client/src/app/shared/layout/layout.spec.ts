@@ -88,6 +88,7 @@ const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): Libr
   mediaTypes: ['movie'],
   defaultQualityProfileId: null,
   defaultLanguageProfileId: null,
+  folders: [],
   ...opts,
 });
 
