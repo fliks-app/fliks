@@ -130,8 +130,12 @@ fn plugin_manifest() {
         include_str!("../../../../fixtures/plugin-manifest/cases.json"),
         |i| {
             let m = &i["manifest"];
-            if i["kind"] == "parse" {
-                return json!({"parsed": parse(&serde_json::to_vec(m).unwrap()).is_some()});
+            match i["kind"].as_str() {
+                Some("parse") => {
+                    return json!({"parsed": parse(&serde_json::to_vec(m).unwrap()).is_some()});
+                }
+                Some("api") => return json!({"supported": super::manifest::api_supported(m)}),
+                _ => {}
             }
             match validate_shape(m) {
                 Ok(()) => json!({"ok": true}),

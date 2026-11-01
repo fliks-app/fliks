@@ -389,8 +389,8 @@ fn test_route(req: &Request) -> Result<Response, String> {
         "resolve" => host_result(
             host::media_resolve(&t::ResolveQuery {
                 media_ids: vec![1, 2],
-                season_ids: vec![],
-                episode_ids: vec![],
+                group_ids: vec![],
+                item_ids: vec![],
             })
             .map(|v| v.into_iter().map(|(k, m)| (k, m.title)).collect::<Vec<_>>()),
         ),
@@ -405,6 +405,8 @@ fn test_route(req: &Request) -> Result<Response, String> {
                         .map(str::to_owned)
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(1),
+                    family: t::Family::Video,
+                    language: None,
                     paths,
                     transfer: t::TransferMode::Copy,
                     fallback_quality: None,

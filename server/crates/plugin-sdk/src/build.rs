@@ -256,9 +256,9 @@ pub fn check_world(wasm: &[u8]) -> Result<(), Error> {
         .keys()
         .map(|k| r.name_world_key(k))
         .collect();
-    if exports != ["fliks:plugin/guest@2.0.0"] {
+    if exports != ["fliks:plugin/guest@3.0.0"] {
         return Err(format!(
-            "exports {} instead of fliks:plugin/guest@2.0.0",
+            "exports {} instead of fliks:plugin/guest@3.0.0",
             exports.join(", ")
         ));
     }

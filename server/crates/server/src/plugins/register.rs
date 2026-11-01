@@ -140,10 +140,11 @@ impl Plugins {
             return Err(fail("revoked", reason));
         }
         if !manifest::api_supported(m) {
+            let api = manifest::SUPPORTED_PLUGIN_API_VERSIONS[0];
             return Err(fail(
                 "incompatible-api",
                 format!(
-                    "manifest declares pluginApi {}, this core accepts 2",
+                    "manifest declares pluginApi {}, this core accepts {api}; install a build of this plugin made for pluginApi {api}",
                     m["pluginApi"]
                 ),
             ));

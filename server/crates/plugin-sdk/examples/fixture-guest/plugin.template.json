@@ -1,6 +1,6 @@
 {
   "id": "fliks.fixture",
-  "pluginApi": 2,
+  "pluginApi": 3,
   "name": "Fixture",
   "fliks": ">=5.0.0 <6.0.0",
   "author": "Fliks",
@@ -11,7 +11,7 @@
   "runtime": "wasm",
   "memoryMb": 64,
   "database": { "schema": true, "coreRefs": ["item_groups", "items", "media", "users"] },
-  "scopes": ["config:rw", "media:read", "events:emit", "ingest:write", "requests:progress", "acquisition:candidates", "releases:score"],
+  "scopes": ["config:rw", "media:read", "events:emit", "ingest:write", "acquisition:candidates", "releases:score"],
   "ingestRoots": [],
   "permissions": ["queue"],
   "routes": [

@@ -1,4 +1,4 @@
-//! Guest SDK for Fliks plugins: `fliks:plugin@2.0.0` bindings, the `Plugin` trait and `export!`.
+//! Guest SDK for Fliks plugins: `fliks:plugin@3.0.0` bindings, the `Plugin` trait and `export!`.
 
 pub mod bindings {
     wit_bindgen::generate!({
