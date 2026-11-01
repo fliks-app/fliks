@@ -16,8 +16,9 @@ use std::collections::HashMap;
 pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
     format!(
         r#"
-  SELECT DISTINCT ps."mediaId" AS id FROM playback_states ps
-  INNER JOIN media m ON m.id = ps."mediaId"
+  SELECT DISTINCT i."mediaId" AS id FROM playback_states ps
+  INNER JOIN items i ON i.id = ps."itemId"
+  INNER JOIN media m ON m.id = i."mediaId"
   WHERE ps."userId" = {uid} AND ps.completed = true AND m.type = 'movie'
   UNION
   SELECT m2.id FROM media m2
@@ -33,7 +34,7 @@ pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
     WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
     AND NOT EXISTS (
       SELECT 1 FROM playback_states ps2
-      WHERE ps2."userId" = {uid} AND ps2."episodeId" = e.id AND ps2.completed = true
+      WHERE ps2."userId" = {uid} AND ps2."itemId" = e.id AND ps2.completed = true
     )
   )"#
     )
@@ -327,8 +328,8 @@ async fn attach_watched(
         r#"SELECT m.id::int AS "id!",
   (
     (m.type = 'movie' AND EXISTS (
-      SELECT 1 FROM playback_states ps
-      WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps.completed = true
+      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+      WHERE ps."userId" = $1 AND i."mediaId" = m.id AND ps.completed = true
     ))
     OR
     (m.type = 'series'
@@ -341,15 +342,15 @@ async fn attach_watched(
         WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
           AND NOT EXISTS (
             SELECT 1 FROM playback_states ps2
-            WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true
+            WHERE ps2."userId" = $1 AND ps2."itemId" = e.id AND ps2.completed = true
           )
       )
     )
   ) AS "watched!",
   CASE m.type WHEN 'movie' THEN COALESCE((
     SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
-    FROM playback_states ps
-    WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps."episodeId" IS NULL
+    FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+    WHERE ps."userId" = $1 AND i."mediaId" = m.id AND i."groupId" IS NULL
       AND ps.completed = false AND ps."durationSeconds" > 0
     ORDER BY ps."lastPlayedAt" DESC LIMIT 1
   ), 0) WHEN 'series' THEN 0 END AS "progress!"

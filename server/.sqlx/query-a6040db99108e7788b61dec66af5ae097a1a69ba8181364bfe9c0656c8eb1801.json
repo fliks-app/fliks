@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id?\", m.title AS \"title?\", m.genres AS \"genres?: Json<Vec<String>>\"\n           FROM playback_states ps\n           LEFT JOIN items i ON i.id = ps.\"itemId\"\n           LEFT JOIN media m ON m.id = i.\"mediaId\"\n           WHERE ps.\"userId\" = $1 AND ps.completed = true\n             AND ($2::int[] IS NULL OR m.\"libraryId\" = ANY($2))\n           ORDER BY ps.\"lastPlayedAt\" DESC\n           LIMIT 15",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "genres?: Json<Vec<String>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "genres"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a6040db99108e7788b61dec66af5ae097a1a69ba8181364bfe9c0656c8eb1801"
+}

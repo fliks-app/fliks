@@ -181,9 +181,8 @@ pub async fn items(
            LEFT JOIN media_metadata md ON md."mediaId" = m.id
            LEFT JOIN items e ON e.id = pi."episodeId"
            LEFT JOIN item_groups s ON s.id = e."groupId"
-           LEFT JOIN playback_states ps ON ps."userId" = $3 AND (
-                (pi."episodeId" IS NULL AND ps."mediaId" = pi."mediaId" AND ps."episodeId" IS NULL)
-                OR (pi."episodeId" IS NOT NULL AND ps."episodeId" = pi."episodeId"))
+           LEFT JOIN playback_states ps ON ps."userId" = $3
+                AND ps."itemId" = COALESCE(pi."episodeId", item_of(pi."mediaId", NULL))
            WHERE pi."playlistId" = $1
            ORDER BY pi.position, pi.id"#,
         id,

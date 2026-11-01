@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states\n                 (\"userId\", \"itemId\", \"mediaFileId\", \"positionSeconds\",\n                  \"durationSeconds\", completed, \"lastPlayedAt\", \"playedAt\")\n               VALUES ($1, $2, $3, $4, $5, $6, now(), CASE WHEN $7 THEN now() END)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Float8",
+        "Float8",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b54bf30ffe563afebf44d908adbf26b6edd0608685e18a0a37ffe53ad689d532"
+}

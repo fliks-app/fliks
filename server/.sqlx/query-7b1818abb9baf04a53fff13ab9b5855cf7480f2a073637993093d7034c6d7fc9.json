@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states SET \"hiddenFromContinueWatching\" = true\n           WHERE \"userId\" = $1 AND \"itemId\" IN (SELECT id FROM items WHERE \"mediaId\" = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b1818abb9baf04a53fff13ab9b5855cf7480f2a073637993093d7034c6d7fc9"
+}

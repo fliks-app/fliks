@@ -99,11 +99,11 @@ INSERT INTO requests (id, "mediaType", provider, "externalId", title, status, "u
 INSERT INTO playlists (id, name, "ownerId", visibility) VALUES (1, 'Parity Playlist', 2, 'private');
 INSERT INTO playlist_items ("playlistId", "mediaId", position, "addedById") VALUES (1,1,0,2),(1,2,1,2),(1,3,2,2);
 INSERT INTO likes ("userId", "mediaId") VALUES (2,1),(2,18),(4,2);
-INSERT INTO playback_states ("positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "mediaId", "mediaFileId", "episodeId") VALUES
- (1200, 3600, false, '2026-01-02', NULL, 2, 1, 1, NULL),
- (3500, 3600, true, '2026-01-03', '2026-01-03', 2, 2, 2, NULL),
- (600, 1800, false, '2026-01-04', NULL, 2, 18, 18, 1),
- (300, 3600, false, '2026-01-02', NULL, 3, 1, 1, NULL);
+INSERT INTO playback_states ("positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "itemId", "mediaFileId") VALUES
+ (1200, 3600, false, '2026-01-02', NULL, 2, 13, 1),
+ (3500, 3600, true, '2026-01-03', '2026-01-03', 2, 14, 2),
+ (600, 1800, false, '2026-01-04', NULL, 2, 1, 18),
+ (300, 3600, false, '2026-01-02', NULL, 3, 13, 1);
 -- fixed timestamps and sequences past the explicit ids
 DO $$
 DECLARE r record;

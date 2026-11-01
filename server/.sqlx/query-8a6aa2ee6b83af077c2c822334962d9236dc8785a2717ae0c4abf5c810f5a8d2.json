@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH cov AS (\n             SELECT p.\"itemId\" AS id FROM item_parts p JOIN items i ON i.id = p.\"itemId\"\n             WHERE p.\"mediaFileId\" = $2 AND p.\"itemId\" <> $3 AND i.\"groupId\" IS NOT NULL),\n           fresh AS (\n             SELECT cov.id FROM cov WHERE NOT EXISTS (SELECT 1 FROM playback_states ps\n               WHERE ps.\"userId\" = $1 AND ps.\"itemId\" = cov.id AND ps.completed)),\n           done AS (\n             INSERT INTO playback_states (\"userId\", \"itemId\", \"mediaFileId\",\n               \"positionSeconds\", \"durationSeconds\", completed, \"lastPlayedAt\")\n             SELECT $1, cov.id, $2, 0, $4, true, now() FROM cov\n             ON CONFLICT (\"userId\", \"itemId\")\n             DO UPDATE SET completed = true, \"positionSeconds\" = 0, \"lastPlayedAt\" = now()\n             RETURNING 1)\n           SELECT id AS \"id!\" FROM fresh",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "itemId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8a6aa2ee6b83af077c2c822334962d9236dc8785a2717ae0c4abf5c810f5a8d2"
+}

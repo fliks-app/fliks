@@ -3,7 +3,9 @@ use super::{
     db::find_state,
     watched::{Watch, record_watch},
 };
+use crate::media::items::{Link, sole_item};
 use chrono::{DateTime, Duration, Utc};
+use fliks_domain::media::kind::MediaKind;
 use sqlx::PgPool;
 
 async fn seed(pool: &PgPool) -> (i32, i32, i32) {
@@ -33,28 +35,45 @@ async fn seed(pool: &PgPool) -> (i32, i32, i32) {
     .fetch_one(pool)
     .await
     .unwrap();
+    let mut c = pool.acquire().await.unwrap();
+    crate::media::items::create_shell(&mut c, media, MediaKind::Movie)
+        .await
+        .unwrap();
+    let links = [Link {
+        file,
+        owner: None,
+        last: None,
+    }];
+    crate::media::items::attach(pool, media, &links)
+        .await
+        .unwrap();
     (user, media, file)
 }
 
-fn watch(file: i32, position: f64, at: Option<DateTime<Utc>>) -> Watch {
+async fn watch(
+    pool: &PgPool,
+    ids: (i32, i32, i32),
+    position: f64,
+    at: Option<DateTime<Utc>>,
+) -> Watch {
     Watch {
         position,
         duration: 3600.0,
-        file,
+        file: ids.2,
+        item: sole_item(pool, ids.1).await.unwrap().unwrap(),
         episode: None,
         client_played_at: at,
     }
 }
 
 async fn play(pool: &PgPool, ids: (i32, i32, i32), position: f64, at: Option<DateTime<Utc>>) {
-    let (user, media, file) = ids;
-    record_watch(pool, user, media, &watch(file, position, at))
-        .await
-        .unwrap();
+    let w = watch(pool, ids, position, at).await;
+    record_watch(pool, ids.0, ids.1, &w).await.unwrap();
 }
 
 async fn row(pool: &PgPool, user: i32, media: i32) -> (f64, bool, DateTime<Utc>) {
-    let r = find_state(pool, user, media, None).await.unwrap().unwrap();
+    let item = sole_item(pool, media).await.unwrap().unwrap();
+    let r = find_state(pool, user, item).await.unwrap().unwrap();
     (r.position_seconds, r.completed, r.last_played_at)
 }
 
@@ -68,7 +87,8 @@ async fn stale_replay_leaves_the_newer_row_alone(pool: PgPool) {
     play(&pool, ids, 900.0, None).await;
     let before = row(&pool, ids.0, ids.1).await;
     let old = Utc::now() - Duration::days(2);
-    let out = record_watch(&pool, ids.0, ids.1, &watch(ids.2, 100.0, Some(old)))
+    let replay = watch(&pool, ids, 100.0, Some(old)).await;
+    let out = record_watch(&pool, ids.0, ids.1, &replay)
         .await
         .unwrap()
         .unwrap();
@@ -139,6 +159,7 @@ async fn finishing_a_range_file_completes_every_episode_it_plays(pool: PgPool) {
         position,
         duration: 3600.0,
         file,
+        item: ids[0],
         episode: Some(ids[0]),
         client_played_at: None,
     };

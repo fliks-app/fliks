@@ -62,6 +62,15 @@ impl Ctx {
             .await
             .unwrap()
     }
+
+    /// The media's `video` edition and its ungrouped item.
+    async fn shell(&self, media: i32) -> i32 {
+        self.id(&format!(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ({media}, 'video') RETURNING id)
+               INSERT INTO items ("mediaId", "editionId") SELECT {media}, id FROM e RETURNING items.id"#
+        ))
+        .await
+    }
 }
 
 #[sqlx::test(migrations = false)]
@@ -109,10 +118,13 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
         .await;
+    let item = c.shell(m).await;
     let f = c
         .id(&format!(
-            r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
-               VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id"#
+            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
+                 VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT {item}, id, {m} FROM f
+               RETURNING "mediaFileId""#
         ))
         .await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
@@ -159,6 +171,7 @@ async fn toggle_watched_without_a_file_keeps_duration_null(pool: PgPool) {
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
         .await;
+    c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
     for completed in [true, false] {
         let (s, row) = c.api("POST", &uri, None).await;
@@ -180,11 +193,12 @@ async fn recommendation_ties_break_by_media_id(pool: PgPool) {
             r#"INSERT INTO media (title, type, genres, "libraryId") VALUES ('w', 'movie', '["Drama"]', {lib}) RETURNING id"#
         ))
         .await;
+    let item = c.shell(watched).await;
     sqlx::query(
-        r#"INSERT INTO playback_states ("userId", "mediaId", completed) VALUES ($1, $2, true)"#,
+        r#"INSERT INTO playback_states ("userId", "itemId", completed) VALUES ($1, $2, true)"#,
     )
     .bind(c.user)
-    .bind(watched)
+    .bind(item)
     .execute(&c.pool)
     .await
     .unwrap();
@@ -225,6 +239,7 @@ async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
         .await;
+    c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
     let plays = || c.id("SELECT count(*)::int FROM playback_history");
     c.api("POST", &uri, None).await;

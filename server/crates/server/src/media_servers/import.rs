@@ -185,7 +185,13 @@ async fn apply(
         let Some(media) = media else {
             return Ok(false);
         };
-        return write(db, user_id, media, None, &p).await.map_err(sql);
+        let Some(item) = crate::playback::item_of(db, media, None)
+            .await
+            .map_err(sql)?
+        else {
+            return Ok(false);
+        };
+        return write(db, user_id, item, &p).await.map_err(sql);
     }
     let Some(series_emby) = &item.series_id else {
         return Ok(false);
@@ -232,72 +238,34 @@ async fn apply(
     let Some(episode) = episode else {
         return Ok(false);
     };
-    write(db, user_id, series, Some(episode), &p)
-        .await
-        .map_err(sql)
+    write(db, user_id, episode, &p).await.map_err(sql)
 }
 
-/// One statement per key shape; the database decides whether Fliks' newer state wins.
-async fn write(
-    db: &PgPool,
-    user: i32,
-    media: i32,
-    episode: Option<i32>,
-    p: &Plan,
-) -> sqlx::Result<bool> {
-    let row = match episode {
-        None => {
-            sqlx::query_scalar!(
-                r#"INSERT INTO playback_states ("userId", "mediaId", "episodeId", "positionSeconds",
-                       "durationSeconds", completed, "hiddenFromContinueWatching", "lastPlayedAt", "playedAt")
-                   VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $7)
-                   ON CONFLICT ("userId", "mediaId") WHERE "episodeId" IS NULL DO UPDATE SET
-                       "positionSeconds" = EXCLUDED."positionSeconds",
-                       "durationSeconds" = CASE WHEN EXCLUDED."durationSeconds" > 0
-                           THEN EXCLUDED."durationSeconds" ELSE playback_states."durationSeconds" END,
-                       completed = EXCLUDED.completed,
-                       "hiddenFromContinueWatching" = EXCLUDED."hiddenFromContinueWatching",
-                       "lastPlayedAt" = EXCLUDED."lastPlayedAt", "playedAt" = EXCLUDED."playedAt"
-                   WHERE playback_states."lastPlayedAt" <= EXCLUDED."lastPlayedAt"
-                   RETURNING id"#,
-                user,
-                media,
-                p.position,
-                p.duration,
-                p.completed,
-                p.hidden,
-                p.date
-            )
-            .fetch_optional(db)
-            .await?
-        }
-        Some(ep) => {
-            sqlx::query_scalar!(
-                r#"INSERT INTO playback_states ("userId", "mediaId", "episodeId", "positionSeconds",
-                       "durationSeconds", completed, "hiddenFromContinueWatching", "lastPlayedAt", "playedAt")
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-                   ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL DO UPDATE SET
-                       "positionSeconds" = EXCLUDED."positionSeconds",
-                       "durationSeconds" = CASE WHEN EXCLUDED."durationSeconds" > 0
-                           THEN EXCLUDED."durationSeconds" ELSE playback_states."durationSeconds" END,
-                       completed = EXCLUDED.completed,
-                       "hiddenFromContinueWatching" = EXCLUDED."hiddenFromContinueWatching",
-                       "lastPlayedAt" = EXCLUDED."lastPlayedAt", "playedAt" = EXCLUDED."playedAt"
-                   WHERE playback_states."lastPlayedAt" <= EXCLUDED."lastPlayedAt"
-                   RETURNING id"#,
-                user,
-                media,
-                ep,
-                p.position,
-                p.duration,
-                p.completed,
-                p.hidden,
-                p.date
-            )
-            .fetch_optional(db)
-            .await?
-        }
-    };
+/// The database decides whether Fliks' newer state wins.
+async fn write(db: &PgPool, user: i32, item: i32, p: &Plan) -> sqlx::Result<bool> {
+    let row = sqlx::query_scalar!(
+        r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", "durationSeconds",
+               completed, "hiddenFromContinueWatching", "lastPlayedAt", "playedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+           ON CONFLICT ("userId", "itemId") DO UPDATE SET
+               "positionSeconds" = EXCLUDED."positionSeconds",
+               "durationSeconds" = CASE WHEN EXCLUDED."durationSeconds" > 0
+                   THEN EXCLUDED."durationSeconds" ELSE playback_states."durationSeconds" END,
+               completed = EXCLUDED.completed,
+               "hiddenFromContinueWatching" = EXCLUDED."hiddenFromContinueWatching",
+               "lastPlayedAt" = EXCLUDED."lastPlayedAt", "playedAt" = EXCLUDED."playedAt"
+           WHERE playback_states."lastPlayedAt" <= EXCLUDED."lastPlayedAt"
+           RETURNING id"#,
+        user,
+        item,
+        p.position,
+        p.duration,
+        p.completed,
+        p.hidden,
+        p.date
+    )
+    .fetch_optional(db)
+    .await?;
     Ok(row.is_some())
 }
 

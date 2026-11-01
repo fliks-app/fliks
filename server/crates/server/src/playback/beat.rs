@@ -30,7 +30,7 @@ const DEBOUNCE_MS: i64 = 30_000;
 const SEEK_SECONDS: f64 = 30.0;
 const PRUNE_MS: i64 = DEBOUNCE_MS * 10;
 
-/// Last history write per `user:media:episode`, per process and never persisted (rules 1, 13, 14).
+/// Last history write per `user:item`, per process and never persisted (rules 1, 13, 14).
 #[derive(Default)]
 pub struct Debounce(Mutex<HashMap<String, (i64, f64)>>);
 
@@ -261,30 +261,30 @@ fn reply(lost: bool, state: Option<Option<Value>>) -> Response {
     }
 }
 
-/// A file-bound token beats only for its own file, which must belong to the media (and episode) beaten.
+/// A file-bound token beats only for its own file, which must be a part of the item beaten.
 async fn check_bound_file(
     st: &AppState,
     bound: u32,
-    media: i32,
-    episode: Option<i64>,
+    item: Option<i32>,
     body_file: Option<i64>,
 ) -> Result<(), AppError> {
     let forbidden = || AppError::forbidden("Forbidden resource");
     if body_file != Some(i64::from(bound)) {
         return Err(forbidden());
     }
-    let episode = episode.and_then(|e| i32::try_from(e).ok());
-    let owned = sqlx::query_scalar::<_, bool>(
-        r#"SELECT EXISTS(
-             SELECT 1 FROM media_files mf
-             LEFT JOIN media_file_items fi ON fi."mediaFileId" = mf.id
-             WHERE mf.id = $1 AND mf."mediaId" = $2 AND fi."episodeId" IS NOT DISTINCT FROM $3)"#,
-    )
-    .bind(bound as i32)
-    .bind(media)
-    .bind(episode)
-    .fetch_one(&st.db)
-    .await?;
+    let owned = match item {
+        Some(item) => {
+            sqlx::query_scalar!(
+                r#"SELECT EXISTS(SELECT 1 FROM item_parts
+                                 WHERE "itemId" = $1 AND "mediaFileId" = $2) AS "owned!""#,
+                item,
+                bound as i32
+            )
+            .fetch_one(&st.db)
+            .await?
+        }
+        None => false,
+    };
     owned.then_some(()).ok_or_else(forbidden)
 }
 
@@ -300,15 +300,12 @@ pub async fn heartbeat(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Response, AppError> {
     let user = a.user.id;
+    let episode = int(&body, "episodeId")
+        .and_then(|e| i32::try_from(e).ok())
+        .filter(|e| *e != 0);
+    let item = super::db::item_of(&st.db, media, episode).await?;
     if let Some(bound) = bound_file {
-        check_bound_file(
-            &st,
-            bound,
-            media,
-            int(&body, "episodeId"),
-            int(&body, "mediaFileId"),
-        )
-        .await?;
+        check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
     }
     let mut lost = false;
     let mut attributed = None;
@@ -336,9 +333,11 @@ pub async fn heartbeat(
             emit_state(&st, user, u, media, &body);
         }
     }
-    let episode = int(&body, "episodeId");
     let history_user = attributed.unwrap_or(user);
-    let key = format!("{history_user}:{media}:{}", episode.unwrap_or(0));
+    let key = match item {
+        Some(item) => format!("{history_user}:{item}"),
+        None => format!("{history_user}:unresolved:{media}:{}", episode.unwrap_or(0)),
+    };
     let (pos, dur) = (
         num(&body, "positionSeconds").unwrap_or(0.0),
         num(&body, "durationSeconds").unwrap_or(0.0),
@@ -361,11 +360,15 @@ pub async fn heartbeat(
             "mediaId and mediaFileId are required",
         ));
     };
+    let Some(item) = item else {
+        return Ok(reply(lost, Some(None)));
+    };
     let watch = Watch {
         position: pos,
         duration: dur,
         file,
-        episode: episode.and_then(|e| i32::try_from(e).ok()),
+        item,
+        episode,
         client_played_at,
     };
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;

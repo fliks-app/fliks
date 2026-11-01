@@ -1,0 +1,168 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ps.id, ps.\"createdAt\" AS created_at, ps.\"updatedAt\" AS updated_at,\n                  ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n                  ps.completed, ps.\"hiddenFromContinueWatching\" AS hidden_from_continue_watching,\n                  ps.\"lastPlayedAt\" AS last_played_at, ps.\"playedAt\" AS played_at,\n                  ps.\"userId\" AS user_id, i.\"mediaId\" AS media_id, ps.\"mediaFileId\" AS media_file_id,\n                  CASE WHEN i.\"groupId\" IS NOT NULL THEN i.id END AS episode_id\n           FROM playback_states ps JOIN items i ON i.id = ps.\"itemId\"\n           WHERE ps.\"userId\" = $1 AND ps.\"itemId\" = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "updatedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "positionSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "duration_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "durationSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "completed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "completed"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "hidden_from_continue_watching",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "hiddenFromContinueWatching"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_played_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "lastPlayedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "played_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "playedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "userId"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "media_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "mediaId"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "media_file_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "ca6960aa84e2d90deab582a678b55b175e0df7777fa691275a0f74ebd87468db"
+}

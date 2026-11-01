@@ -645,7 +645,7 @@ struct Old {
     end: Option<i32>,
 }
 
-/// Rules 29-31: the files the new ones replace; progress moves to the heir first.
+/// Rules 29-31: the files the new ones replace.
 async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported]) -> Vec<i32> {
     let mut carried = vec![];
     let new_ids: Vec<i32> = imported.iter().map(|i| i.file_id).collect();
@@ -680,15 +680,16 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
         let r: Result<(), String> = async {
             let heir = match media.media_type {
                 MediaKind::Series => match (old.season_number, old.episode_number, old.end) {
-                    (Some(s), Some(e), None) => imported
-                        .iter()
-                        .find(|i| i.season_number == Some(s) && i.episode_number == Some(e) && i.episode_end.is_none()),
+                    (Some(s), Some(e), None) => imported.iter().find(|i| {
+                        i.season_number == Some(s)
+                            && i.episode_number == Some(e)
+                            && i.episode_end.is_none()
+                    }),
                     _ => None,
                 },
                 MediaKind::Movie => imported.first(),
             };
-            match media.media_type {
-                MediaKind::Series => {
+            if media.media_type == MediaKind::Series {
                 let (Some(s), Some(e)) = (old.season_number, old.episode_number) else {
                     return Ok(());
                 };
@@ -696,31 +697,11 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
                 if !span.clone().all(|n| covered.contains(&(s, n))) {
                     return Ok(());
                 }
-                for i in imported.iter().filter(|i| i.episode_id.is_some()) {
-                    sqlx::query!(
-                        r#"UPDATE playback_states SET "mediaFileId" = $1 WHERE "mediaFileId" = $2 AND "episodeId" = $3"#,
-                        i.file_id,
-                        old.id,
-                        i.episode_id
-                    )
-                    .execute(&st.db)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                }
-                }
-                MediaKind::Movie => {
-                sqlx::query!(
-                    r#"UPDATE playback_states SET "mediaFileId" = $1 WHERE "mediaFileId" = $2"#,
-                    imported[0].file_id,
-                    old.id
-                )
-                .execute(&st.db)
-                .await
-                .map_err(|e| e.to_string())?;
-                }
             }
             if let Some(h) = heir {
-                carried.extend(crate::subtitles::sidecars::carry_over(st, media.id, old.id, h.file_id).await);
+                carried.extend(
+                    crate::subtitles::sidecars::carry_over(st, media.id, old.id, h.file_id).await,
+                );
             }
             crate::media::write::delete_media_file(st, media, old.id, true)
                 .await

@@ -632,6 +632,7 @@ async fn seed_library(pool: &PgPool) {
         .execute(pool)
         .await
         .unwrap();
+    q(r#"INSERT INTO items ("mediaId", "editionId") SELECT m.id, ed.id FROM media m JOIN editions ed ON ed."mediaId" = m.id WHERE m.type = 'movie'"#).execute(pool).await.unwrap();
     q(r#"INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") SELECT n, 'E' || n, s.id, s."mediaId", ed.id FROM item_groups s JOIN editions ed ON ed."mediaId" = s."mediaId", generate_series(1,2) n"#).execute(pool).await.unwrap();
 }
 
@@ -686,7 +687,7 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
             .await
             .unwrap();
     // Fliks played movie 2 after Emby did, so Emby must not overwrite it.
-    sqlx::query(r#"INSERT INTO playback_states ("userId","mediaId","positionSeconds","lastPlayedAt") SELECT $1, id, 5, '2026-01-03' FROM media WHERE id = (SELECT "mediaId" FROM media_external_ids WHERE provider = 'tmdb' AND value = '1002')"#)
+    sqlx::query(r#"INSERT INTO playback_states ("userId","itemId","positionSeconds","lastPlayedAt") SELECT $1, id, 5, '2026-01-03' FROM items WHERE "mediaId" = (SELECT "mediaId" FROM media_external_ids WHERE provider = 'tmdb' AND value = '1002')"#)
         .bind(existing).execute(&pool).await.unwrap();
     let id = add_server(&c, "ok", &[], true).await;
     let ev = run_import(&c, id).await;
@@ -725,8 +726,9 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
         async move {
             sqlx::query_as::<_, (f64, f64, bool, bool)>(
                 r#"SELECT ps."positionSeconds", ps."durationSeconds", ps.completed, ps."hiddenFromContinueWatching"
-                   FROM playback_states ps JOIN media m ON m.id = ps."mediaId" JOIN users u ON u.id = ps."userId"
-                   WHERE m.title = $1 AND u.username = 'user' AND ps."episodeId" IS NULL"#,
+                   FROM playback_states ps JOIN items i ON i.id = ps."itemId" JOIN media m ON m.id = i."mediaId"
+                   JOIN users u ON u.id = ps."userId"
+                   WHERE m.title = $1 AND u.username = 'user' AND i."groupId" IS NULL"#,
             )
             .bind(title).fetch_optional(&pool).await.unwrap()
         }
@@ -749,12 +751,12 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
     );
     assert_eq!(row("Movie 5").await, None);
     let eps: i64 =
-        sqlx::query_scalar(r#"SELECT count(*) FROM playback_states WHERE "episodeId" IS NOT NULL"#)
+        sqlx::query_scalar(r#"SELECT count(*) FROM playback_states ps JOIN items i ON i.id = ps."itemId" WHERE i."groupId" IS NOT NULL"#)
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(eps, 2);
-    let d: String = sqlx::query_scalar(r#"SELECT to_char("lastPlayedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM playback_states ps JOIN media m ON m.id = ps."mediaId" WHERE m.title = 'Movie 3'"#).fetch_one(&pool).await.unwrap();
+    let d: String = sqlx::query_scalar(r#"SELECT to_char("lastPlayedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM playback_states ps JOIN items i ON i.id = ps."itemId" JOIN media m ON m.id = i."mediaId" WHERE m.title = 'Movie 3'"#).fetch_one(&pool).await.unwrap();
     assert_eq!(d, "2024-03-04", "DateCreated fallback");
     // The created account sees the default role's libraries
     let libs: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM library_user_access a JOIN users u ON u.id = a."userId" WHERE u.username = 'newbie'"#).fetch_one(&pool).await.unwrap();

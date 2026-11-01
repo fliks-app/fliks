@@ -46,6 +46,20 @@ async fn fake_engine() -> (String, Arc<Mutex<Vec<String>>>) {
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
+/// Gives a movie its edition and item, and the file as a part of it.
+async fn give_item(pool: &PgPool, media: i32, file: i32) {
+    sqlx::query(
+        r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id),
+                i AS (INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT i.id, $2, $1 FROM i"#,
+    )
+    .bind(media)
+    .bind(file)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 struct Ctx {
     app: Router,
     st: AppState,
@@ -90,6 +104,7 @@ async fn ctx_with(pool: PgPool, engine: Option<&str>) -> Ctx {
     .fetch_one(&pool)
     .await
     .unwrap();
+    give_item(&pool, media, file).await;
     Ctx {
         token: st.jwt.sign_access(user, "u").unwrap().token,
         app: playback::router().with_state(st.clone()),
@@ -459,6 +474,7 @@ async fn a_file_bound_stream_token_beats_only_for_its_own_file(pool: PgPool) {
     .fetch_one(&c.pool)
     .await
     .unwrap();
+    give_item(&c.pool, other_media, other_file).await;
     let bound = |f: i32| {
         c.st.jwt
             .sign_stream_for(c.user, "u", f as u32)

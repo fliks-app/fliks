@@ -1,5 +1,5 @@
 //! The watched toggles and the watch recorded by the heartbeat (`docs/spec/playback-state.md`).
-use super::db::{find_state, fk, media_exists};
+use super::db::{find_state, fk, item_of};
 use crate::http::AppError;
 use crate::playlists::remove_watched_from_auto_playlists;
 use chrono::{DateTime, Utc};
@@ -7,13 +7,12 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 
 /// Appends one `playback_history` row (`cleanup.md` rule 6a).
-async fn log_play(db: &PgPool, user: i32, media: i32, episode: Option<i32>) -> sqlx::Result<()> {
-    sqlx::query(
-        r#"INSERT INTO playback_history ("userId", "mediaId", "episodeId") VALUES ($1, $2, $3)"#,
+async fn log_play(db: &PgPool, user: i32, item: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"INSERT INTO playback_history ("userId", "itemId") VALUES ($1, $2)"#,
+        user,
+        item
     )
-    .bind(user)
-    .bind(media)
-    .bind(episode)
     .execute(db)
     .await
     .map(drop)
@@ -27,18 +26,18 @@ async fn log_uncompleted_episodes(
     media: i32,
     season: Option<i32>,
 ) -> sqlx::Result<()> {
-    sqlx::query(
-        r#"INSERT INTO playback_history ("userId", "mediaId", "episodeId")
-           SELECT $1, $2, e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
+    sqlx::query!(
+        r#"INSERT INTO playback_history ("userId", "itemId")
+           SELECT $1, e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
            WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
              AND CASE WHEN $3::int IS NULL THEN s."mediaId" = $2 AND s."number" > 0
                       ELSE s.id = $3 END
              AND NOT EXISTS (SELECT 1 FROM playback_states ps
-                             WHERE ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed)"#,
+                             WHERE ps."userId" = $1 AND ps."itemId" = e.id AND ps.completed)"#,
+        user,
+        media,
+        season
     )
-    .bind(user)
-    .bind(media)
-    .bind(season)
     .execute(db)
     .await
     .map(drop)
@@ -52,34 +51,20 @@ pub async fn toggle_watched(
     file: Option<i32>,
     episode: Option<i32>,
 ) -> Result<Value, AppError> {
-    let existing = find_state(db, user, media, episode).await?;
-    if existing.is_none() && !media_exists(db, media).await? {
-        return Err(AppError::not_found("not_found"));
-    }
+    let item = item_of(db, media, episode)
+        .await?
+        .ok_or_else(|| AppError::not_found("not_found"))?;
+    let existing = find_state(db, user, item).await?;
     let completing = existing.as_ref().is_none_or(|e| !e.completed);
     let mut file = file.filter(|f| *f != 0);
     if file.is_none() && existing.is_none() {
-        file = match episode {
-            Some(ep) => {
-                sqlx::query_scalar!(
-                    r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1 LIMIT 1"#,
-                    ep
-                )
-                .fetch_optional(db)
-                .await?
-            }
-            None => {
-                sqlx::query_scalar!(
-                    r#"SELECT f.id FROM media_files f WHERE f."mediaId" = $1
-                       AND NOT EXISTS (SELECT 1 FROM media_file_items fi
-                                       WHERE fi."mediaFileId" = f.id AND fi."episodeId" IS NOT NULL)
-                       LIMIT 1"#,
-                    media
-                )
-                .fetch_optional(db)
-                .await?
-            }
-        };
+        file = sqlx::query_scalar!(
+            r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1
+               ORDER BY "mediaFileId" LIMIT 1"#,
+            item
+        )
+        .fetch_optional(db)
+        .await?;
     }
     let prev_file = existing.as_ref().and_then(|e| e.media_file_id);
     let mut position = existing.as_ref().map_or(0.0, |e| e.position_seconds);
@@ -119,13 +104,12 @@ pub async fn toggle_watched(
         None => {
             sqlx::query!(
                 r#"INSERT INTO playback_states
-                     ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
-                      "durationSeconds", completed, "lastPlayedAt")
-                   VALUES ($1, $2, $3, $4, $5, $6, true, now())"#,
+                     ("userId", "itemId", "mediaFileId", "positionSeconds", "durationSeconds",
+                      completed, "lastPlayedAt")
+                   VALUES ($1, $2, $3, $4, $5, true, now())"#,
                 user,
-                media,
+                item,
                 file,
-                episode,
                 position,
                 duration
             )
@@ -134,11 +118,11 @@ pub async fn toggle_watched(
             .map_err(fk)?;
         }
     }
-    let mut row = find_state(db, user, media, episode)
+    let mut row = find_state(db, user, item)
         .await?
         .ok_or_else(|| AppError::internal("playback state vanished"))?;
     if completing {
-        log_play(db, user, media, episode).await?;
+        log_play(db, user, item).await?;
         remove_watched_from_auto_playlists(
             db,
             user,
@@ -176,8 +160,7 @@ pub async fn toggle_series_watched(
                    "positionSeconds" = 0,
                    "lastPlayedAt" = NOW()
                WHERE "userId" = $1
-                 AND "mediaId" = $2
-                 AND "episodeId" IS NOT NULL"#,
+                 AND "itemId" IN (SELECT id FROM items WHERE "mediaId" = $2 AND "groupId" IS NOT NULL)"#,
             user,
             media
         )
@@ -188,13 +171,12 @@ pub async fn toggle_series_watched(
     log_uncompleted_episodes(db, user, media, None).await?;
     sqlx::query!(
         r#"INSERT INTO playback_states
-             ("userId", "mediaId", "mediaFileId", "episodeId",
+             ("userId", "itemId", "mediaFileId",
               "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
-           SELECT $1::int4, $2::int4,
+           SELECT $1::int4, e.id,
                   (SELECT p."mediaFileId" FROM item_parts p
                     WHERE p."itemId" = e.id
                     ORDER BY p."mediaFileId" DESC LIMIT 1),
-                  e.id,
                   0,
                   COALESCE(
                     (SELECT (mf2."streamInfo"->>'durationSeconds')::float
@@ -210,7 +192,7 @@ pub async fn toggle_series_watched(
            WHERE s."mediaId" = $2
              AND s."number" > 0
              AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-           ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL
+           ON CONFLICT ("userId", "itemId")
            DO UPDATE SET
              completed = true,
              "positionSeconds" = 0,
@@ -221,16 +203,14 @@ pub async fn toggle_series_watched(
     .execute(db)
     .await?;
     let done: Vec<i32> = sqlx::query_scalar!(
-        r#"SELECT "episodeId" FROM playback_states
-           WHERE "userId" = $1 AND "mediaId" = $2 AND completed = true"#,
+        r#"SELECT i.id FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+           WHERE ps."userId" = $1 AND i."mediaId" = $2 AND i."groupId" IS NOT NULL
+             AND ps.completed = true"#,
         user,
         media
     )
     .fetch_all(db)
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
+    .await?;
     remove_watched_from_auto_playlists(db, user, media, Some(&done)).await;
     Ok(())
 }
@@ -247,10 +227,8 @@ pub async fn toggle_season_watched(
         return sqlx::query!(
             r#"UPDATE playback_states
                SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = now()
-               WHERE "userId" = $1 AND "mediaId" = $2
-                 AND "episodeId" IN (SELECT id FROM items WHERE "groupId" = $3)"#,
+               WHERE "userId" = $1 AND "itemId" IN (SELECT id FROM items WHERE "groupId" = $2)"#,
             user,
-            media,
             season
         )
         .execute(db)
@@ -262,7 +240,7 @@ pub async fn toggle_season_watched(
     sqlx::query!(
         r#"DELETE FROM playback_states
            WHERE "userId" = $1
-             AND "episodeId" IN (SELECT i.id FROM items i WHERE i."groupId" = $2
+             AND "itemId" IN (SELECT i.id FROM items i WHERE i."groupId" = $2
                                  AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id))"#,
         user,
         season
@@ -271,25 +249,21 @@ pub async fn toggle_season_watched(
     .await?;
     let inserted: Vec<i32> = sqlx::query_scalar!(
         r#"INSERT INTO playback_states
-             ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
+             ("userId", "itemId", "mediaFileId", "positionSeconds",
               "durationSeconds", completed, "lastPlayedAt", "playedAt")
-           SELECT $1::int4, $2::int4, f.id, e.id, 0,
+           SELECT $1::int4, e.id, f.id, 0,
                   COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0), true, now(), NULL
            FROM items e
            CROSS JOIN LATERAL (SELECT mf.id, mf."streamInfo" FROM media_files mf
                                JOIN item_parts p ON p."mediaFileId" = mf.id
                                WHERE p."itemId" = e.id ORDER BY mf.id DESC LIMIT 1) f
-           WHERE e."groupId" = $3
-           RETURNING "episodeId""#,
+           WHERE e."groupId" = $2
+           RETURNING "itemId""#,
         user,
-        media,
         season
     )
     .fetch_all(&mut *tx)
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
+    .await?;
     tx.commit().await?;
     remove_watched_from_auto_playlists(db, user, media, Some(&inserted)).await;
     Ok(())
@@ -300,6 +274,8 @@ pub struct Watch {
     pub position: f64,
     pub duration: f64,
     pub file: i32,
+    /// The item the beat names, resolved from `(mediaId, episodeId)`.
+    pub item: i32,
     pub episode: Option<i32>,
     /// When the client played it, for an offline replay; `None` for a live beat.
     pub client_played_at: Option<DateTime<Utc>>,
@@ -314,7 +290,7 @@ pub fn completes(pos: f64, dur: f64) -> bool {
 async fn write_replay(
     db: &PgPool,
     existing: Option<&super::db::StateRow>,
-    (user, media): (i32, i32),
+    user: i32,
     w: &Watch,
     at: DateTime<Utc>,
     completed: bool,
@@ -338,14 +314,13 @@ async fn write_replay(
         .bind(w.file),
         None => sqlx::query(
             r#"INSERT INTO playback_states
-                 ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
+                 ("userId", "itemId", "mediaFileId", "positionSeconds",
                   "durationSeconds", completed, "lastPlayedAt", "playedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $9 THEN $8 END)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $8 THEN $7 END)"#,
         )
         .bind(user)
-        .bind(media)
+        .bind(w.item)
         .bind(w.file)
-        .bind(w.episode)
         .bind(w.position)
         .bind(w.duration)
         .bind(completed)
@@ -357,48 +332,41 @@ async fn write_replay(
     .map(drop)
 }
 
-/// Completes the other episodes the file plays, and returns those that were not completed yet.
-async fn complete_covered(
-    db: &PgPool,
-    (user, media): (i32, i32),
-    w: &Watch,
-    episode: i32,
-) -> sqlx::Result<Vec<i32>> {
+/// Completes the other items the file plays, and returns those that were not completed yet.
+async fn complete_covered(db: &PgPool, user: i32, w: &Watch) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar!(
         r#"WITH cov AS (
              SELECT p."itemId" AS id FROM item_parts p JOIN items i ON i.id = p."itemId"
-             WHERE p."mediaFileId" = $3 AND p."itemId" <> $4 AND i."groupId" IS NOT NULL),
+             WHERE p."mediaFileId" = $2 AND p."itemId" <> $3 AND i."groupId" IS NOT NULL),
            fresh AS (
              SELECT cov.id FROM cov WHERE NOT EXISTS (SELECT 1 FROM playback_states ps
-               WHERE ps."userId" = $1 AND ps."episodeId" = cov.id AND ps.completed)),
+               WHERE ps."userId" = $1 AND ps."itemId" = cov.id AND ps.completed)),
            done AS (
-             INSERT INTO playback_states ("userId", "mediaId", "mediaFileId", "episodeId",
+             INSERT INTO playback_states ("userId", "itemId", "mediaFileId",
                "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
-             SELECT $1, $2, $3, cov.id, 0, $5, true, now() FROM cov
-             ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL
+             SELECT $1, cov.id, $2, 0, $4, true, now() FROM cov
+             ON CONFLICT ("userId", "itemId")
              DO UPDATE SET completed = true, "positionSeconds" = 0, "lastPlayedAt" = now()
              RETURNING 1)
            SELECT id AS "id!" FROM fresh"#,
         user,
-        media,
         w.file,
-        episode,
+        w.item,
         w.duration
     )
     .fetch_all(db)
     .await
 }
 
-/// Upserts the viewer's row (movie row when `episode` is falsy) and returns it as `repo.save` did,
-/// `None` after an FK violation (media or file gone mid-session).
+/// Upserts the viewer's row for the item the beat names and returns it as `repo.save` did,
+/// `None` after an FK violation (file gone mid-session).
 pub async fn record_watch(
     db: &PgPool,
     user: i32,
     media: i32,
     w: &Watch,
 ) -> Result<Option<Value>, AppError> {
-    let lookup = w.episode.filter(|e| *e != 0);
-    let existing = find_state(db, user, media, lookup).await?;
+    let existing = find_state(db, user, w.item).await?;
     let replay = w.client_played_at;
     let stale = replay
         .zip(existing.as_ref())
@@ -409,7 +377,7 @@ pub async fn record_watch(
     let saved = if stale {
         Ok(())
     } else if let Some(at) = replay {
-        write_replay(db, existing.as_ref(), (user, media), w, at, completed).await
+        write_replay(db, existing.as_ref(), user, w, at, completed).await
     } else {
         match &existing {
             Some(e) => sqlx::query!(
@@ -431,13 +399,12 @@ pub async fn record_watch(
             .map(drop),
             None => sqlx::query!(
                 r#"INSERT INTO playback_states
-                 ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
+                 ("userId", "itemId", "mediaFileId", "positionSeconds",
                   "durationSeconds", completed, "lastPlayedAt", "playedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, now(), CASE WHEN $8 THEN now() END)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, now(), CASE WHEN $7 THEN now() END)"#,
                 user,
-                media,
+                w.item,
                 w.file,
-                w.episode,
                 w.position,
                 w.duration,
                 completed,
@@ -454,17 +421,17 @@ pub async fn record_watch(
         Err(e) => return Err(e.into()),
     }
     if completed && !was_completed && !stale {
-        log_play(db, user, media, w.episode.filter(|e| *e != 0)).await?;
+        log_play(db, user, w.item).await?;
         let mut episodes: Option<Vec<i32>> = w.episode.map(|e| vec![e]);
-        if let Some(e) = w.episode.filter(|e| *e != 0) {
-            for id in complete_covered(db, (user, media), w, e).await? {
-                log_play(db, user, media, Some(id)).await?;
+        if w.episode.is_some() {
+            for id in complete_covered(db, user, w).await? {
+                log_play(db, user, id).await?;
                 episodes.get_or_insert_default().push(id);
             }
         }
         remove_watched_from_auto_playlists(db, user, media, episodes.as_deref()).await;
     }
-    let mut row = find_state(db, user, media, lookup)
+    let mut row = find_state(db, user, w.item)
         .await?
         .ok_or_else(|| AppError::internal("playback state vanished"))?;
     if let Some(e) = &existing {

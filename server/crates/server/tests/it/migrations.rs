@@ -850,6 +850,85 @@ async fn m1789000060_links_files_to_items_through_parts(pool: PgPool) {
     assert_eq!(left, 0, "parts go with their file or their item");
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000070_keys_progress_and_history_by_item(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_070).await;
+    sql(
+        &pool,
+        r#"INSERT INTO users (id, username) VALUES (1, 'u'), (2, 'v');
+          INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 's', 'series'), (3, 't', 'series');
+          INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media;
+          INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM editions WHERE "mediaId" = 1;
+          INSERT INTO item_groups (id, "number", "mediaId") VALUES (1, 1, 2), (2, 1, 3);
+          INSERT INTO items (id, "groupId", "mediaId", "editionId", "number") VALUES
+            (10, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 1),
+            (11, 2, 3, (SELECT id FROM editions WHERE "mediaId" = 3), 1);
+          INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (1, 1, 'a', 1, 'q');
+          INSERT INTO playback_states (id, "userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds", "updatedAt") VALUES
+            (1, 1, 1, 1, NULL, 30, '2020-01-01'),
+            (2, 1, 2, NULL, 10, 40, '2020-01-01'),
+            (3, 2, 2, NULL, 11, 50, '2020-01-01'),
+            (4, 2, 2, NULL, NULL, 60, '2020-01-01'),
+            (5, 2, 1, NULL, 10, 70, '2020-01-01');
+          INSERT INTO playback_history ("userId", "mediaId", "episodeId") VALUES
+            (1, 1, NULL), (1, 2, 10), (2, 3, 11), (2, 2, NULL)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_070).await;
+
+    let movie_item: i32 = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = 1"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let states: Vec<(i32, i32, i32)> = rows(
+        &pool,
+        r#"SELECT id, "userId", "itemId" FROM playback_states ORDER BY id"#,
+    )
+    .await;
+    // A series row without episode has no item and goes; an episode of another media keeps its episode.
+    assert_eq!(
+        states,
+        [(1, 1, movie_item), (2, 1, 10), (3, 2, 11), (5, 2, 10)]
+    );
+    let history: Vec<(i32, i32)> = rows(
+        &pool,
+        r#"SELECT "userId", "itemId" FROM playback_history ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(history, [(1, movie_item), (1, 10), (2, 11)]);
+    let bumped: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM playback_states WHERE "updatedAt" > '2021-01-01'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(bumped, 0, "the migration keeps the states' updatedAt");
+
+    sql(&pool, "DELETE FROM media_files WHERE id = 1").await;
+    let kept: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "mediaFileId" FROM playback_states WHERE id = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(kept, None, "the last file played is never the key");
+    assert!(
+        sqlx::raw_sql(r#"INSERT INTO playback_states ("userId", "itemId") VALUES (1, 10)"#)
+            .execute(&pool)
+            .await
+            .is_err(),
+        "one row per user and item"
+    );
+    sql(&pool, "DELETE FROM items WHERE id = 10").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM playback_states WHERE "itemId" = 10)
+              + (SELECT COUNT(*) FROM playback_history WHERE "itemId" = 10)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "progress and history go with their item");
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64

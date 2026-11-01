@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             f.id AS \"media_file_id?\",\n             CASE WHEN e.\"groupId\" IS NOT NULL THEN e.id END AS episode_id,\n             ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n             s.\"number\" AS \"season_number?\", e.\"number\" AS \"episode_number?\"\n           FROM playback_states ps\n           JOIN items e ON e.id = ps.\"itemId\"\n           LEFT JOIN item_groups s ON s.id = e.\"groupId\"\n           LEFT JOIN LATERAL (\n             SELECT p.\"mediaFileId\" AS id FROM item_parts p WHERE p.\"itemId\" = e.id\n             ORDER BY (p.\"mediaFileId\" = ps.\"mediaFileId\") DESC NULLS LAST, p.\"mediaFileId\" DESC\n             LIMIT 1) f ON true\n           WHERE ps.\"userId\" = $1\n             AND e.\"mediaId\" = $2\n             AND ps.completed = false\n             AND ps.\"positionSeconds\" > 0\n           ORDER BY ps.\"lastPlayedAt\" DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_file_id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "position_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "positionSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "duration_seconds",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "durationSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "season_number?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "episode_number?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "a02be0d31e4bc8f6b7cb943f5a5a8d43cf642b4f6e22d781b7def189279d5bcb"
+}

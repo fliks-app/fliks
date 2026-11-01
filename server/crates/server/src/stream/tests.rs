@@ -113,6 +113,23 @@ async fn ctx_with(pool: PgPool, engine: bool, features: &[&str]) -> Ctx {
     .fetch_one(&pool)
     .await
     .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    crate::media::items::create_shell(
+        &mut conn,
+        media,
+        fliks_domain::media::kind::MediaKind::Movie,
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    let link = crate::media::items::Link {
+        file,
+        owner: None,
+        last: None,
+    };
+    crate::media::items::attach(&pool, media, &[link])
+        .await
+        .unwrap();
     let token = st.jwt.sign_access(user, "admin").unwrap().token;
     Ctx {
         app,
@@ -313,12 +330,15 @@ async fn a_non_numeric_start_at_is_a_400(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn resume_download_and_explicit_start(pool: PgPool) {
     let c = ctx(pool, true).await;
-    sqlx::query(r#"INSERT INTO playback_states ("userId", "mediaId", "positionSeconds", completed) VALUES ($1, $2, 120, false)"#)
-        .bind(c.user)
-        .bind(c.media)
-        .execute(&c.pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", completed)
+           SELECT $1, id, 120, false FROM items WHERE "mediaId" = $2"#,
+    )
+    .bind(c.user)
+    .bind(c.media)
+    .execute(&c.pool)
+    .await
+    .unwrap();
     for (query, want, pinned) in [
         ("", 120.0, false),
         ("?startAt=0", 0.0, false),
@@ -493,7 +513,8 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
+        r#"WITH gone AS (DELETE FROM item_parts)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
            SELECT $1, id, "mediaId" FROM media_files"#,
     )
     .bind(ep)
