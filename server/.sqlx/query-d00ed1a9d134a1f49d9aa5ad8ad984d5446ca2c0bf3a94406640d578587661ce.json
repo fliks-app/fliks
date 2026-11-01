@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tc.\"tmdbId\" AS \"id!\",\n       tc.name AS \"name!\",\n       COUNT(*)::int          AS \"count!\",\n       COALESCE(\n         (ARRAY_AGG(m.\"posterUrl\" ORDER BY m.id)\n          FILTER (WHERE m.\"posterUrl\" IS NOT NULL))[1:4],\n         ARRAY[]::text[]\n       ) AS \"posters!\"\nFROM media m\nJOIN media_tmdb_collection tc ON tc.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = ANY($1)\n  AND tc.name <> ''\nGROUP BY tc.\"collectionId\", tc.\"tmdbId\", tc.name\nHAVING COUNT(*) >= 2\nORDER BY tc.name ASC, tc.\"tmdbId\" ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_tmdb_collection",
+            "name": "tmdbId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media_tmdb_collection",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "count!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "posters!",
+        "type_info": "VarcharArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "d00ed1a9d134a1f49d9aa5ad8ad984d5446ca2c0bf3a94406640d578587661ce"
+}

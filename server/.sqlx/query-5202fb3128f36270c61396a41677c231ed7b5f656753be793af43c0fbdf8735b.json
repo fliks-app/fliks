@@ -1,27 +1,27 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"tmdbCollectionId\" AS collection_id, \"tmdbCollectionName\" AS collection_name, \"libraryId\" AS library_id\n           FROM media WHERE id = $1",
+  "query": "SELECT tc.\"tmdbId\" AS \"collection_id?\", tc.name AS \"collection_name?\", m.\"libraryId\" AS library_id\n           FROM media m LEFT JOIN media_tmdb_collection tc ON tc.\"mediaId\" = m.id WHERE m.id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "collection_id",
+        "name": "collection_id?",
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "media",
-            "name": "tmdbCollectionId"
+            "table": "media_tmdb_collection",
+            "name": "tmdbId"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "collection_name",
-        "type_info": "Varchar",
+        "name": "collection_name?",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "media",
-            "name": "tmdbCollectionName"
+            "table": "media_tmdb_collection",
+            "name": "name"
           }
         }
       },
@@ -48,5 +48,5 @@
       true
     ]
   },
-  "hash": "7f9793b68bfeb22642e719ff7d32999a51f2aa841a6b91982f65e7cfd460de81"
+  "hash": "5202fb3128f36270c61396a41677c231ed7b5f656753be793af43c0fbdf8735b"
 }

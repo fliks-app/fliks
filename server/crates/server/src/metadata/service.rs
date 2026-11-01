@@ -59,6 +59,12 @@ fn strings(v: &Value, k: &str) -> Vec<String> {
 }
 
 impl Details {
+    /// The TMDB collection the provider names, its name `''` when it gives none.
+    pub fn tmdb_collection(&self) -> Option<(i32, &str)> {
+        let id = self.tmdb_collection_id?;
+        Some((id, self.tmdb_collection_name.as_deref().unwrap_or_default()))
+    }
+
     pub fn from_value(v: &Value) -> Self {
         Self {
             tmdb_id: n(v, "tmdbId"),

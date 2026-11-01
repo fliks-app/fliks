@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"collectionId\" FROM collection_external_ids WHERE provider = 'tmdb' AND value = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "collectionId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "collection_external_ids",
+            "name": "collectionId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "531277ad5f13785359183910683201a9ddb51bc2414f83305e17ce0e22597bf7"
+}

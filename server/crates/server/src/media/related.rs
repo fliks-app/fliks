@@ -34,9 +34,10 @@ fn item(
 
 pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, AppError> {
     let Some(src) = sqlx::query!(
-        r#"SELECT m.type AS "kind!", m."libraryId" AS library_id, m.genres, m.year, m."tmdbCollectionId" AS collection_id,
+        r#"SELECT m.type AS "kind!", m."libraryId" AS library_id, m.genres, m.year, tc."tmdbId" AS "collection_id?",
                   mm.keywords AS "keywords?"
-           FROM media m LEFT JOIN media_metadata mm ON mm."mediaId" = m.id WHERE m.id = $1"#,
+           FROM media m LEFT JOIN movie_details mm ON mm."mediaId" = m.id
+           LEFT JOIN media_tmdb_collection tc ON tc."mediaId" = m.id WHERE m.id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -78,12 +79,13 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
         r#"SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
        m.rating, m.genres, meta.keywords AS "keywords?",
        EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
-FROM media m LEFT JOIN media_metadata meta ON meta."mediaId" = m.id
+FROM media m LEFT JOIN movie_details meta ON meta."mediaId" = m.id
 WHERE m."libraryId" = $1 AND m.type = 'movie' AND m.id != $2
   AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))
        OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))
        OR m.id = ANY($5))
-  AND ($6::int IS NULL OR m."tmdbCollectionId" IS NULL OR m."tmdbCollectionId" != $6)
+  AND ($6::int IS NULL OR NOT EXISTS (
+        SELECT 1 FROM media_tmdb_collection tc WHERE tc."mediaId" = m.id AND tc."tmdbId" = $6))
 ORDER BY m.id"#,
         library,
         id,
@@ -148,8 +150,8 @@ ORDER BY m.id"#,
 /// `None` is the 200-with-empty-body answer: no collection, or the movie is alone in it.
 pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError> {
     let Some(src) = sqlx::query!(
-        r#"SELECT "tmdbCollectionId" AS collection_id, "tmdbCollectionName" AS collection_name, "libraryId" AS library_id
-           FROM media WHERE id = $1"#,
+        r#"SELECT tc."tmdbId" AS "collection_id?", tc.name AS "collection_name?", m."libraryId" AS library_id
+           FROM media m LEFT JOIN media_tmdb_collection tc ON tc."mediaId" = m.id WHERE m.id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -164,9 +166,11 @@ pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError>
         r#"SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
        m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
 FROM media m
+JOIN media_tmdb_collection tc ON tc."mediaId" = m.id
+JOIN collection_entries ce ON ce."collectionId" = tc."collectionId" AND ce."mediaId" = m.id
 LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d.kind = 'release') dates ON true
-WHERE m."libraryId" = $1 AND m."tmdbCollectionId" = $2
-ORDER BY dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
+WHERE m."libraryId" = $1 AND tc."tmdbId" = $2
+ORDER BY ce.position ASC NULLS LAST, dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
         library,
         collection
     )

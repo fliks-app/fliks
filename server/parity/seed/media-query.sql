@@ -42,38 +42,41 @@ UPDATE media SET "fanartUrl" = '/api/images/' || id || '/fanart' WHERE id IN (2,
 -- updated before any insert so the heap order stays the id order
 UPDATE media_files SET "createdAt" = '2026-02-01'::timestamptz + (id * 37 % 101) * interval '1 hour' WHERE id <= 29;
 
-INSERT INTO media (id, "createdAt", "updatedAt", title, "originalTitle", year, type, overview, status, monitored, "folderName", rating, genres, runtime, "libraryId", "qualityProfileId", "languageProfileId", "addedById", "tmdbCollectionId", "tmdbCollectionName", "posterUrl", "fanartUrl") VALUES
- (21, '2026-01-01'::timestamptz + interval '21 days', '2026-01-01', 'alpha test', 'Alpha Original', 2015, 'movie', 'A comedy about impossible things', 'released', true, 'alpha test (2020)', 6.0, '["Comedy"]'::jsonb, NULL, 1, 1, NULL, 2, NULL, NULL, NULL, NULL),
- (22, '2026-01-01'::timestamptz + interval '22 days', '2026-01-01', '12 Angry Men', NULL, 1957, 'movie', 'Twelve jurors decide a verdict', 'released', true, '12 Angry Men (2020)', 9.0, '["Drama"]'::jsonb, NULL, 1, NULL, NULL, 2, NULL, NULL, NULL, NULL),
- (23, '2026-01-01'::timestamptz + interval '23 days', '2026-01-01', 'Éclair', NULL, NULL, 'movie', NULL, 'released', true, 'Éclair (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (24, '2026-01-01'::timestamptz + interval '24 days', '2026-01-01', 'L''Impossible', 'Lo Imposible', 2012, 'movie', 'Une famille survit au tsunami', 'released', true, 'L''Impossible (2020)', 7.6, '["Drama", "Thriller"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (25, '2026-01-01'::timestamptz + interval '25 days', '2026-01-01', 'Les Évadés', 'The Shawshank Redemption', 1994, 'movie', 'Un banquier condamné s''évade de prison', 'released', true, 'Les Évadés (2020)', 8.7, '["Drama", "Crime"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (26, '2026-01-01'::timestamptz + interval '26 days', '2026-01-01', 'Zeta Alpha Alpha', NULL, 2018, 'movie', NULL, 'released', true, 'Zeta Alpha Alpha (2020)', 5.5, '["drama"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (27, '2026-01-01'::timestamptz + interval '27 days', '2026-01-01', 'Unidentified Movie', NULL, 2019, 'movie', NULL, 'released', true, 'Unidentified Movie (2020)', 6.5, '["Comedy", "Drama"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (28, '2026-01-01'::timestamptz + interval '28 days', '2026-01-01', 'Empty Imdb Movie', NULL, 2019, 'movie', NULL, 'released', true, 'Empty Imdb Movie (2020)', 6.5, '["Comedy"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (29, '2026-01-01'::timestamptz + interval '29 days', '2026-01-01', 'Unmonitored Movie', NULL, 2023, 'movie', NULL, 'announced', false, 'Unmonitored Movie (2020)', 4.0, '["Horror"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (30, '2026-01-01'::timestamptz + interval '30 days', '2026-01-01', 'No Files Movie', NULL, 2025, 'movie', NULL, 'tba', true, 'No Files Movie (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL, NULL, NULL),
- (31, '2026-01-01'::timestamptz + interval '31 days', '2026-01-01', 'Null Library Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Null Library Movie (2020)', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (32, '2026-01-01'::timestamptz + interval '32 days', '2026-01-01', 'Collection Alpha 1', NULL, 2010, 'movie', NULL, 'released', true, 'Collection Alpha 1 (2020)', 7.0, '["Drama"]'::jsonb, NULL, 1, NULL, NULL, NULL, 500, 'Alpha Collection', NULL, NULL),
- (33, '2026-01-01'::timestamptz + interval '33 days', '2026-01-01', 'Collection Alpha 2', NULL, 2012, 'movie', NULL, 'released', true, 'Collection Alpha 2 (2020)', 7.2, '["Drama", "Action"]'::jsonb, NULL, 1, NULL, NULL, NULL, 500, 'Alpha Collection', NULL, NULL),
- (34, '2026-01-01'::timestamptz + interval '34 days', '2026-01-01', 'Collection Solo', NULL, 2014, 'movie', NULL, 'released', true, 'Collection Solo (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, 501, 'Solo Collection', NULL, NULL),
- (35, '2026-01-01'::timestamptz + interval '35 days', '2026-01-01', 'Collection Other Library', NULL, 2011, 'movie', NULL, 'released', true, 'Collection Other Library (2020)', NULL, NULL, NULL, 2, NULL, NULL, NULL, 500, 'Alpha Collection', NULL, NULL),
- (36, '2026-01-01'::timestamptz + interval '36 days', '2026-01-01', 'Profile Movie Unmet', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie Unmet (2020)', NULL, NULL, NULL, 1, 1, NULL, 2, NULL, NULL, NULL, NULL),
- (37, '2026-01-01'::timestamptz + interval '37 days', '2026-01-01', 'Profile Movie Met', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie Met (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL, NULL, NULL),
- (38, '2026-01-01'::timestamptz + interval '38 days', '2026-01-01', 'Profile Movie Empty Quality', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie Empty Quality (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL, NULL, NULL),
- (39, '2026-01-01'::timestamptz + interval '39 days', '2026-01-01', 'Profile Movie 8K', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie 8K (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL, NULL, NULL),
- (40, '2026-01-01'::timestamptz + interval '40 days', '2026-01-01', 'Unknown Cutoff Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Unknown Cutoff Movie (2020)', NULL, NULL, NULL, 1, 2, NULL, NULL, NULL, NULL, NULL, NULL),
- (41, '2026-01-01'::timestamptz + interval '41 days', '2026-01-01', 'Language Profile Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Language Profile Movie (2020)', NULL, NULL, NULL, 1, NULL, 1, NULL, NULL, NULL, NULL, NULL),
- (42, '2026-01-01'::timestamptz + interval '42 days', '2026-01-01', 'Pathless Library Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Pathless Library Movie (2020)', NULL, NULL, NULL, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (43, '2026-01-01'::timestamptz + interval '43 days', '2026-01-01', 'Series Multi', NULL, 2022, 'series', NULL, 'continuing', true, 'Series Multi (2020)', 7.0, '["Drama", "Crime"]'::jsonb, NULL, 2, 1, NULL, NULL, NULL, NULL, NULL, NULL),
- (44, '2026-01-01'::timestamptz + interval '44 days', '2026-01-01', 'Series Watched', NULL, 2022, 'series', NULL, 'ended', true, 'Series Watched (2020)', NULL, NULL, NULL, 2, 1, NULL, NULL, NULL, NULL, NULL, NULL),
- (45, '2026-01-01'::timestamptz + interval '45 days', '2026-01-01', 'Series Half Watched', NULL, 2023, 'series', NULL, 'continuing', true, 'Series Half Watched (2020)', NULL, NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (46, '2026-01-01'::timestamptz + interval '46 days', '2026-01-01', 'Series No Files', NULL, 2019, 'series', NULL, 'ended', false, 'Series No Files (2020)', NULL, NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (47, '2026-01-01'::timestamptz + interval '47 days', '2026-01-01', 'Series Calendar', NULL, 2026, 'series', NULL, 'continuing', true, 'Series Calendar (2020)', NULL, '["Drama"]'::jsonb, NULL, 2, NULL, NULL, 2, NULL, NULL, NULL, NULL),
- (48, '2026-01-01'::timestamptz + interval '48 days', '2026-01-01', 'Cal Movie Cinema Digital', NULL, 2026, 'movie', NULL, 'released', true, 'Cal Movie Cinema Digital (2020)', NULL, NULL, NULL, 1, NULL, NULL, 2, NULL, NULL, NULL, NULL),
- (49, '2026-01-01'::timestamptz + interval '49 days', '2026-01-01', 'Cal Movie Release Only', NULL, 2026, 'movie', NULL, 'released', true, 'Cal Movie Release Only (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (50, '2026-01-01'::timestamptz + interval '50 days', '2026-01-01', 'Cal Movie Release Inside Cinema Outside', NULL, 2026, 'movie', NULL, 'released', true, 'Cal Movie Release Inside Cinema Outside (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
- (51, '2026-01-01'::timestamptz + interval '51 days', '2026-01-01', 'No Signal Movie', NULL, 2020, 'movie', NULL, 'released', true, 'No Signal Movie (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO media (id, "createdAt", "updatedAt", title, "originalTitle", year, type, overview, status, monitored, "folderName", rating, genres, runtime, "libraryId", "qualityProfileId", "languageProfileId", "addedById", "posterUrl", "fanartUrl") VALUES
+ (21, '2026-01-01'::timestamptz + interval '21 days', '2026-01-01', 'alpha test', 'Alpha Original', 2015, 'movie', 'A comedy about impossible things', 'released', true, 'alpha test (2020)', 6.0, '["Comedy"]'::jsonb, NULL, 1, 1, NULL, 2, NULL, NULL),
+ (22, '2026-01-01'::timestamptz + interval '22 days', '2026-01-01', '12 Angry Men', NULL, 1957, 'movie', 'Twelve jurors decide a verdict', 'released', true, '12 Angry Men (2020)', 9.0, '["Drama"]'::jsonb, NULL, 1, NULL, NULL, 2, NULL, NULL),
+ (23, '2026-01-01'::timestamptz + interval '23 days', '2026-01-01', 'Éclair', NULL, NULL, 'movie', NULL, 'released', true, 'Éclair (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (24, '2026-01-01'::timestamptz + interval '24 days', '2026-01-01', 'L''Impossible', 'Lo Imposible', 2012, 'movie', 'Une famille survit au tsunami', 'released', true, 'L''Impossible (2020)', 7.6, '["Drama", "Thriller"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (25, '2026-01-01'::timestamptz + interval '25 days', '2026-01-01', 'Les Évadés', 'The Shawshank Redemption', 1994, 'movie', 'Un banquier condamné s''évade de prison', 'released', true, 'Les Évadés (2020)', 8.7, '["Drama", "Crime"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (26, '2026-01-01'::timestamptz + interval '26 days', '2026-01-01', 'Zeta Alpha Alpha', NULL, 2018, 'movie', NULL, 'released', true, 'Zeta Alpha Alpha (2020)', 5.5, '["drama"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (27, '2026-01-01'::timestamptz + interval '27 days', '2026-01-01', 'Unidentified Movie', NULL, 2019, 'movie', NULL, 'released', true, 'Unidentified Movie (2020)', 6.5, '["Comedy", "Drama"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (28, '2026-01-01'::timestamptz + interval '28 days', '2026-01-01', 'Empty Imdb Movie', NULL, 2019, 'movie', NULL, 'released', true, 'Empty Imdb Movie (2020)', 6.5, '["Comedy"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (29, '2026-01-01'::timestamptz + interval '29 days', '2026-01-01', 'Unmonitored Movie', NULL, 2023, 'movie', NULL, 'announced', false, 'Unmonitored Movie (2020)', 4.0, '["Horror"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (30, '2026-01-01'::timestamptz + interval '30 days', '2026-01-01', 'No Files Movie', NULL, 2025, 'movie', NULL, 'tba', true, 'No Files Movie (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL),
+ (31, '2026-01-01'::timestamptz + interval '31 days', '2026-01-01', 'Null Library Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Null Library Movie (2020)', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+ (32, '2026-01-01'::timestamptz + interval '32 days', '2026-01-01', 'Collection Alpha 1', NULL, 2010, 'movie', NULL, 'released', true, 'Collection Alpha 1 (2020)', 7.0, '["Drama"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (33, '2026-01-01'::timestamptz + interval '33 days', '2026-01-01', 'Collection Alpha 2', NULL, 2012, 'movie', NULL, 'released', true, 'Collection Alpha 2 (2020)', 7.2, '["Drama", "Action"]'::jsonb, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (34, '2026-01-01'::timestamptz + interval '34 days', '2026-01-01', 'Collection Solo', NULL, 2014, 'movie', NULL, 'released', true, 'Collection Solo (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (35, '2026-01-01'::timestamptz + interval '35 days', '2026-01-01', 'Collection Other Library', NULL, 2011, 'movie', NULL, 'released', true, 'Collection Other Library (2020)', NULL, NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL),
+ (36, '2026-01-01'::timestamptz + interval '36 days', '2026-01-01', 'Profile Movie Unmet', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie Unmet (2020)', NULL, NULL, NULL, 1, 1, NULL, 2, NULL, NULL),
+ (37, '2026-01-01'::timestamptz + interval '37 days', '2026-01-01', 'Profile Movie Met', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie Met (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL),
+ (38, '2026-01-01'::timestamptz + interval '38 days', '2026-01-01', 'Profile Movie Empty Quality', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie Empty Quality (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL),
+ (39, '2026-01-01'::timestamptz + interval '39 days', '2026-01-01', 'Profile Movie 8K', NULL, 2020, 'movie', NULL, 'released', true, 'Profile Movie 8K (2020)', NULL, NULL, NULL, 1, 1, NULL, NULL, NULL, NULL),
+ (40, '2026-01-01'::timestamptz + interval '40 days', '2026-01-01', 'Unknown Cutoff Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Unknown Cutoff Movie (2020)', NULL, NULL, NULL, 1, 2, NULL, NULL, NULL, NULL),
+ (41, '2026-01-01'::timestamptz + interval '41 days', '2026-01-01', 'Language Profile Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Language Profile Movie (2020)', NULL, NULL, NULL, 1, NULL, 1, NULL, NULL, NULL),
+ (42, '2026-01-01'::timestamptz + interval '42 days', '2026-01-01', 'Pathless Library Movie', NULL, 2020, 'movie', NULL, 'released', true, 'Pathless Library Movie (2020)', NULL, NULL, NULL, 3, NULL, NULL, NULL, NULL, NULL),
+ (43, '2026-01-01'::timestamptz + interval '43 days', '2026-01-01', 'Series Multi', NULL, 2022, 'series', NULL, 'continuing', true, 'Series Multi (2020)', 7.0, '["Drama", "Crime"]'::jsonb, NULL, 2, 1, NULL, NULL, NULL, NULL),
+ (44, '2026-01-01'::timestamptz + interval '44 days', '2026-01-01', 'Series Watched', NULL, 2022, 'series', NULL, 'ended', true, 'Series Watched (2020)', NULL, NULL, NULL, 2, 1, NULL, NULL, NULL, NULL),
+ (45, '2026-01-01'::timestamptz + interval '45 days', '2026-01-01', 'Series Half Watched', NULL, 2023, 'series', NULL, 'continuing', true, 'Series Half Watched (2020)', NULL, NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL),
+ (46, '2026-01-01'::timestamptz + interval '46 days', '2026-01-01', 'Series No Files', NULL, 2019, 'series', NULL, 'ended', false, 'Series No Files (2020)', NULL, NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL),
+ (47, '2026-01-01'::timestamptz + interval '47 days', '2026-01-01', 'Series Calendar', NULL, 2026, 'series', NULL, 'continuing', true, 'Series Calendar (2020)', NULL, '["Drama"]'::jsonb, NULL, 2, NULL, NULL, 2, NULL, NULL),
+ (48, '2026-01-01'::timestamptz + interval '48 days', '2026-01-01', 'Cal Movie Cinema Digital', NULL, 2026, 'movie', NULL, 'released', true, 'Cal Movie Cinema Digital (2020)', NULL, NULL, NULL, 1, NULL, NULL, 2, NULL, NULL),
+ (49, '2026-01-01'::timestamptz + interval '49 days', '2026-01-01', 'Cal Movie Release Only', NULL, 2026, 'movie', NULL, 'released', true, 'Cal Movie Release Only (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (50, '2026-01-01'::timestamptz + interval '50 days', '2026-01-01', 'Cal Movie Release Inside Cinema Outside', NULL, 2026, 'movie', NULL, 'released', true, 'Cal Movie Release Inside Cinema Outside (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL),
+ (51, '2026-01-01'::timestamptz + interval '51 days', '2026-01-01', 'No Signal Movie', NULL, 2020, 'movie', NULL, 'released', true, 'No Signal Movie (2020)', NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO collections (id, name) VALUES (1, 'Alpha Collection'), (2, 'Solo Collection');
+INSERT INTO collection_external_ids ("collectionId", provider, value) VALUES (1, 'tmdb', '500'), (2, 'tmdb', '501');
+INSERT INTO collection_entries ("collectionId", "mediaId") VALUES (1, 32), (1, 33), (2, 34), (1, 35);
 INSERT INTO media_release_dates ("mediaId", kind, date) VALUES
  (29, 'physical', '2026-03-25'),
  (32, 'release', '2010-05-01'),
@@ -214,7 +217,7 @@ INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES
  (13, 57, 43), (14, 57, 43), (20, 58, 44), (21, 58, 44), (23, 59, 45), (24, 60, 45),
  (27, 61, 47), (29, 62, 47), (30, 62, 47);
 
-INSERT INTO media_metadata (id, "createdAt", "updatedAt", budget, revenue, tagline, popularity, "voteCount", "originalLanguage", "productionCountries", "productionCompanies", videos, keywords, "mediaId") VALUES
+INSERT INTO movie_details (id, "createdAt", "updatedAt", budget, revenue, tagline, popularity, "voteCount", "originalLanguage", "productionCountries", "productionCompanies", videos, keywords, "mediaId") VALUES
  (1, '2026-01-01', '2026-01-01', 150000000000, 9007199254740993, 'A tagline', 12.5, 1234, 'en', '[{"iso_3166_1":"US","name":"United States"}]', '[{"id":1,"name":"Studio"}]', '[{"key":"abc","site":"YouTube"}]', '["heist","space"]', 3),
  (2, '2026-01-01', '2026-01-01', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '["heist"]', 5),
  (3, '2026-01-01', '2026-01-01', 0, 0, NULL, 1.5, 10, 'fr', '[]', '[]', '[]', '["space","war"]', 7),
@@ -257,3 +260,4 @@ BEGIN
     EXECUTE format('SELECT setval(pg_get_serial_sequence(%L, ''id''), COALESCE((SELECT max(id) FROM %I), 1), (SELECT count(*) > 0 FROM %I))', r.t, r.t, r.t);
   END LOOP;
 END $$;
+SELECT setval('media_details_id_seq', GREATEST((SELECT max(id) FROM movie_details), (SELECT max(id) FROM series_details), 1));

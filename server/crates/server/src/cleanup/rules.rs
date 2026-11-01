@@ -237,7 +237,8 @@ pub fn compile(
             .push_bind(r);
     }
     if let Some(v) = int32(c, "minVotes") {
-        q.push(r#" AND (SELECT mm."voteCount" FROM media_metadata mm WHERE mm."mediaId" = media.id) >= "#)
+        q.push(r#" AND COALESCE((SELECT d."voteCount" FROM movie_details d WHERE d."mediaId" = media.id),
+                (SELECT d."voteCount" FROM series_details d WHERE d."mediaId" = media.id)) >= "#)
             .push_bind(v);
     }
     if let Some(gb) = c.get("sizeAboveGb").and_then(Value::as_f64) {

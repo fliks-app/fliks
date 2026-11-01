@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO movie_details (\"mediaId\", budget, revenue, tagline, popularity, \"voteCount\",\n                     \"originalLanguage\", \"productionCountries\", \"productionCompanies\", videos, keywords)\n                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n                   ON CONFLICT (\"mediaId\") DO UPDATE SET\n                     budget = COALESCE(EXCLUDED.budget, movie_details.budget),\n                     revenue = COALESCE(EXCLUDED.revenue, movie_details.revenue),\n                     tagline = COALESCE(EXCLUDED.tagline, movie_details.tagline),\n                     popularity = COALESCE(EXCLUDED.popularity, movie_details.popularity),\n                     \"voteCount\" = COALESCE(EXCLUDED.\"voteCount\", movie_details.\"voteCount\"),\n                     \"originalLanguage\" = COALESCE(EXCLUDED.\"originalLanguage\", movie_details.\"originalLanguage\"),\n                     \"productionCountries\" = CASE WHEN $12 THEN EXCLUDED.\"productionCountries\" ELSE movie_details.\"productionCountries\" END,\n                     \"productionCompanies\" = CASE WHEN $13 THEN EXCLUDED.\"productionCompanies\" ELSE movie_details.\"productionCompanies\" END,\n                     videos = CASE WHEN $14 THEN EXCLUDED.videos ELSE movie_details.videos END,\n                     keywords = CASE WHEN $15 THEN EXCLUDED.keywords ELSE movie_details.keywords END",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Float8",
+        "Int4",
+        "Varchar",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9ba907e5697c30ad9684550961286f3c07adc394ed3bbb83fef6e2ffb9ef7411"
+}

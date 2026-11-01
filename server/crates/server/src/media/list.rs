@@ -136,8 +136,12 @@ fn push_scope(
     if !p.genres.is_empty() {
         qb.push(" AND media.genres @> ").push_bind(json!(p.genres));
     }
+    if let Some(v) = p.collection_id.filter(|v| *v != 0) {
+        qb.push(" AND EXISTS (SELECT 1 FROM media_tmdb_collection c WHERE c.\"mediaId\" = media.id AND c.\"tmdbId\" = ")
+            .push_bind(v)
+            .push(")");
+    }
     for (col, v) in [
-        ("tmdbCollectionId", p.collection_id),
         ("qualityProfileId", p.quality_profile_id),
         ("languageProfileId", p.language_profile_id),
     ] {

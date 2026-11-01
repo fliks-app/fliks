@@ -30,7 +30,7 @@ pub async fn items_view(
   || jsonb_build_object(
     'additionalFanartUrls', to_jsonb(media."additionalFanartUrls"),
     'metadataRefreshedAt', iso_ms(media."metadataRefreshedAt"), 'rating', media.rating, 'genres', media.genres,
-    'tmdbCollectionId', media."tmdbCollectionId", 'tmdbCollectionName', media."tmdbCollectionName",
+    'tmdbCollectionId', coll."tmdbId", 'tmdbCollectionName', coll.name,
     'runtime', media.runtime, 'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
     'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
     'minimumAvailability', media."minimumAvailability")
@@ -69,6 +69,7 @@ FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
 LEFT JOIN quality_profiles qp ON qp.id = media."qualityProfileId"
 LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"
+LEFT JOIN media_tmdb_collection coll ON coll."mediaId" = media.id
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb
@@ -176,16 +177,12 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
     Ok(Some(media))
 }
 
-/// The `media_metadata` rows of `ids` (`media-query.md` rule 31), by media id.
+/// The `metadata` objects of `ids` (`media-query.md` rule 31), by media id.
 pub async fn metadata(db: &PgPool, ids: &[i32]) -> Result<HashMap<i32, Value>, sqlx::Error> {
     let rows = sqlx::query!(
-        r#"SELECT mm."mediaId" AS "media_id!",
-  jsonb_build_object('id', mm.id, 'createdAt', iso_ms(mm."createdAt"), 'updatedAt', iso_ms(mm."updatedAt"),
-      'budget', mm.budget::text, 'revenue', mm.revenue::text, 'tagline', mm.tagline, 'popularity', mm.popularity,
-      'voteCount', mm."voteCount", 'originalLanguage', mm."originalLanguage",
-      'productionCountries', mm."productionCountries", 'productionCompanies', mm."productionCompanies",
-      'videos', mm.videos, 'keywords', mm.keywords) AS "json!: Value"
-FROM media_metadata mm WHERE mm."mediaId" = ANY($1)"#,
+        r#"SELECT d.id AS "media_id!", d.json AS "json!: Value"
+FROM (SELECT i AS id, media_details_json(i) AS json FROM UNNEST($1::int[]) AS i) d
+WHERE d.json IS NOT NULL"#,
         ids
     )
     .fetch_all(db)
