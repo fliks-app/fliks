@@ -77,7 +77,7 @@ pub async fn upsert(db: &PgPool, update: bool, s: &Sidecar<'_>) -> sqlx::Result<
         }
         None => {
             sqlx::query!(
-                r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", "episodeId", language, forced,
+                r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", "itemId", language, forced,
                           "hearingImpaired", "providerType", status, score, "filePath", tags)
                    VALUES ($1, $2, $3, $4, $5, $6, $7::text::subtitle_files_providertype_enum,
                            'downloaded', 100, $8, $9)"#,

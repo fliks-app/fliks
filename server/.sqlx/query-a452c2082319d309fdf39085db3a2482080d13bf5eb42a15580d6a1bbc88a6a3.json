@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM content_recommendations\n           WHERE \"senderId\" = $1 AND \"recipientId\" = $2 AND \"mediaId\" = $3\n             AND \"groupId\" IS NOT DISTINCT FROM $4 AND \"itemId\" IS NOT DISTINCT FROM $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a452c2082319d309fdf39085db3a2482080d13bf5eb42a15580d6a1bbc88a6a3"
+}

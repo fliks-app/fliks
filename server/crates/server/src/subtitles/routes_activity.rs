@@ -91,14 +91,14 @@ struct ItemRow {
 }
 
 const ITEM_SELECT: &str = r#"SELECT sf.id, sf."mediaId" AS media_id, m.title AS media_title, m."type" AS media_type,
-  COALESCE(sf."episodeId", fe.id) AS episode_id, COALESCE(es."number", fs."number") AS season_number,
+  COALESCE(sf."itemId", fe.id) AS episode_id, COALESCE(es."number", fs."number") AS season_number,
   COALESCE(e."number", fe."number") AS episode_number, COALESCE(e.title, fe.title) AS episode_title,
   sf.language, sf."providerType"::text AS provider_type, sf.score, sf.status::text AS status, sf.forced,
   sf."hearingImpaired" AS hearing_impaired, sf.synced, sf."syncFailed" AS sync_failed,
   sf."errorMessage" AS error_message, sf."createdAt" AS created_at
   FROM subtitle_files sf
   LEFT JOIN media m ON m.id = sf."mediaId"
-  LEFT JOIN items e ON e.id = sf."episodeId" LEFT JOIN item_groups es ON es.id = e."groupId"
+  LEFT JOIN items e ON e.id = sf."itemId" LEFT JOIN item_groups es ON es.id = e."groupId"
   LEFT JOIN media_files mf ON mf.id = sf."mediaFileId"
   LEFT JOIN items fe ON fe.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) LEFT JOIN item_groups fs ON fs.id = fe."groupId""#;
 

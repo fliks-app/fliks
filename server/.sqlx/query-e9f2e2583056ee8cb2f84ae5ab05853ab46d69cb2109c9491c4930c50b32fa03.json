@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO likes (\"userId\", \"mediaId\", \"groupId\", \"itemId\")\n           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e9f2e2583056ee8cb2f84ae5ab05853ab46d69cb2109c9491c4930c50b32fa03"
+}

@@ -127,12 +127,12 @@ pub fn compile(
         "season" => (
             r#"s.id AS "seasonId", NULL::int AS "episodeId", s."number" AS "seasonNumber", NULL::int AS "episodeNumber""#,
             r#"media JOIN item_groups s ON s."mediaId" = media.id"#,
-            r#" AND (x."seasonId" IS NULL OR x."seasonId" = s.id)"#,
+            r#" AND (x."groupId" IS NULL OR x."groupId" = s.id)"#,
         ),
         "episode" => (
             r#"s.id AS "seasonId", e.id AS "episodeId", s."number" AS "seasonNumber", e."number" AS "episodeNumber""#,
             r#"media JOIN item_groups s ON s."mediaId" = media.id JOIN items e ON e."groupId" = s.id"#,
-            r#" AND (x."seasonId" IS NULL OR x."seasonId" = s.id) AND (x."episodeId" IS NULL OR x."episodeId" = e.id)"#,
+            r#" AND (x."groupId" IS NULL OR x."groupId" = s.id) AND (x."itemId" IS NULL OR x."itemId" = e.id)"#,
         ),
         _ => (
             r#"NULL::int AS "seasonId", NULL::int AS "episodeId", NULL::int AS "seasonNumber", NULL::int AS "episodeNumber""#,
@@ -378,7 +378,7 @@ struct Recommendation {
 /// merged by media, without the whole-media candidates, biggest first.
 pub async fn recommendations(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Value> {
     let flagged: HashSet<i32> = sqlx::query_scalar(
-        r#"SELECT "mediaId" FROM cleanup_candidates WHERE "seasonId" IS NULL AND "episodeId" IS NULL"#,
+        r#"SELECT "mediaId" FROM cleanup_candidates WHERE "groupId" IS NULL AND "itemId" IS NULL"#,
     )
     .fetch_all(db)
     .await?

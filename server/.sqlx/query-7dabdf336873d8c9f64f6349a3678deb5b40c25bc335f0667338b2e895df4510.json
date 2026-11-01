@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.\"mediaId\" AS media_id, l.\"seasonId\" AS season_id, l.\"episodeId\" AS episode_id\n           FROM likes l WHERE l.\"userId\" = $1 AND l.\"mediaId\" = ANY($2)",
+  "query": "SELECT l.\"mediaId\" AS media_id, l.\"groupId\" AS season_id, l.\"itemId\" AS episode_id\n           FROM likes l WHERE l.\"userId\" = $1 AND l.\"mediaId\" = ANY($2)",
   "describe": {
     "columns": [
       {
@@ -21,7 +21,7 @@
         "origin": {
           "Table": {
             "table": "likes",
-            "name": "seasonId"
+            "name": "groupId"
           }
         }
       },
@@ -32,7 +32,7 @@
         "origin": {
           "Table": {
             "table": "likes",
-            "name": "episodeId"
+            "name": "itemId"
           }
         }
       }
@@ -49,5 +49,5 @@
       true
     ]
   },
-  "hash": "5002c314daa89517826ca8de9b624dab497797f4363d210f74aab21a7409656e"
+  "hash": "7dabdf336873d8c9f64f6349a3678deb5b40c25bc335f0667338b2e895df4510"
 }

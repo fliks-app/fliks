@@ -5,7 +5,7 @@ use sqlx::{FromRow, PgExecutor};
 
 /// Column list of a [`Row`]; enums read as text.
 pub const COLS: &str = r#"id, "createdAt" AS created_at, "updatedAt" AS updated_at, "mediaId" AS media_id,
-  "episodeId" AS episode_id, "mediaFileId" AS media_file_id, language, forced,
+  "itemId" AS episode_id, "mediaFileId" AS media_file_id, language, forced,
   "hearingImpaired" AS hearing_impaired, "providerType"::text AS provider_type,
   "providerFileId" AS provider_file_id, "filePath" AS file_path, status::text AS status,
   "streamIndex" AS stream_index, "sourceStreamIndex" AS source_stream_index, codec, score,
@@ -128,7 +128,7 @@ pub struct Inserted {
 
 pub async fn insert(db: impl PgExecutor<'_>, n: &New) -> sqlx::Result<Inserted> {
     let r: (i32, DateTime<Utc>, DateTime<Utc>) = sqlx::query_as(
-        r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", "episodeId", language, forced,
+        r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", "itemId", language, forced,
              "hearingImpaired", "providerType", "providerFileId", "filePath", status, "streamIndex",
              "sourceStreamIndex", codec, score, "hashMatched", synced, locked, tags,
              "translationProviderId", "translationEngine", "translationModel", "translationProviderName")
