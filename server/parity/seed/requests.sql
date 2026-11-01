@@ -4,8 +4,11 @@ INSERT INTO roles (id, "createdAt", "updatedAt", name, permissions, "isDefault")
  (5, '2026-01-01', '2026-01-01', 'Validator', '["media.read","requests.create","requests.manage"]', false);
 INSERT INTO users (id, "createdAt", "updatedAt", username, email, "passwordHash", "roleId", "isAdmin") VALUES
  (6, '2026-01-01', '2026-01-01', 'validator', 'validator@parity.test', '$2b$10$QqKxvC..siIi7O4vTWwwpOKQoFL65PNMJ68uix7h6yDYu01SPUBu6', 5, false);
-INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", path) VALUES
- (3, '2026-01-01', '2026-01-01', 'More Movies', 'film', '#ef4444', '["movie"]', '/tmp/fliks-parity/s5-requests/media/more');
+INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes") VALUES
+ (3, '2026-01-01', '2026-01-01', 'More Movies', 'film', '#ef4444', '["movie"]');
+INSERT INTO library_folders (id, "createdAt", "updatedAt", "libraryId", path) VALUES
+ (3, '2026-01-01', '2026-01-01', 3, '/tmp/fliks-parity/s5-requests/media/more');
+SELECT setval('library_folders_id_seq', 3);
 SELECT setval('libraries_id_seq', 3);
 INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 6), (3, 6);
 

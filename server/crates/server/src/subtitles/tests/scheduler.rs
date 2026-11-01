@@ -215,8 +215,8 @@ async fn an_upgrade_of_a_hash_matched_row_needs_a_hash_matched_candidate(pool: P
     only_english(&c).await;
     provider(&c, "subdl").await;
     one_hit(&c);
-    let stored = "Movie.2020.1080p.BluRay.x264-GRP.en.srt";
-    std::fs::write(c.dir.join(stored), SRT).unwrap();
+    let stored = "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt";
+    std::fs::write(c.root.join(stored), SRT).unwrap();
     let id = row(&c, "en", "subdl", Some(stored), None, None).await;
     sqlx::query(r#"UPDATE subtitle_files SET score = 10, "hashMatched" = true WHERE id = $1"#)
         .bind(id)

@@ -157,7 +157,12 @@ pub async fn items(
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
                     'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
                     'qualityProfileId', w."qualityProfileId", 'minimumAvailability', w."minimumAvailability") AS "media!: Jsonb<Value>",
-                  to_jsonb(l) AS "library!: Jsonb<Value>",
+                  jsonb_build_object('id', l.id, 'createdAt', l."createdAt", 'updatedAt', l."updatedAt",
+                    'name', l.name, 'icon', l.icon, 'color', l.color, 'mediaTypes', l."mediaTypes",
+                    'preferredProvider', l."preferredProvider", 'path', df.path, 'label', NULL,
+                    'metadataLanguage', l."metadataLanguage", 'metadataRegion', l."metadataRegion",
+                    'defaultQualityProfileId', l."defaultQualityProfileId",
+                    'defaultLanguageProfileId', l."defaultLanguageProfileId") AS "library!: Jsonb<Value>",
                   to_jsonb(q) - 'family' AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
                   COALESCE(to_jsonb(md) - 'mediaId' - 'kind',
@@ -180,6 +185,7 @@ pub async fn items(
            JOIN items e ON e.id = pi."itemId"
            JOIN media m ON m.id = e."mediaId"
            JOIN libraries l ON l.id = m."libraryId" AND l.id = ANY($2)
+           LEFT JOIN library_default_folders df ON df."libraryId" = l.id
            LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $4)::int AS tmdb,
              max(value) FILTER (WHERE provider = $5)::int AS tvdb,
              max(value) FILTER (WHERE provider = $6) AS imdb

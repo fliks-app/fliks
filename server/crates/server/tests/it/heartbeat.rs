@@ -76,6 +76,13 @@ async fn ctx(pool: PgPool) -> Ctx {
 
 async fn ctx_with(pool: PgPool, engine: Option<&str>) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (name) VALUES ('fixture');
+           INSERT INTO library_folders ("libraryId", path) SELECT id, '/fixture' FROM libraries"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let cfg = Config::from_lookup(|k| match k {
         "FLIKS_ENGINE_URL" => engine.map(Into::into),
         "FLIKS_ENGINE_TOKEN" => engine.map(|_| "tok".into()),
@@ -98,7 +105,7 @@ async fn ctx_with(pool: PgPool, engine: Option<&str>) -> Ctx {
             .await
             .unwrap();
     let file: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId") VALUES ('x', 1, 'q', $1) RETURNING id"#,
+        r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId") VALUES ('x', 1, 'q', $1, (SELECT min(id) FROM library_folders)) RETURNING id"#,
     )
     .bind(media)
     .fetch_one(&pool)
@@ -504,7 +511,7 @@ async fn a_file_bound_stream_token_beats_only_for_its_own_file(pool: PgPool) {
             .await
             .unwrap();
     let other_file: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId") VALUES ('y', 1, 'q', $1) RETURNING id"#,
+        r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId") VALUES ('y', 1, 'q', $1, (SELECT min(id) FROM library_folders)) RETURNING id"#,
     )
     .bind(other_media)
     .fetch_one(&c.pool)

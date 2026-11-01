@@ -220,8 +220,8 @@ async fn refresh_loop(
 }
 
 const ALL_MEDIA: &str = r#"SELECT id, title, "type" FROM media ORDER BY id"#;
-const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type" FROM media m JOIN libraries l ON l.id = m."libraryId"
-    WHERE l.path IS NOT NULL AND l.path <> '' AND (
+const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type" FROM media m JOIN library_default_folders df ON df."libraryId" = m."libraryId"
+    WHERE (
         (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AND COALESCE(m."folderName", '') <> '')
         OR (m."type" = ANY($1)
             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id

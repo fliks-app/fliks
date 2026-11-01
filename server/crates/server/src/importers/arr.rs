@@ -14,7 +14,7 @@ use fliks_domain::{
     },
     media::{
         kind::MediaKind,
-        path::{join, media_path, normalize},
+        path::{join, normalize},
     },
     metadata::limiter::Priority,
     naming::validate_folder_name,
@@ -665,11 +665,9 @@ async fn sonarr_series_subtitles(
     let Some(local) = db::series_by_tmdb(&st.db, tmdb).await.map_err(db_err)? else {
         return Ok(0);
     };
-    let Some(root) = media_path(local.library_path.as_deref(), local.folder_name.as_deref()) else {
-        return Ok(0);
-    };
     let mut count = 0;
     for file in db::series_files(&st.db, local.id).await.map_err(db_err)? {
+        let root = file.folder_path.clone();
         let video = join(&root, &file.relative_path);
         let dir = video.rsplit_once('/').map_or(".", |(d, _)| d).to_owned();
         let names = {

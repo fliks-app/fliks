@@ -2247,3 +2247,245 @@ async fn m1789000200_keeps_the_sort_creator_of_a_book_current(pool: PgPool) {
     sql(&pool, r#"UPDATE media SET title = 'b2' WHERE id = 1"#).await;
     assert_eq!(bumped(&pool).await, 1, "any other change does");
 }
+
+async fn m195_error(pool: &PgPool) -> String {
+    let m = MIGRATOR
+        .iter()
+        .find(|m| m.version == 1_789_000_000_195)
+        .unwrap();
+    sqlx::raw_sql(m.sql.as_ref())
+        .execute(pool)
+        .await
+        .expect_err("the migration refuses")
+        .to_string()
+}
+
+async fn count(pool: &PgPool, table: &str) -> i64 {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000195_moves_library_paths_into_folders_and_files_under_them(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_195).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m/a/'), (2, 'b', ''), (3, 'c', NULL), (4, 'd', '//m//d//'), (5, 'e', '/');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+             (1, 'root movie', 'movie', 1, ''), (2, 'show', 'series', 1, 'Show'), (3, 'other', 'movie', 4, 'Other'),
+             (4, 'unfiled', 'movie', 3, 'X');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "createdAt", "updatedAt") VALUES
+             (1, 1, 'r.mkv', 1, 'q', '2026-01-01', '2026-01-02'), (2, 2, 'Season 01/e1.mkv', 1, 'q', '2026-01-01', '2026-01-02'),
+             (3, 3, 'r.mkv', 1, 'q', '2026-01-01', '2026-01-02'), (4, 3, 'a..b/..c.mkv', 1, 'q', '2026-01-01', '2026-01-02');
+           INSERT INTO subtitle_files (id, language, "providerType", "filePath", "mediaId") VALUES
+             (1, 'en', 'disk', 'r.en.srt', 1), (2, 'en', 'disk', 'Season 01/e1.en.srt', 2), (3, 'en', 'embedded', NULL, 2),
+             (4, 'en', 'disk', '/m/a/Show/abs.srt', 2), (5, 'en', 'disk', '  ', 2), (6, 'en', 'disk', E' x.srt　', 2);
+           INSERT INTO wants ("mediaId", family) VALUES (1, 'video'), (2, 'video'), (4, 'video')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_195).await;
+
+    let folders: Vec<(i32, String, i32)> = rows(
+        &pool,
+        r#"SELECT "libraryId", path, position FROM library_folders ORDER BY "libraryId""#,
+    )
+    .await;
+    assert_eq!(
+        folders,
+        vec![
+            (1, "/m/a".into(), 0),
+            (4, "/m/d".into(), 0),
+            (5, "/".into(), 0)
+        ],
+        "an empty or null path is no folder; slashes collapse and the trailing one goes, except the root"
+    );
+    let files: Vec<(i32, String, String, bool)> = rows(
+        &pool,
+        r#"SELECT f.id, lf.path, f."relativePath", f."updatedAt" = '2026-01-02' FROM media_files f
+           JOIN library_folders lf ON lf.id = f."folderId" ORDER BY f.id"#,
+    )
+    .await;
+    assert_eq!(
+        files,
+        vec![
+            (1, "/m/a".into(), "r.mkv".into(), true),
+            (2, "/m/a".into(), "Show/Season 01/e1.mkv".into(), true),
+            (3, "/m/d".into(), "Other/r.mkv".into(), true),
+            (4, "/m/d".into(), "Other/a..b/..c.mkv".into(), true),
+        ],
+        "a media folder becomes a prefix of its files; updatedAt is kept; `..` inside a name is fine"
+    );
+    let subs: Vec<(i32, Option<String>)> = rows(
+        &pool,
+        r#"SELECT id, "filePath" FROM subtitle_files ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(
+        subs,
+        vec![
+            (1, Some("r.en.srt".into())),
+            (2, Some("Show/Season 01/e1.en.srt".into())),
+            (3, None),
+            (4, Some("/m/a/Show/abs.srt".into())),
+            (5, Some("  ".into())),
+            (6, Some("Show/x.srt".into())),
+        ],
+        "only relative sidecar paths take the folder prefix, trimmed like the readers do"
+    );
+    let pinned: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM wants WHERE "folderId" IS NOT NULL"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pinned, 0, "a want follows its library's default folder");
+    let defaults: Vec<(i32, String)> = rows(
+        &pool,
+        r#"SELECT "libraryId", path FROM library_default_folders ORDER BY 1"#,
+    )
+    .await;
+    assert_eq!(
+        defaults,
+        vec![(1, "/m/a".into()), (4, "/m/d".into()), (5, "/".into())]
+    );
+    let gone: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM information_schema.columns WHERE table_name = 'libraries' AND column_name IN ('path', 'label')"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(gone, 0);
+
+    for bad in [
+        r#"INSERT INTO library_folders ("libraryId", path) VALUES (3, '/m/a')"#,
+        r#"INSERT INTO library_folders ("libraryId", path) VALUES (3, '')"#,
+        r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality) VALUES (1, 1, 'r.mkv', 1, 'q')"#,
+        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (1, 'new.mkv', 1, 'q')"#,
+        r#"DELETE FROM library_folders WHERE id = 1"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    for rel in [
+        "/abs.mkv",
+        "../x.mkv",
+        "a/../x.mkv",
+        "a/..",
+        "a//b.mkv",
+        "a\\b.mkv",
+    ] {
+        let q = format!(
+            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality) VALUES (1, 1, '{}', 1, 'q')"#,
+            rel.replace('\\', "\\\\")
+        );
+        assert!(
+            sqlx::raw_sql(sqlx::AssertSqlSafe(q))
+                .execute(&pool)
+                .await
+                .is_err(),
+            "{rel}"
+        );
+    }
+    sql(&pool, "DELETE FROM media WHERE id = 3").await;
+    sql(&pool, "DELETE FROM libraries WHERE id IN (4, 5)").await;
+    assert_eq!(
+        count(&pool, "library_folders").await,
+        1,
+        "a library takes its folders with it"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000195_refuses_rows_it_cannot_place_and_changes_nothing(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_195).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m'), (2, 'b', '/m/')"#,
+    )
+    .await;
+    let e = m195_error(&pool).await;
+    assert!(
+        e.contains("libraries 1, 2 share one path") && e.contains("psql"),
+        "{e}"
+    );
+
+    sql(
+        &pool,
+        r#"UPDATE libraries SET path = '/n' WHERE id = 2;
+           INSERT INTO libraries (id, name) VALUES (3, 'c');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+             (1, 'a', 'movie', 3, 'A'), (2, 'b', 'movie', NULL, 'B'), (3, 'c', 'movie', 1, 'C');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (1, 1, 'a.mkv', 1, 'q'), (2, 2, 'b.mkv', 1, 'q'), (3, 3, 'c.mkv', 1, 'q');
+           INSERT INTO subtitle_files (id, language, "providerType", "filePath", "mediaId") VALUES (1, 'en', 'disk', 'c.en.srt', 3);
+           INSERT INTO wants ("mediaId", family) VALUES (3, 'video')"#,
+    )
+    .await;
+    let e = m195_error(&pool).await;
+    assert!(
+        e.contains("2 media file(s) belong to no library folder (first ids: 1, 2)")
+            && e.contains("psql"),
+        "{e}"
+    );
+
+    sql(
+        &pool,
+        r#"DELETE FROM media_files WHERE id IN (1, 2);
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+             (4, 'd', 'movie', 1, 'C'), (5, 'e', 'movie', 1, '');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (4, 4, 'c.mkv', 1, 'q'), (5, 5, 'C/c.mkv', 1, 'q')"#,
+    )
+    .await;
+    let e = m195_error(&pool).await;
+    assert!(
+        e.contains("3 media file(s) would share one path in their folder (first ids: 3, 4, 5)")
+            && e.contains("psql"),
+        "{e}"
+    );
+
+    sql(
+        &pool,
+        r#"DELETE FROM media_files WHERE id IN (4, 5);
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (6, 5, '/abs.mkv', 1, 'q'), (7, 5, 'a/../b.mkv', 1, 'q'), (8, 5, 'a//b.mkv', 1, 'q'),
+             (9, 5, 'a\b.mkv', 1, 'q'), (10, 4, '../c.mkv', 1, 'q')"#,
+    )
+    .await;
+    let e = m195_error(&pool).await;
+    assert!(
+        e.contains("5 media file(s) have a relativePath that is absolute")
+            && e.contains("(first ids: 6, 7, 8, 9, 10)")
+            && e.contains("psql"),
+        "{e}"
+    );
+
+    for (table, rows) in [
+        ("libraries", 3),
+        ("media", 5),
+        ("media_files", 6),
+        ("subtitle_files", 1),
+        ("wants", 1),
+    ] {
+        assert_eq!(count(&pool, table).await, rows, "{table}");
+    }
+    let paths: Vec<(String,)> = rows(
+        &pool,
+        "SELECT path FROM libraries WHERE path IS NOT NULL ORDER BY id",
+    )
+    .await;
+    assert_eq!(paths, vec![("/m".to_string(),), ("/n".to_string(),)]);
+    let rel: Vec<(String,)> = rows(
+        &pool,
+        r#"SELECT "relativePath" FROM media_files ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(rel[0].0, "c.mkv");
+    let folders: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM information_schema.tables WHERE table_name = 'library_folders'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(folders, 0, "a refused migration is rolled back whole");
+}

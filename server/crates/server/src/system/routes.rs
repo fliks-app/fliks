@@ -141,16 +141,17 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>,
         sqlx::query_scalar::<_, i32>("SELECT count(*)::int FROM requests WHERE status = 'pending'")
             .fetch_one(&st.db)
             .await?;
-    let libs: Vec<(i32, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT id, name, label, path FROM libraries WHERE path IS NOT NULL AND path <> '' ORDER BY name ASC, id ASC",
+    let libs: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT l.name, df.path FROM libraries l
+           JOIN library_default_folders df ON df."libraryId" = l.id ORDER BY l.name ASC, l.id ASC"#,
     )
     .fetch_all(&st.db)
     .await?;
     let mut disk_space = vec![];
-    for (_, name, label, path) in libs {
+    for (name, path) in libs {
         let d = libraries::disk(&path).await;
         disk_space.push(DiskSpace {
-            label: label.unwrap_or(name),
+            label: name,
             path,
             free_space: d.free_space,
             total_space: d.total_space,

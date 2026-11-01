@@ -8,7 +8,7 @@ use crate::state::AppState;
 use axum::{Router, routing::get};
 
 pub use acl::{accessible_library_ids, assert_media_accessible, media_not_found};
-pub use db::paths_visible;
+pub use db::{Folder, paths_visible};
 pub use path::{disk, sanitize as sanitize_path};
 pub use routes::*;
 

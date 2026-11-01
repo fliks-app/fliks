@@ -130,8 +130,9 @@ async fn ctx_with(pool: PgPool, tvdb_key: &str) -> Ctx {
         tokens.push((id, st.jwt.sign_access(id, name).unwrap().token));
     }
     // library 1 is readable by `reader`, library 2 is not
-    sqlx::query(
-        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'A', '/tmp/a'), (2, 'B', '/tmp/b')"#,
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (id, name) VALUES (1, 'A'), (2, 'B');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/tmp/a'), (2, '/tmp/b')"#,
     )
     .execute(&pool)
     .await

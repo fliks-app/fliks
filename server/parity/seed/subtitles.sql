@@ -7,12 +7,12 @@ UPDATE media SET "languageProfileId" = 2 WHERE id IN (1, 2);
 INSERT INTO subtitle_files (id, "createdAt", "updatedAt", "mediaId", "mediaFileId", language, forced, "hearingImpaired", "providerType", "providerFileId", "filePath", status, "streamIndex", "sourceStreamIndex", codec, score, "hashMatched", synced, locked) VALUES
  (1, '2026-02-01 10:00', '2026-02-01 10:00', 1, 1, 'en', false, false, 'embedded', NULL, NULL, 'embedded', 1, NULL, 'subrip', 100, false, false, false),
  (2, '2026-02-02 10:00', '2026-02-02 10:00', 1, 1, 'und', false, false, 'embedded', NULL, NULL, 'embedded', 2, NULL, 'hdmv_pgs_subtitle', 100, false, false, false),
- (3, '2026-02-03 10:00', '2026-02-03 10:00', 1, 1, 'fr', false, false, 'disk', NULL, 'Parity Movie 01 (2020).fr.srt', 'downloaded', NULL, NULL, NULL, 100, false, true, false),
- (4, '2026-02-04 10:00', '2026-02-04 10:00', 1, 1, 'en', false, true, 'opensubtitles', '99', 'Parity Movie 01 (2020).en.hi.srt', 'downloaded', NULL, NULL, 'subrip', 55, false, false, false),
+ (3, '2026-02-03 10:00', '2026-02-03 10:00', 1, 1, 'fr', false, false, 'disk', NULL, 'Parity Movie 01 (2020)/Parity Movie 01 (2020).fr.srt', 'downloaded', NULL, NULL, NULL, 100, false, true, false),
+ (4, '2026-02-04 10:00', '2026-02-04 10:00', 1, 1, 'en', false, true, 'opensubtitles', '99', 'Parity Movie 01 (2020)/Parity Movie 01 (2020).en.hi.srt', 'downloaded', NULL, NULL, 'subrip', 55, false, false, false),
  (5, '2026-02-05 10:00', '2026-02-05 10:00', 1, 1, 'fr', false, false, 'ocr', NULL, NULL, 'failed', NULL, 2, 'subrip', 100, false, false, false),
- (6, '2026-02-06 10:00', '2026-02-06 10:00', 2, 2, 'de', true, false, 'disk', NULL, 'Parity Movie 02 (2020).de.forced.srt', 'downloaded', NULL, NULL, NULL, 100, false, true, false),
+ (6, '2026-02-06 10:00', '2026-02-06 10:00', 2, 2, 'de', true, false, 'disk', NULL, 'Parity Movie 02 (2020)/Parity Movie 02 (2020).de.forced.srt', 'downloaded', NULL, NULL, NULL, 100, false, true, false),
  (7, '2026-02-07 10:00', '2026-02-07 10:00', 1, 1, 'en', false, false, 'embedded', NULL, NULL, 'embedded', 3, NULL, 'dvb_subtitle', 100, false, false, false),
- (8, '2026-02-08 10:00', '2026-02-08 10:00', 1, 1, 'en', false, false, 'disk', NULL, 'Parity Movie 01 (2020).pgs.sup', 'downloaded', NULL, NULL, 'hdmv_pgs_subtitle', 100, false, true, false);
+ (8, '2026-02-08 10:00', '2026-02-08 10:00', 1, 1, 'en', false, false, 'disk', NULL, 'Parity Movie 01 (2020)/Parity Movie 01 (2020).pgs.sup', 'downloaded', NULL, NULL, 'hdmv_pgs_subtitle', 100, false, true, false);
 UPDATE subtitle_files SET "errorMessage" = 'activity.subtitle_error_interrupted' WHERE id = 5;
 INSERT INTO subtitle_providers (id, "createdAt", "updatedAt", name, type, enabled, settings, priority) VALUES
  (1, '2026-01-01', '2026-01-01', 'OpenSubtitles', 'opensubtitles', false, '{"username":"u","password":"secret","apiKey":"key"}', 1),

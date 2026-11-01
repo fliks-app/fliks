@@ -19,8 +19,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-const LIBRARY: &str = r#"INSERT INTO libraries (id, name, "mediaTypes", path)
-    VALUES (1, 'Movies', '["movie"]', '/nonexistent/m')"#;
+const LIBRARY: &str = r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m')"#;
 
 /// One call of the fixture's `/test/<route>`, answered as JSON.
 async fn call(h: &H, route: &str, q: &[(&str, &str)]) -> Value {
@@ -62,8 +62,8 @@ async fn denied(tag: &str, scopes: Value, missing: &str) {
         "active"
     );
     sqlx::raw_sql(
-        r#"INSERT INTO libraries (id, name, "mediaTypes", path)
-             VALUES (1, 'Movies', '["movie"]', '/nonexistent/m');
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
            INSERT INTO media (id, title, type) VALUES (7, 'Held', 'movie');
            INSERT INTO media_external_ids ("mediaId", kind, provider, value)
              VALUES (7, 'movie', 'tmdb', '603');"#,
@@ -204,7 +204,7 @@ async fn concurrent_creates_of_one_title_make_one_media() {
     let Some(s) = Scratch::create("create_race").await else {
         return;
     };
-    sqlx::query(LIBRARY).execute(&s.pool).await.unwrap();
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, hits) = state_with_tmdb(&s).await;
     let mut rx = st.hub.subscribe();
     let calls = (0..5).map(|_| {
@@ -265,8 +265,8 @@ async fn a_user_request_and_a_plugin_create_make_one_media() {
     let (st, _) = state_with_tmdb(&s).await;
     let mut rx = st.hub.subscribe();
     sqlx::raw_sql(
-        r#"INSERT INTO libraries (id, name, "mediaTypes", path)
-             VALUES (1, 'Movies', '["movie"]', '/nonexistent/m');
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
            INSERT INTO auto_approval_rules (name, enabled, criteria)
              VALUES ('all', true, '{"mediaType":"movie"}');
            INSERT INTO roles (id, name, permissions)

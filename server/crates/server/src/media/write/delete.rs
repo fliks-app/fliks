@@ -21,7 +21,10 @@ use std::{collections::HashMap, path::PathBuf};
 
 /// Rule 70: the folder a media delete may remove, `Err` with the reason it is kept.
 pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<PathBuf>, String> {
-    let (Some(lib), Some(folder)) = (m.library_path.as_deref(), m.folder_name.as_deref()) else {
+    let (Some(lib), Some(folder)) = (
+        m.folder.as_ref().map(|f| f.path.as_str()),
+        m.folder_name.as_deref(),
+    ) else {
         return Ok(None);
     };
     if folder.is_empty() || lib.is_empty() {
@@ -37,18 +40,17 @@ pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<P
             return Ok(None);
         }
     };
-    let roots: Vec<PathBuf> = sqlx::query_scalar!(
-        r#"SELECT path AS "path!" FROM libraries WHERE path IS NOT NULL AND path <> ''"#
-    )
-    .fetch_all(&st.db)
-    .await
-    .map_err(|e| e.to_string())?
-    .into_iter()
-    .map(PathBuf::from)
-    .collect();
+    let roots: Vec<PathBuf> = sqlx::query_scalar!(r#"SELECT path FROM library_folders"#)
+        .fetch_all(&st.db)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
     let others: Vec<PathBuf> = sqlx::query!(
-        r#"SELECT l.path AS "lib!", m."folderName" AS "folder!" FROM media m JOIN libraries l ON l.id = m."libraryId"
-           WHERE m.id <> $1 AND m."folderName" <> '' AND l.path IS NOT NULL"#,
+        r#"SELECT df.path AS "lib!", m."folderName" AS "folder!" FROM media m
+           JOIN library_default_folders df ON df."libraryId" = m."libraryId"
+           WHERE m.id <> $1 AND m."folderName" <> ''"#,
         m.id
     )
     .fetch_all(&st.db)
@@ -192,24 +194,22 @@ pub async fn delete_media_file(
     on_disk: bool,
 ) -> Result<(), AppError> {
     let f = sqlx::query!(
-        r#"SELECT "relativePath" AS rel FROM media_files WHERE id = $1 AND "mediaId" = $2"#,
+        r#"SELECT f."relativePath" AS rel, lf.path AS folder FROM media_files f
+           JOIN library_folders lf ON lf.id = f."folderId" WHERE f.id = $1 AND f."mediaId" = $2"#,
         file_id,
         media.id
     )
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(|| AppError::not_found(format!("File #{file_id} not found")))?;
-    if on_disk && let Some(lib) = media.library_path.as_deref().filter(|l| !l.is_empty()) {
+    if on_disk && !f.folder.is_empty() {
         let rel = fsx::safe_rel(&f.rel).ok_or_else(invalid_path)?;
-        match fsx::Root::open(lib) {
+        match fsx::Root::open(&f.folder) {
             Err(e) => {
                 tracing::warn!("file #{file_id}: library root unavailable ({e}), nothing unlinked")
             }
             Ok(root) => {
-                let full = root
-                    .media_dir(media.folder_name.as_deref())
-                    .map_err(|_| invalid_path())?
-                    .join(rel);
+                let full = root.path().join(rel);
                 match fsx::unlink_contained(&root, &full) {
                     Ok(fsx::Unlinked::Removed) => {}
                     Ok(fsx::Unlinked::Missing) => {

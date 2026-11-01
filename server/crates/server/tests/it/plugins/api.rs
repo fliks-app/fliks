@@ -988,7 +988,8 @@ async fn releases_match_and_score() {
     };
     let h = harness(&s, "releases", |_| {}).await;
     sqlx::raw_sql(
-        r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1, 'Movies', '["movie"]', '/nonexistent/m');
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
            INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
            INSERT INTO media (id, title, type, "libraryId", "folderName", year, monitored)
              VALUES (1, 'Big Buck Bunny', 'movie', 1, 'bbb', 2008, true),

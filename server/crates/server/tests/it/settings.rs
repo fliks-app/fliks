@@ -477,7 +477,8 @@ async fn setup_checklist_items_and_dismissal(pool: PgPool) {
 async fn sidebar_counts(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     sqlx::raw_sql(
-        r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1, 'M', '["movie"]', '/nonexistent/m');
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'M', '["movie"]');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (1, 'A', 'movie', 1, 'a'), (2, 'B', 'movie', 1, 'b');
            INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (1, 'movie', 'tmdb', '1'), (2, 'movie', 'tmdb', '2');
            INSERT INTO requests ("userId", "mediaType", provider, "externalId", title, status)

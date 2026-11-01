@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT df.path AS \"lib!\", m.\"folderName\" AS \"folder!\" FROM media m\n           JOIN library_default_folders df ON df.\"libraryId\" = m.\"libraryId\"\n           WHERE m.id <> $1 AND m.\"folderName\" <> ''",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "lib!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_default_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "folder!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "folderName"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "d9c0bae41e309be7be86d7f061a5debbb989a70f8b4f5a0ea8ec6c319ac925fd"
+}

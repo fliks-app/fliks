@@ -61,8 +61,8 @@ async fn a_subtitle_is_translated_through_an_openai_compatible_endpoint(pool: Pg
     let c = ctx(pool).await;
     echo_server(&c.stub);
     let pid = openai_provider(&c).await;
-    let stored = "Movie.2020.1080p.BluRay.x264-GRP.en.srt";
-    std::fs::write(c.dir.join(stored), SRT).unwrap();
+    let stored = "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt";
+    std::fs::write(c.root.join(stored), SRT).unwrap();
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", language, "providerType", "filePath", status, codec, score)
            VALUES ($1, $2, 'en', 'disk', $3, 'downloaded', 'subrip', 80) RETURNING id"#,
@@ -155,8 +155,8 @@ async fn a_subtitle_is_translated_through_an_openai_compatible_endpoint(pool: Pg
         .fetch_one(&c.pool)
         .await
         .unwrap();
-    assert_eq!(path, "Movie.2020.1080p.BluRay.x264-GRP.fr.srt");
-    let out = std::fs::read_to_string(c.dir.join(&path)).unwrap();
+    assert_eq!(path, "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.fr.srt");
+    let out = std::fs::read_to_string(c.root.join(&path)).unwrap();
     assert!(
         out.contains("Hello there.!")
             && out.contains("Second line.!")
@@ -215,8 +215,8 @@ async fn a_rate_limited_engine_fails_the_run_with_its_scope(pool: PgPool) {
     );
     let pid = openai_provider(&c).await;
     enable(&c).await;
-    let stored = "Movie.2020.1080p.BluRay.x264-GRP.en.srt";
-    std::fs::write(c.dir.join(stored), SRT).unwrap();
+    let stored = "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt";
+    std::fs::write(c.root.join(stored), SRT).unwrap();
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", language, "providerType", "filePath", status, codec, score)
            VALUES ($1, $2, 'en', 'disk', $3, 'downloaded', 'subrip', 80) RETURNING id"#,

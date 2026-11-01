@@ -20,15 +20,15 @@
               "fanartUrl": null,
               "files": [
                 {
-                  "createdAt": "2026-02-05T01:00:00.000Z",
-                  "episodeId": 2,
-                  "id": 19,
+                  "createdAt": "2026-02-03T12:00:00.000Z",
+                  "episodeId": 1,
+                  "id": 18,
                   "language": "en",
                   "mediaId": 18,
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series A - S01E02.mkv",
+                  "relativePath": "Parity Series A/Season 01/Parity Series A - S01E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -79,15 +79,15 @@
                   "updatedAt": "2026-01-01T00:00:00.000Z"
                 },
                 {
-                  "createdAt": "2026-02-03T12:00:00.000Z",
-                  "episodeId": 1,
-                  "id": 18,
+                  "createdAt": "2026-02-05T01:00:00.000Z",
+                  "episodeId": 2,
+                  "id": 19,
                   "language": "en",
                   "mediaId": 18,
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series A - S01E01.mkv",
+                  "relativePath": "Parity Series A/Season 01/Parity Series A - S01E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -146,7 +146,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series A - S02E01.mkv",
+                  "relativePath": "Parity Series A/Season 02/Parity Series A - S02E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -205,7 +205,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series A - S02E02.mkv",
+                  "relativePath": "Parity Series A/Season 02/Parity Series A - S02E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -333,7 +333,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series B - S01E01.mkv",
+                  "relativePath": "Parity Series B/Season 01/Parity Series B - S01E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -392,7 +392,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series B - S01E02.mkv",
+                  "relativePath": "Parity Series B/Season 01/Parity Series B - S01E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -451,7 +451,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series B - S02E01.mkv",
+                  "relativePath": "Parity Series B/Season 02/Parity Series B - S02E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -510,7 +510,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series B - S02E02.mkv",
+                  "relativePath": "Parity Series B/Season 02/Parity Series B - S02E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -630,15 +630,15 @@
               "fanartUrl": null,
               "files": [
                 {
-                  "createdAt": "2026-02-04T18:00:00.000Z",
-                  "episodeId": 10,
-                  "id": 27,
+                  "createdAt": "2026-02-03T05:00:00.000Z",
+                  "episodeId": 9,
+                  "id": 26,
                   "language": "en",
                   "mediaId": 20,
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series C - S01E02.mkv",
+                  "relativePath": "Parity Series C/Season 01/Parity Series C - S01E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -689,15 +689,15 @@
                   "updatedAt": "2026-01-01T00:00:00.000Z"
                 },
                 {
-                  "createdAt": "2026-02-03T05:00:00.000Z",
-                  "episodeId": 9,
-                  "id": 26,
+                  "createdAt": "2026-02-04T18:00:00.000Z",
+                  "episodeId": 10,
+                  "id": 27,
                   "language": "en",
                   "mediaId": 20,
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series C - S01E01.mkv",
+                  "relativePath": "Parity Series C/Season 01/Parity Series C - S01E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -756,7 +756,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series C - S02E01.mkv",
+                  "relativePath": "Parity Series C/Season 02/Parity Series C - S02E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -815,7 +815,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series C - S02E02.mkv",
+                  "relativePath": "Parity Series C/Season 02/Parity Series C - S02E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -936,20 +936,6 @@
               "fanartUrl": null,
               "files": [
                 {
-                  "createdAt": "2026-02-04T00:00:00.000Z",
-                  "episodeId": 29,
-                  "id": 62,
-                  "language": "en",
-                  "mediaId": 47,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
-                  "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/e29.mkv",
-                  "size": 1000062,
-                  "streamInfo": null,
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
-                },
-                {
                   "createdAt": "2026-02-02T11:00:00.000Z",
                   "episodeId": 27,
                   "id": 61,
@@ -958,8 +944,22 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/e27.mkv",
+                  "relativePath": "Series Calendar (2020)/Season 01/e27.mkv",
                   "size": 1000061,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-02-04T00:00:00.000Z",
+                  "episodeId": 29,
+                  "id": 62,
+                  "language": "en",
+                  "mediaId": 47,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Series Calendar (2020)/Season 01/e29.mkv",
+                  "size": 1000062,
                   "streamInfo": null,
                   "updatedAt": "2026-01-01T00:00:00.000Z"
                 }
@@ -1033,24 +1033,6 @@
               "fanartUrl": null,
               "files": [
                 {
-                  "createdAt": "2026-02-05T03:00:00.000Z",
-                  "episodeId": 24,
-                  "id": 60,
-                  "language": "en",
-                  "mediaId": 45,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
-                  "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/e24.mkv",
-                  "size": 1000060,
-                  "streamInfo": {
-                    "audio": [],
-                    "subtitles": [],
-                    "video": []
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
-                },
-                {
                   "createdAt": "2026-02-03T14:00:00.000Z",
                   "episodeId": 23,
                   "id": 59,
@@ -1059,9 +1041,27 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/e23.mkv",
+                  "relativePath": "Series Half Watched (2020)/Season 01/e23.mkv",
                   "size": 1000059,
                   "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-02-05T03:00:00.000Z",
+                  "episodeId": 24,
+                  "id": 60,
+                  "language": "en",
+                  "mediaId": 45,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Series Half Watched (2020)/Season 01/e24.mkv",
+                  "size": 1000060,
+                  "streamInfo": {
+                    "audio": [],
+                    "subtitles": [],
+                    "video": []
+                  },
                   "updatedAt": "2026-01-01T00:00:00.000Z"
                 }
               ],
@@ -1140,7 +1140,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-720p",
-                  "relativePath": "Season 01/e13.mkv",
+                  "relativePath": "Series Multi (2020)/Season 01/e13.mkv",
                   "size": 1000057,
                   "streamInfo": null,
                   "updatedAt": "2026-01-01T00:00:00.000Z"
@@ -1300,7 +1300,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "Bluray-1080p",
-                  "relativePath": "Season 01/e20.mkv",
+                  "relativePath": "Series Watched (2020)/Season 01/e20.mkv",
                   "size": 1000058,
                   "streamInfo": null,
                   "updatedAt": "2026-01-01T00:00:00.000Z"

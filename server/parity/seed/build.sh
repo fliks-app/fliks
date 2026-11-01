@@ -45,9 +45,12 @@ INSERT INTO users (id, username, email, "passwordHash", "roleId", "isAdmin", ava
  (3, 'readonly', 'readonly@parity.test', '$H_READONLY', 3, false, NULL),
  (4, 'other', 'other@parity.test', '$H_OTHER', 2, false, '/api/users/4/avatar?v=1767225600000'),
  (5, 'manager', 'manager@parity.test', '$H_MANAGER', 4, false, NULL);
-INSERT INTO libraries (id, name, icon, color, "mediaTypes", path) VALUES
- (1, 'Movies', 'film', '#3b82f6', '["movie"]', '/tmp/fliks-parity/media/movies'),
- (2, 'Series', 'tv', '#10b981', '["series"]', '/tmp/fliks-parity/media/series');
+INSERT INTO libraries (id, name, icon, color, "mediaTypes") VALUES
+ (1, 'Movies', 'film', '#3b82f6', '["movie"]'),
+ (2, 'Series', 'tv', '#10b981', '["series"]');
+INSERT INTO library_folders (id, "libraryId", path) VALUES
+ (1, 1, '/tmp/fliks-parity/media/movies'),
+ (2, 2, '/tmp/fliks-parity/media/series');
 INSERT INTO library_user_access ("libraryId", "userId") VALUES (1,2),(2,2),(1,3),(1,4),(2,4),(1,5),(2,5);
 INSERT INTO role_default_libraries ("roleId", "libraryId") VALUES (2,1),(2,2);
 INSERT INTO app_settings (key, value) VALUES ('parity_flag', 'on'), ('parity_json', '{"a":1}'), ('parity_null', NULL);
@@ -71,7 +74,7 @@ for n in range(1, 18):
     ext = "mp4" if n % 2 == 0 else "mkv"
     fid += 1
     i, size = info[ext]
-    files.append(f"({fid}, {n}, {q(folder+'.'+ext)}, {size}, 'WEBDL-1080p', 'en', '{i}')")
+    files.append(f"({fid}, {n}, 1, {q(folder+'/'+folder+'.'+ext)}, {size}, 'WEBDL-1080p', 'en', '{i}')")
     parts.append(f"({12 + n}, {fid}, {n}, 0)")
 sid = eid = 0
 for k, s in enumerate("ABC"):
@@ -86,7 +89,7 @@ for k, s in enumerate("ABC"):
             eid += 1; fid += 1
             episodes.append(f"({eid}, {ep}, {q(f'Episode {ep}')}, {sid}, {mid}, {mid})")
             i, size = info["mkv"]
-            files.append(f"({fid}, {mid}, {q(f'Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
+            files.append(f"({fid}, {mid}, 2, {q(f'{title}/Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
             parts.append(f"({eid}, {fid}, {mid}, 0)")
 print('INSERT INTO media (id, title, year, type, overview, status, monitored, "folderName", rating, genres, runtime, "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
 print('INSERT INTO media_release_dates ("mediaId", kind, date) VALUES\n ' + ",\n ".join(dates) + ";")
@@ -96,7 +99,7 @@ print('INSERT INTO wants ("mediaId", family) SELECT id, \'video\' FROM media ORD
 print('INSERT INTO item_groups (id, "number", "mediaId") VALUES\n ' + ",\n ".join(seasons) + ";")
 print('INSERT INTO items (id, "number", title, "groupId", "mediaId", "editionId") VALUES\n ' + ",\n ".join(episodes) + ";")
 print('INSERT INTO items (id, "mediaId", "editionId") SELECT 12 + id, id, id FROM media WHERE type = \'movie\' ORDER BY id;')
-print('INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
+print('INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, language, "streamInfo") VALUES\n ' + ",\n ".join(files) + ";")
 print('INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES\n ' + ",\n ".join(parts) + ";")
 PY
 cat <<'SQL'

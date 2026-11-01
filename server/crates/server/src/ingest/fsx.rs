@@ -1,4 +1,5 @@
 //! Contained filesystem writes under a library root (`ingest.md` rules 1-15, W1-W16).
+use crate::engine::resolve::lexical_resolve;
 use fliks_domain::naming::validate_folder_name;
 use std::{
     fs, io,
@@ -45,6 +46,38 @@ impl Root {
                 .map_err(|_| format!("Invalid folder name \"{f}\"")),
         }
     }
+}
+
+/// A stored `relativePath` under a folder root, lexically; `None` when it escapes the root.
+pub fn locate(folder: &str, rel: &str) -> Option<PathBuf> {
+    let root = lexical_resolve(Path::new(folder), "");
+    let abs = lexical_resolve(&root, rel);
+    abs.starts_with(&root).then_some(abs)
+}
+
+/// Whether two paths name one directory: same realpath (case-folded on Windows and macOS) or same inode.
+pub fn same_dir(a: &Path, b: &Path) -> bool {
+    let fold = |p: PathBuf| {
+        let s = p.to_string_lossy().into_owned();
+        if cfg!(any(windows, target_os = "macos")) {
+            s.to_lowercase()
+        } else {
+            s
+        }
+    };
+    if let (Some(x), Some(y)) = (resolve_existing(a), resolve_existing(b))
+        && fold(x) == fold(y)
+    {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if let (Ok(x), Ok(y)) = (fs::metadata(a), fs::metadata(b)) {
+            return (x.dev(), x.ino()) == (y.dev(), y.ino());
+        }
+    }
+    false
 }
 
 /// Realpath of the deepest existing ancestor joined with the rest; `None` for a relative path or a
@@ -443,6 +476,32 @@ mod tests {
         );
         assert_eq!(rel_under(Path::new("/m"), Path::new("/m")), None);
         assert_eq!(rel_under(Path::new("/m"), Path::new("/n/a")), None);
+    }
+
+    #[test]
+    fn locate_stays_under_the_folder() {
+        assert_eq!(
+            locate("/m/a/", "x/../y/z.mkv"),
+            Some(PathBuf::from("/m/a/y/z.mkv"))
+        );
+        for bad in ["../b.mkv", "/etc/hosts", "x/../../b"] {
+            assert_eq!(locate("/m/a", bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn same_dir_follows_links_and_missing_tails() {
+        let d = std::env::temp_dir().join(format!("fliks-samedir-{}", std::process::id()));
+        let real = d.join("real");
+        fs::create_dir_all(&real).unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&real, d.join("link")).unwrap();
+            assert!(same_dir(&real, &d.join("link")));
+            assert!(same_dir(&real.join("new"), &d.join("link/new")));
+        }
+        assert!(!same_dir(&real, &d.join("other")));
+        fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

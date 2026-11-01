@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.\"relativePath\" AS rel, lf.path AS folder FROM media_files f\n           JOIN library_folders lf ON lf.id = f.\"folderId\" WHERE f.id = $1 AND f.\"mediaId\" = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rel",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "folder",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "703dd1c1d3b53fe1f6383eb11dc5d37aa0454d6842b819a01f58f52d51835f26"
+}

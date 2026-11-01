@@ -81,8 +81,10 @@ async fn load(pool: &PgPool, id: Option<i32>) -> sqlx::Result<Vec<Role>> {
                   l."mediaTypes" AS "media_types: Json<Vec<String>>", l."preferredProvider" AS preferred_provider,
                   l."metadataLanguage" AS metadata_language, l."metadataRegion" AS metadata_region,
                   l."defaultQualityProfileId" AS default_quality_profile_id,
-                  l."defaultLanguageProfileId" AS default_language_profile_id, l.path, l.label
+                  l."defaultLanguageProfileId" AS default_language_profile_id,
+                  df.path AS "path?", NULL::text AS label
            FROM role_default_libraries rdl JOIN libraries l ON l.id = rdl."libraryId"
+           LEFT JOIN library_default_folders df ON df."libraryId" = l.id
            WHERE rdl."roleId" = ANY($1) ORDER BY l.id"#,
         &ids
     )

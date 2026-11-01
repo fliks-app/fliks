@@ -143,7 +143,10 @@ async fn relink_in_place(
     }
     if current.library_id.is_none() {
         current.library_id = Some(lib.id);
-        current.library_path = Some(lib.path.clone());
+        current.folder = Some(crate::libraries::Folder {
+            id: lib.folder_id,
+            path: lib.path.clone(),
+        });
         current.library_name = Some(lib.name.clone());
     }
     for f in &d.files {

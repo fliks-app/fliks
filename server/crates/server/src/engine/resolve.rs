@@ -340,16 +340,21 @@ async fn live(
     }
 }
 
-/// Where a file row sits: its library and the path stored under the media root.
+/// Where a file row sits: its library, its folder root and the path stored under that root.
 struct Located {
     library_id: Option<i32>,
-    folder: Option<String>,
-    library_path: Option<String>,
+    folder_path: String,
+    stored: String,
+}
+
+/// Where a subtitle row sits: its library and the path stored under the folder root.
+struct SubLocated {
+    library_id: Option<i32>,
     stored: Option<String>,
 }
 
 /// A media file the user may read, as its absolute path: library ACL, then the path must stay under the
-/// media root, exist, and not escape it through a symlink. Every refusal is a 404 to the routes.
+/// folder root, exist, and not escape it through a symlink. Every refusal is a 404 to the routes.
 async fn resolve_file(
     st: &AppState,
     user: &UserRow,
@@ -359,11 +364,10 @@ async fn resolve_file(
     let id = i32::try_from(id).map_err(|_| Fail::Denied)?;
     let row = sqlx::query_as!(
         Located,
-        r#"SELECT m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path,
-                  mf."relativePath" AS stored
+        r#"SELECT m."libraryId" AS library_id, lf.path AS folder_path, mf."relativePath" AS stored
            FROM media_files mf
            LEFT JOIN media m ON m."id" = mf."mediaId"
-           LEFT JOIN libraries l ON l."id" = m."libraryId"
+           JOIN library_folders lf ON lf."id" = mf."folderId"
            WHERE mf."id" = $1"#,
         id
     )
@@ -371,15 +375,12 @@ async fn resolve_file(
     .await?
     .ok_or(Fail::Denied)?;
     check_library(st, user, perms, row.library_id).await?;
-    let root = media_root(row.library_path, row.folder).ok_or(Fail::Denied)?;
-    let absolute = lexical_resolve(&root, &row.stored.unwrap_or_default());
-    if !absolute.starts_with(&root) {
-        return Err(Fail::Denied);
-    }
+    let absolute = crate::ingest::fsx::locate(&row.folder_path, &row.stored).ok_or(Fail::Denied)?;
     tokio::fs::metadata(&absolute)
         .await
         .map_err(|_| Fail::Denied)?;
     let real = dunce::canonicalize(&absolute).map_err(|_| Fail::Denied)?;
+    let root = dunce::canonicalize(&row.folder_path).map_err(|_| Fail::Denied)?;
     if !real.starts_with(&root) {
         return Err(Fail::Denied);
     }
@@ -395,12 +396,10 @@ async fn subtitle_on_disk(
 ) -> Result<PathBuf, Fail> {
     let id = i32::try_from(id).map_err(|_| Fail::Denied)?;
     let row = sqlx::query_as!(
-        Located,
-        r#"SELECT m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path,
-                  sf."filePath" AS stored
+        SubLocated,
+        r#"SELECT m."libraryId" AS library_id, sf."filePath" AS stored
            FROM subtitle_files sf
            LEFT JOIN media m ON m."id" = sf."mediaId"
-           LEFT JOIN libraries l ON l."id" = m."libraryId"
            WHERE sf."id" = $1"#,
         id
     )
@@ -448,15 +447,6 @@ async fn check_library(
     .fetch_one(&st.db)
     .await?;
     granted.then_some(()).ok_or(Fail::Denied)
-}
-
-/// `library.path` joined with the media's folder (the library root for a movie without one).
-pub(crate) fn media_root(library_path: Option<String>, folder: Option<String>) -> Option<PathBuf> {
-    let library = library_path.filter(|p| !p.is_empty())?;
-    Some(lexical_resolve(
-        Path::new(&library),
-        folder.as_deref().unwrap_or(""),
-    ))
 }
 
 /// `path.resolve(base, rel)` without touching the disk: `rel` wins when absolute, `.` and `..` fold.

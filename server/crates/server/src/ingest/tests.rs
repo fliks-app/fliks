@@ -251,7 +251,7 @@ async fn call(c: &Ctx, method: &str, uri: &str, tok: &str, body: Value) -> (u16,
 
 async fn library(c: &Ctx, name: &str, path: &Path, types: &str) -> i32 {
     fs::create_dir_all(path).unwrap();
-    sqlx::query_scalar(r#"INSERT INTO libraries (name, path, "mediaTypes") VALUES ($1, $2, $3::jsonb) RETURNING id"#)
+    sqlx::query_scalar(r#"WITH l AS (INSERT INTO libraries (name, "mediaTypes") VALUES ($1, $3::jsonb) RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, $2 FROM l) SELECT id FROM l"#)
         .bind(name)
         .bind(path.to_string_lossy().as_ref())
         .bind(types)
@@ -282,7 +282,11 @@ async fn media(c: &Ctx, lib: i32, folder: &str, t: &str) -> i32 {
 }
 
 async fn file_row(c: &Ctx, m: i32, rel: &str) -> i32 {
-    sqlx::query_scalar(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES ($1, $2, 1, 'x') RETURNING id"#)
+    sqlx::query_scalar(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+           SELECT m.id, CASE WHEN COALESCE(m."folderName", '') = '' THEN $2 ELSE m."folderName" || '/' || $2 END,
+                  1, 'x', df."folderId"
+           FROM media m JOIN library_default_folders df ON df."libraryId" = m."libraryId" WHERE m.id = $1
+           RETURNING id"#)
         .bind(m)
         .bind(rel)
         .fetch_one(&c.st.db)
@@ -371,19 +375,17 @@ async fn file_delete_refuses_escaping_paths(pool: PgPool) {
     touch(&lib.join("A/A.edl"), b"1 2 0");
     let a = media(&c, l, "A", "movie").await;
     for rel in ["../../victim.mkv", "/etc/hosts", "a/../../b"] {
-        let f = file_row(&c, a, rel).await;
-        let (s, _) = call(
-            &c,
-            "DELETE",
-            &format!("/api/media/{a}/files/{f}?deleteOnDisk=true"),
-            &c.admin,
-            json!({}),
+        let refused = sqlx::query(
+            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+               VALUES ($1, $2, 1, 'x', (SELECT min(id) FROM library_folders))"#,
         )
+        .bind(a)
+        .bind(rel)
+        .execute(&c.st.db)
         .await;
-        assert_eq!(s, 400, "{rel}");
+        assert!(refused.is_err(), "{rel}");
     }
     assert!(c.dir.join("victim.mkv").exists());
-    assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 3);
     let f = file_row(&c, a, "A.mkv").await;
     let (s, _) = call(
         &c,
@@ -476,7 +478,7 @@ async fn rescan_refuses_a_missing_folder_and_reconciles(pool: PgPool) {
             .fetch_all(&c.st.db)
             .await
             .unwrap();
-    assert_eq!(rows, ["Season 01/Show - S01E02.mkv"]);
+    assert_eq!(rows, ["Show/Season 01/Show - S01E02.mkv"]);
     assert_eq!(
         count(&c, r#"SELECT count(DISTINCT "itemId") FROM item_parts"#).await,
         1
@@ -578,7 +580,7 @@ async fn rescan_links_a_range_and_a_version_to_the_items_they_play(pool: PgPool)
     .fetch_all(&c.st.db)
     .await
     .unwrap();
-    let (range, single) = ("Show - S01E01-E03.mkv", "Show - S01E03.mkv");
+    let (range, single) = ("Show/Show - S01E01-E03.mkv", "Show/Show - S01E03.mkv");
     let want = [(1, range, 0), (2, range, 0), (3, range, 0), (3, single, 0)];
     assert_eq!(
         parts,
@@ -729,7 +731,7 @@ async fn rescan_adds_the_good_files_when_one_insert_fails(pool: PgPool) {
     sqlx::query(
         r#"CREATE FUNCTION refuse_bad() RETURNS trigger AS $$
            BEGIN
-             IF NEW."relativePath" = 'bad.mkv' THEN RAISE EXCEPTION 'refused'; END IF;
+             IF NEW."relativePath" = 'A/bad.mkv' THEN RAISE EXCEPTION 'refused'; END IF;
              RETURN NEW;
            END $$ LANGUAGE plpgsql"#,
     )
@@ -747,7 +749,7 @@ async fn rescan_adds_the_good_files_when_one_insert_fails(pool: PgPool) {
             .fetch_all(&c.st.db)
             .await
             .unwrap();
-    assert_eq!(rows, ["good1.mkv", "good2.mkv"]);
+    assert_eq!(rows, ["A/good1.mkv", "A/good2.mkv"]);
 }
 
 #[sqlx::test(migrations = false)]

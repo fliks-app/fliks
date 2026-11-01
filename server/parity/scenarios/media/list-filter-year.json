@@ -185,7 +185,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 01 (2020).mkv",
+                  "relativePath": "Parity Movie 01 (2020)/Parity Movie 01 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -309,7 +309,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 07 (2020).mkv",
+                  "relativePath": "Parity Movie 07 (2020)/Parity Movie 07 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -434,7 +434,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 17 (2020).mkv",
+                  "relativePath": "Parity Movie 17 (2020)/Parity Movie 17 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -555,124 +555,6 @@
               "fanartUrl": null,
               "files": [
                 {
-                  "createdAt": "2026-02-04T08:00:00.000Z",
-                  "episodeId": 7,
-                  "id": 24,
-                  "language": "en",
-                  "mediaId": 19,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
-                  "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series B - S02E01.mkv",
-                  "size": 73237,
-                  "streamInfo": {
-                    "audio": [
-                      {
-                        "channelLayout": "mono",
-                        "channels": 1,
-                        "codec": "aac",
-                        "endSeconds": 3.021,
-                        "isDefault": false,
-                        "language": "eng",
-                        "profile": "LC",
-                        "sampleRate": 48000,
-                        "startTimeSeconds": 0,
-                        "streamIndex": 1
-                      }
-                    ],
-                    "chapters": [],
-                    "durationSeconds": 3.021,
-                    "formatBitRate": 193941,
-                    "formatName": "matroska,webm",
-                    "formatStartSeconds": 0,
-                    "subtitles": [],
-                    "video": [
-                      {
-                        "avgFrameRate": "24/1",
-                        "bitDepth": 8,
-                        "codec": "h264",
-                        "colorRange": "tv",
-                        "displayAspectRatio": "16:9",
-                        "dvBlPresent": false,
-                        "dvElPresent": false,
-                        "dvRpuPresent": false,
-                        "endSeconds": 3,
-                        "firstFrameSeconds": 0,
-                        "frameRate": "24",
-                        "hdr10Plus": false,
-                        "height": 90,
-                        "level": 10,
-                        "pixelFormat": "yuv420p",
-                        "profile": "High",
-                        "reorderFrames": 2,
-                        "startTimeSeconds": 0,
-                        "streamIndex": 0,
-                        "width": 160
-                      }
-                    ]
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
-                },
-                {
-                  "createdAt": "2026-02-01T16:00:00.000Z",
-                  "episodeId": 8,
-                  "id": 25,
-                  "language": "en",
-                  "mediaId": 19,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
-                  "quality": "WEBDL-1080p",
-                  "relativePath": "Season 02/Parity Series B - S02E02.mkv",
-                  "size": 73237,
-                  "streamInfo": {
-                    "audio": [
-                      {
-                        "channelLayout": "mono",
-                        "channels": 1,
-                        "codec": "aac",
-                        "endSeconds": 3.021,
-                        "isDefault": false,
-                        "language": "eng",
-                        "profile": "LC",
-                        "sampleRate": 48000,
-                        "startTimeSeconds": 0,
-                        "streamIndex": 1
-                      }
-                    ],
-                    "chapters": [],
-                    "durationSeconds": 3.021,
-                    "formatBitRate": 193941,
-                    "formatName": "matroska,webm",
-                    "formatStartSeconds": 0,
-                    "subtitles": [],
-                    "video": [
-                      {
-                        "avgFrameRate": "24/1",
-                        "bitDepth": 8,
-                        "codec": "h264",
-                        "colorRange": "tv",
-                        "displayAspectRatio": "16:9",
-                        "dvBlPresent": false,
-                        "dvElPresent": false,
-                        "dvRpuPresent": false,
-                        "endSeconds": 3,
-                        "firstFrameSeconds": 0,
-                        "frameRate": "24",
-                        "hdr10Plus": false,
-                        "height": 90,
-                        "level": 10,
-                        "pixelFormat": "yuv420p",
-                        "profile": "High",
-                        "reorderFrames": 2,
-                        "startTimeSeconds": 0,
-                        "streamIndex": 0,
-                        "width": 160
-                      }
-                    ]
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
-                },
-                {
                   "createdAt": "2026-02-01T06:00:00.000Z",
                   "episodeId": 5,
                   "id": 22,
@@ -681,7 +563,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series B - S01E01.mkv",
+                  "relativePath": "Parity Series B/Season 01/Parity Series B - S01E01.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -740,7 +622,125 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Season 01/Parity Series B - S01E02.mkv",
+                  "relativePath": "Parity Series B/Season 01/Parity Series B - S01E02.mkv",
+                  "size": 73237,
+                  "streamInfo": {
+                    "audio": [
+                      {
+                        "channelLayout": "mono",
+                        "channels": 1,
+                        "codec": "aac",
+                        "endSeconds": 3.021,
+                        "isDefault": false,
+                        "language": "eng",
+                        "profile": "LC",
+                        "sampleRate": 48000,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 1
+                      }
+                    ],
+                    "chapters": [],
+                    "durationSeconds": 3.021,
+                    "formatBitRate": 193941,
+                    "formatName": "matroska,webm",
+                    "formatStartSeconds": 0,
+                    "subtitles": [],
+                    "video": [
+                      {
+                        "avgFrameRate": "24/1",
+                        "bitDepth": 8,
+                        "codec": "h264",
+                        "colorRange": "tv",
+                        "displayAspectRatio": "16:9",
+                        "dvBlPresent": false,
+                        "dvElPresent": false,
+                        "dvRpuPresent": false,
+                        "endSeconds": 3,
+                        "firstFrameSeconds": 0,
+                        "frameRate": "24",
+                        "hdr10Plus": false,
+                        "height": 90,
+                        "level": 10,
+                        "pixelFormat": "yuv420p",
+                        "profile": "High",
+                        "reorderFrames": 2,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 0,
+                        "width": 160
+                      }
+                    ]
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-02-04T08:00:00.000Z",
+                  "episodeId": 7,
+                  "id": 24,
+                  "language": "en",
+                  "mediaId": 19,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Parity Series B/Season 02/Parity Series B - S02E01.mkv",
+                  "size": 73237,
+                  "streamInfo": {
+                    "audio": [
+                      {
+                        "channelLayout": "mono",
+                        "channels": 1,
+                        "codec": "aac",
+                        "endSeconds": 3.021,
+                        "isDefault": false,
+                        "language": "eng",
+                        "profile": "LC",
+                        "sampleRate": 48000,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 1
+                      }
+                    ],
+                    "chapters": [],
+                    "durationSeconds": 3.021,
+                    "formatBitRate": 193941,
+                    "formatName": "matroska,webm",
+                    "formatStartSeconds": 0,
+                    "subtitles": [],
+                    "video": [
+                      {
+                        "avgFrameRate": "24/1",
+                        "bitDepth": 8,
+                        "codec": "h264",
+                        "colorRange": "tv",
+                        "displayAspectRatio": "16:9",
+                        "dvBlPresent": false,
+                        "dvElPresent": false,
+                        "dvRpuPresent": false,
+                        "endSeconds": 3,
+                        "firstFrameSeconds": 0,
+                        "frameRate": "24",
+                        "hdr10Plus": false,
+                        "height": 90,
+                        "level": 10,
+                        "pixelFormat": "yuv420p",
+                        "profile": "High",
+                        "reorderFrames": 2,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 0,
+                        "width": 160
+                      }
+                    ]
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-02-01T16:00:00.000Z",
+                  "episodeId": 8,
+                  "id": 25,
+                  "language": "en",
+                  "mediaId": 19,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Parity Series B/Season 02/Parity Series B - S02E02.mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -854,26 +854,7 @@
               "createdAt": "2026-02-12T00:00:00.000Z",
               "digitalRelease": null,
               "fanartUrl": null,
-              "files": [
-                {
-                  "createdAt": "2026-02-02T08:00:00.000Z",
-                  "episodeId": null,
-                  "id": 50,
-                  "language": "en",
-                  "mediaId": 42,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
-                  "quality": "WEBDL-1080p",
-                  "relativePath": "Pathless Library Movie (2020)/Pathless Library Movie (2020).mkv",
-                  "size": 1000050,
-                  "streamInfo": {
-                    "audio": [],
-                    "subtitles": [],
-                    "video": []
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
-                }
-              ],
+              "files": [],
               "folderName": "Pathless Library Movie (2020)",
               "genres": null,
               "id": 42,
@@ -916,7 +897,7 @@
               "rating": null,
               "releaseDate": null,
               "runtime": null,
-              "sizeOnDisk": 1000050,
+              "sizeOnDisk": 0,
               "status": "released",
               "title": "Pathless Library Movie",
               "tmdbCollectionId": null,

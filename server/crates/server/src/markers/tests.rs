@@ -50,8 +50,8 @@ async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {
     .unwrap();
     sqlx::query(
         r#"WITH f AS (
-             INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId")
-             VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM item_groups WHERE id = $2))
+             INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "folderId")
+             VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM item_groups WHERE id = $2), (SELECT min(id) FROM library_folders))
              RETURNING id, "mediaId")
            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT $3, id, "mediaId", 0 FROM f"#,
     )
@@ -114,12 +114,12 @@ async fn ctx(pool: PgPool, intro_detect: bool) -> Ctx {
     .unwrap();
     let l1 = one(
         &pool,
-        r#"INSERT INTO libraries (name, path) VALUES ('L1', '/lib1') RETURNING id"#,
+        r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L1') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '/lib1' FROM l) SELECT id FROM l"#,
     )
     .await;
     let l2 = one(
         &pool,
-        r#"INSERT INTO libraries (name, path) VALUES ('L2', '/lib2') RETURNING id"#,
+        r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L2') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '/lib2' FROM l) SELECT id FROM l"#,
     )
     .await;
     sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, $2)"#)

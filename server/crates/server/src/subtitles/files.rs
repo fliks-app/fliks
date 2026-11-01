@@ -30,7 +30,7 @@ pub struct MediaCtx {
     pub imdb_id: Option<String>,
     pub tmdb_id: Option<i32>,
     pub folder_name: Option<String>,
-    pub library_path: Option<String>,
+    pub folder_path: Option<String>,
     pub library_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub monitored: bool,
@@ -41,9 +41,9 @@ pub struct MediaCtx {
 fn media_sql() -> String {
     format!(
         r#"SELECT m.id, m.title, m."type" AS kind, m.year, ids.imdb AS imdb_id, ids.tmdb AS tmdb_id,
-  m."folderName" AS folder_name, l.path AS library_path, m."libraryId" AS library_id,
+  m."folderName" AS folder_name, df.path AS folder_path, m."libraryId" AS library_id,
   m."languageProfileId" AS language_profile_id, m.monitored, m.genres, m.overview
-  FROM media m LEFT JOIN libraries l ON l.id = m."libraryId" {}"#,
+  FROM media m LEFT JOIN library_default_folders df ON df."libraryId" = m."libraryId" {}"#,
         crate::media::external_ids::ids_join("m")
     )
 }
@@ -106,8 +106,9 @@ pub async fn files_of_media(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result
     .await
 }
 
-/// `M` and its realpath `Mc`: every write is checked against `Mc`.
+/// The folder root `L` (base of stored paths), `M` and its realpath `Mc`: every write is checked against `Mc`.
 pub struct Dirs {
+    pub l: PathBuf,
     pub m: PathBuf,
     pub mc: fsx::Root,
 }
@@ -115,7 +116,7 @@ pub struct Dirs {
 impl MediaCtx {
     pub fn dirs(&self, no_root: &str) -> Result<Dirs, AppError> {
         let lib = self
-            .library_path
+            .folder_path
             .as_deref()
             .filter(|p| !p.trim().is_empty())
             .ok_or_else(|| AppError::bad_request(no_root))?;
@@ -128,7 +129,11 @@ impl MediaCtx {
             return Err(AppError::bad_request(no_root));
         }
         let mc = fsx::Root::open(&m.to_string_lossy()).map_err(|_| missing_disk())?;
-        Ok(Dirs { m, mc })
+        Ok(Dirs {
+            l: lib_root.path().to_path_buf(),
+            m,
+            mc,
+        })
     }
 }
 
@@ -139,7 +144,7 @@ fn missing_disk() -> AppError {
 impl Dirs {
     /// The absolute path of a stored relative path: lexically under `M`, parent really under `Mc`.
     pub fn resolve(&self, stored: &str) -> Option<PathBuf> {
-        let abs = resolve_subtitle_absolute_path(&self.m.to_string_lossy(), stored)?;
+        let abs = resolve_subtitle_absolute_path(&self.l.to_string_lossy(), stored)?;
         let abs = PathBuf::from(abs);
         self.mc.contains(abs.parent()?, true).then_some(abs)
     }
@@ -157,9 +162,9 @@ impl Dirs {
         }
     }
 
-    /// `relativePath` of a path already under `M`, `/`-separated.
+    /// `relativePath` of a path already under `M`, relative to `L`, `/`-separated.
     pub fn rel(&self, abs: &Path) -> Option<String> {
-        relative_path_under_root(&self.m.to_string_lossy(), &abs.to_string_lossy())
+        relative_path_under_root(&self.l.to_string_lossy(), &abs.to_string_lossy())
     }
 
     /// Creates `<video>.<suffix>[-N]<ext>` next to the video, never replacing a file (rule 6).

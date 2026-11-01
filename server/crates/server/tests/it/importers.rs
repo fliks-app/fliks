@@ -135,7 +135,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         (1, "Movies", r#"["movie"]"#, "/lib/movies"),
         (2, "Series", r#"["series"]"#, "/lib/tv"),
     ] {
-        sqlx::query(r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES ($1, $2, $3::jsonb, $4)"#)
+        sqlx::query(r#"WITH l AS (INSERT INTO libraries (id, name, "mediaTypes") VALUES ($1, $2, $3::jsonb) RETURNING id) INSERT INTO library_folders ("libraryId", path) SELECT id, $4 FROM l"#)
             .bind(id)
             .bind(name)
             .bind(types)
@@ -346,7 +346,7 @@ async fn authz_and_validation(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn preview_lists_roots_with_suggestions(pool: PgPool) {
     let c = ctx(pool).await;
-    sqlx::query("UPDATE libraries SET path = '/media/movies' WHERE id = 1")
+    sqlx::query(r#"UPDATE library_folders SET path = '/media/movies' WHERE "libraryId" = 1"#)
         .execute(&c.pool)
         .await
         .unwrap();
@@ -388,7 +388,7 @@ async fn radarr_import_writes_media_profiles_and_subtitles(pool: PgPool) {
         .execute(&c.pool)
         .await
         .unwrap();
-    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
+    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId") VALUES (60, 50, 'Old.mkv', 1, 'x', (SELECT min(id) FROM library_folders))"#)
         .execute(&c.pool).await.unwrap();
     let mut body = import_body(&c, "radarr", "ok", 1);
     let (s, b) = post(&c, "/api/imports/radarr", &c.admin, body.clone()).await;
@@ -548,7 +548,7 @@ async fn sonarr_import_writes_sidecar_subtitles(pool: PgPool) {
     ] {
         std::fs::write(season.join(name), b"x").unwrap();
     }
-    sqlx::query("UPDATE libraries SET path = $1 WHERE id = 2")
+    sqlx::query(r#"UPDATE library_folders SET path = $1 WHERE "libraryId" = 2"#)
         .bind(root.to_str().unwrap())
         .execute(&c.pool)
         .await
@@ -559,7 +559,7 @@ async fn sonarr_import_writes_sidecar_subtitles(pool: PgPool) {
         .execute(&c.pool)
         .await
         .unwrap();
-    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (80, 70, 'Season 01/Parity Series A - S01E01.mkv', 1, 'x')"#)
+    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId") VALUES (80, 70, 'Parity Series A/Season 01/Parity Series A - S01E01.mkv', 1, 'x', (SELECT id FROM library_folders WHERE "libraryId" = 2))"#)
         .execute(&c.pool).await.unwrap();
     let mut body = import_body(&c, "sonarr", "ok", 2);
     body["importSubtitles"] = json!(true);
@@ -579,13 +579,13 @@ async fn sonarr_import_writes_sidecar_subtitles(pool: PgPool) {
                 "en".into(),
                 false,
                 "sonarr".into(),
-                Some("Season 01/Parity Series A - S01E01.en.srt".into())
+                Some("Parity Series A/Season 01/Parity Series A - S01E01.en.srt".into())
             ),
             (
                 "fr".into(),
                 true,
                 "sonarr".into(),
-                Some("Season 01/Parity Series A - S01E01.fr.forced.srt".into())
+                Some("Parity Series A/Season 01/Parity Series A - S01E01.fr.forced.srt".into())
             )
         ]
     );
@@ -738,7 +738,7 @@ async fn radarr_extrafile_path_cannot_leave_the_media_folder(pool: PgPool) {
         .execute(&c.pool)
         .await
         .unwrap();
-    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
+    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId") VALUES (60, 50, 'Old.mkv', 1, 'x', (SELECT min(id) FROM library_folders))"#)
         .execute(&c.pool).await.unwrap();
     let mut body = import_body(&c, "radarr", "subs-traversal", 1);
     body["importSubtitles"] = json!(true);

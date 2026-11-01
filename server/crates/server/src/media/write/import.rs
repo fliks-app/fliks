@@ -54,9 +54,10 @@ pub async fn resolve_target_in(
     library_id: Option<i32>,
 ) -> Result<Target, AppError> {
     let rows = sqlx::query!(
-        r#"SELECT id, name, path, "mediaTypes" AS types, "defaultQualityProfileId" AS dq,
-                  "defaultLanguageProfileId" AS dl
-           FROM libraries WHERE id = ANY($1) ORDER BY name ASC, id ASC"#,
+        r#"SELECT l.id, l.name, df.path AS "path?", l."mediaTypes" AS types,
+                  l."defaultQualityProfileId" AS dq, l."defaultLanguageProfileId" AS dl
+           FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id
+           WHERE l.id = ANY($1) ORDER BY l.name ASC, l.id ASC"#,
         libs
     )
     .fetch_all(&st.db)

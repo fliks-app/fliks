@@ -438,7 +438,7 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
     let format = format_of(&stored)?;
     let text = decode_text(&tokio::fs::read(&abs).await.map_err(|e| e.to_string())?);
     let reference = reference(o.reference.as_deref(), &dirs)?;
-    let video = dirs.m.join(
+    let video = dirs.l.join(
         crate::ingest::fsx::safe_rel(&file.relative_path).ok_or("MediaFile path is invalid")?,
     );
     let req = JobRequest {

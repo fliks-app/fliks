@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.id, l.name, df.\"folderId\" AS \"folder_id?\", df.path AS \"path?\", l.\"mediaTypes\" AS types,\n                  l.\"preferredProvider\" AS provider, l.\"defaultQualityProfileId\" AS dq,\n                  l.\"defaultLanguageProfileId\" AS dl\n           FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id WHERE l.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "folder_id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "library_default_folders",
+            "name": "folderId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "path?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_default_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "types",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mediaTypes"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "provider",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "preferredProvider"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "dq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "defaultQualityProfileId"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "dl",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "defaultLanguageProfileId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "7ab8595ed87d92d5ae5a29c7d7117e7a217d2390fc7660ea90e411d31c43d5dc"
+}

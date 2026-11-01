@@ -57,6 +57,7 @@ pub fn router() -> Router<AppState> {
 struct Lib {
     id: i32,
     name: String,
+    folder_id: i32,
     path: String,
     types: Vec<MediaKind>,
     provider: Option<String>,
@@ -67,19 +68,24 @@ struct Lib {
 /// `requirePathFor`: 404 unknown, 400 without a root path.
 async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
     let r = sqlx::query!(
-        r#"SELECT id, name, path, "mediaTypes" AS types, "preferredProvider" AS provider,
-                  "defaultQualityProfileId" AS dq, "defaultLanguageProfileId" AS dl FROM libraries WHERE id = $1"#,
+        r#"SELECT l.id, l.name, df."folderId" AS "folder_id?", df.path AS "path?", l."mediaTypes" AS types,
+                  l."preferredProvider" AS provider, l."defaultQualityProfileId" AS dq,
+                  l."defaultLanguageProfileId" AS dl
+           FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id WHERE l.id = $1"#,
         id
     )
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(|| AppError::not_found(format!("Library #{id} not found")))?;
-    let path = r.path.filter(|p| !p.is_empty()).ok_or_else(|| {
-        AppError::bad_request(format!("Library #{id} has no root path configured"))
-    })?;
+    let (Some(folder_id), Some(path)) = (r.folder_id, r.path.filter(|p| !p.is_empty())) else {
+        return Err(AppError::bad_request(format!(
+            "Library #{id} has no root path configured"
+        )));
+    };
     Ok(Lib {
         id: r.id,
         name: r.name,
+        folder_id,
         path,
         types: serde_json::from_value::<Vec<String>>(r.types)
             .unwrap_or_default()
@@ -300,18 +306,16 @@ pub async fn scan(
     }
     let lib = require_path(&st, id).await?;
     let linked: HashSet<PathBuf> = sqlx::query!(
-        r#"SELECT mf."relativePath" AS rel, m."folderName" AS folder FROM media_files mf
-           JOIN media m ON m.id = mf."mediaId" WHERE m."libraryId" = $1"#,
+        r#"SELECT mf."relativePath" AS rel, lf.path AS folder FROM media_files mf
+           JOIN library_folders lf ON lf.id = mf."folderId" WHERE lf."libraryId" = $1"#,
         id
     )
     .fetch_all(&st.db)
     .await?
     .into_iter()
     .map(|r| {
-        let base = fliks_domain::media::path::media_path(Some(&lib.path), r.folder.as_deref())
-            .unwrap_or_default();
         PathBuf::from(resolve(
-            &fliks_domain::media::path::join(&base, &r.rel.replace('\\', "/")),
+            &fliks_domain::media::path::join(&r.folder, &r.rel.replace('\\', "/")),
             "/",
         ))
     })

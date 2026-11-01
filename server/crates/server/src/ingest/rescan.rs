@@ -51,8 +51,9 @@ struct Row {
 /// `media.path`: the library root and the media folder must exist (never created here).
 fn media_dir(media: &MediaRow) -> Result<(fsx::Root, PathBuf), AppError> {
     let lib = media
-        .library_path
-        .as_deref()
+        .folder
+        .as_ref()
+        .map(|f| f.path.as_str())
         .filter(|p| !p.is_empty())
         .ok_or_else(|| {
             AppError::bad_request(format!("Media #{} has no root path configured", media.id))
@@ -129,7 +130,7 @@ pub async fn rescan_files(
     let media = load_media(&st.db, media_id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media_id))?;
-    if media.library_path.as_deref().is_none_or(str::is_empty) {
+    if media.folder.as_ref().is_none_or(|f| f.path.is_empty()) {
         return Err(AppError::bad_request(format!(
             "Media #{media_id} has no root path configured"
         )));
@@ -149,7 +150,7 @@ pub async fn rescan_files(
     let found = tokio::task::spawn_blocking(move || media_dir(&m))
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
-    let (_, dir) = match found {
+    let (root, dir) = match found {
         Ok(d) => d,
         Err(_) if rows.is_empty() => return Ok(Counts::default()),
         Err(e) => return Err(e),
@@ -159,12 +160,13 @@ pub async fn rescan_files(
         media.title,
         dir.display()
     );
+    let base = root.path().to_path_buf();
     let linked: HashSet<String> = rows.iter().map(|r| norm(&r.rel)).collect();
-    let w = walk_media(&media, &dir, &rows, &linked).await?;
+    let w = walk_media(&media, &dir, &base, &rows, &linked).await?;
     let disk: Vec<(String, PathBuf)> = w
         .files
         .into_iter()
-        .filter_map(|p| Some((fsx::rel_under(&dir, &p)?, p)))
+        .filter_map(|p| Some((fsx::rel_under(&base, &p)?, p)))
         .collect();
     let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
     let mut c = Counts::default();
@@ -173,7 +175,7 @@ pub async fn rescan_files(
     let mut slots = Slots::default();
     if media.has_seasons() {
         slots = Slots::load(&st.db, media_id).await?;
-        let wanted = wanted_numbers(&dir, &rows, &on_disk, &disk, &linked);
+        let wanted = wanted_numbers(&base, &rows, &on_disk, &disk, &linked);
         slots_created = slots.ensure(&st.db, media_id, &wanted).await?;
     }
 
@@ -187,7 +189,7 @@ pub async fn rescan_files(
         .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
         .collect();
     let applied = async {
-        refresh_existing(st, &media, &dir, &kept, &slots, &mut c, &mut touched).await?;
+        refresh_existing(st, &media, &base, &kept, &slots, &mut c, &mut touched).await?;
         add_new(st, &media, &disk, &linked, &slots, &mut c, &mut touched).await
     }
     .await;
@@ -220,6 +222,7 @@ fn norm(r: &str) -> String {
 async fn walk_media(
     media: &MediaRow,
     dir: &Path,
+    base: &Path,
     rows: &[Row],
     linked: &HashSet<String>,
 ) -> Result<Walk, AppError> {
@@ -228,13 +231,13 @@ async fn walk_media(
         complete: true,
     };
     if media.folder_name.as_deref().is_some_and(|f| !f.is_empty()) {
-        let (d, l) = (dir.to_path_buf(), linked.clone());
+        let (d, b, l) = (dir.to_path_buf(), base.to_path_buf(), linked.clone());
         w = tokio::task::spawn_blocking(move || {
             let mut w = Walk {
                 files: vec![],
                 complete: true,
             };
-            walk(&d, &d, 0, &l, false, &mut w);
+            walk(&d, &b, 0, &l, false, &mut w);
             w
         })
         .await
@@ -242,7 +245,7 @@ async fn walk_media(
     } else {
         for r in rows {
             if let Some(rel) = fsx::safe_rel(&r.rel) {
-                let p = dir.join(rel);
+                let p = base.join(rel);
                 if tokio::fs::metadata(&p).await.is_ok_and(|m| m.is_file()) {
                     w.files.push(p);
                 }
@@ -415,6 +418,9 @@ async fn add_new(
     touched: &mut Vec<(i32, Option<i32>)>,
 ) -> Result<(), AppError> {
     let media_id = media.id;
+    let Some(folder_id) = media.folder.as_ref().map(|f| f.id) else {
+        return Ok(());
+    };
     let mut fresh: Vec<NewRow> = vec![];
     for (rel, abs) in disk.iter().filter(|(r, _)| !linked.contains(r)) {
         let Ok(meta) = tokio::fs::metadata(abs).await else {
@@ -466,7 +472,7 @@ async fn add_new(
         .iter()
         .map(|n| (n.rel.as_str(), (n.episode_id, n.last)))
         .collect();
-    let inserted = match insert_rows(&st.db, media_id, &fresh).await {
+    let inserted = match insert_rows(&st.db, media_id, folder_id, &fresh).await {
         Ok(rows) => rows,
         Err(e) => {
             tracing::error!(
@@ -475,7 +481,7 @@ async fn add_new(
             );
             let mut rows = vec![];
             for n in &fresh {
-                match insert_rows(&st.db, media_id, std::slice::from_ref(n)).await {
+                match insert_rows(&st.db, media_id, folder_id, std::slice::from_ref(n)).await {
                     Ok(r) => rows.extend(r),
                     Err(e) => tracing::error!(
                         "Rescan[media #{media_id}]: failed to add \"{}\": {e}",
@@ -504,15 +510,16 @@ async fn add_new(
 async fn insert_rows(
     db: &sqlx::PgPool,
     media_id: i32,
+    folder_id: i32,
     fresh: &[NewRow],
 ) -> Result<Vec<(i32, String)>, sqlx::Error> {
     let rows = sqlx::query!(
-        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "streamInfo",
+        r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "streamInfo",
              "mtimeMs", "probeVersion")
-           SELECT $1, v.rel, v.size, v.quality, v.info, v.mtime, $7
+           SELECT $1, $8, v.rel, v.size, v.quality, v.info, v.mtime, $7
            FROM UNNEST($2::text[], $3::bigint[], $4::text[], $5::jsonb[], $6::bigint[])
              AS v(rel, size, quality, info, mtime)
-           ON CONFLICT ("mediaId", "relativePath") DO NOTHING
+           ON CONFLICT ("folderId", "relativePath") DO NOTHING
            RETURNING id, "relativePath" AS rel"#,
         media_id,
         &fresh.iter().map(|n| n.rel.clone()).collect::<Vec<_>>(),
@@ -520,7 +527,8 @@ async fn insert_rows(
         &fresh.iter().map(|n| n.quality.clone()).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.info.clone()).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.mtime).collect::<Vec<_>>() as &[Option<i64>],
-        PROBE_VERSION
+        PROBE_VERSION,
+        folder_id
     )
     .fetch_all(db)
     .await?;
@@ -878,10 +886,10 @@ pub async fn link_in_place(
     nums: Option<EpisodeNumbers>,
 ) -> Result<Result<Linked, String>, AppError> {
     let outside = || Ok(Err("file outside the media folder".to_owned()));
-    let Some(lib) = media.library_path.as_deref() else {
+    let Some(folder) = media.folder.as_ref() else {
         return outside();
     };
-    let Ok(root) = fsx::Root::open(lib) else {
+    let Ok(root) = fsx::Root::open(&folder.path) else {
         return outside();
     };
     let Ok(dir) = root.media_dir(media.folder_name.as_deref()) else {
@@ -891,27 +899,33 @@ pub async fn link_in_place(
         return Ok(Err("not a regular file".into()));
     };
     let real_dir = dunce::canonicalize(&dir).unwrap_or(dir.clone());
-    let Some(rel) = fsx::rel_under(&real_dir, &real).filter(|_| root.contains(&real, false)) else {
+    let Some(inner) = fsx::rel_under(&real_dir, &real).filter(|_| root.contains(&real, false))
+    else {
         return outside();
     };
+    let named = media.folder_name.as_deref().filter(|f| !f.is_empty());
+    let rel = named.map_or_else(|| inner.clone(), |f| format!("{f}/{inner}"));
     if !is_video(&file_name(&real)) {
         return Ok(Err("not a video file".into()));
     }
-    if media.folder_name.as_deref().is_none_or(str::is_empty) && rel.contains('/') {
+    if named.is_none() && inner.contains('/') {
         return Ok(Err(
             "a title with no folder can only own files at the library root".into(),
         ));
     }
-    if let Some(id) = sqlx::query_scalar!(
-        r#"SELECT id FROM media_files WHERE "mediaId" = $1 AND "relativePath" = $2"#,
-        media.id,
+    if let Some(held) = sqlx::query!(
+        r#"SELECT id, "mediaId" AS media_id FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2"#,
+        folder.id,
         rel
     )
     .fetch_optional(&st.db)
     .await?
     {
+        if held.media_id != Some(media.id) {
+            return Ok(Err("file already linked to another media".into()));
+        }
         return Ok(Ok(Linked {
-            file_id: id,
+            file_id: held.id,
             created: false,
         }));
     }
@@ -934,9 +948,10 @@ pub async fn link_in_place(
         }
     }
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-           VALUES ($1, $2, $3, $4) RETURNING id"#,
+        r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
         media.id,
+        folder.id,
         rel,
         meta.len() as i64,
         parse_release_quality(&name).quality.name
