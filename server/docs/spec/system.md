@@ -49,7 +49,7 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 ### D. Stats
 
 12. `movies` and `series` = `SELECT type, count(*) FROM media GROUP BY type` folded through the kind registry, zero-filled (`media-details.md` rule 10), `pendingRequests` = `SELECT count(*) FROM requests WHERE status = 'pending'`.
-13. `diskSpace`: libraries `ORDER BY name ASC` (+ `id ASC`) with a non-empty `path`; per library `{path: library.path as stored, label: label ?? name (an empty-string label stays empty), freeSpace: f_bfree * f_bsize, totalSpace: f_blocks * f_bsize}`; on a `statfs` error `freeSpace` and `totalSpace` are `-1` (JSON numbers; same semantics as `libraries.md` rule 6, run on the blocking pool). Absolute paths are exposed here by design: the route needs `settings.access`, the audience allowed to see server paths.
+13. `diskSpace`: libraries `ORDER BY name ASC` (+ `id ASC`) with a default folder; per library `{path: the default folder path as stored, label: name (`label` is always null), freeSpace: f_bfree * f_bsize, totalSpace: f_blocks * f_bsize}`; on a `statfs` error `freeSpace` and `totalSpace` are `-1` (JSON numbers; same semantics as `libraries.md` rule 6, run on the blocking pool). Absolute paths are exposed here by design: the route needs `settings.access`, the audience allowed to see server paths.
 
 ### E. Backups
 
@@ -89,7 +89,7 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 - `SELECT 1` (health).
 - `SELECT count(*) FROM plugin_packages` and `... WHERE enabled = true`.
 - `SELECT count(*)::int FROM media WHERE type = 'movie'` (and `'series'`); `SELECT count(*)::int FROM requests WHERE status = 'pending'`.
-- `SELECT id, name, label, path FROM libraries WHERE path IS NOT NULL AND path <> '' ORDER BY name ASC, id ASC`.
+- `SELECT l.id, l.name, df.path FROM libraries l JOIN library_default_folders df ON df."libraryId" = l.id ORDER BY l.name ASC, l.id ASC`.
 - Restore guard and sweep: `SELECT EXISTS (SELECT 1 FROM commands WHERE status IN ('running','queued'))`; `UPDATE commands SET status = 'failed', "endedOn" = now() WHERE status IN ('running','queued')`.
 - External: `pg_dump`, `psql` (rules 17-24).
 
