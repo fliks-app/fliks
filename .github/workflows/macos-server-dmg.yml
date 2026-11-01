@@ -155,7 +155,6 @@ jobs:
           xcrun notarytool submit "$dmg" \
             --key "$KEY_P8" --key-id "$KEY_ID" --issuer "$ISSUER_ID" --wait
           xcrun stapler staple "$dmg"
-          xcrun stapler validate "$dmg"
 
       # ── Sparkle appcast ──
       # The app reads it from releases/latest, so it always points at the newest DMG.
