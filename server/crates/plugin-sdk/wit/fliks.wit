@@ -212,7 +212,7 @@ interface host {
     target, candidates-query, candidates-page, release-title, release-match,
     candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
     ingest-result, acquisition-event, audience, download-progress, family, unit-ref, host-error,
-    json,
+    json, kind, external-id,
   };
 
   /// `family` none is the media's only want.
@@ -228,6 +228,9 @@ interface host {
   ) -> result<list<scored-release>, host-error>;
   media-resolve: func(query: resolve-query) -> result<list<tuple<string, resolved-media>>, host-error>;
   media-exists: func(media-ids: list<u32>) -> result<list<u32>, host-error>;
+  /// The media of a work named by external ids, created when the library has none; needs `media:create`.
+  media-resolve-or-create: func(kind: kind, external-ids: list<external-id>, library-id: option<u32>)
+    -> result<u32, host-error>;
 
   library-ingest: func(request: ingest-request) -> result<ingest-result, host-error>;
 

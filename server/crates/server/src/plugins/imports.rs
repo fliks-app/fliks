@@ -16,7 +16,7 @@ pub fn host_err(code: &str, message: impl Into<String>) -> HostError {
     }
 }
 
-fn db_err(e: sqlx::Error) -> HostError {
+pub(super) fn db_err(e: sqlx::Error) -> HostError {
     let unreachable = matches!(
         e,
         sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed
@@ -129,6 +129,7 @@ macro_rules! call {
 }
 
 const HOST_CALL: std::time::Duration = std::time::Duration::from_secs(8);
+const CREATE_CALL: std::time::Duration = std::time::Duration::from_secs(60);
 const INGEST_CALL: std::time::Duration = std::time::Duration::from_secs(1800);
 
 impl t::Host for Ctx {}
@@ -248,6 +249,24 @@ impl host::Host for Ctx {
                     .map_err(db_err)?;
             Ok(found.into_iter().map(|i| i as u32).collect())
         })
+    }
+    async fn media_resolve_or_create(
+        &mut self,
+        kind: t::Kind,
+        external_ids: Vec<t::ExternalId>,
+        library_id: Option<u32>,
+    ) -> Result<u32, HostError> {
+        let app = self.app();
+        call!(
+            self,
+            "media.resolveOrCreate",
+            ["media:create"],
+            CREATE_CALL,
+            async {
+                let app = app?;
+                super::acquisition::resolve_or_create(&app, &kind, &external_ids, library_id).await
+            }
+        )
     }
     async fn library_ingest(&mut self, r: t::IngestRequest) -> Result<t::IngestResult, HostError> {
         let app = self.app();

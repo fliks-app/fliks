@@ -11,7 +11,7 @@
   "runtime": "wasm",
   "memoryMb": 64,
   "database": { "schema": true, "coreRefs": ["item_groups", "items", "media", "users"] },
-  "scopes": ["config:rw", "media:read", "events:emit", "ingest:write", "acquisition:candidates", "releases:score"],
+  "scopes": ["config:rw", "media:read", "media:create", "events:emit", "ingest:write", "acquisition:candidates", "releases:score"],
   "ingestRoots": [],
   "permissions": ["queue"],
   "routes": [

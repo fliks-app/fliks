@@ -52,6 +52,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   | Scope | Host methods it unlocks |
   |---|---|
   | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, and — because both answer with media identity for the whole library — `acquisition.candidates` and `releases.match` |
+  | `media:create` | `media.resolveOrCreate`: adds a title to a library when none holds it, so an update that declares it waits for an admin |
   | `acquisition:candidates` | `acquisition.candidates`, `releases.match` |
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
