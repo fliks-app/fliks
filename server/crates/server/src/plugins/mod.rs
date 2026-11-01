@@ -379,14 +379,19 @@ impl Plugins {
             return;
         }
         let mut tasks = vec![];
+        let failed = Arc::new(Mutex::new(Vec::<String>::new()));
         for pkg in pkgs {
             if !pkg.enabled {
                 tracing::info!("plugin \"{}\" is disabled — not loaded", pkg.plugin_id);
                 continue;
             }
             let me = self.clone();
+            let failed = failed.clone();
             tasks.push(tokio::spawn(async move {
                 let r = me.register_and_settle(&pkg).await;
+                if r.is_err() {
+                    failed.lock_clean().push(pkg.plugin_id.clone());
+                }
                 let reason = r
                     .as_ref()
                     .err()
@@ -401,6 +406,13 @@ impl Plugins {
         }
         let _ =
             tokio::time::timeout(self.opts.ready_wait, futures_util::future::join_all(tasks)).await;
+        let failed = std::mem::take(&mut *failed.lock_clean());
+        if let (false, Some(st)) = (failed.is_empty(), self.app().cloned()) {
+            tokio::spawn(async move {
+                sources::refresh_all(&st, true).await;
+                st.plugins.auto_update_of(Some(&failed)).await;
+            });
+        }
     }
 
     /// Process lifetime tasks: domain events, scheduled calls, staging sweep, catalog boot pass.

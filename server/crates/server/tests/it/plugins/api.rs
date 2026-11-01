@@ -1357,3 +1357,60 @@ async fn auto_update_rolls_back_and_holds_new_scopes() {
     h.finish().await;
     s.finish().await;
 }
+
+/// Rule 29: a plugin that fails registration at boot is auto-updated at once, not at 03:00.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn failed_registration_at_boot_updates_at_once() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("bootupd").await else {
+        return;
+    };
+    let cat = catalog().await;
+    let ca = cat.ca.clone();
+    let h = harness_with(&s, "bootupd", Arc::new(|_| {}), move |o| {
+        o.fetch = Fetcher {
+            net: StubNet::new(1, tokio_rustls::rustls::RootCertStore::empty(), &[]),
+            roots: vec![ca.clone()],
+        };
+    })
+    .await;
+    let key =
+        base64::engine::general_purpose::STANDARD.encode(test_key().verifying_key().to_bytes());
+    let bytes = pack(&m, "0.1.0", &w, Some(&test_key()));
+    cat.archives
+        .lock()
+        .unwrap()
+        .push(("/fixture.fkplugin".into(), bytes.clone()));
+    let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a",
+        "kind": "process", "versions": [{"version": "0.1.0", "pluginApi": 2, "fliks": ">=5.0.0 <6.0.0",
+        "zipUrl": format!("https://localhost:{}/fixture.fkplugin", cat.port), "sha256": archive::sha256_hex(&bytes)}]}]});
+    *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+    let url = format!("https://localhost:{}/catalog.json", cat.port);
+    h.call(
+        "POST",
+        "/api/plugins/sources",
+        Some(&h.admin),
+        Some(json!({"url": url, "publicKey": key})),
+    )
+    .await;
+    assert_eq!(h.install(&bytes).await["status"], "active");
+    sqlx::query(
+        r#"UPDATE plugin_packages SET version = '0.0.9',
+           manifest = jsonb_set(manifest, '{fliks}', '">=99.0.0"')"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    h.st.plugins.stop_all().await;
+    h.st.plugins.boot().await;
+    super::harness::until("updated after boot", Duration::from_secs(30), async || {
+        let p = packages::find(&s.pool, "fliks.fixture")
+            .await
+            .unwrap()
+            .unwrap();
+        p.version == "0.1.0" && p.status == "active" && h.st.plugins.rt("fliks.fixture").is_some()
+    })
+    .await;
+    h.finish().await;
+    s.finish().await;
+}
