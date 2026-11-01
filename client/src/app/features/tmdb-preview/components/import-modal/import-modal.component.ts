@@ -14,13 +14,22 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Router } from '@angular/router';
 import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
-import { LibrariesApiService, Library } from '../../../../core/services/api/libraries-api.service';
+import {
+  LibrariesApiService,
+  Library,
+  LibraryFolderChoice,
+} from '../../../../core/services/api/libraries-api.service';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import {
+  LibraryFolderSelectComponent,
+  defaultFolderId,
+} from '../../../../shared/components/library-folder-select/library-folder-select';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
+import { serverMessage } from '../../../../core/utils/server-message';
 import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
 
 @Component({
@@ -30,6 +39,7 @@ import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
     ModalFooterComponent,
     ModalHeaderComponent,
     SeasonPickerComponent,
+    LibraryFolderSelectComponent,
     FormsModule,
     TranslatePipe,
   ],
@@ -64,6 +74,7 @@ export class ImportModalComponent {
   readonly selectedQualityProfileId = signal<number | null>(null);
   readonly selectedLanguageProfileId = signal<number | null>(null);
   readonly selectedLibraryId = signal<number | null>(null);
+  readonly selectedFolderId = signal<number | null>(null);
 
   readonly seasons = signal<SeasonStub[]>([]);
   readonly selectedSeasons = signal<Set<number>>(new Set());
@@ -74,6 +85,8 @@ export class ImportModalComponent {
   readonly compatibleLibraries = computed(() =>
     this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
+
+  readonly folderChoices = computed(() => this.folderChoicesOf(this.selectedLibraryId()));
 
   /** The destination resolves from this list, so empty ends in a server refusal; silent while in flight, where empty means unknown. */
   readonly noCompatibleLibrary = computed(
@@ -121,6 +134,7 @@ export class ImportModalComponent {
 
       const target = libs.find((l) => l.mediaTypes.includes(params.mediaType));
       this.selectedLibraryId.set(target?.id ?? null);
+      this.selectedFolderId.set(defaultFolderId(this.folderChoicesOf(target?.id ?? null)));
       const prefill = this.profilePrefill(target?.id ?? null);
       this.selectedQualityProfileId.set(prefill.qp);
       this.selectedLanguageProfileId.set(prefill.lp);
@@ -131,11 +145,21 @@ export class ImportModalComponent {
     }
   }
 
+  private folderChoicesOf(libraryId: number | null): LibraryFolderChoice[] {
+    const lib = this.libraries().find((l) => l.id === libraryId);
+    return (lib?.folders ?? []).map((f) => ({
+      id: f.id,
+      name: f.path,
+      freeSpace: f.disk?.accessible ? f.disk.freeSpace : null,
+    }));
+  }
+
   /** A profile still on the previous library's pre-fill follows the new library. */
   selectLibrary(id: number | null) {
     const prev = this.profilePrefill(this.selectedLibraryId());
     const next = this.profilePrefill(id);
     this.selectedLibraryId.set(id);
+    this.selectedFolderId.set(defaultFolderId(this.folderChoicesOf(id)));
     if (this.selectedQualityProfileId() === prev.qp) this.selectedQualityProfileId.set(next.qp);
     if (this.selectedLanguageProfileId() === prev.lp) this.selectedLanguageProfileId.set(next.lp);
   }
@@ -191,6 +215,7 @@ export class ImportModalComponent {
         qualityProfileId: this.selectedQualityProfileId() ?? undefined,
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
         libraryId: this.selectedLibraryId() ?? undefined,
+        folderId: this.selectedFolderId() ?? undefined,
         ...(KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed()
           ? {
               monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b),
@@ -202,11 +227,9 @@ export class ImportModalComponent {
       this.imported.emit();
       void this.router.navigate(mediaDetailLink(saved.type, saved.id));
     } catch (err: unknown) {
-      const httpErr = err as { status?: number; error?: { message?: string } };
+      const httpErr = err as { status?: number };
       if (httpErr?.status === 400) {
-        this.error.set(
-          httpErr.error?.message ?? this.translate.instant('discover.tmdb_not_configured'),
-        );
+        this.error.set(serverMessage(err, this.translate, 'discover.tmdb_not_configured'));
       } else if (httpErr?.status === 403) {
         this.error.set(this.translate.instant('discover.forbidden'));
       } else {
