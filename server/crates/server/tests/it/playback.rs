@@ -414,3 +414,39 @@ async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
         .collect();
     assert_eq!(ids, vec![i64::from(series)]);
 }
+
+#[sqlx::test(migrations = false)]
+async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let u = c.user;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"ALTER TABLE media DROP CONSTRAINT "CK_media_type";
+        INSERT INTO libraries (id, name) VALUES (1, 'l');
+        INSERT INTO media (id, title, type, "libraryId") VALUES
+          (1, 'done', 'movie', 1), (2, 'begun', 'movie', 1), (3, 'all', 'series', 1),
+          (4, 'half', 'series', 1), (5, 'third', 'third', 1), (6, 'empty', 'series', 1);
+        INSERT INTO editions (id, "mediaId", family) SELECT id, id, 'video' FROM media;
+        INSERT INTO item_groups (id, "number", "mediaId") VALUES (13, 1, 3), (14, 1, 4), (16, 1, 6);
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 1, 1), (2, 2, 2), (5, 5, 5);
+        INSERT INTO items (id, "number", "groupId", "mediaId", "editionId")
+          VALUES (31, 1, 13, 3, 3), (32, 2, 13, 3, 3), (41, 1, 14, 4, 4), (42, 2, 14, 4, 4), (61, 1, 16, 6, 6);
+        INSERT INTO media_files (id, "mediaId", "relativePath", size, quality)
+          SELECT i.id, i."mediaId", 'f' || i.id, 1, 'q' FROM items i WHERE i.id IN (31, 32, 41, 42);
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT id, id, "mediaId" FROM items WHERE id IN (31, 32, 41, 42);
+        INSERT INTO playback_states ("userId", "itemId", completed) VALUES
+          ({u}, 1, true), ({u}, 2, false), ({u}, 31, true), ({u}, 32, true), ({u}, 41, true),
+          ({u}, 42, false), ({u}, 5, true), ({u}, 61, true);"#
+    )))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (s, ids) = c.api("GET", "/api/playback/watched-ids", None).await;
+    let mut ids: Vec<i64> = ids
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    ids.sort();
+    assert_eq!((s, ids), (200, vec![1, 3, 5]));
+}

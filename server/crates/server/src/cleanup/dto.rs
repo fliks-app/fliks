@@ -15,12 +15,10 @@ pub const ACTIONS: [&str; 3] = ["delete", "delete_files_unmonitor", "none"];
 /// The levels below a media: its seasons and episodes, only for kinds made of them.
 const ITEM_LEVELS: [&str; 2] = ["season", "episode"];
 
-/// Every kind names a whole-media level; the item levels exist when a kind has seasons.
+/// Every kind names a whole-media level, then the item levels of the kinds with seasons.
 pub fn levels_allowed() -> Vec<&'static str> {
     let mut all = MediaKind::NAMES.to_vec();
-    if MediaKind::ALL.iter().any(|k| k.has_seasons()) {
-        all.extend(ITEM_LEVELS);
-    }
+    all.extend(ITEM_LEVELS);
     all
 }
 
@@ -121,7 +119,7 @@ pub fn rule(v: Value) -> Res<Rule> {
     })
 }
 
-/// Canonical order; null or absent is `["movie"]`; at most one level of a kind with seasons or below it.
+/// Canonical order; null or absent is `["movie"]`; at most one seasonal level (kind, season, episode).
 fn levels(c: &mut Check, o: &Map<String, Value>) -> Vec<String> {
     let default = || vec![MediaKind::Movie.to_string()];
     let allowed = levels_allowed();

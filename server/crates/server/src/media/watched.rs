@@ -4,16 +4,14 @@ use std::fmt::Display;
 
 /// The seasonal kinds as a SQL `text[]` literal; registry constants, never user text.
 fn seasonal_array() -> String {
-    let names: Vec<String> = MediaKind::seasonal_names()
-        .into_iter()
-        .map(|n| format!("'{n}'"))
-        .collect();
+    let kinds = MediaKind::seasonal_names();
+    debug_assert!(kinds.iter().all(|n| !n.contains('\'')));
+    let names: Vec<String> = kinds.into_iter().map(|n| format!("'{n}'")).collect();
     format!("ARRAY[{}]::text[]", names.join(", "))
 }
 
-/// A seasonal media is watched when every on-disk item of its groups above 0 is completed (and one
-/// is on disk), any other when one of its items is completed. `uid` is a user id, a bound parameter
-/// or a column, never user text; `m` aliases the media row.
+/// Seasonal: every on-disk item of its groups above 0 is completed; any other: one item is completed.
+/// `uid` is a user id, a bound parameter or a column, never user text; `m` aliases the media row.
 pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     let seasonal = seasonal_array();
     format!(
@@ -36,11 +34,6 @@ pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     )
   END"#
     )
-}
-
-/// The ids of the media `uid` has watched, as a subquery.
-pub(crate) fn sql(uid: impl Display) -> String {
-    format!("SELECT m.id FROM media m WHERE {}", predicate(uid, "m"))
 }
 
 /// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind.

@@ -78,7 +78,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | `missing` | `!== undefined` | rule 22 | |
     | `unidentified` | `=== true` | `NOT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = media.id)` | identified means any external id (`external-ids.md` rule 7); an empty `imdbId` is not stored, so it does not count |
     | `letter` | truthy | rule 23 | |
-20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `media.id <op> (<watched subquery>)` with `op = onlyWatched ? IN : NOT IN` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below, the one watched rule of the server (Q-P and `watched-ids` use the same predicate): a media of a kind with seasons (`MediaKind::has_seasons`) is watched when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; such a media with no file-backed episode is never watched); any other media is watched when the user has a `completed` row on one of its items (a movie's single item, either edition of a book).
+20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `(<watched predicate>)` for `onlyWatched` or `NOT (<watched predicate>)` for `excludeWatched` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below, the one watched rule of the server (Q-P and `watched-ids` use the same predicate): a media of a kind with seasons (`MediaKind::has_seasons`) is watched when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; such a media with no file-backed episode is never watched); any other media is watched when the user has a `completed` row on one of its items (a movie's single item, either edition of a book).
 21. `total` = number of distinct media matching all clauses above (not reduced by `cutoffUnmet`, rule 26, nor by `limit`).
 22. `missing` (rule 19) is, with `today` = the **UTC** date `YYYY-MM-DD` computed in application code (not `CURRENT_DATE`): `missing=true` → `(files.id IS NULL OR <ME>)`, `missing=false` → `(files.id IS NOT NULL AND NOT <ME>)`, where `files.id IS NULL` means the media has no `media_files` row (`NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = media.id)`) and `<ME>` is Q-M below ("a monitored season (> 0) holds a monitored episode, aired on or before today, not on disk"). An episode with `airDate IS NULL` is never missing; an unmonitored series with gaps is still missing; a movie is missing iff it has no file. "On disk" = the episode has an item part (`items.md` rule 21): a multi-episode file gives a part to every existing episode of its range, so the episodes inside it are on disk without any range arithmetic.
 23. `letter`: `letter = query.letter.toUpperCase()` (Unicode upper-casing); `'#'` → `media.title !~ '^[A-Za-z]'` (title not starting with an ASCII letter, evaluated by Postgres); a single ASCII `A`-`Z` → `UPPER(LEFT(media.title, 1)) = $letter` (database `UPPER`; titles starting with an accented letter do not match their base letter); anything else (two characters, `1`, `É`, lowercase that does not upper-case into `A-Z`) adds **no filter** and no error.
@@ -105,7 +105,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 31. `MD` (`GET :id`) = the media loaded with relations `seasons, seasons.episodes, files, qualityProfile, languageProfile, library, metadata`: the `MLI` columns/`path`/relation ids/joined relations of rule 30 **plus** `seasons` (array, `[]` when none; each `id, createdAt, updatedAt, seasonNumber, monitored, preferredProvider, posterUrl, overview, airDate` (string\|null, varchar), `mediaId`, `episodes[]`) and `metadata`; **no** `sizeOnDisk`, `episodeStats`, `watched`, `progressPercent`. Episode: `id, createdAt, updatedAt, episodeNumber, endEpisodeNumber, title, overview, airDate` (`YYYY-MM-DD`\|null), `runtime, monitored, hasFile, stillUrl, markersScannedAt` (ISO\|null), `seasonId` (no `searchVector`). `metadata` (`movie_details` or `series_details`, built by `media_details_json`, `media-details.md` rule 13): `id, createdAt, updatedAt, budget, revenue` (**strings** or null: bigint, always null for a series), `tagline, popularity` (float), `voteCount, originalLanguage, productionCountries, productionCompanies, videos, keywords` (jsonb); when the media has no metadata row the key is `null` (parity `detail-no-metadata`).
 32. Detail post-processing: seasons sorted with `seasonNumber 0` (specials) **last**, the others ascending; episodes of each season ascending by `episodeNumber`; `hasFile` of an episode is derived: true when it has an item part (`items.md` rule 21), so an episode inside a multi-episode file reports `true`. 404 `Media #<id> not found` when the row vanished after the gate. `files` are ordered `id ASC`.
 33. `recently-added`: limit `query.limit ?? 20` (`0` gives `[]` via `LIMIT 0`; negative = 400, rule 9), mode `query.mode ?? 'file'`, user clauses only when `excludeWatched || requestedByMe`. Pass 1 ranks ids with Q-R below, pass 2 loads the full `MLI` (library, profiles, files joins, `id IN ids`), restores the pass-1 order and runs `attachEpisodeStats` only. Mode `media`: `ORDER BY media."createdAt" DESC`; `file`: only media with a file, `ORDER BY lf.added DESC` (newest `media_files."createdAt"` per media); `both`: `ORDER BY GREATEST(media."createdAt", COALESCE(lf.added, media."createdAt")) DESC`. Ties break on `media.id ASC`. `libraryId` (truthy) is ANDed with the ACL.
-34. `recently-added` items carry no `watched` / `progressPercent` (watched/progress are not computed); `excludeWatched` filters with `media.id NOT IN (<watched subquery>)` (no `onlyWatched` here).
+34. `recently-added` items carry no `watched` / `progressPercent` (watched/progress are not computed); `excludeWatched` filters with `NOT (<watched predicate>)` (no `onlyWatched` here).
 
 ### E. Counts, genres, collections, qualities
 
@@ -195,10 +195,10 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
 
 **Q-L3 (list: hydrate)** (`.*` below stands for the entity columns of rule 30, never `searchVector`; a null FK column gives a `null` relation-id key, rule 30) `SELECT media.*, library.*, "qualityProfile".*, "languageProfile".* FROM media LEFT JOIN libraries library ON library.id = media."libraryId" LEFT JOIN quality_profiles ... LEFT JOIN language_profiles ... WHERE media.id = ANY($page_ids)`; `SELECT * FROM media_files WHERE "mediaId" = ANY($page_ids) ORDER BY id`; reassemble in `$page_ids` order.
 
-**Q-W (watched subquery)**: `<seasonal>` is `ARRAY['series']::text[]`, the kinds with seasons from the registry.
+**Q-W (watched predicate)** on the media row `m`; `<seasonal>` is `ARRAY['series']::text[]`, the kinds with seasons from the registry.
 
 ```sql
-SELECT m.id FROM media m WHERE CASE WHEN m.type = ANY(<seasonal>) THEN
+CASE WHEN m.type = ANY(<seasonal>) THEN
     EXISTS (
       SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
       WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
@@ -217,6 +217,8 @@ SELECT m.id FROM media m WHERE CASE WHEN m.type = ANY(<seasonal>) THEN
     )
   END
 ```
+
+The `ELSE` arm counts only the ungrouped items of the media, and a media finished in one of its editions is watched.
 
 **Q-M (missing-episode predicate)**:
 
@@ -274,7 +276,7 @@ FROM media m
 WHERE m.id = ANY($2::int[])
 ```
 
-**Q-R (recently-added ids)** rule 33 (`<user>` = optional `AND media.id NOT IN (<Q-W with $user>)` / `AND media."addedById" = $user`; `<lib>` = optional `AND media."libraryId" = $n`):
+**Q-R (recently-added ids)** rule 33 (`<user>` = optional `AND NOT (<Q-W with $user>)` / `AND media."addedById" = $user`; `<lib>` = optional `AND media."libraryId" = $n`):
 
 ```sql
 SELECT media.id AS id

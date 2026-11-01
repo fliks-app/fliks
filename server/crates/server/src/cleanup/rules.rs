@@ -228,8 +228,8 @@ pub fn compile(
         q.push(format!(
             r#" AND EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER})
             AND NOT EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER}
-              AND media.id NOT IN ({}))"#,
-            crate::media::watched::sql(r#"r."userId""#)
+              AND NOT ({}))"#,
+            crate::media::watched::predicate(r#"r."userId""#, "media")
         ));
     }
     if let Some(r) = c.get("ratingBelow").and_then(Value::as_f64) {
@@ -333,28 +333,31 @@ pub async fn matched(
 }
 
 /// Built-in recommendations: reason key, criteria, levels (`cleanup.md` rules 33-36).
-const RECOMMENDATIONS: [(&str, &str, &[&str]); 4] = [
-    (
-        "never_played",
-        r#"{"neverPlayed": true, "addedOlderThanDays": 90}"#,
-        &MediaKind::NAMES,
-    ),
-    (
-        "watched_by_requester",
-        r#"{"watchedByRequester": true, "lastPlayedOlderThanDays": 60}"#,
-        &MediaKind::NAMES,
-    ),
-    (
-        "not_played_for_a_year",
-        r#"{"notPlayedInLastDays": 365, "addedOlderThanDays": 365}"#,
-        &MediaKind::NAMES,
-    ),
-    (
-        "series_ended",
-        r#"{"seriesEnded": true, "lastPlayedOlderThanDays": 180, "addedOlderThanDays": 180}"#,
-        &[MediaKind::Series.as_str()],
-    ),
-];
+fn recommendation_sets() -> [(&'static str, &'static str, Vec<&'static str>); 4] {
+    let all = MediaKind::NAMES.to_vec();
+    [
+        (
+            "never_played",
+            r#"{"neverPlayed": true, "addedOlderThanDays": 90}"#,
+            all.clone(),
+        ),
+        (
+            "watched_by_requester",
+            r#"{"watchedByRequester": true, "lastPlayedOlderThanDays": 60}"#,
+            all.clone(),
+        ),
+        (
+            "not_played_for_a_year",
+            r#"{"notPlayedInLastDays": 365, "addedOlderThanDays": 365}"#,
+            all,
+        ),
+        (
+            "series_ended",
+            r#"{"seriesEnded": true, "lastPlayedOlderThanDays": 180, "addedOlderThanDays": 180}"#,
+            MediaKind::seasonal_names(),
+        ),
+    ]
+}
 
 #[derive(Serialize)]
 struct Recommendation {
@@ -383,7 +386,7 @@ pub async fn recommendations(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Val
     .collect();
     let mut reasons = vec![];
     let mut items: HashMap<i32, (Match, Vec<&str>)> = HashMap::new();
-    for (key, criteria, levels) in RECOMMENDATIONS {
+    for (key, criteria, levels) in recommendation_sets() {
         let criteria: Value = serde_json::from_str(criteria).expect("built-in criteria");
         let lv: Vec<String> = levels.iter().map(|l| (*l).to_owned()).collect();
         for m in matched(db, &criteria, &lv, "delete").await? {

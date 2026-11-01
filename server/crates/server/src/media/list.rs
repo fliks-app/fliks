@@ -164,8 +164,11 @@ fn push_scope(
         None => {}
     }
     if p.exclude_watched || p.only_watched {
-        let op = if p.only_watched { "IN" } else { "NOT IN" };
-        qb.push(format!(" AND media.id {op} ({})", super::watched::sql(uid)));
+        let not = if p.only_watched { "" } else { "NOT " };
+        qb.push(format!(
+            " AND {not}({})",
+            super::watched::predicate(uid, "media")
+        ));
     }
     if p.requested_by_me {
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);
@@ -213,18 +216,16 @@ fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
             "::int4[]) AS qr(q, rank) ON qr.q = f.quality WHERE {files_on}), 0)"
         ));
     };
-    qb.push(" AND ((media.type <> ALL(")
+    qb.push(" AND CASE WHEN media.type = ANY(")
         .push_bind(MediaKind::seasonal_names())
-        .push(") AND ");
-    rank(qb, "f.\"mediaId\" = media.id");
-    qb.push(" < c.cr) OR (media.type = ANY(")
-        .push_bind(MediaKind::seasonal_names())
-        .push(") AND EXISTS (SELECT 1 FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0 AND e.monitored = true AND ");
+        .push(") THEN EXISTS (SELECT 1 FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0 AND e.monitored = true AND ");
     rank(
         qb,
         "EXISTS (SELECT 1 FROM item_parts p WHERE p.\"mediaFileId\" = f.id AND p.\"itemId\" = e.id)",
     );
-    qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM item_groups s2 JOIN items o ON o.\"groupId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"number\" > 0 AND o.monitored = true AND o.\"endNumber\" IS NOT NULL AND e.\"number\" > o.\"number\" AND e.\"number\" <= o.\"endNumber\")))) ");
+    qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM item_groups s2 JOIN items o ON o.\"groupId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"number\" > 0 AND o.monitored = true AND o.\"endNumber\" IS NOT NULL AND e.\"number\" > o.\"number\" AND e.\"number\" <= o.\"endNumber\")) ELSE ");
+    rank(qb, "f.\"mediaId\" = media.id");
+    qb.push(" < c.cr END ");
 }
 
 fn order_sql(p: &Search) -> &'static str {
@@ -354,8 +355,8 @@ pub async fn recently_added(
     }
     if p.exclude_watched {
         qb.push(format!(
-            " AND media.id NOT IN ({})",
-            super::watched::sql(uid)
+            " AND NOT ({})",
+            super::watched::predicate(uid, "media")
         ));
     }
     if p.requested_by_me {

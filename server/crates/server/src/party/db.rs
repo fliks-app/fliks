@@ -748,8 +748,8 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
                AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN item_groups s ON s.id = e."groupId"
                                                WHERE e.id = $3 AND s."mediaId" = $1))
                AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = ANY($4)))
-               AND ($3::int IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1)
-                    OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = $3 AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))"#,
+               AND (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId"
+                            WHERE (e.id = $3 OR ($3 IS NULL AND e."mediaId" = $1 AND e."groupId" IS NULL)) AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))"#,
     )
     .bind(item.media_id)
     .bind(item.media_file_id)
