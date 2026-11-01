@@ -3829,5 +3829,30 @@
     "taken_propose": "Già proposto",
     "propose_count_one": "Proponi {{count}} episodio",
     "propose_count_other": "Proponi {{count}} episodi"
+  },
+  "reader": {
+    "back": "Indietro",
+    "contents": "Indice",
+    "no_contents": "Questo libro non ha un indice.",
+    "settings": "Impostazioni di lettura",
+    "progress": "Avanzamento della lettura",
+    "font_size": "Dimensione del testo",
+    "font_family": "Carattere",
+    "font_publisher": "Libro",
+    "font_serif": "Serif",
+    "font_sans": "Sans serif",
+    "theme": "Tema",
+    "theme_light": "Chiaro",
+    "theme_sepia": "Seppia",
+    "theme_dark": "Scuro",
+    "line_spacing": "Interlinea",
+    "margins": "Margini",
+    "margins_narrow": "Stretti",
+    "margins_normal": "Medi",
+    "margins_wide": "Larghi",
+    "layout": "Impaginazione",
+    "layout_paginated": "Pagine",
+    "layout_scroll": "Scorrimento",
+    "open_failed": "Impossibile aprire questo libro."
   }
 }
