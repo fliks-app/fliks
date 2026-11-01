@@ -423,6 +423,19 @@ install.
 
 ---
 
+## Provider plugins
+
+A metadata provider is a `process` plugin whose manifest carries a `provider` block and whose
+component exports the `metadata-provider` interface (the `provider` world of `fliks.wit`). It
+declares the id namespaces it owns (`<pluginId>:<name>` for your own, with an anchored `idPattern`),
+the kinds of work it serves and what it can do for each (`search`, `work`, `children`, `person`, ...),
+its upstream rate limits, the hosts its images come from, and the config keys it needs. The host
+paces and retries every outbound request itself; the plugin only maps upstream answers to the
+record shapes. Build it with `fliks-plugin-sdk-provider` (`export_provider!`). A provider holds no
+database and needs no scope. Fields and rules: `server/docs/spec/provider-plugins.md`.
+
+---
+
 ## Proposing an extension point
 
 Everything a plugin can reach is a closed set: the host functions in the WIT world

@@ -182,7 +182,9 @@ jobs:
           workspaces: server
       - name: build the fixture component
         working-directory: server/crates/plugin-sdk
-        run: cargo xtask build examples/fixture-guest
+        run: |
+          cargo xtask build examples/fixture-guest
+          cargo xtask build examples/fixture-provider
       - name: plugin SDK tests (harness on the fixture)
         working-directory: server/crates/plugin-sdk
         run: cargo test --workspace

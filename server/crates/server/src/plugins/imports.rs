@@ -389,6 +389,24 @@ impl host::Host for Ctx {
         })
     }
 
+    async fn provider_set_limits(
+        &mut self,
+        _rate_per_sec: f64,
+        _burst: u32,
+        _daily_quota: Option<u32>,
+    ) -> Result<(), HostError> {
+        Err(host_err(
+            "ERR_NO_METHOD",
+            "host method \"provider.setLimits\" is not served",
+        ))
+    }
+    async fn provider_quota_spent(&mut self) -> Result<(), HostError> {
+        Err(host_err(
+            "ERR_NO_METHOD",
+            "host method \"provider.quotaSpent\" is not served",
+        ))
+    }
+
     async fn config_get(
         &mut self,
         keys: Option<Vec<String>>,

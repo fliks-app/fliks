@@ -1,6 +1,7 @@
 //! `plugin.json` (`plugins.md` rules 1-5, 12, 16) and the inspect pipeline over an archive.
 use super::archive::{self, Archive, Refusal, refuse};
 use super::trust::{self, Keys, Trust};
+use fliks_domain::plugins::provider;
 use nodejs_semver::{Range, Version};
 use serde_json::{Map, Value};
 
@@ -57,7 +58,8 @@ const BASE_KEYS: [&str; 14] = [
     "i18n",
     "kind",
 ];
-const PROCESS_KEYS: [&str; 11] = [
+const PROCESS_KEYS: [&str; 12] = [
+    "provider",
     "runtime",
     "memoryMb",
     "files",
@@ -237,6 +239,13 @@ fn secrets_shaped(db: &Value) -> bool {
     }
 }
 
+/// Rule 58: a provider's block is well shaped and it holds no schema.
+fn provider_fields(j: &Value) -> bool {
+    j.get("provider").is_none_or(|p| {
+        provider::validate_block(p).is_ok() && j["database"]["schema"] == Value::Bool(false)
+    })
+}
+
 fn process_fields(j: &Value) -> bool {
     j["runtime"] == "wasm"
         && j["memoryMb"].as_f64().is_some_and(|m| m <= MEMORY_MB_MAX)
@@ -248,8 +257,9 @@ fn process_fields(j: &Value) -> bool {
             .as_array()
             .is_some_and(|a| a.iter().all(Value::is_string))
         && route_array(&j["routes"])
+        && provider_fields(j)
         && j["scopes"].as_array().is_some_and(|a| {
-            !a.is_empty()
+            (!a.is_empty() || j.get("provider").is_some())
                 && a.iter()
                     .all(|s| s.as_str().is_some_and(|s| SCOPES.contains(&s)))
         })
@@ -395,6 +405,30 @@ fn strs(v: &Value) -> impl Iterator<Item = &str> {
     v.as_array().into_iter().flatten().filter_map(Value::as_str)
 }
 
+/// Rule 12's provider capabilities: `namespace:<name>` per namespace, then `provider:<first>:<kind>` per kind.
+fn provider_capabilities(p: &Value) -> Vec<String> {
+    let names: Vec<&str> = p["namespaces"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| n["name"].as_str())
+        .collect();
+    let Some(first) = names.first() else {
+        return vec![];
+    };
+    let mut kinds: Vec<&str> = p["kinds"]
+        .as_object()
+        .into_iter()
+        .flat_map(|k| k.keys().map(String::as_str))
+        .collect();
+    kinds.sort_unstable();
+    names
+        .iter()
+        .map(|n| format!("namespace:{n}"))
+        .chain(kinds.into_iter().map(|k| format!("provider:{first}:{k}")))
+        .collect()
+}
+
 /// Rule 12's capability list, in order.
 pub fn capabilities(m: &Value, network_newly_requested: bool) -> Vec<String> {
     let ui = &m["ui"];
@@ -427,6 +461,7 @@ pub fn capabilities(m: &Value, network_newly_requested: bool) -> Vec<String> {
         if network_newly_requested {
             caps.push("network:internal".into());
         }
+        caps.extend(provider_capabilities(&m["provider"]));
     }
     caps
 }

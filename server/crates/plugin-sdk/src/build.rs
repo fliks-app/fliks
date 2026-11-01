@@ -217,12 +217,12 @@ pub fn verify(archive: &[u8], extra_keys: trust::Keys, budget: usize) -> Result<
             wasm.len()
         ));
     }
-    check_world(wasm)?;
+    check_world(wasm, i.manifest.get("provider").is_some())?;
     Ok(i)
 }
 
-/// Every import is one of the `plugin` world's and the only export is `guest`.
-pub fn check_world(wasm: &[u8]) -> Result<(), Error> {
+/// Every import is one of the `plugin` world's; the exports are `guest`, plus `metadata-provider` for a provider.
+pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
     use wit_parser::decoding::{DecodedWasm, decode};
     let mut world = wit_parser::Resolve::default();
     let (pkg, _) = world
@@ -251,15 +251,21 @@ pub fn check_world(wasm: &[u8]) -> Result<(), Error> {
             foreign.join(", ")
         ));
     }
-    let exports: Vec<String> = r.worlds[cw]
+    let exports: BTreeSet<String> = r.worlds[cw]
         .exports
         .keys()
         .map(|k| r.name_world_key(k))
         .collect();
-    if exports != ["fliks:plugin/guest@3.0.0"] {
+    let mut want = vec!["fliks:plugin/guest@3.0.0"];
+    if provider {
+        want.push("fliks:plugin/metadata-provider@3.0.0");
+    }
+    want.sort_unstable();
+    if exports.iter().ne(want.iter()) {
         return Err(format!(
-            "exports {} instead of fliks:plugin/guest@3.0.0",
-            exports.join(", ")
+            "exports {} instead of {}",
+            exports.into_iter().collect::<Vec<_>>().join(", "),
+            want.join(", ")
         ));
     }
     Ok(())

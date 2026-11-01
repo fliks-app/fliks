@@ -247,6 +247,11 @@ interface host {
 
   config-get: func(keys: option<list<string>>) -> result<list<tuple<string, string>>, host-error>;
   config-set: func(key: string, value: option<string>) -> result<_, host-error>;
+
+  /// Provider only: replaces the limits of the host's outbound limiter (read from `x-ratelimit-*` headers).
+  provider-set-limits: func(rate-per-sec: f64, burst: u32, daily-quota: option<u32>) -> result<_, host-error>;
+  /// Provider only: the day's quota is spent until midnight UTC.
+  provider-quota-spent: func() -> result<_, host-error>;
 }
 
 interface db {
@@ -283,6 +288,45 @@ interface guest {
   shutdown: func();
 }
 
+interface metadata-provider {
+  use types.{kind, external-id, json};
+
+  /// The resolved metadata language: `locale` is the TMDB-style tag (`fr-FR`).
+  record lang { language: string, region: option<string>, locale: string }
+  record search-query {
+    kind: kind,
+    query: string,
+    year: option<s32>,
+    title: option<string>,
+    author: option<string>,
+    author-id: option<string>,
+    isbn: option<string>,
+    language: option<string>,
+    page: u32,
+  }
+  variant provider-error {
+    not-found,
+    unsupported,
+    unauthorized,
+    /// The upstream's quota or rate-limit error body, read by the plugin.
+    rate-limited,
+    upstream(string),
+  }
+
+  /// A record is a `json` document of the shape the metadata specs name, validated by the host.
+  search: func(q: search-query, lang: lang) -> result<json, provider-error>;
+  fetch-work: func(kind: kind, id: string, lang: lang) -> result<json, provider-error>;
+  fetch-children: func(kind: kind, id: string, lang: lang) -> result<json, provider-error>;
+  child-stubs: func(kind: kind, id: string, lang: lang) -> result<json, provider-error>;
+  find-by: func(source: external-id, lang: lang) -> result<option<tuple<string, kind>>, provider-error>;
+  fetch-edition: func(edition: external-id, lang: lang) -> result<option<json>, provider-error>;
+  fetch-chapters: func(asin: string, lang: lang) -> result<option<json>, provider-error>;
+  fetch-person: func(id: string, lang: lang) -> result<json, provider-error>;
+  person-credits: func(id: string, lang: lang) -> result<json, provider-error>;
+  %list: func(kind: kind, name: string, params: list<tuple<string, string>>, lang: lang)
+    -> result<json, provider-error>;
+}
+
 world plugin {
   include wasi:cli/imports@0.2.12;
   import wasi:http/types@0.2.12;
@@ -291,4 +335,9 @@ world plugin {
   import db;
   import log;
   export guest;
+}
+
+world provider {
+  include plugin;
+  export metadata-provider;
 }

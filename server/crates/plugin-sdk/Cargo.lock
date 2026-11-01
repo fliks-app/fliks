@@ -1131,6 +1131,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixture-provider"
+version = "0.1.0"
+dependencies = [
+ "fliks-plugin-sdk",
+ "fliks-plugin-sdk-provider",
+ "serde_json",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1179,6 +1188,15 @@ dependencies = [
  "wit-bindgen 0.62.0",
  "wit-parser 0.259.0",
  "wstd",
+]
+
+[[package]]
+name = "fliks-plugin-sdk-provider"
+version = "0.1.0"
+dependencies = [
+ "fliks-plugin-sdk",
+ "wasip2",
+ "wit-bindgen 0.62.0",
 ]
 
 [[package]]
