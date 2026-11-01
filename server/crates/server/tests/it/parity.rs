@@ -35,27 +35,35 @@ fn env(k: &str, d: &str) -> String {
     std::env::var(k).unwrap_or_else(|_| d.into())
 }
 
-/// Runs psql inside the container so no credentials are needed; `sql` is fed on stdin when given.
+/// Runs psql with `sql` on stdin when given: the local client when `PGHOST` is set (CI), else inside the container.
 fn psql(args: &[&str], sql: Option<&[u8]>) -> String {
     use std::io::Write;
     use std::process::Stdio;
-    let pg = std::env::var("PARITY_PG").unwrap_or_else(|_| "fliks-postgres-1".into());
-    let mut child = Command::new("docker")
-        .args(["exec", "-i", &pg, "sh", "-c"])
-        .arg(r#"psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@""#)
-        .arg("_")
+    let mut cmd = if std::env::var_os("PGHOST").is_some() {
+        let mut c = Command::new("psql");
+        c.args(["-v", "ON_ERROR_STOP=1", "-q"]);
+        c
+    } else {
+        let pg = env("PARITY_PG", "fliks-postgres-1");
+        let mut c = Command::new("docker");
+        c.args(["exec", "-i", &pg, "sh", "-c"])
+            .arg(r#"psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@""#)
+            .arg("_");
+        c
+    };
+    let mut child = cmd
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("docker");
+        .expect("psql");
     let mut stdin = child.stdin.take().expect("stdin");
     if let Some(sql) = sql {
         stdin.write_all(sql).expect("psql stdin");
     }
     drop(stdin);
-    let out = child.wait_with_output().expect("docker");
+    let out = child.wait_with_output().expect("psql");
     assert!(
         out.status.success(),
         "psql {args:?}: {}",

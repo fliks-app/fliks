@@ -12,16 +12,27 @@ export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-4} SQLX_OFFLINE=true
 RUN=$CARGO_TARGET_DIR/run-all
 export FLIKS_PARITY_ROOT=$RUN/root # media and fixtures of this run only; other runs keep /tmp/fliks-parity
 DBPFX=${PARITY_DB_PREFIX:-pall_}
-HEAVY=${HEAVY:-fliks-heavy}
+HEAVY=${HEAVY-fliks-heavy} # HEAVY= runs cargo unwrapped (CI)
 FILTER=$* # scenario path substrings, any of which selects a scenario
-export PARITY_PG=${PARITY_PG:-fliks-postgres-1} # the PostgreSQL container the run creates its databases in
+# PARITY_SHARD=<k>/<n>: the scenario group directories dealt onto n shards by size (largest first); this run takes shard k
+if [ -n "${PARITY_SHARD:-}" ]; then
+  FILTER=$(for d in "$SERVER"/parity/scenarios/*/; do echo "$(find "$d" -name '*.json' | wc -l) $(basename "$d")"; done |
+    LC_ALL=C sort -k1,1nr -k2 | awk -v k="${PARITY_SHARD%/*}" -v n="${PARITY_SHARD#*/}" \
+      '{ m = 1; for (i = 2; i <= n; i++) if (load[i] < load[m]) m = i; load[m] += $1; if (m == k) printf "scenarios/%s/ ", $2 }')
+fi
+# PGHOST set (CI): the PostgreSQL the PG* env names, local psql. Else the PARITY_PG container, psql inside it.
+export PARITY_PG=${PARITY_PG:-fliks-postgres-1}
 P_ARR=4960 P_LIVETV=4961 P_EMBY=4962 P_ESTUB=4963 P_PROV=4964 P_ENGINE=4965 P_TARGET=4966
 PIDS=()
 
 log() { echo "[run-all] $*" >&2; }
 die() { log "$*"; exit 2; }
 
-psql_admin() { docker exec -i "$PARITY_PG" sh -c 'psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
+if [ -n "${PGHOST:-}" ]; then
+  psql_admin() { psql -v ON_ERROR_STOP=1 -q "$@"; }
+else
+  psql_admin() { docker exec -i "$PARITY_PG" sh -c 'psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
+fi
 
 stop_all() {
   local p
@@ -51,14 +62,20 @@ wait_http() { # wait_http <url> [seconds]
 }
 
 # ---- preconditions ----
-for t in docker ffmpeg python3 node curl sha256sum; do command -v "$t" >/dev/null || die "missing tool: $t"; done
-docker exec "$PARITY_PG" true 2>/dev/null || die "docker container $PARITY_PG is not running"
+for t in ffmpeg python3 node curl sha256sum ss; do command -v "$t" >/dev/null || die "missing tool: $t"; done
+if [ -n "${PGHOST:-}" ]; then
+  command -v psql >/dev/null || die "missing tool: psql"
+  psql_admin -d postgres -c 'SELECT 1' >/dev/null || die "PostgreSQL $PGHOST is not reachable"
+else
+  command -v docker >/dev/null || die "missing tool: docker"
+  docker exec "$PARITY_PG" true 2>/dev/null || die "docker container $PARITY_PG is not running"
+fi
 for p in $P_ARR $P_LIVETV $P_EMBY $P_ESTUB $P_PROV $P_ENGINE $P_TARGET; do
   ss -ltn | grep -q "[:.]$p " && die "port $p is in use (4960-4999 are reserved for run-all.sh)"
 done
 trap cleanup EXIT # only now: a second run stopped by the port check must not drop the first run's databases
 mkdir -p "$RUN"
-export PATH=$SERVER/parity/bin:$PATH # pg_dump/psql run inside the postgres container
+[ -n "${PGHOST:-}" ] || export PATH=$SERVER/parity/bin:$PATH # pg_dump/psql run inside the postgres container
 rm -rf "$RUN"/{target-*,*.log}
 
 # ---- build once ----
@@ -87,17 +104,21 @@ if [ ! -x "$ENGBIN" ]; then
   chmod +x "$ENGBIN.tmp" && mv "$ENGBIN.tmp" "$ENGBIN"
 fi
 
-# ---- media, database template ----
+# ---- media, database template (builtin C.UTF-8: text order and case folding do not follow the image's libc) ----
 "$SERVER/parity/media-gen.sh" || die "media-gen failed"
 TPL=${DBPFX}tpl
 DB=${DBPFX}run
-psql_admin -d postgres -c "DROP DATABASE IF EXISTS $TPL WITH (FORCE)" -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $TPL" || die "template db"
+psql_admin -d postgres -c "DROP DATABASE IF EXISTS $TPL WITH (FORCE)" -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $TPL TEMPLATE template0 ENCODING 'UTF8' LOCALE_PROVIDER builtin BUILTIN_LOCALE 'C.UTF-8' LOCALE 'C.UTF-8'" || die "template db"
 sed "s|/tmp/fliks-parity|$FLIKS_PARITY_ROOT|g" "$SERVER/parity/seed/base.sql" | psql_admin -d "$TPL" >/dev/null || die "base.sql"
-DBHOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PARITY_PG")
-DBUSER=$(docker exec "$PARITY_PG" sh -c 'printf %s "$POSTGRES_USER"')
-DBPASS=$(docker exec "$PARITY_PG" sh -c 'printf %s "$POSTGRES_PASSWORD"')
+if [ -n "${PGHOST:-}" ]; then
+  DBHOST=$PGHOST DBPORT=${PGPORT:-5432} DBUSER=$PGUSER DBPASS=${PGPASSWORD:-}
+else
+  DBHOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PARITY_PG") DBPORT=5432
+  DBUSER=$(docker exec "$PARITY_PG" sh -c 'printf %s "$POSTGRES_USER"')
+  DBPASS=$(docker exec "$PARITY_PG" sh -c 'printf %s "$POSTGRES_PASSWORD"')
+fi
 # scenario databases are copies of the template: bring it to the current schema once
-env -u DATABASE_URL DB_HOST=$DBHOST DB_PORT=5432 DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$TPL "$BIN" migrate || die "migrating the template"
+env -u DATABASE_URL DB_HOST=$DBHOST DB_PORT=$DBPORT DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$TPL "$BIN" migrate || die "migrating the template"
 
 # ---- stubs that live for the whole run ----
 start arr-stub "$SERVER/parity/stubs" env ARR_STUB_PORT=$P_ARR node arr-stub.mjs
@@ -125,7 +146,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
       ENG_URL=http://127.0.0.1:$P_ENGINE ENG_TOK=pall-engine ;;
     stub) ENG_URL=http://127.0.0.1:$P_ESTUB ENG_TOK=stub ;;
   esac
-  local penv=(DB_HOST=$DBHOST DB_PORT=5432 DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$DB
+  local penv=(DB_HOST=$DBHOST DB_PORT=$DBPORT DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$DB
     PORT=$P_TARGET JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_DISABLE_UPDATE_CHECK=1 FLIKS_SKIP_PRE_MIGRATION_BACKUP=1
     FLIKS_CAST_DIR="$ROOT/server/public" RUST_LOG=info
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"

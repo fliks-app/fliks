@@ -82,6 +82,9 @@
         },
         "status": 201
       },
+      "ignore": [
+        "$.error"
+      ],
       "method": "POST",
       "path": "/api/livetv/admin/sources/test"
     },

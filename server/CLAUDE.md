@@ -47,7 +47,7 @@ export CARGO_TARGET_DIR=$PWD/target RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0   
 ## Before you open a PR
 
 - A migration: update `parity/seed/build.sh`, and the per-group `parity/seed/<group>.sql` when it adds a required column or table; CI rebuilds the seeds, so a break fails there.
-- Parity for any PR touching server SQL: `PARITY_MODES="up0 down1" parity/run-all.sh <touched group> <another>` as one batched call, not under `fliks-heavy` (run-all takes its own slot). Provider scenarios are `engine: down`: `up0` alone leaves their `expect`s stale.
+- Parity: don't run the full suite locally. The `parity` jobs of the Server workflow run it on every PR (all modes, sharded; not a required check): read the job summary for the failing scenarios and the `parity-*-logs` artifact. Run a group locally (`PARITY_MODES=up0 parity/run-all.sh <group>`, own slot, not under `fliks-heavy`) only to debug a CI failure or to record `expect`s for a changed behaviour. Provider scenarios are `engine: down`: `up0` alone leaves their `expect`s stale.
 - A backfill (`UPDATE` in a migration) must not bump `updatedAt`: `ALTER TABLE t DISABLE TRIGGER set_updated_at` around it, then re-enable.
 - Every FK gets a non-partial index led by its columns (`tests/it/migrations.rs` asserts it); a partial index is useless to the cascade.
 - Wire bodies (`playlists/items.rs`): name the columns, never `to_jsonb(row)` of a whole table, so moving a column cannot move the wire.
