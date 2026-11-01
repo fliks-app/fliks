@@ -204,6 +204,7 @@ impl Collector<'_> {
                 mdir.to_path_buf(),
             ),
             MediaKind::Movie => (vec![(dir.to_path_buf(), "movie.nfo")], dir.to_path_buf()),
+            MediaKind::Book => (vec![], dir.to_path_buf()),
         };
         for (d, want) in nfo {
             if !d.starts_with(mdir) {

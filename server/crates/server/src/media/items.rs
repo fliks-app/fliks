@@ -109,7 +109,7 @@ pub struct NewWant {
     pub quality_profile_id: Option<i32>,
 }
 
-/// Gives a new media its `video` edition, one want per family of its kind and, when it has no seasons, its sole item.
+/// Gives a new media one want per family of its kind and, but for a book, its `video` edition and, without seasons, its sole item.
 pub async fn create_shell(
     c: &mut PgConnection,
     media: i32,
@@ -125,6 +125,9 @@ pub async fn create_shell(
         )
         .execute(&mut *c)
         .await?;
+    }
+    if kind == MediaKind::Book {
+        return Ok(());
     }
     let edition = sqlx::query_scalar!(
         r#"INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id"#,

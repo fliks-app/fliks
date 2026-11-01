@@ -5,11 +5,11 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-/// Every media of `only` (all when empty) has a `video` edition and want, and exactly the movies have an ungrouped item.
+/// Every media but a book of `only` (all when empty) has a `video` edition and want, and exactly the movies have an ungrouped item.
 pub async fn assert_media_have_shells(pool: &PgPool, only: &[i32]) {
     let bad: Vec<(i32, String)> = sqlx::query_as(
         r#"SELECT m.id, m.type FROM media m
-           WHERE (cardinality($1::int[]) = 0 OR m.id = ANY($1))
+           WHERE (cardinality($1::int[]) = 0 OR m.id = ANY($1)) AND m.type <> 'book'
              AND (NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id AND e.family = 'video')
                OR NOT EXISTS (SELECT 1 FROM wants w WHERE w."mediaId" = m.id AND w.family = 'video')
                OR (m.type = 'movie') <> EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id AND i."groupId" IS NULL))
@@ -330,4 +330,68 @@ async fn writers_refuse_to_pick_among_several_ungrouped_items(pool: PgPool) {
             .await
             .is_err()
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_is_created_without_edition_or_item_and_keeps_its_kind(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    let st = AppState::new(
+        pool.clone(),
+        Config::from_lookup(|_| None),
+        "0123456789abcdef0123456789abcdef",
+    );
+    sqlx::raw_sql(
+        r#"INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let token = st.jwt.sign_access(1, "admin").unwrap().token;
+    let app = media::router().with_state(st);
+
+    let mut made = vec![];
+    for kind in ["book", "movie"] {
+        let (s, b) = call(
+            &app,
+            &token,
+            "POST",
+            "/api/media",
+            json!({"title": kind, "type": kind}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        made.push(b["id"].as_i64().unwrap());
+    }
+    let wants: Vec<String> =
+        sqlx::query_scalar(r#"SELECT family FROM wants WHERE "mediaId" = $1 ORDER BY family"#)
+            .bind(made[0] as i32)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(wants, ["audio", "text"]);
+    let owned: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT count(*) FROM editions WHERE "mediaId" = $1) + (SELECT count(*) FROM items WHERE "mediaId" = $1)"#,
+    )
+    .bind(made[0] as i32)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(owned, 0);
+    assert_media_have_shells(&pool, &[]).await;
+
+    sqlx::raw_sql(r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m'); UPDATE media SET "libraryId" = 1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (id, kind) in [(made[0], "movie"), (made[1], "book")] {
+        let (s, b) = call(
+            &app,
+            &token,
+            "PUT",
+            &format!("/api/media/{id}"),
+            json!({"type": kind}),
+        )
+        .await;
+        assert_eq!(s, 400, "{b}");
+    }
 }

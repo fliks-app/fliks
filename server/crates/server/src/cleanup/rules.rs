@@ -87,7 +87,7 @@ impl Scope {
                             .into(),
                     added: r#"media."createdAt""#.into(),
                     released: format!(
-                        r#"(SELECT d.date FROM media_release_dates d WHERE d."mediaId" = media.id AND d.kind = '{}')"#,
+                        r#"(SELECT d.date FROM media_release_dates d WHERE d."mediaId" = media.id AND d."editionId" IS NULL AND d.kind = '{}')"#,
                         ReleaseKind::Release.as_str()
                     ),
                     episodes: None,

@@ -20,10 +20,20 @@ pub enum Field {
     Credits,
     Details,
     Ids,
+    Subtitle,
+    Authors,
+    Narrators,
+    Translators,
+    Series,
+    Publisher,
+    Language,
+    PageCount,
+    Duration,
+    Format,
 }
 
 impl Field {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 27] = [
         Self::Title,
         Self::OriginalTitle,
         Self::Overview,
@@ -41,6 +51,16 @@ impl Field {
         Self::Credits,
         Self::Details,
         Self::Ids,
+        Self::Subtitle,
+        Self::Authors,
+        Self::Narrators,
+        Self::Translators,
+        Self::Series,
+        Self::Publisher,
+        Self::Language,
+        Self::PageCount,
+        Self::Duration,
+        Self::Format,
     ];
 
     /// The name `media_field_sources.field` stores.
@@ -63,6 +83,16 @@ impl Field {
             Self::Credits => "credits",
             Self::Details => "details",
             Self::Ids => "ids",
+            Self::Subtitle => "subtitle",
+            Self::Authors => "authors",
+            Self::Narrators => "narrators",
+            Self::Translators => "translators",
+            Self::Series => "series",
+            Self::Publisher => "publisher",
+            Self::Language => "language",
+            Self::PageCount => "pageCount",
+            Self::Duration => "durationSeconds",
+            Self::Format => "format",
         }
     }
 
@@ -106,6 +136,16 @@ impl Field {
                 "keywords",
             ],
             Self::Ids => &["tmdbId", "tvdbId", "imdbId"],
+            Self::Subtitle => &["subtitle"],
+            Self::Authors => &["authors"],
+            Self::Narrators => &["narrators"],
+            Self::Translators => &["translators"],
+            Self::Series => &["series"],
+            Self::Publisher => &["publisher"],
+            Self::Language => &["language"],
+            Self::PageCount => &["pageCount"],
+            Self::Duration => &["durationSeconds"],
+            Self::Format => &["format"],
         }
     }
 
@@ -114,9 +154,11 @@ impl Field {
         Self::ALL.into_iter().find(|f| f.keys().contains(&key))
     }
 
-    /// `null`, `""` and `[]` are empty; under `ids` so is `0`.
+    /// `null`, `""` and `[]` are empty; under `ids`, `pageCount` and `durationSeconds` so is `0`.
     pub fn is_empty(self, v: &Value) -> bool {
-        blank(v) || (self == Self::Ids && v.as_i64() == Some(0))
+        blank(v)
+            || (matches!(self, Self::Ids | Self::PageCount | Self::Duration)
+                && v.as_i64() == Some(0))
     }
 }
 
@@ -158,5 +200,7 @@ mod tests {
         }
         assert!(Field::Ids.is_empty(&json!(0)));
         assert!(!Field::Ids.is_empty(&json!(5)));
+        assert!(Field::PageCount.is_empty(&json!(0)) && Field::Duration.is_empty(&json!(0)));
+        assert!(!Field::PageCount.is_empty(&json!(320)));
     }
 }

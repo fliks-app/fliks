@@ -11,13 +11,13 @@ impl FieldOrder {
     /// `first` (the season's, the media's, the library's preferred provider, most specific first),
     /// then the kind's default order.
     pub fn new(kind: MediaKind, first: &[ExternalProvider]) -> Self {
-        let defaults = match kind {
-            MediaKind::Movie | MediaKind::Series => {
-                [ExternalProvider::Tmdb, ExternalProvider::Tvdb]
-            }
+        use ExternalProvider::{Audible, Audnexus, Bnf, GoogleBooks, OpenLibrary, Tmdb, Tvdb};
+        let defaults: &[ExternalProvider] = match kind {
+            MediaKind::Movie | MediaKind::Series => &[Tmdb, Tvdb],
+            MediaKind::Book => &[OpenLibrary, Bnf, GoogleBooks, Audible, Audnexus],
         };
         let mut order: Vec<ExternalProvider> = vec![];
-        for p in first.iter().copied().chain(defaults) {
+        for p in first.iter().chain(defaults).copied() {
             if !order.contains(&p) {
                 order.push(p);
             }

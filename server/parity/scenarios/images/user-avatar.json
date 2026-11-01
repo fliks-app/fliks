@@ -11,6 +11,7 @@
       "as": "user",
       "expect": {
         "body": {
+          "bookQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "user@parity.test",

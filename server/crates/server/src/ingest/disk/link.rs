@@ -299,7 +299,7 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
                 tmdb_id,
             },
         ),
-        MediaKind::Movie => naming::apply_movie_folder_format(
+        MediaKind::Movie | MediaKind::Book => naming::apply_movie_folder_format(
             &f.movie_folder,
             &MovieFolder {
                 title: m.title.clone(),
@@ -451,7 +451,7 @@ async fn target_folder(
                     tmdb_id: None,
                 },
             ),
-            MediaKind::Movie => naming::apply_movie_folder_format(
+            MediaKind::Movie | MediaKind::Book => naming::apply_movie_folder_format(
                 &f.movie_folder,
                 &MovieFolder {
                     title: title.to_owned(),
@@ -512,7 +512,7 @@ pub(super) async fn find_or_create_unmatched(
 ) -> Result<(MediaRow, bool, String), AppError> {
     let sample = PathBuf::from(resolve(&d.files[0].path, "/"));
     let art_dir = match d.media_type {
-        MediaKind::Movie => sample.parent().unwrap_or(&sample).to_path_buf(),
+        MediaKind::Movie | MediaKind::Book => sample.parent().unwrap_or(&sample).to_path_buf(),
         MediaKind::Series if d.transfer.is_some() => {
             series_folder_of(&sample, &d.folder_name, d.scan_root.as_deref())
         }
@@ -520,7 +520,7 @@ pub(super) async fn find_or_create_unmatched(
     };
     let root_movie = d.folder_name.is_empty();
     let art_base = match d.media_type {
-        MediaKind::Movie => Some(split_ext(&file_name(&sample)).0.to_owned()),
+        MediaKind::Movie | MediaKind::Book => Some(split_ext(&file_name(&sample)).0.to_owned()),
         MediaKind::Series => None,
     };
     let read_nfo = async || -> Option<NfoData> {
@@ -529,11 +529,11 @@ pub(super) async fn find_or_create_unmatched(
                 Some(n) => Some(n),
                 None => nfo::for_video(&sample).await,
             },
-            MediaKind::Movie if root_movie => {
+            MediaKind::Movie | MediaKind::Book if root_movie => {
                 let base = art_base.clone().unwrap_or_default();
                 nfo::file(&art_dir.join(format!("{base}.nfo"))).await
             }
-            MediaKind::Movie => nfo::for_video(&sample).await,
+            MediaKind::Movie | MediaKind::Book => nfo::for_video(&sample).await,
         }
     };
     let guessed = d

@@ -36,6 +36,7 @@ pub const fn setting_key(kind: MediaKind, scope: Scope) -> Option<&'static str> 
         (MediaKind::Series, Scope::Folder) => Some("naming_series_folder_format"),
         (MediaKind::Series, Scope::GroupFolder) => Some("naming_season_folder_format"),
         (MediaKind::Movie, Scope::GroupFolder) => None,
+        (MediaKind::Book, _) => None,
     }
 }
 

@@ -451,6 +451,8 @@ Vector sets (fixtures under `server/fixtures`, replayed by Rust tests, `BLESS=1`
 | `streams-ok` (engine up), `streams-engine-down` (`[]`), `streams-file-of-other-media` (404), `streams-notfound-media`, `streams-badid`, `streams-library-no-path` (400 or 404) | rules 59-61 |
 | `search-vector-trigger` (Rust test, not parity): insert/update `title`/`overview` through SQL and assert `searchVector` equals the rule 62 expression; the backfill migration leaves `updatedAt` unchanged | rule 63 |
 
+A book's list item and detail carry a `book` object (`books-api.md`); the list gains the book filters and sorts there.
+
 ## Open questions
 
 none.

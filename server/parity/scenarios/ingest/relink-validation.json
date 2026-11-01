@@ -16,7 +16,7 @@
           "message": [
             "libraryId must not be less than 1",
             "libraryId must be an integer number",
-            "type must be one of the following values: movie, series",
+            "type must be one of the following values: movie, series, book",
             "folderName must be a string",
             "files must contain at least 1 elements",
             "files must be an array"

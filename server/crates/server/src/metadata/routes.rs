@@ -206,11 +206,11 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
         None => preferred(&st.db, bare(&q, "mediaId").as_deref()).await?,
     };
     let primary = md.resolve(name.as_deref());
-    let search = Search {
-        kind: MediaKind::from_tv(tv),
+    let search = Search::text(
+        MediaKind::from_tv(tv),
         query,
-        year: year(bare(&q, "year").as_deref()),
-    };
+        year(bare(&q, "year").as_deref()),
+    );
     let lang = lang(&st).await?;
     let go = Priority::Interactive;
     let mut found = md.of(primary).search(&search, &lang, go).await;

@@ -120,6 +120,9 @@ fn setting_keys_are_derived_from_kind_and_scope() {
             Some("naming_series_format"),
             Some("naming_series_folder_format"),
             Some("naming_season_folder_format"),
+            None,
+            None,
+            None,
         ]
     );
     let rows = [(

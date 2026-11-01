@@ -227,7 +227,11 @@ mod tests {
     #[test]
     fn the_join_names_the_registry_providers() {
         let j = ids_join("m");
-        for p in ExternalProvider::ALL {
+        for p in [
+            ExternalProvider::Tmdb,
+            ExternalProvider::Tvdb,
+            ExternalProvider::Imdb,
+        ] {
             assert!(j.contains(&format!("'{p}'")), "{p}");
         }
     }

@@ -435,7 +435,7 @@ mod tests {
         assert_eq!(
             msgs(create_request(json!({}))),
             json!([
-                "mediaType must be one of the following values: movie, series",
+                "mediaType must be one of the following values: movie, series, book",
                 "tmdbId must not be less than 1",
                 "tmdbId must be an integer number",
                 "title must be a string"

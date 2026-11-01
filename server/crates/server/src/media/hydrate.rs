@@ -85,7 +85,7 @@ LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_dat
              max(date) FILTER (WHERE kind = 'digital') AS digital_date,
              max(date) FILTER (WHERE kind = 'physical') AS physical_date,
              max(date) FILTER (WHERE kind = 'release') AS release_date
-           FROM media_release_dates WHERE "mediaId" = media.id) dates ON true
+           FROM media_release_dates WHERE "mediaId" = media.id AND "editionId" IS NULL) dates ON true
 LEFT JOIN LATERAL (
   SELECT COUNT(e.id) AS total,
          COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded

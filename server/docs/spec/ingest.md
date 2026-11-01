@@ -240,6 +240,8 @@ Fixtures: `media-path` (lexical `relativePathUnderMediaRoot`; it compares compon
 
 Parity scenarios: 14 files in `server/parity/scenarios/ingest/`, seed `ingest` = `server/parity/seed/ingest.sql`: libraries `Work Movies` (3), `Work Series` (4), `Pathless` (5) under `/tmp/fliks-parity/s5-ingest/work`, rebuilt per scenario by the harness `fs` key, `fsAfter` asserts the tree: `orphans-scan-library`, `orphans-scan-errors` (404, 400 no path, 403, 401), `orphans-scan-outside-acl` (404), `orphans-preview` (ok, not found, not a directory, validation), `orphans-preview-user` (403), `relink-inplace-unmatched` (`$.files[*].id` ignored), `relink-inplace-series`, `relink-inplace-outside-root` (400), `relink-inplace-identified-escape` (400), `relink-validation` (400 body, wrong type, 404 library), `relink-batch-queued`; engine `up` only (the probe is required, rule 21): `relink-transfer-copy` (re-run `alreadyPresent`), `relink-transfer-move`, `relink-reorganize`.
 
+Book files: `book-ingest.md`.
+
 ## Open questions
 
 None.

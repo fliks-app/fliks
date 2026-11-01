@@ -485,7 +485,7 @@ async fn external_id_for(
     let direct = match p {
         ExternalProvider::Tmdb => m.tmdb_id,
         ExternalProvider::Tvdb => m.tvdb_id,
-        ExternalProvider::Imdb => None,
+        _ => None,
     };
     if let Some(id) = direct.filter(|i| *i != 0) {
         return Ok(Some(id.to_string()));
@@ -551,7 +551,7 @@ async fn external_id_for(
                 return Ok(Some(id));
             }
         }
-        ExternalProvider::Imdb => {}
+        _ => {}
     }
     tracing::warn!(
         "crossRef: {label} - cross-reference failed for {}",

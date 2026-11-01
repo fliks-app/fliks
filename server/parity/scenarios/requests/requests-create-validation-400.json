@@ -13,7 +13,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "mediaType must be one of the following values: movie, series",
+            "mediaType must be one of the following values: movie, series, book",
             "tmdbId must not be less than 1",
             "tmdbId must be an integer number",
             "title must be a string"
@@ -42,7 +42,7 @@
           "error": "Bad Request",
           "message": [
             "property extra should not exist",
-            "mediaType must be one of the following values: movie, series",
+            "mediaType must be one of the following values: movie, series, book",
             "tmdbId must not be less than 1",
             "tmdbId must be an integer number",
             "title must be a string",

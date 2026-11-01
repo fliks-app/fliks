@@ -582,7 +582,7 @@ impl Tmdb {
         let external = match source {
             ExternalProvider::Imdb => "imdb_id",
             ExternalProvider::Tvdb => "tvdb_id",
-            ExternalProvider::Tmdb => return Ok(None),
+            _ => return Ok(None),
         };
         let d = self
             .get(

@@ -447,6 +447,10 @@ pub async fn update(
             _ => None,
         })
         .unwrap_or(media.media_type);
+    if kind != media.media_type && (kind == MediaKind::Book || media.media_type == MediaKind::Book)
+    {
+        return Err(AppError::bad_request("A book cannot change type"));
+    }
     if kind != media.media_type && kind.has_seasons() {
         let movie_items = sqlx::query_scalar!(
             r#"SELECT id FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL"#,

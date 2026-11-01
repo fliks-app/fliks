@@ -86,7 +86,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "criteria.mediaType must be one of the following values: movie, series",
+            "criteria.mediaType must be one of the following values: movie, series, book",
             "criteria.maxSeasons must not be less than 1",
             "criteria.yearTo must not be greater than 2200"
           ],

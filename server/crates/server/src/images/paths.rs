@@ -283,6 +283,7 @@ mod tests {
             "series-1",
             "movie-tmdb-603",
             "series-imdb-tt0133093",
+            "book-openlibrary-OL45883W",
         ] {
             assert!(request_key(ok), "{ok}");
         }
@@ -294,8 +295,8 @@ mod tests {
             "movie-6\u{663}",
             "movie-603x",
             "movie-tmdb-",
-            "movie-isbn-5",
-            "book-tmdb-5",
+            "movie-unknown-5",
+            "comic-tmdb-5",
             "movie-tmdb-6-3",
             "movie-imdb-../x",
             long.as_str(),
