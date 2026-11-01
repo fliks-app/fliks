@@ -55,7 +55,8 @@ pub async fn items_view(
         jsonb_build_object('id', f.id, 'createdAt', iso_ms(f."createdAt"), 'updatedAt', iso_ms(f."updatedAt"),
           'relativePath', f."relativePath", 'size', f.size, 'quality', f.quality, 'language', f.language,
           'streamInfo', f."streamInfo", 'osdbHash', f."osdbHash", 'osdbBytesize', f."osdbBytesize",
-          'mediaId', f."mediaId", 'episodeId', f."episodeId") ORDER BY f.id)
+          'mediaId', f."mediaId",
+          'episodeId', (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id)) ORDER BY f.id)
       FROM media_files f WHERE f."mediaId" = media.id
         AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g."mediaId" = media.id))), '[]'::jsonb),
     'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0))
@@ -74,10 +75,7 @@ LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
            FROM media_external_ids WHERE "mediaId" = media.id) ids ON true
 LEFT JOIN LATERAL (
   SELECT COUNT(e.id) AS total,
-         COUNT(e.id) FILTER (WHERE (e."hasFile" = true OR EXISTS (
-           SELECT 1 FROM items cov WHERE cov."groupId" = e."groupId" AND cov."hasFile" = true
-             AND cov."endNumber" IS NOT NULL AND e."number" > cov."number"
-             AND e."number" <= cov."endNumber"))) AS downloaded
+         COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded
   FROM item_groups s JOIN items e ON e."groupId" = s.id
   WHERE s."mediaId" = media.id AND s."number" > 0) st ON media.type = 'series'
 WHERE media.id = ANY($1)"#,
@@ -135,7 +133,7 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
             jsonb_build_object('id', e.id, 'createdAt', iso_ms(e."createdAt"), 'updatedAt', iso_ms(e."updatedAt"),
               'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
               'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime, 'monitored', e.monitored,
-              'hasFile', (e."hasFile" OR EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1 AND f."episodeId" = e.id)),
+              'hasFile', EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id),
               'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"), 'seasonId', e."groupId")
             ORDER BY e."number", e.id)
           FROM items e WHERE e."groupId" = s.id), '[]'::jsonb))

@@ -84,7 +84,8 @@ pub struct FileRow {
     pub osdb_bytesize: Option<i64>,
 }
 
-pub const FILE_COLS: &str = r#"id, "mediaId" AS media_id, "episodeId" AS episode_id, "relativePath" AS relative_path,
+pub const FILE_COLS: &str = r#"id, "mediaId" AS media_id, "relativePath" AS relative_path,
+  (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = media_files.id) AS episode_id,
   "streamInfo" AS stream_info, "osdbHash" AS osdb_hash, "osdbBytesize" AS osdb_bytesize"#;
 
 pub async fn file_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<FileRow>> {

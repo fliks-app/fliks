@@ -91,7 +91,10 @@ impl Scope {
                 };
             }
         };
-        let files = format!(r#"media_files f JOIN items ep ON ep.id = f."episodeId" WHERE {ep}"#);
+        let files = format!(
+            r#"media_files f WHERE EXISTS (SELECT 1 FROM item_parts p JOIN items ep ON ep.id = p."itemId"
+               WHERE p."mediaFileId" = f.id AND {ep})"#
+        );
         Scope {
             size: format!("COALESCE((SELECT SUM(f.size) FROM {files}), 0)"),
             last_played: format!(
@@ -107,7 +110,7 @@ impl Scope {
     }
 }
 
-const EP_FILE: &str = r#"EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = ep.id)"#;
+const EP_FILE: &str = r#"EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = ep.id)"#;
 
 /// `disk_libs` are the libraries under `diskFreeBelowPercent`; `unmonitor` skips already unmonitored media.
 pub fn compile(
@@ -143,7 +146,7 @@ pub fn compile(
     ));
     if let Some(ep) = &sc.episodes {
         q.push(format!(
-            r#" AND EXISTS (SELECT 1 FROM media_files f JOIN items ep ON ep.id = f."episodeId" WHERE {ep})"#
+            r#" AND EXISTS (SELECT 1 FROM items ep WHERE {ep} AND {EP_FILE})"#
         ));
     } else if unmonitor {
         q.push(" AND media.monitored");
@@ -251,7 +254,7 @@ pub fn compile(
     if let Some(n) = int(c, "keepLatestEpisodes") {
         q.push(
             r#" AND (SELECT COUNT(*) FROM items e2 JOIN item_groups s2 ON s2.id = e2."groupId"
-            WHERE s2."mediaId" = media.id AND EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = e2.id)
+            WHERE s2."mediaId" = media.id AND EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = e2.id)
             AND (COALESCE(e2."airDate", '-infinity'::date), e2.id) > (COALESCE(e."airDate", '-infinity'::date), e.id)) >= "#,
         )
         .push_bind(n);

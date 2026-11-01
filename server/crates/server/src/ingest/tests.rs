@@ -477,7 +477,7 @@ async fn rescan_refuses_a_missing_folder_and_reconciles(pool: PgPool) {
             .unwrap();
     assert_eq!(rows, ["Season 01/Show - S01E02.mkv"]);
     assert_eq!(
-        count(&c, r#"SELECT count(*) FROM items WHERE "hasFile""#).await,
+        count(&c, r#"SELECT count(DISTINCT "itemId") FROM item_parts"#).await,
         1
     );
     // A media with no rows and no folder: nothing to remove.
@@ -509,7 +509,8 @@ async fn rescan_batches_slots_links_and_removals(pool: PgPool) {
     let r = rescan(&c, s).await.unwrap();
     assert_eq!((r.added, r.removed), (3, 1));
     let has: Vec<(i32, i32, Option<i32>, bool)> = sqlx::query_as(
-        r#"SELECT s."number", e."number", e."endNumber", e."hasFile"
+        r#"SELECT s."number", e."number", e."endNumber",
+                  EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = e.id)
            FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE s."mediaId" = $1
            ORDER BY 1, 2"#,
     )
@@ -537,7 +538,7 @@ async fn rescan_batches_slots_links_and_removals(pool: PgPool) {
     assert_eq!(
         count(
             &c,
-            &format!(r#"SELECT count("episodeId") FROM media_files WHERE id = {unlinked}"#)
+            &format!(r#"SELECT count(*) FROM item_parts WHERE "mediaFileId" = {unlinked}"#)
         )
         .await,
         1
@@ -545,10 +546,119 @@ async fn rescan_batches_slots_links_and_removals(pool: PgPool) {
     assert_eq!(
         count(
             &c,
-            &format!(r#"SELECT count(*) FROM media_files WHERE "episodeId" = {special}"#)
+            &format!(r#"SELECT count(*) FROM item_parts WHERE "itemId" = {special}"#)
         )
         .await,
         1
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn rescan_links_a_range_and_a_version_to_the_items_they_play(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("series");
+    let l = library(&c, "S", &lib, r#"["series"]"#).await;
+    let s = media(&c, l, "Show", "series").await;
+    let g: i32 = sqlx::query_scalar(r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 1, true) RETURNING id"#)
+        .bind(s).fetch_one(&c.st.db).await.unwrap();
+    for n in 1..=3 {
+        sqlx::query(r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", monitored) VALUES ($1, $2, (SELECT id FROM editions WHERE "mediaId" = $2), $3, true)"#)
+            .bind(g).bind(s).bind(n).execute(&c.st.db).await.unwrap();
+    }
+    for n in ["Show - S01E01-E03.mkv", "Show - S01E03.mkv"] {
+        touch(&lib.join("Show").join(n), b"x");
+    }
+    rescan(&c, s).await.unwrap();
+    let parts: Vec<(i32, String, i32)> = sqlx::query_as(
+        r#"SELECT i."number", f."relativePath", p."position" FROM item_parts p
+           JOIN items i ON i.id = p."itemId" JOIN media_files f ON f.id = p."mediaFileId"
+           ORDER BY 1, 2"#,
+    )
+    .fetch_all(&c.st.db)
+    .await
+    .unwrap();
+    let (range, single) = ("Show - S01E01-E03.mkv", "Show - S01E03.mkv");
+    let want = [(1, range, 0), (2, range, 0), (3, range, 0), (3, single, 0)];
+    assert_eq!(
+        parts,
+        want.map(|(n, f, p)| (n, f.to_owned(), p)),
+        "the range file plays its three items, the single one is a second version of the third"
+    );
+    let owner: Option<i32> = sqlx::query_scalar(
+        r#"SELECT fi."episodeId" FROM media_file_items fi JOIN media_files f ON f.id = fi."mediaFileId"
+           WHERE f."relativePath" = $1"#,
+    )
+    .bind(range)
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    let first: i32 =
+        sqlx::query_scalar(r#"SELECT id FROM items WHERE "groupId" = $1 AND "number" = 1"#)
+            .bind(g)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+    assert_eq!(
+        owner,
+        Some(first),
+        "a file reports the lowest item it plays"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refresh_gives_the_items_it_creates_inside_a_range_their_parts(pool: PgPool) {
+    use crate::metadata::service::{EpisodeDetails, SeasonDetails};
+    let c = ctx(pool).await;
+    let lib = c.dir.join("series");
+    let l = library(&c, "S", &lib, r#"["series"]"#).await;
+    let s = media(&c, l, "Show", "series").await;
+    touch(&lib.join("Show/Show - S01E01-E03.mkv"), b"x");
+    rescan(&c, s).await.unwrap();
+    let parts = || count(&c, r#"SELECT count(*) FROM item_parts"#);
+    assert_eq!(parts().await, 1, "the rescan creates the owner only");
+    let season = SeasonDetails {
+        season_number: 1,
+        overview: None,
+        air_date: None,
+        poster_url: None,
+        episodes: (1..=3)
+            .map(|n| EpisodeDetails {
+                episode_number: n,
+                title: format!("E{n}"),
+                ..Default::default()
+            })
+            .collect(),
+    };
+    crate::media::write::apply_seasons(&c.st, s, &[season])
+        .await
+        .unwrap();
+    assert_eq!(
+        parts().await,
+        3,
+        "the refreshed episodes of the range play the file"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn rescan_links_a_movie_file_to_the_movie_item(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    touch(&lib.join("A/A.mkv"), b"a");
+    let a = media(&c, l, "A", "movie").await;
+    rescan(&c, a).await.unwrap();
+    let rows: Vec<(Option<i32>, bool)> = sqlx::query_as(
+        r#"SELECT fi."episodeId", i."groupId" IS NULL FROM item_parts p JOIN items i ON i.id = p."itemId"
+           LEFT JOIN media_file_items fi ON fi."mediaFileId" = p."mediaFileId" WHERE p."mediaId" = $1"#,
+    )
+    .bind(a)
+    .fetch_all(&c.st.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [(None, true)],
+        "one part on the ungrouped item, reported without an episode"
     );
 }
 

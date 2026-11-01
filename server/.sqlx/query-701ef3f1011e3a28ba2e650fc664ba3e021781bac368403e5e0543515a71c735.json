@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states\n             (\"userId\", \"mediaId\", \"mediaFileId\", \"episodeId\",\n              \"positionSeconds\", \"durationSeconds\", completed, \"lastPlayedAt\")\n           SELECT $1::int4, $2::int4,\n                  (SELECT p.\"mediaFileId\" FROM item_parts p\n                    WHERE p.\"itemId\" = e.id\n                    ORDER BY p.\"mediaFileId\" DESC LIMIT 1),\n                  e.id,\n                  0,\n                  COALESCE(\n                    (SELECT (mf2.\"streamInfo\"->>'durationSeconds')::float\n                       FROM media_files mf2 JOIN item_parts p2 ON p2.\"mediaFileId\" = mf2.id\n                      WHERE p2.\"itemId\" = e.id\n                      ORDER BY mf2.id DESC LIMIT 1),\n                    0\n                  ),\n                  true,\n                  NOW()\n           FROM items e\n           JOIN item_groups s ON s.id = e.\"groupId\"\n           WHERE s.\"mediaId\" = $2\n             AND s.\"number\" > 0\n             AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = e.id)\n           ON CONFLICT (\"userId\", \"episodeId\") WHERE \"episodeId\" IS NOT NULL\n           DO UPDATE SET\n             completed = true,\n             \"positionSeconds\" = 0,\n             \"lastPlayedAt\" = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "701ef3f1011e3a28ba2e650fc664ba3e021781bac368403e5e0543515a71c735"
+}

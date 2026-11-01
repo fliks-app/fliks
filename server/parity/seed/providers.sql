@@ -46,9 +46,9 @@ INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "med
  (201, '2026-01-01', '2026-01-01', 0, false, 202, NULL),
  (202, '2026-01-01', '2026-01-01', 1, true, 202, 'tvdb'),
  (203, '2026-01-01', '2026-01-01', 2, true, 202, NULL);
-INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "hasFile", "groupId", "mediaId", "editionId") VALUES
- (201, '2026-01-01', '2026-01-01', 1, 'Old Ep 1', true, false, 202, 202, (SELECT id FROM editions WHERE "mediaId" = 202)),
- (202, '2026-01-01', '2026-01-01', 9, 'Gone', true, false, 202, 202, (SELECT id FROM editions WHERE "mediaId" = 202));
+INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "groupId", "mediaId", "editionId") VALUES
+ (201, '2026-01-01', '2026-01-01', 1, 'Old Ep 1', true, 202, 202, (SELECT id FROM editions WHERE "mediaId" = 202)),
+ (202, '2026-01-01', '2026-01-01', 9, 'Gone', true, 202, 202, (SELECT id FROM editions WHERE "mediaId" = 202));
 INSERT INTO items ("mediaId", "editionId", monitored)
   SELECT m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
   WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;

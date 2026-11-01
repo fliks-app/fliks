@@ -1,0 +1,140 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH user_series AS (\n             SELECT DISTINCT ON (ps.\"mediaId\")\n                    ps.\"mediaId\", ps.\"lastPlayedAt\"\n             FROM playback_states ps\n             JOIN media m ON m.id = ps.\"mediaId\"\n             WHERE ps.\"userId\" = $1 AND m.type = 'series'\n               AND ps.\"hiddenFromContinueWatching\" = false\n             ORDER BY ps.\"mediaId\", ps.\"lastPlayedAt\" DESC\n           ),\n           last_completed AS (\n             -- Highest (seasonNumber, episodeNumber) among completed episodes: lastPlayedAt ties\n             -- when the user bulk-marks a season.\n             SELECT DISTINCT ON (ps.\"mediaId\")\n                    ps.\"mediaId\", ps.\"episodeId\",\n                    s.\"number\" AS \"seasonNumber\", e.\"number\" AS \"episodeNumber\"\n             FROM playback_states ps\n             JOIN items e ON e.id = ps.\"episodeId\"\n             JOIN item_groups s ON s.id = e.\"groupId\"\n             WHERE ps.\"userId\" = $1 AND ps.completed = true AND ps.\"episodeId\" IS NOT NULL\n             ORDER BY ps.\"mediaId\", s.\"number\" DESC, e.\"number\" DESC\n           ),\n           in_progress AS (\n             SELECT DISTINCT ON (ps.\"mediaId\")\n                    ps.\"mediaId\", ps.\"episodeId\", ps.\"mediaFileId\",\n                    ps.\"positionSeconds\", ps.\"durationSeconds\"\n             FROM playback_states ps\n             WHERE ps.\"userId\" = $1\n               AND ps.completed = false AND ps.\"positionSeconds\" >= 5\n               AND ps.\"episodeId\" IS NOT NULL\n             ORDER BY ps.\"mediaId\", ps.\"lastPlayedAt\" DESC\n           ),\n           next_ep AS (\n             SELECT lc.\"mediaId\",\n                    (SELECT e.id FROM items e\n                     JOIN item_groups s ON s.id = e.\"groupId\"\n                     WHERE s.\"mediaId\" = lc.\"mediaId\" AND s.\"number\" > 0\n                       AND (s.\"number\" > lc.\"seasonNumber\"\n                            OR (s.\"number\" = lc.\"seasonNumber\" AND e.\"number\" > lc.\"episodeNumber\"))\n                     ORDER BY s.\"number\", e.\"number\" LIMIT 1\n                    ) AS \"episodeId\"\n             FROM last_completed lc\n             WHERE lc.\"mediaId\" NOT IN (SELECT \"mediaId\" FROM in_progress)\n           ),\n           combined AS (\n             SELECT ip.\"mediaId\", ip.\"episodeId\", ip.\"mediaFileId\", ip.\"positionSeconds\", ip.\"durationSeconds\"\n             FROM in_progress ip\n             UNION ALL\n             SELECT ne.\"mediaId\", ne.\"episodeId\", NULL::int AS \"mediaFileId\", 0.0 AS \"positionSeconds\", 0.0 AS \"durationSeconds\"\n             FROM next_ep ne WHERE ne.\"episodeId\" IS NOT NULL\n           )\n           SELECT\n             COALESCE(ps_next.id, 0) AS \"id!\",\n             c.\"mediaId\" AS \"media_id!\",\n             COALESCE(c.\"mediaFileId\", mf.id) AS media_file_id,\n             c.\"episodeId\" AS episode_id,\n             COALESCE(ps_next.\"positionSeconds\", c.\"positionSeconds\", 0) AS \"position_seconds!\",\n             COALESCE(ps_next.\"durationSeconds\", c.\"durationSeconds\", 0) AS duration_seconds,\n             us.\"lastPlayedAt\" AS \"last_played_at!\",\n             m.title AS media_title,\n             m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n             'series'::text AS \"media_type!\",\n             e.\"stillUrl\" AS still_url,\n             'S' || LPAD(s.\"number\"::text, 2, '0') || 'E' || LPAD(e.\"number\"::text, 2, '0')\n               || COALESCE(' - ' || e.title, '') AS episode_label,\n             CASE WHEN COALESCE(ps_next.\"durationSeconds\", c.\"durationSeconds\", 0) > 0\n                  THEN ROUND((COALESCE(ps_next.\"positionSeconds\", c.\"positionSeconds\", 0)\n                             / COALESCE(ps_next.\"durationSeconds\", c.\"durationSeconds\", 1)) * 100)\n                  ELSE 0 END AS \"progress_percent!\"\n           FROM combined c\n           JOIN user_series us ON us.\"mediaId\" = c.\"mediaId\"\n           JOIN media m ON m.id = c.\"mediaId\"\n           JOIN items e ON e.id = c.\"episodeId\"\n           JOIN item_groups s ON s.id = e.\"groupId\"\n           LEFT JOIN LATERAL (\n             SELECT mf2.id FROM media_files mf2 JOIN item_parts p2 ON p2.\"mediaFileId\" = mf2.id\n             WHERE p2.\"itemId\" = c.\"episodeId\"\n             ORDER BY mf2.id DESC LIMIT 1\n           ) mf ON c.\"mediaFileId\" IS NULL\n           LEFT JOIN playback_states ps_next ON ps_next.\"userId\" = $1 AND ps_next.\"mediaId\" = c.\"mediaId\" AND ps_next.\"episodeId\" = c.\"episodeId\"\n           WHERE COALESCE(ps_next.completed, false) = false\n             AND COALESCE(c.\"mediaFileId\", mf.id) IS NOT NULL AND m.\"libraryId\" = ANY($2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_file_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "position_seconds!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_seconds",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_played_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "lastPlayedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "media_title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "poster_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "fanart_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "media_type!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "still_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "stillUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "episode_label",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "progress_percent!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      false,
+      false,
+      true,
+      true,
+      null,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "f405e8b5f71e3576e65f5b52671328b3b55aea0709707edb6d12c2ae0c823b9d"
+}

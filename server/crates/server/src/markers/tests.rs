@@ -39,8 +39,8 @@ async fn one(pool: &PgPool, sql: &str) -> i32 {
 
 async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {
     let id: i32 = sqlx::query_scalar(
-        r#"INSERT INTO items ("number", "hasFile", "groupId", "mediaId", "editionId")
-           SELECT $1, true, g.id, g."mediaId", ed.id FROM item_groups g
+        r#"INSERT INTO items ("number", "groupId", "mediaId", "editionId")
+           SELECT $1, g.id, g."mediaId", ed.id FROM item_groups g
            JOIN editions ed ON ed."mediaId" = g."mediaId" WHERE g.id = $2 RETURNING items.id"#,
     )
     .bind(n)
@@ -49,8 +49,11 @@ async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {
     .await
     .unwrap();
     sqlx::query(
-        r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "episodeId")
-           VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM item_groups WHERE id = $2), $3)"#,
+        r#"WITH f AS (
+             INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId")
+             VALUES ($1, 1, '720p', '{"durationSeconds": 1500}', (SELECT "mediaId" FROM item_groups WHERE id = $2))
+             RETURNING id, "mediaId")
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT $3, id, "mediaId" FROM f"#,
     )
     .bind(file)
     .bind(season)

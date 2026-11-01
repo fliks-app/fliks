@@ -88,36 +88,27 @@ fn null_criteria_are_not_set() {
     ));
 }
 
-fn ep(season: i32, number: i32, end: Option<i32>, file: bool, monitored: bool) -> Ep {
+fn ep(season: i32, number: i32, file: bool, monitored: bool) -> Ep {
     Ep {
         season_number: season,
         season_monitored: true,
         number,
-        end_number: end,
         monitored,
         has_file: file,
     }
 }
 
 #[test]
-fn a_multi_episode_file_covers_its_range() {
-    let eps = [
-        ep(1, 1, Some(3), true, true),
-        ep(1, 2, None, false, true),
-        ep(1, 3, None, false, true),
-    ];
+fn every_monitored_episode_needs_a_file() {
+    let eps = [ep(1, 1, true, true), ep(1, 2, true, true)];
     assert!(scope_covered(Some(&[1]), &eps));
-    let eps = [
-        ep(1, 1, Some(2), true, true),
-        ep(1, 2, None, false, true),
-        ep(1, 3, None, false, true),
-    ];
+    let eps = [ep(1, 1, true, true), ep(1, 2, false, true)];
     assert!(!scope_covered(Some(&[1]), &eps));
 }
 
 #[test]
 fn scope_limits_the_seasons_that_are_checked() {
-    let eps = [ep(1, 1, None, true, true), ep(2, 1, None, false, true)];
+    let eps = [ep(1, 1, true, true), ep(2, 1, false, true)];
     assert!(scope_covered(Some(&[1]), &eps));
     assert!(!scope_covered(Some(&[2]), &eps));
     assert!(
@@ -129,14 +120,14 @@ fn scope_limits_the_seasons_that_are_checked() {
 #[test]
 fn nothing_to_check_is_not_covered() {
     assert!(
-        !scope_covered(Some(&[5]), &[ep(1, 1, None, true, true)]),
+        !scope_covered(Some(&[5]), &[ep(1, 1, true, true)]),
         "scope past the library"
     );
     assert!(
-        !scope_covered(None, &[ep(1, 1, None, false, false)]),
+        !scope_covered(None, &[ep(1, 1, false, false)]),
         "everything unmonitored"
     );
-    let mut e = ep(1, 1, None, false, true);
+    let mut e = ep(1, 1, false, true);
     e.season_monitored = false;
     assert!(!scope_covered(None, &[e]), "unmonitored season");
 }

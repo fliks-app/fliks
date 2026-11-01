@@ -25,12 +25,12 @@ pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
   AND EXISTS (
     SELECT 1 FROM item_groups s
     JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
   )
   AND NOT EXISTS (
     SELECT 1 FROM item_groups s
     JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
     AND NOT EXISTS (
       SELECT 1 FROM playback_states ps2
       WHERE ps2."userId" = {uid} AND ps2."episodeId" = e.id AND ps2.completed = true
@@ -45,14 +45,7 @@ const MISSING_EPISODE: &str = r#"EXISTS (
   WHERE ms."mediaId" = media.id AND ms."number" > 0
     AND ms.monitored = true AND me.monitored = true
     AND me."airDate" <= "#;
-const MISSING_EPISODE_TAIL: &str = r#" AND NOT ("me"."hasFile" = true OR EXISTS (
-      SELECT 1 FROM "items" cov
-      WHERE cov."groupId" = "me"."groupId"
-        AND cov."hasFile" = true
-        AND cov."endNumber" IS NOT NULL
-        AND "me"."number" > cov."number"
-        AND "me"."number" <= cov."endNumber"
-    ))
+const MISSING_EPISODE_TAIL: &str = r#" AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = me.id)
 )"#;
 
 /// Distinct stored qualities with their rank, for the cutoff filter in SQL.
@@ -242,7 +235,10 @@ fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
     qb.push(" AND ((media.type = 'movie' AND ");
     rank(qb, "f.\"mediaId\" = media.id");
     qb.push(" < c.cr) OR (media.type = 'series' AND EXISTS (SELECT 1 FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0 AND e.monitored = true AND ");
-    rank(qb, "f.\"episodeId\" = e.id");
+    rank(
+        qb,
+        "EXISTS (SELECT 1 FROM item_parts p WHERE p.\"mediaFileId\" = f.id AND p.\"itemId\" = e.id)",
+    );
     qb.push(" < c.cr AND NOT EXISTS (SELECT 1 FROM item_groups s2 JOIN items o ON o.\"groupId\" = s2.id WHERE s2.\"mediaId\" = media.id AND s2.\"number\" > 0 AND o.monitored = true AND o.\"endNumber\" IS NOT NULL AND e.\"number\" > o.\"number\" AND e.\"number\" <= o.\"endNumber\")))) ");
 }
 
@@ -338,11 +334,11 @@ async fn attach_watched(
     (m.type = 'series'
       AND EXISTS (
         SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
       )
       AND NOT EXISTS (
         SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
           AND NOT EXISTS (
             SELECT 1 FROM playback_states ps2
             WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true

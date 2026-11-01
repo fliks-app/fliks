@@ -109,7 +109,7 @@
                   "createdAt": "2026-01-01T00:00:00.000Z",
                   "endEpisodeNumber": null,
                   "episodeNumber": 2,
-                  "hasFile": false,
+                  "hasFile": true,
                   "id": 14,
                   "markersScannedAt": null,
                   "monitored": true,

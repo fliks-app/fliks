@@ -3,7 +3,7 @@ use super::gate;
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{AppError, auth::Authed, validate::PathParams},
-    ingest::{MediaRow, clear_has_file, drop_thumbnails, fsx, load_media},
+    ingest::{MediaRow, drop_thumbnails, fsx, load_media},
     state::AppState,
 };
 use axum::{
@@ -190,7 +190,7 @@ pub async fn delete_media_file(
     on_disk: bool,
 ) -> Result<(), AppError> {
     let f = sqlx::query!(
-        r#"SELECT "relativePath" AS rel, "episodeId" AS episode FROM media_files WHERE id = $1 AND "mediaId" = $2"#,
+        r#"SELECT "relativePath" AS rel FROM media_files WHERE id = $1 AND "mediaId" = $2"#,
         file_id,
         media.id
     )
@@ -235,9 +235,6 @@ pub async fn delete_media_file(
         .execute(&st.db)
         .await?;
     drop_thumbnails(st, file_id);
-    if let Some(ep) = f.episode {
-        clear_has_file(&st.db, ep).await?;
-    }
     crate::media_servers::dispatch_detached(st, "file.deleted");
     Ok(())
 }

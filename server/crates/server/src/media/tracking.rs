@@ -85,7 +85,8 @@ pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error
     let cutoff = media.cutoff.and_then(|c| app_quality_by_id(i64::from(c)));
     let has_profile = media.profile_id.is_some();
     let files = sqlx::query!(
-        r#"SELECT quality, "episodeId" AS episode_id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+        r#"SELECT f.quality, p."itemId" AS "item_id?" FROM media_files f
+           LEFT JOIN item_parts p ON p."mediaFileId" = f.id WHERE f."mediaId" = $1 ORDER BY f.id, p."itemId""#,
         id
     )
     .fetch_all(db)
@@ -102,7 +103,7 @@ pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error
     }
     let mut by_episode: HashMap<i32, Vec<&str>> = HashMap::new();
     for f in &files {
-        if let Some(e) = f.episode_id {
+        if let Some(e) = f.item_id {
             by_episode.entry(e).or_default().push(&f.quality);
         }
     }

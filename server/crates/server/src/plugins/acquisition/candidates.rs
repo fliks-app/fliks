@@ -181,7 +181,7 @@ pub(super) async fn movie_targets(
     .fetch_all(db)
     .await?;
     let mids: Vec<i32> = rows.iter().map(|m| m.id).collect();
-    let mut files = qualities_by(db, "mediaId", &mids).await?;
+    let mut files = qualities_by(db, false, &mids).await?;
     Ok(rows
         .into_iter()
         .filter_map(|m| {
@@ -208,10 +208,9 @@ pub(super) async fn episode_targets(
              LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
             WHERE m.monitored AND m.type = 'series' AND s.monitored AND ep.monitored
               AND ep."airDate" IS NOT NULL AND ep."airDate" <= $1
-              AND (NOT (ep."hasFile" OR EXISTS (SELECT 1 FROM items cov WHERE cov."groupId" = ep."groupId"
-                     AND cov."hasFile" AND cov."endNumber" IS NOT NULL
-                     AND ep."number" > cov."number" AND ep."number" <= cov."endNumber"))
-                   OR (ep."hasFile" AND qp."upgradeAllowed"))
+              AND (NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ep.id)
+                   OR (EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = ep.id AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < ep."number"))
+                       AND qp."upgradeAllowed"))
               AND ($2::int[] IS NULL OR m.id = ANY($2))
             ORDER BY ep.id"#,
     )
@@ -246,7 +245,7 @@ pub(super) async fn episode_targets(
         .filter(|e| e.has_file)
         .map(|e| e.id)
         .collect();
-    let mut files = qualities_by(db, "episodeId", &with_file).await?;
+    let mut files = qualities_by(db, true, &with_file).await?;
     let mut out = vec![];
     for (eid, sid, snum, mid) in rows {
         let (Some(e), Some(m)) = (episodes.remove(&eid), medias.get(&mid)) else {

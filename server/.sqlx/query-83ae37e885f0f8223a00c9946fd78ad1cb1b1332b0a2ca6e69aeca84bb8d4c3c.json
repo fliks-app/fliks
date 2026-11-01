@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"number\" AS season_number, s.monitored AS season_monitored,\n        e.\"number\" AS \"number!\", e.monitored,\n        EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = e.id) AS \"has_file!\"\n        FROM item_groups s JOIN items e ON e.\"groupId\" = s.id WHERE s.\"mediaId\" = $1\n        ORDER BY s.\"number\", e.\"number\", e.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "season_number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "season_monitored",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "monitored"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "number!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "monitored",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "monitored"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "has_file!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "83ae37e885f0f8223a00c9946fd78ad1cb1b1332b0a2ca6e69aeca84bb8d4c3c"
+}

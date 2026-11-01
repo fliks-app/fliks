@@ -107,11 +107,7 @@ ORDER BY m.id"#,
             r#"SELECT ep.id AS "id!", ep."number" AS "episode_number!", ep.title, to_char(ep."airDate", 'YYYY-MM-DD') AS "date!",
   season."number" AS "season_number!", media.id AS "media_id!", media.title AS "media_title!",
   media."posterUrl" AS poster_url, media."fanartUrl" AS fanart_url, media.status::text AS "status!", media.year,
-  (ep."hasFile" = true OR EXISTS (
-    SELECT 1 FROM "items" cov
-    WHERE cov."groupId" = ep."groupId" AND cov."hasFile" = true AND cov."endNumber" IS NOT NULL
-      AND ep."number" > cov."number" AND ep."number" <= cov."endNumber"
-  )) AS "on_disk!"
+  EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ep.id) AS "on_disk!"
 FROM items ep
 INNER JOIN item_groups season ON season.id = ep."groupId"
 INNER JOIN media media ON media.id = season."mediaId"

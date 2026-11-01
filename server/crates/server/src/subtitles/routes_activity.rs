@@ -100,7 +100,7 @@ const ITEM_SELECT: &str = r#"SELECT sf.id, sf."mediaId" AS media_id, m.title AS 
   LEFT JOIN media m ON m.id = sf."mediaId"
   LEFT JOIN items e ON e.id = sf."episodeId" LEFT JOIN item_groups es ON es.id = e."groupId"
   LEFT JOIN media_files mf ON mf.id = sf."mediaFileId"
-  LEFT JOIN items fe ON fe.id = mf."episodeId" LEFT JOIN item_groups fs ON fs.id = fe."groupId""#;
+  LEFT JOIN items fe ON fe.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) LEFT JOIN item_groups fs ON fs.id = fe."groupId""#;
 
 impl ItemRow {
     fn json(&self, full: bool) -> Value {
@@ -302,11 +302,11 @@ pub async fn missing(
                AND ($4::int[] IS NULL OR m."libraryId" = ANY($4))
            )
            SELECT r.media_id, r.media_title, r.media_type, r.language, r.forced, f.id AS file_id,
-                  f."relativePath" AS file_path, f."episodeId" AS episode_id, s."number" AS season_number,
+                  f."relativePath" AS file_path, (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) AS episode_id, s."number" AS season_number,
                   e."number" AS episode_number, COUNT(*) OVER () AS total
            FROM required r
            JOIN media_files f ON f."mediaId" = r.media_id
-           LEFT JOIN items e ON e.id = f."episodeId"
+           LEFT JOIN items e ON e.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id)
            LEFT JOIN item_groups s ON s.id = e."groupId"
            WHERE NOT EXISTS (
              SELECT 1 FROM subtitle_files sf

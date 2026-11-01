@@ -39,10 +39,6 @@ UPDATE media m SET year = v.year, rating = v.rating, genres = v.genres FROM (VAL
 ) AS v(id, year, rating, genres) WHERE m.id = v.id;
 UPDATE media SET "posterUrl" = '/api/images/' || id || '/poster' WHERE id <= 8;
 UPDATE media SET "fanartUrl" = '/api/images/' || id || '/fanart' WHERE id IN (2, 4);
--- a file-backed episode whose column says false (GET :id heals hasFile)
-ALTER TABLE items DISABLE TRIGGER set_updated_at;
-UPDATE items SET "hasFile" = false WHERE id = 1;
-ALTER TABLE items ENABLE TRIGGER set_updated_at;
 -- updated before any insert so the heap order stays the id order
 UPDATE media_files SET "createdAt" = '2026-02-01'::timestamptz + (id * 37 % 101) * interval '1 hour' WHERE id <= 29;
 
@@ -117,7 +113,11 @@ UPDATE media SET "posterUrl" = '/api/images/' || id || '/poster' WHERE id IN (21
 UPDATE media SET "searchVector" = NULL WHERE id = 24;
 
 -- the base movies' items move out of the episode id range the scenarios record
+ALTER TABLE item_parts DROP CONSTRAINT "FK_item_parts_item";
 UPDATE items SET id = -id WHERE "groupId" IS NULL;
+UPDATE item_parts SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
+ALTER TABLE item_parts ADD CONSTRAINT "FK_item_parts_item" FOREIGN KEY ("itemId", "mediaId")
+  REFERENCES items (id, "mediaId") ON DELETE CASCADE;
 INSERT INTO editions ("mediaId", family)
   SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
 INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId", "posterUrl", overview, "airDate") VALUES
@@ -131,64 +131,71 @@ INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "med
  (14, '2026-01-01', '2026-01-01', 1, true, 47, NULL, NULL, NULL),
  (15, '2026-01-01', '2026-01-01', 0, true, 47, NULL, NULL, NULL),
  (16, '2026-01-01', '2026-01-01', 2, true, 47, NULL, NULL, NULL);
-INSERT INTO items (id, "createdAt", "updatedAt", "number", "endNumber", title, "airDate", runtime, monitored, "hasFile", "stillUrl", "markersScannedAt", "groupId", "mediaId", "editionId") VALUES
- (13, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', 45, true, true, '/api/images/43/still-1', '2026-01-10T00:00:00Z', 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (14, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (15, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, false, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (16, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2099-01-01', NULL, true, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (17, '2026-01-01', '2026-01-01', 1, NULL, 'Special', '2000-01-01', NULL, true, false, NULL, NULL, 8, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (18, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, false, NULL, NULL, 9, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (19, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 9, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
- (20, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', NULL, true, true, NULL, NULL, 10, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
- (21, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 10, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
- (22, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, false, NULL, NULL, 11, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
- (23, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
- (24, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
- (25, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, true, false, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
- (26, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, false, NULL, NULL, 13, 46, (SELECT id FROM editions WHERE "mediaId" = 46)),
- (27, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2026-03-03', NULL, true, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
- (28, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2026-03-10', NULL, false, false, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
- (29, '2026-01-01', '2026-01-01', 3, 4, 'Episode 3', '2026-03-17', NULL, true, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
- (30, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2026-03-17', NULL, true, false, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
- (31, '2026-01-01', '2026-01-01', 1, NULL, 'Calendar Special', '2026-03-07', NULL, true, false, NULL, NULL, 15, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
- (32, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', NULL, NULL, true, false, NULL, NULL, 16, 47, (SELECT id FROM editions WHERE "mediaId" = 47));
+INSERT INTO items (id, "createdAt", "updatedAt", "number", "endNumber", title, "airDate", runtime, monitored, "stillUrl", "markersScannedAt", "groupId", "mediaId", "editionId") VALUES
+ (13, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', 45, true, '/api/images/43/still-1', '2026-01-10T00:00:00Z', 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (14, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (15, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, false, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (16, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2099-01-01', NULL, true, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (17, '2026-01-01', '2026-01-01', 1, NULL, 'Special', '2000-01-01', NULL, true, NULL, NULL, 8, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (18, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, NULL, NULL, 9, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (19, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, NULL, NULL, 9, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
+ (20, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', NULL, true, NULL, NULL, 10, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
+ (21, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, NULL, NULL, 10, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
+ (22, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, NULL, NULL, 11, 44, (SELECT id FROM editions WHERE "mediaId" = 44)),
+ (23, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
+ (24, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
+ (25, '2026-01-01', '2026-01-01', 3, NULL, 'Episode 3', '2000-01-01', NULL, true, NULL, NULL, 12, 45, (SELECT id FROM editions WHERE "mediaId" = 45)),
+ (26, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2000-01-01', NULL, true, NULL, NULL, 13, 46, (SELECT id FROM editions WHERE "mediaId" = 46)),
+ (27, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', '2026-03-03', NULL, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (28, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2026-03-10', NULL, false, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (29, '2026-01-01', '2026-01-01', 3, 4, 'Episode 3', '2026-03-17', NULL, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (30, '2026-01-01', '2026-01-01', 4, NULL, 'Episode 4', '2026-03-17', NULL, true, NULL, NULL, 14, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (31, '2026-01-01', '2026-01-01', 1, NULL, 'Calendar Special', '2026-03-07', NULL, true, NULL, NULL, 15, 47, (SELECT id FROM editions WHERE "mediaId" = 47)),
+ (32, '2026-01-01', '2026-01-01', 1, NULL, 'Episode 1', NULL, NULL, true, NULL, NULL, 16, 47, (SELECT id FROM editions WHERE "mediaId" = 47));
 INSERT INTO items (id, "mediaId", "editionId", monitored)
   SELECT -1000 - m.id, m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
   WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;
-INSERT INTO media_files (id, "createdAt", "updatedAt", "relativePath", size, quality, language, "streamInfo", "mediaId", "episodeId", "osdbHash", "osdbBytesize") VALUES
- (30, '2026-02-01'::timestamptz + (30 * 37 % 101) * interval '1 hour', '2026-01-01', 'alpha test (2020)/alpha test (2020).mkv', 1000030, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 21, NULL, '8e245d9679d31e12', 12345678901),
- (31, '2026-02-01'::timestamptz + (31 * 37 % 101) * interval '1 hour', '2026-01-01', '12 Angry Men (2020)/12 Angry Men (2020).mkv', 1000031, 'WEBDL-1080p', 'en', NULL, 22, NULL, NULL, NULL),
- (32, '2026-02-01'::timestamptz + (32 * 37 % 101) * interval '1 hour', '2026-01-01', 'Éclair (2020)/Éclair (2020).mkv', 1000032, 'WEBDL-1080p', 'en', NULL, 23, NULL, NULL, NULL),
- (33, '2026-02-01'::timestamptz + (33 * 37 % 101) * interval '1 hour', '2026-01-01', 'L''Impossible (2020)/L''Impossible (2020).mkv', 1000033, 'WEBDL-1080p', 'en', NULL, 24, NULL, NULL, NULL),
- (34, '2026-02-01'::timestamptz + (34 * 37 % 101) * interval '1 hour', '2026-01-01', 'Les Évadés (2020)/Les Évadés (2020).mkv', 1000034, 'WEBDL-1080p', 'en', NULL, 25, NULL, NULL, NULL),
- (35, '2026-02-01'::timestamptz + (35 * 37 % 101) * interval '1 hour', '2026-01-01', 'Zeta Alpha Alpha (2020)/Zeta Alpha Alpha (2020).mkv', 1000035, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 26, NULL, NULL, NULL),
- (36, '2026-02-01'::timestamptz + (36 * 37 % 101) * interval '1 hour', '2026-01-01', 'Unidentified Movie (2020)/Unidentified Movie (2020).mkv', 1000036, 'WEBDL-1080p', 'en', NULL, 27, NULL, NULL, NULL),
- (37, '2026-02-01'::timestamptz + (37 * 37 % 101) * interval '1 hour', '2026-01-01', 'Empty Imdb Movie (2020)/Empty Imdb Movie (2020).mkv', 1000037, 'WEBDL-1080p', 'en', NULL, 28, NULL, NULL, NULL),
- (38, '2026-02-01'::timestamptz + (38 * 37 % 101) * interval '1 hour', '2026-01-01', 'Unmonitored Movie (2020)/Unmonitored Movie (2020).mkv', 1000038, 'WEBDL-1080p', 'en', NULL, 29, NULL, NULL, NULL),
- (39, '2026-02-01'::timestamptz + (39 * 37 % 101) * interval '1 hour', '2026-01-01', 'Null Library Movie (2020)/Null Library Movie (2020).mkv', 1000039, 'WEBDL-1080p', 'en', NULL, 31, NULL, NULL, NULL),
- (40, '2026-02-01'::timestamptz + (40 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Alpha 1 (2020)/Collection Alpha 1 (2020).mkv', 1000040, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 32, NULL, NULL, NULL),
- (41, '2026-02-01'::timestamptz + (41 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Alpha 2 (2020)/Collection Alpha 2 (2020).mkv', 1000041, 'WEBDL-1080p', 'en', NULL, 33, NULL, NULL, NULL),
- (42, '2026-02-01'::timestamptz + (42 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Solo (2020)/Collection Solo (2020).mkv', 1000042, 'WEBDL-1080p', 'en', NULL, 34, NULL, NULL, NULL),
- (43, '2026-02-01'::timestamptz + (43 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Other Library (2020)/Collection Other Library (2020).mkv', 1000043, 'WEBDL-1080p', 'en', NULL, 35, NULL, NULL, NULL),
- (44, '2026-02-01'::timestamptz + (44 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Unmet (2020)/Profile Movie Unmet (2020).mkv', 1000044, 'WEBDL-720p', 'en', NULL, 36, NULL, NULL, NULL),
- (45, '2026-02-01'::timestamptz + (45 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Met (2020)/Profile Movie Met (2020).mkv', 1000045, 'Bluray-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 37, NULL, NULL, NULL),
- (46, '2026-02-01'::timestamptz + (46 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Empty Quality (2020)/Profile Movie Empty Quality (2020).mkv', 1000046, '', 'en', NULL, 38, NULL, NULL, NULL),
- (47, '2026-02-01'::timestamptz + (47 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie 8K (2020)/Profile Movie 8K (2020).mkv', 1000047, '4320p WEB-DL', 'en', NULL, 39, NULL, NULL, NULL),
- (48, '2026-02-01'::timestamptz + (48 * 37 % 101) * interval '1 hour', '2026-01-01', 'Unknown Cutoff Movie (2020)/Unknown Cutoff Movie (2020).mkv', 1000048, 'WEBDL-1080p', 'en', NULL, 40, NULL, NULL, NULL),
- (49, '2026-02-01'::timestamptz + (49 * 37 % 101) * interval '1 hour', '2026-01-01', 'Language Profile Movie (2020)/Language Profile Movie (2020).mkv', 1000049, 'WEBDL-1080p', 'en', NULL, 41, NULL, NULL, NULL),
- (50, '2026-02-01'::timestamptz + (50 * 37 % 101) * interval '1 hour', '2026-01-01', 'Pathless Library Movie (2020)/Pathless Library Movie (2020).mkv', 1000050, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 42, NULL, NULL, NULL),
- (51, '2026-02-01'::timestamptz + (51 * 37 % 101) * interval '1 hour', '2026-01-01', 'Cal Movie Cinema Digital (2020)/Cal Movie Cinema Digital (2020).mkv', 1000051, 'WEBDL-1080p', 'en', NULL, 48, NULL, NULL, NULL),
- (52, '2026-02-01'::timestamptz + (52 * 37 % 101) * interval '1 hour', '2026-01-01', 'Cal Movie Release Only (2020)/Cal Movie Release Only (2020).mkv', 1000052, 'WEBDL-1080p', 'en', NULL, 49, NULL, NULL, NULL),
- (53, '2026-02-01'::timestamptz + (53 * 37 % 101) * interval '1 hour', '2026-01-01', 'Cal Movie Release Inside Cinema Outside (2020)/Cal Movie Release Inside Cinema Outside (2020).mkv', 1000053, 'WEBDL-1080p', 'en', NULL, 50, NULL, NULL, NULL),
- (54, '2026-02-01'::timestamptz + (54 * 37 % 101) * interval '1 hour', '2026-01-01', 'No Signal Movie (2020)/No Signal Movie (2020).mkv', 1000054, 'WEBDL-1080p', 'en', NULL, 51, NULL, NULL, NULL),
- (55, '2026-02-01'::timestamptz + (55 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Met (2020)/Profile Movie Met (2020).720.mkv', 1000055, 'HDTV-720p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 37, NULL, NULL, NULL),
- (56, '2026-02-01'::timestamptz + (56 * 37 % 101) * interval '1 hour', '2026-01-01', 'alpha test (2020)/alpha test (2020).720.mkv', 1000056, 'Bluray-720p', NULL, NULL, 21, NULL, NULL, NULL),
- (57, '2026-02-01'::timestamptz + (57 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e13.mkv', 1000057, 'WEBDL-720p', 'en', NULL, 43, 13, NULL, NULL),
- (58, '2026-02-01'::timestamptz + (58 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e20.mkv', 1000058, 'Bluray-1080p', 'en', NULL, 44, 20, NULL, NULL),
- (59, '2026-02-01'::timestamptz + (59 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e23.mkv', 1000059, 'WEBDL-1080p', 'en', NULL, 45, 23, NULL, NULL),
- (60, '2026-02-01'::timestamptz + (60 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e24.mkv', 1000060, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 45, 24, NULL, NULL),
- (61, '2026-02-01'::timestamptz + (61 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e27.mkv', 1000061, 'WEBDL-1080p', 'en', NULL, 47, 27, NULL, NULL),
- (62, '2026-02-01'::timestamptz + (62 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e29.mkv', 1000062, 'WEBDL-1080p', 'en', NULL, 47, 29, NULL, NULL);
+INSERT INTO media_files (id, "createdAt", "updatedAt", "relativePath", size, quality, language, "streamInfo", "mediaId", "osdbHash", "osdbBytesize") VALUES
+ (30, '2026-02-01'::timestamptz + (30 * 37 % 101) * interval '1 hour', '2026-01-01', 'alpha test (2020)/alpha test (2020).mkv', 1000030, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 21, '8e245d9679d31e12', 12345678901),
+ (31, '2026-02-01'::timestamptz + (31 * 37 % 101) * interval '1 hour', '2026-01-01', '12 Angry Men (2020)/12 Angry Men (2020).mkv', 1000031, 'WEBDL-1080p', 'en', NULL, 22, NULL, NULL),
+ (32, '2026-02-01'::timestamptz + (32 * 37 % 101) * interval '1 hour', '2026-01-01', 'Éclair (2020)/Éclair (2020).mkv', 1000032, 'WEBDL-1080p', 'en', NULL, 23, NULL, NULL),
+ (33, '2026-02-01'::timestamptz + (33 * 37 % 101) * interval '1 hour', '2026-01-01', 'L''Impossible (2020)/L''Impossible (2020).mkv', 1000033, 'WEBDL-1080p', 'en', NULL, 24, NULL, NULL),
+ (34, '2026-02-01'::timestamptz + (34 * 37 % 101) * interval '1 hour', '2026-01-01', 'Les Évadés (2020)/Les Évadés (2020).mkv', 1000034, 'WEBDL-1080p', 'en', NULL, 25, NULL, NULL),
+ (35, '2026-02-01'::timestamptz + (35 * 37 % 101) * interval '1 hour', '2026-01-01', 'Zeta Alpha Alpha (2020)/Zeta Alpha Alpha (2020).mkv', 1000035, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 26, NULL, NULL),
+ (36, '2026-02-01'::timestamptz + (36 * 37 % 101) * interval '1 hour', '2026-01-01', 'Unidentified Movie (2020)/Unidentified Movie (2020).mkv', 1000036, 'WEBDL-1080p', 'en', NULL, 27, NULL, NULL),
+ (37, '2026-02-01'::timestamptz + (37 * 37 % 101) * interval '1 hour', '2026-01-01', 'Empty Imdb Movie (2020)/Empty Imdb Movie (2020).mkv', 1000037, 'WEBDL-1080p', 'en', NULL, 28, NULL, NULL),
+ (38, '2026-02-01'::timestamptz + (38 * 37 % 101) * interval '1 hour', '2026-01-01', 'Unmonitored Movie (2020)/Unmonitored Movie (2020).mkv', 1000038, 'WEBDL-1080p', 'en', NULL, 29, NULL, NULL),
+ (39, '2026-02-01'::timestamptz + (39 * 37 % 101) * interval '1 hour', '2026-01-01', 'Null Library Movie (2020)/Null Library Movie (2020).mkv', 1000039, 'WEBDL-1080p', 'en', NULL, 31, NULL, NULL),
+ (40, '2026-02-01'::timestamptz + (40 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Alpha 1 (2020)/Collection Alpha 1 (2020).mkv', 1000040, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 32, NULL, NULL),
+ (41, '2026-02-01'::timestamptz + (41 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Alpha 2 (2020)/Collection Alpha 2 (2020).mkv', 1000041, 'WEBDL-1080p', 'en', NULL, 33, NULL, NULL),
+ (42, '2026-02-01'::timestamptz + (42 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Solo (2020)/Collection Solo (2020).mkv', 1000042, 'WEBDL-1080p', 'en', NULL, 34, NULL, NULL),
+ (43, '2026-02-01'::timestamptz + (43 * 37 % 101) * interval '1 hour', '2026-01-01', 'Collection Other Library (2020)/Collection Other Library (2020).mkv', 1000043, 'WEBDL-1080p', 'en', NULL, 35, NULL, NULL),
+ (44, '2026-02-01'::timestamptz + (44 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Unmet (2020)/Profile Movie Unmet (2020).mkv', 1000044, 'WEBDL-720p', 'en', NULL, 36, NULL, NULL),
+ (45, '2026-02-01'::timestamptz + (45 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Met (2020)/Profile Movie Met (2020).mkv', 1000045, 'Bluray-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 37, NULL, NULL),
+ (46, '2026-02-01'::timestamptz + (46 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Empty Quality (2020)/Profile Movie Empty Quality (2020).mkv', 1000046, '', 'en', NULL, 38, NULL, NULL),
+ (47, '2026-02-01'::timestamptz + (47 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie 8K (2020)/Profile Movie 8K (2020).mkv', 1000047, '4320p WEB-DL', 'en', NULL, 39, NULL, NULL),
+ (48, '2026-02-01'::timestamptz + (48 * 37 % 101) * interval '1 hour', '2026-01-01', 'Unknown Cutoff Movie (2020)/Unknown Cutoff Movie (2020).mkv', 1000048, 'WEBDL-1080p', 'en', NULL, 40, NULL, NULL),
+ (49, '2026-02-01'::timestamptz + (49 * 37 % 101) * interval '1 hour', '2026-01-01', 'Language Profile Movie (2020)/Language Profile Movie (2020).mkv', 1000049, 'WEBDL-1080p', 'en', NULL, 41, NULL, NULL),
+ (50, '2026-02-01'::timestamptz + (50 * 37 % 101) * interval '1 hour', '2026-01-01', 'Pathless Library Movie (2020)/Pathless Library Movie (2020).mkv', 1000050, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 42, NULL, NULL),
+ (51, '2026-02-01'::timestamptz + (51 * 37 % 101) * interval '1 hour', '2026-01-01', 'Cal Movie Cinema Digital (2020)/Cal Movie Cinema Digital (2020).mkv', 1000051, 'WEBDL-1080p', 'en', NULL, 48, NULL, NULL),
+ (52, '2026-02-01'::timestamptz + (52 * 37 % 101) * interval '1 hour', '2026-01-01', 'Cal Movie Release Only (2020)/Cal Movie Release Only (2020).mkv', 1000052, 'WEBDL-1080p', 'en', NULL, 49, NULL, NULL),
+ (53, '2026-02-01'::timestamptz + (53 * 37 % 101) * interval '1 hour', '2026-01-01', 'Cal Movie Release Inside Cinema Outside (2020)/Cal Movie Release Inside Cinema Outside (2020).mkv', 1000053, 'WEBDL-1080p', 'en', NULL, 50, NULL, NULL),
+ (54, '2026-02-01'::timestamptz + (54 * 37 % 101) * interval '1 hour', '2026-01-01', 'No Signal Movie (2020)/No Signal Movie (2020).mkv', 1000054, 'WEBDL-1080p', 'en', NULL, 51, NULL, NULL),
+ (55, '2026-02-01'::timestamptz + (55 * 37 % 101) * interval '1 hour', '2026-01-01', 'Profile Movie Met (2020)/Profile Movie Met (2020).720.mkv', 1000055, 'HDTV-720p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 37, NULL, NULL),
+ (56, '2026-02-01'::timestamptz + (56 * 37 % 101) * interval '1 hour', '2026-01-01', 'alpha test (2020)/alpha test (2020).720.mkv', 1000056, 'Bluray-720p', NULL, NULL, 21, NULL, NULL),
+ (57, '2026-02-01'::timestamptz + (57 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e13.mkv', 1000057, 'WEBDL-720p', 'en', NULL, 43, NULL, NULL),
+ (58, '2026-02-01'::timestamptz + (58 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e20.mkv', 1000058, 'Bluray-1080p', 'en', NULL, 44, NULL, NULL),
+ (59, '2026-02-01'::timestamptz + (59 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e23.mkv', 1000059, 'WEBDL-1080p', 'en', NULL, 45, NULL, NULL),
+ (60, '2026-02-01'::timestamptz + (60 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e24.mkv', 1000060, 'WEBDL-1080p', 'en', '{"video": [], "audio": [], "subtitles": []}'::jsonb, 45, NULL, NULL),
+ (61, '2026-02-01'::timestamptz + (61 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e27.mkv', 1000061, 'WEBDL-1080p', 'en', NULL, 47, NULL, NULL),
+ (62, '2026-02-01'::timestamptz + (62 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e29.mkv', 1000062, 'WEBDL-1080p', 'en', NULL, 47, NULL, NULL);
+INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
+  SELECT i.id, f.id, f."mediaId" FROM media_files f
+  JOIN items i ON i."mediaId" = f."mediaId" AND i."groupId" IS NULL WHERE f.id BETWEEN 30 AND 56;
+-- a multi-episode file (13, 20, 29) plays the item inside its range
+INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES
+ (13, 57, 43), (14, 57, 43), (20, 58, 44), (21, 58, 44), (23, 59, 45), (24, 60, 45),
+ (27, 61, 47), (29, 62, 47), (30, 62, 47);
 
 INSERT INTO media_metadata (id, "createdAt", "updatedAt", budget, revenue, tagline, popularity, "voteCount", "originalLanguage", "productionCountries", "productionCompanies", videos, keywords, "mediaId") VALUES
  (1, '2026-01-01', '2026-01-01', 150000000000, 9007199254740993, 'A tagline', 12.5, 1234, 'en', '[{"iso_3166_1":"US","name":"United States"}]', '[{"id":1,"name":"Studio"}]', '[{"key":"abc","site":"YouTube"}]', '["heist","space"]', 3),
@@ -217,6 +224,8 @@ INSERT INTO media_crew (id, "createdAt", "updatedAt", job, department, "mediaId"
 INSERT INTO playback_states ("createdAt", "updatedAt", "positionSeconds", "durationSeconds", completed, "lastPlayedAt", "playedAt", "userId", "mediaId", "mediaFileId", "episodeId") VALUES
  ('2026-02-01', '2026-02-01', 450, 3600, false, '2026-02-01', NULL, 2, 6, 6, NULL),
  ('2026-02-01', '2026-02-01', 3500, 3600, true, '2026-02-03', '2026-02-03', 2, 44, 58, (SELECT id FROM items WHERE "groupId" = (SELECT id FROM item_groups WHERE "mediaId" = 44 AND "number" = 1) AND "number" = 1)),
+ -- finishing the range file of episode 1 completes episode 2 with it
+ ('2026-02-01', '2026-02-01', 0, 3600, true, '2026-02-03', NULL, 2, 44, 58, 21),
  ('2026-02-01', '2026-02-01', 1700, 1800, true, '2026-02-04', '2026-02-04', 2, 45, 59, 23),
  ('2026-02-01', '2026-02-01', 200, 1800, false, '2026-02-05', NULL, 2, 45, 60, 24);
 

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mf.\"mediaId\"\n           FROM media_files mf\n           WHERE mf.\"mediaId\" = ANY($1)\n           GROUP BY mf.\"mediaId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mediaId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mediaId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6ed61a2506be92a1d6101662197f26e5febf03c09afa695ddf01a740da1906a9"
+}

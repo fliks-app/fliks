@@ -618,7 +618,6 @@ pub struct Ep {
     pub season_number: i32,
     pub season_monitored: bool,
     pub number: i32,
-    pub end_number: Option<i32>,
     pub monitored: bool,
     pub has_file: bool,
 }
@@ -627,7 +626,8 @@ pub async fn episodes(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<Ep>> {
     sqlx::query_as!(
         Ep,
         r#"SELECT s."number" AS season_number, s.monitored AS season_monitored,
-        e."number" AS "number!", e."endNumber" AS end_number, e.monitored, e."hasFile" AS has_file
+        e."number" AS "number!", e.monitored,
+        EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id) AS "has_file!"
         FROM item_groups s JOIN items e ON e."groupId" = s.id WHERE s."mediaId" = $1
         ORDER BY s."number", e."number", e.id"#,
         media_id

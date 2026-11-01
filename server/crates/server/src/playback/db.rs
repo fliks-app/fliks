@@ -322,8 +322,8 @@ pub async fn continue_watching(
            JOIN items e ON e.id = c."episodeId"
            JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN LATERAL (
-             SELECT mf2.id FROM media_files mf2
-             WHERE mf2."mediaId" = c."mediaId" AND mf2."episodeId" = c."episodeId"
+             SELECT mf2.id FROM media_files mf2 JOIN item_parts p2 ON p2."mediaFileId" = mf2.id
+             WHERE p2."itemId" = c."episodeId"
              ORDER BY mf2.id DESC LIMIT 1
            ) mf ON c."mediaFileId" IS NULL
            LEFT JOIN playback_states ps_next ON ps_next."userId" = $1 AND ps_next."mediaId" = c."mediaId" AND ps_next."episodeId" = c."episodeId"
@@ -422,7 +422,7 @@ pub async fn watched_media_ids(db: &PgPool, user: i32, libs: &[i32]) -> sqlx::Re
            JOIN items e ON e."groupId" = s.id
            LEFT JOIN playback_states ps
              ON ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
-           WHERE s."number" > 0 AND e."hasFile" = true
+           WHERE s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
              AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))
            GROUP BY s."mediaId"
            HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)"#,
