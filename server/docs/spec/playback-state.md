@@ -27,7 +27,7 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 | `POST /api/playback/media/:mediaId/toggle-series-watched` | `JwtOrApiKeyGuard` (class); policies none | body `{ watched:boolean }` | `{ watched: boolean }` | 400 pipe | bulk upsert/update; playlist auto-remove when watched |
 | `POST /api/playback/media/:mediaId/seasons/:seasonId/toggle-watched` | `JwtOrApiKeyGuard` (class); policies none | body `{ watched:boolean }` | `{ watched: boolean }` | 400 pipe | delete+insert / update; playlist auto-remove when watched |
 
-`PlaybackState` JSON (entity, no `@Exclude`): `id, createdAt, updatedAt, positionSeconds, durationSeconds (nullable), completed, hiddenFromContinueWatching, lastPlayedAt, playedAt (nullable)`, and for a row **loaded** from the DB the `@RelationId` virtuals `userId, mediaId, mediaFileId, episodeId`; a row **just inserted** carries `user:{id}, media:{id}, mediaFile:{id}|absent, episode:{id}|null` instead (see `heartbeat.md` rule 16). `GET.../state` (`findOne`) always has the former shape.
+`PlaybackState` JSON (entity, no `@Exclude`): `id, createdAt, updatedAt, positionSeconds, durationSeconds (nullable), completed, hiddenFromContinueWatching, lastPlayedAt, playedAt (nullable)`, and for a row **loaded** from the DB `userId, mediaId, mediaFileId, episodeId`: `mediaId` is the media of the row's item, `episodeId` the item's id when it is in a group and `null` for a movie's item, `mediaFileId` the last file played (`null` once that file is deleted); a row **just inserted** carries `user:{id}, media:{id}, mediaFile:{id}|absent, episode:{id}|null` instead (see `heartbeat.md` rule 16). `GET.../state` always has the former shape.
 
 ## Rules
 
@@ -40,16 +40,16 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ### State reads and deletes
 
-5. `findState(userId, mediaId, episodeId?)`: a movie row is `"episodeId" IS NULL`; an episode row has that `episodeId`. The controller parses `episodeId` with `parseInt` only when the query value is non-empty; `NaN` and `0` are falsy and select the **movie row**.
-6. `GET state`: returns the row or `null` (empty body). `DELETE state`: removes the found row (`DELETE FROM playback_states WHERE id = $1`), no error when absent, 200 empty.
-7. `GET media/:id` (resume info): newest not-completed row of the user for that media with `positionSeconds > 0` (any episode), joined to its season/episode numbers; `null` -> empty body; `positionSeconds` is `0` when the stored value is `< 10` (`RESUME_FROM_START_UNDER_SECONDS`), else as stored; `durationSeconds` `Number()`-ed; `seasonNumber`/`episodeNumber` omitted (undefined) when null (movies).
-8. `watched-episodes`: distinct `episodeId`s with `completed = true`; no ordering.
-9. `episode-progress`: object keyed by episode id with `ROUND(position/duration*100)` for not-completed rows with duration and position `> 0`; only values with `0 < p < 100` are kept (a row at 100 or rounding to 0 is dropped). JSON keys are decimal strings.
-10. `hide/:mediaId`: `hiddenFromContinueWatching = true` on **every** row (movie and all episodes) of `(user, media)`; the flag is cleared again by the next heartbeat write (`heartbeat.md` rule 15).
+5. A state belongs to one item: `(userId, itemId)` is unique (`items.md`). The wire names `(mediaId, episodeId?)`, and `item_of(media, episode)` (SQL below) resolves it: an absent episode names the media's ungrouped item (a movie's), an episode id names that item when it belongs to `mediaId`. Any other pair (a series without episode, an unknown media, an episode of another media) names no item: `GET state` answers an empty body, `DELETE state` is a no-op, `toggle-watched` is 404 `not_found` and the heartbeat answers `{state: null}`. The controller parses `episodeId` with `parseInt` only when the query value is non-empty; `NaN` and `0` are falsy and select the **movie item**.
+6. `GET state`: returns the row of `(user, item)` or `null` (empty body). `DELETE state`: removes that row, no error when absent, 200 empty.
+7. `GET media/:id` (resume info): newest not-completed row of the user for any item of that media with `positionSeconds > 0`, joined to its group/item numbers; `null` -> empty body; `positionSeconds` is `0` when the stored value is `< 10` (`RESUME_FROM_START_UNDER_SECONDS`), else as stored; `durationSeconds` `Number()`-ed; `seasonNumber`/`episodeNumber` omitted (undefined) when null (movies). `mediaFileId` is the last file played when it is still a part of the item, else the item's latest part (highest file id), `null` when the item has none.
+8. `watched-episodes`: distinct ids of the media's grouped items the user completed; no ordering.
+9. `episode-progress`: object keyed by episode id (a grouped item's id) with `ROUND(position/duration*100)` for not-completed rows with duration and position `> 0`; only values with `0 < p < 100` are kept (a row at 100 or rounding to 0 is dropped). JSON keys are decimal strings.
+10. `hide/:mediaId`: `hiddenFromContinueWatching = true` on **every** row of the user's states of the media's items (movie item and episodes); the flag is cleared again by the next heartbeat write (`heartbeat.md` rule 15).
 
 ### Continue watching
 
-11. Two queries then a merge (SQL below). Movies: not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), `m.type = 'movie'`, scoped by library; post-processing per row: `mediaType = 'movie'`, `episodeLabel = null`, `positionSeconds` and `progressPercent` `Number()`-ed; when `positionSeconds < 10` both are set to `0` (the item stays listed). Series ("next up"): per series the in-progress episode (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`) else the episode after the highest completed `(season, episode)` (specials `seasonNumber = 0` excluded) when it exists and has a file and is not completed; `mediaType = 'series'`; same `< 10` zeroing; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next episode; `lastPlayedAt` = the series' most recent non-hidden state. Merge: concatenate movies then series, sort by `lastPlayedAt` DESC (JS `Date` compare, stable), `slice(0,20)`. No SQL `LIMIT`.
+11. One statement (SQL below), per media, then ordered and cut in SQL. Movies (ungrouped items): not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), scoped by library; `mediaType = 'movie'`, `episodeLabel = null`. Series ("next up"): per media the in-progress item (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`, hidden or not) else the item after the highest completed `(group number, item number)` (groups numbered `> 0`) when it exists and has a part and is not completed; `mediaType = 'series'`; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next item; `lastPlayedAt` = the series' most recent non-hidden state. `mediaFileId` is the last file played when it is a part of the item, else the item's latest part; a series row without any part is dropped. Post-processing per row: `positionSeconds` and `progressPercent` are set to `0` when `positionSeconds < 10` (the item stays listed). Order: `lastPlayedAt` truncated to the millisecond DESC, then movies before series, then media id; `LIMIT 20`.
 12. `ContinueWatchingItem` fields: `id, mediaId, mediaFileId (number|null), episodeId (number|null), positionSeconds, durationSeconds, progressPercent, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel`; movies have `stillUrl: null`.
 
 ### History
@@ -59,9 +59,9 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ### Watched toggles
 
-15. `toggle-watched` (`toggleWatched`): `existing = findState(user, media, body.episodeId)`; `willBeCompleted = existing ? !existing.completed: true`. For a new row with no `body.mediaFileId`, a file is looked up (`episodeId != null` -> any file with a part on that episode, `LIMIT 1`; else a file of `mediaId = $m` that plays no grouped item); no file found leaves `mediaFileId` **NULL** (the column is nullable). Build a new row from relation objects when none exists. Then `completed = willBeCompleted`; `lastPlayedAt = now`; `mediaFile = {id: fileId}` only when a file id is known; when completing: `positionSeconds = 0`, and if `durationSeconds` is falsy it is read from `media_files."streamInfo"->durationSeconds` of `fileId || state.mediaFileId` (else `0`; no read when neither id exists); un-completing leaves position and duration. `playedAt` is never set or cleared. `repo.save`; when `willBeCompleted`, `removeWatchedFromAutoPlaylists(user, media, episodeId != null ? [episodeId]: null)` through the isolated wrapper (`heartbeat.md` rules 19-20). Returns the saved entity (new-row shape for an insert, loaded-row shape for an update). Ownership of `mediaId`/`episodeId`/`mediaFileId` is not checked: a bogus pair fails with an FK violation (500; here unlike the heartbeat, `23503` is **not** swallowed).
-16. `toggle-series-watched` (`toggleSeriesWatched(userId, mediaId, !!body.watched)`): watched: one raw upsert (SQL below) for every episode with a part in seasons with `seasonNumber > 0` of `mediaId`: file = highest `media_files.id` among the episode's parts, `positionSeconds = 0`, `durationSeconds` = that file's `streamInfo->>'durationSeconds'` as float (0 if missing), `completed = true`, `lastPlayedAt = NOW()`; on conflict `("userId","episodeId") WHERE "episodeId" IS NOT NULL`: only `completed = true`, `positionSeconds = 0`, `lastPlayedAt = NOW()` (duration, file and `playedAt` untouched; new rows have `playedAt` NULL). Then loads **all** completed states of `(user, media)` (including ones this call did not touch), maps to non-null episode ids and calls the playlist auto-remove with that list (an empty list returns early inside the playlist method). Unwatched: `UPDATE` every row of `(user, media)` with `episodeId IS NOT NULL` (specials and file-less episodes included) to `completed = false, positionSeconds = 0, lastPlayedAt = NOW()`. Returns `{watched}`. Not transactional.
-17. `toggle-season-watched` (`toggleSeasonWatched(userId, mediaId, seasonId, !!body.watched)`): `episodes` = all episodes of `seasonId` (the season is **not** checked against `mediaId`); none -> `{watched}` without any write. Watched: only episodes with a part; none -> `{watched}`; latest file per episode through its parts (highest id); **delete** the user's rows for those episodes (`WHERE "userId" = $1 AND "episodeId" IN (...)`, regardless of `mediaId`), then **insert** one row per episode that has a file: `mediaId` = the path `mediaId`, `mediaFileId`, `positionSeconds = 0`, `durationSeconds = file.streamInfo?.durationSeconds ?? 0`, `completed = true`, `lastPlayedAt = now`, `playedAt = null`; when at least one row was inserted call the playlist auto-remove with those episode ids. Unwatched: `UPDATE... SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = now WHERE "userId" = $1 AND "mediaId" = $2 AND "episodeId" IN (all season episode ids)` (here `mediaId` **is** in the predicate: asymmetric). Not transactional (two concurrent watched calls can trip the unique index -> 500). Returns `{watched}`.
+15. `toggle-watched` (`toggleWatched`): `item = item_of(media, body.episodeId)`, none -> 404 `not_found`; `existing` = the row of `(user, item)`; `willBeCompleted = existing ? !existing.completed: true`. For a new row with no `body.mediaFileId`, the lowest-id part of the item is the file; no part leaves `mediaFileId` **NULL** (the column is nullable). Then `completed = willBeCompleted`; `lastPlayedAt = now`; `mediaFile = {id: fileId}` only when a file id is known; when completing: `positionSeconds = 0`, and if `durationSeconds` is falsy it is read from `media_files."streamInfo"->durationSeconds` of `fileId || state.mediaFileId` (else `0`; no read when neither id exists); un-completing leaves position and duration. `playedAt` is never set or cleared. When `willBeCompleted`, one `playback_history` row and `removeWatchedFromAutoPlaylists(user, media, episodeId != null ? [episodeId]: null)` through the isolated wrapper (`heartbeat.md` rules 19-20). Returns the saved row (new-row shape for an insert, loaded-row shape for an update). Ownership of `mediaFileId` is not checked: an unknown file is an FK violation, answered 404 `not_found`.
+16. `toggle-series-watched` (`toggleSeriesWatched(userId, mediaId, !!body.watched)`): watched: one raw upsert (SQL below) for every item with a part in groups with `number > 0` of `mediaId`: file = highest `media_files.id` among the item's parts, `positionSeconds = 0`, `durationSeconds` = that file's `streamInfo->>'durationSeconds'` as float (0 if missing), `completed = true`, `lastPlayedAt = NOW()`; on conflict `("userId","itemId")`: only `completed = true`, `positionSeconds = 0`, `lastPlayedAt = NOW()` (duration, file and `playedAt` untouched; new rows have `playedAt` NULL). Then loads **all** completed states of the user for the media's grouped items (including ones this call did not touch), maps them to item ids and calls the playlist auto-remove with that list (an empty list returns early inside the playlist method). Unwatched: `UPDATE` every state of the media's grouped items (specials and file-less items included) to `completed = false, positionSeconds = 0, lastPlayedAt = NOW()`. Returns `{watched}`. Not transactional.
+17. `toggle-season-watched` (`toggleSeasonWatched(userId, mediaId, seasonId, !!body.watched)`): the route answers 404 for an unknown media and for a season of another media; a season with no items writes nothing. Both directions act on the season's items. Watched: only items with a part; none -> `{watched}`; latest file per item through its parts (highest id); **delete** the user's rows for those items, then **insert** one row per item that has a file: `mediaFileId`, `positionSeconds = 0`, `durationSeconds = file.streamInfo?.durationSeconds ?? 0`, `completed = true`, `lastPlayedAt = now`, `playedAt = null`; when at least one row was inserted call the playlist auto-remove with those item ids. Unwatched: `UPDATE... SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = now` on the user's rows of all the season's items. The delete and the insert run in one transaction. Returns `{watched}`.
 18. Delete+insert loses any previous `playedAt` of those rows (history entries of the season's episodes vanish when the season is marked watched); the series-wide upsert keeps them.
 
 18a. Every flip of `completed` to true in rules 15-17 and in the heartbeat appends a `playback_history` row (`cleanup.md` rule 6a); un-completing deletes nothing.
@@ -70,9 +70,9 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 19. `dismiss(userId, mediaId)`: `INSERT INTO recommendation_dismissals ("userId","mediaId") VALUES ($1,$2) ON CONFLICT DO NOTHING` (`orIgnore`), idempotent on unique `UQ_recommendation_dismissals_user_media (userId, mediaId)`; no check that the media exists or is accessible; 204.
 20. `resetDismissals`: `DELETE... WHERE "userId" = $1`, answer `{removed: affected ?? 0}`. `countDismissals`: `SELECT COUNT(*)... WHERE "userId" = $1` -> `{count}`.
-21. `getRecommendations(userId, libs, limit?)`: `libs` empty -> `[]`. **History window**: the user's 15 most recent `completed = true` states (`lastPlayedAt` DESC, joined to media); walk them in order; skip a state whose media is missing or has no genres (it still used one of the 15); skip a media id already taken; keep at most 10 unique media, assigning `rank` 0,1,2... only to kept ones; none kept -> `[]`.
+21. `getRecommendations(userId, libs, limit?)`: `libs` empty -> `[]`. **History window**: the user's 15 most recent `completed = true` states (`lastPlayedAt` DESC, joined through their item to its media); walk them in order; skip a state whose media is missing or has no genres (it still used one of the 15); skip a media id already taken; keep at most 10 unique media, assigning `rank` 0,1,2... only to kept ones; none kept -> `[]`.
 22. **Genre profile**: for each kept media with `rank r`, `weight = 1/(r+1)` is added to each of its genres (a genre repeated in one media counts each time); `genreSource[g]` = title of the media that first contributed `g`, replaced by the rank-0 media whenever it contributes `g`.
-23. **Exclusions**: the kept media ids, **every** media id the user has any `playback_states` row for (completed or not), and every dismissed media id.
+23. **Exclusions**: the kept media ids, **every** media id the user has any `playback_states` row for through one of its items (completed or not), and every dismissed media id.
 24. **Candidates**: media with `genres IS NOT NULL AND genres != '[]'`, `id NOT IN (excluded)` (clause omitted when the set is empty), `"libraryId" IN (libs)`; columns `id, title, type, year, posterUrl, fanartUrl, additionalFanartUrls, genres`; **no `ORDER BY`**.
 25. **Score** per candidate with genres: `total = sum(genreWeights[g] ?? 0)`; `topGenre` = the first genre (candidate order) with the strictly greatest weight; candidates with `total <= 0` are dropped; `score = total / sqrt(candidate.genres.length)`. Stable sort by score DESC (ties keep candidate/DB order).
 26. **Stratification**: `TOTAL = limit ?? 15`; `PER_TYPE_CAP = max(10, ceil(TOTAL * 0.7))`; walk `scored`: stop at `TOTAL`; an item whose type already has `PER_TYPE_CAP` items goes to `overflow`, else to `top` and counts for its type; afterwards append `overflow` in order until `TOTAL`. The result is **not** re-sorted after the append.
@@ -82,19 +82,34 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ## SQL
 
-`HISTORY_MIN_WATCH_SECONDS = 5`, `RESUME_FROM_START_UNDER_SECONDS = 10`. In the continue-watching text `${libFilter}` is ` AND m."libraryId" = ANY($2)` and `${HISTORY_MIN_WATCH_SECONDS}` is `5`. Parameters are positional (`$1` user, `$2` accessible ids array).
+`HISTORY_MIN_WATCH_SECONDS = 5`, `RESUME_FROM_START_UNDER_SECONDS = 10`. Parameters are positional (`$1` user, `$2` accessible ids array).
+
+**Item of a wire pair** (created by the migration; `NULL` for a pair that names no item):
+```sql
+CREATE FUNCTION item_of(media integer, episode integer) RETURNS integer
+LANGUAGE sql STABLE PARALLEL SAFE AS $$
+  SELECT CASE WHEN episode IS NULL
+    THEN (SELECT id FROM items WHERE "mediaId" = media AND "groupId" IS NULL ORDER BY id LIMIT 1)
+    ELSE (SELECT id FROM items WHERE id = episode AND "mediaId" = media) END
+$$;
+```
+
+**Find state** (params `[userId, itemId]`): `SELECT ps.*, i."mediaId", CASE WHEN i."groupId" IS NOT NULL THEN i.id END AS "episodeId" FROM playback_states ps JOIN items i ON i.id = ps."itemId" WHERE ps."userId" = $1 AND ps."itemId" = $2`. Delete: `DELETE FROM playback_states WHERE "userId" = $1 AND "itemId" = $2`.
 
 **Resume info** (params `[userId, mediaId]`):
 ```sql
-SELECT
-   ps."mediaFileId", ps."episodeId",
-   ps."positionSeconds", ps."durationSeconds",
-   s."number", e."number"
+SELECT f.id AS "mediaFileId",
+       CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
+       ps."positionSeconds", ps."durationSeconds", s."number", e."number"
  FROM playback_states ps
- LEFT JOIN items e ON e.id = ps."episodeId"
+ JOIN items e ON e.id = ps."itemId"
  LEFT JOIN item_groups s ON s.id = e."groupId"
+ LEFT JOIN LATERAL (
+   SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
+   ORDER BY (p."mediaFileId" = ps."mediaFileId") DESC NULLS LAST, p."mediaFileId" DESC
+   LIMIT 1) f ON true
  WHERE ps."userId" = $1
-   AND ps."mediaId" = $2
+   AND e."mediaId" = $2
    AND ps.completed = false
    AND ps."positionSeconds" > 0
  ORDER BY ps."lastPlayedAt" DESC
@@ -103,141 +118,121 @@ SELECT
 
 **Watched episode ids**:
 ```sql
-SELECT DISTINCT ps."episodeId"
- FROM playback_states ps
- WHERE ps."userId" = $1 AND ps."mediaId" = $2
-   AND ps.completed = true AND ps."episodeId" IS NOT NULL
+SELECT DISTINCT i.id
+ FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+ WHERE ps."userId" = $1 AND i."mediaId" = $2
+   AND ps.completed = true AND i."groupId" IS NOT NULL
 ```
 
 **Episode progress**:
 ```sql
-SELECT ps."episodeId",
+SELECT i.id,
         ROUND((ps."positionSeconds" / ps."durationSeconds") * 100) AS percent
- FROM playback_states ps
- WHERE ps."userId" = $1 AND ps."mediaId" = $2
-   AND ps."episodeId" IS NOT NULL
+ FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+ WHERE ps."userId" = $1 AND i."mediaId" = $2
+   AND i."groupId" IS NOT NULL
    AND ps.completed = false
    AND ps."durationSeconds" > 0
    AND ps."positionSeconds" > 0
 ```
 
-**Continue watching, movies**:
+**Continue watching** (params `[userId, accessibleLibraryIds, 20]`), one statement:
 ```sql
-SELECT
-        ps.id, ps."mediaId", ps."mediaFileId", ps."episodeId",
-        ps."positionSeconds", ps."durationSeconds", ps."lastPlayedAt",
-        m.title AS "mediaTitle", m."posterUrl", m."fanartUrl",
-        NULL::text AS "stillUrl",
-        CASE WHEN ps."durationSeconds" > 0
-             THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)
-             ELSE 0 END AS "progressPercent"
- FROM playback_states ps
- JOIN media m ON m.id = ps."mediaId"
- WHERE ps."userId" = $1
-   AND ps.completed = false
-   AND ps."hiddenFromContinueWatching" = false
-   AND ps."positionSeconds" >= ${HISTORY_MIN_WATCH_SECONDS}
-   AND m.type = 'movie'${libFilter}
- ORDER BY ps."lastPlayedAt" DESC
-```
-
-**Continue watching, series**:
-```sql
-WITH user_series AS (
-  SELECT DISTINCT ON (ps."mediaId")
-         ps."mediaId", ps."lastPlayedAt"
+WITH st AS (
+  SELECT ps.id, ps."itemId", ps."mediaFileId", ps."positionSeconds", ps."durationSeconds",
+         ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
+         i."mediaId", i."groupId", i."number" AS inum, g."number" AS gnum
   FROM playback_states ps
-  JOIN media m ON m.id = ps."mediaId"
-  WHERE ps."userId" = $1 AND m.type = 'series'
-    AND ps."hiddenFromContinueWatching" = false
-  ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
+  JOIN items i ON i.id = ps."itemId"
+  LEFT JOIN item_groups g ON g.id = i."groupId"
+  WHERE ps."userId" = $1
+),
+user_series AS (
+  SELECT "mediaId", max("lastPlayedAt") AS "lastPlayedAt"
+  FROM st WHERE "groupId" IS NOT NULL AND NOT hidden GROUP BY "mediaId"
 ),
 last_completed AS (
-  -- Highest (seasonNumber, episodeNumber) among completed episodes —
-  -- ordering by lastPlayedAt ties when the user bulk-marks a season,
-  -- which would make next_ep target an arbitrary earlier episode.
-  SELECT DISTINCT ON (ps."mediaId")
-         ps."mediaId", ps."episodeId",
-         s."number" AS "seasonNumber", e."number" AS "episodeNumber"
-  FROM playback_states ps
-  JOIN items e ON e.id = ps."episodeId"
-  JOIN item_groups s ON s.id = e."groupId"
-  WHERE ps."userId" = $1 AND ps.completed = true AND ps."episodeId" IS NOT NULL
-  ORDER BY ps."mediaId", s."number" DESC, e."number" DESC
+  -- Highest (group, number) among completed items: lastPlayedAt ties when the user bulk-marks a season.
+  SELECT DISTINCT ON ("mediaId") "mediaId", gnum, inum
+  FROM st WHERE completed AND "groupId" IS NOT NULL
+  ORDER BY "mediaId", gnum DESC, inum DESC
 ),
 in_progress AS (
-  SELECT DISTINCT ON (ps."mediaId")
-         ps."mediaId", ps."episodeId", ps."mediaFileId",
-         ps."positionSeconds", ps."durationSeconds"
-  FROM playback_states ps
-  WHERE ps."userId" = $1
-    AND ps.completed = false AND ps."positionSeconds" >= ${HISTORY_MIN_WATCH_SECONDS}
-    AND ps."episodeId" IS NOT NULL
-  ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
+  SELECT DISTINCT ON ("mediaId") "mediaId", "itemId", "mediaFileId", "positionSeconds", "durationSeconds"
+  FROM st
+  WHERE NOT completed AND "positionSeconds" >= 5 AND "groupId" IS NOT NULL
+  ORDER BY "mediaId", "lastPlayedAt" DESC
 ),
-next_ep AS (
+next_item AS (
   SELECT lc."mediaId",
-         (SELECT e.id FROM items e
-          JOIN item_groups s ON s.id = e."groupId"
+         (SELECT e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
           WHERE s."mediaId" = lc."mediaId" AND s."number" > 0
-            AND (s."number" > lc."seasonNumber"
-                 OR (s."number" = lc."seasonNumber" AND e."number" > lc."episodeNumber"))
-          ORDER BY s."number", e."number" LIMIT 1
-         ) AS "episodeId"
+            AND (s."number" > lc.gnum OR (s."number" = lc.gnum AND e."number" > lc.inum))
+          ORDER BY s."number", e."number" LIMIT 1) AS "itemId"
   FROM last_completed lc
   WHERE lc."mediaId" NOT IN (SELECT "mediaId" FROM in_progress)
 ),
-combined AS (
-  SELECT ip."mediaId", ip."episodeId", ip."mediaFileId", ip."positionSeconds", ip."durationSeconds"
-  FROM in_progress ip
+picked AS (
+  SELECT st.id, st."mediaId", st."itemId", st."mediaFileId", st."positionSeconds",
+         st."durationSeconds", st."lastPlayedAt"
+  FROM st
+  WHERE st."groupId" IS NULL AND NOT st.completed AND NOT st.hidden AND st."positionSeconds" >= 5
   UNION ALL
-  SELECT ne."mediaId", ne."episodeId", NULL::int AS "mediaFileId", 0.0 AS "positionSeconds", 0.0 AS "durationSeconds"
-  FROM next_ep ne WHERE ne."episodeId" IS NOT NULL
+  SELECT COALESCE(ps.id, 0), ip."mediaId", ip."itemId", ip."mediaFileId",
+         ip."positionSeconds", ip."durationSeconds", us."lastPlayedAt"
+  FROM in_progress ip
+  JOIN user_series us ON us."mediaId" = ip."mediaId"
+  LEFT JOIN playback_states ps ON ps."userId" = $1 AND ps."itemId" = ip."itemId"
+  UNION ALL
+  SELECT COALESCE(ps.id, 0), ni."mediaId", ni."itemId", NULL::int,
+         COALESCE(ps."positionSeconds", 0), COALESCE(ps."durationSeconds", 0), us."lastPlayedAt"
+  FROM next_item ni
+  JOIN user_series us ON us."mediaId" = ni."mediaId"
+  LEFT JOIN playback_states ps ON ps."userId" = $1 AND ps."itemId" = ni."itemId"
+  WHERE ni."itemId" IS NOT NULL AND COALESCE(NOT ps.completed, true)
 )
-SELECT
-  COALESCE(ps_next.id, 0) AS id,
-  c."mediaId",
-  COALESCE(c."mediaFileId", mf.id) AS "mediaFileId",
-  c."episodeId",
-  COALESCE(ps_next."positionSeconds", c."positionSeconds", 0) AS "positionSeconds",
-  COALESCE(ps_next."durationSeconds", c."durationSeconds", 0) AS "durationSeconds",
-  us."lastPlayedAt",
-  m.title AS "mediaTitle",
-  m."posterUrl", m."fanartUrl",
-  e."stillUrl",
-  'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
-    || COALESCE(' - ' || e.title, '') AS "episodeLabel",
-  CASE WHEN COALESCE(ps_next."durationSeconds", c."durationSeconds", 0) > 0
-       THEN ROUND((COALESCE(ps_next."positionSeconds", c."positionSeconds", 0)
-                  / COALESCE(ps_next."durationSeconds", c."durationSeconds", 1)) * 100)
-       ELSE 0 END AS "progressPercent"
-FROM combined c
-JOIN user_series us ON us."mediaId" = c."mediaId"
-JOIN media m ON m.id = c."mediaId"
-JOIN items e ON e.id = c."episodeId"
-JOIN item_groups s ON s.id = e."groupId"
-LEFT JOIN LATERAL (
-  SELECT mf2.id FROM media_files mf2
-  WHERE mf2."mediaId" = c."mediaId" AND mf2."episodeId" = c."episodeId"
-  ORDER BY mf2.id DESC LIMIT 1
-) mf ON c."mediaFileId" IS NULL
-LEFT JOIN playback_states ps_next ON ps_next."userId" = $1 AND ps_next."mediaId" = c."mediaId" AND ps_next."episodeId" = c."episodeId"
-WHERE COALESCE(ps_next.completed, false) = false
-  AND COALESCE(c."mediaFileId", mf.id) IS NOT NULL${libFilter}
+SELECT x.id, x."mediaId", x.file AS "mediaFileId", x."episodeId", x.pos AS "positionSeconds",
+       x.dur AS "durationSeconds", x."lastPlayedAt", x.title AS "mediaTitle",
+       x.poster AS "posterUrl", x.fanart AS "fanartUrl", x.kind AS "mediaType",
+       x.still AS "stillUrl", x.label AS "episodeLabel",
+       CASE WHEN COALESCE(x.dur, 0) > 0 THEN ROUND((x.pos / x.dur) * 100) ELSE 0 END AS "progressPercent"
+FROM (
+  SELECT c.id, c."mediaId", f.id AS file, c.pos, c.dur, c."lastPlayedAt",
+         CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
+         m.title, m."posterUrl" AS poster, m."fanartUrl" AS fanart,
+         CASE WHEN e."groupId" IS NULL THEN 'movie' ELSE 'series' END AS kind,
+         e."stillUrl" AS still,
+         CASE WHEN e."groupId" IS NOT NULL
+              THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
+                   || COALESCE(' - ' || e.title, '') END AS label
+  FROM (SELECT id, "mediaId", "itemId", "mediaFileId", "positionSeconds" AS pos,
+               "durationSeconds" AS dur, "lastPlayedAt" FROM picked) c
+  JOIN media m ON m.id = c."mediaId" AND m."libraryId" = ANY($2)
+  JOIN items e ON e.id = c."itemId"
+  LEFT JOIN item_groups s ON s.id = e."groupId"
+  LEFT JOIN LATERAL (
+    SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
+    ORDER BY (p."mediaFileId" = c."mediaFileId") DESC NULLS LAST, p."mediaFileId" DESC
+    LIMIT 1) f ON true
+  WHERE e."groupId" IS NULL OR f.id IS NOT NULL
+) x
+ORDER BY date_trunc('milliseconds', x."lastPlayedAt") DESC, x.kind, x."mediaId"
+LIMIT $3
 ```
 Numeric types matter for JSON: `positionSeconds`/`durationSeconds` are `double precision` (a JS number); `ROUND(double)` is `double precision` (number); `id` is `int`; `lastPlayedAt` is `timestamptz` (ISO string in JSON).
 
 **History count** (params `[userId, accessibleLibraryIds]`):
 ```sql
 SELECT COUNT(*) AS cnt
- FROM playback_states ps
+ FROM playback_states ps JOIN items i ON i.id = ps."itemId"
  WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
-   AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = ps."mediaId" AND mAcl."libraryId" = ANY($2))
+   AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = i."mediaId" AND mAcl."libraryId" = ANY($2))
 ```
 **History page** (params `[userId, limit, (page-1)*limit, accessibleLibraryIds]`):
 ```sql
 SELECT
-   ps.id, ps."mediaId", ps."mediaFileId", ps."episodeId",
+   ps.id, e."mediaId", ps."mediaFileId",
+   CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
    ps."positionSeconds", ps."durationSeconds", ps.completed,
    ps."lastPlayedAt",
    m.title AS "mediaTitle", m.type AS "mediaType",
@@ -245,13 +240,13 @@ SELECT
    CASE WHEN ps."durationSeconds" > 0
         THEN ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)
         ELSE 0 END AS "progressPercent",
-   CASE WHEN ps."episodeId" IS NOT NULL
+   CASE WHEN e."groupId" IS NOT NULL
         THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
              || COALESCE(' - ' || e.title, '')
         ELSE NULL END AS "episodeLabel"
  FROM playback_states ps
- JOIN media m ON m.id = ps."mediaId"
- LEFT JOIN items e ON e.id = ps."episodeId"
+ JOIN items e ON e.id = ps."itemId"
+ JOIN media m ON m.id = e."mediaId"
  LEFT JOIN item_groups s ON s.id = e."groupId"
  WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
    AND m."libraryId" = ANY($4)
@@ -261,9 +256,10 @@ SELECT
 
 **Watched media ids** (params `[userId, accessibleLibraryIds]`):
 ```sql
-SELECT DISTINCT ps."mediaId" AS id
+SELECT DISTINCT i."mediaId" AS id
 FROM playback_states ps
-JOIN media m ON m.id = ps."mediaId"
+JOIN items i ON i.id = ps."itemId"
+JOIN media m ON m.id = i."mediaId"
 WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'
   AND m."libraryId" = ANY($2)
 
@@ -273,7 +269,7 @@ SELECT s."mediaId" AS id
 FROM item_groups s
 JOIN items e ON e."groupId" = s.id
 LEFT JOIN playback_states ps
-  ON ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed = true
+  ON ps."userId" = $1 AND ps."itemId" = e.id AND ps.completed = true
 WHERE s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
   AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))
 GROUP BY s."mediaId"
@@ -283,17 +279,17 @@ HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)
 **Series bulk watched** (params `[userId, mediaId]`):
 ```sql
 INSERT INTO playback_states
-  ("userId", "mediaId", "mediaFileId", "episodeId",
+  ("userId", "itemId", "mediaFileId",
    "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
-SELECT $1, $2,
-       (SELECT mf.id FROM media_files mf
-         WHERE mf."episodeId" = e.id
-         ORDER BY mf.id DESC LIMIT 1),
-       e.id,
+SELECT $1, e.id,
+       (SELECT p."mediaFileId" FROM item_parts p
+         WHERE p."itemId" = e.id
+         ORDER BY p."mediaFileId" DESC LIMIT 1),
        0,
        COALESCE(
-         (SELECT (mf2."streamInfo"->>'durationSeconds')::float FROM media_files mf2
-           WHERE mf2."episodeId" = e.id
+         (SELECT (mf2."streamInfo"->>'durationSeconds')::float
+            FROM media_files mf2 JOIN item_parts p2 ON p2."mediaFileId" = mf2.id
+           WHERE p2."itemId" = e.id
            ORDER BY mf2.id DESC LIMIT 1),
          0
        ),
@@ -304,7 +300,7 @@ JOIN item_groups s ON s.id = e."groupId"
 WHERE s."mediaId" = $2
   AND s."number" > 0
   AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL
+ON CONFLICT ("userId", "itemId")
 DO UPDATE SET
   completed = true,
   "positionSeconds" = 0,
@@ -317,20 +313,19 @@ UPDATE playback_states
        "positionSeconds" = 0,
        "lastPlayedAt" = NOW()
  WHERE "userId" = $1
-   AND "mediaId" = $2
-   AND "episodeId" IS NOT NULL
+   AND "itemId" IN (SELECT id FROM items WHERE "mediaId" = $2 AND "groupId" IS NOT NULL)
 ```
-After the upsert: `SELECT * FROM playback_states WHERE "userId" = $1 AND "mediaId" = $2 AND completed = true`.
+After the upsert: `SELECT i.id FROM playback_states ps JOIN items i ON i.id = ps."itemId" WHERE ps."userId" = $1 AND i."mediaId" = $2 AND i."groupId" IS NOT NULL AND ps.completed = true`.
 
-**Season toggle** (equivalent SQL): `SELECT * FROM items WHERE "groupId" = $1`; `SELECT f.* FROM media_files f JOIN item_parts p ON p."mediaFileId" = f.id WHERE p."itemId" IN (...) ORDER BY f.id DESC`; `DELETE FROM playback_states WHERE "userId" = $1 AND "episodeId" IN (...)`; `INSERT INTO playback_states ("userId","mediaId","mediaFileId","episodeId","positionSeconds","durationSeconds",completed,"lastPlayedAt","playedAt") VALUES (...)` (bulk, `playedAt` NULL); unwatched: `UPDATE playback_states SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = $now, "updatedAt" = now WHERE "userId" = $1 AND "mediaId" = $2 AND "episodeId" IN (...)`.
+**Season toggle** (equivalent SQL): `DELETE FROM playback_states WHERE "userId" = $1 AND "itemId" IN (SELECT i.id FROM items i WHERE i."groupId" = $2 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id))`; `INSERT INTO playback_states ("userId","itemId","mediaFileId","positionSeconds","durationSeconds",completed,"lastPlayedAt","playedAt") SELECT $1, e.id, f.id, 0, COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0), true, now(), NULL FROM items e CROSS JOIN LATERAL (latest part file of e) f WHERE e."groupId" = $2 RETURNING "itemId"`, both in one transaction; unwatched: `UPDATE playback_states SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = now() WHERE "userId" = $1 AND "itemId" IN (SELECT id FROM items WHERE "groupId" = $2)`.
 
-**toggleWatched file lookups**: `SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1 LIMIT 1` (episode) or a file of `mediaId = $1` with no part on a grouped item, `LIMIT 1` (movie); `SELECT * FROM media_files WHERE id = $1`. No `ORDER BY` on the first two (any matching row).
+**toggleWatched file lookup**: `SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1 ORDER BY "mediaFileId" LIMIT 1`; `SELECT * FROM media_files WHERE id = $1`.
 
-**Hide**: `UPDATE playback_states SET "hiddenFromContinueWatching" = true, "updatedAt" = now WHERE "userId" = $1 AND "mediaId" = $2`.
+**Hide**: `UPDATE playback_states SET "hiddenFromContinueWatching" = true WHERE "userId" = $1 AND "itemId" IN (SELECT id FROM items WHERE "mediaId" = $2)`.
 
 **Recommendations** (equivalent SQL):
-- window: `SELECT ps.*, m.* FROM playback_states ps LEFT JOIN media m ON m.id = ps."mediaId" WHERE ps."userId" = $1 AND ps.completed = true ORDER BY ps."lastPlayedAt" DESC LIMIT 15`.
-- started media: `SELECT DISTINCT ps."mediaId" AS "mediaId" FROM playback_states ps WHERE ps."userId" = $1`.
+- window: `SELECT ps.*, m.* FROM playback_states ps LEFT JOIN items i ON i.id = ps."itemId" LEFT JOIN media m ON m.id = i."mediaId" WHERE ps."userId" = $1 AND ps.completed = true ORDER BY ps."lastPlayedAt" DESC LIMIT 15`.
+- started media: `SELECT DISTINCT i."mediaId" FROM playback_states ps JOIN items i ON i.id = ps."itemId" WHERE ps."userId" = $1`.
 - dismissed: `SELECT d."mediaId" AS "mediaId" FROM recommendation_dismissals d WHERE d."userId" = $1`.
 - candidates: `SELECT m.id, m.title, m.type, m.year, m."posterUrl", m."fanartUrl", m."additionalFanartUrls", m.genres FROM media m WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb [AND m.id NOT IN (...)] AND m."libraryId" IN (...)`.
 - availability (verbatim) (param `$1` = int array of top ids):
@@ -349,7 +344,7 @@ SELECT mf."mediaId" AS "mediaId"
 ```
 - dismiss: `INSERT INTO recommendation_dismissals ("userId","mediaId") VALUES ($1,$2) ON CONFLICT DO NOTHING` (plus default `createdAt`/`updatedAt`); reset: `DELETE FROM recommendation_dismissals WHERE "userId" = $1`; count: `SELECT COUNT(*) FROM recommendation_dismissals WHERE "userId" = $1`.
 
-`playback_states` unique partial indexes: `server/migrations/1783400000000_index-playback-state-unique-per-target.sql` (`idx_playback_user_movie`, `idx_playback_user_episode`). In the baseline `playback_states."mediaFileId"` is a nullable FK (`ON DELETE CASCADE`) and `createdAt`/`updatedAt` are `TIMESTAMP` without time zone (`server/migrations/1777816212948_baseline.sql`), so those two fields are excluded from parity.
+`playback_states` is unique on `("userId","itemId")` (`UQ_playback_states_user_item`) and its `"itemId"` is a cascading FK to `items`; `"mediaFileId"` is the last file played, a nullable FK with `ON DELETE SET NULL`, so deleting a file keeps the progress (`server/migrations/1789000000070_progress-on-items.sql`). `createdAt`/`updatedAt` are `TIMESTAMP` without time zone (`server/migrations/1777816212948_baseline.sql`), so those two fields are excluded from parity.
 
 ## Events
 
@@ -372,4 +367,4 @@ none.
 
 1. Candidate query of `getRecommendations` has no `ORDER BY`, so equal scores are ordered by Postgres scan order; a defined tie-break (e.g. `ORDER BY m.id`) is not specified.
 2. `history` with a fractional `page`/`limit` is a 500 (rule 3): keep or reject with 400?
-3. `toggle-season-watched` does not verify `seasonId` belongs to `mediaId` and deletes the user's history stamps (`playedAt`) for the season (rules 17-18): keep or change?
+3. `toggle-season-watched` deletes the user's history stamps (`playedAt`) for the season (rules 17-18): keep or change?

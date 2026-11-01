@@ -22,7 +22,7 @@ What a media is made of. A movie is one item; a series is items (its episodes) g
 
 11. The wire is unchanged: `seasonId` is the group id, `seasonNumber` the group `number`, `episodeId` the id of a grouped item, `episodeNumber` its `number`, `endEpisodeNumber` its `"endNumber"`. SQL that builds those payloads names the keys (`jsonb_build_object` or an alias); no query serialises a whole `items` or `item_groups` row.
 12. An ungrouped item is not an episode. A query about episodes joins `item_groups` on `"groupId"` or filters `"groupId" IS NOT NULL`, so the item of a movie never appears in an episode list, count or lookup (the episode gates of `PATCH /api/media/episodes/:episodeId` and of the markers routes answer `404` for it).
-13. Progress and every other reference keep their columns (`playback_states."episodeId"`, ...); a movie's progress carries a null `episodeId`. A file carries no item: its items are its parts (rules 17-23).
+13. Progress and history belong to an item: `playback_states` is unique on `(userId, itemId)` and `playback_history` rows carry an `itemId`, both cascading with the item. The other references keep their columns. The SQL function `item_of(media, episode)` turns the wire pair `(mediaId, episodeId?)` into an item: an absent episode names the media's ungrouped item, an episode id names that item when it belongs to the media, any other pair names none. A file carries no item: its items are its parts (rules 17-23).
 
 ## Versions and editions
 
