@@ -1,14 +1,25 @@
 //! Where artwork lives: one table for the serving routes and the store.
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use std::{
     fmt,
     path::{Path, PathBuf},
 };
 
+/// An id that can name a request art directory: `imdb` ids are free text, and the key builds a path.
+fn art_id(value: &str) -> bool {
+    (1..=64).contains(&value.len()) && value.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
 pub fn request_key(id: &str) -> bool {
-    id.strip_prefix("movie-")
-        .or_else(|| id.strip_prefix("series-"))
-        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    let Some((kind, rest)) = id.split_once('-') else {
+        return false;
+    };
+    MediaKind::NAMES.contains(&kind)
+        && match rest.split_once('-') {
+            // `<kind>-<digits>` is art keyed by the TMDB id alone: it stays readable
+            None => !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()),
+            Some((provider, value)) => ExternalProvider::parse(provider).is_some() && art_id(value),
+        }
 }
 
 /// `0` or digits without a leading zero, within the integer range.
@@ -159,10 +170,21 @@ impl Target {
         Self::new(Kind::Media, id, Some(variant))
     }
 
-    /// Request art is keyed `<movie|series>-<tmdbId>` (`image-store.md` rule 22).
-    pub fn request(kind: MediaKind, tmdb_id: i64, variant: Variant) -> Self {
-        let k = kind.as_str();
-        Self::new(Kind::Request, format!("{k}-{tmdb_id}"), Some(variant))
+    /// Request art is keyed `<kind>-<provider>-<value>` (`image-store.md` rule 22); `None` for a value
+    /// that cannot name a directory.
+    pub fn request(
+        kind: MediaKind,
+        provider: ExternalProvider,
+        value: &str,
+        variant: Variant,
+    ) -> Option<Self> {
+        art_id(value).then(|| {
+            Self::new(
+                Kind::Request,
+                format!("{kind}-{provider}-{value}"),
+                Some(variant),
+            )
+        })
     }
 
     pub fn person(id: i32) -> Self {
@@ -225,7 +247,15 @@ mod tests {
     fn a_negative_id_has_no_target() {
         assert!(!Target::media(-1, Variant::Poster).is_valid());
         assert!(!Target::person(-5).is_valid());
-        assert!(!Target::request(MediaKind::Movie, -603, Variant::Poster).is_valid());
+        assert!(
+            Target::request(
+                MediaKind::Movie,
+                ExternalProvider::Tmdb,
+                "-603",
+                Variant::Poster
+            )
+            .is_none()
+        );
         assert!(Target::person(5).is_valid());
     }
 
@@ -248,13 +278,27 @@ mod tests {
         ] {
             assert!(!canonical_id(bad), "{bad}");
         }
-        assert!(request_key("movie-603") && request_key("series-1"));
+        for ok in [
+            "movie-603",
+            "series-1",
+            "movie-tmdb-603",
+            "series-imdb-tt0133093",
+        ] {
+            assert!(request_key(ok), "{ok}");
+        }
+        let long = format!("movie-imdb-{}", "a".repeat(65));
         for bad in [
             "movie-",
             "movie-abc",
             "../x",
             "movie-6\u{663}",
             "movie-603x",
+            "movie-tmdb-",
+            "movie-isbn-5",
+            "book-tmdb-5",
+            "movie-tmdb-6-3",
+            "movie-imdb-../x",
+            long.as_str(),
         ] {
             assert!(!request_key(bad), "{bad}");
         }
@@ -281,6 +325,10 @@ mod tests {
         assert_eq!(
             p("request", "movie-603", Some("logo"), "full"),
             Some("/d/requests/movie-603/logo.jpg".into())
+        );
+        assert_eq!(
+            p("request", "movie-tmdb-603", Some("logo"), "full"),
+            Some("/d/requests/movie-tmdb-603/logo.jpg".into())
         );
         assert_eq!(
             p("person", "5", Some("zzz"), "medium"),
@@ -316,12 +364,18 @@ mod tests {
         );
         assert_eq!(t.sidecar(d), Path::new("/d/media/7/fanart-3.src.json"));
         assert_eq!(t.api_path(), "/api/images/media/7/fanart-3");
-        let r = Target::request(MediaKind::Movie, 603, Variant::Poster);
+        let r = Target::request(
+            MediaKind::Movie,
+            ExternalProvider::Tmdb,
+            "603",
+            Variant::Poster,
+        )
+        .unwrap();
         assert_eq!(
             r.sidecar(d),
-            Path::new("/d/requests/movie-603/poster.src.json")
+            Path::new("/d/requests/movie-tmdb-603/poster.src.json")
         );
-        assert_eq!(r.api_path(), "/api/images/request/movie-603/poster");
+        assert_eq!(r.api_path(), "/api/images/request/movie-tmdb-603/poster");
         assert_eq!(Target::person(5).api_path(), "/api/images/person/5");
         assert_eq!(
             Target::person(5).sidecar(d),

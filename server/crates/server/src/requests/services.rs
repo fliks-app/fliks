@@ -64,9 +64,6 @@ pub async fn title_facts(
 
 /// Stores the art of a title (`request/<key>`) unless already stored; best effort.
 pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
-    let tmdb_id = key
-        .tmdb_id()
-        .ok_or_else(|| format!("no metadata provider for {}", key.provider))?;
     let media_type = key.media_type;
     let slots = [
         (Variant::Poster, "posterUrl"),
@@ -75,12 +72,17 @@ pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
     let mut details: Option<Details> = None;
     let mut out = [None, None];
     for (i, (variant, field)) in slots.into_iter().enumerate() {
-        let t = Target::request(media_type, i64::from(tmdb_id), variant);
+        let Some(t) = Target::request(media_type, key.provider, &key.external_id, variant) else {
+            return Ok(Art::default());
+        };
         if st.images.has_image(&t) {
             out[i] = Some(t.api_path());
             continue;
         }
         if details.is_none() {
+            let tmdb_id = key
+                .tmdb_id()
+                .ok_or_else(|| format!("no metadata provider for {}", key.provider))?;
             details = Some(Details::from_value(
                 &tmdb_details(st, media_type, tmdb_id).await?,
             ));

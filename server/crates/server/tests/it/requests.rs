@@ -1234,7 +1234,7 @@ async fn art_lands_in_the_response_and_a_failure_is_swallowed(pool: PgPool) {
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, movie(101)).await;
     let poster = r["posterUrl"].as_str().unwrap().to_owned();
     assert!(
-        poster.starts_with("/api/images/request/movie-101/poster?v="),
+        poster.starts_with("/api/images/request/movie-tmdb-101/poster?v="),
         "{poster}"
     );
     assert_eq!(r["fanartUrl"], Value::Null, "the stub has no backdrop");
