@@ -209,6 +209,27 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
       },
+      {
+        path: 'add/book/:provider/:externalId',
+        data: { kind: 'book' },
+        loadComponent: () =>
+          import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+      },
+      {
+        path: 'books/:id',
+        loadComponent: () =>
+          import('./features/media-detail/media-detail').then(
+            (m) => m.MediaDetailComponent,
+          ),
+        data: { kind: 'book', reuse: true },
+      },
+      {
+        path: 'collections/:id',
+        loadComponent: () =>
+          import('./features/collection-detail/collection-detail').then(
+            (m) => m.CollectionDetailComponent,
+          ),
+      },
       // Backward compat: /add/movie/:tmdbId → defaults to tmdb provider
       {
         path: 'add/movie/:tmdbId',

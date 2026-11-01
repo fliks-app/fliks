@@ -1,1 +1,1 @@
-export type MediaType = 'movie' | 'series';
+export type MediaType = 'movie' | 'series' | 'book';

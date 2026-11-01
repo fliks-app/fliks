@@ -3829,5 +3829,14 @@
     "taken_propose": "Bereits vorgeschlagen",
     "propose_count_one": "{{count}} Folge vorschlagen",
     "propose_count_other": "{{count}} Folgen vorschlagen"
+  },
+  "kinds": {
+    "book": "Buch"
+  },
+  "families": {
+    "video": "Video",
+    "audio": "Audio",
+    "text": "Text",
+    "image": "Bild"
   }
 }

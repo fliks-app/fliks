@@ -94,7 +94,8 @@ export class ReleaseGrabController {
     if (!m) return null;
     switch (m.type) {
       case 'movie': return m;
-      case 'series': return null;
+      case 'series':
+      case 'book': return null;
       default: return assertNever(m.type);
     }
   }

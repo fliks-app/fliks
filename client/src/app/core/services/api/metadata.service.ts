@@ -207,6 +207,7 @@ export class MetadataService {
     switch (type) {
       case 'movie': return this.searchMovie(q, year, provider, mediaId);
       case 'series': return this.searchTv(q, year, provider, mediaId);
+      case 'book': throw new Error('Books go through BooksApiService');
       default: return assertNever(type);
     }
   }
@@ -215,6 +216,7 @@ export class MetadataService {
     switch (type) {
       case 'movie': return this.discoverMovies(opts);
       case 'series': return this.discoverTv(opts);
+      case 'book': throw new Error('Books go through BooksApiService');
       default: return assertNever(type);
     }
   }
@@ -223,6 +225,7 @@ export class MetadataService {
     switch (type) {
       case 'movie': return this.getMovieGenres();
       case 'series': return this.getTvGenres();
+      case 'book': throw new Error('Books go through BooksApiService');
       default: return assertNever(type);
     }
   }
@@ -231,6 +234,7 @@ export class MetadataService {
     switch (type) {
       case 'movie': return this.getTrendingMovies(window);
       case 'series': return this.getTrendingTv(window);
+      case 'book': throw new Error('Books go through BooksApiService');
       default: return assertNever(type);
     }
   }
@@ -239,6 +243,7 @@ export class MetadataService {
     switch (type) {
       case 'movie': return this.getPopularMovies();
       case 'series': return this.getPopularTv();
+      case 'book': throw new Error('Books go through BooksApiService');
       default: return assertNever(type);
     }
   }
@@ -247,6 +252,7 @@ export class MetadataService {
     switch (type) {
       case 'movie': return this.getMovieDetails(tmdbId);
       case 'series': return this.getTvDetails(tmdbId);
+      case 'book': throw new Error('Books go through BooksApiService');
       default: return assertNever(type);
     }
   }

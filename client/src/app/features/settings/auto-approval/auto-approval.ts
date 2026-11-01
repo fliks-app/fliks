@@ -78,6 +78,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
   private readonly genresByKind: Record<MediaType, () => TmdbGenre[]> = {
     movie: this.movieGenres,
     series: this.tvGenres,
+    book: () => [],
   };
   protected readonly showMaxSeasons = computed(() => {
     const type = this.formMediaType();
