@@ -29,6 +29,11 @@ The identity a media has in an outside system: a TMDB id, an IMDb id, later an O
 12. The migration adds `UNIQUE (id, type)` to `media`, creates the table, its `CHECK`s, the keys and indexes, backfills one row per non-empty `media."imdbId"` and per positive `"tmdbId"` and `"tvdbId"` (every value was already unique per kind for `tmdb`; the others are copied as they are), then drops the three columns and `UQ_media_type_tmdbId`. There is no dual write and no copy kept.
 13. The wire is unchanged. `tmdbId`, `tvdbId`, `imdbId` stay on every media payload (`media-query.md`, `playlists.md`, `subtitles.md`, `libraries.md`), assembled with rule 5, `null` when absent, and every request body that takes them (`POST /api/media`, `PUT /api/media/:id`, `POST /api/media/:id/identify`) still names them.
 
+## Requests
+
+14. A request names its title by `(mediaType, provider, externalId)` (`requests.md` rule 5), the media kind and an id of a provider whose ids are unique per kind (`is_unique`: `tmdb` for `movie` and `series`), so one request names at most one media. It matches the media of that kind holding the same `(provider, value)` row, by rule 6's lookup; a media with no row matches no request. The migration of `requests` copies `"tmdbId"` into `('tmdb', "tmdbId"::text)` and drops the column; a row whose `"tmdbId"` is not a positive 9-digit integer is dropped (it could never match a media).
+15. Request art is keyed `<kind>-<provider>-<value>` (`image-store.md` rule 22).
+
 ## Not in scope
 
-`requests."tmdbId"`, `persons."tmdbId"` and `persons.provider`, `media."tmdbCollectionId"` (a collection's id, not the title's) and the art keys of requests keep their columns; the request and importer writes move onto `(provider, value)` later. Where one of them looks a media up by `tmdbId` it goes through rule 6's lookup.
+`persons."tmdbId"` and `persons.provider`, and `media."tmdbCollectionId"` (a collection's id, not the title's) keep their columns. Where one of them looks a media up by `tmdbId` it goes through rule 6's lookup.
