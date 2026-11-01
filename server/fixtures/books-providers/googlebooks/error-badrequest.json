@@ -1,0 +1,13 @@
+{
+ "error": {
+  "code": 400,
+  "message": "Invalid query",
+  "errors": [
+   {
+    "message": "Invalid query",
+    "domain": "global",
+    "reason": "badRequest"
+   }
+  ]
+ }
+}

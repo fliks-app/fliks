@@ -1,0 +1,20 @@
+{
+ "asin": "B0QZ7AUTH1",
+ "description": "Autrice née à Ombrelune.",
+ "genres": [
+  {
+   "asin": "2000000001",
+   "name": "Jeunesse",
+   "type": "genre"
+  }
+ ],
+ "image": "https://images-na.ssl-images-amazon.com/images/S/amzn-author-media-prod/zzzzzzzz.jpg",
+ "name": "Maëlis Quenotte",
+ "region": "us",
+ "similar": [
+  {
+   "asin": "B0QZ7AUTH2",
+   "name": "Torvald Pexinsel"
+  }
+ ]
+}

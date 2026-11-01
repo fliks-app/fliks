@@ -1,0 +1,42 @@
+{
+ "title": "La Cartographe des Brumes",
+ "publishers": [
+  "Brindle Audio House"
+ ],
+ "publish_date": "2019-03-05",
+ "isbn_13": [
+  "9782999000049"
+ ],
+ "languages": [
+  {
+   "key": "/languages/fre"
+  }
+ ],
+ "physical_format": "Audio CD",
+ "contributors": [
+  {
+   "role": "Narrator",
+   "name": "Odalric Menvieux"
+  }
+ ],
+ "number_of_pages": 0,
+ "works": [
+  {
+   "key": "/works/OL9200001W"
+  }
+ ],
+ "type": {
+  "key": "/type/edition"
+ },
+ "key": "/books/OL9300002M",
+ "latest_revision": 7,
+ "revision": 7,
+ "created": {
+  "type": "/type/datetime",
+  "value": "2019-01-02T03:04:05.678901"
+ },
+ "last_modified": {
+  "type": "/type/datetime",
+  "value": "2025-04-29T10:32:23.853856"
+ }
+}

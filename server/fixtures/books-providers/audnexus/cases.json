@@ -1,0 +1,17 @@
+{"cases":[
+{"expected":{"authors":[{"id":"B0QZ7AUTH1","name":"Maëlis Quenotte"}],"covers":["https://m.media-amazon.com/images/I/bbbbbbbbbb.jpg"],"description":"Une cartographe sans carte, une ville qui change de nom chaque nuit. <br /> <br />Second tome.","durationSecs":30060,"format":"audio","ids":{"asin":"B0QZ7LM4NV","edition":null,"isbn13":["9782999000049"],"work":null},"language":"fr","level":"edition","narrators":[{"id":null,"name":"Odalric Menvieux"}],"pageCount":null,"provider":"audnexus","published":"2020-05-11","publisher":"Brindle Audio House","rating":{"average":4.4,"count":null},"series":[{"id":"B0QZ7SER02","name":"Chroniques d'Ombrelune","position":"2"},{"id":"B0QZ7SER03","name":"Le Monde d'Ombrelune","position":"1.5"}],"subjects":["Jeunesse","Fantasy et magie"],"subtitle":"Chroniques d'Ombrelune 2","title":"La Cartographe des Brumes","translators":[]},"input":{"file":"book-fr.json","fn":"parse_book"}},
+{"expected":{"authors":[],"covers":[],"description":"Plain.","durationSecs":null,"format":"audio","ids":{"asin":"B0TXN2KP52","edition":null,"isbn13":[],"work":null},"language":"en","level":"edition","narrators":[],"pageCount":null,"provider":"audnexus","published":"2019-03-01","publisher":null,"rating":null,"series":[],"subjects":[],"subtitle":null,"title":"The Cartographer of Mists","translators":[]},"input":{"file":"book-minimal.json","fn":"parse_book"}},
+{"expected":{"error":"not found"},"input":{"file":"error-region.json","fn":"parse_book"}},
+{"expected":{"error":"rate limited"},"input":{"file":"error-ratelimit.json","fn":"parse_book"}},
+{"expected":{"error":"api error: Invalid ASIN"},"input":{"file":"error-other.json","fn":"parse_book"}},
+{"expected":{"accurate":true,"asin":"B0QZ7LM4NV","brandIntroMs":2000,"brandOutroMs":5000,"chapters":[{"lengthMs":60000,"startMs":0,"title":"Crédits"},{"lengthMs":1800500,"startMs":60000,"title":"La rue des Lampistes"},{"lengthMs":900000,"startMs":1860500,"title":""}],"runtimeMs":2760500},"input":{"file":"chapters.json","fn":"parse_chapters"}},
+{"expected":{"accurate":false,"asin":"B0TXN2KP52","brandIntroMs":null,"brandOutroMs":null,"chapters":[],"runtimeMs":null},"input":{"file":"chapters-inaccurate.json","fn":"parse_chapters"}},
+{"expected":{"error":"not found"},"input":{"file":"error-region.json","fn":"parse_chapters"}},
+{"expected":{"alternateNames":[],"bio":"Autrice née à Ombrelune.","birthDate":null,"deathDate":null,"id":"B0QZ7AUTH1","name":"Maëlis Quenotte","photos":["https://images-na.ssl-images-amazon.com/images/S/amzn-author-media-prod/zzzzzzzz.jpg"],"provider":"audnexus","remoteIds":{}},"input":{"file":"author.json","fn":"parse_author"}},
+{"expected":{"error":"not found"},"input":{"file":"error-region.json","fn":"parse_author"}},
+{"expected":"https://api.audnex.us/books/B0QZ7LM4NV","input":{"args":{"asin":"B0QZ7LM4NV"},"fn":"book_url"}},
+{"expected":"https://api.audnex.us/books/B0QZ7LM4NV?region=fr","input":{"args":{"asin":"B0QZ7LM4NV","region":"fr"},"fn":"book_url"}},
+{"expected":"https://api.audnex.us/books/B0QZ7LM4NV/chapters?region=uk","input":{"args":{"asin":"B0QZ7LM4NV","region":"uk"},"fn":"chapters_url"}},
+{"expected":"https://api.audnex.us/authors/B0QZ7AUTH1?region=us","input":{"args":{"asin":"B0QZ7AUTH1","region":"us"},"fn":"author_url"}},
+{"input":{"fn":"book_url","args":{"asin":"../x"}},"expected":null}
+]}

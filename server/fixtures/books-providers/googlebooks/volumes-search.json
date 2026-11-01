@@ -1,0 +1,95 @@
+{
+ "kind": "books#volumes",
+ "totalItems": 3,
+ "items": [
+  {
+   "kind": "books#volume",
+   "id": "aB1cD2eF3gHI",
+   "etag": "AbCdEfGhIjK",
+   "selfLink": "https://www.googleapis.com/books/v1/volumes/aB1cD2eF3gHI",
+   "volumeInfo": {
+    "title": "The Lantern Clockmaker (The Emberfall Cycle, Book 1.5)",
+    "authors": [
+     "Torvald Pexinsel",
+     "Wilmette Arrowood"
+    ],
+    "publishedDate": "2021",
+    "industryIdentifiers": [
+     {
+      "type": "OTHER",
+      "identifier": "PKEY:abc123"
+     }
+    ],
+    "pageCount": 0,
+    "printType": "BOOK",
+    "language": "en-US",
+    "categories": [
+     "Juvenile Fiction"
+    ]
+   },
+   "accessInfo": {
+    "country": "FR",
+    "viewability": "PARTIAL",
+    "embeddable": true
+   },
+   "searchInfo": {
+    "textSnippet": "Une cartographe sans carte"
+   },
+   "saleInfo": {
+    "country": "US",
+    "saleability": "FOR_SALE",
+    "isEbook": true
+   }
+  },
+  {
+   "kind": "books#volume",
+   "id": "jK4lM5nO6pQR",
+   "etag": "AbCdEfGhIjK",
+   "selfLink": "https://www.googleapis.com/books/v1/volumes/jK4lM5nO6pQR",
+   "volumeInfo": {
+    "title": "The Cartographer of Mists",
+    "publishedDate": "2020-03",
+    "publisher": "Marlowe & Pike",
+    "industryIdentifiers": [
+     {
+      "type": "ISBN_10",
+      "identifier": "1999000021"
+     }
+    ],
+    "language": "en",
+    "imageLinks": {
+     "thumbnail": "http://books.google.com/books/content?id=zX3kLmN0pQsC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    "averageRating": 3.0
+   },
+   "accessInfo": {
+    "country": "FR",
+    "viewability": "PARTIAL",
+    "embeddable": true
+   },
+   "searchInfo": {
+    "textSnippet": "Une cartographe sans carte"
+   }
+  },
+  {
+   "kind": "books#volume",
+   "id": "sT7uV8wX9yZA",
+   "etag": "AbCdEfGhIjK",
+   "selfLink": "https://www.googleapis.com/books/v1/volumes/sT7uV8wX9yZA",
+   "volumeInfo": {
+    "authors": [
+     "Untitled Person"
+    ],
+    "language": "en"
+   },
+   "accessInfo": {
+    "country": "FR",
+    "viewability": "PARTIAL",
+    "embeddable": true
+   },
+   "searchInfo": {
+    "textSnippet": "Une cartographe sans carte"
+   }
+  }
+ ]
+}

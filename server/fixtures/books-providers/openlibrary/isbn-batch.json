@@ -1,0 +1,65 @@
+{
+ "ISBN:9782999000018": {
+  "url": "http://openlibrary.org/books/OL9300001M/La_Cartographe_des_Brumes",
+  "key": "/books/OL9300001M",
+  "title": "La Cartographe des Brumes",
+  "subtitle": "roman",
+  "authors": [
+   {
+    "url": "http://openlibrary.org/authors/OL9100001A/Maëlis_Quenotte",
+    "name": "Maëlis Quenotte"
+   }
+  ],
+  "by_statement": "Maëlis Quenotte ; traduit par Ignace Rovelin.",
+  "identifiers": {
+   "goodreads": [
+    "1000001"
+   ],
+   "isbn_10": [
+    "2999000014"
+   ],
+   "isbn_13": [
+    "9782999000018"
+   ],
+   "openlibrary": [
+    "OL9300001M"
+   ]
+  },
+  "publishers": [
+   {
+    "name": "Éditions du Roc Fendu"
+   }
+  ],
+  "publish_places": [
+   {
+    "name": "[Paris]"
+   }
+  ],
+  "publish_date": "2019",
+  "number_of_pages": 340,
+  "subjects": [
+   {
+    "name": "Fantasy",
+    "url": "https://openlibrary.org/subjects/fantasy"
+   }
+  ],
+  "cover": {
+   "small": "https://covers.openlibrary.org/b/id/9900003-S.jpg",
+   "medium": "https://covers.openlibrary.org/b/id/9900003-M.jpg",
+   "large": "https://covers.openlibrary.org/b/id/9900003-L.jpg"
+  }
+ },
+ "ISBN:9781999000011": {
+  "key": "/books/OL9300003M",
+  "title": "The Lantern Clockmaker",
+  "identifiers": {
+   "openlibrary": [
+    "OL9300003M"
+   ]
+  }
+ },
+ "ISBN:9781999000028": {
+  "url": "http://openlibrary.org/books/OL9300004M/x",
+  "key": "/books/OL9300004M"
+ }
+}

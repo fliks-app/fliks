@@ -1,0 +1,34 @@
+{
+ "kind": "books#volume",
+ "id": "zX3kLmN0pQsC",
+ "etag": "AbCdEfGhIjK",
+ "selfLink": "https://www.googleapis.com/books/v1/volumes/zX3kLmN0pQsC",
+ "volumeInfo": {
+  "title": "The Cartographer of Mists",
+  "authors": [
+   "Maëlis Quenotte"
+  ],
+  "publishedDate": "March 2020",
+  "industryIdentifiers": [
+   {
+    "type": "ISBN_13",
+    "identifier": "9781999000028"
+   }
+  ],
+  "language": "en",
+  "pageCount": 351
+ },
+ "accessInfo": {
+  "country": "FR",
+  "viewability": "PARTIAL",
+  "embeddable": true
+ },
+ "searchInfo": {
+  "textSnippet": "Une cartographe sans carte"
+ },
+ "saleInfo": {
+  "country": "US",
+  "saleability": "FOR_SALE",
+  "isEbook": true
+ }
+}

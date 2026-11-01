@@ -1,0 +1,69 @@
+{
+ "authors": [
+  {
+   "author": {
+    "key": "/authors/OL9100001A"
+   },
+   "type": {
+    "key": "/type/author_role"
+   }
+  }
+ ],
+ "covers": [
+  -1,
+  9900001,
+  9900002
+ ],
+ "description": {
+  "type": "/type/text",
+  "value": "Une cartographe sans carte, une ville qui change de nom chaque nuit.<br><br>Second tome des <b>Chroniques d'Ombrelune</b> &amp; suite directe du premier.\r\n\r\n<a href=\"https://example.org/x\">Lire un extrait</a>"
+ },
+ "first_publish_date": "March 2019",
+ "key": "/works/OL9200001W",
+ "links": [
+  {
+   "title": "Fiche de l'éditeur",
+   "url": "https://example.org/fiche",
+   "type": {
+    "key": "/type/link"
+   }
+  }
+ ],
+ "subject_people": [
+  "Iselne Varrow"
+ ],
+ "subject_places": [
+  "Ombrelune"
+ ],
+ "subject_times": [
+  "Époque des lampes"
+ ],
+ "subjects": [
+  "Fantasy",
+  "Cartography",
+  "Fantasy fiction, French"
+ ],
+ "title": "La Cartographe des Brumes",
+ "type": {
+  "key": "/type/work"
+ },
+ "excerpts": [
+  {
+   "excerpt": "La brume avait mangé la rue.",
+   "comment": "first sentence",
+   "author": {
+    "key": "/people/someone"
+   }
+  }
+ ],
+ "latest_revision": 7,
+ "revision": 7,
+ "created": {
+  "type": "/type/datetime",
+  "value": "2019-01-02T03:04:05.678901"
+ },
+ "last_modified": {
+  "type": "/type/datetime",
+  "value": "2025-04-29T10:32:23.853856"
+ }
+}
