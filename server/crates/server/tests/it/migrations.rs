@@ -1683,3 +1683,66 @@ async fn m1789000150_moves_request_quotas_to_user_quotas(pool: PgPool) {
         .unwrap();
     assert_eq!(left, 2, "deleting a user deletes its rows");
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1789000140_moves_the_profile_and_availability_onto_wants(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_140).await;
+    sql(
+        &pool,
+        r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (3, 'P', 18, '[]');
+           INSERT INTO quality_definitions (id, "qualityId", title, "minSize", "preferredSize", "maxSize")
+             VALUES (1, 4, 'q4', 0, 1, 2);
+           INSERT INTO media (id, title, type, "qualityProfileId", "minimumAvailability") VALUES
+             (1, 'a', 'movie', 3, 'announced'), (2, 'b', 'series', NULL, 'released'),
+             (3, 'c', 'movie', NULL, 'odd value')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_140).await;
+
+    let wants: Vec<(i32, String, Option<i32>, String)> = rows(
+        &pool,
+        r#"SELECT "mediaId", family, "qualityProfileId", "minimumAvailability" FROM wants ORDER BY "mediaId""#,
+    )
+    .await;
+    assert_eq!(
+        wants,
+        vec![
+            (1, "video".into(), Some(3), "announced".into()),
+            (2, "video".into(), None, "released".into()),
+            (3, "video".into(), None, "odd value".into()),
+        ],
+        "every media gets its video want, values copied verbatim"
+    );
+    let family: String =
+        sqlx::query_scalar(r#"SELECT family FROM quality_definitions WHERE id = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(family, "video");
+    for bad in [
+        r#"INSERT INTO wants ("mediaId", family) VALUES (1, 'video')"#,
+        r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'video', 'fr')"#,
+        r#"INSERT INTO wants ("mediaId", family) VALUES (1, 'audio')"#,
+        r#"INSERT INTO quality_definitions ("qualityId", title, "minSize", "preferredSize", "maxSize") VALUES (4, 'dup', 0, 0, 0)"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(&pool, "DELETE FROM quality_profiles WHERE id = 3").await;
+    let kept: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "qualityProfileId" FROM wants WHERE "mediaId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        kept, None,
+        "deleting a profile leaves the want, not its media"
+    );
+    let cols: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM information_schema.columns WHERE table_name = 'media'
+           AND column_name IN ('qualityProfileId', 'minimumAvailability')"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cols, 0);
+}

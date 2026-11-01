@@ -525,7 +525,8 @@ async fn deleting_a_profile_nulls_its_references(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    sqlx::query(r#"INSERT INTO media (title, type, "libraryId", "qualityProfileId", "languageProfileId") VALUES ('m', 'movie', $1, $2, $3)"#)
+    sqlx::query(r#"WITH m AS (INSERT INTO media (title, type, "libraryId", "languageProfileId") VALUES ('m', 'movie', $1, $3) RETURNING id)
+        INSERT INTO wants ("mediaId", family, "qualityProfileId") SELECT id, 'video', $2 FROM m"#)
         .bind(lib)
         .bind(qid)
         .bind(lid)
@@ -540,8 +541,8 @@ async fn deleting_a_profile_nulls_its_references(pool: PgPool) {
         assert_eq!(s, 200);
     }
     let row: (Option<i32>, Option<i32>, Option<i32>, Option<i32>) = sqlx::query_as(
-        r#"SELECT l."defaultQualityProfileId", l."defaultLanguageProfileId", m."qualityProfileId", m."languageProfileId"
-        FROM libraries l, media m WHERE l.id = $1"#,
+        r#"SELECT l."defaultQualityProfileId", l."defaultLanguageProfileId", w."qualityProfileId", m."languageProfileId"
+        FROM libraries l, media m, wants w WHERE l.id = $1 AND w."mediaId" = m.id"#,
     )
     .bind(lib)
     .fetch_one(&pool)

@@ -36,7 +36,7 @@ struct MediaRow {
     tmdb_id: Option<i32>,
     tvdb_id: Option<i32>,
     library_id: Option<i32>,
-    minimum_availability: String,
+    minimum_availability: Option<String>,
     in_cinemas: Option<NaiveDate>,
     digital_release: Option<NaiveDate>,
     physical_release: Option<NaiveDate>,
@@ -56,14 +56,16 @@ fn media_select() -> String {
         r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
     m."alternativeTitles" AS alternative_titles, m.year, m.runtime, ids.imdb AS imdb_id,
     ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, m."libraryId" AS library_id, m.monitored,
-    m."minimumAvailability" AS minimum_availability, dates.cinema_date AS in_cinemas,
+    w."minimumAvailability" AS minimum_availability, dates.cinema_date AS in_cinemas,
     dates.digital_date AS digital_release, dates.physical_date AS physical_release,
     dates.release_date, m.status::text AS status,
     qp.id AS qp_id, qp.cutoff AS qp_cutoff, qp."upgradeAllowed" AS qp_upgrade, qp.items AS qp_items,
     qp."resolutionUpgradeOnly" AS qp_res_only, qp."minCustomFormatScore" AS qp_min_cf,
     lp."audioLanguages" AS lp_audio
-  FROM media m LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
+  FROM media m {}
+  LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
   LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId" {} {}"#,
+        crate::media::wants::video_want_join("m"),
         crate::media::external_ids::ids_join("m"),
         crate::media::details::dates_join("m")
     )
@@ -335,8 +337,9 @@ mod tests {
         sqlx::raw_sql(
             r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
                INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
-               INSERT INTO media (title, year, type, status, "libraryId", "qualityProfileId", "folderName", monitored)
-                 SELECT 'm' || n, 2000, 'movie', 'released', 1, 1, 'm' || n, n % 5 <> 0 FROM generate_series(1, 250) n;"#,
+               INSERT INTO media (title, year, type, status, "libraryId", "folderName", monitored)
+                 SELECT 'm' || n, 2000, 'movie', 'released', 1, 'm' || n, n % 5 <> 0 FROM generate_series(1, 250) n;
+               INSERT INTO wants ("mediaId", family, "qualityProfileId") SELECT id, 'video', 1 FROM media;"#,
         )
         .execute(&db)
         .await
@@ -375,9 +378,14 @@ mod tests {
         .await
         .unwrap();
         let mut c = db.acquire().await.unwrap();
-        crate::media::items::create_shell(&mut c, 1, fliks_domain::media::kind::MediaKind::Movie)
-            .await
-            .unwrap();
+        crate::media::items::create_shell(
+            &mut c,
+            1,
+            fliks_domain::media::kind::MediaKind::Movie,
+            Default::default(),
+        )
+        .await
+        .unwrap();
         drop(c);
         let item = crate::media::items::sole_item(&db, 1)
             .await

@@ -143,10 +143,10 @@ pub async fn context(
 
 pub(super) fn available(m: &MediaRow, today: NaiveDate) -> bool {
     let le = |d: Option<NaiveDate>| d.is_some_and(|d| d <= today);
-    match m.minimum_availability.as_str() {
-        "announced" => true,
-        "inCinemas" => le(m.in_cinemas),
-        "released" => {
+    match m.minimum_availability.as_deref() {
+        Some("announced") => true,
+        Some("inCinemas") => le(m.in_cinemas),
+        Some("released") => {
             le(m.digital_release)
                 || le(m.physical_release)
                 || m.in_cinemas
@@ -205,7 +205,8 @@ pub(super) async fn episode_targets(
     let rows: Vec<(i32, i32, i32, i32)> = sqlx::query_as(
         r#"SELECT ep.id, s.id, s."number", m.id FROM items ep
              JOIN item_groups s ON s.id = ep."groupId" JOIN media m ON m.id = s."mediaId"
-             LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
+             LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
+             LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
             WHERE m.monitored AND m.type = 'series' AND s.monitored AND ep.monitored
               AND ep."airDate" IS NOT NULL AND ep."airDate" <= $1
               AND (NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ep.id)

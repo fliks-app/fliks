@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET title = $2, year = $3, \"folderName\" = $4,\n                  overview = $5, \"libraryId\" = $6, \"updatedAt\" = now()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Varchar",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea06956e418ecbf15248069bc16d3ed44515fa423b893713c4f95c410870ff25"
+}

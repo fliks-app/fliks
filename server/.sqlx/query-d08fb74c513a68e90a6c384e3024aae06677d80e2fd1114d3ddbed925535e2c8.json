@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET\n             \"languageProfileId\" = CASE WHEN $2 THEN $3 ELSE \"languageProfileId\" END,\n             \"libraryId\" = COALESCE($4, \"libraryId\")\n           WHERE id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Bool",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d08fb74c513a68e90a6c384e3024aae06677d80e2fd1114d3ddbed925535e2c8"
+}

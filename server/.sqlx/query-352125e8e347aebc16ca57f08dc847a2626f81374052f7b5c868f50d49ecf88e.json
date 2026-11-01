@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, \"qualityId\" AS quality_id,\n        title, \"minSize\" AS min_size, \"preferredSize\" AS preferred_size, \"maxSize\" AS max_size\n        FROM quality_definitions ORDER BY \"qualityId\" ASC",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, \"qualityId\" AS quality_id,\n        title, \"minSize\" AS min_size, \"preferredSize\" AS preferred_size, \"maxSize\" AS max_size\n        FROM quality_definitions WHERE family = 'video' ORDER BY \"qualityId\" ASC",
   "describe": {
     "columns": [
       {
@@ -106,5 +106,5 @@
       false
     ]
   },
-  "hash": "310678f8e3a721d98540dc8bc880599fa8ad97e7aef3db6c9c08553ec65afaa4"
+  "hash": "352125e8e347aebc16ca57f08dc847a2626f81374052f7b5c868f50d49ecf88e"
 }

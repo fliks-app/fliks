@@ -23,11 +23,12 @@ async fn ctx(pool: PgPool) -> Ctx {
         INSERT INTO libraries (id, name, path) VALUES (1, 'L1', '/m/one'), (2, 'L2', '/m/two');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
-        INSERT INTO media (id, title, "originalTitle", overview, year, type, "libraryId", "qualityProfileId", "folderName") VALUES
-          (1, 'Alpha Alpha', NULL, NULL, 2000, 'movie', 1, 1, 'a'),
-          (2, 'Beta', 'Alpha', NULL, 2000, 'movie', 1, 1, 'b'),
-          (3, 'Aaa Gamma', NULL, 'alpha story', 2000, 'movie', 1, 1, 'c'),
-          (4, 'Delta', NULL, NULL, 2000, 'movie', 2, 1, 'd');
+        INSERT INTO media (id, title, "originalTitle", overview, year, type, "libraryId", "folderName") VALUES
+          (1, 'Alpha Alpha', NULL, NULL, 2000, 'movie', 1, 'a'),
+          (2, 'Beta', 'Alpha', NULL, 2000, 'movie', 1, 'b'),
+          (3, 'Aaa Gamma', NULL, 'alpha story', 2000, 'movie', 1, 'c'),
+          (4, 'Delta', NULL, NULL, 2000, 'movie', 2, 'd');
+        INSERT INTO wants ("mediaId", family, "qualityProfileId") SELECT id, 'video', 1 FROM media;
         INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES
           (1, 'f', 1, 'WEBDL-720p'), (2, 'f', 1, 'Bluray-1080p'), (3, 'f', 1, 'HDTV-720p'), (4, 'f', 1, 'CAM');
         "#,

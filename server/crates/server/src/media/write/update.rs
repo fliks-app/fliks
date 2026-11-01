@@ -12,7 +12,8 @@ use crate::{
     media::{
         details::{drop_details, set_release_dates},
         external_ids::{self, Link},
-        items,
+        items::{self, NewWant},
+        wants,
     },
     requests::MediaRef,
     state::AppState,
@@ -242,7 +243,7 @@ pub async fn create(
     if let Some(date) = release {
         set_release_dates(&mut tx, id, &[(ReleaseKind::Release, date)], false).await?;
     }
-    items::create_shell(&mut tx, id, media_type).await?;
+    items::create_shell(&mut tx, id, media_type, NewWant::default()).await?;
     if ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? != Link::Linked {
         return Err(clash());
     }
@@ -610,19 +611,21 @@ pub async fn patch_profiles(
     if let Some(Some(p)) = l {
         profile_exists(&st, true, p).await?;
     }
+    let mut tx = st.db.begin().await?;
     sqlx::query!(
         r#"UPDATE media SET
-             "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
-             "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END
+             "languageProfileId" = CASE WHEN $2 THEN $3 ELSE "languageProfileId" END
            WHERE id = $1"#,
         id,
-        q.is_some(),
-        q.flatten(),
         l.is_some(),
         l.flatten()
     )
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    if let Some(q) = q {
+        wants::set_quality_profile(&mut *tx, id, q).await?;
+    }
+    tx.commit().await?;
     Ok(Json(detail_or_404(&st, &a, id).await?))
 }
 
@@ -727,13 +730,10 @@ pub async fn bulk(
     let mut tx = st.db.begin().await?;
     let updated = sqlx::query!(
         r#"UPDATE media SET
-             "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
-             "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END,
-             "libraryId" = COALESCE($6, "libraryId")
+             "languageProfileId" = CASE WHEN $2 THEN $3 ELSE "languageProfileId" END,
+             "libraryId" = COALESCE($4, "libraryId")
            WHERE id = ANY($1)"#,
         &ids,
-        q.is_some(),
-        q.flatten(),
         l.is_some(),
         l.flatten(),
         library
@@ -741,6 +741,15 @@ pub async fn bulk(
     .execute(&mut *tx)
     .await?
     .rows_affected();
+    if let Some(q) = q {
+        sqlx::query!(
+            r#"UPDATE wants SET "qualityProfileId" = $2 WHERE "mediaId" = ANY($1) AND family = 'video'"#,
+            &ids,
+            q
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
     let change = match monitored {
         Some(m) => Some(apply_media_monitored(&mut tx, &ids, m).await?),
         None => None,

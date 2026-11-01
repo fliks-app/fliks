@@ -273,6 +273,7 @@ async fn media(c: &Ctx, lib: i32, folder: &str, t: &str) -> i32 {
         &mut tx,
         id,
         fliks_domain::media::kind::MediaKind::parse(t).unwrap(),
+        Default::default(),
     )
     .await
     .unwrap();

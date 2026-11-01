@@ -36,7 +36,7 @@ async fn seed(pool: &PgPool) -> (i32, i32, i32) {
     .await
     .unwrap();
     let mut c = pool.acquire().await.unwrap();
-    crate::media::items::create_shell(&mut c, media, MediaKind::Movie)
+    crate::media::items::create_shell(&mut c, media, MediaKind::Movie, Default::default())
         .await
         .unwrap();
     let links = [Link {

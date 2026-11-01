@@ -154,9 +154,10 @@ pub async fn items(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
-                    'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date) AS "media!: Jsonb<Value>",
+                    'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
+                    'qualityProfileId', w."qualityProfileId", 'minimumAvailability', w."minimumAvailability") AS "media!: Jsonb<Value>",
                   to_jsonb(l) AS "library!: Jsonb<Value>",
-                  to_jsonb(q) AS "quality: Jsonb<Value>",
+                  to_jsonb(q) - 'family' AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
                   COALESCE(to_jsonb(md) - 'mediaId' - 'kind',
                     (to_jsonb(sd) - 'mediaId' - 'kind') || jsonb_build_object('budget', NULL, 'revenue', NULL))
@@ -187,7 +188,8 @@ pub async fn items(
                         max(date) FILTER (WHERE kind = 'physical') AS physical_date,
                         max(date) FILTER (WHERE kind = 'release') AS release_date
                       FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
-           LEFT JOIN quality_profiles q ON q.id = m."qualityProfileId"
+           LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
+           LEFT JOIN quality_profiles q ON q.id = w."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
            LEFT JOIN movie_details md ON md."mediaId" = m.id
            LEFT JOIN series_details sd ON sd."mediaId" = m.id

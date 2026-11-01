@@ -1,5 +1,6 @@
 //! Default quality-definition sizes (`docs/spec/profiles.md` rules 25-26).
-use crate::release::parsing::quality::{APP_QUALITIES, app_quality_by_id};
+use crate::media::family::Family;
+use crate::release::parsing::quality::{APP_QUALITIES, AppQuality, app_quality_by_id};
 
 /// MB per hour of content; `0` on min or max means no limit.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -51,9 +52,17 @@ pub fn default_sizes(quality_id: i64) -> Sizes {
         .unwrap_or(TABLE[0].1)
 }
 
-/// The rows `ensureDefaults` inserts: `(qualityId, title, sizes)` per `APP_QUALITIES` entry.
-pub fn seed_rows() -> impl Iterator<Item = (i32, &'static str, Sizes)> {
-    APP_QUALITIES
+/// The qualities of a family; empty for a family without a quality table.
+pub fn table(family: Family) -> &'static [AppQuality] {
+    match family {
+        Family::Video => &APP_QUALITIES,
+        Family::Audio | Family::Text | Family::Image => &[],
+    }
+}
+
+/// The rows `ensureDefaults` inserts: `(qualityId, title, sizes)` per quality of the family.
+pub fn seed_rows(family: Family) -> impl Iterator<Item = (i32, &'static str, Sizes)> {
+    table(family)
         .iter()
         .map(|q| (q.id as i32, q.name, default_sizes(i64::from(q.id))))
 }
@@ -79,7 +88,8 @@ mod tests {
 
     #[test]
     fn seeds_one_row_per_quality() {
-        let rows: Vec<_> = seed_rows().collect();
+        assert_eq!(seed_rows(Family::Audio).count(), 0);
+        let rows: Vec<_> = seed_rows(Family::Video).collect();
         assert_eq!(rows.len(), 24);
         assert_eq!(rows[17].1, "Bluray-1080p");
     }

@@ -5,7 +5,7 @@ use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
     external_ids::{self, Ids},
     field_sources::set_field_sources,
-    items,
+    items::{self, NewWant},
 };
 use crate::{
     events::DomainEvent,
@@ -306,11 +306,11 @@ async fn insert_media(
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type,
              overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime,
-             monitored, "metadataRefreshedAt", "qualityProfileId", "languageProfileId", "libraryId",
+             monitored, "metadataRefreshedAt", "languageProfileId", "libraryId",
              "folderName", "addedById")
            VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,
              $10, $11, $12, $13,
-             true, now(), $14, $15, $16, NULLIF($17, ''), $18)
+             true, now(), $14, $15, NULLIF($16, ''), $17)
            RETURNING id"#,
         d.title,
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
@@ -325,7 +325,6 @@ async fn insert_media(
         d.rating,
         json!(d.genres),
         d.runtime,
-        imp.quality_profile_id,
         imp.language_profile_id,
         imp.library_id,
         folder,
@@ -346,7 +345,10 @@ async fn insert_media(
     )
     .await?;
     set_tmdb_collection(tx, id, d.tmdb_collection()).await?;
-    items::create_shell(tx, id, imp.media_type).await?;
+    let want = NewWant {
+        quality_profile_id: imp.quality_profile_id,
+    };
+    items::create_shell(tx, id, imp.media_type, want).await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
         tvdb: d.tvdb_id,
@@ -576,10 +578,10 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles", overview,
-             genres, runtime, rating, "libraryId", "folderName", "qualityProfileId",
+             genres, runtime, rating, "libraryId", "folderName",
              "languageProfileId", "addedById")
            VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,
-             $9, $10, $11, $12, $13)
+             $9, $10, $11, $12)
            RETURNING id"#,
         title,
         original,
@@ -591,7 +593,6 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         nfo.rating,
         u.library_id,
         u.folder_name,
-        q,
         l,
         Some(added_by).filter(|u| *u != 0)
     )
@@ -604,7 +605,10 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         false,
     )
     .await?;
-    items::create_shell(&mut tx, id, u.media_type).await?;
+    let want = NewWant {
+        quality_profile_id: q,
+    };
+    items::create_shell(&mut tx, id, u.media_type, want).await?;
     tx.commit().await?;
     store_local_artwork(st, id, &u.artwork).await;
     st.hub.emit_domain(DomainEvent::MediaImported {

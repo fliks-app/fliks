@@ -2,6 +2,7 @@
 use super::{
     hydrate,
     params::{Recent, Search},
+    wants::video_want_join,
 };
 use chrono::{NaiveDate, Utc};
 use fliks_domain::{
@@ -86,8 +87,11 @@ fn push_scope(
     today: NaiveDate,
 ) {
     qb.push(" FROM media");
+    if cutoff.is_some() || p.quality_profile_id.is_some_and(|v| v != 0) {
+        qb.push(" ").push(video_want_join("media"));
+    }
     if cutoff.is_some() {
-        qb.push(" JOIN quality_profiles qp ON qp.id = media.\"qualityProfileId\" JOIN LATERAL (SELECT t.rank AS cr FROM unnest(");
+        qb.push(" JOIN quality_profiles qp ON qp.id = w.\"qualityProfileId\" JOIN LATERAL (SELECT t.rank AS cr FROM unnest(");
         qb.push_bind(
             APP_QUALITIES
                 .iter()
@@ -141,12 +145,12 @@ fn push_scope(
             .push_bind(v.to_string())
             .push(")");
     }
-    for (col, v) in [
-        ("qualityProfileId", p.quality_profile_id),
-        ("languageProfileId", p.language_profile_id),
+    for (table, col, v) in [
+        ("w", "qualityProfileId", p.quality_profile_id),
+        ("media", "languageProfileId", p.language_profile_id),
     ] {
         if let Some(v) = v.filter(|v| *v != 0) {
-            qb.push(format!(" AND media.\"{col}\" = ")).push_bind(v);
+            qb.push(format!(" AND {table}.\"{col}\" = ")).push_bind(v);
         }
     }
     match p.missing {

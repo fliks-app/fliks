@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO media (title, year, type, status, monitored, \"libraryId\", \"folderName\",\n                              overview, \"qualityProfileId\")\n           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $6, $7, $8, $9)\n           RETURNING id",
+  "query": "INSERT INTO media (title, year, type, status, monitored, \"libraryId\", \"folderName\",\n                              overview)\n           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $6, $7, $8)\n           RETURNING id",
   "describe": {
     "columns": [
       {
@@ -24,13 +24,12 @@
         "Bool",
         "Int4",
         "Varchar",
-        "Text",
-        "Int4"
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "f1c84c3c8cf7b67a842952bae6b2b3eec48d6a56ec53adc3a4e6318977574398"
+  "hash": "92bde20d86cd624716205db4426747affb33386236e7e69b5f6b63a618612065"
 }

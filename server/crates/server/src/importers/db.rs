@@ -1,7 +1,8 @@
 //! Queries of the importers (`importers.md` SQL 1-7).
 use crate::media::{
     external_ids::{self, Ids},
-    items,
+    items::{self, NewWant},
+    wants,
 };
 use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use serde_json::Value;
@@ -75,8 +76,9 @@ pub async fn media_by_tmdb(
     sqlx::query_as!(
         Existing,
         r#"SELECT m.id, m.year, m.monitored, ids.imdb AS imdb_id, m.overview,
-                  m."qualityProfileId" AS quality_profile_id
+                  w."qualityProfileId" AS quality_profile_id
            FROM media m
+           LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
            LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb
@@ -111,8 +113,8 @@ pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteErr
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, year, type, status, monitored, "libraryId", "folderName",
-                              overview, "qualityProfileId")
-           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $6, $7, $8, $9)
+                              overview)
+           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $6, $7, $8)
            RETURNING id"#,
         m.title,
         m.year,
@@ -121,12 +123,14 @@ pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteErr
         m.monitored,
         m.library_id,
         m.folder_name,
-        m.overview,
-        m.quality_profile_id
+        m.overview
     )
     .fetch_one(&mut *tx)
     .await?;
-    items::create_shell(&mut tx, id, m.media_type).await?;
+    let want = NewWant {
+        quality_profile_id: m.quality_profile_id,
+    };
+    items::create_shell(&mut tx, id, m.media_type, want).await?;
     let ids = Ids {
         tmdb: Some(m.tmdb_id),
         imdb: m.imdb_id.map(str::to_owned),
@@ -158,18 +162,18 @@ pub async fn update_media(
     let mut tx = db.begin().await?;
     sqlx::query!(
         r#"UPDATE media SET title = $2, year = $3, "folderName" = $4,
-                  overview = $5, "qualityProfileId" = $6, "libraryId" = $7, "updatedAt" = now()
+                  overview = $5, "libraryId" = $6, "updatedAt" = now()
            WHERE id = $1"#,
         m.id,
         m.title,
         m.year,
         m.folder_name,
         m.overview,
-        m.quality_profile_id,
         m.library_id
     )
     .execute(&mut *tx)
     .await?;
+    wants::set_quality_profile(&mut *tx, m.id, m.quality_profile_id).await?;
     let ids = Ids {
         imdb: m.imdb_id.map(str::to_owned),
         ..Ids::default()

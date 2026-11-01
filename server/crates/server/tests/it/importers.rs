@@ -384,6 +384,10 @@ async fn radarr_import_writes_media_profiles_and_subtitles(pool: PgPool) {
     let c = ctx(pool).await;
     sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 'released', 'Old', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO wants ("mediaId", family) VALUES (50, 'video')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
         .execute(&c.pool).await.unwrap();
     let mut body = import_body(&c, "radarr", "ok", 1);
@@ -402,7 +406,7 @@ async fn radarr_import_writes_media_profiles_and_subtitles(pool: PgPool) {
         (json!(2), json!(2))
     );
     let m: (i32, bool, String, Option<i32>) = sqlx::query_as(
-        r#"SELECT year, monitored, "folderName", "qualityProfileId" FROM media WHERE id = 50"#,
+        r#"SELECT m.year, m.monitored, m."folderName", w."qualityProfileId" FROM media m JOIN wants w ON w."mediaId" = m.id WHERE m.id = 50"#,
     )
     .fetch_one(&c.pool)
     .await
@@ -551,6 +555,10 @@ async fn sonarr_import_writes_sidecar_subtitles(pool: PgPool) {
         .unwrap();
     sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (70, 'Parity Series A', 2021, 'series', 'continuing', 'Parity Series A', 2) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (2000)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO wants ("mediaId", family) VALUES (70, 'video')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (80, 70, 'Season 01/Parity Series A - S01E01.mkv', 1, 'x')"#)
         .execute(&c.pool).await.unwrap();
     let mut body = import_body(&c, "sonarr", "ok", 2);
@@ -617,6 +625,10 @@ async fn seerr_import_creates_users_requests_and_refuses_a_second_run(pool: PgPo
     .unwrap();
     sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'M', 2020, 'movie', 'released', 'M', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO wants ("mediaId", family) VALUES (50, 'video')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     let mut events = c.st.hub.subscribe();
     setting(&c, "seerr_api_key", KEY).await;
     setting(&c, "seerr_url", &format!("{}/seerr/slow", c.stub)).await;
@@ -722,6 +734,10 @@ async fn radarr_extrafile_path_cannot_leave_the_media_folder(pool: PgPool) {
     let c = ctx(pool).await;
     sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 'released', 'Old', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO wants ("mediaId", family) VALUES (50, 'video')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
         .execute(&c.pool).await.unwrap();
     let mut body = import_body(&c, "radarr", "subs-traversal", 1);

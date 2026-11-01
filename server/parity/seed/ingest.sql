@@ -21,6 +21,8 @@ INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
  (104, 'movie', 'tmdb', '5104');
 INSERT INTO editions ("mediaId", family)
   SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
+INSERT INTO wants ("mediaId", family)
+  SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM wants w WHERE w."mediaId" = m.id) ORDER BY id;
 INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId") VALUES
  (101, '2026-01-01', '2026-01-01', 1, true, 103);
 INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "groupId", "mediaId", "editionId") VALUES

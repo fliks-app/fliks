@@ -5,12 +5,13 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-/// Every media of `only` (all when empty) has a `video` edition, and exactly the movies have an ungrouped item.
+/// Every media of `only` (all when empty) has a `video` edition and want, and exactly the movies have an ungrouped item.
 pub async fn assert_media_have_shells(pool: &PgPool, only: &[i32]) {
     let bad: Vec<(i32, String)> = sqlx::query_as(
         r#"SELECT m.id, m.type FROM media m
            WHERE (cardinality($1::int[]) = 0 OR m.id = ANY($1))
              AND (NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id AND e.family = 'video')
+               OR NOT EXISTS (SELECT 1 FROM wants w WHERE w."mediaId" = m.id AND w.family = 'video')
                OR (m.type = 'movie') <> EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id AND i."groupId" IS NULL))
            ORDER BY m.id"#,
     )

@@ -33,9 +33,9 @@ pub async fn items_view(
     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
     'runtime', media.runtime, 'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
     'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
-    'minimumAvailability', media."minimumAvailability")
+    'minimumAvailability', w."minimumAvailability")
   || jsonb_build_object(
-    'libraryId', media."libraryId", 'qualityProfileId', media."qualityProfileId",
+    'libraryId', media."libraryId", 'qualityProfileId', w."qualityProfileId",
     'languageProfileId', media."languageProfileId", 'addedById', media."addedById")
   || jsonb_build_object(
     'library', CASE WHEN l.id IS NULL THEN 'null'::jsonb ELSE
@@ -67,7 +67,8 @@ pub async fn items_view(
      ELSE '{}'::jsonb END) AS "json!: Value"
 FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
-LEFT JOIN quality_profiles qp ON qp.id = media."qualityProfileId"
+LEFT JOIN wants w ON w."mediaId" = media.id AND w.family = 'video'
+LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
 LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"
 LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
   FROM collection_entries e JOIN collections c ON c.id = e."collectionId"

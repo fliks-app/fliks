@@ -74,7 +74,9 @@ fn state_of(
 pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error> {
     let Some(media) = sqlx::query!(
         r#"SELECT m.type AS "kind!", m.monitored, qp.id AS "profile_id?", qp.cutoff AS "cutoff?"
-           FROM media m LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId" WHERE m.id = $1"#,
+           FROM media m
+           LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
+           LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId" WHERE m.id = $1"#,
         id
     )
     .fetch_optional(db)

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO media (title, \"originalTitle\", \"alternativeTitles\", year, type,\n             overview, status, \"posterUrl\", \"fanartUrl\", \"logoUrl\", rating, genres, runtime,\n             monitored, \"metadataRefreshedAt\", \"qualityProfileId\", \"languageProfileId\", \"libraryId\",\n             \"folderName\", \"addedById\")\n           VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,\n             $10, $11, $12, $13,\n             true, now(), $14, $15, $16, NULLIF($17, ''), $18)\n           RETURNING id",
+  "query": "INSERT INTO media (title, \"originalTitle\", \"alternativeTitles\", year, type,\n             overview, status, \"posterUrl\", \"fanartUrl\", \"logoUrl\", rating, genres, runtime,\n             monitored, \"metadataRefreshedAt\", \"languageProfileId\", \"libraryId\",\n             \"folderName\", \"addedById\")\n           VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,\n             $10, $11, $12, $13,\n             true, now(), $14, $15, NULLIF($16, ''), $17)\n           RETURNING id",
   "describe": {
     "columns": [
       {
@@ -32,7 +32,6 @@
         "Int4",
         "Int4",
         "Int4",
-        "Int4",
         "Text",
         "Int4"
       ]
@@ -41,5 +40,5 @@
       false
     ]
   },
-  "hash": "e2e4e4435a79a57d5c7cebd6d0c7be947fb7e72b065d7fceabb90e37ed9ad26b"
+  "hash": "78c2b2c2f046df63b3a0fdcd8ae5d88339e4f9b15a0af34a9273c1ec0e9f0b8c"
 }

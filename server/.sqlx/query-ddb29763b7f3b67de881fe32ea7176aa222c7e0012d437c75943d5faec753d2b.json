@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO editions (\"mediaId\", family) VALUES ($1, 'video') RETURNING id",
+  "query": "INSERT INTO editions (\"mediaId\", family) VALUES ($1, $2) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -17,12 +17,13 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "cd19b19c625266be545819e436b40460a605a7e670c3d7b03e45d9962f2b93fb"
+  "hash": "ddb29763b7f3b67de881fe32ea7176aa222c7e0012d437c75943d5faec753d2b"
 }

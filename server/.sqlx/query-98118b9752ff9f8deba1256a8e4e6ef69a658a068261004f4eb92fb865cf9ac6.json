@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, type AS \"media_type!\", \"libraryId\" AS library_id,\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"posterUrl\" AS poster_url, \"fanartUrl\" AS fanart_url FROM media WHERE id = $1",
+  "query": "SELECT m.id, m.type AS \"media_type!\", m.\"libraryId\" AS library_id,\n        w.\"qualityProfileId\" AS quality_profile_id, m.\"languageProfileId\" AS language_profile_id,\n        m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url FROM media m\n        LEFT JOIN wants w ON w.\"mediaId\" = m.id AND w.family = 'video' WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -42,7 +42,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "media",
+            "table": "wants",
             "name": "qualityProfileId"
           }
         }
@@ -96,5 +96,5 @@
       true
     ]
   },
-  "hash": "f20545219f17540de8a35b984535f26943737335ace1220606809e89aab80480"
+  "hash": "98118b9752ff9f8deba1256a8e4e6ef69a658a068261004f4eb92fb865cf9ac6"
 }
