@@ -143,10 +143,10 @@ pub async fn context(
 
 pub(super) fn available(m: &MediaRow, today: NaiveDate) -> bool {
     let le = |d: Option<NaiveDate>| d.is_some_and(|d| d <= today);
-    match m.minimum_availability.as_str() {
-        "announced" => true,
-        "inCinemas" => le(m.in_cinemas),
-        "released" => {
+    match m.minimum_availability.as_deref() {
+        Some("announced") => true,
+        Some("inCinemas") => le(m.in_cinemas),
+        Some("released") => {
             le(m.digital_release)
                 || le(m.physical_release)
                 || m.in_cinemas

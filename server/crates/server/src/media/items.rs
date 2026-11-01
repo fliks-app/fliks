@@ -1,5 +1,5 @@
 //! Editions and items of a media (`docs/spec/items.md`).
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use sqlx::{PgConnection, PgExecutor, PgPool};
 
 /// One file and the item it belongs to; `last` is the last episode number a multi-episode file covers.
@@ -84,8 +84,9 @@ pub async fn create_shell(
         .await?;
     }
     let edition = sqlx::query_scalar!(
-        r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id"#,
-        media
+        r#"INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id"#,
+        media,
+        Family::Video.as_str()
     )
     .fetch_one(&mut *c)
     .await?;
@@ -137,8 +138,9 @@ pub async fn follow_kind(c: &mut PgConnection, media: i32, kind: MediaKind) -> s
 /// The media's `video` edition.
 pub async fn video_edition(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
-        r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = 'video' ORDER BY id LIMIT 1"#,
-        media
+        r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = $2 ORDER BY id LIMIT 1"#,
+        media,
+        Family::Video.as_str()
     )
     .fetch_one(db)
     .await

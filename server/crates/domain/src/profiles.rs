@@ -52,7 +52,7 @@ pub fn default_sizes(quality_id: i64) -> Sizes {
         .unwrap_or(TABLE[0].1)
 }
 
-/// The qualities of a family; empty until its table exists.
+/// The qualities of a family; empty for a family without a quality table.
 pub fn table(family: Family) -> &'static [AppQuality] {
     match family {
         Family::Video => &APP_QUALITIES,
