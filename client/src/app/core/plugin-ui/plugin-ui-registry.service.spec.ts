@@ -162,9 +162,13 @@ describe('PluginUiRegistryService', () => {
 
   it('returns the declaring plugin\'s id and routes for releasePicker', async () => {
     const routes = {
-      movie: { search: '/:id/releases', grab: '/:id/grab' },
-      season: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
-      episode: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+      byKind: {
+        movie: { work: { search: '/:id/releases', grab: '/:id/grab' } },
+        series: {
+          group: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
+          item: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+        },
+      },
     };
     const promise = registry.load();
     http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [], { releasePicker: routes })]);

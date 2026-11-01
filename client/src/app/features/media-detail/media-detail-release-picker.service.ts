@@ -65,32 +65,32 @@ export class MediaDetailReleasePickerService {
   private readonly registry = inject(PluginUiRegistryService);
 
   getMovieReleases(id: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.movie, { id }, q, searchId);
+    return this.search((r) => r.byKind.movie?.work, { id }, q, searchId);
   }
 
   grabMovie(id: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.movie, { id }, body);
+    return this.grab((r) => r.byKind.movie?.work, { id }, body);
   }
 
   getSeasonReleases(mediaId: number, seasonId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.season, { id: mediaId, seasonId }, q, searchId);
+    return this.search((r) => r.byKind.series?.group, { id: mediaId, seasonId }, q, searchId);
   }
 
   grabSeason(mediaId: number, seasonId: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.season, { id: mediaId, seasonId }, body);
+    return this.grab((r) => r.byKind.series?.group, { id: mediaId, seasonId }, body);
   }
 
   getEpisodeReleases(mediaId: number, episodeId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.episode, { id: mediaId, episodeId }, q, searchId);
+    return this.search((r) => r.byKind.series?.item, { id: mediaId, episodeId }, q, searchId);
   }
 
   grabEpisode(mediaId: number, episodeId: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.episode, { id: mediaId, episodeId }, body);
+    return this.grab((r) => r.byKind.series?.item, { id: mediaId, episodeId }, body);
   }
 
   /** `sid` names the waiting modal, echoed on every partial result so a modal ignores other searches; omitted means answer only, nothing streamed. */
   private async search(
-    pick: (r: ReleasePickerRoutes) => ReleasePickerPair,
+    pick: (r: ReleasePickerRoutes) => ReleasePickerPair | undefined,
     params: RouteParams,
     q?: string,
     searchId?: string,
@@ -102,7 +102,7 @@ export class MediaDetailReleasePickerService {
     return firstValueFrom(this.http.get<MovieRelease[]>(url, { params: httpParams }));
   }
 
-  private async grab(pick: (r: ReleasePickerRoutes) => ReleasePickerPair, params: RouteParams, body: GrabBody): Promise<void> {
+  private async grab(pick: (r: ReleasePickerRoutes) => ReleasePickerPair | undefined, params: RouteParams, body: GrabBody): Promise<void> {
     const url = this.resolve(pick, 'grab', params);
     return firstValueFrom(this.http.post<void>(url, body));
   }
@@ -110,12 +110,13 @@ export class MediaDetailReleasePickerService {
   /** Throws rather than firing a malformed request — unreachable in practice, since
    *  every caller is itself a plugin contribution that disappears with the plugin. */
   private resolve(
-    pick: (r: ReleasePickerRoutes) => ReleasePickerPair,
+    pick: (r: ReleasePickerRoutes) => ReleasePickerPair | undefined,
     which: keyof ReleasePickerPair,
     params: RouteParams,
   ): string {
     const picker = this.registry.releasePicker();
-    const url = picker && resolveReleasePickerUrl(picker.pluginId, pick(picker.routes)[which], params);
+    const pair = picker && pick(picker.routes);
+    const url = picker && pair && resolveReleasePickerUrl(picker.pluginId, pair[which], params);
     if (!url) throw new Error('release picker route unavailable');
     return url;
   }

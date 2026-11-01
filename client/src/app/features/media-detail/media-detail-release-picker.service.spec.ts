@@ -29,9 +29,13 @@ describe('resolveReleasePickerUrl', () => {
 });
 
 const ROUTES = {
-  movie: { search: '/:id/releases', grab: '/:id/grab' },
-  season: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
-  episode: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+  byKind: {
+    movie: { work: { search: '/:id/releases', grab: '/:id/grab' } },
+    series: {
+      group: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
+      item: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+    },
+  },
 };
 
 describe('MediaDetailReleasePickerService', () => {
@@ -94,8 +98,18 @@ describe('MediaDetailReleasePickerService', () => {
     await expect(service.getMovieReleases(7)).rejects.toThrow();
   });
 
+  it('fires no request and rejects for a level the plugin does not declare', async () => {
+    await install({ byKind: { movie: ROUTES.byKind.movie } });
+    await expect(service.getEpisodeReleases(7, 3)).rejects.toThrow();
+  });
+
   it('fires no request and rejects when the declared route has an unresolvable placeholder', async () => {
-    await install({ ...ROUTES, season: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/:extra/grab' } });
+    await install({
+      byKind: {
+        ...ROUTES.byKind,
+        series: { ...ROUTES.byKind.series, group: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/:extra/grab' } },
+      },
+    });
     await expect(service.grabSeason(7, 3)).rejects.toThrow();
   });
 });

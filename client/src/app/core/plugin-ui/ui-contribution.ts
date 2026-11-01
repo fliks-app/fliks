@@ -166,12 +166,14 @@ export interface ReleasePickerPair {
   grab: string;
 }
 
-/** Routes the core release picker calls, relative to the plugin; `:id`, `:seasonId`, `:episodeId` are substituted.
- *  With none declared the picker never opens. */
+export type ReleasePickerKind = 'movie' | 'series' | 'book' | 'comic' | 'album' | 'artist';
+/** `work` is the whole title, `group` a season, `item` an episode. */
+export type ReleasePickerLevel = 'work' | 'group' | 'item';
+
+/** Routes the core release picker calls per kind and level, relative to the plugin; `:id`, `:seasonId`,
+ *  `:episodeId` are substituted. A level a plugin does not declare never opens the picker. */
 export interface ReleasePickerRoutes {
-  movie: ReleasePickerPair;
-  season: ReleasePickerPair;
-  episode: ReleasePickerPair;
+  byKind: Partial<Record<ReleasePickerKind, Partial<Record<ReleasePickerLevel, ReleasePickerPair>>>>;
 }
 
 /** daisyUI badge tones. Closed: core maps a name to a class and falls back to `ghost`,
