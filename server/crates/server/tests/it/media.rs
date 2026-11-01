@@ -276,8 +276,10 @@ async fn put_sets_clears_and_scopes_the_external_ids(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(left, 0);
+    // An empty IMDb id clears the id.
+    assert_eq!(put(1, json!({"imdbId": "tt9"})).await.1["imdbId"], "tt9");
     let (s, m) = put(1, json!({"imdbId": ""})).await;
-    assert_eq!((s, &m["imdbId"]), (200, &json!("")));
+    assert_eq!((s, &m["imdbId"]), (200, &Value::Null));
     assert_eq!(put(1, json!({"type": "series"})).await.0, 200);
 }
 

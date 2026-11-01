@@ -87,7 +87,6 @@ INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
  (24, 'movie', 'tmdb', '3024'),
  (25, 'movie', 'tmdb', '3025'),
  (26, 'movie', 'tmdb', '3026'),
- (28, 'movie', 'imdb', ''),
  (29, 'movie', 'tmdb', '3029'),
  (30, 'movie', 'tmdb', '3030'),
  (31, 'movie', 'tmdb', '3031'),

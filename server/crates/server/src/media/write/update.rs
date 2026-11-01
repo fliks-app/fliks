@@ -84,8 +84,9 @@ impl BodyIds {
     /// Whether applying the ids changes what the media holds.
     fn differ(&self, m: &MediaRow) -> bool {
         let tmdb = |t: &Option<i32>| t.filter(|t| *t > 0);
+        let imdb = |i: &Option<String>| i.clone().filter(|i| !i.is_empty());
         self.tmdb.as_ref().is_some_and(|t| tmdb(t) != m.tmdb_id)
-            || self.imdb.as_ref().is_some_and(|i| *i != m.imdb_id)
+            || self.imdb.as_ref().is_some_and(|i| imdb(i) != m.imdb_id)
     }
 
     /// The first write that did not link: a held TMDB id, or a media removed meanwhile.

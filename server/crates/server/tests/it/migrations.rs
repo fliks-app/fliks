@@ -570,7 +570,6 @@ async fn m1789000030_moves_the_provider_ids_into_media_external_ids(pool: PgPool
         (3, "series", "imdb", "tt2"),
         (3, "series", "tmdb", "604"),
         (3, "series", "tvdb", "222"),
-        (4, "movie", "imdb", ""),
     ];
     let want: Vec<_> = want
         .iter()
@@ -594,6 +593,7 @@ async fn m1789000030_moves_the_provider_ids_into_media_external_ids(pool: PgPool
         r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tmdb', '603')"#,
         r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tmdb', '0603')"#,
         r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tvdb', 'x')"#,
+        r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'imdb', '')"#,
         r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'isbn', '5')"#,
         // the kind must be the media's, and the media must exist
         r#"INSERT INTO media_external_ids VALUES (9, 'series', 'tvdb', '5')"#,

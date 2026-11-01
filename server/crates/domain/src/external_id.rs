@@ -51,10 +51,13 @@ impl ExternalProvider {
 
     /// `value` as stored for this provider, or `None` when it is not an id of it.
     pub fn normalize(self, value: &str) -> Option<String> {
-        let ok = !self.is_numeric()
-            || ((1..=9).contains(&value.len())
+        let ok = if self.is_numeric() {
+            (1..=9).contains(&value.len())
                 && !value.starts_with('0')
-                && value.bytes().all(|b| b.is_ascii_digit()));
+                && value.bytes().all(|b| b.is_ascii_digit())
+        } else {
+            !value.is_empty()
+        };
         ok.then(|| value.to_owned())
     }
 }
@@ -91,6 +94,6 @@ mod tests {
             assert_eq!(P::Tvdb.normalize(bad), None, "{bad}");
         }
         assert_eq!(P::Imdb.normalize("tt0133093").as_deref(), Some("tt0133093"));
-        assert_eq!(P::Imdb.normalize("").as_deref(), Some(""));
+        assert_eq!(P::Imdb.normalize(""), None);
     }
 }

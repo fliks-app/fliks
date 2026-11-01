@@ -10,7 +10,7 @@ CREATE TABLE "media_external_ids" (
     REFERENCES "media" ("id", "type") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "CK_media_external_ids_provider" CHECK ("provider" IN ('tmdb', 'tvdb', 'imdb')),
   CONSTRAINT "CK_media_external_ids_value" CHECK (
-    "provider" NOT IN ('tmdb', 'tvdb') OR "value" ~ '^[1-9][0-9]{0,8}$'
+    "value" <> '' AND ("provider" NOT IN ('tmdb', 'tvdb') OR "value" ~ '^[1-9][0-9]{0,8}$')
   )
 );
 
@@ -24,7 +24,7 @@ SELECT id, type, 'tmdb', "tmdbId"::text FROM "media" WHERE "tmdbId" BETWEEN 1 AN
 UNION ALL
 SELECT id, type, 'tvdb', "tvdbId"::text FROM "media" WHERE "tvdbId" BETWEEN 1 AND 999999999
 UNION ALL
-SELECT id, type, 'imdb', "imdbId" FROM "media" WHERE "imdbId" IS NOT NULL;
+SELECT id, type, 'imdb', "imdbId" FROM "media" WHERE "imdbId" <> '';
 
 DROP INDEX "UQ_media_type_tmdbId";
 ALTER TABLE "media"

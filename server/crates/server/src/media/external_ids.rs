@@ -56,12 +56,14 @@ pub enum Link {
     Gone,
 }
 
-fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
-    e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23503")
+fn db_code(e: &sqlx::Error) -> Option<String> {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .map(|c| c.into_owned())
 }
 
 /// Sets the media's id for `provider`. A value that is not an id of the provider is not stored.
-/// `Gone` aborts a transaction, so a caller inside one must know the media exists.
+/// `Gone` and a `Taken` lost to a race abort a transaction: a caller inside one stops there.
 pub async fn link(
     c: &mut PgConnection,
     media_id: i32,
@@ -89,7 +91,9 @@ pub async fn link(
     match done {
         Ok(r) if r.rows_affected() > 0 => Ok(Link::Linked),
         Ok(_) => Ok(Link::Taken),
-        Err(e) if is_foreign_key_violation(&e) => Ok(Link::Gone),
+        // The foreign key: the media is gone. The tmdb unique index: a concurrent writer took the id.
+        Err(e) if db_code(&e).as_deref() == Some("23503") => Ok(Link::Gone),
+        Err(e) if db_code(&e).as_deref() == Some("23505") => Ok(Link::Taken),
         Err(e) => Err(e),
     }
 }
