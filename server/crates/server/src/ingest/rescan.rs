@@ -11,6 +11,7 @@ use crate::{
 };
 use fliks_domain::{
     media::bonus::{is_bonus_dir, is_sample_file},
+    metadata::limiter::Priority,
     naming::{EpisodeNumbers, match_special_by_title, parse_episode_numbers},
     release::parsing::{
         quality::parse_release_quality, quality_from_resolution::quality_from_resolution,
@@ -203,7 +204,9 @@ pub async fn rescan_files(
     if c.added + c.removed + c.updated > 0 {
         crate::media_servers::dispatch_detached(st, "library.rescan");
     }
-    if slots_created && let Err(e) = crate::media::write::refresh_series_episodes(st, &media).await
+    if slots_created
+        && let Err(e) =
+            crate::media::write::refresh_series_episodes(st, &media, Priority::Background).await
     {
         tracing::warn!("Rescan[media #{media_id}]: episode metadata refresh failed: {e:?}");
     }

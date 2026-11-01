@@ -33,7 +33,7 @@ pub(super) async fn link_files(
     if media.has_seasons()
         && slot
         && identified
-        && let Err(e) = mw::refresh_series_episodes(st, media).await
+        && let Err(e) = mw::refresh_series_episodes(st, media, d.priority).await
     {
         tracing::warn!("Orphan relink: refreshSeriesEpisodes failed — {}", e.text());
     }
@@ -359,7 +359,7 @@ pub(super) async fn find_or_import(
             added_by: Some(a.user.id),
             monitored_seasons: None,
         };
-        mw::import_title(st, provider, ext.clone(), imp).await
+        mw::import_title(st, provider, ext.clone(), imp, d.priority).await
     }
     .await;
     match imported {

@@ -1,5 +1,5 @@
 //! `/api/metadata/*` (`docs/spec/metadata.md` rules 1-16, 38-39).
-use super::{Provider, Upstream};
+use super::{Metadata, Search, Upstream};
 use crate::{
     http::{
         AppError,
@@ -16,10 +16,11 @@ use axum::{
     http::StatusCode,
     routing::get,
 };
+use fliks_domain::external_id::ExternalProvider;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::{
     media::query::js_parse_int,
-    metadata::{discover, language::Resolved},
+    metadata::{discover, language::Resolved, limiter::Priority},
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -73,19 +74,19 @@ fn bare(pairs: &[(String, String)], key: &str) -> Option<String> {
     (!v.is_empty()).then(|| v.join(","))
 }
 
-fn unavailable(what: &str, provider: Provider, e: &Upstream) -> AppError {
+fn unavailable(what: &str, provider: ExternalProvider, e: &Upstream) -> AppError {
     AppError::with_message(
         StatusCode::SERVICE_UNAVAILABLE,
         format!(
             "Metadata {what} failed on {}: {}",
-            provider.name(),
+            provider.as_str(),
             e.reason()
         ),
     )
 }
 
 /// An upstream 404 on a detail route is a 404, everything else a 503.
-fn fail(provider: Provider, e: &Upstream, detail: bool) -> AppError {
+fn fail(provider: ExternalProvider, e: &Upstream, detail: bool) -> AppError {
     if detail && e.is_not_found() {
         return AppError::not_found("not_found");
     }
@@ -205,14 +206,19 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
         None => preferred(&st.db, bare(&q, "mediaId").as_deref()).await?,
     };
     let primary = md.resolve(name.as_deref());
-    let y = year(bare(&q, "year").as_deref());
+    let search = Search {
+        kind: MediaKind::from_tv(tv),
+        query,
+        year: year(bare(&q, "year").as_deref()),
+    };
     let lang = lang(&st).await?;
-    let mut found = md.search(primary, tv, query, y, &lang).await;
-    if let (Ok(r), Some(other)) = (&found, md.fallback(primary))
+    let go = Priority::Interactive;
+    let mut found = md.of(primary).search(&search, &lang, go).await;
+    if let (Ok(r), Some(other)) = (&found, md.fallback(primary, search.kind))
         && r.is_empty()
     {
-        tracing::info!("no {} result, trying {}", primary.name(), other.name());
-        found = md.search(other, tv, query, y, &lang).await;
+        tracing::info!("no {} result, trying {}", primary.as_str(), other.as_str());
+        found = md.of(other).search(&search, &lang, go).await;
     }
     let results = found.map_err(|e| unavailable("search", primary, &e))?;
     Ok(Json(enrich(&st.db, &a, results, tv).await?))
@@ -229,7 +235,7 @@ pub async fn search_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs) -
 }
 
 async fn listed(st: &AppState, a: &Authed, tv: bool, live: Result<Value, Upstream>) -> Res {
-    let v = live.map_err(|e| fail(Provider::Tmdb, &e, false))?;
+    let v = live.map_err(|e| fail(ExternalProvider::Tmdb, &e, false))?;
     let items = v.as_array().cloned().unwrap_or_default();
     Ok(Json(enrich(&st.db, a, items, tv).await?))
 }
@@ -249,7 +255,10 @@ pub async fn trending_movie(State(st): State<AppState>, a: Authed, Query(q): Pai
         &st,
         &a,
         false,
-        st.metadata.tmdb.trending(false, window(&q), &l).await,
+        st.metadata
+            .tmdb
+            .trending(false, window(&q), &l, Priority::Interactive)
+            .await,
     )
     .await
 }
@@ -257,13 +266,31 @@ pub async fn trending_movie(State(st): State<AppState>, a: Authed, Query(q): Pai
 #[utoipa::path(get, path = "/api/metadata/popular/movie", responses((status = 200)))]
 pub async fn popular_movie(State(st): State<AppState>, a: Authed) -> Res {
     let l = lang(&st).await?;
-    listed(&st, &a, false, st.metadata.tmdb.popular(false, &l).await).await
+    listed(
+        &st,
+        &a,
+        false,
+        st.metadata
+            .tmdb
+            .popular(false, &l, Priority::Interactive)
+            .await,
+    )
+    .await
 }
 
 #[utoipa::path(get, path = "/api/metadata/upcoming/movie", responses((status = 200)))]
 pub async fn upcoming_movie(State(st): State<AppState>, a: Authed) -> Res {
     let l = lang(&st).await?;
-    listed(&st, &a, false, st.metadata.tmdb.upcoming(false, &l).await).await
+    listed(
+        &st,
+        &a,
+        false,
+        st.metadata
+            .tmdb
+            .upcoming(false, &l, Priority::Interactive)
+            .await,
+    )
+    .await
 }
 
 #[utoipa::path(get, path = "/api/metadata/trending/tv", responses((status = 200)))]
@@ -273,7 +300,10 @@ pub async fn trending_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs)
         &st,
         &a,
         true,
-        st.metadata.tmdb.trending(true, window(&q), &l).await,
+        st.metadata
+            .tmdb
+            .trending(true, window(&q), &l, Priority::Interactive)
+            .await,
     )
     .await
 }
@@ -281,13 +311,31 @@ pub async fn trending_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs)
 #[utoipa::path(get, path = "/api/metadata/popular/tv", responses((status = 200)))]
 pub async fn popular_tv(State(st): State<AppState>, a: Authed) -> Res {
     let l = lang(&st).await?;
-    listed(&st, &a, true, st.metadata.tmdb.popular(true, &l).await).await
+    listed(
+        &st,
+        &a,
+        true,
+        st.metadata
+            .tmdb
+            .popular(true, &l, Priority::Interactive)
+            .await,
+    )
+    .await
 }
 
 #[utoipa::path(get, path = "/api/metadata/upcoming/tv", responses((status = 200)))]
 pub async fn upcoming_tv(State(st): State<AppState>, a: Authed) -> Res {
     let l = lang(&st).await?;
-    listed(&st, &a, true, st.metadata.tmdb.upcoming(true, &l).await).await
+    listed(
+        &st,
+        &a,
+        true,
+        st.metadata
+            .tmdb
+            .upcoming(true, &l, Priority::Interactive)
+            .await,
+    )
+    .await
 }
 
 async fn genres(st: &AppState, tv: bool) -> Res {
@@ -295,9 +343,9 @@ async fn genres(st: &AppState, tv: bool) -> Res {
     let v = st
         .metadata
         .tmdb
-        .genres(tv, &l)
+        .genres(tv, &l, Priority::Interactive)
         .await
-        .map_err(|e| fail(Provider::Tmdb, &e, false))?;
+        .map_err(|e| fail(ExternalProvider::Tmdb, &e, false))?;
     Ok(Json(v))
 }
 
@@ -320,8 +368,12 @@ async fn discovered(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool)
         bare(&q, "yearLte").as_deref(),
     );
     let l = lang(&st).await?;
-    let found = st.metadata.tmdb.discover(tv, &opts, &l).await;
-    let results = found.map_err(|e| fail(Provider::Tmdb, &e, false))?;
+    let found = st
+        .metadata
+        .tmdb
+        .discover(tv, &opts, &l, Priority::Interactive)
+        .await;
+    let results = found.map_err(|e| fail(ExternalProvider::Tmdb, &e, false))?;
     Ok(Json(enrich(&st.db, &a, results, tv).await?))
 }
 
@@ -336,30 +388,34 @@ pub async fn discover_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs)
 }
 
 /// `registry.get(name)` (availability unchecked) and the canonical integer id.
-fn target(provider: &str, id: &str) -> Result<(Provider, i64), AppError> {
-    let p = Provider::parse(provider)
+fn target(md: &Metadata, provider: &str, id: &str) -> Result<(ExternalProvider, i64), AppError> {
+    let p = ExternalProvider::parse(provider)
+        .filter(|p| md.get(*p).is_some())
         .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {provider}")))?;
     Ok((p, i64::from(int_param(id)?)))
 }
 
 type Ids = Result<PathParams<(String, String)>, AppError>;
 
-async fn details(st: &AppState, p: Provider, kind: MediaKind, id: i64) -> Res {
+async fn details(st: &AppState, p: ExternalProvider, kind: MediaKind, id: i64) -> Res {
     let l = lang(st).await?;
     let v = st
         .metadata
-        .details(p, kind, id, &l)
+        .of(p)
+        .fetch_work(kind, &id.to_string(), &l, Priority::Interactive)
         .await
         .map_err(|e| fail(p, &e, true))?;
     Ok(Json(v))
 }
 
-async fn seasons_of(st: &AppState, p: Provider, id: i64, stubs: bool) -> Res {
+async fn seasons_of(st: &AppState, p: ExternalProvider, id: i64, stubs: bool) -> Res {
     let l = lang(st).await?;
+    let (id, go, series) = (id.to_string(), Priority::Interactive, MediaKind::Series);
+    let provider = st.metadata.of(p);
     let found = if stubs {
-        st.metadata.season_stubs(p, id, &l).await
+        provider.child_stubs(series, &id, &l, go).await
     } else {
-        st.metadata.seasons(p, id, &l).await
+        provider.fetch_children(series, &id, &l, go).await
     };
     Ok(Json(Value::Array(found.map_err(|e| fail(p, &e, true))?)))
 }
@@ -367,28 +423,28 @@ async fn seasons_of(st: &AppState, p: Provider, id: i64, stubs: bool) -> Res {
 #[utoipa::path(get, path = "/api/metadata/{provider}/movie/{externalId}", responses((status = 200)))]
 pub async fn details_movie(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
-    let (p, id) = target(&p, &id)?;
+    let (p, id) = target(&st.metadata, &p, &id)?;
     details(&st, p, MediaKind::Movie, id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}", responses((status = 200)))]
 pub async fn details_tv(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
-    let (p, id) = target(&p, &id)?;
+    let (p, id) = target(&st.metadata, &p, &id)?;
     details(&st, p, MediaKind::Series, id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/seasons", responses((status = 200)))]
 pub async fn seasons(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
-    let (p, id) = target(&p, &id)?;
+    let (p, id) = target(&st.metadata, &p, &id)?;
     seasons_of(&st, p, id, false).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/season-stubs", responses((status = 200)))]
 pub async fn season_stubs(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
-    let (p, id) = target(&p, &id)?;
+    let (p, id) = target(&st.metadata, &p, &id)?;
     seasons_of(&st, p, id, true).await
 }
 
@@ -398,7 +454,13 @@ pub async fn legacy_movie(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    details(&st, Provider::Tmdb, MediaKind::Movie, i64::from(id?.0)).await
+    details(
+        &st,
+        ExternalProvider::Tmdb,
+        MediaKind::Movie,
+        i64::from(id?.0),
+    )
+    .await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
@@ -407,7 +469,13 @@ pub async fn legacy_tv(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    details(&st, Provider::Tmdb, MediaKind::Series, i64::from(id?.0)).await
+    details(
+        &st,
+        ExternalProvider::Tmdb,
+        MediaKind::Series,
+        i64::from(id?.0),
+    )
+    .await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
@@ -416,5 +484,5 @@ pub async fn legacy_seasons(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    seasons_of(&st, Provider::Tmdb, i64::from(id?.0), false).await
+    seasons_of(&st, ExternalProvider::Tmdb, i64::from(id?.0), false).await
 }
