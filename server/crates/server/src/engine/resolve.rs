@@ -80,6 +80,7 @@ fn deny() -> ResolveResponse {
         owner_id: None,
         format: None,
         ttl_s: Some(TTL_S),
+        parts: vec![],
     }
 }
 
@@ -180,6 +181,7 @@ fn parse(body: &Value) -> Result<ResolveRequest, Vec<String>> {
         purpose,
         subtitle_id,
         stream_index,
+        credential_source: None,
     })
 }
 
@@ -265,6 +267,7 @@ async fn locate(
         owner_id: None,
         format: format.map(str::to_owned),
         ttl_s: None,
+        parts: vec![],
     };
     let id = match &req.media_id {
         ResolveMediaId::Live(viewer) => return live(st, viewer, user.id, raw_perms).await,
@@ -314,6 +317,7 @@ async fn live(
             owner_id: None,
             format: None,
             ttl_s: Some(0.0),
+            parts: vec![],
         }),
         Ok(false) => Err(Fail::Denied),
         Err(e) => Err(Fail::Fault(e)),
