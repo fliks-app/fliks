@@ -229,6 +229,14 @@ pub(crate) async fn apply_seasons(
         let live: HashSet<i32> = sd.episodes.iter().map(|e| e.episode_number).collect();
         if !live.is_empty() {
             let listed: Vec<i32> = live.into_iter().collect();
+            let gone = sqlx::query_scalar!(
+                r#"SELECT id FROM items WHERE "groupId" = $1 AND NOT ("number" = ANY($2))"#,
+                sid,
+                &listed
+            )
+            .fetch_all(&mut *tx)
+            .await?;
+            crate::party::end_playing_items(st, &gone).await?;
             sqlx::query!(
                 r#"DELETE FROM items WHERE "groupId" = $1 AND NOT ("number" = ANY($2))"#,
                 sid,
@@ -346,6 +354,15 @@ async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::
         return Ok(());
     }
     let live: Vec<i32> = found.seasons.iter().map(|s| s.season_number).collect();
+    let gone = sqlx::query_scalar!(
+        r#"SELECT i.id FROM items i JOIN item_groups g ON g.id = i."groupId"
+           WHERE g."mediaId" = $1 AND NOT (g."number" = ANY($2))"#,
+        id,
+        &live
+    )
+    .fetch_all(&st.db)
+    .await?;
+    crate::party::end_playing_items(st, &gone).await?;
     sqlx::query!(
         r#"DELETE FROM item_groups WHERE "mediaId" = $1 AND NOT ("number" = ANY($2))"#,
         id,

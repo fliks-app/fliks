@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT e.id AS \"id!\", e.\"number\" AS \"number!\", e.title, s.\"number\" AS \"season?\"\n           FROM items e LEFT JOIN item_groups s ON s.id = e.\"groupId\" WHERE e.id = ANY($1)",
+  "query": "SELECT e.id AS \"id!\", e.\"number\" AS \"number!\", e.title, s.\"number\" AS \"season?\"\n           FROM items e JOIN item_groups s ON s.id = e.\"groupId\" WHERE e.id = ANY($1)",
   "describe": {
     "columns": [
       {
@@ -54,11 +54,11 @@
       ]
     },
     "nullable": [
-      true,
+      false,
       true,
       true,
       false
     ]
   },
-  "hash": "c2d0731e2c0395a0f4586a2911df31348555e6465049a12fbbe352f5d24cc766"
+  "hash": "c5edd872bc54ab3d1be63bdb9bc764679532dab2f151194067f5c4659a5e48d1"
 }

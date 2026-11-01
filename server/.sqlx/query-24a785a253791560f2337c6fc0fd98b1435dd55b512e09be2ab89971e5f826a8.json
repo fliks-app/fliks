@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.\"playlistId\" AS \"playlist_id!\",\n                  c.count AS \"count!\",\n                  COALESCE(p.posters, ARRAY[]::text[]) AS \"posters!\"\n           FROM (\n             SELECT pi.\"playlistId\" AS \"playlistId\", COUNT(*)::int AS count\n             FROM playlist_items pi\n             JOIN items it ON it.id = pi.\"itemId\"\n             JOIN media m ON m.id = it.\"mediaId\"\n             WHERE pi.\"playlistId\" = ANY($1)\n               AND m.\"libraryId\" = ANY($2)\n             GROUP BY pi.\"playlistId\"\n           ) c\n           LEFT JOIN (\n             SELECT \"playlistId\", (ARRAY_AGG(poster ORDER BY minpos))[1:4] AS posters\n             FROM (\n               SELECT pi.\"playlistId\" AS \"playlistId\",\n                      m.\"posterUrl\"   AS poster,\n                      MIN(pi.\"position\") AS minpos\n               FROM playlist_items pi\n               JOIN items it ON it.id = pi.\"itemId\"\n               JOIN media m ON m.id = it.\"mediaId\"\n               WHERE pi.\"playlistId\" = ANY($1)\n                 AND m.\"libraryId\" = ANY($2)\n                 AND m.\"posterUrl\" IS NOT NULL\n               GROUP BY pi.\"playlistId\", m.\"posterUrl\"\n             ) d\n             GROUP BY \"playlistId\"\n           ) p ON p.\"playlistId\" = c.\"playlistId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "playlist_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playlist_items",
+            "name": "playlistId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "posters!",
+        "type_info": "VarcharArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "24a785a253791560f2337c6fc0fd98b1435dd55b512e09be2ab89971e5f826a8"
+}

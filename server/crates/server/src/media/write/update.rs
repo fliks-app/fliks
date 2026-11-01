@@ -430,6 +430,22 @@ pub async fn update(
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let monitored = b.bool("monitored")?.flatten();
+    let kind = cols
+        .iter()
+        .find_map(|(k, c)| match (k, c) {
+            (&"type", Col::Text(Some(t))) => MediaKind::parse(t),
+            _ => None,
+        })
+        .unwrap_or(media.media_type);
+    if kind != media.media_type && kind.has_seasons() {
+        let movie_items = sqlx::query_scalar!(
+            r#"SELECT id FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL"#,
+            id
+        )
+        .fetch_all(&st.db)
+        .await?;
+        crate::party::end_playing_items(&st, &movie_items).await?;
+    }
     let mut tx = st.db.begin().await?;
     if !cols.is_empty() {
         let mut q = QueryBuilder::new("UPDATE media SET ");
@@ -449,13 +465,6 @@ pub async fn update(
         q.push(")");
         q.build().execute(&mut *tx).await.map_err(clash_or)?;
     }
-    let kind = cols
-        .iter()
-        .find_map(|(k, c)| match (k, c) {
-            (&"type", Col::Text(Some(t))) => MediaKind::parse(t),
-            _ => None,
-        })
-        .unwrap_or(media.media_type);
     if kind != media.media_type {
         items::follow_kind(&mut tx, id, kind).await?;
     }

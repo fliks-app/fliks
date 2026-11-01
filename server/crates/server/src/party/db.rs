@@ -47,16 +47,17 @@ impl Row {
 
 /// The item columns of a row: the playing item once started, else the head of the programme.
 const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id, p."hostId" AS host_id,
-    CASE WHEN p.status = 'scheduled' THEN h."mediaId" ELSE p."mediaId" END AS media_id,
+    it."mediaId" AS media_id,
     CASE WHEN p.status = 'scheduled' THEN h."mediaFileId" ELSE p."mediaFileId" END AS media_file_id,
-    CASE WHEN p.status = 'scheduled' THEN h."episodeId" ELSE p."episodeId" END AS episode_id,
+    CASE WHEN it."groupId" IS NOT NULL THEN it.id END AS episode_id,
     p."playlistId" AS playlist_id, p."inviteToken" AS invite_token,
     p.policy, p."reactionsEnabled" AS reactions_enabled, p."chatEnabled" AS chat_enabled,
     p."linkSharing" AS link_sharing, p."public" AS public, p."scheduledAt" AS scheduled_at, p.status, p.position, p.cover"#;
 
 const FROM: &str = r#"watch_parties p LEFT JOIN LATERAL (
-    SELECT "mediaId", "mediaFileId", "episodeId" FROM watch_party_items
-    WHERE "partyId" = p.id ORDER BY position LIMIT 1) h ON true"#;
+    SELECT "itemId", "mediaFileId" FROM watch_party_items
+    WHERE "partyId" = p.id ORDER BY position LIMIT 1) h ON true
+    LEFT JOIN items it ON it.id = CASE WHEN p.status = 'scheduled' THEN h."itemId" ELSE p."itemId" END"#;
 
 pub fn new_token() -> String {
     let mut b = [0u8; 16];
@@ -185,8 +186,8 @@ pub async fn set_cover(
 
 async fn insert_items(tx: &mut sqlx::PgConnection, party: i32, items: &[Item]) -> sqlx::Result<()> {
     sqlx::query(
-        r#"INSERT INTO watch_party_items ("partyId", position, "mediaId", "mediaFileId", "episodeId")
-           SELECT $1, (n - 1)::int, m, f, e
+        r#"INSERT INTO watch_party_items ("partyId", position, "itemId", "mediaFileId")
+           SELECT $1, (n - 1)::int, item_of(m, e), f
            FROM unnest($2::int[], $3::int[], $4::int[]) WITH ORDINALITY AS t(m, f, e, n)"#,
     )
     .bind(party)
@@ -413,10 +414,23 @@ pub async fn listed(db: &PgPool, user: i32, public: bool, all: bool) -> sqlx::Re
 
 /// The parties not yet ended that play `media`.
 pub async fn open_ids_playing(db: &PgPool, media: i32) -> sqlx::Result<Vec<i32>> {
-    sqlx::query_scalar(r#"SELECT id FROM watch_parties WHERE "mediaId" = $1 AND status <> 'ended'"#)
-        .bind(media)
-        .fetch_all(db)
-        .await
+    sqlx::query_scalar(
+        r#"SELECT id FROM watch_parties
+           WHERE "itemId" IN (SELECT id FROM items WHERE "mediaId" = $1) AND status <> 'ended'"#,
+    )
+    .bind(media)
+    .fetch_all(db)
+    .await
+}
+
+/// The parties not yet ended that play one of `items`.
+pub async fn open_ids_playing_items(db: &PgPool, items: &[i32]) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT id FROM watch_parties WHERE "itemId" = ANY($1) AND status <> 'ended'"#,
+    )
+    .bind(items)
+    .fetch_all(db)
+    .await
 }
 
 /// The parties not yet ended that `owner` owns.
@@ -497,11 +511,12 @@ pub async fn update_settings(
 pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<Option<Item>> {
     let row: Option<(i32, Option<i32>, Option<i32>)> = sqlx::query_as(
         r#"UPDATE watch_parties p SET status = 'live', "startedAt" = now(),
-               "mediaId" = h."mediaId", "mediaFileId" = h."mediaFileId", "episodeId" = h."episodeId"
-           FROM (SELECT "mediaId", "mediaFileId", "episodeId" FROM watch_party_items
+               "itemId" = h."itemId", "mediaFileId" = h."mediaFileId"
+           FROM (SELECT "itemId", "mediaFileId" FROM watch_party_items
                  WHERE "partyId" = $1 ORDER BY position LIMIT 1) h
            WHERE p.id = $1 AND p.status = 'scheduled'
-           RETURNING h."mediaId", h."mediaFileId", h."episodeId""#,
+           RETURNING (SELECT i."mediaId" FROM items i WHERE i.id = h."itemId"), h."mediaFileId",
+                     (SELECT i.id FROM items i WHERE i.id = h."itemId" AND i."groupId" IS NOT NULL)"#,
     )
     .bind(id)
     .fetch_optional(db)
@@ -527,7 +542,7 @@ pub async fn set_ended(db: &PgPool, id: i32) -> sqlx::Result<()> {
 
 pub async fn persist(db: &PgPool, id: i32, position: f64, item: &Item) -> sqlx::Result<()> {
     sqlx::query(
-        r#"UPDATE watch_parties SET position = $2, "mediaId" = $3, "mediaFileId" = $4, "episodeId" = $5
+        r#"UPDATE watch_parties SET position = $2, "itemId" = item_of($3, $5), "mediaFileId" = $4
            WHERE id = $1"#,
     )
     .bind(id)
@@ -759,10 +774,11 @@ pub struct QueueRow {
 /// The programme in its order.
 pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, Option<i32>, bool)> = sqlx::query_as(
-        r#"SELECT i."mediaId", i."mediaFileId", i."episodeId",
-                  (i."episodeId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = i."mediaId")
-                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."episodeId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
-           FROM watch_party_items i WHERE i."partyId" = $1 ORDER BY i.position"#,
+        r#"SELECT it."mediaId", i."mediaFileId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
+                  (it."groupId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = it."mediaId")
+                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+           FROM watch_party_items i JOIN items it ON it.id = i."itemId"
+           WHERE i."partyId" = $1 ORDER BY i.position"#,
     )
     .bind(party)
     .fetch_all(db)
@@ -783,10 +799,11 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
 /// The playlist's rows in its order (`playlists.md` rule 13).
 pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, bool)> = sqlx::query_as(
-        r#"SELECT pi."mediaId", pi."episodeId",
-                  (pi."episodeId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = pi."mediaId")
-                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = pi."episodeId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
-           FROM playlist_items pi WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
+        r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
+                  (it."groupId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = it."mediaId")
+                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = pi."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+           FROM playlist_items pi JOIN items it ON it.id = pi."itemId"
+           WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
     )
     .bind(playlist)
     .fetch_all(db)

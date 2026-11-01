@@ -34,6 +34,8 @@ pub struct LiveSession {
     pub position: f64,
     pub state: PlayState,
     pub episode_label: Option<String>,
+    /// The catalog item the heartbeat names; a file spanning several episodes cannot tell.
+    pub item_id: Option<i32>,
     pub supports_volume: Option<bool>,
     pub subtitle_id: Option<String>,
     pub audio_track_index: Option<i32>,
@@ -111,6 +113,7 @@ pub struct Beat {
     pub autoplay_blocked: Option<bool>,
     pub has_next: Option<bool>,
     pub episode_label: Option<Option<String>>,
+    pub item_id: Option<i32>,
     pub supports_volume: Option<Option<bool>>,
     pub subtitle_id: Option<Option<String>>,
     pub audio_track_index: Option<Option<i32>>,
@@ -151,6 +154,7 @@ impl LiveSession {
             position: f.position_s,
             state: PlayState::Playing,
             episode_label: None,
+            item_id: None,
             supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
@@ -217,6 +221,9 @@ impl LiveSession {
             volume,
             muted
         );
+        if b.item_id.is_some() {
+            self.item_id = b.item_id;
+        }
         if let Some(c) = b.sse_connection_id.as_ref().filter(|c| !c.is_empty()) {
             self.sse_connection_id = Some(c.clone());
         }

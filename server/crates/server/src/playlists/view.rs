@@ -18,7 +18,8 @@ async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Sta
            FROM (
              SELECT pi."playlistId" AS "playlistId", COUNT(*)::int AS count
              FROM playlist_items pi
-             JOIN media m ON m.id = pi."mediaId"
+             JOIN items it ON it.id = pi."itemId"
+             JOIN media m ON m.id = it."mediaId"
              WHERE pi."playlistId" = ANY($1)
                AND m."libraryId" = ANY($2)
              GROUP BY pi."playlistId"
@@ -30,7 +31,8 @@ async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Sta
                       m."posterUrl"   AS poster,
                       MIN(pi."position") AS minpos
                FROM playlist_items pi
-               JOIN media m ON m.id = pi."mediaId"
+               JOIN items it ON it.id = pi."itemId"
+               JOIN media m ON m.id = it."mediaId"
                WHERE pi."playlistId" = ANY($1)
                  AND m."libraryId" = ANY($2)
                  AND m."posterUrl" IS NOT NULL

@@ -681,6 +681,63 @@ async fn session_stop_checks_the_owner(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_admin_streams_name_the_episode_the_session_plays(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let sid = golden().0["sessionId"].as_str().unwrap().to_owned();
+    let snap = json!({
+        "sessionId": sid, "ownerId": c.user.to_string(), "mediaFileId": c.file, "kind": "transcode", "quality": "360p",
+        "client": {}, "tags": {}, "openedAtMs": 1.0, "lastBeatMs": 5000.0, "positionS": 0, "state": "playing",
+        "pinned": false, "configRevision": 1, "decision": golden().0["decision"],
+    });
+    c.fake
+        .script("GET", "/v1/sessions", vec![ok(json!([snap]))]);
+    sqlx::query(
+        r#"WITH g AS (INSERT INTO item_groups ("number", "mediaId") VALUES (1, $1) RETURNING id),
+                e AS (INSERT INTO items ("number", "groupId", "mediaId", "editionId")
+                      SELECT n, g.id, $1, (SELECT id FROM editions WHERE "mediaId" = $1)
+                      FROM g, generate_series(1, 2) n RETURNING id),
+                gone AS (DELETE FROM item_parts)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT e.id, $2, $1 FROM e"#,
+    )
+    .bind(c.media)
+    .bind(c.file)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (first, second): (i32, i32) =
+        sqlx::query_as(r#"SELECT min(id), max(id) FROM items WHERE "groupId" IS NOT NULL"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    info(&c, "").await;
+    let episode = |rows: &Value| {
+        (
+            rows[0]["episodeId"].clone(),
+            rows[0]["episodeLabel"].clone(),
+        )
+    };
+    let (_, rows) = call(&c, "GET", "/api/system/streams", &c.token, None).await;
+    assert_eq!(
+        episode(&rows),
+        (json!(first), json!("S1:E1")),
+        "the file's owner"
+    );
+    c.st.presence.heartbeat(
+        &sid,
+        &crate::presence::Beat {
+            item_id: Some(second),
+            ..Default::default()
+        },
+    );
+    let (_, rows) = call(&c, "GET", "/api/system/streams", &c.token, None).await;
+    assert_eq!(
+        episode(&rows),
+        (json!(second), json!("S1:E2")),
+        "the played one"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_admin_streams_list_command_and_cache(pool: PgPool) {
     let c = ctx(pool, true).await;
     let sid = golden().0["sessionId"].as_str().unwrap().to_owned();

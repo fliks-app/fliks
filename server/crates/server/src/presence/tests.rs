@@ -99,6 +99,19 @@ fn heartbeat_overwrites_present_fields_and_null_clears() {
 }
 
 #[test]
+fn a_heartbeat_names_the_item_and_one_without_keeps_it() {
+    let p = Presence::default();
+    p.restore(&snap("a", Some("3"), 1000.0, 2000.0));
+    assert_eq!(p.peek("a").unwrap().item_id, None);
+    let named = Beat {
+        item_id: Some(7),
+        ..Default::default()
+    };
+    assert_eq!(p.heartbeat("a", &named).unwrap().item_id, Some(7));
+    assert_eq!(p.heartbeat("a", &Beat::default()).unwrap().item_id, Some(7));
+}
+
+#[test]
 fn stop_is_idempotent_and_returns_the_entry() {
     let p = Presence::default();
     p.restore(&snap("a", None, 1.0, 1.0));

@@ -88,7 +88,7 @@ fn play_state(b: &Value) -> Option<PlayState> {
     truthy.then(|| serde_json::from_value(v.clone()).ok())?
 }
 
-fn presence_beat(b: &Value, sse: Option<String>) -> Beat {
+fn presence_beat(b: &Value, sse: Option<String>, item_id: Option<i32>) -> Beat {
     Beat {
         position: num(b, "positionSeconds"),
         state: play_state(b),
@@ -99,6 +99,7 @@ fn presence_beat(b: &Value, sse: Option<String>) -> Beat {
         autoplay_blocked: b.get("autoplayBlocked").and_then(Value::as_bool),
         has_next: b.get("hasNext").and_then(Value::as_bool),
         episode_label: text(b, "episodeLabel"),
+        item_id,
         supports_volume: nullable(b, "supportsVolume", Value::as_bool),
         subtitle_id: text(b, "subtitleId"),
         audio_track_index: index(b, "audioTrackIndex"),
@@ -304,7 +305,7 @@ pub async fn heartbeat(
     let episode = int(&body, "episodeId")
         .map(|e| i32::try_from(e).unwrap_or(-1))
         .filter(|e| *e != 0);
-    let bound_item = match bound_file {
+    let mut resolved = match bound_file {
         Some(bound) => {
             let item = super::db::item_of(&st.db, media, episode).await?;
             check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
@@ -321,12 +322,17 @@ pub async fn heartbeat(
         .filter(|s| !s.is_empty())
     {
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
+        let item = match resolved {
+            Some(item) => item,
+            None => super::db::item_of(&st.db, media, episode).await?,
+        };
+        resolved = Some(item);
         let before = st.presence.peek(sid);
         let updated = match engine_lost {
             Some(true) => None,
             _ => st.presence.heartbeat(
                 sid,
-                &presence_beat(&body, sse_connection_id(&body, &headers)),
+                &presence_beat(&body, sse_connection_id(&body, &headers), item),
             ),
         };
         attributed = updated.as_ref().and_then(|u| u.attributed_user_id);
@@ -362,7 +368,7 @@ pub async fn heartbeat(
             "mediaId and mediaFileId are required",
         ));
     };
-    let item = match bound_item {
+    let item = match resolved {
         Some(item) => item,
         None => super::db::item_of(&st.db, media, episode).await?,
     };
@@ -411,6 +417,7 @@ mod tests {
             position: 0.0,
             state: PlayState::Playing,
             episode_label: None,
+            item_id: None,
             supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
@@ -602,8 +609,8 @@ mod tests {
             play_state(&json!({"state": "paused"})),
             Some(PlayState::Paused)
         );
-        let b = presence_beat(&json!({"supportsVolume": null}), None);
+        let b = presence_beat(&json!({"supportsVolume": null}), None, None);
         assert_eq!(b.supports_volume, Some(None));
-        assert_eq!(presence_beat(&json!({}), None).supports_volume, None);
+        assert_eq!(presence_beat(&json!({}), None, None).supports_volume, None);
     }
 }

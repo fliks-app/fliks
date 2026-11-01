@@ -13,7 +13,7 @@ struct Ctx {
     tokens: Vec<String>,
 }
 
-/// Users 1 `a` (admin), 2 `b`, 3 `c`, 4 `d`; a movie (1) and a series (2) with 2 episodes in library 1.
+/// Users 1 `a` (admin), 2 `b`, 3 `c`, 4 `d`; a movie (1, item 4) and a series (2) with 3 episodes (items 1-3) in library 1.
 async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
@@ -35,6 +35,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, 2), (2, 2)"#,
         r#"INSERT INTO editions ("mediaId", family) VALUES (1, 'video'), (2, 'video')"#,
         r#"INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES (1, 'e1', 1, 2, 2), (2, 'e2', 1, 2, 2), (1, 'e3', 2, 2, 2)"#,
+        r#"INSERT INTO items ("mediaId", "editionId") VALUES (1, 1)"#,
         r#"INSERT INTO library_user_access ("userId", "libraryId") SELECT id, 1 FROM users"#,
     ] {
         sqlx::query(q).execute(&pool).await.unwrap();
@@ -179,7 +180,7 @@ async fn reorder_closes_gaps_and_rejects_bad_lists(pool: PgPool) {
     c.sql(r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2)"#)
         .await;
     c.sql(
-        r#"INSERT INTO playlist_items ("playlistId", "mediaId", position) VALUES (1, 1, 5), (1, 2, 9)"#,
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (1, 4, 5), (1, 1, 9)"#,
     )
     .await;
     let order = "/api/playlists/1/items/order";
@@ -221,15 +222,12 @@ async fn add_expands_series_and_seasons_and_skips_present(pool: PgPool) {
         add(json!({})).await.1["message"],
         "errors.playlist_add_target_required"
     );
-    let eps: Vec<(i32, Option<i32>)> =
-        sqlx::query_as(r#"SELECT position, "episodeId" FROM playlist_items ORDER BY position"#)
+    let items: Vec<(i32, i32)> =
+        sqlx::query_as(r#"SELECT position, "itemId" FROM playlist_items ORDER BY position"#)
             .fetch_all(&c.pool)
             .await
             .unwrap();
-    assert_eq!(
-        eps,
-        vec![(0, Some(1)), (1, Some(2)), (2, Some(3)), (3, None)]
-    );
+    assert_eq!(items, vec![(0, 1), (1, 2), (2, 3), (3, 4)]);
 }
 
 #[sqlx::test(migrations = false)]
@@ -237,32 +235,25 @@ async fn auto_remove_touches_only_the_watchers_own_playlists(pool: PgPool) {
     let c = ctx(pool).await;
     for q in [
         r#"INSERT INTO playlists (id, name, "ownerId", "autoRemoveWatched") VALUES (1, 'mine', 2, true), (2, 'theirs', 3, true), (3, 'manual', 2, false)"#,
-        r#"INSERT INTO playlist_items ("playlistId", "mediaId", "episodeId", position) VALUES
-           (1, 1, NULL, 0), (2, 1, NULL, 0), (3, 1, NULL, 0), (1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 3, 3)"#,
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES
+           (1, 4, 0), (2, 4, 0), (3, 4, 0), (1, 1, 1), (1, 2, 2), (1, 3, 3)"#,
     ] {
         c.sql(q).await;
     }
     let left = || async {
-        sqlx::query_as::<_, (i32, i32, Option<i32>)>(
-            r#"SELECT "playlistId", "mediaId", "episodeId" FROM playlist_items ORDER BY id"#,
+        sqlx::query_as::<_, (i32, i32)>(
+            r#"SELECT "playlistId", "itemId" FROM playlist_items ORDER BY id"#,
         )
         .fetch_all(&c.pool)
         .await
         .unwrap()
     };
-    playlists::remove_watched_from_auto_playlists(&c.pool, 2, 2, Some(&[])).await;
-    assert_eq!(
-        left().await.len(),
-        6,
-        "an empty episode list removes nothing"
-    );
-    playlists::remove_watched_from_auto_playlists(&c.pool, 2, 2, Some(&[1, 3])).await;
+    playlists::remove_watched_from_auto_playlists(&c.pool, 2, &[]).await;
+    assert_eq!(left().await.len(), 6, "an empty item list removes nothing");
+    playlists::remove_watched_from_auto_playlists(&c.pool, 2, &[1, 3]).await;
     assert_eq!(left().await.len(), 4);
-    playlists::remove_watched_from_auto_playlists(&c.pool, 2, 1, None).await;
-    assert_eq!(
-        left().await,
-        vec![(2, 1, None), (3, 1, None), (1, 2, Some(2))]
-    );
+    playlists::remove_watched_from_auto_playlists(&c.pool, 2, &[4]).await;
+    assert_eq!(left().await, vec![(2, 4), (3, 4), (1, 2)]);
 }
 
 #[sqlx::test(migrations = false)]

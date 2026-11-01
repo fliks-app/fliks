@@ -679,6 +679,14 @@ pub async fn end_playing(st: &AppState, media: i32) -> sqlx::Result<()> {
     Ok(())
 }
 
+/// Ends every open party playing one of `items`, before the delete that would cascade its row away.
+pub async fn end_playing_items(st: &AppState, items: &[i32]) -> sqlx::Result<()> {
+    for id in db::open_ids_playing_items(&st.db, items).await? {
+        end(st, id, CloseReason::HostEnded, None).await?;
+    }
+    Ok(())
+}
+
 /// Ends every open party `owner` owns, before their account (and so the rows) goes.
 pub async fn end_owned(st: &AppState, owner: i32) -> sqlx::Result<()> {
     for id in db::open_ids_owned(&st.db, owner).await? {

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playlist_items (\"playlistId\", \"itemId\", \"addedById\", position)\n           SELECT $1, t.i, $2,\n                  (COALESCE((SELECT MAX(position) + 1 FROM playlist_items WHERE \"playlistId\" = $1), 0) + t.n - 1)::int\n           FROM unnest($3::int[]) WITH ORDINALITY AS t(i, n)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f100a6017c5801b72f2b8fdbed74c8f7e2ca21322d3a74ef94b3a2ae0922467"
+}
