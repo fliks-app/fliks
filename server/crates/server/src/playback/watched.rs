@@ -29,9 +29,9 @@ async fn log_uncompleted_episodes(
 ) -> sqlx::Result<()> {
     sqlx::query(
         r#"INSERT INTO playback_history ("userId", "mediaId", "episodeId")
-           SELECT $1, $2, e.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+           SELECT $1, $2, e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
            WHERE e."hasFile"
-             AND CASE WHEN $3::int IS NULL THEN s."mediaId" = $2 AND s."seasonNumber" > 0
+             AND CASE WHEN $3::int IS NULL THEN s."mediaId" = $2 AND s."number" > 0
                       ELSE s.id = $3 END
              AND NOT EXISTS (SELECT 1 FROM playback_states ps
                              WHERE ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed)"#,
@@ -199,10 +199,10 @@ pub async fn toggle_series_watched(
                   ),
                   true,
                   NOW()
-           FROM episodes e
-           JOIN seasons s ON s.id = e."seasonId"
+           FROM items e
+           JOIN item_groups s ON s.id = e."groupId"
            WHERE s."mediaId" = $2
-             AND s."seasonNumber" > 0
+             AND s."number" > 0
              AND e."hasFile" = true
            ON CONFLICT ("userId", "episodeId") WHERE "episodeId" IS NOT NULL
            DO UPDATE SET
@@ -242,7 +242,7 @@ pub async fn toggle_season_watched(
             r#"UPDATE playback_states
                SET completed = false, "positionSeconds" = 0, "lastPlayedAt" = now()
                WHERE "userId" = $1 AND "mediaId" = $2
-                 AND "episodeId" IN (SELECT id FROM episodes WHERE "seasonId" = $3)"#,
+                 AND "episodeId" IN (SELECT id FROM items WHERE "groupId" = $3)"#,
             user,
             media,
             season
@@ -256,7 +256,7 @@ pub async fn toggle_season_watched(
     sqlx::query!(
         r#"DELETE FROM playback_states
            WHERE "userId" = $1
-             AND "episodeId" IN (SELECT id FROM episodes WHERE "seasonId" = $2 AND "hasFile")"#,
+             AND "episodeId" IN (SELECT id FROM items WHERE "groupId" = $2 AND "hasFile")"#,
         user,
         season
     )
@@ -268,10 +268,10 @@ pub async fn toggle_season_watched(
               "durationSeconds", completed, "lastPlayedAt", "playedAt")
            SELECT $1::int4, $2::int4, f.id, e.id, 0,
                   COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0), true, now(), NULL
-           FROM episodes e
+           FROM items e
            CROSS JOIN LATERAL (SELECT mf.id, mf."streamInfo" FROM media_files mf
                                WHERE mf."episodeId" = e.id ORDER BY mf.id DESC LIMIT 1) f
-           WHERE e."seasonId" = $3 AND e."hasFile"
+           WHERE e."groupId" = $3 AND e."hasFile"
            RETURNING "episodeId""#,
         user,
         media,

@@ -116,8 +116,8 @@ pub async fn recommendations(
            UNION
            SELECT s."mediaId"
            FROM media_files mf
-           JOIN episodes e ON e.id = mf."episodeId"
-           JOIN seasons s ON s.id = e."seasonId"
+           JOIN items e ON e.id = mf."episodeId"
+           JOIN item_groups s ON s.id = e."groupId"
            WHERE s."mediaId" = ANY($1)
            GROUP BY s."mediaId""#,
         &ids

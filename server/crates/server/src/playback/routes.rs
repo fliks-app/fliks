@@ -351,7 +351,7 @@ pub async fn toggle_season_watched(
     }
     if db::season_media(&st.db, season)
         .await?
-        .is_some_and(|m| m != Some(media))
+        .is_some_and(|m| m != media)
     {
         return Err(AppError::not_found("not_found"));
     }

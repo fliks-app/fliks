@@ -673,6 +673,97 @@ async fn m1789000040_names_request_titles_by_provider_and_external_id(pool: PgPo
     .await;
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1789000050_turns_seasons_and_episodes_into_items(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_050).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 's', 'series'), (3, 'n', 'movie');
+          INSERT INTO seasons (id, "seasonNumber", "mediaId") VALUES (1, 1, 2), (2, 0, NULL);
+          INSERT INTO episodes (id, "episodeNumber", "endEpisodeNumber", "seasonId", "hasFile", "updatedAt") VALUES
+            (1, 1, 2, 1, true, '2026-01-01'), (2, 3, NULL, 1, false, '2026-01-01'),
+            (3, 1, NULL, 2, false, '2026-01-01'), (4, 1, NULL, NULL, false, '2026-01-01');
+          SELECT setval('episodes_id_seq', 4);
+          INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "episodeId") VALUES
+            (1, 1, 'a', 1, 'q', NULL), (2, 2, 'b', 1, 'q', 1);
+          INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds") VALUES (1, 'intro', 1, 2), (3, 'intro', 1, 2)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_050).await;
+
+    // The orphan season and the episodes without a season go; ids of the others are kept.
+    let groups: Vec<(i32, i32, i32)> = rows(
+        &pool,
+        r#"SELECT id, "mediaId", number FROM item_groups ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(groups, [(1, 2, 1)]);
+    type Item = (i32, i32, Option<i32>, Option<i32>, Option<i32>, bool);
+    let got: Vec<Item> = rows(
+        &pool,
+        r#"SELECT id, "mediaId", "groupId", number, "endNumber", "hasFile" FROM items ORDER BY id"#,
+    )
+    .await;
+    // Each movie gets one ungrouped item with a fresh id.
+    let want = [
+        (1, 2, Some(1), Some(1), Some(2), true),
+        (2, 2, Some(1), Some(3), None, false),
+        (5, 1, None, None, None, true),
+        (6, 3, None, None, None, false),
+    ];
+    assert_eq!(got, want);
+    let editions: Vec<(i32, String)> = rows(
+        &pool,
+        r#"SELECT "mediaId", family FROM editions ORDER BY "mediaId""#,
+    )
+    .await;
+    assert_eq!(
+        editions,
+        [
+            (1, "video".to_string()),
+            (2, "video".to_string()),
+            (3, "video".to_string())
+        ]
+    );
+    let bumped: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM items WHERE "groupId" IS NOT NULL AND "updatedAt" <> '2026-01-01'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(bumped, 0, "the migration keeps the episodes' updatedAt");
+    let markers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM episode_markers")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(markers, 1);
+    let file_item: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "episodeId" FROM media_files WHERE id = 2"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(file_item, Some(1));
+
+    for bad in [
+        // an item's edition and group belong to its media
+        r#"INSERT INTO items ("mediaId", "editionId") VALUES (1, (SELECT id FROM editions WHERE "mediaId" = 2))"#,
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId", number) VALUES (3, (SELECT id FROM editions WHERE "mediaId" = 3), 1, 1)"#,
+        // a grouped item is numbered
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId") VALUES (2, (SELECT id FROM editions WHERE "mediaId" = 2), 1)"#,
+        r#"INSERT INTO editions ("mediaId", family) VALUES (1, 'audio')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(&pool, "DELETE FROM media WHERE id = 2").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM items WHERE "mediaId" = 2) + (SELECT COUNT(*) FROM item_groups) + (SELECT COUNT(*) FROM editions WHERE "mediaId" = 2)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
+}
+
 const V4_VERSIONS: i64 = 81;
 fn sql_files() -> i64 {
     MIGRATOR.migrations.len() as i64

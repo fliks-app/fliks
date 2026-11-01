@@ -195,13 +195,13 @@ struct EpisodeRow {
     monitored: bool,
 }
 
-const EPISODE_SELECT: &str = r#"SELECT id, "seasonId" AS season_id, "episodeNumber" AS episode_number,
-    "endEpisodeNumber" AS end_episode_number, title, "airDate" AS air_date, "hasFile" AS has_file, monitored
-  FROM episodes"#;
+const EPISODE_SELECT: &str = r#"SELECT id, "groupId" AS season_id, "number" AS episode_number,
+    "endNumber" AS end_episode_number, title, "airDate" AS air_date, "hasFile" AS has_file, monitored
+  FROM items"#;
 
 async fn episodes_of(db: &PgPool, season_id: i32) -> sqlx::Result<Vec<EpisodeRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"{EPISODE_SELECT} WHERE "seasonId" = $1 ORDER BY id"#
+        r#"{EPISODE_SELECT} WHERE "groupId" = $1 ORDER BY id"#
     )))
     .bind(season_id)
     .fetch_all(db)

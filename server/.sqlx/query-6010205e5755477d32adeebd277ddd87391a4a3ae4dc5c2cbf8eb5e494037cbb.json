@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"number\" AS number, s.monitored AS was, m.id AS \"media_id?\",\n             m.type AS media_type\n           FROM item_groups s LEFT JOIN media m ON m.id = s.\"mediaId\"\n           WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "was",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "monitored"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "media_id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "6010205e5755477d32adeebd277ddd87391a4a3ae4dc5c2cbf8eb5e494037cbb"
+}

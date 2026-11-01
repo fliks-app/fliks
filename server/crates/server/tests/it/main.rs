@@ -7,6 +7,7 @@ mod cleanup_bulk;
 mod events_ticket;
 mod heartbeat;
 mod importers;
+mod items;
 mod libraries;
 mod media;
 mod media_servers;

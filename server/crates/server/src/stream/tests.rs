@@ -469,17 +469,26 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
     open["playbackClockOffsetS"] = json!(2);
     c.fake.script("POST", "/v1/sessions", vec![ok(open)]);
     fs::write(c.dir.join("clip.edl"), "5 10 0\n").unwrap();
+    let edition: i32 = sqlx::query_scalar(
+        r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id"#,
+    )
+    .bind(c.media)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
     let season: i32 = sqlx::query_scalar(
-        r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, $1) RETURNING id"#,
+        r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, $1) RETURNING id"#,
     )
     .bind(c.media)
     .fetch_one(&c.pool)
     .await
     .unwrap();
     let ep: i32 = sqlx::query_scalar(
-        r#"INSERT INTO episodes ("episodeNumber", "seasonId") VALUES (1, $1) RETURNING id"#,
+        r#"INSERT INTO items ("number", "groupId", "mediaId", "editionId") VALUES (1, $1, $2, $3) RETURNING id"#,
     )
     .bind(season)
+    .bind(c.media)
+    .bind(edition)
     .fetch_one(&c.pool)
     .await
     .unwrap();

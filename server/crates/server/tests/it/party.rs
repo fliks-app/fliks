@@ -1107,8 +1107,9 @@ async fn playlist_setup(c: &Ctx, owner: i32) {
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO libraries (name) VALUES ('l2');
            INSERT INTO media (title, type, "libraryId") VALUES ('Gap', 'movie', 2), ('Show', 'series', 1);
-           INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, 3);
-           INSERT INTO episodes ("episodeNumber", title, "seasonId") VALUES (1, 'e1', 1), (2, 'e2', 1);
+           INSERT INTO item_groups ("number", "mediaId") VALUES (1, 3);
+           INSERT INTO editions ("mediaId", family) VALUES (3, 'video');
+           INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES (1, 'e1', 1, 3, 1), (2, 'e2', 1, 3, 1);
            INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES
              (1, NULL, 'f', 1, 'q'), (2, NULL, 'g', 1, 'q'), (3, 1, 'e1', 1, 'q');
            INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'Night', {owner});
@@ -1483,9 +1484,10 @@ async fn step(c: &Ctx, a: &str, path: &str, action: &str) -> (u16, Value) {
 async fn series_setup(c: &Ctx) {
     sqlx::raw_sql(
         r#"INSERT INTO media (title, type, "libraryId") VALUES ('Show', 'series', 1);
-           INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (0, 2), (1, 2), (2, 2);
-           INSERT INTO episodes ("episodeNumber", title, "seasonId") VALUES
-             (1, 'sp', 1), (2, 'e2', 2), (1, 'e1', 2), (3, 'e3', 2), (1, 'f1', 3);
+           INSERT INTO item_groups ("number", "mediaId") VALUES (0, 2), (1, 2), (2, 2);
+           INSERT INTO editions ("mediaId", family) VALUES (2, 'video');
+           INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES
+             (1, 'sp', 1, 2, 1), (2, 'e2', 2, 2, 1), (1, 'e1', 2, 2, 1), (3, 'e3', 2, 2, 1), (1, 'f1', 3, 2, 1);
            INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES
              (2, 1, 's', 1, 'q'), (2, 2, 'b', 1, 'q'), (2, 3, 'a', 1, 'q'), (2, 5, 'd', 1, 'q');"#,
     )
@@ -2851,8 +2853,9 @@ async fn nothing_without_a_file_is_picked_or_started_and_a_series_needs_its_epis
     let (_alice, a) = c.user("alice", true).await;
     sqlx::raw_sql(
         r#"INSERT INTO media (title, type, "libraryId") VALUES ('Empty', 'movie', 1), ('Show', 'series', 1);
-           INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, 3);
-           INSERT INTO episodes ("episodeNumber", title, "seasonId") VALUES (1, 'e1', 1), (2, 'e2', 1);
+           INSERT INTO item_groups ("number", "mediaId") VALUES (1, 3);
+           INSERT INTO editions ("mediaId", family) VALUES (3, 'video');
+           INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES (1, 'e1', 1, 3, 1), (2, 'e2', 1, 3, 1);
            INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES (3, 1, 'e1', 1, 'q');"#,
     )
     .execute(&c.pool)

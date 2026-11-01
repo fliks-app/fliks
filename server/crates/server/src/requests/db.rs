@@ -577,8 +577,8 @@ pub async fn resolve_removed(db: &mut PgConnection, media_id: i32) -> sqlx::Resu
 pub async fn monitored_seasons(db: &PgPool, media_id: i32, season: i64) -> sqlx::Result<Vec<i64>> {
     let season = i32::try_from(season).unwrap_or_default();
     let nums = sqlx::query_scalar!(
-        r#"SELECT "seasonNumber" AS "n!" FROM seasons
-        WHERE "mediaId" = $1 AND (monitored OR "seasonNumber" = $2) ORDER BY 1"#,
+        r#"SELECT "number" AS "n!" FROM item_groups
+        WHERE "mediaId" = $1 AND (monitored OR "number" = $2) ORDER BY 1"#,
         media_id,
         season
     )
@@ -602,8 +602,8 @@ pub async fn monitor_scope(
     if let Some(s) = seasons.filter(|s| !s.is_empty()) {
         let nums: Vec<i32> = s.iter().filter_map(|n| i32::try_from(*n).ok()).collect();
         sqlx::query!(
-            r#"UPDATE seasons SET monitored = true
-            WHERE "mediaId" = $1 AND "seasonNumber" = ANY($2) AND NOT monitored"#,
+            r#"UPDATE item_groups SET monitored = true
+            WHERE "mediaId" = $1 AND "number" = ANY($2) AND NOT monitored"#,
             media_id,
             &nums
         )
@@ -626,10 +626,10 @@ pub struct Ep {
 pub async fn episodes(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<Ep>> {
     sqlx::query_as!(
         Ep,
-        r#"SELECT s."seasonNumber" AS season_number, s.monitored AS season_monitored,
-        e."episodeNumber" AS number, e."endEpisodeNumber" AS end_number, e.monitored, e."hasFile" AS has_file
-        FROM seasons s JOIN episodes e ON e."seasonId" = s.id WHERE s."mediaId" = $1
-        ORDER BY s."seasonNumber", e."episodeNumber", e.id"#,
+        r#"SELECT s."number" AS season_number, s.monitored AS season_monitored,
+        e."number" AS "number!", e."endNumber" AS end_number, e.monitored, e."hasFile" AS has_file
+        FROM item_groups s JOIN items e ON e."groupId" = s.id WHERE s."mediaId" = $1
+        ORDER BY s."number", e."number", e.id"#,
         media_id
     )
     .fetch_all(db)

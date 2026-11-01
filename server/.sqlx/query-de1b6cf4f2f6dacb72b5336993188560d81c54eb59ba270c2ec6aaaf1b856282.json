@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE items SET \"endNumber\" = NULL WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de1b6cf4f2f6dacb72b5336993188560d81c54eb59ba270c2ec6aaaf1b856282"
+}

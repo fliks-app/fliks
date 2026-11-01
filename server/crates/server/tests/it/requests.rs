@@ -795,6 +795,8 @@ async fn approve_imports_for_the_requester_links_and_announces_once(pool: PgPool
         (json!("approved"), json!("admin"))
     );
     assert_eq!(r["media"]["tmdbId"], 80);
+    let media = r["media"]["id"].as_i64().unwrap() as i32;
+    crate::items::assert_media_have_shells(&c.pool(), &[media]).await;
     let imports = c.imports().await;
     assert_eq!(
         imports[0].1,
@@ -910,7 +912,7 @@ async fn series_import_monitors_the_requested_seasons_only(pool: PgPool) {
     .await;
     assert_eq!(s, 201);
     let m: Vec<(i32, bool)> =
-        sqlx::query_as(r#"SELECT "seasonNumber", monitored FROM seasons ORDER BY 1"#)
+        sqlx::query_as(r#"SELECT "number", monitored FROM item_groups ORDER BY 1"#)
             .fetch_all(&c.pool())
             .await
             .unwrap();
@@ -1129,8 +1131,9 @@ async fn episode(
     monitored: bool,
 ) {
     sqlx::query(
-        r#"INSERT INTO episodes ("episodeNumber", "endEpisodeNumber", title, "hasFile", monitored, "seasonId")
-        VALUES ($1, $2, 'e', $3, $4, (SELECT id FROM seasons WHERE "mediaId" = 15 AND "seasonNumber" = $5))"#,
+        r#"INSERT INTO items ("number", "endNumber", title, "hasFile", monitored, "groupId", "mediaId", "editionId")
+        VALUES ($1, $2, 'e', $3, $4, (SELECT id FROM item_groups WHERE "mediaId" = 15 AND "number" = $5), 15,
+                (SELECT id FROM editions WHERE "mediaId" = 15))"#,
     ).bind(number).bind(end).bind(has_file).bind(monitored).bind(season).execute(pool).await.unwrap();
 }
 
@@ -1139,13 +1142,18 @@ async fn import_complete_makes_requests_available_when_the_scope_is_on_disk(pool
     let c = ctx(pool).await;
     let p = c.pool();
     q(&p, r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (15, 'S', 'series', 2) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (94)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
-    q(&p, r#"INSERT INTO seasons ("seasonNumber", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, false)"#).await;
+    q(
+        &p,
+        r#"INSERT INTO editions ("mediaId", family) VALUES (15, 'video')"#,
+    )
+    .await;
+    q(&p, r#"INSERT INTO item_groups ("number", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, false)"#).await;
     // season 1: a two-episode file covers E2; season 2: E2 is missing
     episode(&p, 1, 1, None, true, true).await;
     episode(&p, 1, 2, None, false, true).await;
     episode(&p, 2, 1, None, true, true).await;
     episode(&p, 2, 2, None, false, true).await;
-    q(&p, r#"UPDATE episodes SET "endEpisodeNumber" = 2 WHERE "episodeNumber" = 1 AND "seasonId" = (SELECT id FROM seasons WHERE "seasonNumber" = 1)"#).await;
+    q(&p, r#"UPDATE items SET "endNumber" = 2 WHERE "number" = 1 AND "groupId" = (SELECT id FROM item_groups WHERE "number" = 1)"#).await;
     for seasons in ["'[1]'", "'[2]'", "'[3]'", "NULL"] {
         q(&p, &format!(r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, status, "mediaId", seasons)
             VALUES (1, 'add', 'series', 'tmdb', '94', 'S', 'processing', 15, {seasons})"#)).await;
@@ -1456,7 +1464,7 @@ async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
 async fn unmonitoring_a_season_keeps_a_whole_series_request_on_the_other_seasons(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (15, 'S', 'series', 2) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (94)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
-    q(&c.pool(), r#"INSERT INTO seasons ("seasonNumber", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, true)"#).await;
+    q(&c.pool(), r#"INSERT INTO item_groups ("number", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, true)"#).await;
     q(
         &c.pool(),
         r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, status, "mediaId")
@@ -1465,7 +1473,7 @@ async fn unmonitoring_a_season_keeps_a_whole_series_request_on_the_other_seasons
     .await;
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, series(94, json!([2]))).await;
     assert_eq!(s, 409, "the whole series is available");
-    let season: i32 = sqlx::query_scalar(r#"SELECT id FROM seasons WHERE "seasonNumber" = 2"#)
+    let season: i32 = sqlx::query_scalar(r#"SELECT id FROM item_groups WHERE "number" = 2"#)
         .fetch_one(&c.pool())
         .await
         .unwrap();

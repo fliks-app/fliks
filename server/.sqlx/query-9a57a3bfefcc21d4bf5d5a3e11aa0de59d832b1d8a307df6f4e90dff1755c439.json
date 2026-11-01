@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.\"groupId\" AS \"season_id!\", e.\"number\" AS \"episode_number!\",\n                  e.\"endNumber\" AS end_episode_number, e.title, e.monitored\n           FROM items e JOIN item_groups s ON s.id = e.\"groupId\" WHERE s.\"mediaId\" = $1\n           ORDER BY e.\"number\", e.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "season_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "groupId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "episode_number!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "end_episode_number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "endNumber"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "monitored",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "monitored"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "9a57a3bfefcc21d4bf5d5a3e11aa0de59d832b1d8a307df6f4e90dff1755c439"
+}

@@ -96,14 +96,14 @@ pub async fn list_likes(
         r#"SELECT l."seasonId" AS season_id, l."episodeId" AS episode_id,
                   m.id AS "media_id?", m.type AS "media_type?", m.title AS "title?",
                   m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, m."libraryId" AS library_id,
-                  s."seasonNumber" AS "season_number?", e."episodeNumber" AS "episode_number?",
+                  s."number" AS "season_number?", e."number" AS "episode_number?",
                   e.title AS episode_title, e."stillUrl" AS still_url,
-                  es."seasonNumber" AS "episode_season_number?"
+                  es."number" AS "episode_season_number?"
            FROM likes l
            LEFT JOIN media m ON m.id = l."mediaId"
-           LEFT JOIN seasons s ON s.id = l."seasonId"
-           LEFT JOIN episodes e ON e.id = l."episodeId"
-           LEFT JOIN seasons es ON es.id = e."seasonId"
+           LEFT JOIN item_groups s ON s.id = l."seasonId"
+           LEFT JOIN items e ON e.id = l."episodeId"
+           LEFT JOIN item_groups es ON es.id = e."groupId"
            WHERE l."userId" = $1
            ORDER BY l."createdAt" DESC, l.id
            LIMIT $2"#,

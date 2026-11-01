@@ -107,17 +107,17 @@ pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error
         }
     }
     let seasons = sqlx::query!(
-        r#"SELECT id, "seasonNumber" AS season_number FROM seasons WHERE "mediaId" = $1
-           ORDER BY ("seasonNumber" = 0), "seasonNumber", id"#,
+        r#"SELECT id, "number" AS season_number FROM item_groups WHERE "mediaId" = $1
+           ORDER BY ("number" = 0), "number", id"#,
         id
     )
     .fetch_all(db)
     .await?;
     let episodes = sqlx::query!(
-        r#"SELECT e.id, e."seasonId" AS "season_id!", e."episodeNumber" AS episode_number,
-                  e."endEpisodeNumber" AS end_episode_number, e.title, e.monitored
-           FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE s."mediaId" = $1
-           ORDER BY e."episodeNumber", e.id"#,
+        r#"SELECT e.id, e."groupId" AS "season_id!", e."number" AS "episode_number!",
+                  e."endNumber" AS end_episode_number, e.title, e.monitored
+           FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE s."mediaId" = $1
+           ORDER BY e."number", e.id"#,
         id
     )
     .fetch_all(db)

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE item_groups SET monitored = true\n            WHERE \"mediaId\" = $1 AND \"number\" = ANY($2) AND NOT monitored",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "812f17344f3629e8491621b8f13ec0299af458329f1c3182358b970e2e4b769e"
+}

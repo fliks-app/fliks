@@ -655,11 +655,11 @@ pub async fn item_infos(
     let (media, episode): (Vec<i32>, Vec<Option<i32>>) = keys.iter().copied().unzip();
     let rows: Vec<Row> = sqlx::query_as(
         r#"SELECT q.media, q.episode, m.title, m."posterUrl", m."fanartUrl", m."additionalFanartUrls",
-                  s."seasonNumber", e."episodeNumber", e."stillUrl", e.title
+                  s."number", e."number", e."stillUrl", e.title
            FROM unnest($1::int[], $2::int[]) AS q(media, episode)
            JOIN media m ON m.id = q.media
-           LEFT JOIN episodes e ON e.id = q.episode
-           LEFT JOIN seasons s ON s.id = e."seasonId""#,
+           LEFT JOIN items e ON e.id = q.episode
+           LEFT JOIN item_groups s ON s.id = e."groupId""#,
     )
     .bind(media)
     .bind(episode)
@@ -727,7 +727,7 @@ pub async fn media_libraries(db: &PgPool, media: &[i32]) -> sqlx::Result<HashMap
 pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
     sqlx::query_scalar(
         r#"SELECT ($2::int IS NULL OR EXISTS (SELECT 1 FROM media_files WHERE id = $2 AND "mediaId" = $1))
-               AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+               AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN item_groups s ON s.id = e."groupId"
                                                WHERE e.id = $3 AND s."mediaId" = $1))
                AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series'))
                AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1

@@ -76,7 +76,7 @@ pub(super) async fn season_row(
     b: Option<i32>,
 ) -> sqlx::Result<Option<(i32, i32, i32, bool)>> {
     let sql =
-        format!(r#"SELECT id, "mediaId", "seasonNumber", monitored FROM seasons WHERE {where_}"#);
+        format!(r#"SELECT id, "mediaId", "number", monitored FROM item_groups WHERE {where_}"#);
     let mut q = sqlx::query_as(sqlx::AssertSqlSafe(sql)).bind(a);
     if let Some(b) = b {
         q = q.bind(b);
@@ -127,11 +127,10 @@ pub async fn context(
         return Ok(None);
     };
     if let Some((sid, _, number, _)) = season {
-        let count: i64 =
-            sqlx::query_scalar(r#"SELECT count(*) FROM episodes WHERE "seasonId" = $1"#)
-                .bind(sid)
-                .fetch_one(db)
-                .await?;
+        let count: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM items WHERE "groupId" = $1"#)
+            .bind(sid)
+            .fetch_one(db)
+            .await?;
         tg.season = Some(t::SeasonRef {
             id: sid as u32,
             number: number as u32,
@@ -204,14 +203,14 @@ pub(super) async fn episode_targets(
     today: NaiveDate,
 ) -> sqlx::Result<Vec<EpTarget>> {
     let rows: Vec<(i32, i32, i32, i32)> = sqlx::query_as(
-        r#"SELECT ep.id, s.id, s."seasonNumber", m.id FROM episodes ep
-             JOIN seasons s ON s.id = ep."seasonId" JOIN media m ON m.id = s."mediaId"
+        r#"SELECT ep.id, s.id, s."number", m.id FROM items ep
+             JOIN item_groups s ON s.id = ep."groupId" JOIN media m ON m.id = s."mediaId"
              LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
             WHERE m.monitored AND m.type = 'series' AND s.monitored AND ep.monitored
               AND ep."airDate" IS NOT NULL AND ep."airDate" <= $1
-              AND (NOT (ep."hasFile" OR EXISTS (SELECT 1 FROM episodes cov WHERE cov."seasonId" = ep."seasonId"
-                     AND cov."hasFile" AND cov."endEpisodeNumber" IS NOT NULL
-                     AND ep."episodeNumber" > cov."episodeNumber" AND ep."episodeNumber" <= cov."endEpisodeNumber"))
+              AND (NOT (ep."hasFile" OR EXISTS (SELECT 1 FROM items cov WHERE cov."groupId" = ep."groupId"
+                     AND cov."hasFile" AND cov."endNumber" IS NOT NULL
+                     AND ep."number" > cov."number" AND ep."number" <= cov."endNumber"))
                    OR (ep."hasFile" AND qp."upgradeAllowed"))
               AND ($2::int[] IS NULL OR m.id = ANY($2))
             ORDER BY ep.id"#,
@@ -278,8 +277,8 @@ pub(super) async fn count_by_season(
     unaired_after: Option<NaiveDate>,
 ) -> sqlx::Result<HashMap<i32, i64>> {
     let rows: Vec<(i32, i64)> = sqlx::query_as(
-        r#"SELECT "seasonId", count(*) FROM episodes WHERE "seasonId" = ANY($1)
-             AND ($2::date IS NULL OR "airDate" IS NULL OR "airDate" > $2) GROUP BY "seasonId""#,
+        r#"SELECT "groupId", count(*) FROM items WHERE "groupId" = ANY($1)
+             AND ($2::date IS NULL OR "airDate" IS NULL OR "airDate" > $2) GROUP BY "groupId""#,
     )
     .bind(ids)
     .bind(unaired_after)

@@ -156,8 +156,17 @@ pub async fn items(
                   to_jsonb(q) AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
                   to_jsonb(md) - 'mediaId' AS "metadata: Jsonb<Value>",
-                  to_jsonb(e) - 'searchVector' AS "episode: Jsonb<Value>",
-                  to_jsonb(s) AS "season: Jsonb<Value>",
+                  CASE WHEN e.id IS NOT NULL THEN jsonb_build_object(
+                    'id', e.id, 'createdAt', e."createdAt", 'updatedAt', e."updatedAt",
+                    'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
+                    'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime,
+                    'monitored', e.monitored, 'hasFile', e."hasFile", 'stillUrl', e."stillUrl",
+                    'markersScannedAt', e."markersScannedAt", 'seasonId', e."groupId") END AS "episode: Jsonb<Value>",
+                  CASE WHEN s.id IS NOT NULL THEN jsonb_build_object(
+                    'id', s.id, 'createdAt', s."createdAt", 'updatedAt', s."updatedAt",
+                    'seasonNumber', s."number", 'monitored', s.monitored,
+                    'preferredProvider', s."preferredProvider", 'mediaId', s."mediaId",
+                    'posterUrl', s."posterUrl", 'overview', s.overview, 'airDate', s."airDate") END AS "season: Jsonb<Value>",
                   ps.completed AS "completed?", ps."positionSeconds" AS "position_seconds?",
                   ps."durationSeconds" AS duration_seconds
            FROM playlist_items pi
@@ -170,8 +179,8 @@ pub async fn items(
            LEFT JOIN quality_profiles q ON q.id = m."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
            LEFT JOIN media_metadata md ON md."mediaId" = m.id
-           LEFT JOIN episodes e ON e.id = pi."episodeId"
-           LEFT JOIN seasons s ON s.id = e."seasonId"
+           LEFT JOIN items e ON e.id = pi."episodeId"
+           LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN playback_states ps ON ps."userId" = $3 AND (
                 (pi."episodeId" IS NULL AND ps."mediaId" = pi."mediaId" AND ps."episodeId" IS NULL)
                 OR (pi."episodeId" IS NOT NULL AND ps."episodeId" = pi."episodeId"))
@@ -243,7 +252,7 @@ async fn resolve(
 ) -> Result<(Vec<Target>, bool), AppError> {
     if let Some(episode) = dto.episode_id {
         let series = sqlx::query_scalar!(
-            r#"SELECT s."mediaId" AS "media_id!" FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+            r#"SELECT s."mediaId" AS "media_id!" FROM items e JOIN item_groups s ON s.id = e."groupId"
            WHERE e.id = $1 AND s."mediaId" IS NOT NULL"#,
             episode
         )
@@ -261,8 +270,8 @@ async fn resolve(
     }
     if let Some(season) = dto.season_id {
         let eps = sqlx::query!(
-            r#"SELECT e.id, s."mediaId" AS "media_id!" FROM episodes e JOIN seasons s ON s.id = e."seasonId"
-               WHERE s.id = $1 AND s."mediaId" IS NOT NULL ORDER BY e."episodeNumber", e.id"#,
+            r#"SELECT e.id, s."mediaId" AS "media_id!" FROM items e JOIN item_groups s ON s.id = e."groupId"
+               WHERE s.id = $1 AND s."mediaId" IS NOT NULL ORDER BY e."number", e.id"#,
             season
         )
         .fetch_all(&mut *c)
@@ -301,8 +310,8 @@ async fn resolve(
         ));
     }
     let eps = sqlx::query_scalar!(
-        r#"SELECT e.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
-           WHERE s."mediaId" = $1 ORDER BY s."seasonNumber", e."episodeNumber", e.id"#,
+        r#"SELECT e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
+           WHERE s."mediaId" = $1 ORDER BY s."number", e."number", e.id"#,
         media
     )
     .fetch_all(&mut *c)

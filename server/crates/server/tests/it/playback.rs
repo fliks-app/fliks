@@ -90,7 +90,7 @@ async fn toggles_check_the_media_and_the_season(pool: PgPool) {
         .await;
     let season = c
         .id(&format!(
-            r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, {b}) RETURNING id"#
+            r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, {b}) RETURNING id"#
         ))
         .await;
     let toggle = |m: i32| format!("/api/playback/media/{m}/toggle-watched");
@@ -241,14 +241,20 @@ async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) 
     let m = c
         .id(r#"INSERT INTO media (title, type) VALUES ('s', 'series') RETURNING id"#)
         .await;
+    c.id(&format!(
+        r#"INSERT INTO editions ("mediaId", family) VALUES ({m}, 'video') RETURNING id"#
+    ))
+    .await;
     let season = c
         .id(&format!(
-            r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, {m}) RETURNING id"#
+            r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, {m}) RETURNING id"#
         ))
         .await;
     for n in 1..=2 {
         c.id(&format!(
-            r#"INSERT INTO episodes ("episodeNumber", "seasonId", "hasFile") VALUES ({n}, {season}, true) RETURNING id"#
+            r#"INSERT INTO items ("number", "groupId", "hasFile", "mediaId", "editionId")
+               SELECT {n}, g.id, true, g."mediaId", ed.id FROM item_groups g
+               JOIN editions ed ON ed."mediaId" = g."mediaId" WHERE g.id = {season} RETURNING items.id"#
         ))
         .await;
     }

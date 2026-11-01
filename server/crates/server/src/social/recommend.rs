@@ -275,17 +275,17 @@ async fn cards(
                   cr."episodeId" AS episode_id,
                   m.id AS "media_id?", m.type AS "media_type?", m.title AS "title?",
                   m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, m."libraryId" AS library_id,
-                  s."seasonNumber" AS "season_number?", e."episodeNumber" AS "episode_number?",
+                  s."number" AS "season_number?", e."number" AS "episode_number?",
                   e.title AS episode_title, e."stillUrl" AS still_url,
-                  es."seasonNumber" AS "episode_season_number?",
+                  es."number" AS "episode_season_number?",
                   u.id AS other_id, u.username AS other_username, u.avatar AS other_avatar,
                   u.enabled AS other_enabled, u."shareDisabled" AS other_share_disabled
            FROM content_recommendations cr
            JOIN users u ON u.id = CASE WHEN $2 THEN cr."senderId" ELSE cr."recipientId" END
            LEFT JOIN media m ON m.id = cr."mediaId"
-           LEFT JOIN seasons s ON s.id = cr."seasonId"
-           LEFT JOIN episodes e ON e.id = cr."episodeId"
-           LEFT JOIN seasons es ON es.id = e."seasonId"
+           LEFT JOIN item_groups s ON s.id = cr."seasonId"
+           LEFT JOIN items e ON e.id = cr."episodeId"
+           LEFT JOIN item_groups es ON es.id = e."groupId"
            WHERE (CASE WHEN $2 THEN cr."recipientId" ELSE cr."senderId" END) = $1
              AND ($3 OR cr."dismissedAt" IS NULL)
            ORDER BY cr."createdAt" DESC, cr.id

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id FROM items e JOIN item_groups s ON s.id = e.\"groupId\"\n           WHERE s.\"mediaId\" = $1 AND s.\"number\" = $2 AND e.\"number\" = $3\n           ORDER BY e.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2c584725aa88a12587fa86d91d8cd94c0046be83b1371d468059a782c5a1d28e"
+}

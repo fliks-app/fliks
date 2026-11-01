@@ -54,8 +54,8 @@ async fn subject_of(
     let ep = match file.episode_id {
         Some(id) => {
             sqlx::query!(
-                r#"SELECT e.title AS "title?", e."episodeNumber" AS "number?", s."seasonNumber" AS "season?"
-                   FROM episodes e LEFT JOIN seasons s ON s.id = e."seasonId" WHERE e.id = $1"#,
+                r#"SELECT e.title AS "title?", e."number" AS "number?", s."number" AS "season?"
+                   FROM items e LEFT JOIN item_groups s ON s.id = e."groupId" WHERE e.id = $1"#,
                 id
             )
             .fetch_optional(&st.db)

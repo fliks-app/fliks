@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"mediaId\" AS media_id, s.\"number\" AS season_number, m.title AS \"title?\",\n                  l.path AS \"lib_path?\", m.\"folderName\" AS \"folder_name?\"\n           FROM item_groups s LEFT JOIN media m ON m.id = s.\"mediaId\" LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "mediaId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "season_number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "lib_path?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "folder_name?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "folderName"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "11073432780306341f9d5555621cc565dda70acf0ce3395afa3c69741601e7ca"
+}

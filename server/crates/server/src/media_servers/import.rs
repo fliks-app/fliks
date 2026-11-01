@@ -219,8 +219,8 @@ async fn apply(
         return Ok(false);
     };
     let episode = sqlx::query_scalar!(
-        r#"SELECT e.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
-           WHERE s."mediaId" = $1 AND s."seasonNumber" = $2 AND e."episodeNumber" = $3
+        r#"SELECT e.id FROM items e JOIN item_groups s ON s.id = e."groupId"
+           WHERE s."mediaId" = $1 AND s."number" = $2 AND e."number" = $3
            ORDER BY e.id LIMIT 1"#,
         series,
         i32::try_from(season).map_err(|e| e.to_string())?,

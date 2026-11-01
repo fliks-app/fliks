@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO items (\"mediaId\", \"editionId\", monitored) VALUES ($1, $2, true)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fef131ba23bbe22ad6394eb67940f60eac33712e411329811cb11f8eb22d5785"
+}

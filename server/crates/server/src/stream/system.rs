@@ -294,8 +294,8 @@ fn row_of(
 
 async fn episode_labels(st: &AppState, ids: &[i32]) -> sqlx::Result<HashMap<i32, String>> {
     let rows = sqlx::query!(
-        r#"SELECT e.id AS "id!", e."episodeNumber" AS "number!", e.title, s."seasonNumber" AS "season?"
-           FROM episodes e LEFT JOIN seasons s ON s.id = e."seasonId" WHERE e.id = ANY($1)"#,
+        r#"SELECT e.id AS "id!", e."number" AS "number!", e.title, s."number" AS "season?"
+           FROM items e LEFT JOIN item_groups s ON s.id = e."groupId" WHERE e.id = ANY($1)"#,
         ids
     )
     .fetch_all(&st.db)

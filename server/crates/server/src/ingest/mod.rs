@@ -225,7 +225,7 @@ pub fn is_video(name: &str) -> bool {
 /// `hasFile = false` once no file of the episode remains.
 pub async fn clear_has_file(db: &PgPool, episode_id: i32) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE episodes SET "hasFile" = false
+        r#"UPDATE items SET "hasFile" = false
            WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media_files WHERE "episodeId" = $1)"#,
         episode_id
     )
@@ -236,7 +236,7 @@ pub async fn clear_has_file(db: &PgPool, episode_id: i32) -> Result<(), sqlx::Er
 
 pub async fn clear_has_file_many(db: &PgPool, episodes: &[i32]) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE episodes e SET "hasFile" = false
+        r#"UPDATE items e SET "hasFile" = false
            WHERE e.id = ANY($1) AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = e.id)"#,
         episodes
     )

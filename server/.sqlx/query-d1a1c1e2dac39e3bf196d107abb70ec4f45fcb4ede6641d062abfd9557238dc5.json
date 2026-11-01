@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.\"libraryId\" FROM items e\n           JOIN item_groups s ON s.id = e.\"groupId\" JOIN media m ON m.id = s.\"mediaId\"\n           WHERE e.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "libraryId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "d1a1c1e2dac39e3bf196d107abb70ec4f45fcb4ede6641d062abfd9557238dc5"
+}

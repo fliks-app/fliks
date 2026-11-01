@@ -48,7 +48,7 @@ pub async fn for_season(db: &PgPool, season: i32) -> sqlx::Result<Vec<Marker>> {
         r#"SELECT m.id, m."createdAt" AS created_at, m."updatedAt" AS updated_at, m.type AS "type!",
                   m."startSeconds" AS start_seconds, m."endSeconds" AS end_seconds, m.confidence,
                   m.manual, m."episodeId" AS episode_id
-           FROM episode_markers m JOIN episodes e ON e.id = m."episodeId" WHERE e."seasonId" = $1
+           FROM episode_markers m JOIN items e ON e.id = m."episodeId" WHERE e."groupId" = $1
            ORDER BY m."episodeId", m."startSeconds", m.id"#,
         season
     )
@@ -72,8 +72,8 @@ pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Marker>> {
 /// `Some(libraryId)` (itself possibly NULL) when the episode exists.
 pub async fn episode_library(db: &PgPool, episode: i32) -> sqlx::Result<Option<Option<i32>>> {
     let row = sqlx::query_scalar!(
-        r#"SELECT m."libraryId" FROM episodes e
-           JOIN seasons s ON s.id = e."seasonId" JOIN media m ON m.id = s."mediaId"
+        r#"SELECT m."libraryId" FROM items e
+           JOIN item_groups s ON s.id = e."groupId" JOIN media m ON m.id = s."mediaId"
            WHERE e.id = $1"#,
         episode
     )
@@ -84,7 +84,7 @@ pub async fn episode_library(db: &PgPool, episode: i32) -> sqlx::Result<Option<O
 
 pub async fn season_library(db: &PgPool, season: i32) -> sqlx::Result<Option<Option<i32>>> {
     let row = sqlx::query_scalar!(
-        r#"SELECT m."libraryId" FROM seasons s JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
+        r#"SELECT m."libraryId" FROM item_groups s JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
         season
     )
     .fetch_optional(db)
@@ -93,10 +93,13 @@ pub async fn season_library(db: &PgPool, season: i32) -> sqlx::Result<Option<Opt
 }
 
 pub async fn episode_exists(db: &PgPool, episode: i32) -> sqlx::Result<bool> {
-    sqlx::query_scalar!(r#"SELECT id FROM episodes WHERE id = $1"#, episode)
-        .fetch_optional(db)
-        .await
-        .map(|r| r.is_some())
+    sqlx::query_scalar!(
+        r#"SELECT id FROM items WHERE id = $1 AND "groupId" IS NOT NULL"#,
+        episode
+    )
+    .fetch_optional(db)
+    .await
+    .map(|r| r.is_some())
 }
 
 /// A manual marker replaces the `(episode, type)` one in one statement.
@@ -152,9 +155,9 @@ pub struct SeasonInfo {
 
 pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<SeasonInfo>> {
     let Some(r) = sqlx::query!(
-        r#"SELECT s."mediaId" AS media_id, s."seasonNumber" AS season_number, m.title AS "title?",
+        r#"SELECT s."mediaId" AS media_id, s."number" AS season_number, m.title AS "title?",
                   l.path AS "lib_path?", m."folderName" AS "folder_name?"
-           FROM seasons s LEFT JOIN media m ON m.id = s."mediaId" LEFT JOIN libraries l ON l.id = m."libraryId"
+           FROM item_groups s LEFT JOIN media m ON m.id = s."mediaId" LEFT JOIN libraries l ON l.id = m."libraryId"
            WHERE s.id = $1"#,
         season
     )
@@ -163,7 +166,7 @@ pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<Season
     else {
         return Ok(None);
     };
-    let media_id = r.media_id.unwrap_or_default();
+    let media_id = r.media_id;
     Ok(Some(SeasonInfo {
         media_id,
         season_number: r.season_number,
@@ -177,8 +180,8 @@ pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<Season
 
 pub async fn season_numbers(db: &PgPool, media: i32) -> sqlx::Result<Vec<(i32, i32)>> {
     let rows = sqlx::query!(
-        r#"SELECT id, "seasonNumber" AS season_number FROM seasons WHERE "mediaId" = $1
-           ORDER BY "seasonNumber", id"#,
+        r#"SELECT id, "number" AS season_number FROM item_groups WHERE "mediaId" = $1
+           ORDER BY "number", id"#,
         media
     )
     .fetch_all(db)
@@ -207,13 +210,13 @@ pub async fn seasons_for_scan(
     media: Option<i32>,
 ) -> sqlx::Result<Vec<ScanSeason>> {
     let rows = sqlx::query!(
-        r#"SELECT s.id, s."mediaId" AS "media_id!", s."seasonNumber" AS season_number, m.title AS "title!"
-           FROM seasons s JOIN media m ON m.id = s."mediaId"
-           WHERE s."seasonNumber" > 0 AND m.type = 'series'
+        r#"SELECT s.id, s."mediaId" AS "media_id!", s."number" AS season_number, m.title AS "title!"
+           FROM item_groups s JOIN media m ON m.id = s."mediaId"
+           WHERE s."number" > 0 AND m.type = 'series'
              AND ($1::int IS NULL OR s."mediaId" = $1)
-             AND (NOT $2 OR EXISTS (SELECT 1 FROM episodes e WHERE e."seasonId" = s.id
+             AND (NOT $2 OR EXISTS (SELECT 1 FROM items e WHERE e."groupId" = s.id
                                     AND e."hasFile" = true AND e."markersScannedAt" IS NULL))
-           ORDER BY m.title ASC, s."seasonNumber" ASC, s.id ASC"#,
+           ORDER BY m.title ASC, s."number" ASC, s.id ASC"#,
         media,
         only_missing
     )
@@ -241,12 +244,12 @@ pub struct EpisodeFile {
 /// Episodes of the season with a file, by episode number; each with its highest-id file.
 pub async fn episodes_with_files(db: &PgPool, season: i32) -> sqlx::Result<Vec<EpisodeFile>> {
     let rows = sqlx::query!(
-        r#"SELECT e.id, e."episodeNumber" AS number, f.id AS "file_id?", f."relativePath" AS "rel?",
+        r#"SELECT e.id, e."number" AS "number!", f.id AS "file_id?", f."relativePath" AS "rel?",
                   f."streamInfo" AS "info?"
-           FROM episodes e
+           FROM items e
            LEFT JOIN LATERAL (SELECT id, "relativePath", "streamInfo" FROM media_files
                               WHERE "episodeId" = e.id ORDER BY id DESC LIMIT 1) f ON true
-           WHERE e."seasonId" = $1 AND e."hasFile" = true ORDER BY e."episodeNumber", e.id"#,
+           WHERE e."groupId" = $1 AND e."hasFile" = true ORDER BY e."number", e.id"#,
         season
     )
     .fetch_all(db)
@@ -302,7 +305,7 @@ pub async fn upsert_detected(
 
 pub async fn stamp_scanned(db: &PgPool, season: i32) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"UPDATE episodes SET "markersScannedAt" = now() WHERE "seasonId" = $1 AND "hasFile" = true"#,
+        r#"UPDATE items SET "markersScannedAt" = now() WHERE "groupId" = $1 AND "hasFile" = true"#,
         season
     )
     .execute(db)

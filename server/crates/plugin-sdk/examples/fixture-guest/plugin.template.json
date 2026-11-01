@@ -10,7 +10,7 @@
   "kind": "process",
   "runtime": "wasm",
   "memoryMb": 64,
-  "database": { "schema": true, "coreRefs": ["episodes", "media", "seasons", "users"] },
+  "database": { "schema": true, "coreRefs": ["item_groups", "items", "media", "users"] },
   "scopes": ["config:rw", "media:read", "events:emit", "ingest:write", "requests:progress", "acquisition:candidates", "releases:score"],
   "ingestRoots": [],
   "permissions": ["queue"],

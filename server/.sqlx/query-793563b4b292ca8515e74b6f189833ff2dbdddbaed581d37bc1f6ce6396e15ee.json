@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"number\" AS n, \"preferredProvider\" AS \"pref!\" FROM item_groups\n           WHERE \"mediaId\" = $1 AND \"preferredProvider\" IS NOT NULL AND \"preferredProvider\" <> ''\n           ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pref!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "item_groups",
+            "name": "preferredProvider"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "793563b4b292ca8515e74b6f189833ff2dbdddbaed581d37bc1f6ce6396e15ee"
+}

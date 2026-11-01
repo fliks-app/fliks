@@ -69,14 +69,14 @@ struct Scope {
     played: String,
     added: String,
     released: String,
-    /// `episodes ep` of the scope, for the criteria that walk them.
+    /// `items ep` of the scope, for the criteria that walk them.
     episodes: Option<String>,
 }
 
 impl Scope {
     fn of(level: &str) -> Self {
         let ep = match level {
-            "season" => r#"ep."seasonId" = s.id"#,
+            "season" => r#"ep."groupId" = s.id"#,
             "episode" => "ep.id = e.id",
             _ => {
                 return Scope {
@@ -91,18 +91,17 @@ impl Scope {
                 };
             }
         };
-        let files =
-            format!(r#"media_files f JOIN episodes ep ON ep.id = f."episodeId" WHERE {ep}"#);
+        let files = format!(r#"media_files f JOIN items ep ON ep.id = f."episodeId" WHERE {ep}"#);
         Scope {
             size: format!("COALESCE((SELECT SUM(f.size) FROM {files}), 0)"),
             last_played: format!(
-                r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN episodes ep ON ep.id = ps."episodeId" WHERE {ep})"#
+                r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN items ep ON ep.id = ps."episodeId" WHERE {ep})"#
             ),
             played: format!(
-                r#"EXISTS (SELECT 1 FROM playback_states ps JOIN episodes ep ON ep.id = ps."episodeId" WHERE {ep})"#
+                r#"EXISTS (SELECT 1 FROM playback_states ps JOIN items ep ON ep.id = ps."episodeId" WHERE {ep})"#
             ),
             added: format!(r#"(SELECT MAX(f."createdAt") FROM {files})"#),
-            released: format!(r#"(SELECT MAX(ep."airDate") FROM episodes ep WHERE {ep})"#),
+            released: format!(r#"(SELECT MAX(ep."airDate") FROM items ep WHERE {ep})"#),
             episodes: Some(ep.into()),
         }
     }
@@ -120,13 +119,13 @@ pub fn compile(
     let sc = Scope::of(level);
     let (ids, from, excluded) = match level {
         "season" => (
-            r#"s.id AS "seasonId", NULL::int AS "episodeId", s."seasonNumber" AS "seasonNumber", NULL::int AS "episodeNumber""#,
-            r#"media JOIN seasons s ON s."mediaId" = media.id"#,
+            r#"s.id AS "seasonId", NULL::int AS "episodeId", s."number" AS "seasonNumber", NULL::int AS "episodeNumber""#,
+            r#"media JOIN item_groups s ON s."mediaId" = media.id"#,
             r#" AND (x."seasonId" IS NULL OR x."seasonId" = s.id)"#,
         ),
         "episode" => (
-            r#"s.id AS "seasonId", e.id AS "episodeId", s."seasonNumber" AS "seasonNumber", e."episodeNumber" AS "episodeNumber""#,
-            r#"media JOIN seasons s ON s."mediaId" = media.id JOIN episodes e ON e."seasonId" = s.id"#,
+            r#"s.id AS "seasonId", e.id AS "episodeId", s."number" AS "seasonNumber", e."number" AS "episodeNumber""#,
+            r#"media JOIN item_groups s ON s."mediaId" = media.id JOIN items e ON e."groupId" = s.id"#,
             r#" AND (x."seasonId" IS NULL OR x."seasonId" = s.id) AND (x."episodeId" IS NULL OR x."episodeId" = e.id)"#,
         ),
         _ => (
@@ -144,7 +143,7 @@ pub fn compile(
     ));
     if let Some(ep) = &sc.episodes {
         q.push(format!(
-            r#" AND EXISTS (SELECT 1 FROM media_files f JOIN episodes ep ON ep.id = f."episodeId" WHERE {ep})"#
+            r#" AND EXISTS (SELECT 1 FROM media_files f JOIN items ep ON ep.id = f."episodeId" WHERE {ep})"#
         ));
     } else if unmonitor {
         q.push(" AND media.monitored");
@@ -215,7 +214,7 @@ pub fn compile(
         q.push(format!(
             r#" AND EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER})
             AND NOT EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER}
-              AND EXISTS (SELECT 1 FROM episodes ep WHERE {ep} AND {EP_FILE}
+              AND EXISTS (SELECT 1 FROM items ep WHERE {ep} AND {EP_FILE}
                 AND NOT EXISTS (SELECT 1 FROM playback_states ps WHERE ps."userId" = r."userId"
                   AND ps."episodeId" = ep.id AND ps.completed)))"#
         ));
@@ -251,7 +250,7 @@ pub fn compile(
     }
     if let Some(n) = int(c, "keepLatestEpisodes") {
         q.push(
-            r#" AND (SELECT COUNT(*) FROM episodes e2 JOIN seasons s2 ON s2.id = e2."seasonId"
+            r#" AND (SELECT COUNT(*) FROM items e2 JOIN item_groups s2 ON s2.id = e2."groupId"
             WHERE s2."mediaId" = media.id AND EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = e2.id)
             AND (COALESCE(e2."airDate", '-infinity'::date), e2.id) > (COALESCE(e."airDate", '-infinity'::date), e.id)) >= "#,
         )

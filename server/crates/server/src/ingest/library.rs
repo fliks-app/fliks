@@ -516,7 +516,7 @@ impl Ctx<'_> {
                 && e.end != end
             {
                 sqlx::query!(
-                    r#"UPDATE episodes SET "endEpisodeNumber" = $2 WHERE id = $1"#,
+                    r#"UPDATE items SET "endNumber" = $2 WHERE id = $1"#,
                     e.id,
                     end
                 )
@@ -569,7 +569,7 @@ impl Ctx<'_> {
 
 pub async fn set_has_file(db: &sqlx::PgPool, episode: i32) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE episodes SET "hasFile" = true WHERE id = $1"#,
+        r#"UPDATE items SET "hasFile" = true WHERE id = $1"#,
         episode
     )
     .execute(db)
@@ -579,7 +579,7 @@ pub async fn set_has_file(db: &sqlx::PgPool, episode: i32) -> Result<(), sqlx::E
 
 pub async fn set_has_file_many(db: &sqlx::PgPool, episodes: &[i32]) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE episodes SET "hasFile" = true WHERE id = ANY($1)"#,
+        r#"UPDATE items SET "hasFile" = true WHERE id = ANY($1)"#,
         episodes
     )
     .execute(db)
@@ -604,9 +604,9 @@ pub async fn episode_of_media(
 ) -> Result<Option<Ep>, sqlx::Error> {
     sqlx::query_as!(
         Ep,
-        r#"SELECT e.id, s."seasonNumber" AS season_number, e."episodeNumber" AS episode_number,
-                  e."endEpisodeNumber" AS end, e.title, e."airDate"::text AS air_date
-           FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE e.id = $1 AND s."mediaId" = $2"#,
+        r#"SELECT e.id, s."number" AS season_number, e."number" AS "episode_number!",
+                  e."endNumber" AS end, e.title, e."airDate"::text AS air_date
+           FROM items e JOIN item_groups s ON s.id = e."groupId" WHERE e.id = $1 AND s."mediaId" = $2"#,
         id,
         media
     )
@@ -622,10 +622,10 @@ pub async fn find_episode(
 ) -> Result<Option<Ep>, sqlx::Error> {
     sqlx::query_as!(
         Ep,
-        r#"SELECT e.id, s."seasonNumber" AS season_number, e."episodeNumber" AS episode_number,
-                  e."endEpisodeNumber" AS end, e.title, e."airDate"::text AS air_date
-           FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-           WHERE s."mediaId" = $1 AND s."seasonNumber" = $2 AND e."episodeNumber" = $3
+        r#"SELECT e.id, s."number" AS season_number, e."number" AS "episode_number!",
+                  e."endNumber" AS end, e.title, e."airDate"::text AS air_date
+           FROM item_groups s JOIN items e ON e."groupId" = s.id
+           WHERE s."mediaId" = $1 AND s."number" = $2 AND e."number" = $3
            ORDER BY s.id, e.id LIMIT 1"#,
         media,
         season,
@@ -642,10 +642,10 @@ pub async fn season_episodes(
 ) -> Result<Vec<Ep>, sqlx::Error> {
     sqlx::query_as!(
         Ep,
-        r#"SELECT e.id, s."seasonNumber" AS season_number, e."episodeNumber" AS episode_number,
-                  e."endEpisodeNumber" AS end, e.title, e."airDate"::text AS air_date
-           FROM seasons s JOIN episodes e ON e."seasonId" = s.id
-           WHERE s."mediaId" = $1 AND s."seasonNumber" = $2 ORDER BY e.id"#,
+        r#"SELECT e.id, s."number" AS season_number, e."number" AS "episode_number!",
+                  e."endNumber" AS end, e.title, e."airDate"::text AS air_date
+           FROM item_groups s JOIN items e ON e."groupId" = s.id
+           WHERE s."mediaId" = $1 AND s."number" = $2 ORDER BY e.id"#,
         media,
         season
     )
@@ -669,10 +669,10 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
     let olds = sqlx::query_as!(
         Old,
         r#"SELECT mf.id, mf."relativePath" AS relative_path, mf."episodeId" AS episode_id,
-                  s."seasonNumber" AS "season_number?", e."episodeNumber" AS "episode_number?",
-                  e."endEpisodeNumber" AS end
-           FROM media_files mf LEFT JOIN episodes e ON e.id = mf."episodeId"
-           LEFT JOIN seasons s ON s.id = e."seasonId"
+                  s."number" AS "season_number?", e."number" AS "episode_number?",
+                  e."endNumber" AS end
+           FROM media_files mf LEFT JOIN items e ON e.id = mf."episodeId"
+           LEFT JOIN item_groups s ON s.id = e."groupId"
            WHERE mf."mediaId" = $1 AND mf.id <> ALL($2) ORDER BY mf.id"#,
         media.id,
         &new_ids
@@ -746,7 +746,7 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
             if let (Some(ep), Some(_)) = (old.episode_id, old.end)
                 && !ep_has_range
             {
-                sqlx::query!(r#"UPDATE episodes SET "endEpisodeNumber" = NULL WHERE id = $1"#, ep)
+                sqlx::query!(r#"UPDATE items SET "endNumber" = NULL WHERE id = $1"#, ep)
                     .execute(&st.db)
                     .await
                     .map_err(|e| e.to_string())?;

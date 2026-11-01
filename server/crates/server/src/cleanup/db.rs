@@ -107,16 +107,16 @@ pub async fn rule_delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
 pub async fn candidates(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<Value>> {
     sqlx::query_scalar(
         r#"SELECT jsonb_build_object('id', c.id, 'mediaId', m.id, 'seasonId', c."seasonId", 'episodeId', c."episodeId",
-          'seasonNumber', s."seasonNumber", 'episodeNumber', e."episodeNumber", 'title', m.title,
+          'seasonNumber', s."number", 'episodeNumber', e."number", 'title', m.title,
           'type', m."type", 'posterUrl', m."posterUrl", 'ruleId', r.id, 'ruleName', r.name, 'action', r.action,
           'size', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = m.id
             AND (c."episodeId" IS NULL OR f."episodeId" = c."episodeId")
-            AND (c."seasonId" IS NULL OR f."episodeId" IN (SELECT id FROM episodes WHERE "seasonId" = c."seasonId"))), 0),
+            AND (c."seasonId" IS NULL OR f."episodeId" IN (SELECT id FROM items WHERE "groupId" = c."seasonId"))), 0),
           'flaggedAt', iso_ms(c."flaggedAt"), 'deleteAt', iso_ms(c."deleteAt"))
         FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId" JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
-        LEFT JOIN seasons s ON s.id = c."seasonId" LEFT JOIN episodes e ON e.id = c."episodeId"
+        LEFT JOIN item_groups s ON s.id = c."seasonId" LEFT JOIN items e ON e.id = c."episodeId"
         WHERE m."libraryId" = ANY($1)
-        ORDER BY c."deleteAt" ASC NULLS LAST, m.id ASC, s."seasonNumber" ASC NULLS FIRST, e."episodeNumber" ASC NULLS FIRST"#,
+        ORDER BY c."deleteAt" ASC NULLS LAST, m.id ASC, s."number" ASC NULLS FIRST, e."number" ASC NULLS FIRST"#,
     )
     .bind(libraries)
     .fetch_all(db)
@@ -185,7 +185,7 @@ pub async fn resolve_scope(
 ) -> sqlx::Result<Option<Scope>> {
     if let Some(e) = episode {
         let found: Option<i32> = sqlx::query_scalar(
-            r#"SELECT s.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+            r#"SELECT s.id FROM items e JOIN item_groups s ON s.id = e."groupId"
             WHERE e.id = $1 AND s."mediaId" = $2 AND ($3::int IS NULL OR s.id = $3)"#,
         )
         .bind(e)
@@ -202,7 +202,7 @@ pub async fn resolve_scope(
         return Ok(Some(Scope::default()));
     };
     let found: Option<i32> =
-        sqlx::query_scalar(r#"SELECT id FROM seasons WHERE id = $1 AND "mediaId" = $2"#)
+        sqlx::query_scalar(r#"SELECT id FROM item_groups WHERE id = $1 AND "mediaId" = $2"#)
             .bind(s)
             .bind(media_id)
             .fetch_optional(db)

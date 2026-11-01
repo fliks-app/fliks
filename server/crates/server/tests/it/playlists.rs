@@ -32,8 +32,9 @@ async fn ctx(pool: PgPool) -> Ctx {
     for q in [
         r#"INSERT INTO libraries (name) VALUES ('l')"#,
         r#"INSERT INTO media (title, type, "libraryId") VALUES ('movie', 'movie', 1), ('series', 'series', 1)"#,
-        r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, 2), (2, 2)"#,
-        r#"INSERT INTO episodes ("episodeNumber", title, "seasonId") VALUES (1, 'e1', 1), (2, 'e2', 1), (1, 'e3', 2)"#,
+        r#"INSERT INTO item_groups ("number", "mediaId") VALUES (1, 2), (2, 2)"#,
+        r#"INSERT INTO editions ("mediaId", family) VALUES (1, 'video'), (2, 'video')"#,
+        r#"INSERT INTO items ("number", title, "groupId", "mediaId", "editionId") VALUES (1, 'e1', 1, 2, 2), (2, 'e2', 1, 2, 2), (1, 'e3', 2, 2, 2)"#,
         r#"INSERT INTO library_user_access ("userId", "libraryId") SELECT id, 1 FROM users"#,
     ] {
         sqlx::query(q).execute(&pool).await.unwrap();

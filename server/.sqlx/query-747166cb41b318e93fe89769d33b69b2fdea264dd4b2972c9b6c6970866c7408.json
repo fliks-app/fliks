@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE items SET monitored = $1\n           WHERE \"groupId\" IN (SELECT id FROM item_groups WHERE \"mediaId\" = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "747166cb41b318e93fe89769d33b69b2fdea264dd4b2972c9b6c6970866c7408"
+}

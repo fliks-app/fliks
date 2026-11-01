@@ -128,10 +128,10 @@ async fn remind(st: &AppState, fresh: &[i32]) -> sqlx::Result<()> {
         r#"SELECT c.id, c."mediaId" AS media, m.title, iso_ms(c."deleteAt") AS delete_at,
              CEIL(EXTRACT(EPOCH FROM (c."deleteAt" - now())) / 86400)::int AS days_left,
              r."reminderDays" AS thresholds, c."lastReminderDays" AS last,
-             s."seasonNumber" AS season, e."episodeNumber" AS episode
+             s."number" AS season, e."number" AS episode
            FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
            JOIN cleanup_rules r ON r.id = c."ruleId"
-           LEFT JOIN seasons s ON s.id = c."seasonId" LEFT JOIN episodes e ON e.id = c."episodeId"
+           LEFT JOIN item_groups s ON s.id = c."seasonId" LEFT JOIN items e ON e.id = c."episodeId"
            WHERE c."deleteAt" > now()"#,
     )
     .fetch_all(&st.db)
@@ -273,8 +273,8 @@ async fn act_scope(
         .map_err(err)?
         .ok_or("media not found")?;
     let (season, episode): (Option<i32>, Option<i32>) = sqlx::query_as(
-        r#"SELECT (SELECT "seasonNumber" FROM seasons WHERE id = $1),
-                  (SELECT "episodeNumber" FROM episodes WHERE id = $2)"#,
+        r#"SELECT (SELECT "number" FROM item_groups WHERE id = $1),
+                  (SELECT "number" FROM items WHERE id = $2)"#,
     )
     .bind(scope.season)
     .bind(scope.episode)
@@ -284,7 +284,7 @@ async fn act_scope(
     let files: Vec<i32> = sqlx::query_scalar(
         r#"SELECT f.id FROM media_files f WHERE f."mediaId" = $1
         AND ($2::int IS NULL OR f."episodeId" = $2)
-        AND ($3::int IS NULL OR f."episodeId" IN (SELECT id FROM episodes WHERE "seasonId" = $3))
+        AND ($3::int IS NULL OR f."episodeId" IN (SELECT id FROM items WHERE "groupId" = $3))
         ORDER BY f.id"#,
     )
     .bind(id)
@@ -299,7 +299,7 @@ async fn act_scope(
             .map_err(|e| e.text())?;
     }
     if let Some(episode) = scope.episode {
-        sqlx::query("UPDATE episodes SET monitored = false WHERE id = $1")
+        sqlx::query("UPDATE items SET monitored = false WHERE id = $1")
             .bind(episode)
             .execute(&st.db)
             .await
