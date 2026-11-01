@@ -4,7 +4,42 @@ use super::trust::{self, Keys, Trust};
 use nodejs_semver::{Range, Version};
 use serde_json::{Map, Value};
 
-pub const SUPPORTED_PLUGIN_API_VERSIONS: [u32; 1] = [2];
+pub const SUPPORTED_PLUGIN_API_VERSIONS: [u32; 1] = [3];
+
+/// The levels a `ui.releasePicker` may name per kind (`plugins.md` rule 5).
+const PICKER_LEVELS: [&str; 3] = ["work", "group", "item"];
+
+/// Every `(kind, level, pair)` of a `ui.releasePicker`.
+pub fn picker_pairs(rp: &Value) -> impl Iterator<Item = (&str, &str, &Value)> {
+    rp.as_object()
+        .into_iter()
+        .flatten()
+        .flat_map(|(kind, levels)| {
+            levels
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(move |(level, pair)| (kind.as_str(), level.as_str(), pair))
+        })
+}
+
+fn shaped_picker(rp: &Value) -> bool {
+    let Some(kinds) = rp.as_object().filter(|k| !k.is_empty()) else {
+        return false;
+    };
+    kinds.iter().all(|(kind, levels)| {
+        (1..=16).contains(&kind.len())
+            && kind.bytes().all(|b| b.is_ascii_lowercase())
+            && levels.as_object().is_some_and(|l| {
+                !l.is_empty()
+                    && l.iter().all(|(level, pair)| {
+                        PICKER_LEVELS.contains(&level.as_str())
+                            && pair["search"].is_string()
+                            && pair["grab"].is_string()
+                    })
+            })
+    })
+}
 const RESERVED_IDS: [&str; 4] = ["ui", "metrics", "sources", "import"];
 const BASE_KEYS: [&str; 14] = [
     "id",
@@ -35,11 +70,10 @@ const PROCESS_KEYS: [&str; 11] = [
     "checklist",
     "network",
 ];
-pub const SCOPES: [&str; 7] = [
+pub const SCOPES: [&str; 6] = [
     "media:read",
     "acquisition:candidates",
     "releases:score",
-    "requests:progress",
     "ingest:write",
     "events:emit",
     "config:rw",
@@ -337,16 +371,13 @@ pub fn validate_shape(m: &Value) -> Result<(), Refusal> {
                 "ui.configPages must be an array of pages carrying the keys their kind requires",
             ));
         }
-        if let Some(rp) = ui.get("releasePicker") {
-            let pair = |c: &str| {
-                rp[c].is_object() && rp[c]["search"].is_string() && rp[c]["grab"].is_string()
-            };
-            if !(rp.is_object() && ["movie", "season", "episode"].iter().all(|c| pair(c))) {
-                return Err(refuse(
-                    "PLUGIN_BAD_UI_RELEASE_PICKER",
-                    "ui.releasePicker must declare {search, grab} routes for movie, season and episode",
-                ));
-            }
+        if let Some(rp) = ui.get("releasePicker")
+            && !shaped_picker(rp)
+        {
+            return Err(refuse(
+                "PLUGIN_BAD_UI_RELEASE_PICKER",
+                "ui.releasePicker must map kinds to levels (work, group, item) of {search, grab} routes",
+            ));
         }
     }
     let event = |v: &Value| v.is_object() && v["event"].is_string() && v["webhook"].is_string();
@@ -598,7 +629,7 @@ mod tests {
         required("TableConfigPage", &["kind", "list", "columns"]);
         required("ProvidersConfigPage", &["kind", "list", "implementations"]);
         required("ReleasePickerPair", &["search", "grab"]);
-        required("ReleasePickerRoutes", &["movie", "season", "episode"]);
+        required("ReleasePickerRoutes", &["byKind?"]);
         assert!(
             ts.contains("export const SECRETS_SET_KEY = 'secretsSet';"),
             "the settings read key"
@@ -609,7 +640,7 @@ mod tests {
     use serde_json::json;
 
     fn data() -> Value {
-        json!({"id":"acme.hello","pluginApi":2,"name":"Hello","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+        json!({"id":"acme.hello","pluginApi":3,"name":"Hello","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
                "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"})
     }
 

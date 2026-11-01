@@ -3,6 +3,7 @@ use super::runtime::fliks::plugin::types as t;
 use crate::profiles::db as profiles;
 use crate::state::AppState;
 use chrono::{Days, NaiveDate, Utc};
+use fliks_domain::media::family::Family;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quality_string};
 use fliks_domain::release::parsing::season_episode::{
@@ -32,10 +33,10 @@ struct MediaRow {
     alternative_titles: Value,
     year: Option<i32>,
     runtime: Option<i32>,
-    imdb_id: Option<String>,
-    tmdb_id: Option<i32>,
-    tvdb_id: Option<i32>,
+    external_ids: Value,
     library_id: Option<i32>,
+    want_family: Option<String>,
+    want_language: Option<String>,
     minimum_availability: Option<String>,
     in_cinemas: Option<NaiveDate>,
     digital_release: Option<NaiveDate>,
@@ -54,8 +55,8 @@ struct MediaRow {
 fn media_select() -> String {
     format!(
         r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
-    m."alternativeTitles" AS alternative_titles, m.year, m.runtime, ids.imdb AS imdb_id,
-    ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, m."libraryId" AS library_id, m.monitored,
+    m."alternativeTitles" AS alternative_titles, m.year, m.runtime, ids.list AS external_ids,
+    m."libraryId" AS library_id, m.monitored, w.family AS want_family, w.language AS want_language,
     w."minimumAvailability" AS minimum_availability, dates.cinema_date AS in_cinemas,
     dates.digital_date AS digital_release, dates.physical_date AS physical_release,
     dates.release_date, m.status::text AS status,
@@ -64,9 +65,10 @@ fn media_select() -> String {
     lp."audioLanguages" AS lp_audio
   FROM media m {}
   LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
-  LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId" {} {}"#,
+  LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
+  LEFT JOIN LATERAL (SELECT COALESCE(jsonb_agg(jsonb_build_object('provider', provider, 'value', value)
+      ORDER BY provider), '[]'::jsonb) AS list FROM media_external_ids WHERE "mediaId" = m.id) ids ON true {}"#,
         crate::media::wants::video_want_join("m"),
-        crate::media::external_ids::ids_join("m"),
         crate::media::details::dates_join("m")
     )
 }
@@ -95,6 +97,26 @@ impl MediaRow {
             build_allowed_quality_ids(&items),
             allowed_audio_language_ids(&langs),
         )
+    }
+    fn external_ids(&self) -> Vec<t::ExternalId> {
+        let text = |v: &Value, k: &str| v[k].as_str().map(str::to_owned);
+        self.external_ids
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| {
+                Some(t::ExternalId {
+                    provider: text(e, "provider")?,
+                    value: text(e, "value")?,
+                })
+            })
+            .collect()
+    }
+    fn family(&self) -> Family {
+        self.want_family
+            .as_deref()
+            .and_then(Family::parse)
+            .unwrap_or(Family::Video)
     }
     fn search(&self) -> SearchMedia {
         SearchMedia {
@@ -230,7 +252,8 @@ fn best(qualities: Vec<String>) -> Option<String> {
     })
 }
 
-/// `(owner id, quality)` rows of `media_files` grouped by media (or by item parts), in row order.
+/// `(owner id, quality)` rows of the parts of items, grouped by item or, for `by_item` false, by the
+/// media of their ungrouped item, in file order.
 async fn qualities_by(
     db: &PgPool,
     by_item: bool,
@@ -240,7 +263,9 @@ async fn qualities_by(
         r#"SELECT p."itemId", f.quality FROM media_files f JOIN item_parts p ON p."mediaFileId" = f.id
            WHERE p."itemId" = ANY($1) ORDER BY f.id"#
     } else {
-        r#"SELECT "mediaId", quality FROM media_files WHERE "mediaId" = ANY($1) ORDER BY id"#
+        r#"SELECT i."mediaId", f.quality FROM media_files f JOIN item_parts p ON p."mediaFileId" = f.id
+           JOIN items i ON i.id = p."itemId" WHERE i."mediaId" = ANY($1) AND i."groupId" IS NULL
+           ORDER BY f.id"#
     };
     let rows: Vec<(i32, String)> = sqlx::query_as(sql).bind(ids).fetch_all(db).await?;
     let mut out: HashMap<i32, Vec<String>> = HashMap::new();
@@ -302,24 +327,19 @@ async fn files_for(
     season: Option<i32>,
     episode: Option<&EpisodeRow>,
 ) -> sqlx::Result<Files> {
-    match m.kind {
-        MediaKind::Movie => Ok(file_qualities(db, false, m.id)
-            .await?
-            .into_iter()
-            .map(Some)
-            .collect()),
-        MediaKind::Series => {
-            if let Some(e) = episode {
-                let sib = episodes_of(db, e.season_id).await?;
-                return files_for_episode(db, e, &on_disk(&sib)).await;
-            }
-            if let Some(s) = season {
-                let eps = episodes_of(db, s).await?;
-                return files_for_pack(db, &eps, &on_disk(&eps)).await;
-            }
-            Ok(vec![])
-        }
+    if let Some(e) = episode {
+        let sib = episodes_of(db, e.season_id).await?;
+        return files_for_episode(db, e, &on_disk(&sib)).await;
     }
+    if let Some(s) = season {
+        let eps = episodes_of(db, s).await?;
+        return files_for_pack(db, &eps, &on_disk(&eps)).await;
+    }
+    Ok(file_qualities(db, false, m.id)
+        .await?
+        .into_iter()
+        .map(Some)
+        .collect())
 }
 
 mod candidates;
@@ -349,6 +369,7 @@ mod tests {
         loop {
             let q = t::CandidatesQuery {
                 kind: None,
+                family: None,
                 media_ids: None,
                 available_on: "2030-01-01".into(),
                 limit: 70,
@@ -402,6 +423,140 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    async fn series_with_episodes(db: &PgPool) -> (i32, Vec<i32>) {
+        sqlx::raw_sql(
+            r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
+               INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+               INSERT INTO media (id, title, type, "libraryId", monitored) VALUES (1, 'Show', 'series', 1, true);
+               INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+                 VALUES (1, 'series', 'tmdb', '5'), (1, 'series', 'tvdb', '7')"#,
+        )
+        .execute(db)
+        .await
+        .unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let want = crate::media::items::NewWant {
+            quality_profile_id: Some(1),
+        };
+        crate::media::items::create_shell(&mut c, 1, MediaKind::Series, want)
+            .await
+            .unwrap();
+        drop(c);
+        let edition = crate::media::items::video_edition(db, 1).await.unwrap();
+        let group: i32 = sqlx::query_scalar(
+            r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES (1, 2, true) RETURNING id"#,
+        )
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let mut items = vec![];
+        for n in 1..=3 {
+            items.push(sqlx::query_scalar(
+                r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", title, "airDate", monitored)
+                   VALUES (1, $1, $2, $3, 'E' || $3, make_date(2020, 1, $3), true) RETURNING id"#,
+            )
+            .bind(edition)
+            .bind(group)
+            .bind(n)
+            .fetch_one(db)
+            .await
+            .unwrap());
+        }
+        (group, items)
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_scope_of_a_target_names_its_group_or_item(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let (group, items) = series_with_episodes(&db).await;
+        let st = AppState::new(
+            db.clone(),
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        let whole = context(&st, 1, None, None).await.unwrap().unwrap();
+        assert!(whole.scope.is_empty() && whole.want.is_none());
+        assert_eq!((whole.family, whole.language), (t::Family::Video, None));
+        let ids: Vec<_> = whole
+            .external_ids
+            .iter()
+            .map(|e| (&*e.provider, &*e.value))
+            .collect();
+        assert_eq!(ids, [("tmdb", "5"), ("tvdb", "7")]);
+        let pack = context(&st, 1, Some(group as u32), None)
+            .await
+            .unwrap()
+            .unwrap();
+        let [u] = &pack.scope[..] else {
+            panic!("one unit")
+        };
+        assert_eq!((u.ref_.group, u.ref_.number), (Some(2), None));
+        assert_eq!(
+            (u.group_id, u.item_id, u.unit_count),
+            (Some(group as u32), None, Some(3))
+        );
+        let ep = context(&st, 1, None, Some(items[1] as u32))
+            .await
+            .unwrap()
+            .unwrap();
+        let [u] = &ep.scope[..] else {
+            panic!("one unit")
+        };
+        assert_eq!((u.ref_.group, u.ref_.number), (Some(2), Some(2.0)));
+        assert_eq!(u.item_id, Some(items[1] as u32));
+        assert_eq!(
+            (u.title.as_deref(), u.air_date.as_deref()),
+            (Some("E2"), Some("2020-01-02"))
+        );
+        assert!(matches!(
+            ep.want,
+            Some(t::Want {
+                decision: t::WantDecision::Missing,
+                ..
+            })
+        ));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn candidates_name_their_unit_and_skip_unserved_kinds(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let (group, items) = series_with_episodes(&db).await;
+        let on = NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
+        let query = |kind, family| t::CandidatesQuery {
+            kind,
+            family,
+            media_ids: None,
+            available_on: "2030-01-01".into(),
+            limit: 50,
+            cursor: None,
+        };
+        let page = candidates(&db, query(Some("series".into()), None), on)
+            .await
+            .unwrap();
+        let units: Vec<_> = page
+            .items
+            .iter()
+            .map(|i| (i.scope[0].group_id, i.scope[0].item_id))
+            .collect();
+        let g = Some(group as u32);
+        let item = |n: usize| Some(items[n] as u32);
+        assert_eq!(units, [(g, None), (g, item(0)), (g, item(1)), (g, item(2))]);
+        for (kind, family) in [
+            (Some("book".into()), None),
+            (Some("artist".into()), None),
+            (None, Some(t::Family::Audio)),
+            (Some("movie".into()), None),
+        ] {
+            let page = candidates(&db, query(kind.clone(), family), on)
+                .await
+                .unwrap();
+            assert!(
+                page.items.is_empty() && page.cursor.is_none(),
+                "{kind:?} {family:?}"
+            );
+        }
     }
 
     #[test]

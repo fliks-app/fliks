@@ -1,5 +1,6 @@
 //! What host imports emit on a plugin's behalf (`plugins.md` rule 33).
-use super::runtime::fliks::plugin::types as t;
+use super::runtime::{HostError, fliks::plugin::types as t};
+use super::units;
 use crate::events::event::{Download, DownloadState};
 use crate::events::{DomainEvent, Num, SseEvent};
 use crate::state::AppState;
@@ -65,16 +66,17 @@ fn state_of(s: t::DownloadState) -> DownloadState {
     }
 }
 
-fn download_of(d: &t::DownloadProgress) -> Download {
-    Download {
+fn download_of(d: &t::DownloadProgress) -> Result<Download, HostError> {
+    let (season, episode) = units::video(d.unit.as_ref())?;
+    Ok(Download {
         r#ref: d.ref_.clone(),
-        season_number: d.season_number.map(i64::from),
-        episode_number: d.episode_number.map(i64::from),
+        season_number: season.map(i64::from),
+        episode_number: episode.map(i64::from),
         progress: Num(d.progress),
         dlspeed: Num(d.bytes_per_second.unwrap_or(0.0)),
         eta: Num(d.eta_seconds.unwrap_or(0.0)),
         state: state_of(d.state),
-    }
+    })
 }
 
 /// One `download.progress` to the media's viewers; nothing when there are none.
@@ -112,8 +114,11 @@ impl Progress {
         st: &AppState,
         media_id: i32,
         downloads: &[t::DownloadProgress],
-    ) {
-        let set: Vec<Download> = downloads.iter().map(download_of).collect();
+    ) -> Result<(), HostError> {
+        let set: Vec<Download> = downloads
+            .iter()
+            .map(download_of)
+            .collect::<Result<_, _>>()?;
         let now = Instant::now();
         let wait = {
             let mut g = self.0.lock_clean();
@@ -121,7 +126,7 @@ impl Progress {
                 Some(gate) if now - gate.last < PROGRESS_MIN => {
                     gate.pending = Some(set.clone());
                     if gate.armed {
-                        return;
+                        return Ok(());
                     }
                     gate.armed = true;
                     Some(PROGRESS_MIN - (now - gate.last))
@@ -140,10 +145,12 @@ impl Progress {
             }
         };
         let Some(wait) = wait else {
-            return push_progress(st, media_id, set).await;
+            push_progress(st, media_id, set).await;
+            return Ok(());
         };
         let st = st.clone();
         tokio::spawn(async move { self.flush(st, media_id, wait).await });
+        Ok(())
     }
 
     async fn flush(&'static self, st: AppState, media_id: i32, wait: Duration) {
@@ -174,15 +181,29 @@ pub fn progress_gates() -> &'static Progress {
     P.get_or_init(Progress::default)
 }
 
-/// Rule 33, in order.
-pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) {
+/// The season and episode of an event's unit, once its family is served.
+fn event_unit(
+    family: t::Family,
+    unit: Option<&t::UnitRef>,
+) -> Result<(Option<u32>, Option<u32>), HostError> {
+    super::served(family)?;
+    units::video(unit)
+}
+
+/// Rule 33, in order; an event naming a family or unit the host cannot serve refuses the whole call.
+pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<(), HostError> {
+    for e in &events {
+        match e {
+            t::AcquisitionEvent::Grabbed(g) => drop(event_unit(g.family, g.unit.as_ref())?),
+            t::AcquisitionEvent::Imported(i) => drop(event_unit(i.family, i.unit.as_ref())?),
+            _ => {}
+        }
+    }
     for e in events {
         match e {
             t::AcquisitionEvent::Grabbed(g) => {
-                let (season, episode) = (
-                    g.season_number.map(i64::from),
-                    g.episode_number.map(i64::from),
-                );
+                let (season, episode) = event_unit(g.family, g.unit.as_ref())?;
+                let (season, episode) = (season.map(i64::from), episode.map(i64::from));
                 st.hub.emit_domain(DomainEvent::AcquisitionGrabbed {
                     media_id: g.media_id.into(),
                     season_number: season,
@@ -192,8 +213,8 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) {
                 set.push(Download {
                     r#ref: format!(
                         "pending:{}:{}",
-                        g.season_number.map(|s| s.to_string()).unwrap_or_default(),
-                        g.episode_number.map(|s| s.to_string()).unwrap_or_default()
+                        season.map(|s| s.to_string()).unwrap_or_default(),
+                        episode.map(|s| s.to_string()).unwrap_or_default()
                     ),
                     season_number: season,
                     episode_number: episode,
@@ -206,6 +227,7 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) {
             }
             t::AcquisitionEvent::Imported(i) => {
                 let id = i.media_id as i32;
+                let (season, episode) = event_unit(i.family, i.unit.as_ref())?;
                 let title = media_row(st, id).await.map(|(t, _)| t).unwrap_or_default();
                 let notify = st.clone();
                 let payload =
@@ -219,8 +241,8 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) {
                     SseEvent::ImportComplete {
                         media_id: id.into(),
                         title,
-                        season_number: i.season_number.map(i64::from),
-                        episode_number: i.episode_number.map(i64::from),
+                        season_number: season.map(i64::from),
+                        episode_number: episode.map(i64::from),
                     },
                 );
                 st.hub.emit(SseEvent::QueueUpdated {});
@@ -248,6 +270,7 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) {
             }
         }
     }
+    Ok(())
 }
 
 /// `events.emitOwn`: the `plugin.<id>.` prefix is forced.

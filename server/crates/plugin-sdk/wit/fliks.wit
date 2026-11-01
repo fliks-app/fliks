@@ -1,4 +1,4 @@
-package fliks:plugin@2.0.0;
+package fliks:plugin@3.0.0;
 
 interface types {
   type json = string;
@@ -19,44 +19,75 @@ interface types {
 
   record host-error { code: string, message: string }
 
-  enum media-kind { movie, series }
+  /// A kind of work is a string of the documented set `movie`, `series`, `book`, `comic`, `album`
+  /// (a person, an artist included, is not a work); the host answers `unsupported-kind` for any
+  /// it does not serve, and serves `movie` and `series`.
+  type kind = string;
+  /// Each family has its own quality table; the host serves `video`.
+  enum family { video, audio, text, image }
+
+  /// An id in an outside system; the provider set is open (tmdb, tvdb, imdb, isbn, asin, ...).
+  record external-id { provider: string, value: string }
+
+  /// A piece of a work: none is the whole work, `group` alone a group (a season or volume),
+  /// `number` an item (an episode, a chapter or an issue). `number` sorts and measures coverage,
+  /// `label` is it as printed (`1A`, a half issue), `absolute` the absolute numbering of anime.
+  record unit-ref {
+    group: option<u32>,
+    number: option<f64>,
+    end-number: option<f64>,
+    label: option<string>,
+    absolute: option<f64>,
+  }
+  record unit {
+    ref: unit-ref,
+    group-id: option<u32>,
+    item-id: option<u32>,
+    title: option<string>,
+    air-date: option<string>,
+    /// The items of the group.
+    unit-count: option<u32>,
+  }
+
   enum want-decision { missing, upgrade, skip }
   record want {
     decision: want-decision,
+    family: family,
+    language: option<string>,
+    /// Ids of the family's quality table.
     allowed-quality-ids: list<u32>,
     allowed-language-ids: list<u32>,
+    /// Video only: 0 and false otherwise.
     min-resolution: u32,
     resolution-upgrade-only: bool,
   }
-  record season-ref { id: u32, number: u32, episode-count: u32 }
-  record episode-ref {
-    id: u32,
-    number: u32,
-    end-number: option<u32>,
-    air-date: option<string>,
-    title: option<string>,
-  }
-  record acquisition-target {
+  /// A credited person; `role` is `author`, `narrator`, `artist`, `director`, ...
+  record creator { name: string, role: string }
+  record target {
     media-id: u32,
-    kind: media-kind,
+    kind: kind,
+    family: family,
+    language: option<string>,
     title: string,
     original-title: option<string>,
     alternative-titles: list<string>,
+    /// Empty for video.
+    creators: list<creator>,
     year: option<u32>,
     runtime-minutes: option<u32>,
-    imdb-id: option<string>,
-    tmdb-id: option<u32>,
-    tvdb-id: option<u32>,
+    external-ids: list<external-id>,
+    /// The ids of the wished edition (isbn, asin); empty for video.
+    edition-ids: list<external-id>,
     library-id: u32,
     want: option<want>,
     expected-titles: list<string>,
     search-title: string,
-    season: option<season-ref>,
-    episode: option<episode-ref>,
+    /// Empty is the whole work.
+    scope: list<unit>,
   }
 
-  record span { first: u32, last: u32 }
-  record release-coverage { seasons: option<span>, episodes: option<span>, complete-series: bool }
+  record span { first: f64, last: f64 }
+  record release-coverage { groups: option<span>, units: option<span>, complete: bool }
   variant param-value { number(f64), text(string) }
   record rejection { code: string, params: list<tuple<string, param-value>> }
   record scored-release {
@@ -70,7 +101,7 @@ interface types {
     language-id: option<u32>,
     language-name: option<string>,
     language-allowed: bool,
-    is-full-season: bool,
+    whole-group: bool,
     coverage: option<release-coverage>,
     size-deviation: option<f64>,
     video-codec: option<string>,
@@ -83,9 +114,8 @@ interface types {
   record release-match {
     id: string,
     media-id: option<u32>,
-    season-number: option<u32>,
-    episode-number: option<u32>,
-    is-full-season: bool,
+    unit: option<unit-ref>,
+    whole-group: bool,
     coverage: option<release-coverage>,
     decision: match-decision,
     skip-reason: option<skip-reason>,
@@ -106,38 +136,45 @@ interface types {
     blocked: bool,
   }
   record candidates-query {
-    kind: option<media-kind>,
+    kind: option<kind>,
+    family: option<family>,
     media-ids: option<list<u32>>,
     available-on: string,
     limit: u32,
     cursor: option<string>,
   }
-  record candidates-page { items: list<acquisition-target>, cursor: option<string> }
-  record resolve-query { media-ids: list<u32>, season-ids: list<u32>, episode-ids: list<u32> }
+  record candidates-page { items: list<target>, cursor: option<string> }
+  record resolve-query { media-ids: list<u32>, group-ids: list<u32>, item-ids: list<u32> }
   record resolved-media {
     title: string,
-    kind: media-kind,
+    kind: kind,
     library-id: u32,
-    season-number: option<u32>,
-    episode-number: option<u32>,
-    episode-title: option<string>,
+    unit: option<unit-ref>,
+    unit-title: option<string>,
   }
 
   enum transfer-mode { copy, move }
   record ingest-request {
     idempotency-key: string,
     media-id: u32,
+    family: family,
+    language: option<string>,
     paths: list<string>,
     transfer: transfer-mode,
     fallback-quality: option<string>,
     source-label: string,
   }
-  record imported-file { media-file-id: u32, relative-path: string, quality: string }
+  record imported-file {
+    media-file-id: u32,
+    relative-path: string,
+    quality: string,
+    edition-id: u32,
+    item-ids: list<u32>,
+  }
   record ingest-result {
     imported: list<imported-file>,
     already-present: list<string>,
-    season-number: option<u32>,
-    episode-number: option<u32>,
+    unit: option<unit-ref>,
   }
 
   variant acquisition-event {
@@ -147,11 +184,11 @@ interface types {
     queue-changed,
     stalled-removed(stalled-removed),
   }
-  record grabbed { media-id: u32, season-number: option<u32>, episode-number: option<u32> }
+  record grabbed { media-id: u32, family: family, unit: option<unit-ref> }
   record imported {
     media-id: u32,
-    season-number: option<u32>,
-    episode-number: option<u32>,
+    family: family,
+    unit: option<unit-ref>,
     quality: string,
     source-title: string,
   }
@@ -162,8 +199,7 @@ interface types {
   enum download-state { queued, active, stalled, paused, importing }
   record download-progress {
     ref: string,
-    season-number: option<u32>,
-    episode-number: option<u32>,
+    unit: option<unit-ref>,
     progress: f64,
     bytes-per-second: option<f64>,
     eta-seconds: option<f64>,
@@ -173,25 +209,26 @@ interface types {
 
 interface host {
   use types.{
-    acquisition-target, candidates-query, candidates-page, release-title, release-match,
+    target, candidates-query, candidates-page, release-title, release-match,
     candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
-    ingest-result, acquisition-event, audience, download-progress, host-error, json,
+    ingest-result, acquisition-event, audience, download-progress, family, unit-ref, host-error,
+    json,
   };
 
-  media-acquisition-context: func(media-id: u32, season-id: option<u32>, episode-id: option<u32>)
-    -> result<option<acquisition-target>, host-error>;
+  /// `family` none is the media's only want.
+  media-acquisition-context: func(
+    media-id: u32, family: option<family>, group-id: option<u32>, item-id: option<u32>,
+  ) -> result<option<target>, host-error>;
   acquisition-candidates: func(query: candidates-query) -> result<candidates-page, host-error>;
   releases-match: func(titles: list<release-title>, min-age-minutes: option<u32>)
     -> result<list<release-match>, host-error>;
   releases-score: func(
-    media-id: u32, season-number: option<u32>, episode-number: option<u32>,
+    media-id: u32, family: option<family>, unit: option<unit-ref>,
     releases: list<candidate-release>,
   ) -> result<list<scored-release>, host-error>;
   media-resolve: func(query: resolve-query) -> result<list<tuple<string, resolved-media>>, host-error>;
   media-exists: func(media-ids: list<u32>) -> result<list<u32>, host-error>;
 
-  requests-mark-in-progress: func(idempotency-key: string, media-id: u32, season-number: option<u32>)
-    -> result<_, host-error>;
   library-ingest: func(request: ingest-request) -> result<ingest-result, host-error>;
 
   events-publish: func(events: list<acquisition-event>) -> result<_, host-error>;

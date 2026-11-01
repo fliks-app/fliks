@@ -4,6 +4,7 @@ use super::logs::Level;
 use super::runtime::fliks::plugin::{db, host, log, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
+use super::units;
 use crate::state::AppState;
 use sqlx::PgPool;
 use std::time::Instant;
@@ -136,9 +137,10 @@ impl host::Host for Ctx {
     async fn media_acquisition_context(
         &mut self,
         media_id: u32,
-        season_id: Option<u32>,
-        episode_id: Option<u32>,
-    ) -> Result<Option<t::AcquisitionTarget>, HostError> {
+        family: Option<t::Family>,
+        group_id: Option<u32>,
+        item_id: Option<u32>,
+    ) -> Result<Option<t::Target>, HostError> {
         let app = self.app();
         call!(
             self,
@@ -147,7 +149,8 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::context(&app, media_id, season_id, episode_id)
+                family.map(super::served).transpose()?;
+                super::acquisition::context(&app, media_id, group_id, item_id)
                     .await
                     .map_err(db_err)
             }
@@ -197,8 +200,8 @@ impl host::Host for Ctx {
     async fn releases_score(
         &mut self,
         media_id: u32,
-        season_number: Option<u32>,
-        episode_number: Option<u32>,
+        family: Option<t::Family>,
+        unit: Option<t::UnitRef>,
         releases: Vec<t::CandidateRelease>,
     ) -> Result<Vec<t::ScoredRelease>, HostError> {
         let app = self.app();
@@ -209,7 +212,9 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::score(&app, media_id, season_number, episode_number, releases)
+                family.map(super::served).transpose()?;
+                let (season, episode) = units::video(unit.as_ref())?;
+                super::acquisition::score(&app, media_id, season, episode, releases)
                     .await
                     .map_err(db_err)
             }
@@ -221,7 +226,7 @@ impl host::Host for Ctx {
     ) -> Result<Vec<(String, t::ResolvedMedia)>, HostError> {
         let core = self.sh.env.core.clone();
         call!(self, "media.resolve", ["media:read"], HOST_CALL, async {
-            let total = q.media_ids.len() + q.season_ids.len() + q.episode_ids.len();
+            let total = q.media_ids.len() + q.group_ids.len() + q.item_ids.len();
             if total > 100 {
                 return Err(host_err(
                     "ERR_VALIDATION",
@@ -244,27 +249,6 @@ impl host::Host for Ctx {
             Ok(found.into_iter().map(|i| i as u32).collect())
         })
     }
-    async fn requests_mark_in_progress(
-        &mut self,
-        _idempotency_key: String,
-        media_id: u32,
-        season_number: Option<u32>,
-    ) -> Result<(), HostError> {
-        let app = self.app();
-        call!(
-            self,
-            "requests.markInProgress",
-            ["requests:progress"],
-            HOST_CALL,
-            async {
-                let app = app?;
-                crate::requests::Lifecycle::of(&app)
-                    .mark_in_progress(media_id as i32, season_number.map(|s| s as i32))
-                    .await
-                    .map_err(|e| host_err("ERR", e.text()))
-            }
-        )
-    }
     async fn library_ingest(&mut self, r: t::IngestRequest) -> Result<t::IngestResult, HostError> {
         let app = self.app();
         let id = self.sh.id.clone();
@@ -283,8 +267,7 @@ impl host::Host for Ctx {
         let app = self.app();
         call!(self, "events.publish", ["events:emit"], HOST_CALL, async {
             let app = app?;
-            super::events::publish(&app, events).await;
-            Ok(())
+            super::events::publish(&app, events).await
         })
     }
     async fn notifications_dispatch_grab_started(
@@ -347,8 +330,7 @@ impl host::Host for Ctx {
             let app = app?;
             super::events::progress_gates()
                 .set(&app, media_id as i32, &downloads)
-                .await;
-            Ok(())
+                .await
         })
     }
 
@@ -432,7 +414,7 @@ async fn resolve(
     core: &PgPool,
     q: &t::ResolveQuery,
 ) -> sqlx::Result<Vec<(String, t::ResolvedMedia)>> {
-    let kind = |k: &str| -> sqlx::Result<t::MediaKind> { Ok(crate::db::kind(k)?.into()) };
+    let kind = |k: &str| -> sqlx::Result<String> { Ok(crate::db::kind(k)?.as_str().to_owned()) };
     let ids = |v: &[u32]| v.iter().map(|i| *i as i32).collect::<Vec<i32>>();
     let mut out = vec![];
     let rows: Vec<(i32, String, String, Option<i32>)> = sqlx::query_as(
@@ -448,51 +430,57 @@ async fn resolve(
                 title,
                 kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
-                season_number: None,
-                episode_number: None,
-                episode_title: None,
+                unit: None,
+                unit_title: None,
             },
         ));
     }
     let rows: Vec<(i32, i32, String, String, Option<i32>)> = sqlx::query_as(
-        r#"SELECT s.id, s."number", m.title, m.type, m."libraryId"
-             FROM item_groups s JOIN media m ON m.id = s."mediaId" WHERE s.id = ANY($1) ORDER BY s.id"#,
+        r#"SELECT g.id, g."number", m.title, m.type, m."libraryId"
+             FROM item_groups g JOIN media m ON m.id = g."mediaId" WHERE g.id = ANY($1) ORDER BY g.id"#,
     )
-    .bind(ids(&q.season_ids))
+    .bind(ids(&q.group_ids))
     .fetch_all(core)
     .await?;
     for (id, n, title, k, lib) in rows {
         out.push((
-            format!("season:{id}"),
+            format!("group:{id}"),
             t::ResolvedMedia {
                 title,
                 kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
-                season_number: Some(n as u32),
-                episode_number: None,
-                episode_title: None,
+                unit: units::unit_ref(Some(n), None),
+                unit_title: None,
             },
         ));
     }
-    type Row = (i32, i32, i32, Option<String>, String, String, Option<i32>);
+    type Row = (
+        i32,
+        Option<i32>,
+        Option<i32>,
+        Option<String>,
+        String,
+        String,
+        Option<i32>,
+    );
     let rows: Vec<Row> = sqlx::query_as(
-        r#"SELECT e.id, s."number", e."number", e.title, m.title, m.type, m."libraryId"
-             FROM items e JOIN item_groups s ON s.id = e."groupId" JOIN media m ON m.id = s."mediaId"
-            WHERE e.id = ANY($1) ORDER BY e.id"#,
+        r#"SELECT i.id, g."number", i."number", i.title, m.title, m.type, m."libraryId"
+             FROM items i JOIN media m ON m.id = i."mediaId"
+             LEFT JOIN item_groups g ON g.id = i."groupId"
+            WHERE i.id = ANY($1) ORDER BY i.id"#,
     )
-    .bind(ids(&q.episode_ids))
+    .bind(ids(&q.item_ids))
     .fetch_all(core)
     .await?;
-    for (id, s, e, et, title, k, lib) in rows {
+    for (id, g, n, item_title, title, k, lib) in rows {
         out.push((
-            format!("episode:{id}"),
+            format!("item:{id}"),
             t::ResolvedMedia {
                 title,
                 kind: kind(&k)?,
                 library_id: lib.unwrap_or(0) as u32,
-                season_number: Some(s as u32),
-                episode_number: Some(e as u32),
-                episode_title: et,
+                unit: units::unit_ref(g, n),
+                unit_title: item_title,
             },
         ));
     }
@@ -569,6 +557,76 @@ impl log::Host for Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fliks_domain::media::kind::MediaKind;
+
+    #[sqlx::test(migrations = false)]
+    async fn resolve_names_groups_and_items_with_their_units(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+               INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'Film', 'movie', 1), (2, 'Show', 'series', 1)"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut c = db.acquire().await.unwrap();
+        for (id, kind) in [(1, MediaKind::Movie), (2, MediaKind::Series)] {
+            crate::media::items::create_shell(&mut c, id, kind, Default::default())
+                .await
+                .unwrap();
+        }
+        drop(c);
+        let movie_item = crate::media::items::sole_item(&db, 1)
+            .await
+            .unwrap()
+            .unwrap();
+        let edition = crate::media::items::video_edition(&db, 2).await.unwrap();
+        let group: i32 = sqlx::query_scalar(
+            r#"INSERT INTO item_groups ("mediaId", "number") VALUES (2, 3) RETURNING id"#,
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        let item: i32 = sqlx::query_scalar(
+            r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", title)
+               VALUES (2, $1, $2, 4, 'Pilot') RETURNING id"#,
+        )
+        .bind(edition)
+        .bind(group)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        let q = t::ResolveQuery {
+            media_ids: vec![],
+            group_ids: vec![group as u32],
+            item_ids: vec![movie_item as u32, item as u32],
+        };
+        let got = resolve(&db, &q).await.unwrap();
+        let shape = |k: &str| {
+            let r = &got.iter().find(|(key, _)| key == k).unwrap().1;
+            (
+                r.title.clone(),
+                r.unit.as_ref().map(|u| (u.group, u.number)),
+                r.unit_title.clone(),
+            )
+        };
+        assert_eq!(
+            shape(&format!("group:{group}")),
+            ("Show".into(), Some((Some(3), None)), None)
+        );
+        assert_eq!(
+            shape(&format!("item:{movie_item}")),
+            ("Film".into(), None, None)
+        );
+        assert_eq!(
+            shape(&format!("item:{item}")),
+            (
+                "Show".into(),
+                Some((Some(3), Some(4.0))),
+                Some("Pilot".into())
+            )
+        );
+    }
 
     #[test]
     fn config_set_bounds() {

@@ -1,9 +1,11 @@
 //! `library.ingest` (`plugins.md` rule 32): every path under a granted root, then the S5 ingest.
 use super::imports::host_err;
 use super::runtime::{HostError, fliks::plugin::types as t};
+use super::units;
 use crate::ingest::{library, transfer::Method};
 use crate::state::AppState;
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// `realpath` of `raw`, which must sit under the `realpath` of one of `roots`.
@@ -37,6 +39,13 @@ pub async fn run(
     id: &str,
     r: t::IngestRequest,
 ) -> Result<t::IngestResult, HostError> {
+    super::served(r.family)?;
+    if r.language.is_some() {
+        return Err(host_err(
+            "ERR_VALIDATION",
+            "library.ingest: a video ingest has no language",
+        ));
+    }
     let roots: Vec<String> = sqlx::query_scalar(
         r#"SELECT "ingestRoots" FROM plugin_registrations WHERE "pluginId" = $1"#,
     )
@@ -62,6 +71,16 @@ pub async fn run(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let media_id = r.media_id as i32;
+    let edition = match crate::media::items::video_edition(&st.db, media_id).await {
+        Ok(edition) => edition,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(host_err(
+                "ERR_NOT_FOUND",
+                format!("Media #{media_id} not found"),
+            ));
+        }
+        Err(e) => return Err(db_err(e)),
+    };
     let guard = st.ingest.media.lock(media_id).await;
     let out = library::ingest(
         st,
@@ -86,6 +105,13 @@ pub async fn run(
     if out.imported.is_empty() && !out.errors.is_empty() {
         return Err(host_err("ERR", out.errors.join("; ")));
     }
+    let mut items = item_ids(st, &out.imported).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            "library.ingest: item ids of media {media_id} unreadable: {}",
+            e.message
+        );
+        HashMap::new()
+    });
     if let Some(first) = out.imported.first() {
         let title: Option<String> = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
             .bind(media_id)
@@ -113,12 +139,38 @@ pub async fn run(
                 media_file_id: i.file_id as u32,
                 relative_path: i.relative_path.clone(),
                 quality: i.quality.clone(),
+                edition_id: edition as u32,
+                item_ids: items.remove(&i.file_id).unwrap_or_default(),
             })
             .collect(),
         already_present: out.already_present.clone(),
-        season_number: single.and_then(|i| i.season_number).map(|n| n as u32),
-        episode_number: single.and_then(|i| i.episode_number).map(|n| n as u32),
+        unit: single.and_then(|i| units::unit_ref(i.season_number, i.episode_number)),
     })
+}
+
+fn db_err(e: sqlx::Error) -> HostError {
+    host_err("ERR", e.to_string())
+}
+
+/// Per imported file, the items its parts play.
+async fn item_ids(
+    st: &AppState,
+    imported: &[library::Imported],
+) -> Result<HashMap<i32, Vec<u32>>, HostError> {
+    let files: Vec<i32> = imported.iter().map(|i| i.file_id).collect();
+    let rows: Vec<(i32, i32)> = sqlx::query_as(
+        r#"SELECT "mediaFileId", "itemId" FROM item_parts WHERE "mediaFileId" = ANY($1)
+            ORDER BY "mediaFileId", "itemId""#,
+    )
+    .bind(&files)
+    .fetch_all(&st.db)
+    .await
+    .map_err(db_err)?;
+    let mut items: HashMap<i32, Vec<u32>> = HashMap::new();
+    for (file, item) in rows {
+        items.entry(file).or_default().push(item as u32);
+    }
+    Ok(items)
 }
 
 #[cfg(test)]

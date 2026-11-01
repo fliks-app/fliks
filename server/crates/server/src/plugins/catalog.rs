@@ -204,9 +204,9 @@ mod tests {
     fn filter_and_hidden() {
         let ok = "a".repeat(64);
         let doc = json!({"plugins": [{"id":"p","name":"P","description":"","author":"a","kind":"process",
-            "versions":[v("1.1.0",2,">=5.0.0 <6.0.0",&ok), v("1.0.0",2,">=5.0.0 <6.0.0",&ok),
-                        v("0.9.0",1,">=4.0.0 <5.0.0",&ok), v("2.0.0",2,">=6.0.0 <7.0.0",&ok),
-                        v("1.2.0",2,">=5.0.0 <6.0.0",&"0".repeat(64))]}]});
+            "versions":[v("1.1.0",3,">=5.0.0 <6.0.0",&ok), v("1.0.0",3,">=5.0.0 <6.0.0",&ok),
+                        v("0.9.0",2,">=5.0.0 <6.0.0",&ok), v("2.0.0",3,">=6.0.0 <7.0.0",&ok),
+                        v("1.2.0",3,">=5.0.0 <6.0.0",&"0".repeat(64))]}]});
         let doc = parse(&serde_json::to_vec(&doc).unwrap()).unwrap();
         let f = filter(&doc, "5.0.0", false);
         let p = &f["plugins"][0];

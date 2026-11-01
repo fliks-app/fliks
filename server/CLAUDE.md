@@ -6,7 +6,7 @@ The Fliks HTTP server (Rust), run behind the `fliks-engine` supervisor.
 
 - `crates/domain` (`fliks_domain`): pure logic — serde, serde_json, chrono, regex, fancy-regex, regress, unicode-normalization, encoding_rs, quick-xml, url, percent-encoding only. No tokio, sqlx, fs, axum.
 - `crates/server` (`fliks-server`): axum binary, sqlx, the `fliks-engine-core` git dependency, HTTP and DB.
-- `crates/plugin-sdk`: the pluginApi 2 guest SDK.
+- `crates/plugin-sdk`: the pluginApi 3 guest SDK.
 
 ## Rules
 

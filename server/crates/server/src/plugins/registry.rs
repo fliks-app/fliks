@@ -445,14 +445,14 @@ fn validate_release_picker(m: &Value, routes: &[Value]) -> Result<(), Fail> {
         return Ok(());
     };
     let keys = route_keys(routes);
-    for ctx in ["movie", "season", "episode"] {
+    for (kind, level, pair) in super::manifest::picker_pairs(rp) {
         for (key, method) in [("search", "GET"), ("grab", "POST")] {
-            let path = rp[ctx][key].as_str().unwrap_or_default();
+            let path = pair[key].as_str().unwrap_or_default();
             if !keys.contains(&format!("{method} {path}")) {
                 return Err(fail(
                     "invalid-release-picker",
                     format!(
-                        "releasePicker.{ctx}.{key} \"{path}\" is not declared as a {method} route in routes[]"
+                        "releasePicker.{kind}.{level}.{key} \"{path}\" is not declared as a {method} route in routes[]"
                     ),
                 ));
             }
@@ -736,6 +736,28 @@ mod tests {
                 &process(json!([{"method":"GET","path":"/:page","policy":"read:Settings"}]))
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn release_picker_routes_per_kind() {
+        let routes = json!([
+            {"method":"GET","path":"/s","policy":"read:Settings"},
+            {"method":"POST","path":"/g","policy":"read:Settings"}
+        ]);
+        let pair = json!({"search":"/s","grab":"/g"});
+        let picker = |rp: Value| json!({"ui":{"releasePicker":rp}});
+        let routes = routes.as_array().unwrap();
+        let ok = picker(json!({"movie":{"work":pair},"series":{"group":pair,"item":pair}}));
+        assert!(validate_release_picker(&ok, routes).is_ok());
+        let wrong =
+            picker(json!({"movie":{"work":pair},"series":{"item":{"search":"/g","grab":"/g"}}}));
+        let f = validate_release_picker(&wrong, routes).unwrap_err();
+        assert_eq!(f.reason, "invalid-release-picker");
+        assert!(
+            f.detail.contains("releasePicker.series.item.search"),
+            "{}",
+            f.detail
         );
     }
 

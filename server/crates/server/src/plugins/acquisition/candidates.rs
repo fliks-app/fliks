@@ -9,6 +9,8 @@ pub(super) fn want(m: &MediaRow, d: Option<Decision>, files: &Files) -> Option<t
     let res_only = mode != Mode::Missing && m.qp_res_only == Some(true);
     let quals: Vec<Option<&str>> = files.iter().map(|f| f.as_deref()).collect();
     Some(t::Want {
+        family: m.family().into(),
+        language: m.want_language.clone(),
         decision: match mode {
             Mode::Missing => t::WantDecision::Missing,
             Mode::Upgrade => t::WantDecision::Upgrade,
@@ -25,11 +27,8 @@ pub(super) fn want(m: &MediaRow, d: Option<Decision>, files: &Files) -> Option<t
     })
 }
 
-pub(super) fn target(
-    m: &MediaRow,
-    d: Option<Decision>,
-    files: &Files,
-) -> Option<t::AcquisitionTarget> {
+/// The target of the whole work; callers add the `scope` of a group or an item.
+pub(super) fn target(m: &MediaRow, d: Option<Decision>, files: &Files) -> Option<t::Target> {
     let Some(library_id) = m.library_id else {
         tracing::warn!(
             "candidate #{} \"{}\" dropped — no library id on the loaded media",
@@ -39,33 +38,59 @@ pub(super) fn target(
         return None;
     };
     let titles = resolve_search_titles(&m.search(), None);
-    Some(t::AcquisitionTarget {
+    Some(t::Target {
         media_id: m.id as u32,
-        kind: m.kind.into(),
+        kind: m.kind.as_str().to_owned(),
+        family: m.family().into(),
+        language: m.want_language.clone(),
         title: m.title.clone(),
         original_title: m.original_title.clone(),
         alternative_titles: m.alt(),
+        creators: vec![],
+        edition_ids: vec![],
         year: m.year.map(|y| y as u32),
         runtime_minutes: m.runtime.map(|r| r as u32),
-        imdb_id: m.imdb_id.clone(),
-        tmdb_id: m.tmdb_id.map(|v| v as u32),
-        tvdb_id: m.tvdb_id.map(|v| v as u32),
+        external_ids: m.external_ids(),
         library_id: library_id as u32,
         want: want(m, d, files),
         expected_titles: titles.expected_titles,
         search_title: titles.search_title,
-        season: None,
-        episode: None,
+        scope: vec![],
     })
 }
 
-pub(super) fn episode_ref(e: &EpisodeRow) -> t::EpisodeRef {
-    t::EpisodeRef {
-        id: e.id as u32,
-        number: e.episode_number as u32,
-        end_number: e.end_episode_number.map(|n| n as u32),
-        air_date: e.air_date.map(|d| d.to_string()),
+/// A group (a season) as a unit; `count` is its items.
+pub(super) fn group_unit(id: i32, number: i32, count: i64) -> t::Unit {
+    t::Unit {
+        ref_: t::UnitRef {
+            group: Some(number as u32),
+            number: None,
+            end_number: None,
+            label: None,
+            absolute: None,
+        },
+        group_id: Some(id as u32),
+        item_id: None,
+        title: None,
+        air_date: None,
+        unit_count: Some(count as u32),
+    }
+}
+
+/// An item (an episode) of group `(id, number)` as a unit; `count` is the items of the group.
+pub(super) fn item_unit(group: (i32, i32), e: &EpisodeRow, count: i64) -> t::Unit {
+    t::Unit {
+        ref_: t::UnitRef {
+            group: Some(group.1 as u32),
+            number: Some(f64::from(e.episode_number)),
+            end_number: e.end_episode_number.map(f64::from),
+            label: None,
+            absolute: None,
+        },
+        item_id: Some(e.id as u32),
         title: e.title.clone(),
+        air_date: e.air_date.map(|d| d.to_string()),
+        ..group_unit(group.0, group.1, count)
     }
 }
 
@@ -90,7 +115,7 @@ pub async fn context(
     media_id: u32,
     season_id: Option<u32>,
     episode_id: Option<u32>,
-) -> sqlx::Result<Option<t::AcquisitionTarget>> {
+) -> sqlx::Result<Option<t::Target>> {
     let db = &st.db;
     let Some(m) = media(db, media_id as i32).await? else {
         return Ok(None);
@@ -131,13 +156,11 @@ pub async fn context(
             .bind(sid)
             .fetch_one(db)
             .await?;
-        tg.season = Some(t::SeasonRef {
-            id: sid as u32,
-            number: number as u32,
-            episode_count: count as u32,
-        });
+        tg.scope = vec![match &episode {
+            Some(e) => item_unit((sid, number), e, count),
+            None => group_unit(sid, number, count),
+        }];
     }
-    tg.episode = episode.as_ref().map(episode_ref);
     Ok(Some(tg))
 }
 
@@ -167,17 +190,30 @@ pub(super) struct EpTarget {
     decision: Decision,
 }
 
-pub(super) async fn movie_targets(
+/// The wire names of the kinds with (`seasonal`) or without seasons.
+fn kind_names(seasonal: bool) -> Vec<&'static str> {
+    MediaKind::ALL
+        .into_iter()
+        .filter(|k| k.has_seasons() == seasonal)
+        .map(MediaKind::as_str)
+        .collect()
+}
+
+/// The wanted ungrouped items: the whole work of a kind without seasons.
+pub(super) async fn ungrouped_targets(
     db: &PgPool,
     ids: Option<&[i32]>,
 ) -> sqlx::Result<Vec<(MediaRow, Files, Decision)>> {
     let rows: Vec<MediaRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"{} WHERE m.monitored AND m.type = 'movie'
-             AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) OR qp."upgradeAllowed")
+        r#"{} WHERE m.monitored AND m.type = ANY($2)
+             AND (NOT EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId"
+                              WHERE i."mediaId" = m.id AND i."groupId" IS NULL)
+                  OR qp."upgradeAllowed")
              AND ($1::int[] IS NULL OR m.id = ANY($1)) ORDER BY m.id"#,
         media_select()
     )))
     .bind(ids)
+    .bind(kind_names(false))
     .fetch_all(db)
     .await?;
     let mids: Vec<i32> = rows.iter().map(|m| m.id).collect();
@@ -197,7 +233,8 @@ pub(super) async fn movie_targets(
         .collect())
 }
 
-pub(super) async fn episode_targets(
+/// The wanted items of the groups of a kind with seasons.
+pub(super) async fn grouped_targets(
     db: &PgPool,
     ids: Option<&[i32]>,
     today: NaiveDate,
@@ -207,7 +244,7 @@ pub(super) async fn episode_targets(
              JOIN item_groups s ON s.id = ep."groupId" JOIN media m ON m.id = s."mediaId"
              LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
              LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
-            WHERE m.monitored AND m.type = 'series' AND s.monitored AND ep.monitored
+            WHERE m.monitored AND m.type = ANY($3) AND s.monitored AND ep.monitored
               AND ep."airDate" IS NOT NULL AND ep."airDate" <= $1
               AND (NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ep.id)
                    OR (EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = ep.id AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < ep."number"))
@@ -217,6 +254,7 @@ pub(super) async fn episode_targets(
     )
     .bind(today)
     .bind(ids)
+    .bind(kind_names(true))
     .fetch_all(db)
     .await?;
     let eids: Vec<i32> = rows.iter().map(|r| r.0).collect();
@@ -292,11 +330,12 @@ pub(super) const BATCH: usize = 100;
 
 pub(super) type Key = (u32, u32, u32);
 
-pub(super) fn key(tg: &t::AcquisitionTarget) -> Key {
+pub(super) fn key(tg: &t::Target) -> Key {
+    let unit = tg.scope.first();
     (
         tg.media_id,
-        tg.season.as_ref().map_or(0, |s| s.id),
-        tg.episode.as_ref().map_or(0, |e| e.id),
+        unit.and_then(|u| u.group_id).unwrap_or(0),
+        unit.and_then(|u| u.item_id).unwrap_or(0),
     )
 }
 
@@ -310,9 +349,9 @@ pub(super) async fn media_batch(
     db: &PgPool,
     from: i32,
     ids: Option<&[i32]>,
-    kind: Option<t::MediaKind>,
+    kind: Option<MediaKind>,
 ) -> sqlx::Result<Vec<i32>> {
-    let kind = kind.map(|k| MediaKind::from(k).as_str());
+    let kind = kind.map(MediaKind::as_str);
     sqlx::query_scalar(
         r#"SELECT id FROM media WHERE monitored AND id >= $1 AND ($2::int[] IS NULL OR id = ANY($2))
              AND ($3::text IS NULL OR type = $3) ORDER BY id LIMIT $4"#,
@@ -325,25 +364,25 @@ pub(super) async fn media_batch(
     .await
 }
 
-/// The movies, season packs and episodes wanted among `ids`.
+/// The ungrouped items, group packs and grouped items wanted among `ids`.
 pub(super) async fn targets_for(
     db: &PgPool,
     ids: &[i32],
-    kind: Option<t::MediaKind>,
+    kind: Option<MediaKind>,
     on: NaiveDate,
-) -> sqlx::Result<Vec<t::AcquisitionTarget>> {
+) -> sqlx::Result<Vec<t::Target>> {
     let ids = Some(ids);
     let today = Utc::now().date_naive();
     let mut targets = vec![];
-    if !matches!(kind, Some(t::MediaKind::Series)) {
-        for (m, files, d) in movie_targets(db, ids).await? {
+    if kind.is_none_or(|k| !k.has_seasons()) {
+        for (m, files, d) in ungrouped_targets(db, ids).await? {
             if available(&m, on) {
                 targets.extend(target(&m, Some(d), &files));
             }
         }
     }
-    if !matches!(kind, Some(t::MediaKind::Movie)) {
-        let eps: Vec<EpTarget> = episode_targets(db, ids, today)
+    if kind.is_none_or(MediaKind::has_seasons) {
+        let eps: Vec<EpTarget> = grouped_targets(db, ids, today)
             .await?
             .into_iter()
             .filter(|e| e.episode.air_date.is_none_or(|d| d <= on))
@@ -380,23 +419,14 @@ pub(super) async fn targets_for(
                 continue;
             }
             if let Some(mut tg) = target(m, Some(d), &files) {
-                tg.season = Some(t::SeasonRef {
-                    id: *sid as u32,
-                    number: group[0].season.1 as u32,
-                    episode_count: total as u32,
-                });
+                tg.scope = vec![group_unit(*sid, group[0].season.1, total)];
                 targets.push(tg);
             }
         }
         for e in &eps {
             if let Some(mut tg) = target(&e.media, Some(e.decision), &e.files) {
                 let count = totals.get(&e.season.0).copied().unwrap_or(1);
-                tg.season = Some(t::SeasonRef {
-                    id: e.season.0 as u32,
-                    number: e.season.1 as u32,
-                    episode_count: count as u32,
-                });
-                tg.episode = Some(episode_ref(&e.episode));
+                tg.scope = vec![item_unit(e.season, &e.episode, count)];
                 targets.push(tg);
             }
         }
@@ -405,13 +435,29 @@ pub(super) async fn targets_for(
     Ok(targets)
 }
 
-/// `acquisition.candidates`: movies, season packs and episodes, sorted, paged by keyset: the cursor
-/// names the last item returned. `on` is the validated `availableOn`.
+/// `acquisition.candidates`: ungrouped items, group packs and grouped items, sorted, paged by keyset:
+/// the cursor names the last item returned. `on` is the validated `availableOn`; a kind or family the
+/// host does not serve has no wants.
 pub async fn candidates(
     db: &PgPool,
     q: t::CandidatesQuery,
     on: NaiveDate,
 ) -> sqlx::Result<t::CandidatesPage> {
+    let empty = || t::CandidatesPage {
+        items: vec![],
+        cursor: None,
+    };
+    let kind = match q.kind.as_deref().map(MediaKind::parse) {
+        Some(None) => {
+            tracing::debug!(kind = ?q.kind, "candidates: kind not served, empty page");
+            return Ok(empty());
+        }
+        parsed => parsed.flatten(),
+    };
+    if q.family.is_some_and(|f| crate::plugins::served(f).is_err()) {
+        tracing::debug!(family = ?q.family, "candidates: family not served, empty page");
+        return Ok(empty());
+    }
     let limit = q.limit.clamp(1, MAX_LIMIT) as usize;
     let ids: Option<Vec<i32>> = q
         .media_ids
@@ -420,13 +466,13 @@ pub async fn candidates(
         .filter(|v| !v.is_empty());
     let after = q.cursor.as_deref().and_then(parse_cursor);
     let mut from = after.map_or(0, |k| k.0 as i32);
-    let mut items: Vec<t::AcquisitionTarget> = vec![];
+    let mut items: Vec<t::Target> = vec![];
     while items.len() <= limit {
-        let batch = media_batch(db, from, ids.as_deref(), q.kind).await?;
+        let batch = media_batch(db, from, ids.as_deref(), kind).await?;
         let Some(last) = batch.last() else { break };
         from = last + 1;
         let full = batch.len() == BATCH;
-        let found = targets_for(db, &batch, q.kind, on).await?;
+        let found = targets_for(db, &batch, kind, on).await?;
         items.extend(
             found
                 .into_iter()

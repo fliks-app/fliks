@@ -485,7 +485,7 @@ async fn webhooks_resolve_once_and_never_leak_urls() {
         };
     })
     .await;
-    let manifest = json!({"id":"acme.hooks","pluginApi":2,"name":"Hooks","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+    let manifest = json!({"id":"acme.hooks","pluginApi":3,"name":"Hooks","version":"1.0.0","fliks":">=5.0.0 <7.0.0",
         "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data",
         "events":[{"event":"media.removed","webhook":"setting:url"},{"event":"media.imported","webhook":"setting:url"}],
         "ui":{"configPages":[{"id":"general","labelKey":"x.y","fields":[{"key":"url","type":"url","labelKey":"x.url"}]}]}});

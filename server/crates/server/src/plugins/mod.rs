@@ -1,4 +1,4 @@
-//! The plugin host (`docs/spec/plugins.md`, pluginApi 2 on wasm): install pipeline, registry,
+//! The plugin host (`docs/spec/plugins.md`, pluginApi 3 on wasm): install pipeline, registry,
 //! runtime and the `/api/plugins/*` routes.
 pub mod acquisition;
 pub mod archive;
@@ -26,6 +26,7 @@ pub mod sources;
 pub mod staging;
 pub mod trust;
 pub mod ui;
+pub mod units;
 #[cfg(test)]
 mod vectors;
 pub mod webhooks;
@@ -33,7 +34,7 @@ pub mod webhooks;
 use crate::ingest::KeyedLocks;
 use crate::state::AppState;
 use crate::sync::{MutexExt, RwLockExt};
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::family::Family;
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
@@ -46,23 +47,39 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
 use tokio::sync::Notify;
 
-pub use runtime::{HealthReport, HttpRequest, HttpResponse, Principal};
+pub use runtime::{HealthReport, HostError, HttpRequest, HttpResponse, Principal};
 
-impl From<MediaKind> for runtime::fliks::plugin::types::MediaKind {
-    fn from(k: MediaKind) -> Self {
-        match k {
-            MediaKind::Movie => Self::Movie,
-            MediaKind::Series => Self::Series,
+impl From<Family> for runtime::fliks::plugin::types::Family {
+    fn from(f: Family) -> Self {
+        match f {
+            Family::Video => Self::Video,
+            Family::Audio => Self::Audio,
+            Family::Text => Self::Text,
+            Family::Image => Self::Image,
         }
     }
 }
 
-impl From<runtime::fliks::plugin::types::MediaKind> for MediaKind {
-    fn from(k: runtime::fliks::plugin::types::MediaKind) -> Self {
-        match k {
-            runtime::fliks::plugin::types::MediaKind::Movie => Self::Movie,
-            runtime::fliks::plugin::types::MediaKind::Series => Self::Series,
+impl From<runtime::fliks::plugin::types::Family> for Family {
+    fn from(f: runtime::fliks::plugin::types::Family) -> Self {
+        use runtime::fliks::plugin::types::Family as W;
+        match f {
+            W::Video => Self::Video,
+            W::Audio => Self::Audio,
+            W::Text => Self::Text,
+            W::Image => Self::Image,
         }
+    }
+}
+
+/// The family of a call naming one work: only `video` is served.
+pub fn served(f: runtime::fliks::plugin::types::Family) -> Result<Family, HostError> {
+    match Family::from(f) {
+        Family::Video => Ok(Family::Video),
+        other => Err(imports::host_err(
+            "unsupported-family",
+            format!("family \"{other}\" is not served"),
+        )),
     }
 }
 
@@ -597,5 +614,19 @@ mod runtime_dir_tests {
         );
         assert!(legacy.join("data/q").exists());
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod kind_tests {
+    use super::runtime::fliks::plugin::types as w;
+    use super::*;
+
+    #[test]
+    fn an_unserved_family_is_named_in_the_refusal() {
+        let family = served(w::Family::Audio).unwrap_err();
+        assert_eq!(family.code, "unsupported-family");
+        assert_eq!(family.message, "family \"audio\" is not served");
+        assert_eq!(served(w::Family::Video).unwrap(), Family::Video);
     }
 }
