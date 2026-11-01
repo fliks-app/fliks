@@ -532,7 +532,7 @@ mod tests {
             limit: 50,
             cursor: None,
         };
-        let page = candidates(&db, query(Some(t::MediaKind::Series), None), on)
+        let page = candidates(&db, query(Some("series".into()), None), on)
             .await
             .unwrap();
         let units: Vec<_> = page
@@ -544,11 +544,14 @@ mod tests {
         let item = |n: usize| Some(items[n] as u32);
         assert_eq!(units, [(g, None), (g, item(0)), (g, item(1)), (g, item(2))]);
         for (kind, family) in [
-            (Some(t::MediaKind::Book), None),
+            (Some("book".into()), None),
+            (Some("artist".into()), None),
             (None, Some(t::Family::Audio)),
-            (Some(t::MediaKind::Movie), None),
+            (Some("movie".into()), None),
         ] {
-            let page = candidates(&db, query(kind, family), on).await.unwrap();
+            let page = candidates(&db, query(kind.clone(), family), on)
+                .await
+                .unwrap();
             assert!(
                 page.items.is_empty() && page.cursor.is_none(),
                 "{kind:?} {family:?}"

@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 pub const SUPPORTED_PLUGIN_API_VERSIONS: [u32; 1] = [3];
 
 /// The kinds and levels a `ui.releasePicker` may name (`plugins.md` rule 5).
-const PICKER_KINDS: [&str; 6] = ["movie", "series", "book", "comic", "album", "artist"];
+const PICKER_KINDS: [&str; 5] = ["movie", "series", "book", "comic", "album"];
 const PICKER_LEVELS: [&str; 3] = ["work", "group", "item"];
 
 /// Every `(kind, level, pair)` of a `ui.releasePicker`.
@@ -629,7 +629,7 @@ mod tests {
         required("TableConfigPage", &["kind", "list", "columns"]);
         required("ProvidersConfigPage", &["kind", "list", "implementations"]);
         required("ReleasePickerPair", &["search", "grab"]);
-        required("ReleasePickerRoutes", &["byKind"]);
+        required("ReleasePickerRoutes", &["byKind?"]);
         assert!(
             ts.contains("export const SECRETS_SET_KEY = 'secretsSet';"),
             "the settings read key"

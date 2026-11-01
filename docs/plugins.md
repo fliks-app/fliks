@@ -101,11 +101,11 @@ and the contributions opening a withheld page are withheld with it. So a nav ent
 `when` to restate its own route's policy; use `when` for what the policy cannot express.
 
 **`ui.releasePicker`** names the routes of the release picker per kind of work and level: kinds are
-`movie`, `series`, `book`, `comic`, `album`, `artist`, levels `work` (the whole title), `group` (a
+`movie`, `series`, `book`, `comic`, `album`, levels `work` (the whole title), `group` (a
 season) and `item` (an episode), each a `{search, grab}` pair of the plugin's own routes (`search` a
 `GET`, `grab` a `POST`), at least one level per kind: `{ movie: { work: {...} }, series: { group: {...},
-item: {...} } }`. `:id`, `:groupId`-style placeholders are the route's own; the core picker fills
-`:id`, `:seasonId` and `:episodeId`. A kind the server does not serve yet is accepted and ignored.
+item: {...} } }`. The core picker fills `:id`, `:seasonId` and `:episodeId` in the routes. A kind the
+server does not serve is accepted and ignored.
 
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 
@@ -441,8 +441,8 @@ one of those sets, open an issue. A proposal that can be acted on says:
    one; say which, and what a hostile plugin holding it could do.
 4. **Whether it can avoid a break.** The host links one WIT package version per `pluginApi`, so any
    change to a record or a function, an added field included, is a `pluginApi` bump that orphans every
-   plugin that has not republished, and waits for a scheduled break. The enums `media-kind` and
-   `family` already list every case the roadmap foresees for that reason.
+   plugin that has not republished, and waits for a scheduled break. The enum `family`
+   lists every case the roadmap foresees and `kind` is a string, for that reason.
 
 Items 3 and 4 are what decide the answer. A proposal whose worst case is bounded and that rides a
 scheduled break is a small change; one that widens an existing scope is a security review.

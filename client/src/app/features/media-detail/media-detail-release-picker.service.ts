@@ -65,27 +65,27 @@ export class MediaDetailReleasePickerService {
   private readonly registry = inject(PluginUiRegistryService);
 
   getMovieReleases(id: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.byKind.movie?.work, { id }, q, searchId);
+    return this.search((r) => r.byKind?.movie?.work ?? r.movie, { id }, q, searchId);
   }
 
   grabMovie(id: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.byKind.movie?.work, { id }, body);
+    return this.grab((r) => r.byKind?.movie?.work ?? r.movie, { id }, body);
   }
 
   getSeasonReleases(mediaId: number, seasonId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.byKind.series?.group, { id: mediaId, seasonId }, q, searchId);
+    return this.search((r) => r.byKind?.series?.group ?? r.season, { id: mediaId, seasonId }, q, searchId);
   }
 
   grabSeason(mediaId: number, seasonId: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.byKind.series?.group, { id: mediaId, seasonId }, body);
+    return this.grab((r) => r.byKind?.series?.group ?? r.season, { id: mediaId, seasonId }, body);
   }
 
   getEpisodeReleases(mediaId: number, episodeId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.byKind.series?.item, { id: mediaId, episodeId }, q, searchId);
+    return this.search((r) => r.byKind?.series?.item ?? r.episode, { id: mediaId, episodeId }, q, searchId);
   }
 
   grabEpisode(mediaId: number, episodeId: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.byKind.series?.item, { id: mediaId, episodeId }, body);
+    return this.grab((r) => r.byKind?.series?.item ?? r.episode, { id: mediaId, episodeId }, body);
   }
 
   /** `sid` names the waiting modal, echoed on every partial result so a modal ignores other searches; omitted means answer only, nothing streamed. */

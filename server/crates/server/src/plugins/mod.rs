@@ -50,31 +50,10 @@ use tokio::sync::Notify;
 
 pub use runtime::{HealthReport, HostError, HttpRequest, HttpResponse, Principal};
 
-impl From<MediaKind> for runtime::fliks::plugin::types::MediaKind {
-    fn from(k: MediaKind) -> Self {
-        match k {
-            MediaKind::Movie => Self::Movie,
-            MediaKind::Series => Self::Series,
-        }
-    }
-}
-
-impl TryFrom<runtime::fliks::plugin::types::MediaKind> for MediaKind {
-    type Error = HostError;
-    fn try_from(k: runtime::fliks::plugin::types::MediaKind) -> Result<Self, HostError> {
-        use runtime::fliks::plugin::types::MediaKind as W;
-        match k {
-            W::Movie => Ok(Self::Movie),
-            W::Series => Ok(Self::Series),
-            other => Err(imports::host_err(
-                "unsupported-kind",
-                format!(
-                    "kind \"{}\" is not served",
-                    format!("{other:?}").to_lowercase()
-                ),
-            )),
-        }
-    }
+/// The kind a call names: `movie` and `series` are served, any other string is not.
+pub fn served_kind(k: &str) -> Result<MediaKind, HostError> {
+    MediaKind::parse(k)
+        .ok_or_else(|| imports::host_err("unsupported-kind", format!("kind \"{k}\" is not served")))
 }
 
 impl From<Family> for runtime::fliks::plugin::types::Family {
@@ -88,20 +67,26 @@ impl From<Family> for runtime::fliks::plugin::types::Family {
     }
 }
 
-impl TryFrom<runtime::fliks::plugin::types::Family> for Family {
-    type Error = HostError;
-    fn try_from(f: runtime::fliks::plugin::types::Family) -> Result<Self, HostError> {
+impl From<runtime::fliks::plugin::types::Family> for Family {
+    fn from(f: runtime::fliks::plugin::types::Family) -> Self {
         use runtime::fliks::plugin::types::Family as W;
         match f {
-            W::Video => Ok(Self::Video),
-            other => Err(imports::host_err(
-                "unsupported-family",
-                format!(
-                    "family \"{}\" is not served",
-                    format!("{other:?}").to_lowercase()
-                ),
-            )),
+            W::Video => Self::Video,
+            W::Audio => Self::Audio,
+            W::Text => Self::Text,
+            W::Image => Self::Image,
         }
+    }
+}
+
+/// The family of a call naming one work: only `video` is served.
+pub fn served(f: runtime::fliks::plugin::types::Family) -> Result<Family, HostError> {
+    match Family::from(f) {
+        Family::Video => Ok(Family::Video),
+        other => Err(imports::host_err(
+            "unsupported-family",
+            format!("family \"{other}\" is not served"),
+        )),
     }
 }
 
@@ -636,5 +621,24 @@ mod runtime_dir_tests {
         );
         assert!(legacy.join("data/q").exists());
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod kind_tests {
+    use super::runtime::fliks::plugin::types as w;
+    use super::*;
+
+    #[test]
+    fn unserved_kinds_and_families_are_named_in_the_refusal() {
+        let kind = |k| served_kind(k).unwrap_err();
+        assert_eq!(kind("book").code, "unsupported-kind");
+        assert_eq!(kind("book").message, "kind \"book\" is not served");
+        assert_eq!(kind("artist").message, "kind \"artist\" is not served");
+        assert_eq!(served_kind("series").unwrap(), MediaKind::Series);
+        let family = served(w::Family::Audio).unwrap_err();
+        assert_eq!(family.code, "unsupported-family");
+        assert_eq!(family.message, "family \"audio\" is not served");
+        assert_eq!(served(w::Family::Video).unwrap(), Family::Video);
     }
 }

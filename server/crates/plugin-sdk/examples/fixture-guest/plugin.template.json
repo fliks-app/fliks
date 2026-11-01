@@ -2,7 +2,7 @@
   "id": "fliks.fixture",
   "pluginApi": 3,
   "name": "Fixture",
-  "fliks": ">=5.0.0 <6.0.0",
+  "fliks": ">=5.0.0 <7.0.0",
   "author": "Fliks",
   "description": "Test and parity fixture: every route exercises one host behaviour.",
   "license": "MIT",

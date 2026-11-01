@@ -5,7 +5,6 @@ use crate::events::event::{Download, DownloadState};
 use crate::events::{DomainEvent, Num, SseEvent};
 use crate::state::AppState;
 use crate::sync::MutexExt;
-use fliks_domain::media::family::Family;
 use fliks_domain::media::kind::MediaKind;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -186,10 +185,9 @@ pub fn progress_gates() -> &'static Progress {
 fn event_unit(
     family: t::Family,
     unit: Option<&t::UnitRef>,
-) -> Result<(Option<i32>, Option<i32>), HostError> {
-    Family::try_from(family)?;
-    let (season, episode) = units::video(unit)?;
-    Ok((season.map(|n| n as i32), episode.map(|n| n as i32)))
+) -> Result<(Option<u32>, Option<u32>), HostError> {
+    super::served(family)?;
+    units::video(unit)
 }
 
 /// Rule 33, in order; an event naming a family or unit the host cannot serve refuses the whole call.

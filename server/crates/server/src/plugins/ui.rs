@@ -6,16 +6,16 @@ use fliks_domain::acl::Permissions;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 
-/// `byKind` as declared, plus the `movie`, `season` and `episode` pairs that builds predating it read.
+/// `byKind` as declared, plus the `movie`, `season` and `episode` pairs installed apps read.
 fn picker_entry(rp: Value) -> Value {
     let pair = |kind: &str, level: &str| Some(rp[kind][level].clone()).filter(Value::is_object);
-    let old = (
+    let pairs = (
         pair("movie", "work"),
         pair("series", "group"),
         pair("series", "item"),
     );
     let mut out = Map::new();
-    if let (Some(movie), Some(season), Some(episode)) = old {
+    if let (Some(movie), Some(season), Some(episode)) = pairs {
         out.extend([
             ("movie".to_owned(), movie),
             ("season".to_owned(), season),
@@ -145,7 +145,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn picker_entry_keeps_the_pairs_builds_before_by_kind_read() {
+    fn picker_entry_serves_by_kind_and_the_three_pairs() {
         let pair = json!({"search": "/s", "grab": "/g"});
         let all = json!({"movie": {"work": pair}, "series": {"group": pair, "item": pair}});
         let e = picker_entry(all.clone());

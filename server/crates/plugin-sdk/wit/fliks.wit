@@ -19,8 +19,10 @@ interface types {
 
   record host-error { code: string, message: string }
 
-  /// The host serves `movie` and `series`; the other kinds answer `unsupported-kind`.
-  enum media-kind { movie, series, book, comic, album, artist }
+  /// A kind of work is a string of the documented set `movie`, `series`, `book`, `comic`, `album`
+  /// (a person, an artist included, is not a work); the host answers `unsupported-kind` for any
+  /// it does not serve, and serves `movie` and `series`.
+  type kind = string;
   /// Each family has its own quality table; the host serves `video`.
   enum family { video, audio, text, image }
 
@@ -28,8 +30,15 @@ interface types {
   record external-id { provider: string, value: string }
 
   /// A piece of a work: none is the whole work, `group` alone a group (a season or volume),
-  /// `number` an item (an episode, a chapter or an issue). Numbers are decimals (issue 1.5).
-  record unit-ref { group: option<u32>, number: option<f64>, end-number: option<f64> }
+  /// `number` an item (an episode, a chapter or an issue). `number` sorts and measures coverage,
+  /// `label` is it as printed (`1A`, a half issue), `absolute` the absolute numbering of anime.
+  record unit-ref {
+    group: option<u32>,
+    number: option<f64>,
+    end-number: option<f64>,
+    label: option<string>,
+    absolute: option<f64>,
+  }
   record unit {
     ref: unit-ref,
     group-id: option<u32>,
@@ -52,19 +61,23 @@ interface types {
     min-resolution: u32,
     resolution-upgrade-only: bool,
   }
+  /// A credited person; `role` is `author`, `narrator`, `artist`, `director`, ...
+  record creator { name: string, role: string }
   record target {
     media-id: u32,
-    kind: media-kind,
+    kind: kind,
     family: family,
     language: option<string>,
     title: string,
     original-title: option<string>,
     alternative-titles: list<string>,
-    /// Authors or artists; empty for video.
-    creators: list<string>,
+    /// Empty for video.
+    creators: list<creator>,
     year: option<u32>,
     runtime-minutes: option<u32>,
     external-ids: list<external-id>,
+    /// The ids of the wished edition (isbn, asin); empty for video.
+    edition-ids: list<external-id>,
     library-id: u32,
     want: option<want>,
     expected-titles: list<string>,
@@ -123,7 +136,7 @@ interface types {
     blocked: bool,
   }
   record candidates-query {
-    kind: option<media-kind>,
+    kind: option<kind>,
     family: option<family>,
     media-ids: option<list<u32>>,
     available-on: string,
@@ -134,7 +147,7 @@ interface types {
   record resolve-query { media-ids: list<u32>, group-ids: list<u32>, item-ids: list<u32> }
   record resolved-media {
     title: string,
-    kind: media-kind,
+    kind: kind,
     library-id: u32,
     unit: option<unit-ref>,
     unit-title: option<string>,

@@ -98,6 +98,23 @@ describe('MediaDetailReleasePickerService', () => {
     await expect(service.getMovieReleases(7)).rejects.toThrow();
   });
 
+  it('falls back to the movie, season and episode pairs of a server without byKind', async () => {
+    await install({
+      movie: { search: '/:id/releases', grab: '/:id/grab' },
+      season: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
+      episode: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+    });
+    const movie = service.getMovieReleases(7);
+    http.expectOne('/api/plugins/fliks.acme/7/releases').flush([]);
+    await movie;
+    const season = service.grabSeason(7, 3);
+    http.expectOne('/api/plugins/fliks.acme/7/seasons/3/grab').flush(null);
+    await season;
+    const episode = service.getEpisodeReleases(7, 12);
+    http.expectOne('/api/plugins/fliks.acme/7/episodes/12/releases').flush([]);
+    await episode;
+  });
+
   it('fires no request and rejects for a level the plugin does not declare', async () => {
     await install({ byKind: { movie: ROUTES.byKind.movie } });
     await expect(service.getEpisodeReleases(7, 3)).rejects.toThrow();

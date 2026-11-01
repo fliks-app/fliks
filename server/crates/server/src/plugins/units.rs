@@ -1,4 +1,5 @@
-//! `unit-ref` on video: a group and an item are whole numbers (`plugins.md` rule 31).
+//! `unit-ref` on video: a group and an item are whole numbers, with no label or absolute number
+//! (`plugins.md` rule 31).
 use super::imports::host_err;
 use super::runtime::{HostError, fliks::plugin::types as t};
 
@@ -18,6 +19,15 @@ pub fn video(u: Option<&t::UnitRef>) -> Result<(Option<u32>, Option<u32>), HostE
     let Some(u) = u else {
         return Ok((None, None));
     };
+    if u.absolute.is_some() {
+        return Err(host_err(
+            "ERR_VALIDATION",
+            "absolute unit numbers are not served",
+        ));
+    }
+    if u.label.is_some() && u.number.is_none() {
+        return Err(host_err("ERR_VALIDATION", "a unit label needs its number"));
+    }
     u.end_number.map(|n| whole(n, "end-number")).transpose()?;
     let number = u.number.map(|n| whole(n, "number")).transpose()?;
     if number.is_some() && u.group.is_none() {
@@ -32,6 +42,8 @@ pub fn unit_ref(group: Option<i32>, number: Option<i32>) -> Option<t::UnitRef> {
         group: group.map(|g| g as u32),
         number: number.map(f64::from),
         end_number: None,
+        label: None,
+        absolute: None,
     })
 }
 
@@ -44,6 +56,8 @@ mod tests {
             group,
             number,
             end_number: None,
+            label: None,
+            absolute: None,
         }
     }
 
@@ -58,6 +72,21 @@ mod tests {
         for bad in [unit(Some(1), Some(1.5)), unit(None, Some(3.0))] {
             assert_eq!(video(Some(&bad)).unwrap_err().code, "ERR_VALIDATION");
         }
+        let absolute = t::UnitRef {
+            absolute: Some(1050.0),
+            ..unit(None, None)
+        };
+        assert_eq!(video(Some(&absolute)).unwrap_err().code, "ERR_VALIDATION");
+        let label_only = t::UnitRef {
+            label: Some("1A".into()),
+            ..unit(Some(1), None)
+        };
+        assert!(video(Some(&label_only)).is_err());
+        let labelled = t::UnitRef {
+            label: Some("5".into()),
+            ..unit(Some(2), Some(5.0))
+        };
+        assert_eq!(video(Some(&labelled)).unwrap(), (Some(2), Some(5)));
         let end = t::UnitRef {
             end_number: Some(0.5),
             ..unit(Some(1), Some(1.0))

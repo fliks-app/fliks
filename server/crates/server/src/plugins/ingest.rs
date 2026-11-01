@@ -4,7 +4,6 @@ use super::runtime::{HostError, fliks::plugin::types as t};
 use super::units;
 use crate::ingest::{library, transfer::Method};
 use crate::state::AppState;
-use fliks_domain::media::family::Family;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -40,7 +39,7 @@ pub async fn run(
     id: &str,
     r: t::IngestRequest,
 ) -> Result<t::IngestResult, HostError> {
-    Family::try_from(r.family)?;
+    super::served(r.family)?;
     if r.language.is_some() {
         return Err(host_err(
             "ERR_VALIDATION",
@@ -72,6 +71,9 @@ pub async fn run(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let media_id = r.media_id as i32;
+    let edition = crate::media::items::video_edition(&st.db, media_id)
+        .await
+        .map_err(db_err)?;
     let guard = st.ingest.media.lock(media_id).await;
     let out = library::ingest(
         st,
@@ -96,6 +98,7 @@ pub async fn run(
     if out.imported.is_empty() && !out.errors.is_empty() {
         return Err(host_err("ERR", out.errors.join("; ")));
     }
+    let mut items = item_ids(st, &out.imported).await?;
     if let Some(first) = out.imported.first() {
         let title: Option<String> = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
             .bind(media_id)
@@ -115,7 +118,6 @@ pub async fn run(
     }
     let single =
         (out.imported.len() == 1 && out.imported[0].episode_id.is_some()).then(|| &out.imported[0]);
-    let (edition_id, mut items) = parts(st, media_id, &out.imported).await?;
     Ok(t::IngestResult {
         imported: out
             .imported
@@ -124,7 +126,7 @@ pub async fn run(
                 media_file_id: i.file_id as u32,
                 relative_path: i.relative_path.clone(),
                 quality: i.quality.clone(),
-                edition_id,
+                edition_id: edition as u32,
                 item_ids: items.remove(&i.file_id).unwrap_or_default(),
             })
             .collect(),
@@ -133,16 +135,15 @@ pub async fn run(
     })
 }
 
-/// The media's video edition and, per imported file, the items its parts play.
-async fn parts(
+fn db_err(e: sqlx::Error) -> HostError {
+    host_err("ERR", e.to_string())
+}
+
+/// Per imported file, the items its parts play.
+async fn item_ids(
     st: &AppState,
-    media_id: i32,
     imported: &[library::Imported],
-) -> Result<(u32, HashMap<i32, Vec<u32>>), HostError> {
-    let db_err = |e: sqlx::Error| host_err("ERR", e.to_string());
-    let edition = crate::media::items::video_edition(&st.db, media_id)
-        .await
-        .map_err(db_err)?;
+) -> Result<HashMap<i32, Vec<u32>>, HostError> {
     let files: Vec<i32> = imported.iter().map(|i| i.file_id).collect();
     let rows: Vec<(i32, i32)> = sqlx::query_as(
         r#"SELECT "mediaFileId", "itemId" FROM item_parts WHERE "mediaFileId" = ANY($1)
@@ -156,7 +157,7 @@ async fn parts(
     for (file, item) in rows {
         items.entry(file).or_default().push(item as u32);
     }
-    Ok((edition as u32, items))
+    Ok(items)
 }
 
 #[cfg(test)]

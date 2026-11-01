@@ -6,7 +6,6 @@ use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
 use crate::state::AppState;
-use fliks_domain::media::family::Family;
 use sqlx::PgPool;
 use std::time::Instant;
 
@@ -150,7 +149,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                family.map(Family::try_from).transpose()?;
+                family.map(super::served).transpose()?;
                 super::acquisition::context(&app, media_id, group_id, item_id)
                     .await
                     .map_err(db_err)
@@ -213,7 +212,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                family.map(Family::try_from).transpose()?;
+                family.map(super::served).transpose()?;
                 let (season, episode) = units::video(unit.as_ref())?;
                 super::acquisition::score(&app, media_id, season, episode, releases)
                     .await
@@ -415,7 +414,7 @@ async fn resolve(
     core: &PgPool,
     q: &t::ResolveQuery,
 ) -> sqlx::Result<Vec<(String, t::ResolvedMedia)>> {
-    let kind = |k: &str| -> sqlx::Result<t::MediaKind> { Ok(crate::db::kind(k)?.into()) };
+    let kind = |k: &str| -> sqlx::Result<String> { Ok(crate::db::kind(k)?.as_str().to_owned()) };
     let ids = |v: &[u32]| v.iter().map(|i| *i as i32).collect::<Vec<i32>>();
     let mut out = vec![];
     let rows: Vec<(i32, String, String, Option<i32>)> = sqlx::query_as(

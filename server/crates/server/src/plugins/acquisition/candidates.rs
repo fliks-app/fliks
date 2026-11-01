@@ -40,13 +40,14 @@ pub(super) fn target(m: &MediaRow, d: Option<Decision>, files: &Files) -> Option
     let titles = resolve_search_titles(&m.search(), None);
     Some(t::Target {
         media_id: m.id as u32,
-        kind: m.kind.into(),
+        kind: m.kind.as_str().to_owned(),
         family: m.family().into(),
         language: m.want_language.clone(),
         title: m.title.clone(),
         original_title: m.original_title.clone(),
         alternative_titles: m.alt(),
         creators: vec![],
+        edition_ids: vec![],
         year: m.year.map(|y| y as u32),
         runtime_minutes: m.runtime.map(|r| r as u32),
         external_ids: m.external_ids(),
@@ -65,6 +66,8 @@ pub(super) fn group_unit(id: i32, number: i32, count: i64) -> t::Unit {
             group: Some(number as u32),
             number: None,
             end_number: None,
+            label: None,
+            absolute: None,
         },
         group_id: Some(id as u32),
         item_id: None,
@@ -81,6 +84,8 @@ pub(super) fn item_unit(group: (i32, i32), e: &EpisodeRow, count: i64) -> t::Uni
             group: Some(group.1 as u32),
             number: Some(f64::from(e.episode_number)),
             end_number: e.end_episode_number.map(f64::from),
+            label: None,
+            absolute: None,
         },
         item_id: Some(e.id as u32),
         title: e.title.clone(),
@@ -442,10 +447,15 @@ pub async fn candidates(
         items: vec![],
         cursor: None,
     };
-    let Ok(kind) = q.kind.map(MediaKind::try_from).transpose() else {
+    let Ok(kind) = q
+        .kind
+        .as_deref()
+        .map(crate::plugins::served_kind)
+        .transpose()
+    else {
         return Ok(empty());
     };
-    if q.family.is_some_and(|f| Family::try_from(f).is_err()) {
+    if q.family.is_some_and(|f| crate::plugins::served(f).is_err()) {
         return Ok(empty());
     }
     let limit = q.limit.clamp(1, MAX_LIMIT) as usize;

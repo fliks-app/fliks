@@ -157,7 +157,7 @@ async fn install_pipeline_refusals_and_signatures() {
     // Five staged uploads at most; discarding one frees its slot.
     let mut staged = None;
     for i in 0..6 {
-        let mut d = json!({"id": format!("acme.d{i}"),"pluginApi":3,"name":"D","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+        let mut d = json!({"id": format!("acme.d{i}"),"pluginApi":3,"name":"D","version":"1.0.0","fliks":">=5.0.0 <7.0.0",
             "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"});
         d["name"] = json!(format!("D{i}"));
         let (st, r) = h.upload(&data_archive(&d)).await;
@@ -182,7 +182,7 @@ async fn install_pipeline_refusals_and_signatures() {
     );
     let bad = "/api/plugins/import/..%2f..";
     assert_eq!(h.call("DELETE", bad, Some(&h.admin), None).await.0, 400);
-    let d = json!({"id": "acme.d9","pluginApi":3,"name":"D9","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+    let d = json!({"id": "acme.d9","pluginApi":3,"name":"D9","version":"1.0.0","fliks":">=5.0.0 <7.0.0",
         "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"});
     assert_eq!(h.upload(&data_archive(&d)).await.0, 201);
     h.finish().await;
@@ -196,7 +196,7 @@ async fn a_plugin_api_2_package_fails_with_an_actionable_reason() {
         return;
     };
     let h = harness(&s, "api2", |_| {}).await;
-    let d = json!({"id": "acme.old","pluginApi":2,"name":"Old","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+    let d = json!({"id": "acme.old","pluginApi":2,"name":"Old","version":"1.0.0","fliks":">=5.0.0 <7.0.0",
         "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"});
     let (_, report) = h.upload(&data_archive(&d)).await;
     assert_eq!(report["compatible"], false, "{report}");
@@ -227,7 +227,7 @@ async fn config_ownership_and_counts() {
     };
     let h = harness(&s, "owner", |_| {}).await;
     allow_unsigned(&h).await;
-    let sub = json!({"id":"fliks.fixture.sub","pluginApi":3,"name":"Sub","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+    let sub = json!({"id":"fliks.fixture.sub","pluginApi":3,"name":"Sub","version":"1.0.0","fliks":">=5.0.0 <7.0.0",
         "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"});
     assert_eq!(h.install(&data_archive(&sub)).await["status"], "active");
     h.set("plugin.fliks.fixture.sub.secret", "theirs").await;
@@ -500,7 +500,7 @@ async fn sources_catalog_denylist_and_auto_update() {
         .unwrap()
         .push(("/fixture-0.1.0.fkplugin".into(), signed.clone()));
     let entry = |v: &str, sha: &str| {
-        json!({"version": v, "pluginApi": 3, "fliks": ">=5.0.0 <6.0.0",
+        json!({"version": v, "pluginApi": 3, "fliks": ">=5.0.0 <7.0.0",
         "zipUrl": format!("https://localhost:{}/fixture-{v}.fkplugin", cat.port), "sha256": sha})
     };
     let logo = |p: &str| format!("https://localhost:{}/{p}", cat.port);
@@ -1291,7 +1291,7 @@ async fn auto_update_rolls_back_and_holds_new_scopes() {
             a.push((path.clone(), bytes.clone()));
         }
         let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a",
-            "kind": "process", "versions": [{"version": version, "pluginApi": 3, "fliks": ">=5.0.0 <6.0.0",
+            "kind": "process", "versions": [{"version": version, "pluginApi": 3, "fliks": ">=5.0.0 <7.0.0",
             "zipUrl": format!("https://localhost:{}{path}", cat.port), "sha256": archive::sha256_hex(&bytes)}]}]});
         *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
         h.call(
@@ -1411,7 +1411,7 @@ async fn failed_registration_at_boot_updates_at_once() {
         .unwrap()
         .push(("/fixture.fkplugin".into(), bytes.clone()));
     let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a",
-        "kind": "process", "versions": [{"version": "0.1.0", "pluginApi": 3, "fliks": ">=5.0.0 <6.0.0",
+        "kind": "process", "versions": [{"version": "0.1.0", "pluginApi": 3, "fliks": ">=5.0.0 <7.0.0",
         "zipUrl": format!("https://localhost:{}/fixture.fkplugin", cat.port), "sha256": archive::sha256_hex(&bytes)}]}]});
     *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
     let url = format!("https://localhost:{}/catalog.json", cat.port);
