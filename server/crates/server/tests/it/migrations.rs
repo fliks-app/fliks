@@ -1746,3 +1746,30 @@ async fn m1789000140_moves_the_profile_and_availability_onto_wants(pool: PgPool)
     .unwrap();
     assert_eq!(cols, 0);
 }
+
+/// A cascade or restrict check on the parent scans the child unless an index leads with the FK columns;
+/// a partial index is useless to it.
+#[sqlx::test(migrations = false)]
+async fn every_foreign_key_has_a_covering_index(pool: PgPool) {
+    apply(&pool, |_| true).await;
+    let missing: Vec<(String, String, String)> = rows(
+        &pool,
+        r#"
+        SELECT c.conrelid::regclass::text, c.conname,
+               (SELECT string_agg(a.attname, ', ' ORDER BY a.attnum)
+                  FROM pg_attribute a WHERE a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey))
+          FROM pg_constraint c
+         WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace
+           AND NOT EXISTS (
+             SELECT 1 FROM pg_index i
+              WHERE i.indrelid = c.conrelid AND i.indisvalid AND i.indpred IS NULL
+                AND (string_to_array(i.indkey::text, ' ')::int2[])[1:cardinality(c.conkey)] <@ c.conkey
+                AND c.conkey <@ (string_to_array(i.indkey::text, ' ')::int2[])[1:cardinality(c.conkey)])
+         ORDER BY 1, 2"#,
+    )
+    .await;
+    assert!(
+        missing.is_empty(),
+        "foreign keys without a non-partial index led by their columns (table, constraint, columns): {missing:?}"
+    );
+}
