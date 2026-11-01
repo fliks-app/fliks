@@ -9,11 +9,16 @@ INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTy
  (4, '2026-01-01', '2026-01-01', 'Work Series', 'tv', '#222222', '["series"]', '/tmp/fliks-parity/s5-ingest/work/series'),
  (5, '2026-01-01', '2026-01-01', 'Pathless', 'film', '#333333', '["movie"]', NULL);
 INSERT INTO library_user_access ("createdAt", "updatedAt", "libraryId", "userId") VALUES ('2026-01-01', '2026-01-01', 3, 3);
-INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, "tmdbId", overview, status, monitored, "folderName", genres, "libraryId") VALUES
- (101, '2026-01-01', '2026-01-01', 'Work Movie', 2020, 'movie', 5101, 'Work movie', 'released', true, 'Work Movie (2020)', '[]', 3),
- (102, '2026-01-01', '2026-01-01', 'Work Twin', 2020, 'movie', 5102, 'Shares the folder', 'released', true, 'Work Movie (2020)', '[]', 3),
- (103, '2026-01-01', '2026-01-01', 'Work Show', 2021, 'series', 5103, 'Work show', 'continuing', true, 'Work Show', '[]', 4),
- (104, '2026-01-01', '2026-01-01', 'Work Solo', 2019, 'movie', 5104, 'Own folder', 'released', true, 'Work Solo (2019)', '[]', 3);
+INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, overview, status, monitored, "folderName", genres, "libraryId") VALUES
+ (101, '2026-01-01', '2026-01-01', 'Work Movie', 2020, 'movie', 'Work movie', 'released', true, 'Work Movie (2020)', '[]', 3),
+ (102, '2026-01-01', '2026-01-01', 'Work Twin', 2020, 'movie', 'Shares the folder', 'released', true, 'Work Movie (2020)', '[]', 3),
+ (103, '2026-01-01', '2026-01-01', 'Work Show', 2021, 'series', 'Work show', 'continuing', true, 'Work Show', '[]', 4),
+ (104, '2026-01-01', '2026-01-01', 'Work Solo', 2019, 'movie', 'Own folder', 'released', true, 'Work Solo (2019)', '[]', 3);
+INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
+ (101, 'movie', 'tmdb', '5101'),
+ (102, 'movie', 'tmdb', '5102'),
+ (103, 'series', 'tmdb', '5103'),
+ (104, 'movie', 'tmdb', '5104');
 INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "mediaId") VALUES
  (101, '2026-01-01', '2026-01-01', 1, true, 103);
 INSERT INTO episodes (id, "createdAt", "updatedAt", "episodeNumber", title, monitored, "hasFile", "seasonId") VALUES

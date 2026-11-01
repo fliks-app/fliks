@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT title, type AS \"kind!\", \"tmdbId\" AS tmdb, \"tvdbId\" AS tvdb, \"imdbId\" AS imdb,\n                  \"preferredProvider\" AS pref, \"libraryId\" AS lib FROM media WHERE id = $1",
+  "query": "SELECT m.title, m.type AS \"kind!\", ids.tmdb, ids.tvdb, ids.imdb,\n                  m.\"preferredProvider\" AS pref, m.\"libraryId\" AS lib\n           FROM media m\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $3)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $4) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -29,34 +29,19 @@
         "ordinal": 2,
         "name": "tmdb",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "tmdbId"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 3,
         "name": "tvdb",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "tvdbId"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
         "name": "imdb",
-        "type_info": "Varchar",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "imdbId"
-          }
-        }
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
@@ -83,18 +68,21 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
-      true,
-      true,
-      true,
+      null,
+      null,
+      null,
       true,
       true
     ]
   },
-  "hash": "cde2334dada37f47755d2307c63dc944af4c3a5c14e49759f30a9a197d6165c7"
+  "hash": "ba0a75c788965aac6e7a29e7af494a94dbbc5eb62ddb2c01f45a513fafa16056"
 }

@@ -173,9 +173,10 @@ pub(super) async fn movie_targets(
     ids: Option<&[i32]>,
 ) -> sqlx::Result<Vec<(MediaRow, Files, Decision)>> {
     let rows: Vec<MediaRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"{MEDIA_SELECT} WHERE m.monitored AND m.type = 'movie'
+        r#"{} WHERE m.monitored AND m.type = 'movie'
              AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) OR qp."upgradeAllowed")
-             AND ($1::int[] IS NULL OR m.id = ANY($1)) ORDER BY m.id"#
+             AND ($1::int[] IS NULL OR m.id = ANY($1)) ORDER BY m.id"#,
+        media_select()
     )))
     .bind(ids)
     .fetch_all(db)
@@ -233,7 +234,7 @@ pub(super) async fn episode_targets(
     .map(|e| (e.id, e))
     .collect();
     let medias: HashMap<i32, MediaRow> = sqlx::query_as::<_, MediaRow>(sqlx::AssertSqlSafe(
-        format!("{MEDIA_SELECT} WHERE m.id = ANY($1)"),
+        format!("{} WHERE m.id = ANY($1)", media_select()),
     ))
     .bind(&mids)
     .fetch_all(db)

@@ -171,7 +171,9 @@ fn push_scope(
         None => {}
     }
     if p.unidentified {
-        qb.push(" AND media.\"tmdbId\" IS NULL AND media.\"tvdbId\" IS NULL AND media.\"imdbId\" IS NULL");
+        qb.push(
+            " AND NOT EXISTS (SELECT 1 FROM media_external_ids x WHERE x.\"mediaId\" = media.id)",
+        );
     }
     match p
         .letter

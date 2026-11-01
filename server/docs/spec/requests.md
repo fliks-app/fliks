@@ -118,7 +118,7 @@ SELECT r.*, u.id, u.username, u.avatar, ab.id, ab.username, ab.avatar, m.* -- m:
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"
-LEFT JOIN media m ON m."tmdbId" = r."tmdbId" AND m.type::text = r."mediaType"::text
+LEFT JOIN media m ON m.id = (SELECT e."mediaId" FROM media_external_ids e WHERE e.kind = r."mediaType" AND e.provider = 'tmdb' AND e.value = r."tmdbId"::text)
 WHERE <scope> [AND r.status = $st] [AND r.kind = $k] [AND r."tmdbId" = $t] [AND r."mediaType" = $mt]
 ORDER BY r."createdAt" DESC
 LIMIT $limit OFFSET ($page - 1) * $limit; -- plus a COUNT over the same WHERE

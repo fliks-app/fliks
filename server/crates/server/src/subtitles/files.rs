@@ -38,16 +38,24 @@ pub struct MediaCtx {
     pub overview: Option<String>,
 }
 
-const MEDIA_SQL: &str = r#"SELECT m.id, m.title, m."type" AS kind, m.year, m."imdbId" AS imdb_id, m."tmdbId" AS tmdb_id,
+fn media_sql() -> String {
+    format!(
+        r#"SELECT m.id, m.title, m."type" AS kind, m.year, ids.imdb AS imdb_id, ids.tmdb AS tmdb_id,
   m."folderName" AS folder_name, l.path AS library_path, m."libraryId" AS library_id,
   m."languageProfileId" AS language_profile_id, m.monitored, m.genres, m.overview
-  FROM media m LEFT JOIN libraries l ON l.id = m."libraryId""#;
+  FROM media m LEFT JOIN libraries l ON l.id = m."libraryId" {}"#,
+        crate::media::external_ids::ids_join("m")
+    )
+}
 
 pub async fn load_media(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<MediaCtx>> {
-    sqlx::query_as(sqlx::AssertSqlSafe(format!("{MEDIA_SQL} WHERE m.id = $1")))
-        .bind(id)
-        .fetch_optional(db)
-        .await
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{} WHERE m.id = $1",
+        media_sql()
+    )))
+    .bind(id)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn media_batch(
@@ -56,7 +64,8 @@ pub async fn media_batch(
     limit: i64,
 ) -> sqlx::Result<Vec<MediaCtx>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{MEDIA_SQL} WHERE m.monitored = true AND m.id > $1 ORDER BY m.id ASC LIMIT $2"
+        "{} WHERE m.monitored = true AND m.id > $1 ORDER BY m.id ASC LIMIT $2",
+        media_sql()
     )))
     .bind(after)
     .bind(limit)

@@ -9,6 +9,7 @@ use crate::{
     },
     images::paths::{Target, Variant},
     ingest::{MediaRow, load_media, rescan::rescan_files},
+    media::external_ids::{self, Ids},
     metadata::service::{self, Details, EpisodeDetails, Found, SeasonDetails},
     state::AppState,
 };
@@ -263,24 +264,20 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     let d = &found.details;
     sqlx::query!(
         r#"UPDATE media SET title = $2, "originalTitle" = $3, "alternativeTitles" = $4,
-             year = COALESCE($5, year), "tmdbId" = COALESCE($6, "tmdbId"), "tvdbId" = COALESCE($7, "tvdbId"),
-             "imdbId" = COALESCE($8, "imdbId"), overview = COALESCE($9, overview),
-             status = $10::text::media_status_enum, "posterUrl" = COALESCE($11, "posterUrl"),
-             "fanartUrl" = COALESCE($12, "fanartUrl"), "logoUrl" = COALESCE($13, "logoUrl"),
-             rating = COALESCE($14, rating), genres = $15, runtime = COALESCE($16, runtime),
-             "releaseDate" = COALESCE($17::text::date, "releaseDate"), "inCinemas" = COALESCE($18::text::date, "inCinemas"),
-             "digitalRelease" = COALESCE($19::text::date, "digitalRelease"),
-             "physicalRelease" = COALESCE($20::text::date, "physicalRelease"),
-             "tmdbCollectionId" = $21, "tmdbCollectionName" = $22
+             year = COALESCE($5, year), overview = COALESCE($6, overview),
+             status = $7::text::media_status_enum, "posterUrl" = COALESCE($8, "posterUrl"),
+             "fanartUrl" = COALESCE($9, "fanartUrl"), "logoUrl" = COALESCE($10, "logoUrl"),
+             rating = COALESCE($11, rating), genres = $12, runtime = COALESCE($13, runtime),
+             "releaseDate" = COALESCE($14::text::date, "releaseDate"), "inCinemas" = COALESCE($15::text::date, "inCinemas"),
+             "digitalRelease" = COALESCE($16::text::date, "digitalRelease"),
+             "physicalRelease" = COALESCE($17::text::date, "physicalRelease"),
+             "tmdbCollectionId" = $18, "tmdbCollectionName" = $19
            WHERE id = $1"#,
         id,
         d.title,
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
         json!(d.alternative_titles),
         d.year.filter(|y| y.is_finite()).map(|y| y as i32),
-        d.tmdb_id.filter(|t| *t != 0),
-        d.tvdb_id,
-        d.imdb_id,
         d.overview,
         super::map_status(media.media_type, &d.status),
         d.poster_url,
@@ -298,6 +295,23 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     )
     .execute(&st.db)
     .await?;
+    let ids = Ids {
+        tmdb: d.tmdb_id,
+        tvdb: d.tvdb_id,
+        imdb: d.imdb_id.clone(),
+    };
+    let written = ids
+        .fill(&mut *st.db.acquire().await?, id, media.media_type)
+        .await?;
+    if written.gone {
+        return Err(crate::libraries::media_not_found(id));
+    }
+    for p in written.taken {
+        tracing::warn!(
+            "refresh of \"{}\" (#{id}): the {p} id belongs to another title",
+            media.title
+        );
+    }
     download_media_images(st, id, d).await;
     service::persist_credits(st, id, d).await?;
     if media.has_seasons() {
@@ -436,34 +450,45 @@ async fn apply_identity(
             "Provide at least one external id to identify this media against",
         ));
     }
-    if let Some(t) = tmdb.filter(|t| Some(*t) != media.tmdb_id)
-        && let Some(o) = sqlx::query!(
-            r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type = $2 AND id <> $3 LIMIT 1"#,
-            t,
-            media.media_type.as_str(),
-            media.id
-        )
-        .fetch_optional(&st.db)
-        .await?
-    {
+    let ids = Ids { tmdb, tvdb, imdb };
+    let mut tx = st.db.begin().await?;
+    for (p, v) in ids.entries() {
+        let Some(v) = v.filter(|_| p.is_unique()) else {
+            continue;
+        };
+        let other = external_ids::find(&mut *tx, media.media_type, p, &v)
+            .await?
+            .filter(|o| *o != media.id);
+        if let Some(o) = other {
+            let title = sqlx::query_scalar!("SELECT title FROM media WHERE id = $1", o)
+                .fetch_one(&mut *tx)
+                .await?;
+            return Err(AppError::conflict(format!(
+                "\"{title}\" (#{o}) already uses {} id {v} in this library",
+                p.label()
+            )));
+        }
+    }
+    let written = ids.replace(&mut tx, media.id, media.media_type).await?;
+    if written.gone {
+        return Err(crate::libraries::media_not_found(media.id));
+    }
+    if let Some(p) = written.taken.first() {
         return Err(AppError::conflict(format!(
-            "\"{}\" (#{}) already uses TMDB id {t} in this library",
-            o.title, o.id
+            "Another title already uses this {} id in this library",
+            p.label()
         )));
     }
     sqlx::query!(
-        r#"UPDATE media SET "tmdbId" = $2, "tvdbId" = $3, "imdbId" = $4,
-             "preferredProvider" = CASE WHEN $5 THEN $6 ELSE "preferredProvider" END
+        r#"UPDATE media SET "preferredProvider" = CASE WHEN $2 THEN $3 ELSE "preferredProvider" END
            WHERE id = $1"#,
         media.id,
-        tmdb,
-        tvdb,
-        imdb,
         provider.is_some(),
         provider.flatten()
     )
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(())
 }
 

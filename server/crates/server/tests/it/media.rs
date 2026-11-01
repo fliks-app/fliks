@@ -238,3 +238,61 @@ async fn grid_view_keeps_the_first_file_and_counts_the_rest(pool: PgPool) {
     let (s, _) = c.get(&c.admin, "/api/media?view=nope").await;
     assert_eq!(s, 400);
 }
+
+#[sqlx::test(migrations = false)]
+async fn put_sets_clears_and_scopes_the_external_ids(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let put = async |id: i32, body: Value| {
+        c.send("PUT", &c.admin, &format!("/api/media/{id}"), Some(body))
+            .await
+    };
+    let (s, m) = put(1, json!({"tmdbId": 603, "imdbId": "tt0133093"})).await;
+    assert_eq!(
+        (s, &m["tmdbId"], &m["imdbId"], &m["tvdbId"]),
+        (200, &json!(603), &json!("tt0133093"), &Value::Null)
+    );
+    // The same number names a title of another kind, never a second one of the same kind.
+    assert_eq!(put(2, json!({"tmdbId": 603})).await.0, 409);
+    assert_eq!(
+        put(2, json!({"tmdbId": 604, "type": "series"})).await.0,
+        200
+    );
+    assert_eq!(
+        put(3, json!({"tmdbId": 603, "type": "series"})).await.0,
+        200
+    );
+    // An IMDb id is not unique.
+    assert_eq!(put(2, json!({"imdbId": "tt0133093"})).await.0, 200);
+    // A type change moves the ids with the media: it clashes with media 3's 603.
+    assert_eq!(put(1, json!({"type": "series"})).await.0, 409);
+    let (s, m) = put(1, json!({"tmdbId": null, "imdbId": null})).await;
+    assert_eq!(
+        (s, &m["tmdbId"], &m["imdbId"]),
+        (200, &Value::Null, &Value::Null)
+    );
+    let left: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(left, 0);
+    // An empty IMDb id clears the id.
+    assert_eq!(put(1, json!({"imdbId": "tt9"})).await.1["imdbId"], "tt9");
+    let (s, m) = put(1, json!({"imdbId": ""})).await;
+    assert_eq!((s, &m["imdbId"]), (200, &Value::Null));
+    assert_eq!(put(1, json!({"type": "series"})).await.0, 200);
+}
+
+#[sqlx::test(migrations = false)]
+async fn removing_a_media_removes_its_external_ids(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    c.send("PUT", &c.admin, "/api/media/4", Some(json!({"tmdbId": 9})))
+        .await;
+    let (s, _) = c.send("DELETE", &c.admin, "/api/media/4", None).await;
+    assert_eq!(s, 200);
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM media_external_ids")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}

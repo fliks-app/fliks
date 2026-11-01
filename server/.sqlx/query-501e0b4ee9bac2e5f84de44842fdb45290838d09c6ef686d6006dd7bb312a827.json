@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT pi.id AS item_id, pi.position, pi.\"addedById\" AS added_by_id,\n                  to_jsonb(m) - 'searchVector' AS \"media!: Jsonb<Value>\",\n                  to_jsonb(l) AS \"library!: Jsonb<Value>\",\n                  to_jsonb(q) AS \"quality: Jsonb<Value>\",\n                  to_jsonb(lp) AS \"language: Jsonb<Value>\",\n                  to_jsonb(md) - 'mediaId' AS \"metadata: Jsonb<Value>\",\n                  to_jsonb(e) - 'searchVector' AS \"episode: Jsonb<Value>\",\n                  to_jsonb(s) AS \"season: Jsonb<Value>\",\n                  ps.completed AS \"completed?\", ps.\"positionSeconds\" AS \"position_seconds?\",\n                  ps.\"durationSeconds\" AS duration_seconds\n           FROM playlist_items pi\n           JOIN media m ON m.id = pi.\"mediaId\"\n           JOIN libraries l ON l.id = m.\"libraryId\" AND l.id = ANY($2)\n           LEFT JOIN quality_profiles q ON q.id = m.\"qualityProfileId\"\n           LEFT JOIN language_profiles lp ON lp.id = m.\"languageProfileId\"\n           LEFT JOIN media_metadata md ON md.\"mediaId\" = m.id\n           LEFT JOIN episodes e ON e.id = pi.\"episodeId\"\n           LEFT JOIN seasons s ON s.id = e.\"seasonId\"\n           LEFT JOIN playback_states ps ON ps.\"userId\" = $3 AND (\n                (pi.\"episodeId\" IS NULL AND ps.\"mediaId\" = pi.\"mediaId\" AND ps.\"episodeId\" IS NULL)\n                OR (pi.\"episodeId\" IS NOT NULL AND ps.\"episodeId\" = pi.\"episodeId\"))\n           WHERE pi.\"playlistId\" = $1\n           ORDER BY pi.position, pi.id",
+  "query": "SELECT pi.id AS item_id, pi.position, pi.\"addedById\" AS added_by_id,\n                  (to_jsonb(m) - 'searchVector') || jsonb_build_object(\n                    'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb) AS \"media!: Jsonb<Value>\",\n                  to_jsonb(l) AS \"library!: Jsonb<Value>\",\n                  to_jsonb(q) AS \"quality: Jsonb<Value>\",\n                  to_jsonb(lp) AS \"language: Jsonb<Value>\",\n                  to_jsonb(md) - 'mediaId' AS \"metadata: Jsonb<Value>\",\n                  to_jsonb(e) - 'searchVector' AS \"episode: Jsonb<Value>\",\n                  to_jsonb(s) AS \"season: Jsonb<Value>\",\n                  ps.completed AS \"completed?\", ps.\"positionSeconds\" AS \"position_seconds?\",\n                  ps.\"durationSeconds\" AS duration_seconds\n           FROM playlist_items pi\n           JOIN media m ON m.id = pi.\"mediaId\"\n           JOIN libraries l ON l.id = m.\"libraryId\" AND l.id = ANY($2)\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $4)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $5)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $6) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           LEFT JOIN quality_profiles q ON q.id = m.\"qualityProfileId\"\n           LEFT JOIN language_profiles lp ON lp.id = m.\"languageProfileId\"\n           LEFT JOIN media_metadata md ON md.\"mediaId\" = m.id\n           LEFT JOIN episodes e ON e.id = pi.\"episodeId\"\n           LEFT JOIN seasons s ON s.id = e.\"seasonId\"\n           LEFT JOIN playback_states ps ON ps.\"userId\" = $3 AND (\n                (pi.\"episodeId\" IS NULL AND ps.\"mediaId\" = pi.\"mediaId\" AND ps.\"episodeId\" IS NULL)\n                OR (pi.\"episodeId\" IS NOT NULL AND ps.\"episodeId\" = pi.\"episodeId\"))\n           WHERE pi.\"playlistId\" = $1\n           ORDER BY pi.position, pi.id",
   "describe": {
     "columns": [
       {
@@ -116,7 +116,10 @@
       "Left": [
         "Int4",
         "Int4Array",
-        "Int4"
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -135,5 +138,5 @@
       true
     ]
   },
-  "hash": "fc84f61ceca2c4272781a862815eeefe7187a9e803ae0bfbdec0c0c322606503"
+  "hash": "501e0b4ee9bac2e5f84de44842fdb45290838d09c6ef686d6006dd7bb312a827"
 }

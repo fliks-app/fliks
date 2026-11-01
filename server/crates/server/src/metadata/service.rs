@@ -1,7 +1,7 @@
 //! What the media services read from the providers and write back (`media-write.md` rules 16, 17, 53-58):
 //! provider choice per library, media and season, cross-references, season overrides and credits.
 use super::{Override, Provider, Upstream};
-use crate::{http::AppError, state::AppState};
+use crate::{http::AppError, media::external_ids, state::AppState};
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::metadata::language::Resolved;
 use serde_json::Value;
@@ -349,9 +349,18 @@ impl Row {
 
 async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
     let r = sqlx::query!(
-        r#"SELECT title, type AS "kind!", "tmdbId" AS tmdb, "tvdbId" AS tvdb, "imdbId" AS imdb,
-                  "preferredProvider" AS pref, "libraryId" AS lib FROM media WHERE id = $1"#,
-        id
+        r#"SELECT m.title, m.type AS "kind!", ids.tmdb, ids.tvdb, ids.imdb,
+                  m."preferredProvider" AS pref, m."libraryId" AS lib
+           FROM media m
+           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $3)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $4) AS imdb
+           FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+           WHERE m.id = $1"#,
+        id,
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_optional(&st.db)
     .await?
@@ -370,20 +379,19 @@ async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
 
 type Source = (Provider, String);
 
-async fn set_external(st: &AppState, id: i32, p: Provider, ext: i32) -> Result<(), sqlx::Error> {
-    match p {
-        Provider::Tmdb => {
-            sqlx::query!(r#"UPDATE media SET "tmdbId" = $2 WHERE id = $1"#, id, ext)
-                .execute(&st.db)
-                .await
-        }
-        Provider::Tvdb => {
-            sqlx::query!(r#"UPDATE media SET "tvdbId" = $2 WHERE id = $1"#, id, ext)
-                .execute(&st.db)
-                .await
-        }
+/// Links a cross-referenced id; one another media of the kind holds stays with that media.
+async fn set_external(st: &AppState, m: &Row, p: Provider, ext: i32) -> Result<(), sqlx::Error> {
+    let mut c = st.db.acquire().await?;
+    match external_ids::link(&mut c, m.id, m.kind, p.external(), &ext.to_string()).await? {
+        external_ids::Link::Taken => tracing::warn!(
+            "crossRef: {} - {} id {ext} belongs to another title",
+            m.label(),
+            p.name()
+        ),
+        external_ids::Link::Gone => tracing::info!("crossRef: {} was removed", m.label()),
+        external_ids::Link::Linked => {}
     }
-    .map(drop)
+    Ok(())
 }
 
 /// The id `p` knows `m` by, cross-referencing through the other provider (and writing it back).
@@ -415,14 +423,14 @@ async fn external_id_for(
                 && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tvdbId={id} via IMDB");
-                set_external(st, m.id, p, n).await?;
+                set_external(st, m, p, n).await?;
                 return Ok(Some(id));
             }
             if let Some(tmdb) = m.tmdb_id.filter(|t| *t != 0) {
                 let d = read_details(st, Provider::Tmdb, m.kind, &tmdb.to_string(), lang).await?;
                 if let Some(tvdb) = d.tvdb_id.filter(|t| *t != 0) {
                     tracing::info!("crossRef: {label} - found tvdbId={tvdb} via TMDB");
-                    set_external(st, m.id, p, tvdb).await?;
+                    set_external(st, m, p, tvdb).await?;
                     return Ok(Some(tvdb.to_string()));
                 }
             }
@@ -433,7 +441,7 @@ async fn external_id_for(
                 && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tmdbId={id} via IMDB");
-                set_external(st, m.id, p, n).await?;
+                set_external(st, m, p, n).await?;
                 return Ok(Some(id));
             }
             if let Some(tvdb) = m.tvdb_id.filter(|t| *t != 0)
@@ -441,7 +449,7 @@ async fn external_id_for(
                 && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tmdbId={id} via TVDB");
-                set_external(st, m.id, p, n).await?;
+                set_external(st, m, p, n).await?;
                 return Ok(Some(id));
             }
         }

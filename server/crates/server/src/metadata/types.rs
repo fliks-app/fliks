@@ -1,5 +1,6 @@
 //! Shapes the clients share with their callers (`metadata.md` rules 6, 10, 34).
 use super::http::Upstream;
+use fliks_domain::external_id::ExternalProvider;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +14,13 @@ impl Provider {
         match self {
             Self::Tmdb => "tmdb",
             Self::Tvdb => "tvdb",
+        }
+    }
+
+    pub fn external(self) -> ExternalProvider {
+        match self {
+            Self::Tmdb => ExternalProvider::Tmdb,
+            Self::Tvdb => ExternalProvider::Tvdb,
         }
     }
 

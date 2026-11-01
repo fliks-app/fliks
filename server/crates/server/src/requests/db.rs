@@ -1,4 +1,5 @@
 //! Queries of the `requests`, `request_comments` and `auto_approval_rules` tables (`requests.md` SQL section).
+use crate::media::external_ids;
 use fliks_domain::media::kind::MediaKind;
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool, types::Json};
@@ -212,9 +213,11 @@ pub async fn media_by_tmdb(
         r#"SELECT id, type AS "media_type!", "libraryId" AS library_id,
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "posterUrl" AS poster_url, "fanartUrl" AS fanart_url
-        FROM media WHERE "tmdbId" = $1 AND type = $2"#,
+        FROM media WHERE id = (SELECT "mediaId" FROM media_external_ids
+          WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
         tmdb_id,
-        media_type.as_str()
+        media_type.as_str(),
+        external_ids::TMDB
     )
     .fetch_optional(db)
     .await?
@@ -704,7 +707,7 @@ pub async fn rows(
   'media', CASE WHEN m.id IS NULL THEN 'null'::jsonb ELSE
     jsonb_build_object('id', m.id, 'createdAt', iso_ms(m."createdAt"), 'updatedAt', iso_ms(m."updatedAt"),
       'title', m.title, 'originalTitle', m."originalTitle", 'alternativeTitles', m."alternativeTitles",
-      'year', m.year, 'type', m.type, 'tmdbId', m."tmdbId", 'imdbId', m."imdbId", 'tvdbId', m."tvdbId",
+      'year', m.year, 'type', m.type, 'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
       'overview', m.overview, 'status', m.status::text, 'monitored', m.monitored,
       'libraryId', m."libraryId", 'preferredProvider', m."preferredProvider", 'folderName', m."folderName",
       'posterUrl', m."posterUrl", 'metadataRefreshedAt', iso_ms(m."metadataRefreshedAt"),
@@ -719,7 +722,12 @@ pub async fn rows(
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"
-LEFT JOIN media m ON m."tmdbId" = r."tmdbId" AND m.type = r."mediaType"
+LEFT JOIN media m ON m.id = (SELECT e."mediaId" FROM media_external_ids e
+  WHERE e.kind = r."mediaType" AND e.provider = $10 AND e.value = r."tmdbId"::text)
+LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $10)::int AS tmdb,
+  max(value) FILTER (WHERE provider = $11)::int AS tvdb,
+  max(value) FILTER (WHERE provider = $12) AS imdb
+  FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
@@ -733,7 +741,10 @@ ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.tmdb_id,
         f.media_type.map(MediaKind::as_str),
         limit,
-        offset
+        offset,
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_all(db)
     .await

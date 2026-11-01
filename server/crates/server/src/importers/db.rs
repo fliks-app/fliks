@@ -1,7 +1,30 @@
 //! Queries of the importers (`importers.md` SQL 1-7).
-use fliks_domain::media::kind::MediaKind;
+use crate::media::external_ids::{self, Ids};
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
+
+/// A media write that failed: the database, or an id another title of the kind already holds.
+#[derive(Debug)]
+pub enum WriteError {
+    Db(sqlx::Error),
+    Held(ExternalProvider),
+}
+
+impl From<sqlx::Error> for WriteError {
+    fn from(e: sqlx::Error) -> Self {
+        Self::Db(e)
+    }
+}
+
+impl std::fmt::Display for WriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Db(e) => e.fmt(f),
+            Self::Held(p) => write!(f, "the {p} id already belongs to another title"),
+        }
+    }
+}
 
 pub struct Library {
     pub id: i32,
@@ -48,10 +71,20 @@ pub async fn media_by_tmdb(
 ) -> sqlx::Result<Option<Existing>> {
     sqlx::query_as!(
         Existing,
-        r#"SELECT id, year, monitored, "imdbId" AS imdb_id, overview, "qualityProfileId" AS quality_profile_id
-           FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
+        r#"SELECT m.id, m.year, m.monitored, ids.imdb AS imdb_id, m.overview,
+                  m."qualityProfileId" AS quality_profile_id
+           FROM media m
+           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $4)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $5) AS imdb
+             FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+           WHERE m.id = (SELECT "mediaId" FROM media_external_ids
+             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
         tmdb_id,
-        media_type.as_str()
+        media_type.as_str(),
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_optional(db)
     .await
@@ -71,26 +104,35 @@ pub struct NewMedia<'a> {
     pub quality_profile_id: Option<i32>,
 }
 
-pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> sqlx::Result<i32> {
-    sqlx::query_scalar!(
-        r#"INSERT INTO media (title, "tmdbId", year, type, status, monitored, "libraryId", "folderName",
-                              "imdbId", overview, "qualityProfileId")
-           VALUES ($1, $2, $3, $4, $5::text::media_status_enum, $6, $7, $8, $9, $10, $11)
+pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteError> {
+    let mut tx = db.begin().await?;
+    let id = sqlx::query_scalar!(
+        r#"INSERT INTO media (title, year, type, status, monitored, "libraryId", "folderName",
+                              overview, "qualityProfileId")
+           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $6, $7, $8, $9)
            RETURNING id"#,
         m.title,
-        m.tmdb_id,
         m.year,
         m.media_type.as_str(),
         m.status,
         m.monitored,
         m.library_id,
         m.folder_name,
-        m.imdb_id,
         m.overview,
         m.quality_profile_id
     )
-    .fetch_one(db)
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    let ids = Ids {
+        tmdb: Some(m.tmdb_id),
+        imdb: m.imdb_id.map(str::to_owned),
+        ..Ids::default()
+    };
+    if let Some(p) = ids.fill(&mut tx, id, m.media_type).await?.taken.first() {
+        return Err(WriteError::Held(*p));
+    }
+    tx.commit().await?;
+    Ok(id)
 }
 
 pub struct MediaUpdate<'a> {
@@ -104,23 +146,35 @@ pub struct MediaUpdate<'a> {
     pub library_id: i32,
 }
 
-pub async fn update_media(db: &PgPool, m: &MediaUpdate<'_>) -> sqlx::Result<()> {
+pub async fn update_media(
+    db: &PgPool,
+    kind: MediaKind,
+    m: &MediaUpdate<'_>,
+) -> Result<(), WriteError> {
+    let mut tx = db.begin().await?;
     sqlx::query!(
-        r#"UPDATE media SET title = $2, year = $3, "folderName" = $4, "imdbId" = $5,
-                  overview = $6, "qualityProfileId" = $7, "libraryId" = $8, "updatedAt" = now()
+        r#"UPDATE media SET title = $2, year = $3, "folderName" = $4,
+                  overview = $5, "qualityProfileId" = $6, "libraryId" = $7, "updatedAt" = now()
            WHERE id = $1"#,
         m.id,
         m.title,
         m.year,
         m.folder_name,
-        m.imdb_id,
         m.overview,
         m.quality_profile_id,
         m.library_id
     )
-    .execute(db)
-    .await
-    .map(drop)
+    .execute(&mut *tx)
+    .await?;
+    let ids = Ids {
+        imdb: m.imdb_id.map(str::to_owned),
+        ..Ids::default()
+    };
+    if let Some(p) = ids.fill(&mut tx, m.id, kind).await?.taken.first() {
+        return Err(WriteError::Held(*p));
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 /// Local profiles, id ascending (the last of a duplicate name wins).
@@ -161,8 +215,11 @@ pub async fn series_by_tmdb(db: &PgPool, tmdb_id: i32) -> sqlx::Result<Option<Se
         Series,
         r#"SELECT m.id, l.path AS library_path, m."folderName" AS folder_name
            FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
-           WHERE m."tmdbId" = $1 AND m.type = 'series' LIMIT 1"#,
-        tmdb_id
+           WHERE m.id = (SELECT "mediaId" FROM media_external_ids
+             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
+        tmdb_id,
+        MediaKind::Series.as_str(),
+        external_ids::TMDB
     )
     .fetch_optional(db)
     .await

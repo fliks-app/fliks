@@ -10,6 +10,7 @@ pub mod transfer;
 #[cfg(test)]
 mod tests;
 
+use crate::media::external_ids;
 use crate::state::AppState;
 use crate::sync::MutexExt;
 use fliks_domain::{
@@ -101,11 +102,19 @@ impl MediaRow {
 pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::Error> {
     let Some(r) = sqlx::query!(
         r#"SELECT m.id, m.title, m."originalTitle" AS original_title, m.year, m.type AS "media_type!",
-                  m."tmdbId" AS tmdb_id, m."tvdbId" AS tvdb_id, m."imdbId" AS imdb_id, m.monitored,
+                  ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, ids.imdb AS imdb_id, m.monitored,
                   m."folderName" AS folder_name, m."libraryId" AS library_id, l.name AS "library_name?",
                   l.path AS "library_path?", l."mediaTypes" AS "library_types?"
-           FROM media m LEFT JOIN libraries l ON l.id = m."libraryId" WHERE m.id = $1"#,
-        id
+           FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
+           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $3)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $4) AS imdb
+           FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+           WHERE m.id = $1"#,
+        id,
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_optional(db)
     .await?

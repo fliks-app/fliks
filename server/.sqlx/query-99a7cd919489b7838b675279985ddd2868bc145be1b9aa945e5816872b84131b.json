@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id AS \"id!\", type AS \"kind!\", \"tmdbId\" AS \"ext!\" FROM media\n                   WHERE \"tmdbId\" = ANY($1) AND \"libraryId\" = ANY($2) ORDER BY id ASC",
+  "query": "SELECT m.id AS \"id!\", m.type AS \"kind!\", e.value::int AS \"ext!\"\n               FROM media_external_ids e JOIN media m ON m.id = e.\"mediaId\"\n               WHERE e.provider = $3 AND e.value = ANY($1) AND m.\"libraryId\" = ANY($2)\n               ORDER BY m.id ASC",
   "describe": {
     "columns": [
       {
@@ -29,25 +29,21 @@
         "ordinal": 2,
         "name": "ext!",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "tmdbId"
-          }
-        }
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
+        "TextArray",
         "Int4Array",
-        "Int4Array"
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
-      true
+      null
     ]
   },
-  "hash": "dc3f62ea81c995657ed0efce307f3644e1c6f057051da18c2e79b790e0d793c0"
+  "hash": "99a7cd919489b7838b675279985ddd2868bc145be1b9aa945e5816872b84131b"
 }

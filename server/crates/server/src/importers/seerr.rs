@@ -218,9 +218,11 @@ impl Run<'_> {
         let user = self.user(username).await.map_err(db_err)?;
         if !self.media.contains_key(&(media_type, tmdb)) {
             let row = sqlx::query!(
-                r#"SELECT id, title FROM media WHERE "tmdbId" = $1 AND type = $2 LIMIT 1"#,
+                r#"SELECT id, title FROM media WHERE id = (SELECT "mediaId" FROM media_external_ids
+                     WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
                 tmdb,
-                media_type.as_str()
+                media_type.as_str(),
+                crate::media::external_ids::TMDB
             )
             .fetch_optional(self.db)
             .await

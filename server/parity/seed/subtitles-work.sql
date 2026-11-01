@@ -6,9 +6,14 @@ INSERT INTO language_profiles (id, "createdAt", "updatedAt", name, "audioLanguag
 INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", path) VALUES
  (3, '2026-01-01', '2026-01-01', 'Work Movies', 'film', '#111111', '["movie"]', '/tmp/fliks-parity/s6/subtitles-work/movies'),
  (4, '2026-01-01', '2026-01-01', 'Work Series', 'tv', '#222222', '["series"]', '/tmp/fliks-parity/s6/subtitles-work/series');
-INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, "tmdbId", "imdbId", overview, status, monitored, "folderName", genres, "libraryId", "languageProfileId") VALUES
- (101, '2026-01-01', '2026-01-01', 'Work Movie', 2020, 'movie', 5101, 'tt9000101', 'Work movie', 'released', true, 'Work Movie (2020)', '[]', 3, 2),
- (103, '2026-01-01', '2026-01-01', 'Work Show', 2021, 'series', 5103, 'tt9000103', 'Work show', 'continuing', true, 'Work Show', '[]', 4, 2);
+INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, overview, status, monitored, "folderName", genres, "libraryId", "languageProfileId") VALUES
+ (101, '2026-01-01', '2026-01-01', 'Work Movie', 2020, 'movie', 'Work movie', 'released', true, 'Work Movie (2020)', '[]', 3, 2),
+ (103, '2026-01-01', '2026-01-01', 'Work Show', 2021, 'series', 'Work show', 'continuing', true, 'Work Show', '[]', 4, 2);
+INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
+ (101, 'movie', 'tmdb', '5101'),
+ (101, 'movie', 'imdb', 'tt9000101'),
+ (103, 'series', 'tmdb', '5103'),
+ (103, 'series', 'imdb', 'tt9000103');
 INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "mediaId") VALUES
  (101, '2026-01-01', '2026-01-01', 1, true, 103);
 INSERT INTO episodes (id, "createdAt", "updatedAt", "episodeNumber", title, monitored, "hasFile", "seasonId") VALUES

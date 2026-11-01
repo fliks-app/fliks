@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_external_ids (\"mediaId\", kind, provider, value)\n           SELECT $1::int4, $2::text, $3::text, $4::text\n           WHERE NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids\n                                     WHERE kind = $2 AND provider = $3 AND value = $4 AND \"mediaId\" <> $1))\n           ON CONFLICT (\"mediaId\", provider) DO UPDATE SET value = EXCLUDED.value",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16a299a07b74e01d4da78af2ef01a2fbbcf91174cdd5b652af5a71b286d49fb5"
+}

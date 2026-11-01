@@ -662,7 +662,7 @@
                 "Comedy"
               ],
               "id": 28,
-              "imdbId": "",
+              "imdbId": null,
               "inCinemas": null,
               "languageProfile": null,
               "languageProfileId": null,

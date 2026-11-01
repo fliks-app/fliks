@@ -1,7 +1,7 @@
 # HTTP parity
 
 Scenarios replayed against `fliks-server`. A behaviour change edits the `expect`s it affects. Local only.
-Needs docker (`fliks-postgres-1`), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
+Needs docker (a PostgreSQL container, `fliks-postgres-1` unless `PARITY_PG` names another), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
 
 ## Run everything
 
@@ -35,7 +35,7 @@ python3 external/livetv/server.py 4961 &     # livetv scenarios: PARITY_LIVETV=h
 From `server/`, with the `CARGO_*` env of `CLAUDE.md`:
 
 ```bash
-cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring>
+cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring> [<substring>...]
 PARITY_RECORD=1 cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture   # fills only the steps without `expect`
 ```
 

@@ -110,8 +110,7 @@ pub async fn ctx(pool: PgPool) -> Ctx {
     )
     .await;
     let media: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media (title, "type", year, "imdbId", "tmdbId", "libraryId", "folderName", "languageProfileId")
-           VALUES ('Movie', 'movie', 2020, 'tt0000001', 42, $1, 'Movie (2020)', $2) RETURNING id"#,
+        r#"WITH m AS (INSERT INTO media (title, "type", year, "libraryId", "folderName", "languageProfileId") VALUES ('Movie', 'movie', 2020, $1, 'Movie (2020)', $2) RETURNING id, type), x AS (INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('imdb', 'tt0000001'), ('tmdb', '42')) AS p(provider, value)) SELECT id FROM m"#,
     )
     .bind(lib)
     .bind(profile)

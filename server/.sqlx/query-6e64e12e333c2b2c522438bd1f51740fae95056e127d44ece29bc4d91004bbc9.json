@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, year, monitored, \"imdbId\" AS imdb_id, overview, \"qualityProfileId\" AS quality_profile_id\n           FROM media WHERE \"tmdbId\" = $1 AND type = $2 LIMIT 1",
+  "query": "SELECT m.id, m.year, m.monitored, ids.imdb AS imdb_id, m.overview,\n                  m.\"qualityProfileId\" AS quality_profile_id\n           FROM media m\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $4)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $5) AS imdb\n             FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = (SELECT \"mediaId\" FROM media_external_ids\n             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)",
   "describe": {
     "columns": [
       {
@@ -39,13 +39,8 @@
       {
         "ordinal": 3,
         "name": "imdb_id",
-        "type_info": "Varchar",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "imdbId"
-          }
-        }
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
@@ -73,6 +68,9 @@
     "parameters": {
       "Left": [
         "Int4",
+        "Text",
+        "Text",
+        "Text",
         "Text"
       ]
     },
@@ -80,10 +78,10 @@
       false,
       true,
       false,
-      true,
+      null,
       true,
       true
     ]
   },
-  "hash": "547adbd93f381c88542afec835e4cb14c65841e28fdf7a3f41d711341a6f864c"
+  "hash": "6e64e12e333c2b2c522438bd1f51740fae95056e127d44ece29bc4d91004bbc9"
 }

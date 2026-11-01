@@ -1,4 +1,5 @@
 //! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust.
+use super::external_ids;
 use fliks_domain::{media::path::media_path, track_markers};
 use serde_json::Value;
 use sqlx::PgPool;
@@ -21,8 +22,9 @@ pub async fn items_view(
   (jsonb_build_object(
     'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
     'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
-    'year', media.year, 'type', media.type, 'tmdbId', media."tmdbId", 'imdbId', media."imdbId",
-    'tvdbId', media."tvdbId", 'overview', media.overview, 'status', media.status::text,
+    'year', media.year, 'type', media.type, 'tmdbId', ids.tmdb,
+    'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
+    'overview', media.overview, 'status', media.status::text,
     'monitored', media.monitored, 'preferredProvider', media."preferredProvider", 'folderName', media."folderName",
     'posterUrl', media."posterUrl", 'fanartUrl', media."fanartUrl", 'logoUrl', media."logoUrl")
   || jsonb_build_object(
@@ -66,6 +68,10 @@ FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
 LEFT JOIN quality_profiles qp ON qp.id = media."qualityProfileId"
 LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"
+LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $4)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $5) AS imdb
+           FROM media_external_ids WHERE "mediaId" = media.id) ids ON true
 LEFT JOIN LATERAL (
   SELECT COUNT(e.id) AS total,
          COUNT(e.id) FILTER (WHERE (e."hasFile" = true OR EXISTS (
@@ -76,7 +82,10 @@ LEFT JOIN LATERAL (
   WHERE s."mediaId" = media.id AND s."seasonNumber" > 0) st ON media.type = 'series'
 WHERE media.id = ANY($1)"#,
         ids,
-        grid
+        grid,
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_all(db)
     .await?;
