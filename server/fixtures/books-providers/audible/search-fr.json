@@ -1,0 +1,134 @@
+{
+ "product_filters": [],
+ "products": [
+  {
+   "asset_details": [
+    {
+     "attributes": {},
+     "name": "audio-discovery"
+    }
+   ],
+   "available_codecs": [
+    {
+     "enhanced_codec": "LC_64_22050_stereo",
+     "format": "Enhanced",
+     "is_kindle_enhanced": true,
+     "name": "aax_22_64"
+    }
+   ],
+   "content_type": "Product",
+   "has_children": true,
+   "is_adult_product": false,
+   "is_buyable": true,
+   "is_listenable": true,
+   "is_pdf_url_available": false,
+   "is_preorderable": false,
+   "is_vvab": false,
+   "is_world_rights": false,
+   "format_type": "unabridged",
+   "plans": [
+    {
+     "end_date": "2099-12-31T00:00:00.00000Z",
+     "plan_name": "AccessViaMusic",
+     "start_date": "1970-01-01T00:00:00.00000Z"
+    }
+   ],
+   "product_state": "AVAILABLE",
+   "sku": "BK_XXXX_000001",
+   "sku_lite": "BK_XXXX_000001",
+   "read_along_support": "false",
+   "social_media_images": {
+    "facebook": "https://m.media-amazon.com/images/I/aaaaaaaaaaL._SL10_UR1600,800.jpg"
+   },
+   "asin": "B0QZ7LM4NV",
+   "authors": [
+    {
+     "asin": "B0QZ7AUTH1",
+     "name": "Maëlis Quenotte"
+    }
+   ],
+   "audible_editors_summary": "<p>Resume editorial.</p>",
+   "category_ladders": [
+    {
+     "ladder": [
+      {
+       "id": "2000000001",
+       "name": "Jeunesse"
+      }
+     ],
+     "root": "Genres"
+    }
+   ],
+   "content_delivery_type": "MultiPartBook",
+   "copyright": "©2019 Maëlis Quenotte (P)2020 Brindle Audio House",
+   "date_first_available": "2020-05-11",
+   "isbn": "9782999000049",
+   "issue_date": "2020-05-11",
+   "language": "french",
+   "narrators": [
+    {
+     "name": "Odalric Menvieux"
+    },
+    {
+     "name": "Perrine Hallavant"
+    }
+   ],
+   "product_images": {
+    "1024": "https://m.media-amazon.com/images/I/bbbbbbbbbb._SL1024_.jpg",
+    "500": "https://m.media-amazon.com/images/I/bbbbbbbbbb._SL500_.jpg"
+   },
+   "publication_name": "Chroniques d'Ombrelune",
+   "publisher_name": "Brindle Audio House",
+   "publisher_summary": "Une cartographe sans carte.",
+   "rating": {
+    "num_reviews": 1493,
+    "overall_distribution": {
+     "average_rating": 4.418827597045419,
+     "display_average_rating": "4.4",
+     "display_stars": 4.5,
+     "num_five_star_ratings": 1493,
+     "num_four_star_ratings": 1,
+     "num_one_star_ratings": 0,
+     "num_ratings": 1493,
+     "num_three_star_ratings": 0,
+     "num_two_star_ratings": 0
+    }
+   },
+   "release_date": "2020-05-11",
+   "runtime_length_min": 501,
+   "series": [
+    {
+     "asin": "B0QZ7SER02",
+     "sequence": "2",
+     "title": "Chroniques d'Ombrelune",
+     "url": "/pd/x/B0QZ7SER02"
+    },
+    {
+     "asin": "B0QZ7SER03",
+     "sequence": "II",
+     "title": "Le Monde d'Ombrelune",
+     "url": "/pd/x/B0QZ7SER03"
+    }
+   ],
+   "subtitle": "Chroniques d'Ombrelune 2",
+   "title": "La Cartographe des Brumes",
+   "thesaurus_subject_keywords": [
+    "literature-and-fiction"
+   ]
+  }
+ ],
+ "response_groups": [
+  "customer_rights",
+  "product_desc",
+  "always-returned",
+  "product_extended_attrs",
+  "contributors",
+  "series",
+  "rating",
+  "media",
+  "category_ladders",
+  "product_attrs",
+  "product_details"
+ ],
+ "total_results": 997
+}

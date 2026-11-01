@@ -1,0 +1,33 @@
+{
+ "asin": "B0QZ7LM4NV",
+ "brandIntroDurationMs": 2000,
+ "brandOutroDurationMs": 5000,
+ "chapters": [
+  {
+   "lengthMs": 60000,
+   "startOffsetMs": 0,
+   "startOffsetSec": 0,
+   "title": "Crédits"
+  },
+  {
+   "lengthMs": 1800500,
+   "startOffsetMs": 60000,
+   "startOffsetSec": 60,
+   "title": "La rue des Lampistes"
+  },
+  {
+   "lengthMs": 900000,
+   "startOffsetMs": 1860500,
+   "startOffsetSec": 1860,
+   "title": ""
+  },
+  {
+   "startOffsetMs": 2760500,
+   "title": "Sans durée"
+  }
+ ],
+ "isAccurate": true,
+ "region": "fr",
+ "runtimeLengthMs": 2760500,
+ "runtimeLengthSec": 2760
+}

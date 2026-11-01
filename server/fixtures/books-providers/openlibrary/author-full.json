@@ -1,0 +1,53 @@
+{
+ "birth_date": "31 July 1975",
+ "death_date": "2 May 2051",
+ "fuller_name": "Maëlis Aubrane Quenotte",
+ "photos": [
+  9900005,
+  -1
+ ],
+ "links": [
+  {
+   "title": "Site",
+   "url": "https://example.org/",
+   "type": {
+    "key": "/type/link"
+   }
+  }
+ ],
+ "entity_type": "person",
+ "personal_name": "Maëlis Quenotte",
+ "title": "Dr",
+ "key": "/authors/OL9100001A",
+ "bio": {
+  "type": "/type/text",
+  "value": "Autrice née à Ombrelune. <i>Romancière</i> et cartographe."
+ },
+ "source_records": [
+  "amazon:0000000000"
+ ],
+ "alternate_names": [
+  "M. Quenotte",
+  "Maelis Quenotte"
+ ],
+ "remote_ids": {
+  "viaf": "100000001",
+  "isni": "0000000099999991",
+  "wikidata": "Q0",
+  "empty": ""
+ },
+ "type": {
+  "key": "/type/author"
+ },
+ "name": "Maëlis Quenotte",
+ "latest_revision": 7,
+ "revision": 7,
+ "created": {
+  "type": "/type/datetime",
+  "value": "2019-01-02T03:04:05.678901"
+ },
+ "last_modified": {
+  "type": "/type/datetime",
+  "value": "2025-04-29T10:32:23.853856"
+ }
+}

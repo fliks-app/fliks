@@ -1,0 +1,214 @@
+{
+ "product_filters": [],
+ "products": [
+  {
+   "asset_details": [
+    {
+     "attributes": {},
+     "name": "audio-discovery"
+    }
+   ],
+   "available_codecs": [
+    {
+     "enhanced_codec": "LC_64_22050_stereo",
+     "format": "Enhanced",
+     "is_kindle_enhanced": true,
+     "name": "aax_22_64"
+    }
+   ],
+   "content_type": "Product",
+   "has_children": false,
+   "is_adult_product": false,
+   "is_buyable": true,
+   "is_listenable": true,
+   "is_pdf_url_available": false,
+   "is_preorderable": false,
+   "is_vvab": false,
+   "is_world_rights": false,
+   "format_type": "unabridged",
+   "plans": [
+    {
+     "end_date": "2099-12-31T00:00:00.00000Z",
+     "plan_name": "AccessViaMusic",
+     "start_date": "1970-01-01T00:00:00.00000Z"
+    }
+   ],
+   "product_state": "AVAILABLE",
+   "sku": "BK_XXXX_000001",
+   "sku_lite": "BK_XXXX_000001",
+   "read_along_support": "false",
+   "social_media_images": {
+    "facebook": "https://m.media-amazon.com/images/I/aaaaaaaaaaL._SL10_UR1600,800.jpg"
+   },
+   "asin": "B0QZ7ENG01",
+   "authors": [
+    {
+     "asin": "B0QZ7AUTH2",
+     "name": "Torvald Pexinsel"
+    },
+    {
+     "name": "Wilmette Arrowood"
+    }
+   ],
+   "category_ladders": [
+    {
+     "ladder": [
+      {
+       "id": "1000000001",
+       "name": "Literature & Fiction"
+      },
+      {
+       "id": "1000000002",
+       "name": "Classics"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "1000000003",
+       "name": "Science Fiction & Fantasy"
+      },
+      {
+       "id": "1000000002",
+       "name": "Classics"
+      }
+     ],
+     "root": "Genres"
+    }
+   ],
+   "content_delivery_type": "SinglePartBook",
+   "copyright": "",
+   "date_first_available": "2021-09-03",
+   "isbn": "9781999000028",
+   "issue_date": "2021-09-03",
+   "language": "english",
+   "merchandising_description": "",
+   "merchandising_summary": "Short blurb.",
+   "narrators": [
+    {
+     "name": "Perrine Hallavant"
+    }
+   ],
+   "product_images": {
+    "500": "https://m.media-amazon.com/images/I/aaaaaaaaaa._SL500_.jpg",
+    "1024": "https://m.media-amazon.com/images/I/aaaaaaaaaa._SL1024_.jpg"
+   },
+   "publication_name": "The Emberfall Cycle",
+   "publisher_name": "Brindle Audio House",
+   "publisher_summary": "<p> <strong>A clockmaker repairs the lanterns of a drowned town.</strong> </p> <p>Book <em>one and a half</em>.</p>",
+   "rating": {
+    "num_reviews": 139,
+    "overall_distribution": {
+     "average_rating": 4.89375,
+     "display_average_rating": "4.9",
+     "display_stars": 5.0,
+     "num_five_star_ratings": 139,
+     "num_four_star_ratings": 1,
+     "num_one_star_ratings": 0,
+     "num_ratings": 139,
+     "num_three_star_ratings": 0,
+     "num_two_star_ratings": 0
+    }
+   },
+   "release_date": "2021-09-03",
+   "runtime_length_min": 624,
+   "series": [
+    {
+     "asin": "B0QZ7SER01",
+     "sequence": "1.5",
+     "title": "The Emberfall Cycle",
+     "url": "/pd/The-Emberfall-Cycle/B0QZ7SER01"
+    }
+   ],
+   "title": "The Lantern Clockmaker",
+   "subtitle": "A Tale of Gears"
+  },
+  {
+   "asset_details": [
+    {
+     "attributes": {},
+     "name": "audio-discovery"
+    }
+   ],
+   "available_codecs": [
+    {
+     "enhanced_codec": "LC_64_22050_stereo",
+     "format": "Enhanced",
+     "is_kindle_enhanced": true,
+     "name": "aax_22_64"
+    }
+   ],
+   "content_type": "Product",
+   "has_children": false,
+   "is_adult_product": false,
+   "is_buyable": true,
+   "is_listenable": true,
+   "is_pdf_url_available": false,
+   "is_preorderable": false,
+   "is_vvab": false,
+   "is_world_rights": false,
+   "format_type": "unabridged",
+   "plans": [
+    {
+     "end_date": "2099-12-31T00:00:00.00000Z",
+     "plan_name": "AccessViaMusic",
+     "start_date": "1970-01-01T00:00:00.00000Z"
+    }
+   ],
+   "product_state": "AVAILABLE",
+   "sku": "BK_XXXX_000001",
+   "sku_lite": "BK_XXXX_000001",
+   "read_along_support": "false",
+   "social_media_images": {
+    "facebook": "https://m.media-amazon.com/images/I/aaaaaaaaaaL._SL10_UR1600,800.jpg"
+   },
+   "asin": "B0QZ7ENG02",
+   "authors": [
+    {
+     "name": "Torvald Pexinsel"
+    }
+   ],
+   "language": "english",
+   "narrators": [],
+   "publication_datetime": "2019-03-01T07:00:00Z",
+   "title": "The Cartographer of Mists",
+   "isbn": "",
+   "rating": {
+    "num_reviews": 0,
+    "overall_distribution": {
+     "average_rating": 0.0,
+     "display_average_rating": "0.0",
+     "display_stars": 0.0,
+     "num_five_star_ratings": 0,
+     "num_four_star_ratings": 1,
+     "num_one_star_ratings": 0,
+     "num_ratings": 0,
+     "num_three_star_ratings": 0,
+     "num_two_star_ratings": 0
+    }
+   },
+   "runtime_length_min": 0,
+   "extended_product_description": "Plain description."
+  },
+  {
+   "asin": "B0QZ7ENG03",
+   "rating": {}
+  }
+ ],
+ "response_groups": [
+  "customer_rights",
+  "product_desc",
+  "always-returned",
+  "product_extended_attrs",
+  "contributors",
+  "series",
+  "rating",
+  "media",
+  "category_ladders",
+  "product_attrs",
+  "product_details"
+ ],
+ "total_results": 12
+}

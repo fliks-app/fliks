@@ -1,0 +1,39 @@
+{
+ "works": [
+  {
+   "key": "/works/OL9200002W"
+  }
+ ],
+ "title": "The Lantern Clockmaker",
+ "publishers": [
+  "Marlowe & Pike"
+ ],
+ "publish_date": "1991",
+ "key": "/books/OL9300003M",
+ "type": {
+  "key": "/type/edition"
+ },
+ "identifiers": {},
+ "isbn_10": [
+  "1999000013"
+ ],
+ "ocaid": "bwb_X0-AAA-000",
+ "languages": [
+  {
+   "key": "/languages/eng"
+  }
+ ],
+ "covers": [
+  9900004
+ ],
+ "latest_revision": 7,
+ "revision": 7,
+ "created": {
+  "type": "/type/datetime",
+  "value": "2019-01-02T03:04:05.678901"
+ },
+ "last_modified": {
+  "type": "/type/datetime",
+  "value": "2025-04-29T10:32:23.853856"
+ }
+}

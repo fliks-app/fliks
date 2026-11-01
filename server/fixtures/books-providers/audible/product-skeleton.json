@@ -1,0 +1,26 @@
+{
+ "product": {
+  "asin": "B0ZZZZZZZZ",
+  "asset_details": [],
+  "is_pdf_url_available": false,
+  "is_vvab": false,
+  "rating": {
+   "num_reviews": 0,
+   "overall_distribution": {
+    "average_rating": 3.0,
+    "display_average_rating": "3.0",
+    "display_stars": 3.0,
+    "num_five_star_ratings": 1,
+    "num_four_star_ratings": 1,
+    "num_one_star_ratings": 0,
+    "num_ratings": 1,
+    "num_three_star_ratings": 0,
+    "num_two_star_ratings": 0
+   }
+  }
+ },
+ "response_groups": [
+  "always-returned",
+  "rating"
+ ]
+}

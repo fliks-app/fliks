@@ -8,3 +8,5 @@ Watch party: [`spec/watch-party.md`](spec/watch-party.md) (routes, state machine
 
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash).
 Items: [`spec/items.md`](spec/items.md) (item groups, items and editions: what a media is made of).
+
+Book metadata providers: [`spec/book-providers.md`](spec/book-providers.md) (endpoints, rate limits, identification, field mappings of OpenLibrary, Google Books, BnF, Audible, Audnexus).

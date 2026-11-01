@@ -1,0 +1,71 @@
+{
+ "kind": "books#volumes",
+ "totalItems": 1,
+ "items": [
+  {
+   "kind": "books#volume",
+   "id": "zX3kLmN0pQsC",
+   "etag": "AbCdEfGhIjK",
+   "selfLink": "https://www.googleapis.com/books/v1/volumes/zX3kLmN0pQsC",
+   "volumeInfo": {
+    "title": "La Cartographe des Brumes",
+    "subtitle": "Chroniques d'Ombrelune, tome 2",
+    "authors": [
+     "Maëlis Quenotte"
+    ],
+    "publisher": "Éditions du Roc Fendu",
+    "publishedDate": "2019-03-14",
+    "description": "<p>Une cartographe <b>sans carte</b>.</p><p>Suite directe du premier tome.<br>Fin.</p>",
+    "industryIdentifiers": [
+     {
+      "type": "ISBN_13",
+      "identifier": "9782999000018"
+     },
+     {
+      "type": "ISBN_10",
+      "identifier": "2999000014"
+     }
+    ],
+    "readingModes": {
+     "text": false,
+     "image": false
+    },
+    "pageCount": 340,
+    "printType": "BOOK",
+    "categories": [
+     "Fiction / Fantasy / Epic",
+     "Fiction / Fantasy / Epic"
+    ],
+    "averageRating": 4.5,
+    "ratingsCount": 12,
+    "maturityRating": "NOT_MATURE",
+    "allowAnonLogging": false,
+    "contentVersion": "1.2.0.0.preview.0",
+    "imageLinks": {
+     "smallThumbnail": "http://books.google.com/books/content?id=zX3kLmN0pQsC&printsec=frontcover&img=1&zoom=5&edge=curl&source=gbs_api",
+     "thumbnail": "http://books.google.com/books/content?id=zX3kLmN0pQsC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
+     "small": "http://books.google.com/books/content?id=zX3kLmN0pQsC&printsec=frontcover&img=1&zoom=2&edge=curl&source=gbs_api",
+     "medium": "http://books.google.com/books/content?id=zX3kLmN0pQsC&printsec=frontcover&img=1&zoom=3&edge=curl&source=gbs_api",
+     "large": "http://books.google.com/books/content?id=zX3kLmN0pQsC&printsec=frontcover&img=1&zoom=4&edge=curl&source=gbs_api"
+    },
+    "language": "fr",
+    "previewLink": "http://books.google.com/books?id=zX3kLmN0pQsC&cd=1&source=gbs_api",
+    "infoLink": "http://books.google.com/books?id=zX3kLmN0pQsC&source=gbs_api",
+    "canonicalVolumeLink": "https://books.google.com/books/about/La_Cartographe_des_Brumes.html?hl=&id=zX3kLmN0pQsC"
+   },
+   "accessInfo": {
+    "country": "FR",
+    "viewability": "PARTIAL",
+    "embeddable": true
+   },
+   "searchInfo": {
+    "textSnippet": "Une cartographe sans carte"
+   },
+   "saleInfo": {
+    "country": "FR",
+    "saleability": "NOT_FOR_SALE",
+    "isEbook": false
+   }
+  }
+ ]
+}

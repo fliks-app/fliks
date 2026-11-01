@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/" xmlns="http://catalogue.bnf.fr/namespaces/InterXMarc" xmlns:ixm="http://catalogue.bnf.fr/namespaces/InterXMarc" xmlns:mn="http://catalogue.bnf.fr/namespaces/motsnotices" xmlns:sd="http://www.loc.gov/zing/srw/diagnostic/">
+  <srw:version>1.2</srw:version>
+  <srw:echoedSearchRetrieveRequest>
+    <srw:version>1.2</srw:version>
+    <srw:query>bib.isbn adj</srw:query>
+  </srw:echoedSearchRetrieveRequest>
+  <srw:numberOfRecords>0</srw:numberOfRecords>
+  <srw:diagnostics>
+    <sd:diagnostic xmlns:sd="http://www.loc.gov/zing/srw/diagnostic/">
+      <sd:uri>info:srw/diagnostic/1/10</sd:uri>
+      <sd:message>Erreur de syntaxe dans la requête</sd:message>
+    </sd:diagnostic>
+  </srw:diagnostics>
+</srw:searchRetrieveResponse>

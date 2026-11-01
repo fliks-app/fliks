@@ -1,0 +1,66 @@
+{
+ "links": {
+  "self": "/works/OL9200001W/editions.json",
+  "work": "/works/OL9200001W"
+ },
+ "size": 14,
+ "entries": [
+  {
+   "title": "La Cartographe des Brumes",
+   "publish_date": "2019",
+   "isbn_13": [
+    "9782999000018"
+   ],
+   "key": "/books/OL9300001M",
+   "works": [
+    {
+     "key": "/works/OL9200001W"
+    }
+   ],
+   "type": {
+    "key": "/type/edition"
+   },
+   "languages": [
+    {
+     "key": "/languages/fre"
+    }
+   ],
+   "number_of_pages": 340,
+   "physical_format": "Hardcover"
+  },
+  {
+   "publish_date": "2020",
+   "key": "/books/OL9300010M",
+   "type": {
+    "key": "/type/edition"
+   }
+  },
+  {
+   "title": "The Cartographer of Mists",
+   "publish_date": "Sep 2020",
+   "isbn_13": [
+    "9781999000028"
+   ],
+   "key": "/books/OL9300011M",
+   "works": [
+    {
+     "key": "/works/OL9200001W"
+    }
+   ],
+   "type": {
+    "key": "/type/edition"
+   },
+   "languages": [
+    {
+     "key": "/languages/eng"
+    }
+   ],
+   "physical_format": "Ebook",
+   "translated_from": [
+    {
+     "key": "/languages/fre"
+    }
+   ]
+  }
+ ]
+}

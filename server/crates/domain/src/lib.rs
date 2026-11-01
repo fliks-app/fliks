@@ -1,6 +1,7 @@
 //! Pure domain logic: no IO, no async runtime.
 pub mod acl;
 pub mod arr_import;
+pub mod book_providers;
 pub mod books;
 pub mod burn_in;
 pub mod edl;

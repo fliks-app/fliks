@@ -1,0 +1,57 @@
+{
+ "asin": "B0QZ7LM4NV",
+ "authors": [
+  {
+   "asin": "B0QZ7AUTH1",
+   "name": "Maëlis Quenotte"
+  }
+ ],
+ "copyright": 2019,
+ "description": "Une cartographe sans carte...",
+ "formatType": "unabridged",
+ "genres": [
+  {
+   "asin": "2000000001",
+   "name": "Jeunesse",
+   "type": "genre"
+  },
+  {
+   "asin": "2000000002",
+   "name": "Fantasy et magie",
+   "type": "tag"
+  },
+  {
+   "asin": "2000000003",
+   "name": "Jeunesse",
+   "type": "tag"
+  }
+ ],
+ "image": "https://m.media-amazon.com/images/I/bbbbbbbbbb.jpg",
+ "isAdult": false,
+ "isbn": "9782999000049",
+ "language": "french",
+ "literatureType": "fiction",
+ "narrators": [
+  {
+   "name": "Odalric Menvieux"
+  }
+ ],
+ "publisherName": "Brindle Audio House",
+ "rating": "4.4",
+ "region": "fr",
+ "releaseDate": "2020-05-11T00:00:00.000Z",
+ "runtimeLengthMin": 501,
+ "seriesPrimary": {
+  "asin": "B0QZ7SER02",
+  "name": "Chroniques d'Ombrelune",
+  "position": "2"
+ },
+ "seriesSecondary": {
+  "asin": "B0QZ7SER03",
+  "name": "Le Monde d'Ombrelune",
+  "position": "1.5"
+ },
+ "subtitle": "Chroniques d'Ombrelune 2",
+ "summary": "Une cartographe sans carte, une ville qui change de nom chaque nuit. <br /> <br />Second tome.",
+ "title": "La Cartographe des Brumes"
+}

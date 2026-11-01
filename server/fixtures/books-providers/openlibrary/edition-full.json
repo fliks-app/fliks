@@ -1,0 +1,84 @@
+{
+ "title": "La Cartographe des Brumes (Chroniques d'Ombrelune, 2)",
+ "subtitle": "roman",
+ "publishers": [
+  "Éditions du Roc Fendu",
+  "Marlowe & Pike"
+ ],
+ "publish_date": "March 2019",
+ "isbn_13": [
+  "9782999000018",
+  "9782999000025",
+  "9782999000999"
+ ],
+ "isbn_10": [
+  "2999000014"
+ ],
+ "languages": [
+  {
+   "key": "/languages/fre"
+  }
+ ],
+ "physical_format": "Paperback",
+ "pagination": "xii, 340 p. ;",
+ "covers": [
+  -1,
+  9900003
+ ],
+ "contributors": [
+  {
+   "role": "Translator",
+   "name": "Ignace Rovelin"
+  },
+  {
+   "role": "Illustrator",
+   "name": "Paulin Esterbel"
+  }
+ ],
+ "authors": [
+  {
+   "key": "/authors/OL9100001A"
+  }
+ ],
+ "works": [
+  {
+   "key": "/works/OL9200001W"
+  }
+ ],
+ "series": [
+  "Chroniques d'Ombrelune ; 2"
+ ],
+ "subjects": [
+  "Fantasy",
+  "Romans"
+ ],
+ "description": {
+  "type": "/type/text",
+  "value": "Un <i>second</i> tome."
+ },
+ "identifiers": {
+  "goodreads": [
+   "1000001"
+  ],
+  "librarything": [
+   "1000002"
+  ]
+ },
+ "source_records": [
+  "marc:example/records.mrc:1:2"
+ ],
+ "type": {
+  "key": "/type/edition"
+ },
+ "key": "/books/OL9300001M",
+ "latest_revision": 7,
+ "revision": 7,
+ "created": {
+  "type": "/type/datetime",
+  "value": "2019-01-02T03:04:05.678901"
+ },
+ "last_modified": {
+  "type": "/type/datetime",
+  "value": "2025-04-29T10:32:23.853856"
+ }
+}

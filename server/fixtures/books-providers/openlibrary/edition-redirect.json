@@ -1,0 +1,17 @@
+{
+ "type": {
+  "key": "/type/redirect"
+ },
+ "location": "/books/OL9300001M",
+ "key": "/books/OL9300009M",
+ "latest_revision": 7,
+ "revision": 7,
+ "created": {
+  "type": "/type/datetime",
+  "value": "2019-01-02T03:04:05.678901"
+ },
+ "last_modified": {
+  "type": "/type/datetime",
+  "value": "2025-04-29T10:32:23.853856"
+ }
+}
