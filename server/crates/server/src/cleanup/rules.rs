@@ -1,6 +1,7 @@
 //! Criteria to SQL (`cleanup.md` rules 9-14): one query per rule, every value bound.
 use crate::{http::json::iso_ms, libraries};
 use chrono::{DateTime, Utc};
+use fliks_domain::media::release::ReleaseKind;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, QueryBuilder};
@@ -85,7 +86,10 @@ impl Scope {
                         r#"EXISTS (SELECT 1 FROM playback_states ps JOIN items it ON it.id = ps."itemId" WHERE it."mediaId" = media.id)"#
                             .into(),
                     added: r#"media."createdAt""#.into(),
-                    released: r#"media."releaseDate""#.into(),
+                    released: format!(
+                        r#"(SELECT d.date FROM media_release_dates d WHERE d."mediaId" = media.id AND d.kind = '{}')"#,
+                        ReleaseKind::Release.as_str()
+                    ),
                     episodes: None,
                 };
             }

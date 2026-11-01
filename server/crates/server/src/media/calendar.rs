@@ -2,7 +2,7 @@
 use super::params::Calendar;
 use crate::http::AppError;
 use chrono::{Datelike, Local, NaiveDate};
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{kind::MediaKind, release::ReleaseKind};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -51,17 +51,23 @@ pub async fn calendar(
     let added_by = p.requested_by_me.then_some(uid);
     let mut out: Vec<Value> = vec![];
 
-    if p.media_type.is_none_or(|t| t == MediaKind::Movie) {
+    if p.media_type.is_none_or(|t| !t.has_seasons()) {
+        let kinds: Vec<&str> = MediaKind::ALL
+            .into_iter()
+            .filter(|k| !k.has_seasons() && p.media_type.is_none_or(|t| t == *k))
+            .map(MediaKind::as_str)
+            .collect();
         let rows = sqlx::query!(
-            r#"SELECT m.id AS "id!", m.title AS "title!", m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
-  m.status::text AS "status!", m.year,
-  to_char(m."inCinemas", 'YYYY-MM-DD') AS in_cinemas, to_char(m."digitalRelease", 'YYYY-MM-DD') AS digital_release,
-  to_char(m."physicalRelease", 'YYYY-MM-DD') AS physical_release, to_char(m."releaseDate", 'YYYY-MM-DD') AS release_date,
+            r#"SELECT m.id AS "id!", m.title AS "title!", m.type AS "kind!", m."posterUrl" AS poster_url,
+  m."fanartUrl" AS fanart_url, m.status::text AS "status!", m.year,
+  dates.by_kind AS "dates!: Value",
   EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
 FROM media m
-WHERE m.type = 'movie'
-  AND (m."inCinemas" BETWEEN $1::text::date AND $2::text::date OR m."digitalRelease" BETWEEN $1::text::date AND $2::text::date
-       OR m."physicalRelease" BETWEEN $1::text::date AND $2::text::date OR m."releaseDate" BETWEEN $1::text::date AND $2::text::date)
+LEFT JOIN LATERAL (SELECT jsonb_object_agg(kind, to_char(date, 'YYYY-MM-DD')) AS by_kind
+                   FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
+WHERE m.type = ANY($6)
+  AND EXISTS (SELECT 1 FROM media_release_dates w WHERE w."mediaId" = m.id
+              AND w.date BETWEEN $1::text::date AND $2::text::date)
   AND ($3::bool IS NOT TRUE OR m.monitored = true) AND ($4::int IS NULL OR m."addedById" = $4)
   AND m."libraryId" = ANY($5)
 ORDER BY m.id"#,
@@ -69,40 +75,41 @@ ORDER BY m.id"#,
             end,
             p.monitored_only,
             added_by,
-            ids
+            ids,
+            &kinds as &[&str]
         )
         .fetch_all(db)
         .await
         .map_err(date_error)?;
         for m in rows {
+            let kind = crate::db::kind(&m.kind)?;
             let entry = |event: &str, date: &str| {
-                json!({"id": m.id, "mediaId": m.id, "title": m.title, "type": MediaKind::Movie, "event": event, "date": date,
+                json!({"id": m.id, "mediaId": m.id, "title": m.title, "type": kind, "event": event, "date": date,
                     "posterUrl": m.poster_url, "fanartUrl": m.fanart_url, "status": m.status, "year": m.year,
                     "hasFile": m.has_file})
             };
-            // the window is compared as raw strings, so a compact `20260301` start selects the movie in SQL but emits nothing
-            let inside = |d: &Option<String>| {
-                d.clone()
-                    .filter(|d| d.as_str() >= start.as_str() && d.as_str() <= end.as_str())
+            // the window is compared as raw strings, so a compact `20260301` start selects the media in SQL but emits nothing
+            let inside = |k: ReleaseKind| {
+                m.dates[k.as_str()]
+                    .as_str()
+                    .filter(|d| *d >= start.as_str() && *d <= end.as_str())
             };
             let mut specific = false;
-            for (event, d) in [
-                ("cinema", &m.in_cinemas),
-                ("digital", &m.digital_release),
-                ("physical", &m.physical_release),
-            ] {
-                if let Some(d) = inside(d) {
+            for k in ReleaseKind::ALL.into_iter().filter(|k| !k.is_fallback()) {
+                if let Some(d) = inside(k) {
                     specific = true;
-                    out.push(entry(event, &d));
+                    out.push(entry(k.event(), d));
                 }
             }
-            if let (false, Some(d)) = (specific, inside(&m.release_date)) {
-                out.push(entry("release", &d));
+            for k in ReleaseKind::ALL.into_iter().filter(|k| k.is_fallback()) {
+                if let (false, Some(d)) = (specific, inside(k)) {
+                    out.push(entry(k.event(), d));
+                }
             }
         }
     }
 
-    if p.media_type.is_none_or(|t| t == MediaKind::Series) {
+    if p.media_type.is_none_or(MediaKind::has_seasons) {
         let rows = sqlx::query!(
             r#"SELECT ep.id AS "id!", ep."number" AS "episode_number!", ep.title, to_char(ep."airDate", 'YYYY-MM-DD') AS "date!",
   season."number" AS "season_number!", media.id AS "media_id!", media.title AS "media_title!",

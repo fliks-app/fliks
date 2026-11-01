@@ -46,7 +46,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | `libraryIds` | int[] | its library is listed |
     | `excludeLibraryIds` | int[] | its library is not listed |
     | `addedOlderThanDays` | int 0..36500 | `media.createdAt` is older (season, episode: the newest file of the scope was added before) |
-    | `releasedOlderThanDays` | int 0..36500 | `media.releaseDate` is older (season: the newest `items."airDate"` of the season; episode: its `airDate`; no date: no match) |
+    | `releasedOlderThanDays` | int 0..36500 | the media's `release` date (`media_release_dates`) is older (season: the newest `items."airDate"` of the season; episode: its `airDate`; no date: no match) |
     | `lastPlayedOlderThanDays` | int 0..36500 | the newest `playback_states.lastPlayedAt` of any user, episodes included, is older; never played matches (season: the playback states of its episodes; episode: its own) |
     | `neverPlayed` | bool | no `playback_states` row exists for it (`false` is ignored) |
     | `watchedByRequester` | bool | it has at least one requester (`requests.kind = 'add'`, user set, not declined: a declined requester was never served; pending and later states count) and every requester has watched it: a movie completed, a series with every episode on disk completed (the `exclude watched` predicate of `media-query.md` rule 20; season, episode: every episode of the scope on disk completed by every requester) |

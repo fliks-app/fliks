@@ -93,8 +93,15 @@ async fn seed(pool: &PgPool) -> Seed {
     let m1 = scalar(
         pool,
         &format!(
-            r#"INSERT INTO media (title, type, "libraryId", "createdAt", rating, genres, "releaseDate")
-            VALUES ('a', 'movie', {lib1}, now() - interval '100 days', 3, '["Drama"]', '2000-01-01') RETURNING id"#
+            r#"INSERT INTO media (title, type, "libraryId", "createdAt", rating, genres)
+            VALUES ('a', 'movie', {lib1}, now() - interval '100 days', 3, '["Drama"]') RETURNING id"#
+        ),
+    )
+    .await;
+    exec(
+        pool,
+        &format!(
+            r#"INSERT INTO media_release_dates ("mediaId", kind, date) VALUES ({m1}, 'release', '2000-01-01')"#
         ),
     )
     .await;

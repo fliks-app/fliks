@@ -56,13 +56,14 @@ def fx(name):
     return json.dumps(d["expected"]["info"], sort_keys=True).replace("'", "''"), d["fileSize"]
 info = {"mkv": fx("h264-aac-mkv"), "mp4": fx("h264-aac-mp4")}
 q = lambda s: "'" + s.replace("'", "''") + "'"
-media, ext_ids, files, parts, seasons, episodes = [], [], [], [], [], []
+media, ext_ids, files, parts, seasons, episodes, dates = [], [], [], [], [], [], []
 fid = 0
 for n in range(1, 18):
     title = f"Parity Movie {n:02d}"
     folder = f"{title} (2020)"
     ext_ids.append(f"({n}, 'movie', 'tmdb', '{1000+n}')")
-    media.append(f"({n}, {q(title)}, 2020, 'movie', {q('Synthetic movie '+str(n))}, 'released', true, {q(folder)}, 7.5, '[\"Drama\"]', 90, '2020-01-01', 1)")
+    media.append(f"({n}, {q(title)}, 2020, 'movie', {q('Synthetic movie '+str(n))}, 'released', true, {q(folder)}, 7.5, '[\"Drama\"]', 90, 1)")
+    dates.append(f"({n}, 'release', '2020-01-01')")
     ext = "mp4" if n % 2 == 0 else "mkv"
     fid += 1
     i, size = info[ext]
@@ -73,7 +74,7 @@ for k, s in enumerate("ABC"):
     mid = 18 + k
     title = f"Parity Series {s}"
     ext_ids.append(f"({mid}, 'series', 'tmdb', '{2000+k}')")
-    media.append(f"({mid}, {q(title)}, 2021, 'series', {q('Synthetic series '+s)}, 'continuing', true, {q(title)}, 8.0, '[\"Drama\"]', 30, NULL, 2)")
+    media.append(f"({mid}, {q(title)}, 2021, 'series', {q('Synthetic series '+s)}, 'continuing', true, {q(title)}, 8.0, '[\"Drama\"]', 30, 2)")
     for se in (1, 2):
         sid += 1
         seasons.append(f"({sid}, {se}, {mid})")
@@ -83,7 +84,8 @@ for k, s in enumerate("ABC"):
             i, size = info["mkv"]
             files.append(f"({fid}, {mid}, {q(f'Season {se:02d}/{title} - S{se:02d}E{ep:02d}.mkv')}, {size}, 'WEBDL-1080p', 'en', '{i}')")
             parts.append(f"({eid}, {fid}, {mid})")
-print('INSERT INTO media (id, title, year, type, overview, status, monitored, "folderName", rating, genres, runtime, "releaseDate", "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
+print('INSERT INTO media (id, title, year, type, overview, status, monitored, "folderName", rating, genres, runtime, "libraryId") VALUES\n ' + ",\n ".join(media) + ";")
+print('INSERT INTO media_release_dates ("mediaId", kind, date) VALUES\n ' + ",\n ".join(dates) + ";")
 print('INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES\n ' + ",\n ".join(ext_ids) + ";")
 print('INSERT INTO editions (id, "mediaId", family) SELECT id, id, \'video\' FROM media ORDER BY id;')
 print('INSERT INTO item_groups (id, "number", "mediaId") VALUES\n ' + ",\n ".join(seasons) + ";")

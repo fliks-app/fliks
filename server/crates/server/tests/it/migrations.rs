@@ -1225,6 +1225,61 @@ async fn m1789000100_folds_cast_and_crew_into_credits_and_moves_person_ids(pool:
 }
 
 #[sqlx::test(migrations = false)]
+async fn m1789000110_moves_release_dates_into_a_table_keyed_by_kind(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_110).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type, "releaseDate", "inCinemas", "digitalRelease", "physicalRelease") VALUES
+            (1, 'a', 'movie', '2020-01-01', '2020-01-01', '2020-02-01', NULL),
+            (2, 'b', 'series', '1969-07-20', NULL, NULL, NULL),
+            (3, 'c', 'movie', NULL, NULL, NULL, NULL),
+            (4, 'd', 'movie', NULL, NULL, NULL, '2099-12-31')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_110).await;
+
+    let dates: Vec<(i32, String, String)> = rows(
+        &pool,
+        r#"SELECT "mediaId", kind, date::text FROM media_release_dates ORDER BY "mediaId", kind"#,
+    )
+    .await;
+    let want: Vec<(i32, String, String)> = [
+        (1, "cinema", "2020-01-01"),
+        (1, "digital", "2020-02-01"),
+        (1, "release", "2020-01-01"),
+        (2, "release", "1969-07-20"),
+        (4, "physical", "2099-12-31"),
+    ]
+    .map(|(m, k, d)| (m, k.into(), d.into()))
+    .into();
+    assert_eq!(dates, want, "equal dates stay two rows, a null is no row");
+
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'media'
+           AND column_name IN ('releaseDate', 'inCinemas', 'digitalRelease', 'physicalRelease')"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
+
+    for bad in [
+        r#"INSERT INTO media_release_dates VALUES (1, 'bogus', '2020-01-01')"#,
+        r#"INSERT INTO media_release_dates VALUES (1, 'release', '2021-01-01')"#,
+        r#"INSERT INTO media_release_dates VALUES (99, 'release', '2021-01-01')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    sql(&pool, "DELETE FROM media WHERE id = 1").await;
+    let gone: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM media_release_dates WHERE "mediaId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(gone, 0, "dates go with their media");
+}
+
+#[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
     fliks_server::db::migrate(&pool).await.unwrap();
 

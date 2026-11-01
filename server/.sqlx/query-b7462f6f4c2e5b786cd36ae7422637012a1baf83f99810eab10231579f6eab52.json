@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m WHERE m.\"libraryId\" = $1 AND m.\"tmdbCollectionId\" = $2\nORDER BY m.\"releaseDate\" ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.type AS \"kind!\", m.\"posterUrl\" AS poster_url,\n  m.\"fanartUrl\" AS fanart_url, m.status::text AS \"status!\", m.year,\n  dates.by_kind AS \"dates!: Value\",\n  EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m\nLEFT JOIN LATERAL (SELECT jsonb_object_agg(kind, to_char(date, 'YYYY-MM-DD')) AS by_kind\n                   FROM media_release_dates WHERE \"mediaId\" = m.id) dates ON true\nWHERE m.type = ANY($6)\n  AND EXISTS (SELECT 1 FROM media_release_dates w WHERE w.\"mediaId\" = m.id\n              AND w.date BETWEEN $1::text::date AND $2::text::date)\n  AND ($3::bool IS NOT TRUE OR m.monitored = true) AND ($4::int IS NULL OR m.\"addedById\" = $4)\n  AND m.\"libraryId\" = ANY($5)\nORDER BY m.id",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,12 @@
       },
       {
         "ordinal": 2,
-        "name": "year",
-        "type_info": "Int4",
+        "name": "kind!",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "media",
-            "name": "year"
+            "name": "type"
           }
         }
       },
@@ -60,28 +60,29 @@
       },
       {
         "ordinal": 5,
-        "name": "rating",
-        "type_info": "Float8",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "rating"
-          }
-        }
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 6,
-        "name": "genres",
-        "type_info": "Jsonb",
+        "name": "year",
+        "type_info": "Int4",
         "origin": {
           "Table": {
             "table": "media",
-            "name": "genres"
+            "name": "year"
           }
         }
       },
       {
         "ordinal": 7,
+        "name": "dates!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
         "name": "has_file!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -89,20 +90,25 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
+        "Text",
+        "Bool",
         "Int4",
-        "Int4"
+        "Int4Array",
+        "TextArray"
       ]
     },
     "nullable": [
       false,
       false,
+      false,
       true,
       true,
+      null,
       true,
-      true,
-      true,
+      null,
       null
     ]
   },
-  "hash": "b3fcfc602a3542bc361e4b1d4d36b78975311b87a07d3492872d0b89dc367534"
+  "hash": "b7462f6f4c2e5b786cd36ae7422637012a1baf83f99810eab10231579f6eab52"
 }

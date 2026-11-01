@@ -10,6 +10,7 @@ use crate::{
     ingest::{MediaRow, load_media},
     libraries::{accessible_library_ids, assert_media_accessible},
     media::{
+        details::set_release_dates,
         external_ids::{self, Link},
         items,
     },
@@ -25,7 +26,7 @@ use axum::{
 use fliks_domain::{
     acl::{Action, Subject},
     external_id::ExternalProvider,
-    media::kind::MediaKind,
+    media::{kind::MediaKind, release::ReleaseKind},
 };
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
@@ -67,8 +68,13 @@ enum Col {
     Float(Option<f64>),
     Json(Option<Value>),
     Enum(&'static str, Option<String>),
-    Date(Option<String>),
 }
+
+/// `releaseDate` of the body: absent leaves the date alone, `Some(None)` clears it.
+type Release = Option<Option<String>>;
+
+/// The `media` columns a body sets, and its release date.
+type Columns = (Vec<(&'static str, Col)>, Release);
 
 /// The external ids a `CreateMediaDto` / `UpdateMediaDto` body carries; `None` leaves one alone, `Some(None)` clears it.
 struct BodyIds {
@@ -116,7 +122,7 @@ impl BodyIds {
 }
 
 /// Columns of `CreateMediaDto` / `UpdateMediaDto` that persist (`path` and the profile ids do not).
-fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
+fn columns(b: &Body) -> Result<Columns, AppError> {
     let mut out = vec![];
     macro_rules! put {
         ($col:literal, $v:expr, $wrap:expr) => {
@@ -147,7 +153,7 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
         Col::Json(v.map(|g| json!(g)))
     });
     put!("runtime", b.int("runtime")?, Col::Int);
-    put!("releaseDate", b.date("releaseDate")?, Col::Date);
+    let release = b.date("releaseDate")?;
     b.str("path")?;
     b.num("qualityProfileId")?;
     b.num("languageProfileId")?;
@@ -173,7 +179,7 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
             )]));
         }
     }
-    Ok(out)
+    Ok((out, release))
 }
 
 fn push_value(q: &mut QueryBuilder<Postgres>, c: &Col) {
@@ -183,7 +189,6 @@ fn push_value(q: &mut QueryBuilder<Postgres>, c: &Col) {
         Col::Float(v) => q.push_bind(*v),
         Col::Json(v) => q.push_bind(v.clone()),
         Col::Enum(t, v) => q.push_bind(v.clone()).push(format!("::{t}")),
-        Col::Date(v) => q.push_bind(v.clone()).push("::timestamptz::date"),
     };
 }
 
@@ -216,7 +221,7 @@ pub async fn create(
     b.required(b.str("title")?, "title", "must be a string")?;
     let media_type = b.required_kind("type")?;
     let ids = body_ids(&b)?;
-    let cols = columns(&b)?;
+    let (cols, release) = columns(&b)?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
     q.push(
         cols.iter()
@@ -234,6 +239,9 @@ pub async fn create(
     q.push(") RETURNING id");
     let mut tx = st.db.begin().await?;
     let id: i32 = q.build_query_scalar().fetch_one(&mut *tx).await?;
+    if let Some(date) = release {
+        set_release_dates(&mut tx, id, &[(ReleaseKind::Release, date)], false).await?;
+    }
     items::create_shell(&mut tx, id, media_type).await?;
     if ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? != Link::Linked {
         return Err(clash());
@@ -425,7 +433,7 @@ pub async fn update(
     let id = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let ids = body_ids(&b)?;
-    let cols = columns(&b)?;
+    let (cols, release) = columns(&b)?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -464,6 +472,13 @@ pub async fn update(
         }
         q.push(")");
         q.build().execute(&mut *tx).await.map_err(clash_or)?;
+    }
+    if let Some(date) = release
+        && set_release_dates(&mut tx, id, &[(ReleaseKind::Release, date)], false).await?
+    {
+        sqlx::query!(r#"UPDATE media SET "updatedAt" = now() WHERE id = $1"#, id)
+            .execute(&mut *tx)
+            .await?;
     }
     if kind != media.media_type {
         items::follow_kind(&mut tx, id, kind).await?;

@@ -707,8 +707,8 @@ pub async fn rows(
       'posterUrl', m."posterUrl", 'metadataRefreshedAt', iso_ms(m."metadataRefreshedAt"),
       'fanartUrl', m."fanartUrl", 'logoUrl', m."logoUrl", 'additionalFanartUrls', to_jsonb(m."additionalFanartUrls"))
     || jsonb_build_object('rating', m.rating, 'genres', m.genres, 'tmdbCollectionId', m."tmdbCollectionId",
-      'tmdbCollectionName', m."tmdbCollectionName", 'runtime', m.runtime, 'releaseDate', m."releaseDate",
-      'inCinemas', m."inCinemas", 'digitalRelease', m."digitalRelease", 'physicalRelease', m."physicalRelease",
+      'tmdbCollectionName', m."tmdbCollectionName", 'runtime', m.runtime, 'releaseDate', dates.release_date,
+      'inCinemas', dates.cinema_date, 'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
       'minimumAvailability', m."minimumAvailability", 'qualityProfileId', m."qualityProfileId",
       'languageProfileId', m."languageProfileId", 'addedById', m."addedById", 'path', NULL) END,
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
@@ -723,6 +723,11 @@ LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $10)::int AS tmdb,
   max(value) FILTER (WHERE provider = $11)::int AS tvdb,
   max(value) FILTER (WHERE provider = $12) AS imdb
   FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_date,
+             max(date) FILTER (WHERE kind = 'digital') AS digital_date,
+             max(date) FILTER (WHERE kind = 'physical') AS physical_date,
+             max(date) FILTER (WHERE kind = 'release') AS release_date
+           FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)

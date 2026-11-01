@@ -39,6 +39,14 @@ impl MediaKind {
         }
     }
 
+    /// The key of this kind's count in `{movies, series}` payloads.
+    pub const fn count_key(self) -> &'static str {
+        match self {
+            Self::Movie => "movies",
+            Self::Series => "series",
+        }
+    }
+
     /// The `"must be one of the following values"` text of every input naming a kind.
     pub fn one_of_message() -> String {
         format!(
@@ -84,6 +92,8 @@ mod tests {
             assert_eq!(MediaKind::parse(k.as_str()), Some(k));
             assert_eq!(serde_json::to_string(&k).unwrap(), format!("\"{k}\""));
         }
+        assert_eq!(MediaKind::Movie.count_key(), "movies");
+        assert_eq!(MediaKind::Series.count_key(), "series");
         assert_eq!(MediaKind::NAMES, ["movie", "series"]);
         assert_eq!(MediaKind::parse("Movie"), None);
         assert!(MediaKind::Series.has_seasons() && !MediaKind::Movie.has_seasons());
