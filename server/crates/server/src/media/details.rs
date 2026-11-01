@@ -197,7 +197,7 @@ pub async fn set_tmdb_collection(
     let mut values = sqlx::query_scalar!(
         r#"SELECT x.value FROM collection_entries e
            JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb'
-           WHERE e."mediaId" = $1"#,
+           WHERE e."mediaId" = $1 AND e."itemId" IS NULL"#,
         media
     )
     .fetch_all(&mut *c)
@@ -264,7 +264,7 @@ pub async fn set_tmdb_collection(
     sqlx::query!(
         r#"WITH left_ AS (
              DELETE FROM collection_entries e
-              WHERE e."mediaId" = $1 AND e."collectionId" IS DISTINCT FROM $2
+              WHERE e."mediaId" = $1 AND e."itemId" IS NULL AND e."collectionId" IS DISTINCT FROM $2
                 AND EXISTS (SELECT 1 FROM collection_external_ids x
                              WHERE x."collectionId" = e."collectionId" AND x.provider = 'tmdb')
               RETURNING e."collectionId")
@@ -365,7 +365,8 @@ mod tests {
         sqlx::query_as(
             r#"SELECT e."mediaId", c.name, x.value FROM collection_entries e
                JOIN collections c ON c.id = e."collectionId"
-               JOIN collection_external_ids x ON x."collectionId" = c.id ORDER BY 1"#,
+               JOIN collection_external_ids x ON x."collectionId" = c.id
+               WHERE e."itemId" IS NULL ORDER BY 1"#,
         )
         .fetch_all(db)
         .await

@@ -211,6 +211,7 @@ pub(crate) async fn apply_seasons(
 ) -> Result<i64, AppError> {
     let before: i64 = count_episodes(st, media_id).await?;
     let mut tx = st.db.begin().await?;
+    crate::media::items::lock_versions(&mut tx, media_id).await?;
     let mut applied = vec![];
     for sd in seasons {
         let n = sd.season_number;

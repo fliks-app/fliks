@@ -288,3 +288,46 @@ async fn item_of_names_the_ungrouped_item_only_when_it_is_the_only_one(pool: PgP
         "an item id still names it"
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn writers_refuse_to_pick_among_several_ungrouped_items(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    let (media, item, f) = movie_with_files(&pool, 2).await;
+    sqlx::query(
+        r#"INSERT INTO editions ("mediaId", family, label) VALUES ($1, 'video', 'second')"#,
+    )
+    .bind(media)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let second: i32 = sqlx::query_scalar(
+        r#"INSERT INTO items ("mediaId", "editionId")
+           SELECT $1, max(id) FROM editions WHERE "mediaId" = $1 RETURNING id"#,
+    )
+    .bind(media)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(media::items::sole_item(&pool, media).await.unwrap(), None);
+    assert!(
+        media::items::attach(&pool, media, &[link(f[0])])
+            .await
+            .is_err()
+    );
+    let owned = media::items::Link {
+        file: f[1],
+        owner: Some(second),
+        last: None,
+    };
+    media::items::attach(&pool, media, &[owned]).await.unwrap();
+    assert_eq!(versions(&pool, item).await, vec![]);
+    assert_eq!(versions(&pool, second).await, vec![(f[1], 0, 0)]);
+
+    let mut c = pool.acquire().await.unwrap();
+    let kind = fliks_domain::media::kind::MediaKind::Movie;
+    assert!(
+        media::items::follow_kind(&mut c, media, kind)
+            .await
+            .is_err()
+    );
+}

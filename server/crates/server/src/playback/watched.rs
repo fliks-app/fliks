@@ -1,5 +1,5 @@
 //! The watched toggles and the watch recorded by the heartbeat (`docs/spec/playback-state.md`).
-use super::db::{find_state, fk, item_of};
+use super::db::{find_state, fk, named_item};
 use crate::http::AppError;
 use crate::playlists::remove_watched_from_auto_playlists;
 use chrono::{DateTime, Utc};
@@ -51,7 +51,7 @@ pub async fn toggle_watched(
     file: Option<i32>,
     episode: Option<i32>,
 ) -> Result<Value, AppError> {
-    let item = item_of(db, media, episode)
+    let item = named_item(db, media, episode)
         .await?
         .ok_or_else(|| AppError::not_found("not_found"))?;
     let existing = find_state(db, user, item).await?;
@@ -60,7 +60,7 @@ pub async fn toggle_watched(
     if file.is_none() && existing.is_none() {
         file = sqlx::query_scalar!(
             r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1
-               ORDER BY "version", "position" LIMIT 1"#,
+               ORDER BY "version" DESC, "position" LIMIT 1"#,
             item
         )
         .fetch_optional(db)

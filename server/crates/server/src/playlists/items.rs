@@ -197,7 +197,7 @@ pub async fn items(
            LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
              FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
              JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
-             WHERE e."mediaId" = m.id ORDER BY c.id LIMIT 1) coll ON true
+             WHERE e."mediaId" = m.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
            LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN playback_states ps ON ps."userId" = $3 AND ps."itemId" = pi."itemId"
            WHERE pi."playlistId" = $1
@@ -300,8 +300,7 @@ async fn resolve(
     .await?
     .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
     if !crate::db::kind(&kind)?.has_seasons() {
-        let item = sqlx::query_scalar!(r#"SELECT item_of($1, NULL) AS "item""#, media)
-            .fetch_one(&mut *c)
+        let item = crate::playback::named_item(&mut *c, media, None)
             .await?
             .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
         return Ok((vec![item], false));

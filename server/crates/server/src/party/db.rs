@@ -18,6 +18,7 @@ pub struct Row {
     pub media_id: Option<i32>,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    pub item_id: Option<i32>,
     pub playlist_id: Option<i32>,
     pub invite_token: String,
     #[sqlx(try_from = "String")]
@@ -44,6 +45,7 @@ impl Row {
             media_id: self.media_id?,
             media_file_id: self.media_file_id,
             episode_id: self.episode_id,
+            item_id: self.item_id,
         })
     }
 }
@@ -52,7 +54,7 @@ impl Row {
 const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id, p."hostId" AS host_id,
     it."mediaId" AS media_id,
     CASE WHEN p.status = 'scheduled' THEN h."mediaFileId" ELSE p."mediaFileId" END AS media_file_id,
-    CASE WHEN it."groupId" IS NOT NULL THEN it.id END AS episode_id,
+    CASE WHEN it."groupId" IS NOT NULL THEN it.id END AS episode_id, it.id AS item_id,
     p."playlistId" AS playlist_id, p."inviteToken" AS invite_token,
     p.policy, p."reactionsEnabled" AS reactions_enabled, p."chatEnabled" AS chat_enabled,
     p."linkSharing" AS link_sharing, p."public" AS public, p."scheduledAt" AS scheduled_at, p.status, p.position, p.cover"#;
@@ -190,13 +192,14 @@ pub async fn set_cover(
 async fn insert_items(tx: &mut sqlx::PgConnection, party: i32, items: &[Item]) -> sqlx::Result<()> {
     sqlx::query(
         r#"INSERT INTO watch_party_items ("partyId", position, "itemId", "mediaFileId")
-           SELECT $1, (n - 1)::int, item_of(m, e), f
-           FROM unnest($2::int[], $3::int[], $4::int[]) WITH ORDINALITY AS t(m, f, e, n)"#,
+           SELECT $1, (n - 1)::int, COALESCE(i, item_of(m, e)), f
+           FROM unnest($2::int[], $3::int[], $4::int[], $5::int[]) WITH ORDINALITY AS t(m, f, e, i, n)"#,
     )
     .bind(party)
     .bind(items.iter().map(|i| i.media_id).collect::<Vec<_>>())
     .bind(items.iter().map(|i| i.media_file_id).collect::<Vec<_>>())
     .bind(items.iter().map(|i| i.episode_id).collect::<Vec<_>>())
+    .bind(items.iter().map(|i| i.item_id).collect::<Vec<_>>())
     .execute(tx)
     .await?;
     Ok(())
@@ -512,23 +515,26 @@ pub async fn update_settings(
 /// Goes live on the head of the programme, which becomes the playing item and is returned. `None`
 /// when the party is not `scheduled` or its programme is empty: nothing changed.
 pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<Option<Item>> {
-    let row: Option<(i32, Option<i32>, Option<i32>)> = sqlx::query_as(
+    let row: Option<(i32, Option<i32>, Option<i32>, i32)> = sqlx::query_as(
         r#"UPDATE watch_parties p SET status = 'live', "startedAt" = now(),
                "itemId" = h."itemId", "mediaFileId" = h."mediaFileId"
            FROM (SELECT "itemId", "mediaFileId" FROM watch_party_items
                  WHERE "partyId" = $1 ORDER BY position LIMIT 1) h
            WHERE p.id = $1 AND p.status = 'scheduled'
            RETURNING (SELECT i."mediaId" FROM items i WHERE i.id = h."itemId"), h."mediaFileId",
-                     (SELECT i.id FROM items i WHERE i.id = h."itemId" AND i."groupId" IS NOT NULL)"#,
+                     (SELECT i.id FROM items i WHERE i.id = h."itemId" AND i."groupId" IS NOT NULL), h."itemId""#,
     )
     .bind(id)
     .fetch_optional(db)
     .await?;
-    Ok(row.map(|(media_id, media_file_id, episode_id)| Item {
-        media_id,
-        media_file_id,
-        episode_id,
-    }))
+    Ok(
+        row.map(|(media_id, media_file_id, episode_id, item_id)| Item {
+            media_id,
+            media_file_id,
+            episode_id,
+            item_id: Some(item_id),
+        }),
+    )
 }
 
 pub async fn set_ended(db: &PgPool, id: i32) -> sqlx::Result<()> {
@@ -545,7 +551,7 @@ pub async fn set_ended(db: &PgPool, id: i32) -> sqlx::Result<()> {
 
 pub async fn persist(db: &PgPool, id: i32, position: f64, item: &Item) -> sqlx::Result<()> {
     sqlx::query(
-        r#"UPDATE watch_parties SET position = $2, "itemId" = item_of($3, $5), "mediaFileId" = $4
+        r#"UPDATE watch_parties SET position = $2, "itemId" = COALESCE($6, item_of($3, $5)), "mediaFileId" = $4
            WHERE id = $1"#,
     )
     .bind(id)
@@ -553,6 +559,7 @@ pub async fn persist(db: &PgPool, id: i32, position: f64, item: &Item) -> sqlx::
     .bind(item.media_id)
     .bind(item.media_file_id)
     .bind(item.episode_id)
+    .bind(item.item_id)
     .execute(db)
     .await?;
     Ok(())
@@ -776,10 +783,12 @@ pub struct QueueRow {
     pub playable: bool,
 }
 
+type ProgrammeRow = (i32, Option<i32>, Option<i32>, i32, bool);
+
 /// The programme in its order.
 pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRow>> {
-    let rows: Vec<(i32, Option<i32>, Option<i32>, bool)> = sqlx::query_as(
-        r#"SELECT it."mediaId", i."mediaFileId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
+    let rows: Vec<ProgrammeRow> = sqlx::query_as(
+        r#"SELECT it."mediaId", i."mediaFileId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END, it.id,
                   (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
            FROM watch_party_items i JOIN items it ON it.id = i."itemId"
            WHERE i."partyId" = $1 ORDER BY i.position"#,
@@ -789,21 +798,24 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(media_id, media_file_id, episode_id, playable)| QueueRow {
-            item: Item {
-                media_id,
-                media_file_id,
-                episode_id,
+        .map(
+            |(media_id, media_file_id, episode_id, item_id, playable)| QueueRow {
+                item: Item {
+                    media_id,
+                    media_file_id,
+                    episode_id,
+                    item_id: Some(item_id),
+                },
+                playable,
             },
-            playable,
-        })
+        )
         .collect())
 }
 
 /// The playlist's rows in its order (`playlists.md` rule 13).
 pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<QueueRow>> {
-    let rows: Vec<(i32, Option<i32>, bool)> = sqlx::query_as(
-        r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
+    let rows: Vec<(i32, Option<i32>, i32, bool)> = sqlx::query_as(
+        r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END, it.id,
                   (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = pi."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
            FROM playlist_items pi JOIN items it ON it.id = pi."itemId"
            WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
@@ -813,13 +825,97 @@ pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<Queue
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(media_id, episode_id, playable)| QueueRow {
+        .map(|(media_id, episode_id, item_id, playable)| QueueRow {
             item: Item {
                 media_id,
                 media_file_id: None,
                 episode_id,
+                item_id: Some(item_id),
             },
             playable,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fliks_domain::party::{Item, Policy};
+
+    /// An owner and a media with two ungrouped items, the id of the second returned.
+    async fn two_ungrouped(pool: &PgPool) -> (i32, i32, i32) {
+        crate::db::migrate(pool).await.unwrap();
+        let owner: i32 = sqlx::query_scalar(
+            r#"INSERT INTO users (username, "isAdmin") VALUES ('u', true) RETURNING id"#,
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        let media: i32 = sqlx::query_scalar(
+            r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#,
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        let mut second = 0;
+        for label in ["a", "b"] {
+            second = sqlx::query_scalar(
+                r#"WITH e AS (INSERT INTO editions ("mediaId", family, label) VALUES ($1, 'video', $2) RETURNING id)
+                   INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING items.id"#,
+            )
+            .bind(media)
+            .bind(label)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        }
+        (owner, media, second)
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_programme_keeps_the_stored_item_of_an_ambiguous_pair(pool: PgPool) {
+        let (owner, media, second) = two_ungrouped(&pool).await;
+        let item = Item {
+            media_id: media,
+            media_file_id: None,
+            episode_id: None,
+            item_id: Some(second),
+        };
+        let programme = [item.clone()];
+        let new = New {
+            name: "p",
+            owner,
+            programme: &programme,
+            playlist_id: None,
+            policy: Policy::Everyone,
+            reactions_enabled: true,
+            chat_enabled: true,
+            link_sharing: false,
+            public: false,
+            scheduled_at: Utc::now() + chrono::Duration::hours(1),
+            cover: None,
+        };
+        let (row, _) = insert(&pool, &new, &[], false).await.unwrap();
+        assert_eq!(row.item().unwrap().item_id, Some(second));
+        let rows = programme_rows(&pool, row.id).await.unwrap();
+        assert_eq!(rows[0].item.item_id, Some(second));
+        let live = set_live(&pool, row.id).await.unwrap().unwrap();
+        assert_eq!(live.item_id, Some(second));
+        persist(&pool, row.id, 3.0, &live).await.unwrap();
+        let kept: Option<i32> =
+            sqlx::query_scalar(r#"SELECT "itemId" FROM watch_parties WHERE id = $1"#)
+                .bind(row.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(kept, Some(second));
+        let bare = Item {
+            item_id: None,
+            ..item
+        };
+        assert!(
+            !item_valid(&pool, &bare).await.unwrap(),
+            "the bare pair names no item"
+        );
+    }
 }

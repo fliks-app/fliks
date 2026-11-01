@@ -29,7 +29,7 @@ INSERT INTO media_files (id, "createdAt", "updatedAt", "mediaId", "relativePath"
  (101, '2026-01-01', '2026-01-01', 101, 'Work.Movie.2020.1080p.BluRay.x264-GRP.mkv', 73237, 'Bluray-1080p', 'en'),
  (102, '2026-01-01', '2026-01-01', 103, 'Season 01/Work.Show.S01E01.1080p.WEB-DL.x264-GRP.mkv', 73237, 'WEBDL-1080p', 'en');
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
-  SELECT COALESCE(v.item, i.id), f.id, f."mediaId", 0 FROM media_files f
+  SELECT COALESCE(v.item, i.id), f.id, f."mediaId", (row_number() OVER (PARTITION BY COALESCE(v.item, i.id) ORDER BY f.id) - 1)::int FROM media_files f
   JOIN (VALUES (101, NULL::int), (102, 101)) AS v(file, item) ON v.file = f.id
   LEFT JOIN items i ON i."mediaId" = f."mediaId" AND i."groupId" IS NULL;
 INSERT INTO subtitle_providers (id, "createdAt", "updatedAt", name, type, enabled, settings, priority) VALUES

@@ -30,10 +30,13 @@ async fn movie_items(pool: &PgPool) {
            INSERT INTO items (id, "mediaId", "editionId")
              SELECT 1000 + id, id, 1000 + id FROM media m
              WHERE type = 'movie' AND NOT EXISTS (SELECT 1 FROM items WHERE "mediaId" = m.id);
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId")
-             SELECT (SELECT min(i.id) FROM items i WHERE i."mediaId" = f."mediaId" AND i."groupId" IS NULL),
-                    f.id, f."mediaId"
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+             SELECT t.item, f.id, f."mediaId",
+                    (COALESCE((SELECT max(q."version") + 1 FROM item_parts q WHERE q."itemId" = t.item), 0)
+                     + row_number() OVER (PARTITION BY t.item ORDER BY f.id) - 1)::int
              FROM media_files f JOIN media m ON m.id = f."mediaId"
+             CROSS JOIN LATERAL (SELECT min(i.id) AS item FROM items i
+                                 WHERE i."mediaId" = f."mediaId" AND i."groupId" IS NULL) t
              WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaFileId" = f.id)"#,
     )
     .execute(pool)

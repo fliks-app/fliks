@@ -213,7 +213,7 @@ INSERT INTO media_files (id, "createdAt", "updatedAt", "relativePath", size, qua
  (61, '2026-02-01'::timestamptz + (61 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e27.mkv', 1000061, 'WEBDL-1080p', 'en', NULL, 47, NULL, NULL),
  (62, '2026-02-01'::timestamptz + (62 * 37 % 101) * interval '1 hour', '2026-01-01', 'Season 01/e29.mkv', 1000062, 'WEBDL-1080p', 'en', NULL, 47, NULL, NULL);
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
-  SELECT i.id, f.id, f."mediaId", 0 FROM media_files f
+  SELECT i.id, f.id, f."mediaId", (row_number() OVER (PARTITION BY i.id ORDER BY f.id) - 1)::int FROM media_files f
   JOIN items i ON i."mediaId" = f."mediaId" AND i."groupId" IS NULL WHERE f.id BETWEEN 30 AND 56;
 -- a multi-episode file (13, 20, 29) plays the item inside its range
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES

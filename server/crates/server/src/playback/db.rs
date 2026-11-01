@@ -107,6 +107,26 @@ pub async fn item_of(db: &PgPool, media: i32, episode: Option<i32>) -> sqlx::Res
         .await
 }
 
+/// `item_of` for a request: a pair that names several ungrouped items is a 409, not an unknown pair.
+pub async fn named_item(
+    db: impl sqlx::PgExecutor<'_>,
+    media: i32,
+    episode: Option<i32>,
+) -> Result<Option<i32>, AppError> {
+    let row = sqlx::query!(
+        r#"SELECT item_of($1, $2) AS "item",
+                  (SELECT count(*) FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL) AS "ungrouped!""#,
+        media,
+        episode
+    )
+    .fetch_one(db)
+    .await?;
+    if row.item.is_none() && episode.is_none() && row.ungrouped > 1 {
+        return Err(AppError::conflict("ambiguous_item"));
+    }
+    Ok(row.item)
+}
+
 pub async fn find_state(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<StateRow>> {
     sqlx::query_as!(
         StateRow,

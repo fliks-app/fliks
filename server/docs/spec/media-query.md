@@ -72,7 +72,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | `voteMin` | `!== undefined` | `media.rating >= $n` | float, NULL excluded |
     | `genre` | truthy | `media.genres @> $n::jsonb` with `$n = JSON.stringify([genre])` | jsonb array containment: exact element, case-sensitive, NULL `genres` excluded |
     | `genres` | `length > 0` | `media.genres @> $n::jsonb` with `$n = JSON.stringify(genres)` | all listed genres must be present (AND); combines with `genre` by AND |
-    | `collectionId` | truthy | `EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb' WHERE e."mediaId" = media.id AND x.value = $n::text)` | |
+    | `collectionId` | truthy | `EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb' WHERE e."mediaId" = media.id AND e."itemId" IS NULL AND x.value = $n::text)` | |
     | `qualityProfileId` | truthy | `w."qualityProfileId" = $n` (the video want, `items.md` rule 29) | |
     | `languageProfileId` | truthy | `media."languageProfileId" = $n` | |
     | `missing` | `!== undefined` | rule 22 | |
@@ -324,7 +324,7 @@ SELECT x.value::int            AS id,
          ARRAY[]::text[]
        ) AS posters
 FROM media m
-JOIN collection_entries e ON e."mediaId" = m.id
+JOIN collection_entries e ON e."mediaId" = m.id AND e."itemId" IS NULL
 JOIN collections c ON c.id = e."collectionId"
 JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
 WHERE m."libraryId" = ANY($1)
@@ -369,12 +369,12 @@ WHERE m."libraryId" = $source_library AND m.type = 'movie' AND m.id != $source
         OR jsonb_exists_any(m.genres, ARRAY[$genres...])          -- if source genres
         OR jsonb_exists_any(meta.keywords, ARRAY[$keywords...])   -- if source keywords
         OR m.id IN ($sameDirectorIds...) )                        -- if any
-  AND NOT EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb' WHERE e."mediaId" = m.id AND x.value = $source_collection::text)   -- if source has one
+  AND NOT EXISTS (SELECT 1 FROM collection_entries e JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb' WHERE e."mediaId" = m.id AND e."itemId" IS NULL AND x.value = $source_collection::text)   -- if source has one
 ```
 
 Director lookups: `SELECT crew."personId" FROM media_credits crew WHERE crew."mediaId" = $1 AND crew.role = 'crew' AND crew.job = 'Director'`; `SELECT crew."mediaId" FROM media_credits crew WHERE crew."personId" IN (...) AND crew.role = 'crew' AND crew.job = 'Director' AND crew."mediaId" != $1`.
 
-**Q-F (collection)** `SELECT m.*, (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = m.id) AS "fileCount" FROM media m LEFT JOIN LATERAL (<the dates>) dates ON true JOIN collection_entries ce ON ce."mediaId" = m.id WHERE m."libraryId" = $lib AND ce."collectionId" = $source_collection_id ORDER BY ce.position ASC NULLS LAST, dates.release_date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC`.
+**Q-F (collection)** `SELECT m.*, (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = m.id) AS "fileCount" FROM media m LEFT JOIN LATERAL (<the dates>) dates ON true JOIN collection_entries ce ON ce."mediaId" = m.id AND ce."itemId" IS NULL WHERE m."libraryId" = $lib AND ce."collectionId" = $source_collection_id ORDER BY ce.position ASC NULLS LAST, dates.release_date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC`.
 
 **Q-O (detail)** `SELECT * FROM media WHERE id = $1` then one query per relation (strategy `query`): `item_groups WHERE "mediaId"`, `items WHERE "groupId" = ANY`, `media_files WHERE "mediaId"`, `quality_profiles`, `language_profiles`, `libraries`, `media_details_json(id)`.
 

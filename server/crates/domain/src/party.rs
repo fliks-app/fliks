@@ -127,6 +127,9 @@ pub struct Item {
     pub media_id: i32,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    /// The stored item of a row read from the database; an item from the wire leaves it unset.
+    #[serde(skip)]
+    pub item_id: Option<i32>,
 }
 
 /// The queue rows to try, nearest first, after (before) `current`. A current item that left the
@@ -148,7 +151,9 @@ fn item_args(i: &Item) -> Value {
 }
 
 pub fn same_row(a: &Item, b: &Item) -> bool {
-    a.media_id == b.media_id && a.episode_id == b.episode_id
+    a.media_id == b.media_id
+        && a.episode_id == b.episode_id
+        && (a.item_id.is_none() || b.item_id.is_none() || a.item_id == b.item_id)
 }
 
 /// The server's pick for a queue step: the rows passed over and the row that plays (`None`:
@@ -1334,6 +1339,7 @@ mod tests {
         Item {
             media_id: 1,
             media_file_id: None,
+            item_id: None,
             episode_id: None,
         }
     }
@@ -1581,6 +1587,7 @@ mod tests {
         let out = l.programme(Some(Item {
             media_id: 9,
             media_file_id: None,
+            item_id: None,
             episode_id: None,
         }));
         assert_eq!(l.pb().item, item());
@@ -1702,6 +1709,7 @@ mod tests {
         let next = Item {
             media_id: 1,
             media_file_id: None,
+            item_id: None,
             episode_id: Some(7),
         };
         let out = l
@@ -2137,6 +2145,7 @@ mod tests {
         Item {
             media_id: media,
             media_file_id: None,
+            item_id: None,
             episode_id: episode,
         }
     }

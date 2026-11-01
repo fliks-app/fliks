@@ -117,6 +117,7 @@ impl From<ItemIn> for Item {
             media_id: i.media_id,
             media_file_id: i.media_file_id,
             episode_id: i.episode_id,
+            item_id: None,
         }
     }
 }

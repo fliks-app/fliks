@@ -1752,15 +1752,20 @@ async fn m1789000180_versions_the_parts_and_widens_the_collection_entries(pool: 
     apply_until(&pool, 1_789_000_000_180).await;
     sql(
         &pool,
-        r#"INSERT INTO users (id, username) VALUES (1, 'u');
-           INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie'), (2, 'b', 'movie');
-           INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'video'), (2, 2, 'video');
+        r#"INSERT INTO users (id, username) VALUES (1, 'u'), (2, 'v');
+           INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie'), (2, 'b', 'movie'), (3, 'c', 'series');
+           INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'video'), (2, 2, 'video'), (3, 3, 'video');
+           INSERT INTO item_groups (id, "mediaId", number) VALUES (1, 3, 1);
            INSERT INTO items (id, "mediaId", "editionId") VALUES (10, 1, 1), (20, 2, 2);
+           INSERT INTO items (id, "mediaId", "editionId", "groupId", number) VALUES (30, 3, 3, 1, 1), (31, 3, 3, 1, 2);
            INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
-             (1, 1, 'a.mkv', 1, 'q'), (2, 1, 'b.mkv', 1, 'q'), (3, 1, 'c.mkv', 1, 'q'), (4, 2, 'd.mkv', 1, 'q');
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES (10, 3, 1), (10, 1, 1), (10, 2, 1), (20, 4, 2);
+             (1, 1, 'a.mkv', 1, 'q'), (2, 1, 'b.mkv', 1, 'q'), (3, 1, 'c.mkv', 1, 'q'), (4, 2, 'd.mkv', 1, 'q'),
+             (5, 3, 'e.mkv', 1, 'q');
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") VALUES
+             (10, 3, 1), (10, 1, 1), (10, 2, 1), (20, 4, 2), (30, 5, 3), (31, 5, 3);
            INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds", "updatedAt") VALUES
-             (1, 10, 2, 5, '2026-01-01'), (1, 20, NULL, 5, '2026-01-01');
+             (1, 10, 2, 5, '2026-01-01'), (1, 20, NULL, 5, '2026-01-01'), (1, 31, 5, 5, '2026-01-01'),
+             (2, 20, 1, 5, '2026-01-01');
            INSERT INTO collections (id, name) VALUES (1, 'c');
            INSERT INTO collection_entries ("collectionId", "mediaId", position) VALUES (1, 1, 2), (1, 2, NULL)"#,
     )
@@ -1774,21 +1779,30 @@ async fn m1789000180_versions_the_parts_and_widens_the_collection_entries(pool: 
     .await;
     assert_eq!(
         parts,
-        vec![(10, 1, 0), (10, 2, 1), (10, 3, 2), (20, 4, 0)],
-        "each part is its own version, in file order"
+        vec![
+            (10, 1, 0),
+            (10, 2, 1),
+            (10, 3, 2),
+            (20, 4, 0),
+            (30, 5, 0),
+            (31, 5, 0)
+        ],
+        "each part is its own version, in file order, a multi-episode file one per item"
     );
-    let state: Vec<(i32, Option<i32>, String)> = rows(
+    let state: Vec<(i32, i32, Option<i32>, String)> = rows(
         &pool,
-        r#"SELECT "itemId", "version", "updatedAt"::date::text FROM playback_states ORDER BY 1"#,
+        r#"SELECT "userId", "itemId", "version", "updatedAt"::date::text FROM playback_states ORDER BY 1, 2"#,
     )
     .await;
     assert_eq!(
         state,
         vec![
-            (10, Some(1), "2026-01-01".into()),
-            (20, None, "2026-01-01".into())
+            (1, 10, Some(1), "2026-01-01".into()),
+            (1, 20, None, "2026-01-01".into()),
+            (1, 31, Some(0), "2026-01-01".into()),
+            (2, 20, None, "2026-01-01".into()),
         ],
-        "the backfill follows the played file and leaves updatedAt"
+        "the backfill follows the played file of the same item and leaves updatedAt"
     );
     for bad in [
         r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES (20, 1, 1, 0)"#,
@@ -1854,22 +1868,20 @@ async fn m1789000180_versions_the_parts_and_widens_the_collection_entries(pool: 
     assert_eq!(left, 0, "an item entry goes with its item");
 }
 
-/// The literals of each single-column CHECK on `column`, per table and constraint.
-async fn check_values(pool: &PgPool, column: &str) -> Vec<(String, Vec<String>)> {
-    let found: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT c.conrelid::regclass::text || '.' || c.conname, pg_get_constraintdef(c.oid)
+/// Every single-column CHECK as (table.constraint, column, quoted literals sorted).
+async fn single_column_checks(pool: &PgPool) -> Vec<(String, String, Vec<String>)> {
+    let found: Vec<(String, String, String)> = sqlx::query_as(
+        r#"SELECT c.conrelid::regclass::text || '.' || c.conname, a.attname::text, pg_get_constraintdef(c.oid)
              FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
-            WHERE c.contype = 'c' AND cardinality(c.conkey) = 1 AND a.attname = $1
-              AND c.connamespace = 'public'::regnamespace
+            WHERE c.contype = 'c' AND cardinality(c.conkey) = 1 AND c.connamespace = 'public'::regnamespace
             ORDER BY 1"#,
     )
-    .bind(column)
     .fetch_all(pool)
     .await
     .unwrap();
     found
         .into_iter()
-        .map(|(name, def)| {
+        .map(|(name, column, def)| {
             let mut v: Vec<String> = def
                 .split('\'')
                 .skip(1)
@@ -1877,46 +1889,50 @@ async fn check_values(pool: &PgPool, column: &str) -> Vec<(String, Vec<String>)>
                 .map(str::to_string)
                 .collect();
             v.sort();
-            (name, v)
+            v.dedup();
+            (name, column, v)
         })
         .collect()
 }
 
-/// A kind or family added to the domain must reach every CHECK that lists one.
+/// A kind or family added to the domain must reach every CHECK that lists one, found by its literals.
 #[sqlx::test(migrations = false)]
 async fn kind_and_family_checks_match_the_domain(pool: PgPool) {
-    use fliks_domain::media::{family::Family, kind::MediaKind};
+    use fliks_domain::media::kind::MediaKind;
     apply(&pool, |_| true).await;
+    let checks = single_column_checks(&pool).await;
     let mut kinds: Vec<String> = MediaKind::ALL.iter().map(|k| k.as_str().into()).collect();
     kinds.sort();
-    let mut checked = 0;
-    for (table, column) in [
-        ("media", "type"),
-        ("requests", "mediaType"),
-        ("user_quotas", "kind"),
-    ] {
-        let found = check_values(&pool, column).await;
-        let (name, values) = found
-            .iter()
-            .find(|(n, _)| n.starts_with(&format!("{table}.")))
-            .unwrap_or_else(|| panic!("no CHECK on {table}.{column}"));
-        assert_eq!(values, &kinds, "{name}");
-        checked += 1;
+
+    let (mut lists, mut per_kind, mut levels) = (vec![], vec![], false);
+    for (name, _, values) in checks
+        .iter()
+        .filter(|c| c.2.iter().any(|v| kinds.contains(v)))
+    {
+        if values.len() == 1 {
+            per_kind.push(values[0].clone());
+        } else if name.starts_with("cleanup_rules.") {
+            let rest: Vec<&String> = values.iter().filter(|v| !kinds.contains(v)).collect();
+            assert!(
+                kinds.iter().all(|k| values.contains(k)),
+                "{name} misses a kind"
+            );
+            assert_eq!(rest, ["episode", "season"], "{name}");
+            levels = true;
+        } else {
+            assert_eq!(values, &kinds, "{name}");
+            lists.push(name.clone());
+        }
     }
-    let levels: String = sqlx::query_scalar(
-        r#"SELECT pg_get_constraintdef(oid) FROM pg_constraint
-            WHERE conrelid = 'cleanup_rules'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%levels%'"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    for k in &kinds {
+    per_kind.sort();
+    assert_eq!(per_kind, kinds, "one details table per kind");
+    assert!(levels, "no CHECK on the cleanup levels");
+    for table in ["media.", "requests.", "user_quotas."] {
         assert!(
-            levels.contains(&format!("'{k}'")),
-            "cleanup levels miss {k}"
+            lists.iter().any(|l| l.starts_with(table)),
+            "no kind CHECK on {table}"
         );
     }
-    assert_eq!(checked, 3);
 
     // A family CHECK lists the families some kind is wished in; the other domain families wait for their kind.
     let mut used: Vec<String> = MediaKind::ALL
@@ -1925,12 +1941,10 @@ async fn kind_and_family_checks_match_the_domain(pool: PgPool) {
         .collect();
     used.sort();
     used.dedup();
-    let known: Vec<String> = Family::ALL.iter().map(|f| f.as_str().into()).collect();
-    let families = check_values(&pool, "family").await;
+    let families: Vec<_> = checks.iter().filter(|c| c.1 == "family").collect();
     assert!(families.len() >= 4, "family checks found: {families:?}");
-    for (name, values) in families {
-        assert_eq!(values, used, "{name}");
-        assert!(values.iter().all(|v| known.contains(v)), "{name}");
+    for (name, _, values) in families {
+        assert_eq!(values, &used, "{name}");
     }
 }
 

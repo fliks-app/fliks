@@ -307,7 +307,7 @@ pub async fn heartbeat(
         .filter(|e| *e != 0);
     let mut resolved = match bound_file {
         Some(bound) => {
-            let item = super::db::item_of(&st.db, media, episode).await?;
+            let item = super::db::named_item(&st.db, media, episode).await?;
             check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
             Some(item)
         }
@@ -324,7 +324,7 @@ pub async fn heartbeat(
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
         let item = match resolved {
             Some(item) => item,
-            None => super::db::item_of(&st.db, media, episode).await?,
+            None => super::db::named_item(&st.db, media, episode).await?,
         };
         resolved = Some(item);
         let before = st.presence.peek(sid);
@@ -370,7 +370,7 @@ pub async fn heartbeat(
     };
     let item = match resolved {
         Some(item) => item,
-        None => super::db::item_of(&st.db, media, episode).await?,
+        None => super::db::named_item(&st.db, media, episode).await?,
     };
     let Some(item) = item else {
         return Ok(reply(lost, Some(None)));

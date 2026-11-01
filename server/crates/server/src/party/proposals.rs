@@ -79,6 +79,7 @@ async fn resolve(st: &AppState, rows: Vec<Raw>) -> Result<Vec<ProposalDto>, AppE
         .map(|r| Item {
             media_id: r.1,
             media_file_id: None,
+            item_id: None,
             episode_id: r.2,
         })
         .collect();
@@ -125,27 +126,30 @@ async fn announce(st: &AppState, row: &db::Row) -> Result<(), AppError> {
 /// The proposal the start takes: the most upvotes, then the fewest downvotes; a tie on both is a
 /// 409 the host settles by accepting one.
 pub(super) async fn top(db: &PgPool, party: i32) -> R<Option<Item>> {
-    let rows: Vec<(i32, Option<i32>, i64, i64)> = sqlx::query_as(
-        r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
+    let rows: Vec<(i32, Option<i32>, i32, i64, i64)> = sqlx::query_as(
+        r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END, it.id,
                   count(*) FILTER (WHERE v."value" = 1), count(*) FILTER (WHERE v."value" = -1)
            FROM watch_party_proposals p JOIN items it ON it.id = p."itemId"
            LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
            WHERE p."partyId" = $1 GROUP BY p.id, it.id
-           ORDER BY 3 DESC, 4 ASC LIMIT 2"#,
+           ORDER BY 4 DESC, 5 ASC LIMIT 2"#,
     )
     .bind(party)
     .fetch_all(db)
     .await?;
     if let [a, b] = rows.as_slice()
-        && (a.2, a.3) == (b.2, b.3)
+        && (a.3, a.4) == (b.3, b.4)
     {
         return Err(fail(StatusCode::CONFLICT, "party.error_vote_tie"));
     }
-    Ok(rows.first().map(|&(media_id, episode_id, ..)| Item {
-        media_id,
-        media_file_id: None,
-        episode_id,
-    }))
+    Ok(rows
+        .first()
+        .map(|&(media_id, episode_id, item_id, ..)| Item {
+            media_id,
+            media_file_id: None,
+            item_id: Some(item_id),
+            episode_id,
+        }))
 }
 
 /// Drops the votes and the proposals of users who left the party (kicked, quit, revoked): they
@@ -242,6 +246,7 @@ async fn add_proposals(
         .map(|b| Item {
             media_id: b.media_id,
             media_file_id: None,
+            item_id: None,
             episode_id: b.episode_id,
         })
         .collect();
@@ -346,6 +351,7 @@ async fn proposal(st: &AppState, id: i32, pid: i32) -> R<(i32, Item)> {
     let item = Item {
         media_id,
         media_file_id: None,
+        item_id: None,
         episode_id,
     };
     Ok((by, item))

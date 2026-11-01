@@ -9,13 +9,34 @@ pub struct Link {
     pub last: Option<i32>,
 }
 
-/// Serialises the writers of a media's item versions so two never pick the same one.
-async fn lock_versions(c: &mut PgConnection, media: i32) -> sqlx::Result<()> {
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('item_parts:' || $1::text))")
+/// Advisory lock class of the item-version writers, keyed by media.
+const VERSIONS_LOCK: i32 = 0x4956_5253;
+
+/// Serialises the writers of a media's item parts so two never pick the same version. A writer that
+/// also deletes items takes it before its first delete, the order `attach` follows.
+pub(crate) async fn lock_versions(c: &mut PgConnection, media: i32) -> sqlx::Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(VERSIONS_LOCK)
         .bind(media)
         .execute(c)
         .await
         .map(drop)
+}
+
+/// Refuses to guess among several ungrouped items: a writer that names none must not pick the first.
+async fn refuse_several_ungrouped(c: &mut PgConnection, media: i32) -> sqlx::Result<()> {
+    let n: i64 = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL"#,
+        media
+    )
+    .fetch_one(c)
+    .await?;
+    if n > 1 {
+        return Err(sqlx::Error::Protocol(format!(
+            "media {media} has {n} ungrouped items, none was named"
+        )));
+    }
+    Ok(())
 }
 
 /// Replaces each file's parts with its owner and the existing items of its range; no owner means the sole item.
@@ -29,6 +50,9 @@ pub async fn attach(db: &PgPool, media: i32, links: &[Link]) -> sqlx::Result<()>
     let lasts: Vec<Option<i32>> = links.iter().map(|l| l.last).collect();
     let mut tx = db.begin().await?;
     lock_versions(&mut tx, media).await?;
+    if links.iter().any(|l| l.owner.is_none()) {
+        refuse_several_ungrouped(&mut tx, media).await?;
+    }
     sqlx::query!(
         r#"WITH old AS (
              DELETE FROM item_parts WHERE "mediaFileId" = ANY($2)
@@ -37,7 +61,7 @@ pub async fn attach(db: &PgPool, media: i32, links: &[Link]) -> sqlx::Result<()>
              SELECT DISTINCT i.id AS item, v.file
              FROM UNNEST($2::int[], $3::int[], $4::int[]) AS v(file, owner, last)
              JOIN items o ON o."mediaId" = $1 AND o.id = COALESCE(v.owner,
-                  (SELECT id FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL ORDER BY id LIMIT 1))
+                  item_of($1, NULL))
              JOIN items i ON i.id = o.id
                   OR (i."groupId" = o."groupId" AND i."number" > o."number" AND i."number" <= v.last))
            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
@@ -123,6 +147,7 @@ pub async fn create_shell(
 
 /// Follows a media type change: a series loses its ungrouped item, a movie gains one that plays every file.
 pub async fn follow_kind(c: &mut PgConnection, media: i32, kind: MediaKind) -> sqlx::Result<()> {
+    lock_versions(&mut *c, media).await?;
     if kind.has_seasons() {
         sqlx::query!(
             r#"DELETE FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL"#,
@@ -142,7 +167,7 @@ pub async fn follow_kind(c: &mut PgConnection, media: i32, kind: MediaKind) -> s
     )
     .execute(&mut *c)
     .await?;
-    lock_versions(&mut *c, media).await?;
+    refuse_several_ungrouped(&mut *c, media).await?;
     sqlx::query!(
         r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
            SELECT i.id, f.id, $1,
@@ -169,12 +194,9 @@ pub async fn video_edition(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<
     .await
 }
 
-/// The ungrouped item of a media without seasons.
+/// The ungrouped item of a media without seasons; `None` when it has none or several.
 pub async fn sole_item(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Option<i32>> {
-    sqlx::query_scalar!(
-        r#"SELECT id FROM items WHERE "mediaId" = $1 AND "groupId" IS NULL ORDER BY id LIMIT 1"#,
-        media
-    )
-    .fetch_optional(db)
-    .await
+    sqlx::query_scalar!(r#"SELECT item_of($1, NULL) AS "item""#, media)
+        .fetch_one(db)
+        .await
 }

@@ -264,7 +264,7 @@ pub async fn get_state(
     PathParams(media): PathParams<i32>,
     Query(q): Q,
 ) -> Result<Response, AppError> {
-    let Some(item) = db::item_of(&st.db, media, episode_param(&q)).await? else {
+    let Some(item) = db::named_item(&st.db, media, episode_param(&q)).await? else {
         return Ok(empty());
     };
     let row = db::find_state(&st.db, a.user.id, item).await?;
@@ -278,7 +278,7 @@ pub async fn delete_state(
     PathParams(media): PathParams<i32>,
     Query(q): Q,
 ) -> Result<Response, AppError> {
-    if let Some(item) = db::item_of(&st.db, media, episode_param(&q)).await? {
+    if let Some(item) = db::named_item(&st.db, media, episode_param(&q)).await? {
         db::delete_state(&st.db, a.user.id, item).await?;
     }
     Ok(empty())
