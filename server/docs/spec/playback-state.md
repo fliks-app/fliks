@@ -49,7 +49,7 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ### Continue watching
 
-11. One statement (SQL below), per media, then ordered and cut in SQL. Movies (ungrouped items): not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), scoped by library; `mediaType = 'movie'`, `episodeLabel = null`. Series ("next up"): per media the in-progress item (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`, hidden or not) else the item after the highest completed `(group number, item number)` (groups numbered `> 0`) when it exists and has a part and is not completed; `mediaType = 'series'`; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next item; `lastPlayedAt` = the series' most recent non-hidden state. `mediaFileId` is the last file played when it is a part of the item, else the item's latest part; a row whose item has no part is dropped, movies included (a client cannot play it). Post-processing per row: `positionSeconds` and `progressPercent` are set to `0` when `positionSeconds < 10` (the item stays listed). Order: `lastPlayedAt` truncated to the millisecond DESC, then movies before series, then media id; `LIMIT 20`.
+11. One statement (SQL below), per media, then ordered and cut in SQL. Movies (ungrouped items): not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), scoped by library; `episodeLabel = null`. Series ("next up"): per media the in-progress item (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`, hidden or not) else the item after the highest completed `(group number, item number)` (groups numbered `> 0`) when it exists and has a part and is not completed; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next item; `lastPlayedAt` = the series' most recent non-hidden state. `mediaType` of every row is the media's kind (`media.type`), never derived from whether the item is grouped. `mediaFileId` is the last file played when it is a part of the item, else the item's latest part; a row whose item has no part is dropped, movies included (a client cannot play it). Post-processing per row: `positionSeconds` and `progressPercent` are set to `0` when `positionSeconds < 10` (the item stays listed). Order: `lastPlayedAt` truncated to the millisecond DESC, then the media's kind name (movie before series), then media id; `LIMIT 20`.
 12. `ContinueWatchingItem` fields: `id, mediaId, mediaFileId (number|null), episodeId (number|null), positionSeconds, durationSeconds, progressPercent, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel`; movies have `stillUrl: null`.
 
 ### History
@@ -199,7 +199,7 @@ FROM (
   SELECT c.id, c."mediaId", f.id AS file, c.pos, c.dur, c."lastPlayedAt",
          CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
          m.title, m."posterUrl" AS poster, m."fanartUrl" AS fanart,
-         CASE WHEN e."groupId" IS NULL THEN 'movie' ELSE 'series' END AS kind,
+         m.type AS kind,
          e."stillUrl" AS still,
          CASE WHEN e."groupId" IS NOT NULL
               THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
@@ -253,26 +253,9 @@ SELECT
  LIMIT $2 OFFSET $3
 ```
 
-**Watched media ids** (params `[userId, accessibleLibraryIds]`):
+**Watched media ids** (params `[userId, accessibleLibraryIds]`), `<watched>` the predicate of `media-query.md` Q-W with `:userId` = `$1`:
 ```sql
-SELECT DISTINCT i."mediaId" AS id
-FROM playback_states ps
-JOIN items i ON i.id = ps."itemId"
-JOIN media m ON m.id = i."mediaId"
-WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'
-  AND m."libraryId" = ANY($2)
-
-UNION
-
-SELECT s."mediaId" AS id
-FROM item_groups s
-JOIN items e ON e."groupId" = s.id
-LEFT JOIN playback_states ps
-  ON ps."userId" = $1 AND ps."itemId" = e.id AND ps.completed = true
-WHERE s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-  AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))
-GROUP BY s."mediaId"
-HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)
+SELECT m.id FROM media m WHERE m."libraryId" = ANY($2) AND (<watched>)
 ```
 
 **Series bulk watched** (params `[userId, mediaId]`):

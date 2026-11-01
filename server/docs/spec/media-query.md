@@ -78,7 +78,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | `missing` | `!== undefined` | rule 22 | |
     | `unidentified` | `=== true` | `NOT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = media.id)` | identified means any external id (`external-ids.md` rule 7); an empty `imdbId` is not stored, so it does not count |
     | `letter` | truthy | rule 23 | |
-20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `media.id <op> (<watched subquery>)` with `op = onlyWatched ? IN : NOT IN` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below: a movie is watched when the user's `playback_states` row for its item is `completed`; a series when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; a series with no file-backed episodes is never watched).
+20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `media.id <op> (<watched subquery>)` with `op = onlyWatched ? IN : NOT IN` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below, the one watched rule of the server (Q-P and `watched-ids` use the same predicate): a media of a kind with seasons (`MediaKind::has_seasons`) is watched when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; such a media with no file-backed episode is never watched); any other media is watched when the user has a `completed` row on one of its items (a movie's single item, either edition of a book).
 21. `total` = number of distinct media matching all clauses above (not reduced by `cutoffUnmet`, rule 26, nor by `limit`).
 22. `missing` (rule 19) is, with `today` = the **UTC** date `YYYY-MM-DD` computed in application code (not `CURRENT_DATE`): `missing=true` → `(files.id IS NULL OR <ME>)`, `missing=false` → `(files.id IS NOT NULL AND NOT <ME>)`, where `files.id IS NULL` means the media has no `media_files` row (`NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = media.id)`) and `<ME>` is Q-M below ("a monitored season (> 0) holds a monitored episode, aired on or before today, not on disk"). An episode with `airDate IS NULL` is never missing; an unmonitored series with gaps is still missing; a movie is missing iff it has no file. "On disk" = the episode has an item part (`items.md` rule 21): a multi-episode file gives a part to every existing episode of its range, so the episodes inside it are on disk without any range arithmetic.
 23. `letter`: `letter = query.letter.toUpperCase()` (Unicode upper-casing); `'#'` → `media.title !~ '^[A-Za-z]'` (title not starting with an ASCII letter, evaluated by Postgres); a single ASCII `A`-`Z` → `UPPER(LEFT(media.title, 1)) = $letter` (database `UPPER`; titles starting with an accented letter do not match their base letter); anything else (two characters, `1`, `É`, lowercase that does not upper-case into `A-Z`) adds **no filter** and no error.
@@ -87,9 +87,9 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     - `<TSQ>` = `to_tsquery('french', $tsq)` when `$tsq` is non-empty, else `plainto_tsquery('french', $q)` (which yields an empty query for symbol-only input: the `@@` branch is then false and only the ILIKE/similarity branches can match). Text-search configuration is **`french`** (not `simple`), no `websearch_to_tsquery`; stop words drop out of the query inside Postgres.
     - Predicate: `( media."searchVector" @@ <TSQ> OR media.title ILIKE $like OR media."originalTitle" ILIKE $like OR similarity(media.title, $q) > 0.8 )` with `$q` the **untrimmed** raw `q`, `$like = '%' || q || '%'` unescaped (a user `%`, `_` or `\` keeps its LIKE meaning), `similarity` from `pg_trgm` (migration `1786400000000_pg_trgm.sql`). `searchVector` is NULL for a row never indexed: only the other three branches can match it.
     - Order: by rank when `sortBy` is absent, else the requested sort (rule 18).
-25. `attachEpisodeStats` runs on the page: `sizeOnDisk = Σ Number(file.size)` over the loaded `files` (number, `0` when none); for series, one query (Q-S below, `"downloaded"` counts the episodes with a part, season 0 excluded) gives `episodeStats: { totalEpisodes: number, downloadedEpisodes: number }`, **absent** (key omitted) for movies and for series without episodes in seasons `> 0`.
+25. `attachEpisodeStats` runs on the page: `sizeOnDisk = Σ Number(file.size)` over the loaded `files` (number, `0` when none); for series, one query (Q-S below, `"downloaded"` counts the episodes with a part, season 0 excluded) gives `episodeStats: { totalEpisodes: number, downloadedEpisodes: number }`, **absent** (key omitted) for a kind without seasons and for a media of a kind with seasons that has no episode in seasons `> 0`.
 26. `cutoffUnmet === true` is applied in SQL before pagination: `page`, `limit` and `total` count only the media that pass. A media is kept only if its video want (`items.md` rule 29) has a quality profile whose `cutoff` id resolves in the quality table (`cutoffRank`; no profile or unknown id = dropped). Movies: kept when the best `rankFromQualityString(file.quality)` over `files` (0 with none) is `< cutoffRank`. Series: per monitored episode of seasons `> 0`, the best file rank (`rankFromQualityString`, 0 for no file or empty quality, Q-C below); a series with no such episodes is dropped; `shadowedEpisodeNumbers` is computed over **all** those episodes of the media pooled across seasons (a multi-episode range in season 1 also shadows the same numbers in season 2); kept when some non-shadowed episode has `rank < cutoffRank`. `rankFromQualityString` = `0` for null/empty else `parseReleaseQuality(q).quality.rank` (rule 69). Ranks come from `parseReleaseQuality`, not from an exact name match, so SQL cannot rank by itself: the filtering uses a `(quality text, rank int)` mapping built from the distinct `media_files.quality` strings of the filtered media, or a pre-filter of the ids before paging. The movie and series branches are kind literals owned by the kind and item cleanup (0.14). A page is full unless it is the last.
-27. `attachWatchedProgress` runs last on the (post-cutoff) page: for each media `watched: boolean` (`=== true`) and `progressPercent: number` from the SQL of Q-P: movies resume % = `ROUND(positionSeconds / durationSeconds * 100)::int` of the **most recent** incomplete row of the media's ungrouped item (`groupId IS NULL`, `completed = false`, `durationSeconds > 0`, `ORDER BY "lastPlayedAt" DESC LIMIT 1`), `0` otherwise and always `0` for series; `watched` uses the same definition as rule 20. The percentage stays in SQL: `positionSeconds`/`durationSeconds` are `float8` and `round(float8)` rounds half to even (`450/3600` gives 12, not 13), unlike `f64::round`.
+27. `attachWatchedProgress` runs last on the (post-cutoff) page: for each media `watched: boolean` (`=== true`) and `progressPercent: number` from the SQL of Q-P: movies resume % = `ROUND(positionSeconds / durationSeconds * 100)::int` of the **most recent** incomplete row of the media's ungrouped item (`groupId IS NULL`, `completed = false`, `durationSeconds > 0`, `ORDER BY "lastPlayedAt" DESC LIMIT 1`), `0` otherwise and always `0` for a kind with seasons, so the column is never NULL for any kind; `watched` uses the same definition as rule 20. The percentage stays in SQL: `positionSeconds`/`durationSeconds` are `float8` and `round(float8)` rounds half to even (`450/3600` gives 12, not 13), unlike `f64::round`.
 28. Response `{ data, total }`; media serialise as the `MLI` of rule 30.
 29. Per request: ACL ids; page ids; count; hydrate (media + the three many-to-one joins + `files` by `ANY(ids)` ordered `id ASC`, rule 30); episode stats; cutoff queries only when requested; watched/progress.
 
@@ -147,14 +147,14 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 47. Window: both `start` and `end` given → each `.slice(0, 10)`; otherwise (including only one of them) the **current month in the server's local time zone** (first day to the last day of that month; the process local zone, not UTC). The sliced strings go to Postgres unparsed (`BETWEEN :start AND :end` against `date` columns), so what Postgres accepts decides: `2026-03-01`, compact `20260301`, ordinal `2026-060` work; `2026-03`, `2026`, `2026031`, week dates and `2026-02-30` pass the DTO (rule 8) but are a Postgres error, answered 400 (rule 9). The raw strings are bound as text cast to `date` in SQL, the cast error is mapped to 400, and they are not reformatted (rule 48 compares the raw strings).
 48. Media of the kinds without groups, `movie` (`type` unset, or that kind): `m.type = ANY(<those kinds>) AND EXISTS (<a row of media_release_dates with date BETWEEN $s AND $e>)` (inclusive, `date` column; the four kinds of `media-details.md` are `cinema`, `digital`, `physical`, `release`), `+ m.monitored = true` when `monitoredOnly`, `+ m."addedById" = $user` when `requestedByMe`, ACL (`1 = 0` when empty else `m."libraryId" IN ids`), with `files` left-joined (`hasFile = files.length > 0`). For each movie one entry per specific date inside the window in the order `cinema` (`inCinemas`), `digital` (`digitalRelease`), `physical` (`physicalRelease`); if **none** of the three is inside the window and `releaseDate` is, one entry `event: 'release'`. "Inside the window" is a **string** comparison `d >= start && d <= end` of the `YYYY-MM-DD` column value against the raw sliced `start`/`end`, not the SQL `BETWEEN`: with `start=20260301` SQL selects the movies but `'2026-03-05' < '20260301'` lexically, so no movie entry is emitted (episodes, filtered in SQL only, still are).
 49. Episodes (when `type` unset or a kind with groups, `series`; `type` selects the branch holding its kind, and rule 48 only takes that kind): `episodes ep INNER JOIN item_groups season INNER JOIN media media WHERE ep."airDate" BETWEEN $s AND $e`, `+ media.monitored = true AND ep.monitored = true` when `monitoredOnly`, `+ media."addedById" = $user` when `requestedByMe`, ACL as above, `ORDER BY ep."airDate" ASC`; season 0 episodes are **included**. `hasFile` = the episode has an item part (`onDisk`, SQL in Q-D).
-50. Entry shape (undefined keys omitted): movie `{ id: media.id, mediaId: media.id, title, type: <the media's kind>, event, date: 'YYYY-MM-DD', posterUrl, fanartUrl, status, year, hasFile }`; episode `{ id: episode.id, mediaId, title: <series title>, type: 'series', event: 'airing', date, posterUrl, fanartUrl, status, year, seasonNumber, episodeNumber, episodeTitle: episode.title, hasFile }`. `posterUrl`/`fanartUrl`/`year` may be `null`; `id` collides across kinds (the client keys on type).
+50. Entry shape (undefined keys omitted): movie `{ id: media.id, mediaId: media.id, title, type: <the media's kind>, event, date: 'YYYY-MM-DD', posterUrl, fanartUrl, status, year, hasFile }`; episode `{ id: episode.id, mediaId, title: <series title>, type: <the media's kind>, event: 'airing', date, posterUrl, fanartUrl, status, year, seasonNumber, episodeNumber, episodeTitle: episode.title, hasFile }`. `posterUrl`/`fanartUrl`/`year` may be `null`; `id` collides across kinds (the client keys on type).
 51. Final order: `results.sort((a, b) => a.date.localeCompare(b.date))` (stable, ISO dates so plain lexical): ties keep insertion order = movies `ORDER BY m.id` (per movie cinema, digital, physical, release) then episodes `ORDER BY ep."airDate", ep.id`.
 
 ### H. Related, cast, crew
 
 52. `GET :id/similar`: loads the source with `metadata`; `type !== 'movie'` or no library → `[]`; `genres = source.genres ?? []`, `keywords = metadata?.keywords ?? []`, `directors` = person ids of the `media_credits` rows of the source with `role = 'crew'` and `job = 'Director'` (exact, case-sensitive), `sameDirectorIds` = distinct `media_credits."mediaId"` of other media with `role = 'crew'`, `job = 'Director'` and `"personId" IN directors` (any library; excludes the source id); no genres, no keywords and no same-director ids → `[]`.
 53. `limit` query (bare string): `Number(limit)`; finite and `> 0` → `Math.min(parsed, 30)` (fractional kept, then `Array.slice` truncates), anything else (absent, `''`, `0`, negative, `abc`) → default **12**.
-54. Candidates (Q-X below): media with the **same library and `type = 'movie'`, `id != source`**, where `jsonb_exists_any(m.genres, <source genres>)` (exact, case-sensitive element match) **OR** `jsonb_exists_any(meta.keywords, <source keywords>)` **OR** `m.id IN sameDirectorIds` (each branch only if its list is non-empty), and, when the source has a collection with a `tmdb` id (`media-details.md` rule 18), no candidate of that collection (collection mates excluded); the keywords are those of `movie_details` (rule 54 only reads movies). `hasFile` = media has at least one `media_files` row.
+54. Candidates (Q-X below): media with the **same library and the source's kind, `id != source`**, where `jsonb_exists_any(m.genres, <source genres>)` (exact, case-sensitive element match) **OR** `jsonb_exists_any(meta.keywords, <source keywords>)` **OR** `m.id IN sameDirectorIds` (each branch only if its list is non-empty), and, when the source has a collection with a `tmdb` id (`media-details.md` rule 18), no candidate of that collection (collection mates excluded); the keywords are those of `movie_details` (rule 52 only answers for movies). `hasFile` = media has at least one `media_files` row.
 55. Score (f64, evaluate in exactly this order so floats match): `score = 0`; `+= min(keywordHits * 1.6, 4.8)` where `keywordHits` = number of candidate keywords whose lower-case is in the lower-cased set of the source keywords (candidate duplicates counted); `+= cosine(sourceGenres, candidateGenres) * 2.5` where `cosine = shared / sqrt(a.length * b.length)` (0 when `shared = 0`, `shared` counted like `keywordHits`); `+= 2` when same director; when both years are truthy `+= max(0, 1 - |Δyear| / 20) * 0.5`. Keep when `score >= 1`; sort `score DESC`, then `(rating ?? 0) DESC`, **stable over the SQL row order** (`m.id ASC`); take `limit`. Item `RI` = `{ id, title, year, posterUrl: posterUrl ?? null, fanartUrl: fanartUrl ?? null, rating: rating ?? null, genres: genres ?? [], hasFile: boolean }` (`year` may be `null`). Lower-casing is Unicode `str::to_lowercase`; vectors cover non-ASCII.
 56. 404 `Media #<id> not found` when the source vanished after the gate.
 57. `GET :id/collection`: source without a collection with a `tmdb` id (`media-details.md` rule 18) or without library → `null` (**200, empty body**, rule 10); else every media of the **same library** in the same collection (any `type`), `ORDER BY` the entry's `position ASC NULLS LAST`, then the `release` date of `media_release_dates` `ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC`, including the source itself; fewer than 2 rows → `null`; else `{ id: <the collection's tmdb id>, name: <its name, `''` when it has none>, items: RI[] }`.
@@ -195,30 +195,27 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
 
 **Q-L3 (list: hydrate)** (`.*` below stands for the entity columns of rule 30, never `searchVector`; a null FK column gives a `null` relation-id key, rule 30) `SELECT media.*, library.*, "qualityProfile".*, "languageProfile".* FROM media LEFT JOIN libraries library ON library.id = media."libraryId" LEFT JOIN quality_profiles ... LEFT JOIN language_profiles ... WHERE media.id = ANY($page_ids)`; `SELECT * FROM media_files WHERE "mediaId" = ANY($page_ids) ORDER BY id`; reassemble in `$page_ids` order.
 
-**Q-W (watched subquery, verbatim)**:
+**Q-W (watched subquery)**: `<seasonal>` is `ARRAY['series']::text[]`, the kinds with seasons from the registry.
 
 ```sql
-  SELECT DISTINCT i."mediaId" AS id FROM playback_states ps
-  INNER JOIN items i ON i.id = ps."itemId"
-  INNER JOIN media m ON m.id = i."mediaId"
-  WHERE ps."userId" = :userId AND ps.completed = true AND m.type = 'movie'
-  UNION
-  SELECT m2.id FROM media m2
-  WHERE m2.type = 'series'
-  AND EXISTS (
-    SELECT 1 FROM item_groups s
-    JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM item_groups s
-    JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-    AND NOT EXISTS (
-      SELECT 1 FROM playback_states ps2
-      WHERE ps2."userId" = :userId AND ps2."itemId" = e.id AND ps2.completed = true
+SELECT m.id FROM media m WHERE CASE WHEN m.type = ANY(<seasonal>) THEN
+    EXISTS (
+      SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+      WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
     )
-  )
+    AND NOT EXISTS (
+      SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+      WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM playback_states ps2
+          WHERE ps2."userId" = :userId AND ps2."itemId" = e.id AND ps2.completed = true
+        )
+    )
+  ELSE EXISTS (
+      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+      WHERE ps."userId" = :userId AND i."mediaId" = m.id AND ps.completed = true
+    )
+  END
 ```
 
 **Q-M (missing-episode predicate)**:
@@ -261,38 +258,18 @@ SELECT s."mediaId" AS "mediaId",
    AND e.monitored = true
 ```
 
-**Q-P (watched/progress, verbatim)**; `$1` = user, `$2` = page ids:
+**Q-P (watched/progress)**; `$1` = user, `$2` = page ids, `<watched>` the predicate of Q-W with `:userId` = `$1`:
 
 ```sql
 SELECT m.id::int AS id,
-  (
-    (m.type = 'movie' AND EXISTS (
-      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
-      WHERE ps."userId" = $1 AND i."mediaId" = m.id AND ps.completed = true
-    ))
-    OR
-    (m.type = 'series'
-      AND EXISTS (
-        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-          AND NOT EXISTS (
-            SELECT 1 FROM playback_states ps2
-            WHERE ps2."userId" = $1 AND ps2."itemId" = e.id AND ps2.completed = true
-          )
-      )
-    )
-  ) AS watched,
-  CASE WHEN m.type = 'movie' THEN COALESCE((
+  (<watched>) AS watched,
+  CASE WHEN m.type = ANY(<seasonal>) THEN 0 ELSE COALESCE((
     SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
     FROM playback_states ps JOIN items i ON i.id = ps."itemId"
     WHERE ps."userId" = $1 AND i."mediaId" = m.id AND i."groupId" IS NULL
       AND ps.completed = false AND ps."durationSeconds" > 0
     ORDER BY ps."lastPlayedAt" DESC LIMIT 1
-  ), 0) ELSE 0 END AS progress
+  ), 0) END AS progress
 FROM media m
 WHERE m.id = ANY($2::int[])
 ```

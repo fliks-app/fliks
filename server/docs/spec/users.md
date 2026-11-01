@@ -101,7 +101,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
 
 ### G. Stats
 
-28. `GET /users/:id/stats`: 404 `User #<id> not found`, else `{playback: {totalWatchTimeSeconds: int, moviesWatched: int, seriesStarted: int, episodesWatched: int, lastPlayedAt: ISO|null}, requests: {pending: int, approved: int, declined: int}, activity: {lastActiveAt: ISO|null, memberSince: ISO}}`. `totalWatchTimeSeconds = Math.round(SUM)` (round half up); counts are numbers; `lastPlayedAt` = `MAX(lastPlayedAt)` as ISO-8601 with ms; `lastActiveAt` = `users.lastLogin`; `memberSince` = `users.createdAt`; request statuses other than the three are not reported.
+28. `GET /users/:id/stats`: 404 `User #<id> not found`, else `{playback: {totalWatchTimeSeconds: int, <one count of completed media per kind, `social.md` rule 36>, episodesWatched: int, lastPlayedAt: ISO|null}, requests: {pending: int, approved: int, declined: int}, activity: {lastActiveAt: ISO|null, memberSince: ISO}}`. `totalWatchTimeSeconds = Math.round(SUM)` (round half up); counts are numbers; `lastPlayedAt` = `MAX(lastPlayedAt)` as ISO-8601 with ms; `lastActiveAt` = `users.lastLogin`; `memberSince` = `users.createdAt`; request statuses other than the three are not reported.
 29. The social module reuses the same two aggregation queries for a user's stats.
 
 ### H. Avatar
