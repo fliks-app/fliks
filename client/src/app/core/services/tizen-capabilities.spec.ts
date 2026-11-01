@@ -1,4 +1,4 @@
-import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
+import { applyTizenAudioCodecs, tizenDecoderLevels, tizenSupportsVideoCodec } from './tizen-capabilities';
 
 function installWebapis(
   audio: Record<string, boolean> | null,
@@ -22,14 +22,15 @@ describe('tizen-capabilities', () => {
   });
 
   it('keeps the probed list untouched when the API is missing', () => {
-    expect(applyTizenAudioCodecs(['aac', 'flac'])).toEqual(['aac', 'flac']);
-    expect(tizenSupportsHevc()).toBeNull();
+    expect(applyTizenAudioCodecs(['aac', 'mp3'])).toEqual(['aac', 'mp3']);
+    expect(tizenSupportsVideoCodec('HEVC')).toBeNull();
+    expect(tizenDecoderLevels()).toBeNull();
   });
 
   it('adds Dolby the MSE probe missed and keeps non-enumerated codecs', () => {
     installWebapis({ AAC: true, AC3: true, 'E-AC3': true, OPUS: false });
-    expect(applyTizenAudioCodecs(['aac', 'flac'])).toEqual([
-      'flac',
+    expect(applyTizenAudioCodecs(['aac', 'mp3'])).toEqual([
+      'mp3',
       'aac',
       'ac3',
       'eac3',
@@ -52,10 +53,25 @@ describe('tizen-capabilities', () => {
     expect(applyTizenAudioCodecs(['aac', 'eac3'])).toEqual(['aac', 'eac3']);
   });
 
-  it('reports HEVC support from the video probe', () => {
-    installWebapis(null, { HEVC: true });
-    expect(tizenSupportsHevc()).toBe(true);
-    installWebapis(null, { HEVC: false });
-    expect(tizenSupportsHevc()).toBe(false);
+  it('drops FLAC and ALAC, which AVPlay does not decode in a container', () => {
+    expect(applyTizenAudioCodecs(['aac', 'flac', 'alac'])).toEqual(['aac']);
+  });
+
+  it('reports video support from the video probe', () => {
+    installWebapis(null, { HEVC: true, AV1: false });
+    expect(tizenSupportsVideoCodec('HEVC')).toBe(true);
+    expect(tizenSupportsVideoCodec('AV1')).toBe(false);
+  });
+
+  it('maps the panel class to the spec decoder levels', () => {
+    const panel = (ud: boolean, k8: boolean) => {
+      (window as any).webapis = {
+        productinfo: { isUdPanelSupported: () => ud, is8KPanelSupported: () => k8 },
+      };
+      return tizenDecoderLevels();
+    };
+    expect(panel(false, false)).toEqual({ h264: 42, hevc: 123 });
+    expect(panel(true, false)).toEqual({ h264: 51, hevc: 153 });
+    expect(panel(true, true)).toEqual({ h264: 51, hevc: 183 });
   });
 });
