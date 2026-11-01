@@ -891,7 +891,7 @@ async fn an_excluded_episode_protects_itself_and_its_season(pool: PgPool) {
 }
 
 async fn scoped_candidates(pool: &PgPool) -> Vec<(Option<i32>, Option<i32>)> {
-    sqlx::query_as(r#"SELECT "seasonId", "episodeId" FROM cleanup_candidates ORDER BY id"#)
+    sqlx::query_as(r#"SELECT "groupId", "itemId" FROM cleanup_candidates ORDER BY id"#)
         .fetch_all(pool)
         .await
         .unwrap()
@@ -907,7 +907,7 @@ async fn candidates_of_one_media_are_unique_per_scope(pool: PgPool) {
     .await;
     let insert = |season: String, ep: String| {
         format!(
-            r#"INSERT INTO cleanup_candidates ("mediaId", "seasonId", "episodeId", "ruleId") VALUES ({}, {season}, {ep}, {r})"#,
+            r#"INSERT INTO cleanup_candidates ("mediaId", "groupId", "itemId", "ruleId") VALUES ({}, {season}, {ep}, {r})"#,
             s.media
         )
     };

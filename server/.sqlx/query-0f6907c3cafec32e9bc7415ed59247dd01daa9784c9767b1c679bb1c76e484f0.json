@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO subtitle_files (\"mediaId\", \"mediaFileId\", \"itemId\", language, forced,\n                          \"hearingImpaired\", \"providerType\", status, score, \"filePath\", tags)\n                   VALUES ($1, $2, $3, $4, $5, $6, $7::text::subtitle_files_providertype_enum,\n                           'downloaded', 100, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Bool",
+        "Bool",
+        "Text",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0f6907c3cafec32e9bc7415ed59247dd01daa9784c9767b1c679bb1c76e484f0"
+}

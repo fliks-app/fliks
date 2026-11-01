@@ -1773,3 +1773,83 @@ async fn every_foreign_key_has_a_covering_index(pool: PgPool) {
         "foreign keys without a non-partial index led by their columns (table, constraint, columns): {missing:?}"
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1789000190_names_groups_and_items_in_the_remaining_tables(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_190).await;
+    sql(
+        &pool,
+        r#"INSERT INTO users (id, username) VALUES (1, 'u'), (2, 'v');
+          INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie'), (2, 's', 'series');
+          INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM media;
+          INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM editions WHERE "mediaId" = 1;
+          INSERT INTO item_groups (id, "number", "mediaId") VALUES (1, 1, 2);
+          INSERT INTO items (id, "groupId", "mediaId", "editionId", "number")
+            VALUES (10, 1, 2, (SELECT id FROM editions WHERE "mediaId" = 2), 1);
+          INSERT INTO likes (id, "userId", "mediaId", "seasonId", "episodeId", "updatedAt")
+            VALUES (1, 1, 2, 1, 10, '2020-01-01');
+          INSERT INTO content_recommendations (id, "senderId", "recipientId", "mediaId", "seasonId", "episodeId")
+            VALUES (1, 1, 2, 2, 1, 10);
+          INSERT INTO cleanup_rules (id, name, criteria) VALUES (1, 'r', '{}');
+          INSERT INTO cleanup_candidates (id, "mediaId", "seasonId", "episodeId", "ruleId")
+            VALUES (1, 2, 1, 10, 1);
+          INSERT INTO cleanup_exclusions (id, "mediaId", "seasonId", "episodeId") VALUES (1, 2, 1, 10);
+          INSERT INTO subtitle_files (id, language, "providerType", "mediaId", "episodeId")
+            VALUES (1, 'en', 'embedded', 2, 10)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_190).await;
+
+    for q in [
+        r#"SELECT "groupId", "itemId" FROM likes"#,
+        r#"SELECT "groupId", "itemId" FROM content_recommendations"#,
+        r#"SELECT "groupId", "itemId" FROM cleanup_candidates"#,
+        r#"SELECT "groupId", "itemId" FROM cleanup_exclusions"#,
+    ] {
+        let r: Vec<(Option<i32>, Option<i32>)> = rows(&pool, q).await;
+        assert_eq!(r, [(Some(1), Some(10))], "{q}");
+    }
+    let sub: Option<i32> = sqlx::query_scalar(r#"SELECT "itemId" FROM subtitle_files"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sub, Some(10));
+    let bumped: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM likes WHERE "updatedAt" > '2021-01-01'"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(bumped, 0, "the migration keeps the likes' updatedAt");
+
+    let movie_item: i32 = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = 1"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sql(
+        &pool,
+        &format!(
+            r#"INSERT INTO likes (id, "userId", "mediaId", "itemId") VALUES (2, 1, 1, {movie_item});
+              INSERT INTO content_recommendations (id, "senderId", "recipientId", "mediaId", "itemId")
+                VALUES (2, 1, 2, 1, {movie_item});
+              INSERT INTO cleanup_exclusions (id, "mediaId", "itemId") VALUES (2, 1, {movie_item})"#
+        ),
+    )
+    .await;
+
+    sql(&pool, "DELETE FROM items WHERE id = 10").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM likes WHERE "mediaId" = 2)
+              + (SELECT COUNT(*) FROM content_recommendations WHERE "mediaId" = 2)
+              + (SELECT COUNT(*) FROM cleanup_candidates)
+              + (SELECT COUNT(*) FROM cleanup_exclusions WHERE "mediaId" = 2)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "rows about an item go with it");
+    let sub: Option<i32> = sqlx::query_scalar(r#"SELECT "itemId" FROM subtitle_files"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sub, None, "a subtitle outlives its item");
+}

@@ -193,7 +193,7 @@ pub async fn recommend(
     sqlx::query!(
         r#"DELETE FROM content_recommendations
            WHERE "senderId" = $1 AND "recipientId" = $2 AND "mediaId" = $3
-             AND "seasonId" IS NOT DISTINCT FROM $4 AND "episodeId" IS NOT DISTINCT FROM $5"#,
+             AND "groupId" IS NOT DISTINCT FROM $4 AND "itemId" IS NOT DISTINCT FROM $5"#,
         me.id,
         to.id,
         dto.media_id,
@@ -204,7 +204,7 @@ pub async fn recommend(
     .await?;
     sqlx::query!(
         r#"INSERT INTO content_recommendations
-             ("senderId", "recipientId", "mediaId", "seasonId", "episodeId", message, "dismissedAt")
+             ("senderId", "recipientId", "mediaId", "groupId", "itemId", message, "dismissedAt")
            VALUES ($1, $2, $3, $4, $5, $6, NULL)"#,
         me.id,
         to.id,
@@ -272,8 +272,8 @@ async fn cards(
         return Ok(vec![]);
     }
     let rows = sqlx::query!(
-        r#"SELECT cr.id, cr.message, cr."createdAt" AS created_at, cr."seasonId" AS season_id,
-                  cr."episodeId" AS episode_id,
+        r#"SELECT cr.id, cr.message, cr."createdAt" AS created_at, cr."groupId" AS season_id,
+                  cr."itemId" AS episode_id,
                   m.id AS "media_id?", m.type AS "media_type?", m.title AS "title?",
                   m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, m."libraryId" AS library_id,
                   s."number" AS "season_number?", e."number" AS "episode_number?",
@@ -284,8 +284,8 @@ async fn cards(
            FROM content_recommendations cr
            JOIN users u ON u.id = CASE WHEN $2 THEN cr."senderId" ELSE cr."recipientId" END
            LEFT JOIN media m ON m.id = cr."mediaId"
-           LEFT JOIN item_groups s ON s.id = cr."seasonId"
-           LEFT JOIN items e ON e.id = cr."episodeId"
+           LEFT JOIN item_groups s ON s.id = cr."groupId"
+           LEFT JOIN items e ON e.id = cr."itemId"
            LEFT JOIN item_groups es ON es.id = e."groupId"
            WHERE (CASE WHEN $2 THEN cr."recipientId" ELSE cr."senderId" END) = $1
              AND ($3 OR cr."dismissedAt" IS NULL)

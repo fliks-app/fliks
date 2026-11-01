@@ -78,8 +78,8 @@ pub async fn flag(st: &AppState) -> sqlx::Result<usize> {
     sqlx::query(
         r#"DELETE FROM cleanup_candidates c WHERE NOT EXISTS (
              SELECT 1 FROM UNNEST($1::int[], $2::int[], $3::int[]) AS t(m, s, e)
-             WHERE t.m = c."mediaId" AND t.s IS NOT DISTINCT FROM c."seasonId"
-               AND t.e IS NOT DISTINCT FROM c."episodeId")"#,
+             WHERE t.m = c."mediaId" AND t.s IS NOT DISTINCT FROM c."groupId"
+               AND t.e IS NOT DISTINCT FROM c."itemId")"#,
     )
     .bind(&medias)
     .bind(&seasons)
@@ -90,10 +90,10 @@ pub async fn flag(st: &AppState) -> sqlx::Result<usize> {
     let graces: Vec<Option<i32>> = keys.iter().map(|k| claimed[k].1).collect();
     let fresh: Vec<i32> = sqlx::query_scalar(
         r#"WITH up AS (
-             INSERT INTO cleanup_candidates ("mediaId", "seasonId", "episodeId", "ruleId", "deleteAt")
+             INSERT INTO cleanup_candidates ("mediaId", "groupId", "itemId", "ruleId", "deleteAt")
              SELECT t.m, t.s, t.e, t.r, now() + make_interval(days => t.g)
              FROM UNNEST($1::int[], $2::int[], $3::int[], $4::int[], $5::int[]) AS t(m, s, e, r, g)
-             ON CONFLICT ("mediaId", "seasonId", "episodeId") DO UPDATE SET "ruleId" = EXCLUDED."ruleId",
+             ON CONFLICT ("mediaId", "groupId", "itemId") DO UPDATE SET "ruleId" = EXCLUDED."ruleId",
                "deleteAt" = COALESCE(cleanup_candidates."deleteAt", EXCLUDED."deleteAt")
              RETURNING id, "deleteAt", (xmax = 0) AS inserted)
            SELECT id FROM up WHERE inserted AND "deleteAt" IS NOT NULL"#,
@@ -131,7 +131,7 @@ async fn remind(st: &AppState, fresh: &[i32]) -> sqlx::Result<()> {
              s."number" AS season, e."number" AS episode
            FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
            JOIN cleanup_rules r ON r.id = c."ruleId"
-           LEFT JOIN item_groups s ON s.id = c."seasonId" LEFT JOIN items e ON e.id = c."episodeId"
+           LEFT JOIN item_groups s ON s.id = c."groupId" LEFT JOIN items e ON e.id = c."itemId"
            WHERE c."deleteAt" > now()"#,
     )
     .fetch_all(&st.db)
@@ -222,7 +222,7 @@ async fn unmonitor_whole(
     set_media_monitored(st, &[id], false)
         .await
         .map_err(|e| e.to_string())?;
-    sqlx::query(r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "seasonId" IS NULL"#)
+    sqlx::query(r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "groupId" IS NULL AND "itemId" IS NULL"#)
         .bind(id)
         .execute(&st.db)
         .await
@@ -308,8 +308,8 @@ async fn act_scope(
         set_season_monitored(st, season, false).await.map_err(err)?;
     }
     sqlx::query(
-        r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "seasonId" = $2
-        AND ($3::int IS NULL OR "episodeId" = $3)"#,
+        r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "groupId" = $2
+        AND ($3::int IS NULL OR "itemId" = $3)"#,
     )
     .bind(id)
     .bind(scope.season)

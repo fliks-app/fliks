@@ -93,7 +93,7 @@ pub async fn list_likes(
         return Ok(vec![]);
     }
     let rows = sqlx::query!(
-        r#"SELECT l."seasonId" AS season_id, l."episodeId" AS episode_id,
+        r#"SELECT l."groupId" AS season_id, l."itemId" AS episode_id,
                   m.id AS "media_id?", m.type AS "media_type?", m.title AS "title?",
                   m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url, m."libraryId" AS library_id,
                   s."number" AS "season_number?", e."number" AS "episode_number?",
@@ -101,8 +101,8 @@ pub async fn list_likes(
                   es."number" AS "episode_season_number?"
            FROM likes l
            LEFT JOIN media m ON m.id = l."mediaId"
-           LEFT JOIN item_groups s ON s.id = l."seasonId"
-           LEFT JOIN items e ON e.id = l."episodeId"
+           LEFT JOIN item_groups s ON s.id = l."groupId"
+           LEFT JOIN items e ON e.id = l."itemId"
            LEFT JOIN item_groups es ON es.id = e."groupId"
            WHERE l."userId" = $1
            ORDER BY l."createdAt" DESC, l.id
@@ -152,7 +152,7 @@ pub async fn list_likes(
 /// `mediaId:seasonId|'':episodeId|''` keys of the user's likes among `media` (rule 7).
 pub async fn liked_keys(db: &PgPool, user: i32, media: &[i32]) -> sqlx::Result<HashSet<String>> {
     let rows = sqlx::query!(
-        r#"SELECT l."mediaId" AS media_id, l."seasonId" AS season_id, l."episodeId" AS episode_id
+        r#"SELECT l."mediaId" AS media_id, l."groupId" AS season_id, l."itemId" AS episode_id
            FROM likes l WHERE l."userId" = $1 AND l."mediaId" = ANY($2)"#,
         user,
         media
@@ -201,7 +201,7 @@ pub async fn like_state(
     PathParams(media): PathParams<i32>,
 ) -> Result<Json<LikeState>, AppError> {
     let rows = sqlx::query!(
-        r#"SELECT l."seasonId" AS season_id, l."episodeId" AS episode_id
+        r#"SELECT l."groupId" AS season_id, l."itemId" AS episode_id
            FROM likes l WHERE l."userId" = $1 AND l."mediaId" = $2 ORDER BY l.id"#,
         a.user.id,
         media
@@ -227,7 +227,7 @@ pub async fn like_add(
     let accessible = accessible_library_ids(&st.db, &a).await?;
     assert_targets(&st.db, &accessible, dto.media_id, season, episode).await?;
     sqlx::query!(
-        r#"INSERT INTO likes ("userId", "mediaId", "seasonId", "episodeId")
+        r#"INSERT INTO likes ("userId", "mediaId", "groupId", "itemId")
            VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"#,
         a.user.id,
         dto.media_id,
@@ -250,7 +250,7 @@ pub async fn like_remove(
     let (season, episode) = dto.ids();
     sqlx::query!(
         r#"DELETE FROM likes WHERE "userId" = $1 AND "mediaId" = $2
-           AND "seasonId" IS NOT DISTINCT FROM $3 AND "episodeId" IS NOT DISTINCT FROM $4"#,
+           AND "groupId" IS NOT DISTINCT FROM $3 AND "itemId" IS NOT DISTINCT FROM $4"#,
         a.user.id,
         dto.media_id,
         season,

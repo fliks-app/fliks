@@ -128,7 +128,7 @@ pub async fn start(
         return Err(AppError::conflict("errors.already_running"));
     };
     let running: Option<i32> = sqlx::query_scalar(
-        r#"SELECT id FROM subtitle_files WHERE "mediaFileId" IS NOT DISTINCT FROM $1 AND "episodeId" IS NOT DISTINCT FROM $2
+        r#"SELECT id FROM subtitle_files WHERE "mediaFileId" IS NOT DISTINCT FROM $1 AND "itemId" IS NOT DISTINCT FROM $2
            AND language = $3 AND forced = $4 AND "hearingImpaired" = $5 AND "providerType" = 'translated' AND status = 'processing' LIMIT 1"#,
     )
     .bind(source.media_file_id)

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.\"seasonId\" AS season_id, l.\"episodeId\" AS episode_id,\n                  m.id AS \"media_id?\", m.type AS \"media_type?\", m.title AS \"title?\",\n                  m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, m.\"libraryId\" AS library_id,\n                  s.\"number\" AS \"season_number?\", e.\"number\" AS \"episode_number?\",\n                  e.title AS episode_title, e.\"stillUrl\" AS still_url,\n                  es.\"number\" AS \"episode_season_number?\"\n           FROM likes l\n           LEFT JOIN media m ON m.id = l.\"mediaId\"\n           LEFT JOIN item_groups s ON s.id = l.\"seasonId\"\n           LEFT JOIN items e ON e.id = l.\"episodeId\"\n           LEFT JOIN item_groups es ON es.id = e.\"groupId\"\n           WHERE l.\"userId\" = $1\n           ORDER BY l.\"createdAt\" DESC, l.id\n           LIMIT $2",
+  "query": "SELECT l.\"groupId\" AS season_id, l.\"itemId\" AS episode_id,\n                  m.id AS \"media_id?\", m.type AS \"media_type?\", m.title AS \"title?\",\n                  m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, m.\"libraryId\" AS library_id,\n                  s.\"number\" AS \"season_number?\", e.\"number\" AS \"episode_number?\",\n                  e.title AS episode_title, e.\"stillUrl\" AS still_url,\n                  es.\"number\" AS \"episode_season_number?\"\n           FROM likes l\n           LEFT JOIN media m ON m.id = l.\"mediaId\"\n           LEFT JOIN item_groups s ON s.id = l.\"groupId\"\n           LEFT JOIN items e ON e.id = l.\"itemId\"\n           LEFT JOIN item_groups es ON es.id = e.\"groupId\"\n           WHERE l.\"userId\" = $1\n           ORDER BY l.\"createdAt\" DESC, l.id\n           LIMIT $2",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
         "origin": {
           "Table": {
             "table": "likes",
-            "name": "seasonId"
+            "name": "groupId"
           }
         }
       },
@@ -21,7 +21,7 @@
         "origin": {
           "Table": {
             "table": "likes",
-            "name": "episodeId"
+            "name": "itemId"
           }
         }
       },
@@ -169,5 +169,5 @@
       false
     ]
   },
-  "hash": "3b520ab937835250fd6ff304148e7cfbb16ffa86fab7b7c2eaea549cb886d8e4"
+  "hash": "ee91aff01c24e6b19af090335646cb797d02d99525a19c97b3c97a358a660c38"
 }
