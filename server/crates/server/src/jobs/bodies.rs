@@ -113,6 +113,9 @@ async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
 
 async fn refresh_metadata(st: &AppState) -> Outcome {
     const JOB: &str = "RefreshMetadata";
+    if let Err(e) = crate::metadata::prune_snapshots(&st.db).await {
+        tracing::warn!("{JOB}: snapshot cleanup failed: {e}");
+    }
     if !tmdb_configured(st, JOB) {
         return Ok(());
     }

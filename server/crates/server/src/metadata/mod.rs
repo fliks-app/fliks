@@ -3,6 +3,7 @@ mod credits;
 mod http;
 mod language;
 mod map;
+mod orchestrator;
 mod provider;
 mod routes;
 pub mod service;
@@ -14,6 +15,7 @@ mod types;
 
 pub use http::{Guarded, Observed, Upstream};
 pub use language::{LanguageCache, Override};
+pub use orchestrator::{Key, prune_snapshots};
 pub use provider::{MetadataProvider, Search};
 pub use routes::*;
 pub use types::{Credits, MetaError, PersonDetails};
@@ -37,6 +39,8 @@ pub struct Metadata {
     /// TMDB's lists (trending, popular, upcoming, genres, discover) are not part of the trait.
     pub tmdb: Arc<tmdb::Tmdb>,
     providers: HashMap<ExternalProvider, Entry>,
+    db: sqlx::PgPool,
+    flights: orchestrator::Flights,
 }
 
 impl Metadata {
@@ -50,7 +54,9 @@ impl Metadata {
         let tvdb = Arc::new(tvdb::Tvdb::new(&c.tvdb_url, &c.tvdb_key, TVDB_TIMEOUT));
         let entry = |on: bool, provider: Arc<dyn MetadataProvider>| Entry { on, provider };
         Self {
-            lang: LanguageCache::new(db),
+            lang: LanguageCache::new(db.clone()),
+            db,
+            flights: Default::default(),
             providers: HashMap::from([
                 (
                     ExternalProvider::Tmdb,
