@@ -80,14 +80,14 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     | `letter` | truthy | rule 23 | |
 20. User-scoped clauses (only with a user, always true): `(excludeWatched || onlyWatched)` adds `media.id <op> (<watched subquery>)` with `op = onlyWatched ? IN : NOT IN` (so `onlyWatched` wins when both are set); `requestedByMe` adds `media."addedById" = $user` (approved requests and direct imports both set `addedById`). The watched subquery is the SQL of Q-W below: a movie is watched when any `playback_states` row of the user for it is `completed`; a series when it has at least one episode with a file in a season `> 0` and **every** such episode has a completed row of the user (specials excluded; a series with no file-backed episodes is never watched).
 21. `total` = number of distinct media matching all clauses above (not reduced by `cutoffUnmet`, rule 26, nor by `limit`).
-22. `missing` (rule 19) is, with `today` = the **UTC** date `YYYY-MM-DD` computed in application code (not `CURRENT_DATE`): `missing=true` → `(files.id IS NULL OR <ME>)`, `missing=false` → `(files.id IS NOT NULL AND NOT <ME>)`, where `files.id IS NULL` means the media has no `media_files` row (`NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = media.id)`) and `<ME>` is Q-M below ("a monitored season (> 0) holds a monitored episode, aired on or before today, not on disk"). An episode with `airDate IS NULL` is never missing; an unmonitored series with gaps is still missing; a movie is missing iff it has no file. "On disk" (coverage) = own `hasFile` or covered by the `[episodeNumber+1 .. endEpisodeNumber]` range of a sibling episode in the same season that has a file.
+22. `missing` (rule 19) is, with `today` = the **UTC** date `YYYY-MM-DD` computed in application code (not `CURRENT_DATE`): `missing=true` → `(files.id IS NULL OR <ME>)`, `missing=false` → `(files.id IS NOT NULL AND NOT <ME>)`, where `files.id IS NULL` means the media has no `media_files` row (`NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = media.id)`) and `<ME>` is Q-M below ("a monitored season (> 0) holds a monitored episode, aired on or before today, not on disk"). An episode with `airDate IS NULL` is never missing; an unmonitored series with gaps is still missing; a movie is missing iff it has no file. "On disk" = the episode has an item part (`items.md` rule 21): a multi-episode file gives a part to every existing episode of its range, so the episodes inside it are on disk without any range arithmetic.
 23. `letter`: `letter = query.letter.toUpperCase()` (Unicode upper-casing); `'#'` → `media.title !~ '^[A-Za-z]'` (title not starting with an ASCII letter, evaluated by Postgres); a single ASCII `A`-`Z` → `UPPER(LEFT(media.title, 1)) = $letter` (database `UPPER`; titles starting with an accented letter do not match their base letter); anything else (two characters, `1`, `É`, lowercase that does not upper-case into `A-Z`) adds **no filter** and no error.
 24. **Full-text search** (`q` truthy; `''` = no search; whitespace-only is truthy):
     - Prefix tsquery: `q.trim().split(/\s+/)` (whitespace set of JS `trim`: includes U+FEFF, excludes U+0085), each word stripped of every character that is not `\p{L}` or `\p{N}`, empty results dropped, each remaining word suffixed `:*`, joined with ` & ` → `$tsq` (`star wars` → `star:* & wars:*`). The code uses the `regex` crate classes `\p{L}`/`\p{N}` and that whitespace set, not `char::is_alphabetic`/`split_whitespace`.
     - `<TSQ>` = `to_tsquery('french', $tsq)` when `$tsq` is non-empty, else `plainto_tsquery('french', $q)` (which yields an empty query for symbol-only input: the `@@` branch is then false and only the ILIKE/similarity branches can match). Text-search configuration is **`french`** (not `simple`), no `websearch_to_tsquery`; stop words drop out of the query inside Postgres.
     - Predicate: `( media."searchVector" @@ <TSQ> OR media.title ILIKE $like OR media."originalTitle" ILIKE $like OR similarity(media.title, $q) > 0.8 )` with `$q` the **untrimmed** raw `q`, `$like = '%' || q || '%'` unescaped (a user `%`, `_` or `\` keeps its LIKE meaning), `similarity` from `pg_trgm` (migration `1786400000000_pg_trgm.sql`). `searchVector` is NULL for a row never indexed: only the other three branches can match it.
     - Order: by rank when `sortBy` is absent, else the requested sort (rule 18).
-25. `attachEpisodeStats` runs on the page: `sizeOnDisk = Σ Number(file.size)` over the loaded `files` (number, `0` when none); for series, one query (Q-S below, `"downloaded"` counts coverage on disk, season 0 excluded) gives `episodeStats: { totalEpisodes: number, downloadedEpisodes: number }`, **absent** (key omitted) for movies and for series without episodes in seasons `> 0`.
+25. `attachEpisodeStats` runs on the page: `sizeOnDisk = Σ Number(file.size)` over the loaded `files` (number, `0` when none); for series, one query (Q-S below, `"downloaded"` counts the episodes with a part, season 0 excluded) gives `episodeStats: { totalEpisodes: number, downloadedEpisodes: number }`, **absent** (key omitted) for movies and for series without episodes in seasons `> 0`.
 26. `cutoffUnmet === true` is applied in SQL before pagination: `page`, `limit` and `total` count only the media that pass. A media is kept only if it has a quality profile whose `cutoff` id resolves in the quality table (`cutoffRank`; no profile or unknown id = dropped). Movies: kept when the best `rankFromQualityString(file.quality)` over `files` (0 with none) is `< cutoffRank`. Series: per monitored episode of seasons `> 0`, the best file rank (`rankFromQualityString`, 0 for no file or empty quality, Q-C below); a series with no such episodes is dropped; `shadowedEpisodeNumbers` is computed over **all** those episodes of the media pooled across seasons (a multi-episode range in season 1 also shadows the same numbers in season 2); kept when some non-shadowed episode has `rank < cutoffRank`. `rankFromQualityString` = `0` for null/empty else `parseReleaseQuality(q).quality.rank` (rule 69). Ranks come from `parseReleaseQuality`, not from an exact name match, so SQL cannot rank by itself: the filtering uses a `(quality text, rank int)` mapping built from the distinct `media_files.quality` strings of the filtered media, or a pre-filter of the ids before paging. A page is full unless it is the last.
 27. `attachWatchedProgress` runs last on the (post-cutoff) page: for each media `watched: boolean` (`=== true`) and `progressPercent: number` from the SQL of Q-P: movies resume % = `ROUND(positionSeconds / durationSeconds * 100)::int` of the **most recent** incomplete whole-media row (`episodeId IS NULL`, `completed = false`, `durationSeconds > 0`, `ORDER BY "lastPlayedAt" DESC LIMIT 1`), `0` otherwise and always `0` for series; `watched` uses the same definition as rule 20. The percentage stays in SQL: `positionSeconds`/`durationSeconds` are `float8` and `round(float8)` rounds half to even (`450/3600` gives 12, not 13), unlike `f64::round`.
 28. Response `{ data, total }`; media serialise as the `MLI` of rule 30.
@@ -103,7 +103,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
     - derived: `sizeOnDisk`, `episodeStats?` (rule 25), `watched`, `progressPercent` (rule 27; absent on `recently-added`);
     - **not present**: `metadata`, `seasons`, `cast`, `crew`, `addedBy`, `searchVector` ). `libraryId`, `files[].episodeId` and `library.defaultQualityProfileId` are present as `null` when unset.
 31. `MD` (`GET :id`) = the media loaded with relations `seasons, seasons.episodes, files, qualityProfile, languageProfile, library, metadata`: the `MLI` columns/`path`/relation ids/joined relations of rule 30 **plus** `seasons` (array, `[]` when none; each `id, createdAt, updatedAt, seasonNumber, monitored, preferredProvider, posterUrl, overview, airDate` (string\|null, varchar), `mediaId`, `episodes[]`) and `metadata`; **no** `sizeOnDisk`, `episodeStats`, `watched`, `progressPercent`. Episode: `id, createdAt, updatedAt, episodeNumber, endEpisodeNumber, title, overview, airDate` (`YYYY-MM-DD`\|null), `runtime, monitored, hasFile, stillUrl, markersScannedAt` (ISO\|null), `seasonId` (no `searchVector`). `metadata` (`media_metadata`): `id, createdAt, updatedAt, budget, revenue` (**strings** or null: bigint), `tagline, popularity` (float), `voteCount, originalLanguage, productionCountries, productionCompanies, videos, keywords` (jsonb); when the media has no metadata row the key is `null` (parity `detail-no-metadata`).
-32. Detail post-processing: seasons sorted with `seasonNumber 0` (specials) **last**, the others ascending; episodes of each season ascending by `episodeNumber`; for series, any episode whose id appears as `episodeId > 0` of a loaded file gets `hasFile = true` in the response even if the column says `false`. 404 `Media #<id> not found` when the row vanished after the gate. `files` are ordered `id ASC`.
+32. Detail post-processing: seasons sorted with `seasonNumber 0` (specials) **last**, the others ascending; episodes of each season ascending by `episodeNumber`; `hasFile` of an episode is derived: true when it has an item part (`items.md` rule 21), so an episode inside a multi-episode file reports `true`. 404 `Media #<id> not found` when the row vanished after the gate. `files` are ordered `id ASC`.
 33. `recently-added`: limit `query.limit ?? 20` (`0` gives `[]` via `LIMIT 0`; negative = 400, rule 9), mode `query.mode ?? 'file'`, user clauses only when `excludeWatched || requestedByMe`. Pass 1 ranks ids with Q-R below, pass 2 loads the full `MLI` (library, profiles, files joins, `id IN ids`), restores the pass-1 order and runs `attachEpisodeStats` only. Mode `media`: `ORDER BY media."createdAt" DESC`; `file`: only media with a file, `ORDER BY lf.added DESC` (newest `media_files."createdAt"` per media); `both`: `ORDER BY GREATEST(media."createdAt", COALESCE(lf.added, media."createdAt")) DESC`. Ties break on `media.id ASC`. `libraryId` (truthy) is ANDed with the ACL.
 34. `recently-added` items carry no `watched` / `progressPercent` (watched/progress are not computed); `excludeWatched` filters with `media.id NOT IN (<watched subquery>)` (no `onlyWatched` here).
 
@@ -136,7 +136,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 39. `getTrackingStatus(id)`: `findOne(id)` (rule 32), `profile = media.qualityProfile`, `cutoffDef = getAppQualityById(profile.cutoff)` (undefined for no profile or unknown id), `targetQuality = label(cutoffDef)` where `label(def) = def.resolution > 0 ? '<resolution>p' : def.name`.
 40. `stateOf(monitored, files)` (each `files` item has `quality`): not monitored → `{ monitored, state: 'unmonitored' }`; no `cutoffDef` → `{ monitored, state: 'no-profile' }`; no files → `{ monitored, state: 'missing' }`; else `best` = highest-`rank` `parseReleaseQuality(file.quality).quality` (first wins on equal rank); `best.rank >= cutoffDef.rank` → `{ monitored, state: 'met', currentQuality: label(best) }`; else `sameResolution = best.resolution === cutoffDef.resolution` and `{ monitored, state: 'below', currentQuality: sameResolution ? best.name : label(best), targetQuality: sameResolution ? cutoffDef.name : targetQuality }`. Absent keys are omitted (undefined). `stateOf` calls `parseReleaseQuality` directly, so an empty `quality` string parses to `Bluray-480p` (rank 30) here while `rankFromQualityString('')` is 0 in `cutoffUnmet` (rule 26).
 41. Movie: `{ type: 'movie', hasProfile: !!profile, movie: stateOf(media.monitored, media.files) }` (all files of the media).
-42. Series: `{ type: 'series', hasProfile: !!profile, seasons: [{ seasonNumber, episodes: TrackingEpisode[] }] }`: seasons in `findOne` order (specials last, seasons without episodes listed with `episodes: []`); files are grouped by `episodeId` (files with a null `episodeId` ignored); an episode is **hidden** when its number lies in `(episodeNumber, endEpisodeNumber]` of another episode of the same season (range only, independent of `hasFile`); each visible episode is `{ episodeId: id, seasonNumber, episodeNumber, endEpisodeNumber: endEpisodeNumber ?? null, title (string\|null), ...stateOf(episode.monitored, filesOfEpisode) }`. `hasProfile` is true even when the cutoff id is unknown (state then `no-profile`). The media's own `monitored` is not consulted for series.
+42. Series: `{ type: 'series', hasProfile: !!profile, seasons: [{ seasonNumber, episodes: TrackingEpisode[] }] }`: seasons in `findOne` order (specials last, seasons without episodes listed with `episodes: []`); files are grouped by item through their parts (a file without a part is ignored; a range file counts for each episode it plays); an episode is **hidden** when its number lies in `(episodeNumber, endEpisodeNumber]` of another episode of the same season (range only, independent of `hasFile`); each visible episode is `{ episodeId: id, seasonNumber, episodeNumber, endEpisodeNumber: endEpisodeNumber ?? null, title (string\|null), ...stateOf(episode.monitored, filesOfEpisode) }`. `hasProfile` is true even when the cutoff id is unknown (state then `no-profile`). The media's own `monitored` is not consulted for series.
 43. `hasProfile`, `state` ∈ `unmonitored|no-profile|missing|below|met` are client-matched strings.
 44. `parseReleaseQuality` and `getAppQualityById` serve `tracking` and `cutoffUnmet` (rule 69). `parseReleaseQuality`: lower-cased, `.` replaced by space, source/resolution regexes, candidate selection, fuzzy fallback; a resolution with no table bucket (`4320p`/`8K`, `576p`, `360p`) leaves the fuzzy list empty and returns **`WORKPRINT`** (id 1, rank 5, resolution 0) as `quality`, with a display-only label `<res>p (<nearest>)` (`4320p (HDTV-2160p)`, `576p (DVD)`) that neither `tracking` nor `cutoffUnmet` reads.
 45. Neither `tracking` nor the detail route is cached; both are recomputed per request.
@@ -146,7 +146,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 
 47. Window: both `start` and `end` given → each `.slice(0, 10)`; otherwise (including only one of them) the **current month in the server's local time zone** (first day to the last day of that month; the process local zone, not UTC). The sliced strings go to Postgres unparsed (`BETWEEN :start AND :end` against `date` columns), so what Postgres accepts decides: `2026-03-01`, compact `20260301`, ordinal `2026-060` work; `2026-03`, `2026`, `2026031`, week dates and `2026-02-30` pass the DTO (rule 8) but are a Postgres error, answered 400 (rule 9). The raw strings are bound as text cast to `date` in SQL, the cast error is mapped to 400, and they are not reformatted (rule 48 compares the raw strings).
 48. Movies (when `type` unset or `movie`): `m.type = 'movie' AND (m.inCinemas BETWEEN $s AND $e OR m.digitalRelease BETWEEN ... OR m.physicalRelease BETWEEN ... OR m.releaseDate BETWEEN ...)` (inclusive, `date` columns), `+ m.monitored = true` when `monitoredOnly`, `+ m."addedById" = $user` when `requestedByMe`, ACL (`1 = 0` when empty else `m."libraryId" IN ids`), with `files` left-joined (`hasFile = files.length > 0`). For each movie one entry per specific date inside the window in the order `cinema` (`inCinemas`), `digital` (`digitalRelease`), `physical` (`physicalRelease`); if **none** of the three is inside the window and `releaseDate` is, one entry `event: 'release'`. "Inside the window" is a **string** comparison `d >= start && d <= end` of the `YYYY-MM-DD` column value against the raw sliced `start`/`end`, not the SQL `BETWEEN`: with `start=20260301` SQL selects the movies but `'2026-03-05' < '20260301'` lexically, so no movie entry is emitted (episodes, filtered in SQL only, still are).
-49. Episodes (when `type` unset or `series`): `episodes ep INNER JOIN item_groups season INNER JOIN media media WHERE ep."airDate" BETWEEN $s AND $e`, `+ media.monitored = true AND ep.monitored = true` when `monitoredOnly`, `+ media."addedById" = $user` when `requestedByMe`, ACL as above, `ORDER BY ep."airDate" ASC`; season 0 episodes are **included**. `hasFile` = coverage on disk (`onDiskSql('ep')`, SQL in Q-D), falling back to `ep.hasFile`.
+49. Episodes (when `type` unset or `series`): `episodes ep INNER JOIN item_groups season INNER JOIN media media WHERE ep."airDate" BETWEEN $s AND $e`, `+ media.monitored = true AND ep.monitored = true` when `monitoredOnly`, `+ media."addedById" = $user` when `requestedByMe`, ACL as above, `ORDER BY ep."airDate" ASC`; season 0 episodes are **included**. `hasFile` = the episode has an item part (`onDisk`, SQL in Q-D).
 50. Entry shape (undefined keys omitted): movie `{ id: media.id, mediaId: media.id, title, type: 'movie', event, date: 'YYYY-MM-DD', posterUrl, fanartUrl, status, year, hasFile }`; episode `{ id: episode.id, mediaId, title: <series title>, type: 'series', event: 'airing', date, posterUrl, fanartUrl, status, year, seasonNumber, episodeNumber, episodeTitle: episode.title, hasFile }`. `posterUrl`/`fanartUrl`/`year` may be `null`; `id` collides across kinds (the client keys on type).
 51. Final order: `results.sort((a, b) => a.date.localeCompare(b.date))` (stable, ISO dates so plain lexical): ties keep insertion order = movies `ORDER BY m.id` (per movie cinema, digital, physical, release) then episodes `ORDER BY ep."airDate", ep.id`.
 
@@ -207,12 +207,12 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
   AND EXISTS (
     SELECT 1 FROM item_groups s
     JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
   )
   AND NOT EXISTS (
     SELECT 1 FROM item_groups s
     JOIN items e ON e."groupId" = s.id
-    WHERE s."mediaId" = m2.id AND s."number" > 0 AND e."hasFile" = true
+    WHERE s."mediaId" = m2.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
     AND NOT EXISTS (
       SELECT 1 FROM playback_states ps2
       WHERE ps2."userId" = :userId AND ps2."episodeId" = e.id AND ps2.completed = true
@@ -220,21 +220,14 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
   )
 ```
 
-**Q-M (missing-episode predicate, `onDiskSql('me')` expanded)**:
+**Q-M (missing-episode predicate)**:
 
 ```sql
 EXISTS (
   SELECT 1 FROM item_groups ms JOIN items me ON me."groupId" = ms.id
   WHERE ms."mediaId" = media.id AND ms."number" > 0
     AND ms.monitored = true AND me.monitored = true
-    AND me."airDate" <= $today AND NOT ("me"."hasFile" = true OR EXISTS (
-      SELECT 1 FROM "items" cov
-      WHERE cov."groupId" = "me"."groupId"
-        AND cov."hasFile" = true
-        AND cov."endNumber" IS NOT NULL
-        AND "me"."number" > cov."number"
-        AND "me"."number" <= cov."endNumber"
-    ))
+    AND me."airDate" <= $today AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = me.id)
 )
 ```
 
@@ -243,7 +236,7 @@ EXISTS (
 ```sql
 SELECT s."mediaId",
        COUNT(e.id) AS total,
-       COUNT(e.id) FILTER (WHERE <onDiskSql('e')>) AS downloaded
+       COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded
 FROM item_groups s
 JOIN items e ON e."groupId" = s.id
 WHERE s."mediaId" = ANY($1) AND s."number" > 0
@@ -260,7 +253,8 @@ SELECT s."mediaId" AS "mediaId",
        f."quality" AS "quality"
   FROM item_groups s
   JOIN items e ON e."groupId" = s.id
-  LEFT JOIN media_files f ON f."episodeId" = e.id
+  LEFT JOIN item_parts p ON p."itemId" = e.id
+  LEFT JOIN media_files f ON f.id = p."mediaFileId"
  WHERE s."mediaId" = ANY($1)
    AND s."number" > 0
    AND e.monitored = true
@@ -279,11 +273,11 @@ SELECT m.id::int AS id,
     (m.type = 'series'
       AND EXISTS (
         SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
       )
       AND NOT EXISTS (
         SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-        WHERE s."mediaId" = m.id AND s."number" > 0 AND e."hasFile" = true
+        WHERE s."mediaId" = m.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
           AND NOT EXISTS (
             SELECT 1 FROM playback_states ps2
             WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true
@@ -370,10 +364,10 @@ WHERE m.type = 'movie'
        OR m."physicalRelease" BETWEEN $s AND $e OR m."releaseDate" BETWEEN $s AND $e)
   [AND m.monitored = true] [AND m."addedById" = $user] AND m."libraryId" = ANY($ids)
 -- episodes
-SELECT ep.id, ep."number", ep.title, ep."airDate", ep."hasFile",
+SELECT ep.id, ep."number", ep.title, ep."airDate",
        season."number", media.id AS "mediaId", media.title AS "mediaTitle",
        media."posterUrl", media."fanartUrl", media.status, media.year,
-       <onDiskSql('ep')> AS "onDisk"
+       EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ep.id) AS "onDisk"
 FROM items ep
 INNER JOIN item_groups season ON season.id = ep."groupId"
 INNER JOIN media media ON media.id = season."mediaId"
@@ -469,7 +463,7 @@ Vector sets (fixtures under `server/fixtures`, replayed by Rust tests, `BLESS=1`
 | `genres-all`, `genres-library`, `genres-library-outside-acl`, `genres-library-garbage` (`abc`, `0`, `12abc`), `genres-readonly`, `genres-empty-scope`; `collections-all`, `-library`, `-outside-acl`, `-single-member-hidden` | rule 38, posters ordering |
 | `calendar-month`, `-explicit-range`, `-only-start` (current month: fixed via an explicit range in the other scenarios; this one asserts only shape), `-type-movie`, `-type-series`, `-monitoredonly`, `-requestedbyme`, `-readonly-scope`, `-shadowed-episode-hasfile`, `-release-fallback`, `-season0-included`, `-compact-dates` (`20260301`..`20260331`: episodes only), `-bad-date` (`2026-02-30`, `2026-03`: 400), `-bad-type` | rules 47-51 |
 | `tracking-movie-met`, `-movie-below`, `-movie-no-profile`, `-movie-missing`, `-movie-unmonitored`, `-movie-below-same-resolution` (names, not labels), `-unknown-cutoff` (`hasProfile: true`, `no-profile`), `-8k-file` (`WORKPRINT`), `-empty-quality` (`Bluray-480p`), `-series-multi-episode`, `-series-specials-last`, `-notfound`, `-outside-acl`, `-badid`, `-unauthenticated` | rules 39-46 |
-| `detail-movie`, `detail-series` (season order, specials last, episode order, hasFile heal), `detail-no-metadata` (`metadata: null`), `detail-with-metadata` (bigint strings), `detail-notfound`, `detail-null-library` (404 even for admin), `detail-outside-acl`, `detail-badid`, `detail-id-out-of-range` (400), `detail-id-noncanonical` (`%207%20`, `1e1`: 400), `detail-unauthenticated`, `detail-movie-user` (`path`, `library.path` absent; every non-admin `MLI`/`MD` scenario carries it) | rules 3, 31-32, 73 |
+| `detail-movie`, `detail-series` (season order, specials last, episode order, `hasFile` from parts, a multi-episode file reporting `true` on the episode inside its range), `detail-no-metadata` (`metadata: null`), `detail-with-metadata` (bigint strings), `detail-notfound`, `detail-null-library` (404 even for admin), `detail-outside-acl`, `detail-badid`, `detail-id-out-of-range` (400), `detail-id-noncanonical` (`%207%20`, `1e1`: 400), `detail-unauthenticated`, `detail-movie-user` (`path`, `library.path` absent; every non-admin `MLI`/`MD` scenario carries it) | rules 3, 31-32, 73 |
 | `similar-default`, `-limit`, `-limit-garbage`, `-limit-cap`, `-limit-fraction` (`0.5`: `[]`), `-series-empty`, `-no-signal-empty`, `-excludes-collection`, `-director-only`, `-notfound`, `-outside-acl`; `collection-ok`, `-none-empty-body`, `-alone-empty-body`, `-notfound`, `-outside-acl` | rules 52-57 (200 empty body recorded as `body: null` with empty-body flag) |
 | `cast-ok`, `crew-ok`, `cast-empty`, `cast-notfound`, `cast-outside-acl` | rule 58 |
 | `streams-ok` (engine up), `streams-engine-down` (`[]`), `streams-file-of-other-media` (404), `streams-notfound-media`, `streams-badid`, `streams-library-no-path` (400 or 404) | rules 59-61 |

@@ -124,7 +124,7 @@ Static segments win over `:id`/`:subtitleId`: `/api/media/sync-queue` and `/api/
 
 Tables: `subtitle_files` (`sf`), `subtitle_blacklist`, `subtitle_provider_stats`, `media`, `media_files`, `items`, `item_groups`, `language_profiles`, `app_settings`. DDL: the baseline migration plus `1782200000000`, `1780200000000`, `1784700000000`; `subtitle_files."updatedAt"` has the `set_updated_at` trigger. Columns are camelCase quoted. Enum columns: `subtitle_files."providerType"` and `"status"` (a bogus filter value is rejected with 400 before the query).
 
-- Q1 history: `SELECT sf.*, media.*, episode.*, season.*, mf.*, fe.*, fs.* FROM subtitle_files sf LEFT JOIN media ON media.id = sf."mediaId" LEFT JOIN items episode ON episode.id = sf."episodeId" LEFT JOIN item_groups season ON season.id = episode."seasonId" LEFT JOIN media_files mf ON mf.id = sf."mediaFileId" LEFT JOIN items fe ON fe.id = mf."episodeId" LEFT JOIN item_groups fs ON fs.id = fe."groupId" WHERE [sf."providerType" <> 'embedded'] [AND sf.status = $s] [AND sf.language = $l] [AND sf."providerType" = $p] ORDER BY sf."createdAt" DESC, sf.id ASC LIMIT $limit OFFSET $offset` plus `SELECT count(*)` with the same filters The query selects only the sources of the 13 `Item` fields (`media.title`, `media.type`, episode and season numbers/titles).
+- Q1 history: `SELECT sf.*, media.*, episode.*, season.*, mf.*, fe.*, fs.* FROM subtitle_files sf LEFT JOIN media ON media.id = sf."mediaId" LEFT JOIN items episode ON episode.id = sf."episodeId" LEFT JOIN item_groups season ON season.id = episode."seasonId" LEFT JOIN media_files mf ON mf.id = sf."mediaFileId" LEFT JOIN items fe ON fe.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) LEFT JOIN item_groups fs ON fs.id = fe."groupId" WHERE [sf."providerType" <> 'embedded'] [AND sf.status = $s] [AND sf.language = $l] [AND sf."providerType" = $p] ORDER BY sf."createdAt" DESC, sf.id ASC LIMIT $limit OFFSET $offset` plus `SELECT count(*)` with the same filters The query selects only the sources of the 13 `Item` fields (`media.title`, `media.type`, episode and season numbers/titles).
 - Q2 stats: `SELECT count(*) FROM subtitle_files WHERE "providerType" <> 'embedded'`; `SELECT status, COUNT(*)::int AS count FROM subtitle_files WHERE "providerType" <> 'embedded' GROUP BY status`; same grouped by `"providerType"`; recent: Q1's joins, same filter, `ORDER BY "createdAt" DESC, id ASC LIMIT 10`.
 - Q3 list for media: `SELECT * FROM subtitle_files WHERE "mediaId" = $1 ORDER BY language ASC, score DESC, id ASC`; by file: `WHERE "mediaFileId" = $1`, same order.
 - Q4 missing (`$1 text[]`, `$2` limit, `$3` offset):
@@ -142,11 +142,11 @@ WITH required AS (
   WHERE m.monitored = true
 )
 SELECT r.media_id, r.media_title, r.media_type, r.language, r.forced,
-       f.id AS file_id, f."relativePath", f."episodeId",
+       f.id AS file_id, f."relativePath", (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) AS "episodeId",
        s."number", e."number", COUNT(*) OVER () AS total
 FROM required r
 JOIN media_files f ON f."mediaId" = r.media_id
-LEFT JOIN items e ON e.id = f."episodeId"
+LEFT JOIN items e ON e.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id)
 LEFT JOIN item_groups  s ON s.id = e."groupId"
 WHERE NOT EXISTS (
   SELECT 1 FROM subtitle_files sf
