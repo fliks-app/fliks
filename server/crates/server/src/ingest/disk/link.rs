@@ -1,6 +1,6 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
-use fliks_domain::external_id::ExternalProvider;
+use fliks_domain::{external_id::ExternalProvider, media::family::Family};
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -161,6 +161,7 @@ async fn relink_in_place(
     if linked > 0 {
         st.hub.emit_domain(DomainEvent::MediaFilesImported {
             media_id: i64::from(media.id),
+            family: Family::Video,
             season_number: None,
             episode_number: None,
             source: ImportSource::Disk,

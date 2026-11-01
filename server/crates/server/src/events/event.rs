@@ -1,6 +1,6 @@
 //! Wire events (`docs/spec/events-hub.md`, Events): the 50 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -515,6 +515,13 @@ pub struct RawEvent {
     pub payload: Value,
 }
 
+/// An id of a work in an outside system, as the domain events name it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalId {
+    pub provider: String,
+    pub value: String,
+}
+
 /// In-process only: never reaches a browser (rules 37-39).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all_fields = "camelCase")]
@@ -522,7 +529,7 @@ pub enum DomainEvent {
     #[serde(rename = "media.imported")]
     MediaImported {
         media_id: i64,
-        tmdb_id: Option<i64>,
+        external_ids: Vec<ExternalId>,
         media_type: MediaKind,
         library_id: Option<i64>,
         added_by_user_id: Option<i64>,
@@ -538,12 +545,13 @@ pub enum DomainEvent {
     #[serde(rename = "media.removed")]
     MediaRemoved {
         media_id: i64,
-        tmdb_id: Option<i64>,
+        external_ids: Vec<ExternalId>,
         media_type: MediaKind,
     },
     #[serde(rename = "media.files.imported")]
     MediaFilesImported {
         media_id: i64,
+        family: Family,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         season_number: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -555,6 +563,7 @@ pub enum DomainEvent {
     #[serde(rename = "acquisition.grabbed")]
     AcquisitionGrabbed {
         media_id: i64,
+        family: Family,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         season_number: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -564,7 +573,7 @@ pub enum DomainEvent {
     RequestCreated {
         request_id: i64,
         media_type: MediaKind,
-        tmdb_id: i64,
+        external_ids: Vec<ExternalId>,
         user_id: Option<i64>,
         kind: String,
         seasons: Option<Vec<i64>>,
@@ -574,7 +583,7 @@ pub enum DomainEvent {
         request_id: i64,
         media_id: Option<i64>,
         media_type: MediaKind,
-        tmdb_id: i64,
+        external_ids: Vec<ExternalId>,
         seasons: Option<Vec<i64>>,
         approved_by_user_id: Option<i64>,
     },
@@ -716,15 +725,15 @@ mod tests {
     #[test]
     fn the_eleven_domain_events_and_the_bus_envelope_round_trip() {
         let all = [
-            json!({"type":"media.imported","mediaId":1,"tmdbId":null,"mediaType":"movie","libraryId":null,"addedByUserId":2}),
+            json!({"type":"media.imported","mediaId":1,"externalIds":[],"mediaType":"movie","libraryId":null,"addedByUserId":2}),
             json!({"type":"media.monitored.changed","mediaId":1,"monitored":true}),
             json!({"type":"media.season.monitored.changed","mediaId":1,"seasonNumber":2,"monitored":false}),
-            json!({"type":"media.removed","mediaId":1,"tmdbId":3,"mediaType":"series"}),
-            json!({"type":"media.files.imported","mediaId":1,"episodeNumber":2,"source":"disk"}),
+            json!({"type":"media.removed","mediaId":1,"externalIds":[{"provider":"tmdb","value":"3"},{"provider":"imdb","value":"tt1"}],"mediaType":"series"}),
+            json!({"type":"media.files.imported","mediaId":1,"family":"video","episodeNumber":2,"source":"disk"}),
             json!({"type":"media.acquisition.requested","mediaIds":[1,2],"reason":"r"}),
-            json!({"type":"acquisition.grabbed","mediaId":1}),
-            json!({"type":"request.created","requestId":1,"mediaType":"movie","tmdbId":2,"userId":null,"kind":"k","seasons":null}),
-            json!({"type":"request.approved","requestId":1,"mediaId":null,"mediaType":"movie","tmdbId":2,"seasons":[1],"approvedByUserId":null}),
+            json!({"type":"acquisition.grabbed","mediaId":1,"family":"video"}),
+            json!({"type":"request.created","requestId":1,"mediaType":"movie","externalIds":[{"provider":"tmdb","value":"2"}],"userId":null,"kind":"k","seasons":null}),
+            json!({"type":"request.approved","requestId":1,"mediaId":null,"mediaType":"movie","externalIds":[{"provider":"tmdb","value":"2"}],"seasons":[1],"approvedByUserId":null}),
             json!({"type":"library.scan.completed","libraryId":1,"added":2,"updated":3}),
             json!({"type":"settings.changed","key":"k"}),
         ];

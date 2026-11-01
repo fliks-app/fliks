@@ -374,7 +374,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     st.hub.emit_domain(DomainEvent::RequestCreated {
         request_id: i64::from(id),
         media_type: dto.media_type,
-        tmdb_id: i64::from(dto.tmdb_id),
+        external_ids: key.refs(),
         user_id: Some(i64::from(a.user.id)),
         kind: "add".into(),
         seasons: dto.seasons.clone(),
@@ -384,7 +384,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             request_id: i64::from(id),
             media_id: media_id.map(i64::from),
             media_type: dto.media_type,
-            tmdb_id: i64::from(dto.tmdb_id),
+            external_ids: key.refs(),
             seasons: dto.seasons.clone(),
             approved_by_user_id: Some(i64::from(a.user.id)),
         });
@@ -587,6 +587,8 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         return approve_delete(st, a, &row).await;
     }
     let key = row.key();
+    let mut lock = st.db.begin().await?;
+    db::lock_title(&mut lock, &key).await?;
     let existing = db::media_by_ref(&st.db, &key).await?;
     if existing.is_none() {
         services::assert_import_target(st, row.media_type, row.library_id).await?;
@@ -619,8 +621,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         request_id: i64::from(id),
         media_id: media.map(i64::from),
         media_type: row.media_type,
-        // the event types tmdbId as non-null
-        tmdb_id: key.tmdb_id().map_or(0, i64::from),
+        external_ids: key.refs(),
         seasons: row.seasons.map(|s| s.0),
         approved_by_user_id: Some(i64::from(a.user.id)),
     });

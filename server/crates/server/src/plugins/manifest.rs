@@ -70,8 +70,9 @@ const PROCESS_KEYS: [&str; 11] = [
     "checklist",
     "network",
 ];
-pub const SCOPES: [&str; 6] = [
+pub const SCOPES: [&str; 7] = [
     "media:read",
+    "media:create",
     "acquisition:candidates",
     "releases:score",
     "ingest:write",

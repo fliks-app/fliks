@@ -59,7 +59,7 @@ Rules 18-20 are implemented in `media/write/delete.rs` (`media-write.md` rules 7
 
 18. `DELETE /libraries/:id`: library missing → 404 `Library #<id> not found`; list the library's media ids (`SELECT id FROM media WHERE "libraryId" = $1 ORDER BY id`); for each, sequentially, remove the media (rule 20); then delete the library row (cascade removes its `library_user_access` rows); log `Library #<id> deleted - <n> media row(s) removed, files kept`; 200 empty body.
 19. Not transactional: a failure on the k-th media leaves the first k-1 removed and the library in place. Files and folders are kept.
-20. Removing a media (`media-write.md`): loads the media with files, runs the request-lifecycle `onMediaRemoved` hook, `DELETE FROM media` (FK cascades), fire-and-forget thumbnail deletion per file, domain event `media.removed {mediaId, tmdbId|null, mediaType}`, fire-and-forget `mediaServers.dispatch('media.deleted', {title, path})`.
+20. Removing a media (`media-write.md`): loads the media with files, runs the request-lifecycle `onMediaRemoved` hook, `DELETE FROM media` (FK cascades), fire-and-forget thumbnail deletion per file, domain event `media.removed {mediaId, externalIds, mediaType}`, fire-and-forget `mediaServers.dispatch('media.deleted', {title, path})`.
 
 ### D. Access assignment
 

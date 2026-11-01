@@ -343,8 +343,10 @@ async fn files_for(
 }
 
 mod candidates;
+mod create;
 mod release;
 pub use candidates::*;
+pub use create::*;
 pub use release::*;
 
 #[cfg(test)]

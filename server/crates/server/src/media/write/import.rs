@@ -197,6 +197,7 @@ pub async fn import_title(
             ));
         }
     }
+    let external_ids = external_ids::refs(&mut *tx, id).await?;
     tx.commit().await?;
     tracing::info!(
         "Imported \"{}\" (#{id}) into library #{}",
@@ -217,7 +218,7 @@ pub async fn import_title(
     }
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
-        tmdb_id: d.tmdb_id.filter(|t| *t != 0).map(i64::from),
+        external_ids,
         media_type: imp.media_type,
         library_id: Some(i64::from(imp.library_id)),
         added_by_user_id: imp.added_by.map(i64::from),
@@ -613,7 +614,7 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     store_local_artwork(st, id, &u.artwork).await;
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
-        tmdb_id: None,
+        external_ids: vec![],
         media_type: u.media_type,
         library_id: Some(i64::from(u.library_id)),
         added_by_user_id: Some(i64::from(added_by)).filter(|u| *u != 0),

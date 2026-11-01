@@ -1236,6 +1236,7 @@ async fn the_event_subscriptions_drive_the_lifecycle(pool: PgPool) {
     q(&p, r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, status, "mediaId") VALUES (1, 'add', 'movie', 'tmdb', '96', 'M', 'approved', 17)"#).await;
     c.st.hub.emit_domain(DomainEvent::AcquisitionGrabbed {
         media_id: 17,
+        family: fliks_domain::media::family::Family::Video,
         season_number: None,
         episode_number: None,
     });

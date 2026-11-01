@@ -56,6 +56,7 @@ async fn install_pipeline_refusals_and_signatures() {
             "config:general",
             "scope:config:rw",
             "scope:media:read",
+            "scope:media:create",
             "scope:events:emit",
             "scope:ingest:write",
             "scope:acquisition:candidates",

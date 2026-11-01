@@ -395,6 +395,19 @@ fn test_route(req: &Request) -> Result<Response, String> {
             .map(|v| v.into_iter().map(|(k, m)| (k, m.title)).collect::<Vec<_>>()),
         ),
         "exists" => host_result(host::media_exists(&[1, 2, 999_999])),
+        "create" => {
+            let ids: Vec<t::ExternalId> = req
+                .query("tmdb")
+                .map(|v| t::ExternalId {
+                    provider: "tmdb".into(),
+                    value: v.into(),
+                })
+                .into_iter()
+                .collect();
+            let library = req.query("library").and_then(|v| v.parse().ok());
+            let kind = req.query("kind").unwrap_or("movie");
+            host_result(host::media_resolve_or_create(kind, &ids, library))
+        }
         "ingest" => {
             let paths: Vec<String> = req.query("path").map(str::to_owned).into_iter().collect();
             host_result(

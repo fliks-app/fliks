@@ -51,7 +51,8 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
 
   | Scope | Host methods it unlocks |
   |---|---|
-  | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, and — because both answer with media identity for the whole library — `acquisition.candidates` and `releases.match` |
+  | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, `media.resolveOrCreate` (it tells which titles exist), and, because both answer with media identity for the whole library, `acquisition.candidates` and `releases.match` |
+  | `media:create` | `media.resolveOrCreate` (with `media:read`): adds a title to a library when none holds it. The import runs the request hooks, so it also adopts and approves the pending requests for that title. An update that newly declares it waits for an admin. |
   | `acquisition:candidates` | `acquisition.candidates`, `releases.match` |
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
