@@ -151,7 +151,7 @@ pub async fn items(
     let paths = paths_visible(&a.perms);
     let rows = sqlx::query!(
         r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
-                  (to_jsonb(m) - 'searchVector') || jsonb_build_object(
+                  (to_jsonb(m) - 'searchVector' - 'sortCreator') || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,

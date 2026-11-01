@@ -16,6 +16,7 @@ pub async fn resolve_or_create(
     library_id: Option<u32>,
 ) -> Result<u32, HostError> {
     let kind = MediaKind::parse(kind)
+        .filter(|k| k.families().contains(&Family::Video))
         .ok_or_else(|| host_err("unsupported-kind", format!("kind \"{kind}\" is not served")))?;
     let tmdb = ids
         .iter()

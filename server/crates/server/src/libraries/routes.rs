@@ -19,7 +19,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::kind::MediaKind,
+    media::{family::Family, kind::MediaKind},
 };
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
@@ -184,9 +184,13 @@ pub async fn create(
     max_len("color", dto.color.as_deref(), 32)?;
     max_len("metadataLanguage", dto.metadata_language.as_deref(), 8)?;
     max_len("metadataRegion", dto.metadata_region.as_deref(), 8)?;
-    let media_types = dto
-        .media_types
-        .unwrap_or_else(|| MediaKind::NAMES.map(String::from).to_vec());
+    let media_types = dto.media_types.unwrap_or_else(|| {
+        MediaKind::ALL
+            .into_iter()
+            .filter(|k| k.families().contains(&Family::Video))
+            .map(|k| k.as_str().to_owned())
+            .collect()
+    });
     check_media_types(&media_types)?;
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
