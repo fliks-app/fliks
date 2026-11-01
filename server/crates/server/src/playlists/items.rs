@@ -151,7 +151,9 @@ pub async fn items(
     let rows = sqlx::query!(
         r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
                   (to_jsonb(m) - 'searchVector') || jsonb_build_object(
-                    'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb) AS "media!: Jsonb<Value>",
+                    'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
+                    'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
+                    'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date) AS "media!: Jsonb<Value>",
                   to_jsonb(l) AS "library!: Jsonb<Value>",
                   to_jsonb(q) AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
@@ -177,6 +179,11 @@ pub async fn items(
              max(value) FILTER (WHERE provider = $5)::int AS tvdb,
              max(value) FILTER (WHERE provider = $6) AS imdb
            FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+           LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_date,
+                        max(date) FILTER (WHERE kind = 'digital') AS digital_date,
+                        max(date) FILTER (WHERE kind = 'physical') AS physical_date,
+                        max(date) FILTER (WHERE kind = 'release') AS release_date
+                      FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
            LEFT JOIN quality_profiles q ON q.id = m."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
            LEFT JOIN media_metadata md ON md."mediaId" = m.id

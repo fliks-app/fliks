@@ -136,10 +136,11 @@ pub struct DiskSpace {
 #[utoipa::path(get, path = "/api/system/stats", responses((status = 200)))]
 pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     a.require(Action::Read, Subject::Settings)?;
-    let count = |sql: &'static str| sqlx::query_scalar::<_, i32>(sql).fetch_one(&st.db);
-    let movies = count("SELECT count(*)::int FROM media WHERE type = 'movie'").await?;
-    let series = count("SELECT count(*)::int FROM media WHERE type = 'series'").await?;
-    let pending = count("SELECT count(*)::int FROM requests WHERE status = 'pending'").await?;
+    let mut counts = crate::media::aggregates::kind_counts(&st.db, None).await?;
+    let pending =
+        sqlx::query_scalar::<_, i32>("SELECT count(*)::int FROM requests WHERE status = 'pending'")
+            .fetch_one(&st.db)
+            .await?;
     let libs: Vec<(i32, String, Option<String>, String)> = sqlx::query_as(
         "SELECT id, name, label, path FROM libraries WHERE path IS NOT NULL AND path <> '' ORDER BY name ASC, id ASC",
     )
@@ -155,9 +156,9 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>,
             total_space: d.total_space,
         });
     }
-    Ok(Json(
-        json!({"movies": movies, "series": series, "pendingRequests": pending, "diskSpace": disk_space}),
-    ))
+    counts.insert("pendingRequests".into(), pending.into());
+    counts.insert("diskSpace".into(), json!(disk_space));
+    Ok(Json(Value::Object(counts)))
 }
 
 #[utoipa::path(post, path = "/api/system/backup", responses((status = 201)))]

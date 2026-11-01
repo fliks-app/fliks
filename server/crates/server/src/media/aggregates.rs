@@ -1,18 +1,38 @@
 //! Counts, genres, collections and the quality table (`media-query.md` rules 35-38).
-use fliks_domain::{media::query::js_parse_int, release::parsing::quality::APP_QUALITIES};
+use fliks_domain::{
+    media::{kind::MediaKind, query::js_parse_int},
+    release::parsing::quality::APP_QUALITIES,
+};
 use serde::{Serialize, ser::SerializeMap};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-pub async fn counts(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
-    let r = sqlx::query!(
-        r#"SELECT COUNT(*) FILTER (WHERE type = 'movie') AS "movies!", COUNT(*) FILTER (WHERE type = 'series') AS "series!"
-           FROM media WHERE "libraryId" = ANY($1)"#,
-        ids
+/// The media of `libraries` (all when `None`) counted per kind under each kind's count key, zero when absent.
+pub async fn kind_counts(
+    db: &PgPool,
+    libraries: Option<&[i32]>,
+) -> Result<serde_json::Map<String, Value>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"SELECT type AS "kind!", COUNT(*) AS "n!" FROM media
+           WHERE $1::int[] IS NULL OR "libraryId" = ANY($1) GROUP BY type"#,
+        libraries
     )
-    .fetch_one(db)
+    .fetch_all(db)
     .await?;
-    Ok(json!({"movies": r.movies, "series": r.series}))
+    Ok(MediaKind::ALL
+        .into_iter()
+        .map(|k| {
+            let n = rows
+                .iter()
+                .find(|r| r.kind == k.as_str())
+                .map_or(0, |r| r.n);
+            (k.count_key().to_owned(), n.into())
+        })
+        .collect())
+}
+
+pub async fn counts(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
+    Ok(Value::Object(kind_counts(db, Some(ids)).await?))
 }
 
 /// A JSON object whose keys keep the numeric order of the library ids (JS integer-key order).

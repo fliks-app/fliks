@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO media (title, \"originalTitle\", year, type, status, monitored, \"alternativeTitles\", overview,\n             genres, runtime, rating, \"releaseDate\", \"libraryId\", \"folderName\", \"qualityProfileId\",\n             \"languageProfileId\", \"addedById\")\n           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8, $9::text::date,\n             $10, $11, $12, $13, $14)\n           RETURNING id",
+  "query": "INSERT INTO media (title, \"originalTitle\", year, type, status, monitored, \"alternativeTitles\", overview,\n             genres, runtime, rating, \"libraryId\", \"folderName\", \"qualityProfileId\",\n             \"languageProfileId\", \"addedById\")\n           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,\n             $9, $10, $11, $12, $13)\n           RETURNING id",
   "describe": {
     "columns": [
       {
@@ -25,7 +25,6 @@
         "Jsonb",
         "Int4",
         "Float8",
-        "Text",
         "Int4",
         "Varchar",
         "Int4",
@@ -37,5 +36,5 @@
       false
     ]
   },
-  "hash": "ea16639c165b97a30d507126f371581223ac2344544aa432bec52ec79a4cd6a8"
+  "hash": "54af089e92063353a929a778951d262c52cd6371ead1e79631535ffeed684628"
 }

@@ -2,6 +2,7 @@
 //! transaction; images and credits follow detached.
 use super::{body::Body, entity_or_404, metadata, resolve_profile};
 use crate::media::{
+    details::set_release_dates,
     external_ids::{self, Ids},
     items,
 };
@@ -21,7 +22,7 @@ use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
     external_id::ExternalProvider,
-    media::kind::MediaKind,
+    media::{kind::MediaKind, release::ReleaseKind},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
     nfo::NfoData,
 };
@@ -302,13 +303,13 @@ async fn insert_media(
 ) -> Result<(i32, bool), sqlx::Error> {
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type,
-             overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime, "releaseDate",
-             "inCinemas", "digitalRelease", "physicalRelease", "tmdbCollectionId", "tmdbCollectionName",
+             overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime,
+             "tmdbCollectionId", "tmdbCollectionName",
              monitored, "metadataRefreshedAt", "qualityProfileId", "languageProfileId", "libraryId",
              "folderName", "addedById")
            VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,
-             $10, $11, $12, $13, $14::text::date, $15::text::date, $16::text::date, $17::text::date, $18, $19,
-             true, now(), $20, $21, $22, NULLIF($23, ''), $24)
+             $10, $11, $12, $13, $14, $15,
+             true, now(), $16, $17, $18, NULLIF($19, ''), $20)
            RETURNING id"#,
         d.title,
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
@@ -323,10 +324,6 @@ async fn insert_media(
         d.rating,
         json!(d.genres),
         d.runtime,
-        day(&d.release_date),
-        day(&d.in_cinemas),
-        day(&d.digital_release),
-        day(&d.physical_release),
         d.tmdb_collection_id,
         d.tmdb_collection_name,
         imp.quality_profile_id,
@@ -336,6 +333,18 @@ async fn insert_media(
         imp.added_by.filter(|u| *u != 0)
     )
     .fetch_one(&mut *tx)
+    .await?;
+    set_release_dates(
+        tx,
+        id,
+        &[
+            (ReleaseKind::Release, day(&d.release_date)),
+            (ReleaseKind::Cinema, day(&d.in_cinemas)),
+            (ReleaseKind::Digital, day(&d.digital_release)),
+            (ReleaseKind::Physical, day(&d.physical_release)),
+        ],
+        false,
+    )
     .await?;
     items::create_shell(tx, id, imp.media_type).await?;
     let ids = Ids {
@@ -551,10 +560,10 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles", overview,
-             genres, runtime, rating, "releaseDate", "libraryId", "folderName", "qualityProfileId",
+             genres, runtime, rating, "libraryId", "folderName", "qualityProfileId",
              "languageProfileId", "addedById")
-           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8, $9::text::date,
-             $10, $11, $12, $13, $14)
+           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,
+             $9, $10, $11, $12, $13)
            RETURNING id"#,
         title,
         original,
@@ -564,7 +573,6 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         json!(nfo.genres.clone().unwrap_or_default()),
         nfo.runtime.and_then(|r| i32::try_from(r).ok()),
         nfo.rating,
-        nfo.premiered,
         u.library_id,
         u.folder_name,
         q,
@@ -572,6 +580,13 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         Some(added_by).filter(|u| *u != 0)
     )
     .fetch_one(&mut *tx)
+    .await?;
+    set_release_dates(
+        &mut tx,
+        id,
+        &[(ReleaseKind::Release, nfo.premiered.clone())],
+        false,
+    )
     .await?;
     items::create_shell(&mut tx, id, u.media_type).await?;
     tx.commit().await?;

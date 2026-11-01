@@ -163,8 +163,10 @@ pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError>
     let rows = sqlx::query!(
         r#"SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
        m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
-FROM media m WHERE m."libraryId" = $1 AND m."tmdbCollectionId" = $2
-ORDER BY m."releaseDate" ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
+FROM media m
+LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d.kind = 'release') dates ON true
+WHERE m."libraryId" = $1 AND m."tmdbCollectionId" = $2
+ORDER BY dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
         library,
         collection
     )

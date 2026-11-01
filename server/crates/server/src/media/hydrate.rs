@@ -31,8 +31,8 @@ pub async fn items_view(
     'additionalFanartUrls', to_jsonb(media."additionalFanartUrls"),
     'metadataRefreshedAt', iso_ms(media."metadataRefreshedAt"), 'rating', media.rating, 'genres', media.genres,
     'tmdbCollectionId', media."tmdbCollectionId", 'tmdbCollectionName', media."tmdbCollectionName",
-    'runtime', media.runtime, 'releaseDate', media."releaseDate", 'inCinemas', media."inCinemas",
-    'digitalRelease', media."digitalRelease", 'physicalRelease', media."physicalRelease",
+    'runtime', media.runtime, 'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
+    'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,
     'minimumAvailability', media."minimumAvailability")
   || jsonb_build_object(
     'libraryId', media."libraryId", 'qualityProfileId', media."qualityProfileId",
@@ -73,6 +73,11 @@ LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb
            FROM media_external_ids WHERE "mediaId" = media.id) ids ON true
+LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_date,
+             max(date) FILTER (WHERE kind = 'digital') AS digital_date,
+             max(date) FILTER (WHERE kind = 'physical') AS physical_date,
+             max(date) FILTER (WHERE kind = 'release') AS release_date
+           FROM media_release_dates WHERE "mediaId" = media.id) dates ON true
 LEFT JOIN LATERAL (
   SELECT COUNT(e.id) AS total,
          COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded

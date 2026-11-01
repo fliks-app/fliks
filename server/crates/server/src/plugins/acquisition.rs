@@ -56,15 +56,16 @@ fn media_select() -> String {
         r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
     m."alternativeTitles" AS alternative_titles, m.year, m.runtime, ids.imdb AS imdb_id,
     ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, m."libraryId" AS library_id, m.monitored,
-    m."minimumAvailability" AS minimum_availability, m."inCinemas" AS in_cinemas,
-    m."digitalRelease" AS digital_release, m."physicalRelease" AS physical_release,
-    m."releaseDate" AS release_date, m.status::text AS status,
+    m."minimumAvailability" AS minimum_availability, dates.cinema_date AS in_cinemas,
+    dates.digital_date AS digital_release, dates.physical_date AS physical_release,
+    dates.release_date, m.status::text AS status,
     qp.id AS qp_id, qp.cutoff AS qp_cutoff, qp."upgradeAllowed" AS qp_upgrade, qp.items AS qp_items,
     qp."resolutionUpgradeOnly" AS qp_res_only, qp."minCustomFormatScore" AS qp_min_cf,
     lp."audioLanguages" AS lp_audio
   FROM media m LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
-  LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId" {}"#,
-        crate::media::external_ids::ids_join("m")
+  LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId" {} {}"#,
+        crate::media::external_ids::ids_join("m"),
+        crate::media::details::dates_join("m")
     )
 }
 

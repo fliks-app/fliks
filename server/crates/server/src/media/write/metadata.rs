@@ -1,6 +1,6 @@
 //! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
 use super::{already_running, body::Body, entity_or_404, gate, subject};
-use crate::media::items;
+use crate::media::{details::set_release_dates, items};
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{
@@ -15,7 +15,7 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
-use fliks_domain::acl::Action;
+use fliks_domain::{acl::Action, media::release::ReleaseKind};
 use serde_json::{Value, json};
 use sqlx::PgConnection;
 use std::collections::HashSet;
@@ -278,16 +278,14 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let found = service::for_media(st, id).await?;
     let d = &found.details;
+    let mut tx = st.db.begin().await?;
     sqlx::query!(
         r#"UPDATE media SET title = $2, "originalTitle" = $3, "alternativeTitles" = $4,
              year = COALESCE($5, year), overview = COALESCE($6, overview),
              status = $7::text::media_status_enum, "posterUrl" = COALESCE($8, "posterUrl"),
              "fanartUrl" = COALESCE($9, "fanartUrl"), "logoUrl" = COALESCE($10, "logoUrl"),
              rating = COALESCE($11, rating), genres = $12, runtime = COALESCE($13, runtime),
-             "releaseDate" = COALESCE($14::text::date, "releaseDate"), "inCinemas" = COALESCE($15::text::date, "inCinemas"),
-             "digitalRelease" = COALESCE($16::text::date, "digitalRelease"),
-             "physicalRelease" = COALESCE($17::text::date, "physicalRelease"),
-             "tmdbCollectionId" = $18, "tmdbCollectionName" = $19
+             "tmdbCollectionId" = $14, "tmdbCollectionName" = $15
            WHERE id = $1"#,
         id,
         d.title,
@@ -302,15 +300,24 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         d.rating,
         json!(d.genres),
         d.runtime,
-        day(&d.release_date),
-        day(&d.in_cinemas),
-        day(&d.digital_release),
-        day(&d.physical_release),
         d.tmdb_collection_id,
         d.tmdb_collection_name
     )
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    set_release_dates(
+        &mut tx,
+        id,
+        &[
+            (ReleaseKind::Release, day(&d.release_date)),
+            (ReleaseKind::Cinema, day(&d.in_cinemas)),
+            (ReleaseKind::Digital, day(&d.digital_release)),
+            (ReleaseKind::Physical, day(&d.physical_release)),
+        ],
+        true,
+    )
+    .await?;
+    tx.commit().await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
         tvdb: d.tvdb_id,

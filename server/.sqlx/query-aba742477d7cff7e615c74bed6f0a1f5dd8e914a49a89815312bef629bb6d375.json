@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media_release_dates WHERE \"mediaId\" = $1 AND kind = ANY($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aba742477d7cff7e615c74bed6f0a1f5dd8e914a49a89815312bef629bb6d375"
+}

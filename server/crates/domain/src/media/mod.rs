@@ -3,6 +3,7 @@ pub mod bonus;
 pub mod kind;
 pub mod path;
 pub mod query;
+pub mod release;
 pub mod search;
 pub mod similarity;
 
