@@ -9,7 +9,7 @@ particular plugin *does* belongs in that plugin's own README.
 settings, and subscribe to domain events — core makes every outbound request on its behalf. It
 holds no database, answers no route, and runs no code. Installing one cannot execute anything.
 
-**`process`** ships a WebAssembly component (`plugin.wasm`, `pluginApi` 2) that `fliks-server` runs
+**`process`** ships a WebAssembly component (`plugin.wasm`, `pluginApi` 3) that `fliks-server` runs
 in a wasmtime sandbox. It answers HTTP routes through core's proxy, owns a Postgres schema, and runs
 jobs on a schedule. It is the tier that can do work of its own, and the one whose failure needs
 supervision.
@@ -31,8 +31,10 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
 - `runtime` — the only legal value is the literal `"wasm"`. (`"node"` is refused.)
 - `memoryMb` — the cap on each instance's linear memory, at most 1024; larger is refused.
 - `pluginApi` — the contract revision this plugin is written against. Core accepts only the values in
-  its own `SUPPORTED_PLUGIN_API_VERSIONS`, which is `[2]`: a manifest declaring anything else is
-  installed but `failed` with `incompatible-api`, with no transition window.
+  its own `SUPPORTED_PLUGIN_API_VERSIONS`, which is `[3]`: a manifest declaring anything else (a
+  package built for `pluginApi` 2 included) is installed but `failed` with `incompatible-api`, with no
+  transition window. The admin's plugin list shows the reason, `manifest declares pluginApi 2, this
+  core accepts 3; install a build of this plugin made for pluginApi 3`, and the plugin's data is kept.
 - `fliks` — the core versions this plugin runs on, as a semver range that should carry an upper
   bound (`>=5.0.0 <6.0.0`). Core itself only checks the range is non-empty and satisfied by the
   running version; the official catalogue's CI is what refuses an unbounded range before publishing.
@@ -52,7 +54,6 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, and — because both answer with media identity for the whole library — `acquisition.candidates` and `releases.match` |
   | `acquisition:candidates` | `acquisition.candidates`, `releases.match` |
   | `releases:score` | `releases.score` |
-  | `requests:progress` | `requests.markInProgress` |
   | `ingest:write` | `library.ingest` |
   | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set`, `progress.set` |
   | `config:rw` | `config.get`, `config.set` |
@@ -98,6 +99,13 @@ else is refused at registration. Core then serves `GET /plugins/ui` per viewer: 
 `table` page is sent only to a user whose ability satisfies the policy of the route it lists from,
 and the contributions opening a withheld page are withheld with it. So a nav entry never needs a
 `when` to restate its own route's policy; use `when` for what the policy cannot express.
+
+**`ui.releasePicker`** names the routes of the release picker per kind of work and level: kinds are
+`movie`, `series`, `book`, `comic`, `album`, `artist`, levels `work` (the whole title), `group` (a
+season) and `item` (an episode), each a `{search, grab}` pair of the plugin's own routes (`search` a
+`GET`, `grab` a `POST`), at least one level per kind: `{ movie: { work: {...} }, series: { group: {...},
+item: {...} } }`. `:id`, `:groupId`-style placeholders are the route's own; the core picker fills
+`:id`, `:seasonId` and `:episodeId`. A kind the server does not serve yet is accepted and ignored.
 
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 
@@ -162,9 +170,9 @@ The Apple TV and Cast players do not model this field and will play the main vid
 
 ## What a `process` plugin can ask of core
 
-A `process` plugin is a WebAssembly component (`pluginApi` 2, world `fliks:plugin@2.0.0`) that
+A `process` plugin is a WebAssembly component (`pluginApi` 3, world `fliks:plugin@3.0.0`) that
 `fliks-server` runs in its own wasm host (wasmtime). It is built with the `fliks-plugin-sdk` crate
-(`server/crates/plugin-sdk/`, `MIT OR Apache-2.0`, published as a git tag): the WIT, the `export!`
+(`server/crates/plugin-sdk/`, `MIT OR Apache-2.0`, pinned by git rev, not published to a registry): the WIT, the `export!`
 macro, typed `host`, `db`, `http` and scheduled-call helpers, an async runtime (`rt`: `block_on`,
 `join_all`, `spawn_local`, `timeout`, `sleep` over `wstd`, and `Budget` with the per-export guest
 budgets) so one export can have several outbound requests in flight, `info!`-style logging that
@@ -174,10 +182,9 @@ build, package and verify tooling (feature `build`, `cargo xtask build|package|v
 rules are `server/docs/spec/plugins.md`. The UI-contribution types the web client reads live in
 `client/src/app/core/plugin-ui/ui-contribution.ts`.
 
-Start from the SDK's examples: `examples/fk-plugin-notify/` is a complete small plugin (scheduled
-retries, one outbound POST, two routes), `examples/fixture-guest/` exercises every host behaviour
-and is what the host tests run, `examples/xtask/` is the build tool a plugin repository keeps.
-`fk-plugin-download` is the full reference implementation.
+Start from the SDK's examples: `examples/fixture-guest/` exercises every host behaviour and is what
+the host tests run, `examples/xtask/` is the build tool a plugin repository keeps.
+`fk-plugin-download` and `fk-plugin-notify` are the reference implementations.
 
 ### The sandbox
 
@@ -432,15 +439,15 @@ one of those sets, open an issue. A proposal that can be acted on says:
    function used differently, and that is a faster outcome for everyone than a new one.
 3. **What core would have to trust you with.** A new host function is a new scope, or a widening of
    one; say which, and what a hostile plugin holding it could do.
-4. **Whether it can be additive.** Within one `pluginApi` value the WIT package only grows (a new
-   optional field or function bumps its minor version and the host links both). A change to an
-   existing one's shape or meaning is a `pluginApi` bump and orphans every plugin that has not
-   republished, so it waits for a scheduled break.
+4. **Whether it can avoid a break.** The host links one WIT package version per `pluginApi`, so any
+   change to a record or a function, an added field included, is a `pluginApi` bump that orphans every
+   plugin that has not republished, and waits for a scheduled break. The enums `media-kind` and
+   `family` already list every case the roadmap foresees for that reason.
 
-Items 3 and 4 are what decide the answer. A proposal that is additive and whose worst case is
-bounded is a small change; one that widens an existing scope is a security review.
+Items 3 and 4 are what decide the answer. A proposal whose worst case is bounded and that rides a
+scheduled break is a small change; one that widens an existing scope is a security review.
 
-There is no transition window: core accepts only the `pluginApi` values it lists (today `2`), and a
+There is no transition window: core accepts only the `pluginApi` values it lists (today `3`), and a
 plugin declaring another one is installed but `failed`, not loaded. Proposals that fit inside the
 current value ship far sooner than proposals that need a new one.
 
@@ -449,5 +456,5 @@ current value ship far sooner than proposals that need a new one.
 Fliks 4.x ran `process` plugins as Node child processes (`runtime: "node"`, a `plugin.js`, JSON-RPC
 over unix sockets). That contract is gone: a `pluginApi` 1 package, `data` tier included, still shows
 up after an upgrade but is `failed` with `incompatible-api` and its routes answer 503, until the
-catalog's auto-update installs a `pluginApi` 2 version of it. To port one, rebuild it against the SDK
+catalog's auto-update installs a `pluginApi` 3 version of it. To port one, rebuild it against the SDK
 and republish; the catalog's `COMPATIBILITY.md` has the `pluginApi` to Fliks version row.

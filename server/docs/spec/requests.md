@@ -89,7 +89,7 @@ Shapes used below. `PublicIdentity` = `{id: number, username: string, avatar: st
 | `pending`,`approved`,`processing` (ADD, linked to media) | `declined`, `media = null` | `onMediaMonitorChange` (monitored true→false) → reason `Media was unmonitored`; `onMediaRemoved` → reason `Media removed from library` | 38, 40 |
 | `available` (ADD, linked to media) | `removed`, `media = null` | `onMediaMonitorChange` (monitored true→false); `onMediaRemoved`; also reached by the cleanup actions `delete` and `delete_files_unmonitor` | 38, 40 |
 | season-scoped in-flight or `available` | `declined` (reason `Season <n> was unmonitored`, `media = null`; an `available` row becomes `removed` instead) or season trimmed | `onSeasonMonitorChange` | 39 |
-| `approved` | `processing` | domain `acquisition.grabbed` / plugin host `requests.markInProgress` | 37 |
+| `approved` | `processing` | domain `acquisition.grabbed` | 37 |
 | `approved`,`processing` | `available` | SSE `import.complete` and scope covered | 41 |
 | DELETE `pending` | `approved` (terminal done-state) | manager approve (removal executed) or `onMediaRemoved` for in-flight delete rows | 26, 40 |
 | DELETE `pending` | `declined` | manager `decline` | 25 |
