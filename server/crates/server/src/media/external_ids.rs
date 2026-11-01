@@ -168,19 +168,6 @@ impl Ids {
         ]
     }
 
-    /// The ids present, by provider.
-    pub fn refs(&self) -> Vec<ExternalId> {
-        self.entries()
-            .into_iter()
-            .filter_map(|(p, v)| {
-                Some(ExternalId {
-                    provider: p.as_str().into(),
-                    value: p.normalize(&v?)?,
-                })
-            })
-            .collect()
-    }
-
     /// Links every id present and leaves the others.
     pub async fn fill(
         &self,
@@ -422,7 +409,5 @@ mod tests {
             },
         ];
         assert_eq!(refs(&db, m).await.unwrap(), want);
-        assert_eq!(ids.refs(), [want[1].clone(), want[0].clone()]);
-        assert!(Ids::default().refs().is_empty());
     }
 }

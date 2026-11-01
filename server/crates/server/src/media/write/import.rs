@@ -197,6 +197,7 @@ pub async fn import_title(
             ));
         }
     }
+    let external_ids = external_ids::refs(&mut *tx, id).await?;
     tx.commit().await?;
     tracing::info!(
         "Imported \"{}\" (#{id}) into library #{}",
@@ -217,7 +218,7 @@ pub async fn import_title(
     }
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
-        external_ids: external_ids::refs(&st.db, id).await?,
+        external_ids,
         media_type: imp.media_type,
         library_id: Some(i64::from(imp.library_id)),
         added_by_user_id: imp.added_by.map(i64::from),

@@ -260,11 +260,17 @@ impl host::Host for Ctx {
         call!(
             self,
             "media.resolveOrCreate",
-            ["media:create"],
+            ["media:create", "media:read"],
             CREATE_CALL,
             async {
                 let app = app?;
-                super::acquisition::resolve_or_create(&app, &kind, &external_ids, library_id).await
+                // Spawned so a deadline stops the wait, not the import and its request hooks.
+                tokio::spawn(async move {
+                    super::acquisition::resolve_or_create(&app, &kind, &external_ids, library_id)
+                        .await
+                })
+                .await
+                .map_err(|e| host_err("ERR", e.to_string()))?
             }
         )
     }

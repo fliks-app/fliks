@@ -4,7 +4,7 @@ use crate::{
     events::{DomainEvent, SseEvent},
     http::{AppError, auth::Authed, validate::PathParams},
     ingest::{MediaRow, drop_thumbnails, fsx, load_media},
-    media::external_ids::Ids,
+    media::external_ids,
     state::AppState,
 };
 use axum::{
@@ -80,6 +80,7 @@ pub async fn remove_media(
     crate::requests::Lifecycle::of(st)
         .on_media_removed(&mut tx, &media.lifecycle_ref())
         .await?;
+    let external_ids = external_ids::refs(&mut *tx, id).await?;
     sqlx::query!("DELETE FROM media WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;
@@ -89,12 +90,7 @@ pub async fn remove_media(
     }
     st.hub.emit_domain(DomainEvent::MediaRemoved {
         media_id: i64::from(id),
-        external_ids: Ids {
-            tmdb: media.tmdb_id,
-            tvdb: media.tvdb_id,
-            imdb: media.imdb_id.clone(),
-        }
-        .refs(),
+        external_ids,
         media_type: media.media_type,
     });
     crate::media_servers::dispatch_detached(st, "media.deleted");

@@ -587,6 +587,8 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         return approve_delete(st, a, &row).await;
     }
     let key = row.key();
+    let mut lock = st.db.begin().await?;
+    db::lock_title(&mut lock, &key).await?;
     let existing = db::media_by_ref(&st.db, &key).await?;
     if existing.is_none() {
         services::assert_import_target(st, row.media_type, row.library_id).await?;

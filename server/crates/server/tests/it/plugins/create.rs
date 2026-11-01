@@ -1,6 +1,10 @@
 //! `media.resolveOrCreate` (`plugins.md` rule 57): scope gate, refusals and the title lock.
 use super::harness::*;
-use axum::{Json, Router, extract::Path, routing::get};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    routing::get,
+};
 use fliks_server::{
     config::Config,
     events::{Bus, DomainEvent},
@@ -10,7 +14,10 @@ use fliks_server::{
     state::AppState,
 };
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 const LIBRARY: &str = r#"INSERT INTO libraries (id, name, "mediaTypes", path)
     VALUES (1, 'Movies', '["movie"]', '/nonexistent/m')"#;
@@ -41,29 +48,58 @@ async fn media_count(pool: &sqlx::PgPool) -> i64 {
         .unwrap()
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_plugin_without_media_create_creates_nothing() {
+/// A plugin holding `scopes` calls `create` for a title that exists and one that does not.
+async fn denied(tag: &str, scopes: Value, missing: &str) {
     let Some((mut m, w)) = fixture() else { return };
-    let Some(s) = Scratch::create("create_denied").await else {
+    let Some(s) = Scratch::create(tag).await else {
         return;
     };
-    let h = harness(&s, "create_denied", |_| {}).await;
+    let h = harness(&s, tag, |_| {}).await;
     allow_unsigned(&h).await;
-    m["scopes"] = json!(["config:rw", "media:read"]);
+    m["scopes"] = scopes;
     assert_eq!(
         h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
         "active"
     );
-    sqlx::query(LIBRARY).execute(&s.pool).await.unwrap();
-    let r = call(&h, "create", &[("tmdb", "603")]).await;
-    assert_eq!(r["error"], "ERR_DENIED", "{r}");
-    assert!(
-        r["message"].as_str().unwrap().contains("media:create"),
-        "{r}"
-    );
-    assert_eq!(media_count(&s.pool).await, 0);
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (id, name, "mediaTypes", path)
+             VALUES (1, 'Movies', '["movie"]', '/nonexistent/m');
+           INSERT INTO media (id, title, type) VALUES (7, 'Held', 'movie');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (7, 'movie', 'tmdb', '603');"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    for tmdb in ["603", "604"] {
+        let r = call(&h, "create", &[("tmdb", tmdb)]).await;
+        assert_eq!(r["error"], "ERR_DENIED", "{r}");
+        assert!(r["message"].as_str().unwrap().contains(missing), "{r}");
+        assert!(r.get("ok").is_none(), "no id leaks: {r}");
+    }
+    assert_eq!(media_count(&s.pool).await, 1);
     h.finish().await;
     s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_without_media_create_creates_nothing() {
+    denied(
+        "create_denied",
+        json!(["config:rw", "media:read"]),
+        "media:create",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_without_media_read_learns_no_id() {
+    denied(
+        "create_noread",
+        json!(["config:rw", "media:create"]),
+        "media:read",
+    )
+    .await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -111,7 +147,11 @@ async fn resolve_or_create_refuses_what_it_does_not_serve_and_finds_what_exists(
     s.finish().await;
 }
 
-async fn details(Path((kind, id)): Path<(String, i32)>) -> Json<Value> {
+async fn details(
+    State(hits): State<Arc<AtomicUsize>>,
+    Path((kind, id)): Path<(String, i32)>,
+) -> Json<Value> {
+    hits.fetch_add(1, Ordering::SeqCst);
     let mut b = json!({
         "id": id, "overview": "o", "genres": [], "poster_path": null, "status": "Released",
         "runtime": 100, "credits": {"cast": [], "crew": []},
@@ -129,10 +169,14 @@ async fn details(Path((kind, id)): Path<(String, i32)>) -> Json<Value> {
 }
 
 /// An `AppState` whose TMDB is a loopback stub answering any id.
-async fn state_with_tmdb(s: &Scratch) -> AppState {
+/// The second value counts the detail reads, one per title imported.
+async fn state_with_tmdb(s: &Scratch) -> (AppState, Arc<AtomicUsize>) {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", l.local_addr().unwrap());
-    let app = Router::new().route("/tmdb/3/{kind}/{id}", get(details));
+    let hits = Arc::new(AtomicUsize::new(0));
+    let app = Router::new()
+        .route("/tmdb/3/{kind}/{id}", get(details))
+        .with_state(hits.clone());
     tokio::spawn(async { axum::serve(l, app).await.unwrap() });
     let cfg = Config::from_lookup(|k| match k {
         "TMDB_API_KEY" => Some("tmdb-test-key".into()),
@@ -145,7 +189,7 @@ async fn state_with_tmdb(s: &Scratch) -> AppState {
         fliks_server::config::random_hex(6)
     ));
     st.images = Arc::new(ImageStore::with_root(data, &format!("{base}/img")));
-    st
+    (st, hits)
 }
 
 fn tmdb(id: &str) -> Vec<ExternalId> {
@@ -161,7 +205,7 @@ async fn concurrent_creates_of_one_title_make_one_media() {
         return;
     };
     sqlx::query(LIBRARY).execute(&s.pool).await.unwrap();
-    let st = state_with_tmdb(&s).await;
+    let (st, hits) = state_with_tmdb(&s).await;
     let mut rx = st.hub.subscribe();
     let calls = (0..5).map(|_| {
         let st = st.clone();
@@ -174,6 +218,11 @@ async fn concurrent_creates_of_one_title_make_one_media() {
         .collect();
     assert!(ids.iter().all(|i| *i == ids[0]), "{ids:?}");
     assert_eq!(media_count(&s.pool).await, 1);
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        1,
+        "one import, one provider read"
+    );
     let row: (Option<i32>, i64, i64) = sqlx::query_as(
         r#"SELECT "addedById", (SELECT count(*) FROM items), (SELECT count(*) FROM wants) FROM media"#,
     )
@@ -203,5 +252,62 @@ async fn concurrent_creates_of_one_title_make_one_media() {
     assert_eq!(media_count(&s.pool).await, 1);
     let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(99)).await;
     assert_eq!(e.unwrap_err().code, "ERR_NOT_FOUND", "unknown library");
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_user_request_and_a_plugin_create_make_one_media() {
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+    let Some(s) = Scratch::create("create_request").await else {
+        return;
+    };
+    let (st, _) = state_with_tmdb(&s).await;
+    let mut rx = st.hub.subscribe();
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (id, name, "mediaTypes", path)
+             VALUES (1, 'Movies', '["movie"]', '/nonexistent/m');
+           INSERT INTO auto_approval_rules (name, enabled, criteria)
+             VALUES ('all', true, '{"mediaType":"movie"}');
+           INSERT INTO roles (id, name, permissions)
+             VALUES (50, 'req', '["media.read","requests.create"]');
+           INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (50, 'req', false, 50);
+           INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 50);"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let token = st.jwt.sign_access(50, "req").unwrap().token;
+    let app = fliks_server::app::router(st.clone(), None, "/nonexistent".into(), None);
+    let request = async {
+        let req = Request::post("/api/requests")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(
+                json!({"mediaType": "movie", "tmdbId": 603, "title": "Movie 603"}).to_string(),
+            ))
+            .unwrap();
+        app.oneshot(req).await.unwrap().status().as_u16()
+    };
+    let ids = tmdb("603");
+    let plugin = resolve_or_create(&st, "movie", &ids, None);
+    let (status, created) = tokio::join!(request, plugin);
+    assert_eq!(status, 201);
+    let id = created.unwrap();
+    assert_eq!(media_count(&s.pool).await, 1);
+    let mut imports = 0;
+    while let Ok(b) = rx.try_recv() {
+        imports += usize::from(matches!(
+            &*b,
+            Bus::Domain(DomainEvent::MediaImported { .. })
+        ));
+    }
+    assert_eq!(imports, 1, "one import");
+    let linked: (String, Option<i32>) =
+        sqlx::query_as(r#"SELECT status::text, "mediaId" FROM requests"#)
+            .fetch_one(&s.pool)
+            .await
+            .unwrap();
+    assert_eq!(linked, ("approved".into(), Some(id as i32)));
     s.finish().await;
 }

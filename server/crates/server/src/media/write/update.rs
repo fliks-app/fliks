@@ -247,10 +247,11 @@ pub async fn create(
     if ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? != Link::Linked {
         return Err(clash());
     }
+    let external_ids = external_ids::refs(&mut *tx, id).await?;
     tx.commit().await?;
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
-        external_ids: external_ids::refs(&st.db, id).await?,
+        external_ids,
         media_type,
         library_id: None,
         added_by_user_id: None,
