@@ -2,6 +2,7 @@ pub mod app;
 pub mod atomic_file;
 pub mod auth;
 pub mod auth_token;
+pub mod books;
 pub mod busy;
 pub mod cleanup;
 pub mod config;
