@@ -1,6 +1,9 @@
 //! The id namespaces an entity is known by outside Fliks, as stored in `media_external_ids.provider`.
 use std::fmt;
 
+/// The largest id of a numeric provider: nine digits, as `media_external_ids` checks.
+pub const MAX_NUMERIC_ID: i32 = 999_999_999;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExternalProvider {
     Tmdb,

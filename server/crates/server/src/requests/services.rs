@@ -125,10 +125,14 @@ pub async fn import_from_tmdb(
             .filter_map(|n| i32::try_from(n).ok())
             .collect()
     });
+    let tmdb_id = spec.title.tmdb_id().ok_or_else(|| PortError {
+        status: 400,
+        message: format!("No metadata provider for {}", spec.title.provider),
+    })?;
     import_for_request(
         st,
-        spec.media_type,
-        spec.tmdb_id,
+        spec.title.media_type,
+        tmdb_id,
         (spec.quality_profile_id, spec.language_profile_id),
         spec.library_id,
         added_by,

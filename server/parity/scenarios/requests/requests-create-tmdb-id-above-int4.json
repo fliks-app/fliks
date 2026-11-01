@@ -17,7 +17,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "tmdbId must not be greater than 2147483647"
+            "tmdbId must not be greater than 999999999"
           ],
           "statusCode": 400
         },

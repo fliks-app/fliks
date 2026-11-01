@@ -72,8 +72,7 @@ pub struct Art {
 /// What `importFromTmdb` is asked for (rule 24); `seasons` scopes the monitoring of a series.
 #[derive(Debug, Clone)]
 pub struct ImportSpec {
-    pub media_type: MediaKind,
-    pub tmdb_id: i32,
+    pub title: TitleKey,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,

@@ -31,7 +31,7 @@ The identity a media has in an outside system: a TMDB id, an IMDb id, later an O
 
 ## Requests
 
-14. A request names its title by `(mediaType, provider, externalId)` (`requests.md` rule 5), the media kind and an id of a provider whose ids are unique per kind (`is_unique`: `tmdb` for `movie` and `series`), so one request names at most one media. It matches the media of that kind holding the same `(provider, value)` row, by rule 6's lookup; a media with no row matches no request. The migration of `requests` copies `"tmdbId"` into `('tmdb', "tmdbId"::text)` and drops the column; a row whose `"tmdbId"` is not a positive 9-digit integer is dropped (it could never match a media).
+14. A request names its title by `(mediaType, provider, externalId)` (`requests.md` rule 5), the media kind and an id of a provider whose ids are unique per kind (`is_unique`: `tmdb` for `movie` and `series`), so one request names at most one media. It matches the media of that kind holding the same `(provider, value)` row, by rule 6's lookup; a media with no row matches no request. The migration of `requests` copies `"tmdbId"` into `('tmdb', "tmdbId"::text)` and drops the column; a row whose `"tmdbId"` is not a positive integer of at most 9 digits is dropped (it could never match a media).
 15. Request art is keyed `<kind>-<provider>-<value>` (`image-store.md` rule 22).
 
 ## Not in scope

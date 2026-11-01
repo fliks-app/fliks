@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use fliks_domain::{
     acl::{Action, Subject},
     arr_import::map_status,
+    external_id::MAX_NUMERIC_ID,
     media::kind::MediaKind,
 };
 use serde_json::{Value, json};
@@ -210,7 +211,7 @@ impl Run<'_> {
         };
         let Some(tmdb) = req["media"]["tmdbId"]
             .as_i64()
-            .filter(|n| *n >= 1)
+            .filter(|n| (1..=i64::from(MAX_NUMERIC_ID)).contains(n))
             .and_then(|n| i32::try_from(n).ok())
         else {
             return Ok(Outcome::Skipped);

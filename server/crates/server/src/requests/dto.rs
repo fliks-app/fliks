@@ -3,7 +3,10 @@ use crate::http::{
     AppError,
     validate::{Check, int_param, int4, object},
 };
-use fliks_domain::media::{kind::MediaKind, query::js_number};
+use fliks_domain::{
+    external_id::MAX_NUMERIC_ID,
+    media::{kind::MediaKind, query::js_number},
+};
 use serde_json::{Map, Value, json};
 
 pub(crate) type Res<T> = Result<T, AppError>;
@@ -88,13 +91,16 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     );
     let media_type = c.kind("mediaType", false);
     let kind = c.one_of("kind", &KINDS, true);
-    // past int4 Postgres rejected the insert (500)
+    // `media_external_ids` and `requests` hold nine digits at most
     let tmdb_id = match o.get("tmdbId") {
         Some(v)
             if v.as_f64()
-                .is_some_and(|n| n.fract() == 0.0 && n > f64::from(i32::MAX)) =>
+                .is_some_and(|n| n.fract() == 0.0 && n > f64::from(MAX_NUMERIC_ID)) =>
         {
-            c.err("tmdbId", "must not be greater than 2147483647");
+            c.err(
+                "tmdbId",
+                &format!("must not be greater than {MAX_NUMERIC_ID}"),
+            );
             None
         }
         v => c.int("tmdbId", v.unwrap_or(&Value::Null), false, Some(1), None),

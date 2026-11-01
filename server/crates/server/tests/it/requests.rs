@@ -971,6 +971,27 @@ async fn on_media_imported_adopts_only_covered_requests(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_media_without_external_ids_adopts_no_request(pool: PgPool) {
+    let mut c = ctx(pool).await;
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(120)).await;
+    assert_eq!(s, 201);
+    q(&c.pool(), r#"INSERT INTO media (id, title, type, "libraryId", monitored) VALUES (98, 'Unidentified', 'movie', 1, false)"#).await;
+    let _ = domain(&mut c);
+    Lifecycle::of(&c.st)
+        .on_media_imported(
+            MediaRef {
+                id: 98,
+                media_type: MediaKind::Movie,
+                monitored: false,
+            },
+            Some(1),
+        )
+        .await;
+    assert_eq!(status_of(&c, 1).await, ("pending".to_owned(), None));
+    assert!(domain(&mut c).is_empty());
+}
+
+#[sqlx::test(migrations = false)]
 async fn removal_declines_add_rows_resolves_delete_rows_and_retires_available(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (12, 'M', 'movie', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (91)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;

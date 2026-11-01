@@ -244,9 +244,7 @@ pub async fn ensure_media(
         Ok(id) => id,
         Err(e) if e.status != 409 => return Err(e.into()),
         Err(_) => {
-            let Some(existing) =
-                db::media_by_ref(&st.db, &TitleKey::tmdb(spec.media_type, spec.tmdb_id)).await?
-            else {
+            let Some(existing) = db::media_by_ref(&st.db, &spec.title).await? else {
                 return Ok(None);
             };
             let covers = profiles::envelope_covers(
@@ -266,7 +264,7 @@ pub async fn ensure_media(
     let seasons = spec
         .seasons
         .as_deref()
-        .filter(|_| spec.media_type.has_seasons());
+        .filter(|_| spec.title.media_type.has_seasons());
     db::monitor_scope(&st.db, media_id, seasons).await?;
     Ok(Some(media_id))
 }
@@ -345,8 +343,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     let auto = rules::should_auto_approve(st, a, &dto, library_id).await?;
     let media_id = if auto {
         let spec = ImportSpec {
-            media_type: dto.media_type,
-            tmdb_id: dto.tmdb_id,
+            title: key.clone(),
             quality_profile_id: dto.quality_profile_id,
             language_profile_id: dto.language_profile_id,
             library_id: Some(library_id),
@@ -593,9 +590,6 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         return approve_delete(st, a, &row).await;
     }
     let key = row.key();
-    let tmdb_id = key.tmdb_id().ok_or_else(|| {
-        AppError::bad_request(format!("No metadata provider for {}", row.provider))
-    })?;
     let existing = db::media_by_ref(&st.db, &key).await?;
     if existing.is_none() {
         services::assert_import_target(st, row.media_type, row.library_id).await?;
@@ -604,8 +598,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         return Err(AppError::conflict("Request is not pending"));
     }
     let spec = ImportSpec {
-        media_type: row.media_type,
-        tmdb_id,
+        title: key.clone(),
         quality_profile_id: row.quality_profile_id,
         language_profile_id: row.language_profile_id,
         library_id: row.library_id,
@@ -629,7 +622,8 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         request_id: i64::from(id),
         media_id: media.map(i64::from),
         media_type: row.media_type,
-        tmdb_id: i64::from(tmdb_id),
+        // the event types tmdbId as non-null
+        tmdb_id: key.tmdb_id().map_or(0, i64::from),
         seasons: row.seasons.map(|s| s.0),
         approved_by_user_id: Some(i64::from(a.user.id)),
     });
