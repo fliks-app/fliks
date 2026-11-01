@@ -16,7 +16,9 @@ use axum::{
 };
 use fliks_domain::acl::{Action, Permissions, Subject};
 use fliks_engine_core::{
-    api::{ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse},
+    api::{
+        ResolveCredentialSource, ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse,
+    },
     jsnum,
 };
 use serde_json::Value;
@@ -26,9 +28,11 @@ use subtle::ConstantTimeEq;
 
 const TTL_S: f64 = 60.0;
 const PURPOSES: &str = "stream, download, sprite, subtitle, live";
-const KEYS: [&str; 5] = [
+const SOURCES: &str = "cookie, bearer, query, path, basic";
+const KEYS: [&str; 6] = [
     "mediaId",
     "credential",
+    "credentialSource",
     "purpose",
     "subtitleId",
     "streamIndex",
@@ -150,6 +154,18 @@ fn parse(body: &Value) -> Result<ResolveRequest, Vec<String>> {
             "purpose must be one of the following values: {PURPOSES}"
         ));
     }
+    let credential_source = obj
+        .get("credentialSource")
+        .filter(|v| !v.is_null())
+        .and_then(|v| {
+            let source = serde_json::from_value::<ResolveCredentialSource>(v.clone()).ok();
+            if source.is_none() {
+                errors.push(format!(
+                    "credentialSource must be one of the following values: {SOURCES}"
+                ));
+            }
+            source
+        });
     let mut optional_int = |key: &str| -> Option<u32> {
         let v = obj.get(key).filter(|v| !v.is_null())?;
         let n = v.as_f64().filter(|_| v.is_number());
@@ -181,7 +197,7 @@ fn parse(body: &Value) -> Result<ResolveRequest, Vec<String>> {
         purpose,
         subtitle_id,
         stream_index,
-        credential_source: None,
+        credential_source,
     })
 }
 
@@ -515,6 +531,14 @@ mod tests {
         );
         assert_eq!(
             msgs(
+                json!({"mediaId": 1, "credential": "x", "purpose": "stream", "credentialSource": "url"})
+            ),
+            [format!(
+                "credentialSource must be one of the following values: {SOURCES}"
+            )]
+        );
+        assert_eq!(
+            msgs(
                 json!({"mediaId": 1, "credential": "x", "purpose": "stream", "subtitleId": -1, "streamIndex": 1.5})
             ),
             [
@@ -533,6 +557,14 @@ mod tests {
         assert_eq!(
             (ok.media_id, ok.subtitle_id),
             (ResolveMediaId::File(12), None)
+        );
+        let sourced = parse(
+            &json!({"mediaId": 1, "credential": "c", "credentialSource": "path", "purpose": "stream"}),
+        )
+        .unwrap();
+        assert_eq!(
+            sourced.credential_source,
+            Some(ResolveCredentialSource::Path)
         );
     }
 
