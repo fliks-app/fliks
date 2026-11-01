@@ -1,7 +1,7 @@
 //! Criteria to SQL (`cleanup.md` rules 9-14): one query per rule, every value bound.
 use crate::{http::json::iso_ms, libraries};
 use chrono::{DateTime, Utc};
-use fliks_domain::media::release::ReleaseKind;
+use fliks_domain::media::{kind::MediaKind, release::ReleaseKind};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, QueryBuilder};
@@ -172,7 +172,7 @@ pub fn compile(
             .push_bind(ids)
             .push(")");
     }
-    if level == "movie" || level == "series" {
+    if MediaKind::parse(level).is_some() {
         q.push(r#" AND media."type" = "#)
             .push_bind(level.to_owned());
     }
@@ -229,7 +229,7 @@ pub fn compile(
             r#" AND EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER})
             AND NOT EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER}
               AND media.id NOT IN ({}))"#,
-            crate::media::list::watched_sql(r#"r."userId""#)
+            crate::media::watched::sql(r#"r."userId""#)
         ));
     }
     if let Some(r) = c.get("ratingBelow").and_then(Value::as_f64) {
@@ -237,9 +237,11 @@ pub fn compile(
             .push_bind(r);
     }
     if let Some(v) = int32(c, "minVotes") {
-        q.push(r#" AND COALESCE((SELECT d."voteCount" FROM movie_details d WHERE d."mediaId" = media.id),
-                (SELECT d."voteCount" FROM series_details d WHERE d."mediaId" = media.id)) >= "#)
-            .push_bind(v);
+        q.push(format!(
+            " AND {} >= ",
+            crate::media::details::vote_count("media")
+        ))
+        .push_bind(v);
     }
     if let Some(gb) = c.get("sizeAboveGb").and_then(Value::as_f64) {
         q.push(format!(" AND {size} > "))
@@ -264,7 +266,9 @@ pub fn compile(
         .push_bind(n);
     }
     if flag(c, "seriesEnded") {
-        q.push(r#" AND media."type" = 'series' AND media.status = 'ended'"#);
+        q.push(r#" AND media."type" = ANY("#)
+            .push_bind(MediaKind::seasonal_names())
+            .push(") AND media.status = 'ended'");
     }
     if flag(c, "notLiked") {
         q.push(r#" AND NOT EXISTS (SELECT 1 FROM likes l WHERE l."mediaId" = media.id)"#);
@@ -333,22 +337,22 @@ const RECOMMENDATIONS: [(&str, &str, &[&str]); 4] = [
     (
         "never_played",
         r#"{"neverPlayed": true, "addedOlderThanDays": 90}"#,
-        &["movie", "series"],
+        &MediaKind::NAMES,
     ),
     (
         "watched_by_requester",
         r#"{"watchedByRequester": true, "lastPlayedOlderThanDays": 60}"#,
-        &["movie", "series"],
+        &MediaKind::NAMES,
     ),
     (
         "not_played_for_a_year",
         r#"{"notPlayedInLastDays": 365, "addedOlderThanDays": 365}"#,
-        &["movie", "series"],
+        &MediaKind::NAMES,
     ),
     (
         "series_ended",
         r#"{"seriesEnded": true, "lastPlayedOlderThanDays": 180, "addedOlderThanDays": 180}"#,
-        &["series"],
+        &[MediaKind::Series.as_str()],
     ),
 ];
 

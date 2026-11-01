@@ -13,6 +13,7 @@ mod routes;
 mod streams;
 mod tracking;
 pub mod wants;
+pub(crate) mod watched;
 pub mod write;
 
 pub use routes::*;

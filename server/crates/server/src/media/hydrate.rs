@@ -1,6 +1,9 @@
 //! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust.
 use super::external_ids;
-use fliks_domain::{media::path::media_path, track_markers};
+use fliks_domain::{
+    media::{kind::MediaKind, path::media_path},
+    track_markers,
+};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -62,7 +65,7 @@ pub async fn items_view(
     'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0))
   || CASE WHEN $2 THEN jsonb_build_object('fileCount',
        (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = media.id)) ELSE '{}'::jsonb END
-  || CASE WHEN media.type = 'series' AND st.total > 0 THEN
+  || CASE WHEN media.type = ANY($6) AND st.total > 0 THEN
        jsonb_build_object('episodeStats', jsonb_build_object('totalEpisodes', st.total, 'downloadedEpisodes', st.downloaded))
      ELSE '{}'::jsonb END) AS "json!: Value"
 FROM media
@@ -87,13 +90,14 @@ LEFT JOIN LATERAL (
   SELECT COUNT(e.id) AS total,
          COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded
   FROM item_groups s JOIN items e ON e."groupId" = s.id
-  WHERE s."mediaId" = media.id AND s."number" > 0) st ON media.type = 'series'
+  WHERE s."mediaId" = media.id AND s."number" > 0) st ON media.type = ANY($6)
 WHERE media.id = ANY($1)"#,
         ids,
         grid,
         external_ids::TMDB,
         external_ids::TVDB,
-        external_ids::IMDB
+        external_ids::IMDB,
+        &MediaKind::seasonal_names() as &[&str]
     )
     .fetch_all(db)
     .await?;

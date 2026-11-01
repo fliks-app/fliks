@@ -2,7 +2,10 @@
 use super::cover::Cover;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use fliks_domain::party::{CHAT_CAP, Item, Message, Policy};
+use fliks_domain::{
+    media::kind::MediaKind,
+    party::{CHAT_CAP, Item, Message, Policy},
+};
 use sqlx::{PgPool, types::Json};
 use std::collections::HashMap;
 
@@ -744,13 +747,14 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
         r#"SELECT ($2::int IS NULL OR EXISTS (SELECT 1 FROM media_files WHERE id = $2 AND "mediaId" = $1))
                AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN item_groups s ON s.id = e."groupId"
                                                WHERE e.id = $3 AND s."mediaId" = $1))
-               AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series'))
+               AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = ANY($4)))
                AND ($3::int IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1)
                     OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = $3 AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))"#,
     )
     .bind(item.media_id)
     .bind(item.media_file_id)
     .bind(item.episode_id)
+    .bind(MediaKind::seasonal_names())
     .fetch_one(db)
     .await
 }
@@ -775,8 +779,7 @@ pub struct QueueRow {
 pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, Option<i32>, bool)> = sqlx::query_as(
         r#"SELECT it."mediaId", i."mediaFileId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
-                  (it."groupId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = it."mediaId")
-                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+                  (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
            FROM watch_party_items i JOIN items it ON it.id = i."itemId"
            WHERE i."partyId" = $1 ORDER BY i.position"#,
     )
@@ -800,8 +803,7 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
 pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, bool)> = sqlx::query_as(
         r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END,
-                  (it."groupId" IS NULL AND EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = it."mediaId")
-                   OR EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = pi."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+                  (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = pi."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
            FROM playlist_items pi JOIN items it ON it.id = pi."itemId"
            WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
     )

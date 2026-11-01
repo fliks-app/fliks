@@ -41,6 +41,15 @@ impl MediaKind {
         }
     }
 
+    /// Wire names of the kinds made of seasons and episodes, for SQL `= ANY(...)` bounds.
+    pub fn seasonal_names() -> Vec<&'static str> {
+        Self::ALL
+            .into_iter()
+            .filter(|k| k.has_seasons())
+            .map(Self::as_str)
+            .collect()
+    }
+
     /// The families a media of this kind is wished in: one want each.
     pub const fn families(self) -> &'static [Family] {
         match self {
@@ -53,6 +62,14 @@ impl MediaKind {
         match self {
             Self::Movie => "movies",
             Self::Series => "series",
+        }
+    }
+
+    /// The key of this kind's count of completed media in a user's playback stats.
+    pub const fn completed_stat_key(self) -> &'static str {
+        match self {
+            Self::Movie => "moviesWatched",
+            Self::Series => "seriesStarted",
         }
     }
 
@@ -104,6 +121,9 @@ mod tests {
         assert_eq!(MediaKind::Movie.count_key(), "movies");
         assert_eq!(MediaKind::Series.count_key(), "series");
         assert_eq!(MediaKind::NAMES, ["movie", "series"]);
+        assert_eq!(MediaKind::seasonal_names(), ["series"]);
+        assert_eq!(MediaKind::Movie.completed_stat_key(), "moviesWatched");
+        assert_eq!(MediaKind::Series.completed_stat_key(), "seriesStarted");
         assert_eq!(MediaKind::parse("Movie"), None);
         assert!(MediaKind::Series.has_seasons() && !MediaKind::Movie.has_seasons());
         assert_eq!(MediaKind::from_tv(true), MediaKind::Series);

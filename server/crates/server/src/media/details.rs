@@ -17,6 +17,19 @@ pub fn dates_join(alias: &str) -> String {
     )
 }
 
+/// The `voteCount` of media `alias`, read from the details table of its kind; NULL when unknown.
+pub fn vote_count(alias: &str) -> String {
+    let tables = MediaKind::ALL.map(|k| match k {
+        MediaKind::Movie => "movie_details",
+        MediaKind::Series => "series_details",
+    });
+    let reads: Vec<String> = tables
+        .iter()
+        .map(|t| format!(r#"(SELECT d."voteCount" FROM {t} d WHERE d."mediaId" = {alias}.id)"#))
+        .collect();
+    format!("COALESCE({})", reads.join(", "))
+}
+
 /// Upserts the given dates (text Postgres reads as a date); a `None` deletes its row unless `keep_on_null`.
 /// Answers whether a row changed.
 pub async fn set_release_dates(

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series' AND \"libraryId\" = ANY($2)) AS \"e!\"",
+  "query": "SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = ANY($3) AND \"libraryId\" = ANY($2)) AS \"e!\"",
   "describe": {
     "columns": [
       {
@@ -13,12 +13,13 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Int4Array"
+        "Int4Array",
+        "TextArray"
       ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "81ad64e3b241f69c0d229ce7ee72a655a269a226c85ae99262fdff4765432326"
+  "hash": "e6dff07e82800448d1f387dc0f26f25d0567ec5c1e0a56e7eb4df5891069c20f"
 }

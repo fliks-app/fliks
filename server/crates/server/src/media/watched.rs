@@ -1,0 +1,71 @@
+//! The watched rule (`media-query.md` rule 20), one SQL fragment for every kind.
+use fliks_domain::media::kind::MediaKind;
+use std::fmt::Display;
+
+/// The seasonal kinds as a SQL `text[]` literal; registry constants, never user text.
+fn seasonal_array() -> String {
+    let names: Vec<String> = MediaKind::seasonal_names()
+        .into_iter()
+        .map(|n| format!("'{n}'"))
+        .collect();
+    format!("ARRAY[{}]::text[]", names.join(", "))
+}
+
+/// A seasonal media is watched when every on-disk item of its groups above 0 is completed (and one
+/// is on disk), any other when one of its items is completed. `uid` is a user id, a bound parameter
+/// or a column, never user text; `m` aliases the media row.
+pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
+    let seasonal = seasonal_array();
+    format!(
+        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN
+    EXISTS (
+      SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+      WHERE s."mediaId" = {m}.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
+      WHERE s."mediaId" = {m}.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM playback_states ps2
+          WHERE ps2."userId" = {uid} AND ps2."itemId" = e.id AND ps2.completed = true
+        )
+    )
+  ELSE EXISTS (
+      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+      WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND ps.completed = true
+    )
+  END"#
+    )
+}
+
+/// The ids of the media `uid` has watched, as a subquery.
+pub(crate) fn sql(uid: impl Display) -> String {
+    format!("SELECT m.id FROM media m WHERE {}", predicate(uid, "m"))
+}
+
+/// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind.
+pub(crate) fn progress(uid: impl Display, m: &str) -> String {
+    let seasonal = seasonal_array();
+    format!(
+        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 ELSE COALESCE((
+    SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
+    FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+    WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND i."groupId" IS NULL
+      AND ps.completed = false AND ps."durationSeconds" > 0
+    ORDER BY ps."lastPlayedAt" DESC LIMIT 1
+  ), 0) END"#
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kinds_come_from_the_registry_and_the_other_arm_is_never_null() {
+        assert!(predicate(1, "m").contains("ANY(ARRAY['series']::text[])"));
+        let p = progress("$1", "m");
+        assert!(p.contains("ELSE COALESCE(") && p.contains("), 0) END"));
+        assert!(!p.contains("'movie'") && !predicate(1, "m").contains("'movie'"));
+    }
+}

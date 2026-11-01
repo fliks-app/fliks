@@ -12,6 +12,7 @@ use crate::{
 };
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
+use fliks_domain::media::kind::MediaKind;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{PgConnection, types::Json as Jsonb};
@@ -244,9 +245,10 @@ pub async fn items(
 
 async fn assert_series(c: &mut PgConnection, id: i32, accessible: &[i32]) -> Result<(), AppError> {
     let ok = sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = 'series' AND "libraryId" = ANY($2)) AS "e!""#,
+        r#"SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = ANY($3) AND "libraryId" = ANY($2)) AS "e!""#,
         id,
-        accessible
+        accessible,
+        &MediaKind::seasonal_names() as &[&str]
     )
     .fetch_one(c)
     .await?;

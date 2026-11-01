@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT ep.id AS \"id!\", ep.\"number\" AS \"episode_number!\", ep.title, to_char(ep.\"airDate\", 'YYYY-MM-DD') AS \"date!\",\n  season.\"number\" AS \"season_number!\", media.id AS \"media_id!\", media.title AS \"media_title!\",\n  media.\"posterUrl\" AS poster_url, media.\"fanartUrl\" AS fanart_url, media.status::text AS \"status!\", media.year,\n  EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = ep.id) AS \"on_disk!\"\nFROM items ep\nINNER JOIN item_groups season ON season.id = ep.\"groupId\"\nINNER JOIN media media ON media.id = season.\"mediaId\"\nWHERE ep.\"airDate\" BETWEEN $1::text::date AND $2::text::date\n  AND ($3::bool IS NOT TRUE OR (media.monitored = true AND ep.monitored = true))\n  AND ($4::int IS NULL OR media.\"addedById\" = $4)\n  AND media.\"libraryId\" = ANY($5)\nORDER BY ep.\"airDate\" ASC, ep.id ASC",
+  "query": "SELECT ep.id AS \"id!\", ep.\"number\" AS \"episode_number!\", ep.title, to_char(ep.\"airDate\", 'YYYY-MM-DD') AS \"date!\",\n  season.\"number\" AS \"season_number!\", media.id AS \"media_id!\", media.title AS \"media_title!\",\n  media.\"posterUrl\" AS poster_url, media.\"fanartUrl\" AS fanart_url, media.status::text AS \"status!\", media.year, media.type AS \"kind!\",\n  EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = ep.id) AS \"on_disk!\"\nFROM items ep\nINNER JOIN item_groups season ON season.id = ep.\"groupId\"\nINNER JOIN media media ON media.id = season.\"mediaId\"\nWHERE ep.\"airDate\" BETWEEN $1::text::date AND $2::text::date\n  AND ($3::bool IS NOT TRUE OR (media.monitored = true AND ep.monitored = true))\n  AND ($4::int IS NULL OR media.\"addedById\" = $4)\n  AND media.\"libraryId\" = ANY($5)\nORDER BY ep.\"airDate\" ASC, ep.id ASC",
   "describe": {
     "columns": [
       {
@@ -116,6 +116,17 @@
       },
       {
         "ordinal": 11,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
         "name": "on_disk!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -142,8 +153,9 @@
       true,
       null,
       true,
+      false,
       null
     ]
   },
-  "hash": "baed8615fe483956c3a6c2b8433982f78b258f12b4411efc88fafc4f5832daac"
+  "hash": "b5d8a005952f384d0072c4487fe0b36279668ac0cf7123638a8c1521a9920f36"
 }

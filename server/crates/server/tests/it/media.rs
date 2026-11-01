@@ -297,3 +297,43 @@ async fn removing_a_media_removes_its_external_ids(pool: PgPool) {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_kind_without_a_special_case_lists_with_its_watched_state(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"
+        ALTER TABLE media DROP CONSTRAINT "CK_media_type";
+        INSERT INTO media (id, title, year, type, "libraryId") VALUES (5, 'Third', 2001, 'third', 1);
+        INSERT INTO editions (id, "mediaId", family) VALUES (50, 5, 'video');
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (500, 5, 50), (501, 5, 50);
+        INSERT INTO playback_states ("userId", "itemId", completed, "positionSeconds", "durationSeconds")
+          VALUES (1, 500, false, 30, 120);
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let find = |v: &Value| {
+        v["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == 5)
+            .cloned()
+    };
+    let (s, list) = c.get(&c.admin, "/api/media?sortBy=year").await;
+    let m = find(&list).unwrap();
+    assert_eq!(
+        (s, &m["watched"], &m["progressPercent"]),
+        (200, &json!(false), &json!(25))
+    );
+    sqlx::query("UPDATE playback_states SET completed = true WHERE \"itemId\" = 500")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, list) = c.get(&c.admin, "/api/media?onlyWatched=true").await;
+    assert_eq!(ids(&list), vec![5]);
+    let (_, list) = c.get(&c.admin, "/api/media").await;
+    assert_eq!(find(&list).unwrap()["watched"], true);
+}

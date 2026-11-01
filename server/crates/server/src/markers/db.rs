@@ -1,6 +1,7 @@
 //! Queries of `docs/spec/markers.md` (SQL section).
 use crate::{events::Num, http::json::iso_ms};
 use chrono::{DateTime, Utc};
+use fliks_domain::media::kind::MediaKind;
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 use sqlx::PgPool;
@@ -207,6 +208,7 @@ pub struct ScanSeason {
     pub media_id: i32,
     pub season_number: i32,
     pub media_title: String,
+    pub kind: MediaKind,
 }
 
 pub async fn seasons_for_scan(
@@ -215,9 +217,9 @@ pub async fn seasons_for_scan(
     media: Option<i32>,
 ) -> sqlx::Result<Vec<ScanSeason>> {
     let rows = sqlx::query!(
-        r#"SELECT s.id, s."mediaId" AS "media_id!", s."number" AS season_number, m.title AS "title!"
+        r#"SELECT s.id, s."mediaId" AS "media_id!", s."number" AS season_number, m.title AS "title!", m.type AS "kind!"
            FROM item_groups s JOIN media m ON m.id = s."mediaId"
-           WHERE s."number" > 0 AND m.type = 'series'
+           WHERE s."number" > 0
              AND ($1::int IS NULL OR s."mediaId" = $1)
              AND (NOT $2 OR EXISTS (SELECT 1 FROM items e WHERE e."groupId" = s.id
                                     AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
@@ -228,15 +230,17 @@ pub async fn seasons_for_scan(
     )
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| ScanSeason {
-            id: r.id,
-            media_id: r.media_id,
-            season_number: r.season_number,
-            media_title: r.title,
+    rows.into_iter()
+        .map(|r| {
+            Ok(ScanSeason {
+                id: r.id,
+                media_id: r.media_id,
+                season_number: r.season_number,
+                media_title: r.title,
+                kind: crate::db::kind(&r.kind)?,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub struct EpisodeFile {

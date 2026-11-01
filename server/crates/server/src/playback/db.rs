@@ -288,7 +288,7 @@ pub async fn continue_watching(
              SELECT c.id, c."mediaId", f.id AS file, c.pos, c.dur, c."lastPlayedAt",
                     CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
                     m.title, m."posterUrl" AS poster, m."fanartUrl" AS fanart,
-                    CASE WHEN e."groupId" IS NULL THEN 'movie' ELSE 'series' END AS kind,
+                    m.type AS kind,
                     e."stillUrl" AS still,
                     CASE WHEN e."groupId" IS NOT NULL
                          THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
@@ -383,33 +383,14 @@ pub async fn watched_media_ids(db: &PgPool, user: i32, libs: &[i32]) -> sqlx::Re
     if libs.is_empty() {
         return Ok(vec![]);
     }
-    Ok(sqlx::query_scalar!(
-        r#"SELECT DISTINCT i."mediaId" AS id
-           FROM playback_states ps
-           JOIN items i ON i.id = ps."itemId"
-           JOIN media m ON m.id = i."mediaId"
-           WHERE ps."userId" = $1 AND ps.completed = true AND m.type = 'movie'
-             AND m."libraryId" = ANY($2)
-
-           UNION
-
-           SELECT s."mediaId" AS id
-           FROM item_groups s
-           JOIN items e ON e."groupId" = s.id
-           LEFT JOIN playback_states ps
-             ON ps."userId" = $1 AND ps."itemId" = e.id AND ps.completed = true
-           WHERE s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
-             AND EXISTS (SELECT 1 FROM media m2 WHERE m2.id = s."mediaId" AND m2."libraryId" = ANY($2))
-           GROUP BY s."mediaId"
-           HAVING COUNT(*) > 0 AND COUNT(*) = COUNT(ps.id)"#,
-        user,
-        libs
-    )
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT m.id FROM media m WHERE m."libraryId" = ANY($2) AND ({})"#,
+        crate::media::watched::predicate("$1", "m")
+    )))
+    .bind(user)
+    .bind(libs)
     .fetch_all(db)
-    .await?
-    .into_iter()
-    .flatten()
-    .collect())
+    .await
 }
 
 pub async fn hide(db: &PgPool, user: i32, media: i32) -> sqlx::Result<()> {
