@@ -158,18 +158,24 @@ CREATE FUNCTION refresh_media_sort_creator(m integer) RETURNS void LANGUAGE sql 
 
 CREATE FUNCTION media_credits_sort_creator() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP <> 'INSERT' AND OLD.role = 'author' THEN PERFORM refresh_media_sort_creator(OLD."mediaId"); END IF;
-  IF TG_OP <> 'DELETE' AND NEW.role = 'author' THEN PERFORM refresh_media_sort_creator(NEW."mediaId"); END IF;
+  IF TG_OP <> 'INSERT' THEN PERFORM refresh_media_sort_creator(OLD."mediaId"); END IF;
+  IF TG_OP <> 'DELETE' THEN PERFORM refresh_media_sort_creator(NEW."mediaId"); END IF;
   RETURN NULL;
 END $$;
-CREATE TRIGGER sort_creator AFTER INSERT OR UPDATE OR DELETE ON "media_credits"
-  FOR EACH ROW EXECUTE FUNCTION media_credits_sort_creator();
+CREATE TRIGGER sort_creator_insert AFTER INSERT ON "media_credits"
+  FOR EACH ROW WHEN (NEW.role = 'author') EXECUTE FUNCTION media_credits_sort_creator();
+CREATE TRIGGER sort_creator_delete AFTER DELETE ON "media_credits"
+  FOR EACH ROW WHEN (OLD.role = 'author') EXECUTE FUNCTION media_credits_sort_creator();
+CREATE TRIGGER sort_creator_update AFTER UPDATE ON "media_credits"
+  FOR EACH ROW WHEN (OLD.role = 'author' OR NEW.role = 'author') EXECUTE FUNCTION media_credits_sort_creator();
 
 CREATE FUNCTION persons_sort_creator() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE m integer;
 BEGIN
-  FOR m IN SELECT DISTINCT "mediaId" FROM media_credits
-            WHERE "personId" = NEW.id AND role = 'author' AND "editionId" IS NULL LOOP
+  FOR m IN SELECT id FROM media
+            WHERE id IN (SELECT "mediaId" FROM media_credits
+                          WHERE "personId" = NEW.id AND role = 'author' AND "editionId" IS NULL)
+            ORDER BY id FOR UPDATE LOOP
     PERFORM refresh_media_sort_creator(m);
   END LOOP;
   RETURN NULL;

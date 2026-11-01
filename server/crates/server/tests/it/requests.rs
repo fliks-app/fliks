@@ -343,6 +343,82 @@ async fn status_of(c: &Ctx, id: i64) -> (String, Option<i64>) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_book_is_not_a_tmdb_title(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let book = json!({"mediaType": "book", "tmdbId": 10, "title": "b"});
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, book).await;
+    assert_eq!(s, 400, "{r}");
+    let (s, r) = call(
+        &c,
+        "GET",
+        "/api/requests/title-state?tmdbId=10&mediaType=book",
+        &c.user,
+        json!(null),
+    )
+    .await;
+    assert_eq!(s, 400, "{r}");
+    for (uri, body) in [
+        (
+            "/api/media/import/tmdb",
+            json!({"type": "book", "tmdbId": 10}),
+        ),
+        (
+            "/api/media/import",
+            json!({"type": "book", "externalId": "10", "provider": "tmdb"}),
+        ),
+    ] {
+        let (s, r) = call(&c, "POST", uri, &c.admin, body).await;
+        assert_eq!(s, 400, "{uri}: {r}");
+    }
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM requests")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_explicit_library_must_accept_the_requested_kind(pool: PgPool) {
+    let c = ctx(pool).await;
+    let body = json!({"mediaType": "movie", "tmdbId": 10, "title": "m", "libraryId": SERIES});
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+    assert_eq!(s, 400, "{r}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_media_link_skips_an_openlibrary_edition_or_author_id(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    q(
+        &pool,
+        "INSERT INTO media (id, title, type) VALUES (1, 'b', 'book')",
+    )
+    .await;
+    let mut conn = pool.acquire().await.unwrap();
+    for (id, stored) in [("OL12M", 0), ("OL12A", 0), ("OL12W", 1)] {
+        let l = fliks_server::media::external_ids::link(
+            &mut conn,
+            1,
+            MediaKind::Book,
+            fliks_domain::external_id::ExternalProvider::OpenLibrary,
+            id,
+        )
+        .await
+        .unwrap();
+        assert!(
+            matches!(l, fliks_server::media::external_ids::Link::Linked),
+            "{id}"
+        );
+        let n: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM media_external_ids WHERE provider = 'openlibrary'",
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(n, stored, "{id}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn create_with_sole_library_and_no_rule_stays_pending(pool: PgPool) {
     let mut c = ctx(pool).await;
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(10)).await;

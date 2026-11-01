@@ -2217,6 +2217,31 @@ async fn m1789000200_keeps_the_sort_creator_of_a_book_current(pool: PgPool) {
     );
     sql(&pool, r#"DELETE FROM media_credits WHERE "personId" = 2"#).await;
     assert_eq!(sort_creator(&pool, 1).await, None);
+    sql(
+        &pool,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (1, 3, 'author', 0)"#,
+    )
+    .await;
+    assert_eq!(sort_creator(&pool, 1).await.as_deref(), Some("An Actor"));
+    sql(
+        &pool,
+        r#"UPDATE media_credits SET role = 'crew', job = 'j', department = 'd'
+            WHERE "mediaId" = 1 AND "personId" = 3 AND role = 'author'"#,
+    )
+    .await;
+    assert_eq!(
+        sort_creator(&pool, 1).await,
+        None,
+        "an author turned crew leaves the sort key"
+    );
+    let gated: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_trigger WHERE tgrelid = 'media_credits'::regclass
+           AND tgname LIKE 'sort_creator_%' AND tgqual IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(gated, 3, "each trigger is gated on the author role");
 
     assert_eq!(bumped(&pool).await, 0, "a sort key change leaves updatedAt");
     sql(&pool, r#"UPDATE media SET title = 'b2' WHERE id = 1"#).await;

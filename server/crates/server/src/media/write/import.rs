@@ -387,8 +387,14 @@ struct Common {
 }
 
 fn common(b: &Body) -> Result<Common, AppError> {
+    let media_type = b.required_kind("type")?;
+    if !media_type.is_video() {
+        return Err(AppError::bad_request(format!(
+            "tmdb does not support {media_type}"
+        )));
+    }
     Ok(Common {
-        media_type: b.required_kind("type")?,
+        media_type,
         quality: b.id("qualityProfileId")?.flatten(),
         language: b.id("languageProfileId")?.flatten(),
         library: b.id("libraryId")?.flatten(),

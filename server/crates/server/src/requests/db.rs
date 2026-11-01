@@ -246,6 +246,19 @@ pub async fn library_exists(db: &PgPool, id: i32) -> sqlx::Result<bool> {
     .await
 }
 
+/// The name of library `id` when its `mediaTypes` lacks `kind`.
+pub async fn library_refusing(
+    db: &PgPool,
+    id: i32,
+    kind: MediaKind,
+) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar(r#"SELECT name FROM libraries WHERE id = $1 AND NOT "mediaTypes" ? $2"#)
+        .bind(id)
+        .bind(kind.as_str())
+        .fetch_optional(db)
+        .await
+}
+
 /// Serialises the duplicate check and the insert of one title's ADD requests until the transaction ends.
 pub async fn lock_title(tx: &mut PgConnection, t: &TitleKey) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")

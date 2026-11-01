@@ -89,6 +89,10 @@ pub async fn link(
     let Some(value) = provider.normalize(value) else {
         return Ok(Link::Linked);
     };
+    // `CK_media_external_ids_openlibrary` takes work ids only
+    if provider == ExternalProvider::OpenLibrary && !value.ends_with('W') {
+        return Ok(Link::Linked);
+    }
     let done = sqlx::query!(
         r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
            SELECT $1::int4, $2::text, $3::text, $4::text

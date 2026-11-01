@@ -684,8 +684,8 @@ impl MetadataProvider for Tmdb {
         ExternalProvider::Tmdb
     }
 
-    fn supports(&self, _kind: MediaKind) -> bool {
-        true
+    fn supports(&self, kind: MediaKind) -> bool {
+        kind.is_video()
     }
 
     fn has_persons(&self) -> bool {

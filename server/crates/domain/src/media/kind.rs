@@ -64,6 +64,11 @@ impl MediaKind {
         }
     }
 
+    /// Whether the kind is wished in the video family, the only one TMDB and TVDB describe.
+    pub fn is_video(self) -> bool {
+        self.families().contains(&Family::Video)
+    }
+
     /// The key of this kind's count in `{movies, series}` payloads.
     pub const fn count_key(self) -> &'static str {
         match self {
