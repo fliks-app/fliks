@@ -56,7 +56,13 @@
    "openlibrary": [
     "OL9300003M"
    ]
-  }
+  },
+  "authors": [
+   {
+    "url": "http://openlibrary.org/authors/OL9100002A",
+    "name": "Torvald Pexinsel"
+   }
+  ]
  },
  "ISBN:9781999000028": {
   "url": "http://openlibrary.org/books/OL9300004M/x",

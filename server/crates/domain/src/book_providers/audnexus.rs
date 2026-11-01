@@ -1,9 +1,7 @@
 //! Audnexus (`api.audnex.us`) by ASIN: books, chapters, authors.
 use super::audible::Region;
 use super::util::*;
-use super::{
-    BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, Rating, Series,
-};
+use super::{BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, Series};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -102,14 +100,14 @@ pub fn parse_book(body: &str) -> Result<BookRecord, ParseError> {
     }
     r.duration_secs = uint(&v, "runtimeLengthMin")
         .filter(|m| *m > 0)
-        .map(|m| m * 60);
-    r.covers = text(&v, "image").into_iter().collect();
+        .and_then(|m| m.checked_mul(60));
+    r.covers = text(&v, "image")
+        .and_then(|u| https(&u))
+        .into_iter()
+        .collect();
     r.rating = text(&v, "rating")
         .and_then(|s| s.parse::<f64>().ok())
-        .map(|a| Rating {
-            average: round2(a),
-            count: None,
-        });
+        .and_then(|a| rating(a, None));
     r.format = Some(Format::Audio);
     Ok(r)
 }

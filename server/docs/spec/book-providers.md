@@ -4,15 +4,15 @@ Scope: the URL builders and the response parsers of the five free, keyless book 
 
 ## Common model
 
-1. `BookRecord`: `provider` (`openlibrary|googlebooks|bnf|audible|audnexus`), `level` (`work|edition`), `ids {work, edition, asin, isbn13[]}`, `title`, `subtitle`, `series[] {name, position, id}`, `authors[]`, `narrators[]`, `translators[]` (each `{name, id}`), `language`, `publisher`, `published`, `description`, `subjects[]`, `pageCount`, `durationSecs`, `covers[]`, `rating {average, count}`, `format` (`ebook|print|audio`). A field a provider lacks is `null` or `[]`; a parser never invents one.
+1. `BookRecord`: `provider` (`openlibrary|googlebooks|bnf|audible|audnexus`), `level` (`work|edition`), `ids {work, edition, asin, isbn13[], editionIsbn13[]}`, `title`, `subtitle`, `series[] {name, position, id}`, `authors[]`, `narrators[]`, `translators[]` (each `{name, id}`), `language`, `publisher`, `published`, `description`, `subjects[]`, `pageCount`, `durationSecs`, `covers[]`, `rating {average, count}`, `format` (`ebook|print|audio`). A field a provider lacks is `null` or `[]`; a parser never invents one.
 2. A record without a title is dropped from a page and is `NotFound` for a single lookup. Audible answers an unknown ASIN with HTTP 200 and a skeleton product (`asin`, `rating`, no title): it is `NotFound` too.
-3. `level`: only OpenLibrary has works (a work groups editions; `search.json` and `/works/` return `work`). Every other provider describes an edition. A work record has no ISBN of its own (search results list the ISBNs of its editions), no publisher, no language and no format.
+3. `level`: only OpenLibrary has works (a work groups editions; `search.json` and `/works/` return `work`). Every other provider describes an edition. A work record has no ISBN of its own: `ids.isbn13` stays empty and the ISBNs that `search.json` lists for its editions go to `ids.editionIsbn13`. It also has no publisher, language or format.
 4. ISBNs: every ISBN (10 or 13, hyphens or prefix tolerated) is normalised to ISBN-13 through `books::isbn::parse`, deduplicated in provider order. A value whose check digit fails is dropped.
 5. `language`: ISO 639-1 when the language has one, else the ISO 639-2 code, through `normalize_language_code` (the app already uses it for subtitles and tracks, so a book and its audio file compare equal). OpenLibrary and BnF send MARC codes (`fre`), Google an ISO 639-1 tag (`fr`, region dropped), Audible and Audnexus an English name (`french`, mapped by a table of 25 names). `und` and unknown names give `null`.
 6. `published` is text: `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. Accepted inputs: `2019`, `March 2019`, `September 17, 1999`, `17 sept. 1999` (French and English month names), `[2019?]`, `c1999`, `cop. 2020`, ISO dates and datetimes. A month outside 1-12 or an impossible day falls back to the coarser date.
 7. `series.position` is text (`1.5`, `II`). The parsers never infer a series from a title: a title such as `Name (Saga, 2)` is kept as sent and the series comes from the dedicated field only. Splitting titles is the naming layer's job.
-8. `description` is raw, HTML included. `covers` are largest first, absolute `https` URLs.
-9. `rating.average` is out of 5, rounded to two decimals.
+8. `description` is raw, HTML included. `covers` are largest first, `https` URLs only (any other scheme is dropped).
+9. `rating.average` is out of 5, clamped to 0..5 and rounded to two decimals; a non-finite value gives no rating.
 10. `ParseError`: `Malformed` (not the expected JSON or XML), `NotFound`, `Moved` (OpenLibrary redirect or deletion, with the target key), `RateLimited` (quota or rate limit body: skip the provider), `Api` (any other error body). An HTTP status is the client's to read; the parsers recognise the error bodies the providers send.
 11. Builders taking an id or a free query return `Option<String>`: `None` for an invalid id (path characters, wrong shape) or an empty query. Query strings are percent-encoded by `url`.
 
@@ -41,14 +41,15 @@ Rate limits (for the 0.11 limiter):
 
 Identification: the OLID is the identity (`OL...W` work, `OL...M` edition, `OL...A` author). An ISBN identifies an edition, never a work: `/isbn/` returns the edition, its `works[0]` is the work. A `/type/redirect` document (merged record) parses as `Moved(target)`: follow it once and update the stored id; `/type/delete` is `Moved(None)`; `{"error":"notfound"}` is `NotFound`. Edition and work `authors` are references only (key, no name): `Person.name` is `null` and the author lookup fills it. `search.json` carries names and keys side by side (the lists can differ in length).
 
-Attribution and terms: OpenLibrary data is CC0 (public domain dedication); covers have per-image licences and the site asks for the API usage guidelines to be followed (identify the application). No attribution is required for the data.
+Attribution and terms: the plan states the data is CC0, but `https://openlibrary.org/developers/licensing` (read 2026-11-01) names no licence: it says the Internet Archive "does not assert any new copyright or other proprietary rights" over the database and warns that "there may be existing rights issues on some contributions". Confirm the licence and the cover terms before release; the API page asks that the application identify itself in the `User-Agent`.
 
 Field mapping:
 
 | `BookRecord` | edition | work | search doc |
 |---|---|---|---|
 | `ids.edition` / `ids.work` | `key`, `works[0].key` | `key` | `key` (work) |
-| `ids.isbn13` | `isbn_13`, `isbn_10` | none | `isbn` |
+| `ids.isbn13` | `isbn_13`, `isbn_10` | none | none |
+| `ids.editionIsbn13` | none | none | `isbn` |
 | `title`, `subtitle` | `title`, `subtitle` | same | same |
 | `series` | `series[]` strings (`Name ; 2`, `Name, #2` split, else name only) | none | none |
 | `authors` | `authors[].key` (id only) | `authors[].author.key` (id only) | `author_name[]` with `author_key[]` |
@@ -73,9 +74,9 @@ Rate limits:
 - Observed 2026-11-01, from this machine: every keyless request (three, up to 5 s apart) answered HTTP 429, `status RESOURCE_EXHAUSTED`, `reason rateLimitExceeded`, with `quota_limit: defaultPerDayPerProject` and `quota_limit_value: "0"` for the shared anonymous project. Keyless Google Books has a zero daily quota at the time of writing: the provider must be treated as unavailable and skipped (`ParseError::RateLimited`), as the plan already does when the daily quota is exhausted. The fixture `error-quota.json` is that body with the project number replaced. The volume shapes of the other fixtures come from the documented `volumes` resource (`developers.google.com/books/docs/v1/reference/volumes`), not from a live response.
 - Google's own default for a keyed project is not stated on the pages checked.
 
-Identification: the volume `id` is an edition id (`ids.edition`). `industryIdentifiers` of type `ISBN_13` and `ISBN_10` are trusted; `OTHER` (`PKEY:`, `OCLC:`) are ignored. Search by ISBN first, title and author only as a fallback (titles often embed the series, volumes of one work are separate records).
+Identification: the volume `id` is an edition id (`ids.edition`). `industryIdentifiers` of type `ISBN_13` and `ISBN_10` are trusted; `OTHER` (`PKEY:`, `OCLC:`) are ignored. Search by ISBN first, title and author only as a fallback (titles often embed the series, volumes of one work are separate records). `intitle:` and `inauthor:` take quoted phrases; a `"` inside the input is replaced by a space.
 
-Attribution and terms: Google Books API Terms of Service apply: results are shown with the Google Books attribution and the `infoLink` / `canonicalVolumeLink` of the volume where the data is displayed (previews, descriptions, covers). Covers are Google's thumbnails (`http://books.google.com/books/content?...`, rewritten to `https`, `edge=curl` dropped).
+Attribution and terms: the Books API terms (`https://developers.google.com/books/terms`, read 2026-11-01) have three sections: no fee may be charged to users of the application, content must be removed on a rights claim or a Google request, and users must be told that content they submit through the API may be made public. Attribution and branding are in a separate Branding Guidelines page that was not read; check it before showing Google descriptions or covers. Covers are Google's thumbnails (`http://books.google.com/books/content?...`, rewritten to `https`, `edge=curl` dropped).
 
 Field mapping:
 
@@ -109,7 +110,7 @@ Identification: the ark name (`cb99900011d` in `ark:/12148/cb99900011d`) is the 
 
 Attribution and terms: BnF open data under the Licence Ouverte (Etalab): reuse is free, with the source and the date of the last update credited ("source: BnF, catalogue general"). The API page names the licence; the reuse-conditions page was not readable in this run, so confirm the exact credit line before release.
 
-Diagnostics: a `<diagnostics>` block (for example `info:srw/diagnostic/1/10`, query syntax error) is `ParseError::Api(message)`. Two quotes in a title would end a CQL term: `"` is replaced by a space in query terms.
+Diagnostics: a `<diagnostics>` block (for example `info:srw/diagnostic/1/10`, query syntax error) is `ParseError::Api(message)`. Title and author terms are quoted CQL strings: a backslash, `"`, `*`, `?` and `^` inside them are escaped with a backslash (`Who?` becomes `Who\?`).
 
 Field mapping (UNIMARC, tag `$subfield`):
 
@@ -120,7 +121,7 @@ Field mapping (UNIMARC, tag `$subfield`):
 | `title` | 200 `$a`, then `. {$i}` when a part title is present |
 | `subtitle` | 200 `$e` |
 | `series` | 461 `$t` / `$v` / `$0` (linked entry, preferred); else 225 `$a` / `$v`; else, with only a volume number in 200 `$h`, the 200 `$a` title as the series and `$h` as the position |
-| `authors` | 700, 701, 702 with `$4` absent or `070`: `{$b} {$a}`, id `$3` |
+| `authors` | 700, 701 with `$4` absent or `070`, 702 with `070` only: `{$b} {$a}`, id `$3` |
 | `translators` | 700-702 with `$4` `730` |
 | other roles | `$4` of any other value (preface, illustrator, editor...) is skipped; 710-712 (collectives) are skipped |
 | `language` | 101 `$a` (first; `$c` is the original language) |

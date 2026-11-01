@@ -42,6 +42,11 @@
 <mxc:subfield code="a">Quenotte</mxc:subfield>
 <mxc:subfield code="b">Maëlis</mxc:subfield>
 </mxc:datafield>
+<mxc:datafield tag="702" ind1=" " ind2="|">
+<mxc:subfield code="3">99100005</mxc:subfield>
+<mxc:subfield code="a">Passant</mxc:subfield>
+<mxc:subfield code="b">Anonyme</mxc:subfield>
+</mxc:datafield>
 </mxc:record>      </srw:recordData>
 <srw:recordIdentifier>ark:/12148/cb99900022m</srw:recordIdentifier>
 <srw:recordPosition>1</srw:recordPosition>

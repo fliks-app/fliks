@@ -1,6 +1,6 @@
 //! Audible catalog (unofficial `api.audible.<tld>/1.0/catalog/products`): URL builders and parsers.
 use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, Provider, Rating, SearchPage, Series};
+use super::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series};
 use serde_json::Value;
 
 const RESPONSE_GROUPS: &str = "contributors,media,product_attrs,product_desc,product_details,product_extended_attrs,rating,series,category_ladders";
@@ -206,24 +206,21 @@ fn product(p: &Value) -> Option<BookRecord> {
     }
     r.duration_secs = uint(p, "runtime_length_min")
         .filter(|m| *m > 0)
-        .map(|m| m * 60);
+        .and_then(|m| m.checked_mul(60));
     if let Some(images) = p.get("product_images").and_then(Value::as_object) {
         let mut sized: Vec<(u32, &str)> = images
             .iter()
             .filter_map(|(k, v)| Some((k.parse().ok()?, v.as_str()?)))
             .collect();
         sized.sort_by_key(|a| std::cmp::Reverse(a.0));
-        r.covers = sized.into_iter().map(|(_, u)| u.to_string()).collect();
+        r.covers = sized.into_iter().filter_map(|(_, u)| https(u)).collect();
     }
     let dist = p.pointer("/rating/overall_distribution");
     let count = dist.and_then(|d| uint(d, "num_ratings")).filter(|n| *n > 0);
     r.rating = dist
         .and_then(|d| d.get("average_rating")?.as_f64())
         .zip(count)
-        .map(|(a, c)| Rating {
-            average: round2(a),
-            count: Some(c),
-        });
+        .and_then(|(a, c)| rating(a, Some(c)));
     r.format = Some(Format::Audio);
     Some(r)
 }

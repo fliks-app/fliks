@@ -1,6 +1,6 @@
 //! Google Books (keyless): URL builders and parsers.
 use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, Provider, Rating, SearchPage};
+use super::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage};
 use serde_json::Value;
 
 const BASE: &str = "https://www.googleapis.com/books/v1";
@@ -19,13 +19,18 @@ pub struct Search<'a> {
     pub start_index: Option<u32>,
 }
 
+/// A quoted phrase; a `"` inside would end it, so it is dropped.
+fn phrase(s: &str) -> Option<String> {
+    clean(&s.replace('"', " ")).map(|p| format!("\"{p}\""))
+}
+
 /// `None` when there is nothing to search for.
 pub fn search_url(s: &Search) -> Option<String> {
     let isbn = s.isbn.and_then(isbn13);
     let terms = [
         isbn.map(|i| format!("isbn:{i}")),
-        s.title.and_then(clean).map(|t| format!("intitle:{t}")),
-        s.author.and_then(clean).map(|a| format!("inauthor:{a}")),
+        s.title.and_then(phrase).map(|t| format!("intitle:{t}")),
+        s.author.and_then(phrase).map(|a| format!("inauthor:{a}")),
         s.text.and_then(clean),
     ];
     let q: Vec<String> = terms.into_iter().flatten().collect();
@@ -129,14 +134,12 @@ fn item(v: &Value) -> Option<BookRecord> {
         .iter()
         .filter_map(|s| links?.get(s)?.as_str())
         .map(cover_url)
+        .filter_map(|u| https(&u))
         .collect();
     r.rating = info
         .get("averageRating")
         .and_then(Value::as_f64)
-        .map(|a| Rating {
-            average: round2(a),
-            count: uint(info, "ratingsCount"),
-        });
+        .and_then(|a| rating(a, uint(info, "ratingsCount")));
     r.format = v
         .pointer("/saleInfo/isEbook")
         .and_then(Value::as_bool)

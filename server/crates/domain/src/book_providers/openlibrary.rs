@@ -1,8 +1,6 @@
 //! OpenLibrary: URL builders and parsers (works, editions, search, authors).
 use super::util::*;
-use super::{
-    BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, Rating, SearchPage,
-};
+use super::{BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, SearchPage};
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
@@ -39,12 +37,25 @@ fn olid(id: &str, kind: char) -> Option<&str> {
     (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())).then_some(id)
 }
 
-pub fn search_url(s: &Search) -> String {
+/// `None` when no title, author, isbn or free text is given.
+pub fn search_url(s: &Search) -> Option<String> {
     let (limit, page) = (
         s.limit.map(|n| n.to_string()),
         s.page.map(|n| n.to_string()),
     );
     let mut p = vec![("fields", SEARCH_FIELDS)];
+    let terms = [
+        ("title", s.title),
+        ("author", s.author),
+        ("isbn", s.isbn),
+        ("q", s.q),
+    ];
+    if terms
+        .iter()
+        .all(|(_, v)| v.is_none_or(|v| v.trim().is_empty()))
+    {
+        return None;
+    }
     let opt = [
         ("title", s.title),
         ("author", s.author),
@@ -55,7 +66,7 @@ pub fn search_url(s: &Search) -> String {
         ("page", page.as_deref()),
     ];
     p.extend(opt.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))));
-    url("/search.json", &p)
+    Some(url("/search.json", &p))
 }
 
 /// Redirects (302) to the edition: the client must follow it.
@@ -286,7 +297,7 @@ fn search_doc(d: &Value) -> Option<BookRecord> {
     r.ids.work = key_id(d);
     texts(d, "isbn")
         .iter()
-        .for_each(|i| add_isbn(&mut r.ids.isbn13, i));
+        .for_each(|i| add_isbn(&mut r.ids.edition_isbn13, i));
     r.subtitle = text(d, "subtitle");
     let (names, keys) = (texts(d, "author_name"), texts(d, "author_key"));
     r.authors = (0..names.len().max(keys.len()))
@@ -310,10 +321,7 @@ fn search_doc(d: &Value) -> Option<BookRecord> {
     r.rating = d
         .get("ratings_average")
         .and_then(Value::as_f64)
-        .map(|a| Rating {
-            average: round2(a),
-            count: uint(d, "ratings_count"),
-        });
+        .and_then(|a| rating(a, uint(d, "ratings_count")));
     Some(r)
 }
 
@@ -349,7 +357,12 @@ pub fn parse_isbn_batch(body: &str) -> Result<Vec<BookRecord>, ParseError> {
                 .iter()
                 .map(|a| Person {
                     name: text(a, "name"),
-                    id: text(a, "url").and_then(|u| u.split('/').rev().nth(1).and_then(clean)),
+                    id: text(a, "url").and_then(|u| {
+                        u.split('/')
+                            .skip_while(|s| *s != "authors")
+                            .nth(1)
+                            .and_then(clean)
+                    }),
                 })
                 .collect();
             r.publisher = names(b, "publishers").iter().find_map(|p| text(p, "name"));

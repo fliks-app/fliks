@@ -43,6 +43,8 @@ pub struct ProviderIds {
     pub asin: Option<String>,
     /// Normalised ISBN-13, ISBN-10 converted, deduplicated, provider order.
     pub isbn13: Vec<String>,
+    /// ISBN-13 of the editions a work groups (OpenLibrary search); a work has no ISBN of its own.
+    pub edition_isbn13: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]

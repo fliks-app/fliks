@@ -53,6 +53,19 @@ pub fn isbn13(raw: &str) -> Option<String> {
     crate::books::isbn::parse(raw).map(|i| i.isbn13)
 }
 
+/// Out-of-range or non-finite values are dropped; the rest is clamped to 0..=5 and rounded.
+pub fn rating(average: f64, count: Option<u32>) -> Option<super::Rating> {
+    average.is_finite().then(|| super::Rating {
+        average: round2(average.clamp(0.0, 5.0)),
+        count,
+    })
+}
+
+/// Covers are served over `https` only.
+pub fn https(url: &str) -> Option<String> {
+    clean(url).filter(|u| u.starts_with("https://"))
+}
+
 pub fn add_isbn(list: &mut Vec<String>, raw: &str) {
     if let Some(i) = isbn13(raw) {
         push_unique(list, i);
@@ -101,26 +114,49 @@ static ISO_DATE: LazyLock<Regex> =
 static YEAR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?:^|\D)([12]\d{3})(?:\D|$)").unwrap());
 
-/// Month prefixes, English and French, after accent folding.
+/// Whole month words, English and French, after accent folding.
 const MONTHS: &[(&str, u32)] = &[
+    ("january", 1),
     ("jan", 1),
+    ("janvier", 1),
+    ("janv", 1),
+    ("february", 2),
     ("feb", 2),
+    ("fevrier", 2),
+    ("fevr", 2),
     ("fev", 2),
+    ("march", 3),
     ("mar", 3),
+    ("mars", 3),
+    ("april", 4),
     ("apr", 4),
+    ("avril", 4),
     ("avr", 4),
     ("may", 5),
     ("mai", 5),
+    ("june", 6),
     ("jun", 6),
     ("juin", 6),
+    ("july", 7),
     ("jul", 7),
+    ("juillet", 7),
     ("juil", 7),
+    ("august", 8),
     ("aug", 8),
-    ("aou", 8),
+    ("aout", 8),
+    ("september", 9),
     ("sep", 9),
+    ("sept", 9),
+    ("septembre", 9),
+    ("october", 10),
     ("oct", 10),
+    ("octobre", 10),
+    ("november", 11),
     ("nov", 11),
+    ("novembre", 11),
+    ("december", 12),
     ("dec", 12),
+    ("decembre", 12),
 ];
 
 fn valid_day(y: i32, m: u32, d: u32) -> bool {
@@ -147,13 +183,8 @@ pub fn partial_date(raw: &str) -> Option<String> {
         .replace('û', "u")
         .replace('ô', "o");
     let words = || folded.split(|c: char| !c.is_alphanumeric());
-    let Some(month) = words().find_map(|w| {
-        MONTHS
-            .iter()
-            .filter(|(p, _)| w.starts_with(p) && w.chars().all(|c| c.is_alphabetic()))
-            .max_by_key(|(p, _)| p.len())
-            .map(|(_, m)| *m)
-    }) else {
+    let Some(month) = words().find_map(|w| MONTHS.iter().find(|(n, _)| *n == w).map(|(_, m)| *m))
+    else {
         return Some(format!("{year:04}"));
     };
     let day = words()
@@ -201,6 +232,7 @@ mod tests {
         assert_eq!(d("2017-05-11T00:00:00.000Z").as_deref(), Some("2017-05-11"));
         assert_eq!(d("2019-13").as_deref(), Some("2019"));
         assert_eq!(d("unknown"), None);
+        assert_eq!(d("Decade of 12 marching 2019").as_deref(), Some("2019"));
     }
 
     #[test]

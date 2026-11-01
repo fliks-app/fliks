@@ -26,9 +26,16 @@ fn url(query: &str, start: u32, max: u32) -> String {
         .into()
 }
 
-/// CQL has no escape: quotes would end the term.
+/// Backslash-escapes the CQL specials inside a quoted term.
 fn term(s: &str) -> String {
-    s.replace('"', " ").trim().to_string()
+    let mut out = String::new();
+    for c in s.trim().chars() {
+        if matches!(c, '\\' | '"' | '*' | '?' | '^') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 pub fn isbn_url(isbn: &str) -> Option<String> {
@@ -177,7 +184,7 @@ fn read(body: &str) -> Result<Response, ParseError> {
     Ok(resp)
 }
 
-/// 700-702 `$4` UNIMARC relator codes: absent or `070` author, `730` translator; every other role is skipped.
+/// 700-702 `$4` relator codes: `070` author (also absent on 700 and 701), `730` translator; the rest is skipped.
 fn contributors(m: &Marc, r: &mut BookRecord) {
     for f in m.tag(&["700", "701", "702"]) {
         let Some(family) = f.first('a') else { continue };
@@ -189,8 +196,10 @@ fn contributors(m: &Marc, r: &mut BookRecord) {
             name: Some(name),
             id: f.first('3'),
         };
+        // Without `$4` only the principal responsibility (700, 701) is an author.
         match f.first('4').as_deref() {
-            None | Some("070") => r.authors.push(p),
+            None if f.tag != "702" => r.authors.push(p),
+            Some("070") => r.authors.push(p),
             Some("730") => r.translators.push(p),
             _ => {}
         }

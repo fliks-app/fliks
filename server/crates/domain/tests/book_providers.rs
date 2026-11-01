@@ -86,7 +86,7 @@ fn openlibrary_reproduces_expected() {
 #[test]
 fn googlebooks_reproduces_expected() {
     use googlebooks::*;
-    replay("books-providers/googlebooks", 17, |i| {
+    replay("books-providers/googlebooks", 18, |i| {
         let a = Args(i);
         let b = || body("googlebooks", i);
         match i["fn"].as_str().unwrap() {
@@ -110,7 +110,7 @@ fn googlebooks_reproduces_expected() {
 #[test]
 fn bnf_reproduces_expected() {
     use bnf::*;
-    replay("books-providers/bnf", 16, |i| {
+    replay("books-providers/bnf", 18, |i| {
         let a = Args(i);
         let b = || body("bnf", i);
         match i["fn"].as_str().unwrap() {
@@ -132,7 +132,7 @@ fn bnf_reproduces_expected() {
 #[test]
 fn audible_reproduces_expected() {
     use audible::*;
-    replay("books-providers/audible", 17, |i| {
+    replay("books-providers/audible", 18, |i| {
         let a = Args(i);
         let b = || body("audible", i);
         match i["fn"].as_str().unwrap() {
@@ -159,7 +159,7 @@ fn audible_reproduces_expected() {
 #[test]
 fn audnexus_reproduces_expected() {
     use audnexus::*;
-    replay("books-providers/audnexus", 15, |i| {
+    replay("books-providers/audnexus", 17, |i| {
         let a = Args(i);
         let b = || body("audnexus", i);
         let region = || a.s("region").map(|_| a.region());
