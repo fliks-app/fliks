@@ -7,6 +7,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::{accessible_library_ids, paths_visible},
+    media::external_ids,
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -150,8 +151,7 @@ pub async fn items(
     let rows = sqlx::query!(
         r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
                   (to_jsonb(m) - 'searchVector') || jsonb_build_object(
-                    'tmdbId', external_id('media', m.id, 'tmdb')::int, 'imdbId', external_id('media', m.id, 'imdb'),
-                    'tvdbId', external_id('media', m.id, 'tvdb')::int) AS "media!: Jsonb<Value>",
+                    'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb) AS "media!: Jsonb<Value>",
                   to_jsonb(l) AS "library!: Jsonb<Value>",
                   to_jsonb(q) AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
@@ -163,6 +163,10 @@ pub async fn items(
            FROM playlist_items pi
            JOIN media m ON m.id = pi."mediaId"
            JOIN libraries l ON l.id = m."libraryId" AND l.id = ANY($2)
+           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $4)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $5)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $6) AS imdb
+           FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
            LEFT JOIN quality_profiles q ON q.id = m."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
            LEFT JOIN media_metadata md ON md."mediaId" = m.id
@@ -175,7 +179,10 @@ pub async fn items(
            ORDER BY pi.position, pi.id"#,
         id,
         &accessible,
-        a.user.id
+        a.user.id,
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_all(&st.db)
     .await?;

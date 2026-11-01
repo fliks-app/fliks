@@ -7,6 +7,7 @@ use crate::{
         validate::{PathParams, int_param},
     },
     libraries::accessible_library_ids,
+    media::external_ids,
     state::AppState,
 };
 use axum::{
@@ -140,17 +141,23 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
     if !tmdb.is_empty() || !tvdb.is_empty() {
         let libs = accessible_library_ids(db, a).await?;
         rows = sqlx::query!(
-            r#"SELECT m.id AS "id!", external_id('media', m.id, 'tmdb')::int AS tmdb_id,
-                      external_id('media', m.id, 'tvdb')::int AS tvdb_id
+            r#"SELECT m.id AS "id!", ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id
                FROM media m
+               LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $5)::int AS tmdb,
+                 max(value) FILTER (WHERE provider = $6)::int AS tvdb,
+                 max(value) FILTER (WHERE provider = $7) AS imdb
+                 FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
                WHERE m.type = $3 AND m."libraryId" = ANY($4)
-                 AND m.id IN (SELECT "entityId" FROM external_ids WHERE entity = 'media' AND scope = $3
-                              AND ((provider = 'tmdb' AND value = ANY($1)) OR (provider = 'tvdb' AND value = ANY($2))))
+                 AND m.id IN (SELECT "mediaId" FROM media_external_ids WHERE kind = $3
+                              AND ((provider = $5 AND value = ANY($1)) OR (provider = $6 AND value = ANY($2))))
                ORDER BY m.id ASC"#,
             &tmdb,
             &tvdb,
             kind.as_str(),
-            &libs
+            &libs,
+            external_ids::TMDB,
+            external_ids::TVDB,
+            external_ids::IMDB
         )
         .fetch_all(db)
         .await?

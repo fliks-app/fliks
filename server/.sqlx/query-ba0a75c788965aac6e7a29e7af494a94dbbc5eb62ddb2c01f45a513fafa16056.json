@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT title, type AS \"kind!\", external_id('media', id, 'tmdb')::int AS tmdb,\n                  external_id('media', id, 'tvdb')::int AS tvdb, external_id('media', id, 'imdb') AS imdb,\n                  \"preferredProvider\" AS pref, \"libraryId\" AS lib FROM media WHERE id = $1",
+  "query": "SELECT m.title, m.type AS \"kind!\", ids.tmdb, ids.tvdb, ids.imdb,\n                  m.\"preferredProvider\" AS pref, m.\"libraryId\" AS lib\n           FROM media m\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $3)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $4) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -68,7 +68,10 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -81,5 +84,5 @@
       true
     ]
   },
-  "hash": "e5792507d8162e43ce27b4d77e8014ad224de97b68606a62feb9583f7c7a944b"
+  "hash": "ba0a75c788965aac6e7a29e7af494a94dbbc5eb62ddb2c01f45a513fafa16056"
 }

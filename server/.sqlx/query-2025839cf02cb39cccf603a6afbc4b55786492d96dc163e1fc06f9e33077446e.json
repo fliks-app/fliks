@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.\"seasonNumber\" AS number, s.monitored AS was, m.id AS \"media_id?\",\n             m.type AS media_type, external_id('media', m.id, 'tmdb')::int AS tmdb_id\n           FROM seasons s LEFT JOIN media m ON m.id = s.\"mediaId\" WHERE s.id = $1",
+  "query": "SELECT s.\"seasonNumber\" AS number, s.monitored AS was, m.id AS \"media_id?\",\n             m.type AS media_type, t.value::int AS tmdb_id\n           FROM seasons s LEFT JOIN media m ON m.id = s.\"mediaId\"\n           LEFT JOIN media_external_ids t ON t.\"mediaId\" = m.id AND t.provider = $2\n           WHERE s.id = $1",
   "describe": {
     "columns": [
       {
@@ -56,7 +56,8 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Text"
       ]
     },
     "nullable": [
@@ -67,5 +68,5 @@
       null
     ]
   },
-  "hash": "0fc13e80f342bfabfc8ccc0a7bc7e50c4b7a447cc5dd5b54367126a610ebca5f"
+  "hash": "2025839cf02cb39cccf603a6afbc4b55786492d96dc163e1fc06f9e33077446e"
 }

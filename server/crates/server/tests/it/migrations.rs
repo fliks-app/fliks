@@ -543,23 +543,23 @@ async fn m1789000020_turns_the_media_kind_enums_into_checked_text(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = false)]
-async fn m1789000030_moves_the_provider_ids_into_external_ids(pool: PgPool) {
+async fn m1789000030_moves_the_provider_ids_into_media_external_ids(pool: PgPool) {
     apply_until(&pool, 1_789_000_000_030).await;
     sql(
         &pool,
         r#"INSERT INTO media (id, title, type, "tmdbId", "tvdbId", "imdbId") VALUES
           (1, 'a', 'movie', 603, 111, 'tt1'), (2, 'b', 'series', 603, 222, 'tt2'),
-          (3, 'c', 'series', 604, 222, 'tt3'), (4, 'd', 'movie', 0, 0, ''), (5, 'e', 'movie', NULL, NULL, NULL)"#,
+          (3, 'c', 'series', 604, 222, 'tt2'), (4, 'd', 'movie', 0, 0, ''), (5, 'e', 'movie', NULL, NULL, NULL)"#,
     )
     .await;
     apply_only(&pool, 1_789_000_000_030).await;
 
     let got: Vec<(i32, String, String, String)> = rows(
         &pool,
-        r#"SELECT "entityId", scope, provider, value FROM external_ids ORDER BY "entityId", provider"#,
+        r#"SELECT "mediaId", kind, provider, value FROM media_external_ids ORDER BY "mediaId", provider"#,
     )
     .await;
-    // Media 3 repeats media 2's tvdb id and loses it: the lower id keeps it.
+    // TVDB and IMDb ids were never unique: media 3 keeps the ones media 2 has.
     let want = [
         (1, "movie", "imdb", "tt1"),
         (1, "movie", "tmdb", "603"),
@@ -567,8 +567,10 @@ async fn m1789000030_moves_the_provider_ids_into_external_ids(pool: PgPool) {
         (2, "series", "imdb", "tt2"),
         (2, "series", "tmdb", "603"),
         (2, "series", "tvdb", "222"),
-        (3, "series", "imdb", "tt3"),
+        (3, "series", "imdb", "tt2"),
         (3, "series", "tmdb", "604"),
+        (3, "series", "tvdb", "222"),
+        (4, "movie", "imdb", ""),
     ];
     let want: Vec<_> = want
         .iter()
@@ -582,16 +584,43 @@ async fn m1789000030_moves_the_provider_ids_into_external_ids(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(gone, 0);
+    sql(
+        &pool,
+        "INSERT INTO media (id, title, type) VALUES (9, 'f', 'movie')",
+    )
+    .await;
     for bad in [
-        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'tmdb', '603')"#,
-        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'tmdb', '0603')"#,
-        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'imdb', '')"#,
-        r#"INSERT INTO external_ids VALUES ('media', 9, 'book', 'tmdb', '5')"#,
-        r#"INSERT INTO external_ids VALUES ('person', 9, 'movie', 'tmdb', '5')"#,
-        r#"INSERT INTO external_ids VALUES ('media', 9, 'movie', 'isbn', '5')"#,
+        // movie 1 holds TMDB 603
+        r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tmdb', '603')"#,
+        r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tmdb', '0603')"#,
+        r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tvdb', 'x')"#,
+        r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'isbn', '5')"#,
+        // the kind must be the media's, and the media must exist
+        r#"INSERT INTO media_external_ids VALUES (9, 'series', 'tvdb', '5')"#,
+        r#"INSERT INTO media_external_ids VALUES (99, 'movie', 'tvdb', '5')"#,
     ] {
         assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
     }
+    // The same TVDB id on two media of a kind is fine, and the rows follow their media.
+    sql(
+        &pool,
+        r#"INSERT INTO media_external_ids VALUES (9, 'movie', 'tvdb', '111');
+           UPDATE media SET type = 'series' WHERE id = 9"#,
+    )
+    .await;
+    let kind: String =
+        sqlx::query_scalar(r#"SELECT kind FROM media_external_ids WHERE "mediaId" = 9"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(kind, "series");
+    sql(&pool, "DELETE FROM media WHERE id = 9").await;
+    let left: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM media_external_ids WHERE "mediaId" = 9"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(left, 0);
 }
 
 const V4_VERSIONS: i64 = 81;

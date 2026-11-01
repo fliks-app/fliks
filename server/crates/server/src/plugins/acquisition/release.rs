@@ -22,7 +22,8 @@ pub async fn matches(
 ) -> sqlx::Result<Vec<t::ReleaseMatch>> {
     let db = &st.db;
     let library: Vec<MediaRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{MEDIA_SELECT} WHERE m.monitored ORDER BY m.id"
+        "{} WHERE m.monitored ORDER BY m.id",
+        media_select()
     )))
     .fetch_all(db)
     .await?;

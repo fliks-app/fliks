@@ -35,7 +35,7 @@ python3 external/livetv/server.py 4961 &     # livetv scenarios: PARITY_LIVETV=h
 From `server/`, with the `CARGO_*` env of `CLAUDE.md`:
 
 ```bash
-cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring>
+cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring> [<substring>...]
 PARITY_RECORD=1 cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture   # fills only the steps without `expect`
 ```
 

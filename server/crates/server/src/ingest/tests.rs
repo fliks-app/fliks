@@ -694,8 +694,8 @@ async fn relink_in_place_is_contained(pool: PgPool) {
     assert_eq!(s, 404);
     let m = media(&c, l, "Out (2000)", "movie").await;
     sqlx::query(
-        r#"INSERT INTO external_ids (entity, "entityId", scope, provider, value)
-           VALUES ('media', $1, 'movie', 'tmdb', '77')"#,
+        r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+           VALUES ($1, 'movie', 'tmdb', '77')"#,
     )
     .bind(m)
     .execute(&c.st.db)

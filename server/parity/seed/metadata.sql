@@ -1,13 +1,13 @@
 -- Parity seed delta "metadata" (docs/spec/metadata.md and persons.md Vectors/parity), applied on top of base.sql.
--- Series library prefers TVDB; media 19 shares tmdbId 1001 with movie 1 (type collision); persons cover fresh,
+-- Series library prefers TVDB; media 19 shares tmdb id 1001 with movie 1 (kind collision); persons cover fresh,
 -- stale and never-refreshed rows. Refresh times are relative to the template build.
 ALTER TABLE libraries DISABLE TRIGGER set_updated_at;
 UPDATE libraries SET "preferredProvider" = 'tvdb' WHERE id = 2;
 ALTER TABLE libraries ENABLE TRIGGER set_updated_at;
-ALTER TABLE media DISABLE TRIGGER set_updated_at;
-UPDATE media SET "tvdbId" = 81189 WHERE id = 18;
-UPDATE media SET "tmdbId" = 1001 WHERE id = 19;
-ALTER TABLE media ENABLE TRIGGER set_updated_at;
+INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES
+ (18, 'series', 'tvdb', '81189'),
+ (19, 'series', 'tmdb', '1001')
+ON CONFLICT ("mediaId", provider) DO UPDATE SET value = EXCLUDED.value;
 
 INSERT INTO persons (id, "createdAt", "updatedAt", "tmdbId", name, "avatarUrl", biography, birthday, deathday, "placeOfBirth", "knownForDepartment", departments, "metadataRefreshedAt", provider) VALUES
  (1, '2026-01-01', '2026-01-01', 101, 'Claire Danes', '/api/images/person/1', 'Fresh bio', '1979-04-12', NULL, 'New York', 'Acting', '["Acting"]', now(), 'tmdb'),

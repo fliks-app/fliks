@@ -180,7 +180,7 @@ fn movie(id: i64) -> Value {
 }
 
 async fn media(pool: &PgPool, id: i32, kind: &str, tmdb: Option<i32>, tvdb: Option<i32>, lib: i32) {
-    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES ($1, $2, $3, $6) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', $4::int4::text), ('tvdb', $5::int4::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
+    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES ($1, $2, $3, $6) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', $4::int4::text), ('tvdb', $5::int4::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .bind(id)
         .bind(format!("m{id}"))
         .bind(kind)

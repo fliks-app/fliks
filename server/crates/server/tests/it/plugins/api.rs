@@ -964,8 +964,8 @@ async fn releases_match_and_score() {
            INSERT INTO media (id, title, type, "libraryId", "folderName", year, monitored, "qualityProfileId")
              VALUES (1, 'Big Buck Bunny', 'movie', 1, 'bbb', 2008, true, 1),
                     (2, 'Sintel', 'movie', 1, 'sintel', 2010, true, NULL);
-           INSERT INTO external_ids (entity, "entityId", scope, provider, value)
-             VALUES ('media', 1, 'movie', 'tmdb', '10378'), ('media', 2, 'movie', 'tmdb', '45745');"#,
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (1, 'movie', 'tmdb', '10378'), (2, 'movie', 'tmdb', '45745');"#,
     )
     .execute(&s.pool)
     .await

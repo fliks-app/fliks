@@ -1,8 +1,24 @@
 //! The ids a media has in outside systems (`docs/spec/external-ids.md`).
-use fliks_domain::media::{external_id::ExternalProvider, kind::MediaKind};
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use sqlx::{PgConnection, PgExecutor};
 
-/// The media of `kind` holding `value` for `provider`.
+/// Provider names as the queries bind them.
+pub const TMDB: &str = ExternalProvider::Tmdb.as_str();
+pub const TVDB: &str = ExternalProvider::Tvdb.as_str();
+pub const IMDB: &str = ExternalProvider::Imdb.as_str();
+
+/// The join giving a query the `ids.tmdb`, `ids.tvdb` and `ids.imdb` of media `alias`, for queries
+/// built at run time (the checked ones inline the same text with bound provider names).
+pub fn ids_join(alias: &str) -> String {
+    format!(
+        r#"LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = '{TMDB}')::int AS tmdb,
+             max(value) FILTER (WHERE provider = '{TVDB}')::int AS tvdb,
+             max(value) FILTER (WHERE provider = '{IMDB}') AS imdb
+           FROM media_external_ids WHERE "mediaId" = {alias}.id) ids ON true"#
+    )
+}
+
+/// The media of `kind` holding `value` for `provider`; the lowest id when the provider is not unique.
 pub async fn find(
     db: impl PgExecutor<'_>,
     kind: MediaKind,
@@ -10,8 +26,8 @@ pub async fn find(
     value: &str,
 ) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar!(
-        r#"SELECT "entityId" FROM external_ids
-           WHERE entity = 'media' AND scope = $1 AND provider = $2 AND value = $3"#,
+        r#"SELECT "mediaId" FROM media_external_ids
+           WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 1"#,
         kind.as_str(),
         provider.as_str(),
         value
@@ -30,33 +46,52 @@ pub async fn find_numeric(
     find(db, kind, provider, &id.to_string()).await
 }
 
-/// Sets the media's id for `provider`; `false` when another media of the kind holds the value.
-/// A value that is not an id of the provider is not stored.
+/// What a write of one id came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Link {
+    Linked,
+    /// A unique provider's id is held by another media of the kind: nothing was written.
+    Taken,
+    /// The media does not exist (any more): the foreign key refused the row.
+    Gone,
+}
+
+fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
+    e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23503")
+}
+
+/// Sets the media's id for `provider`. A value that is not an id of the provider is not stored.
+/// `Gone` aborts a transaction, so a caller inside one must know the media exists.
 pub async fn link(
     c: &mut PgConnection,
     media_id: i32,
     kind: MediaKind,
     provider: ExternalProvider,
     value: &str,
-) -> sqlx::Result<bool> {
+) -> sqlx::Result<Link> {
     let Some(value) = provider.normalize(value) else {
-        return Ok(true);
+        return Ok(Link::Linked);
     };
     let done = sqlx::query!(
-        r#"INSERT INTO external_ids (entity, "entityId", scope, provider, value)
-           SELECT 'media', $1::int4, $2::text, $3::text, $4::text
-           WHERE NOT EXISTS (SELECT 1 FROM external_ids WHERE entity = 'media' AND scope = $2
-                               AND provider = $3 AND value = $4 AND "entityId" <> $1)
-           ON CONFLICT (entity, "entityId", provider)
-           DO UPDATE SET scope = EXCLUDED.scope, value = EXCLUDED.value"#,
+        r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+           SELECT $1::int4, $2::text, $3::text, $4::text
+           WHERE NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids
+                                     WHERE kind = $2 AND provider = $3 AND value = $4 AND "mediaId" <> $1))
+           ON CONFLICT ("mediaId", provider) DO UPDATE SET value = EXCLUDED.value"#,
         media_id,
         kind.as_str(),
         provider.as_str(),
-        value
+        value,
+        provider.is_unique()
     )
     .execute(c)
-    .await?;
-    Ok(done.rows_affected() > 0)
+    .await;
+    match done {
+        Ok(r) if r.rows_affected() > 0 => Ok(Link::Linked),
+        Ok(_) => Ok(Link::Taken),
+        Err(e) if is_foreign_key_violation(&e) => Ok(Link::Gone),
+        Err(e) => Err(e),
+    }
 }
 
 pub async fn unlink(
@@ -65,7 +100,7 @@ pub async fn unlink(
     provider: ExternalProvider,
 ) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"DELETE FROM external_ids WHERE entity = 'media' AND "entityId" = $1 AND provider = $2"#,
+        r#"DELETE FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2"#,
         media_id,
         provider.as_str()
     )
@@ -81,24 +116,11 @@ pub async fn set(
     kind: MediaKind,
     provider: ExternalProvider,
     value: Option<&str>,
-) -> sqlx::Result<bool> {
+) -> sqlx::Result<Link> {
     match value.and_then(|v| provider.normalize(v)) {
         Some(v) => link(c, media_id, kind, provider, &v).await,
-        None => unlink(c, media_id, provider).await.map(|()| true),
+        None => unlink(c, media_id, provider).await.map(|()| Link::Linked),
     }
-}
-
-/// Moves the media's ids to the scope of its new kind.
-pub async fn rescope(c: &mut PgConnection, media_id: i32, kind: MediaKind) -> sqlx::Result<()> {
-    sqlx::query!(
-        r#"UPDATE external_ids SET scope = $2
-           WHERE entity = 'media' AND "entityId" = $1 AND scope <> $2"#,
-        media_id,
-        kind.as_str()
-    )
-    .execute(c)
-    .await?;
-    Ok(())
 }
 
 /// The three ids the payloads carry, as providers report them.
@@ -109,8 +131,17 @@ pub struct Ids {
     pub imdb: Option<String>,
 }
 
+/// What writing several ids came to.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Written {
+    /// The unique providers whose id another media of the kind holds.
+    pub taken: Vec<ExternalProvider>,
+    /// The media no longer exists; the remaining ids were not written.
+    pub gone: bool,
+}
+
 impl Ids {
-    fn entries(&self) -> [(ExternalProvider, Option<String>); 3] {
+    pub fn entries(&self) -> [(ExternalProvider, Option<String>); 3] {
         [
             (ExternalProvider::Tmdb, self.tmdb.map(|v| v.to_string())),
             (ExternalProvider::Tvdb, self.tvdb.map(|v| v.to_string())),
@@ -118,22 +149,26 @@ impl Ids {
         ]
     }
 
-    /// Links every id present and leaves the others; the providers whose id another media holds.
+    /// Links every id present and leaves the others.
     pub async fn fill(
         &self,
         c: &mut PgConnection,
         media_id: i32,
         kind: MediaKind,
-    ) -> sqlx::Result<Vec<ExternalProvider>> {
-        let mut held = vec![];
+    ) -> sqlx::Result<Written> {
+        let mut out = Written::default();
         for (p, v) in self.entries() {
-            if let Some(v) = v
-                && !link(c, media_id, kind, p, &v).await?
-            {
-                held.push(p);
+            let Some(v) = v else { continue };
+            match link(c, media_id, kind, p, &v).await? {
+                Link::Linked => {}
+                Link::Taken => out.taken.push(p),
+                Link::Gone => {
+                    out.gone = true;
+                    break;
+                }
             }
         }
-        Ok(held)
+        Ok(out)
     }
 
     /// Makes these ids the media's own: an absent one is removed.
@@ -142,14 +177,19 @@ impl Ids {
         c: &mut PgConnection,
         media_id: i32,
         kind: MediaKind,
-    ) -> sqlx::Result<Vec<ExternalProvider>> {
-        let mut held = vec![];
+    ) -> sqlx::Result<Written> {
+        let mut out = Written::default();
         for (p, v) in self.entries() {
-            if !set(c, media_id, kind, p, v.as_deref()).await? {
-                held.push(p);
+            match set(c, media_id, kind, p, v.as_deref()).await? {
+                Link::Linked => {}
+                Link::Taken => out.taken.push(p),
+                Link::Gone => {
+                    out.gone = true;
+                    break;
+                }
             }
         }
-        Ok(held)
+        Ok(out)
     }
 }
 
@@ -165,8 +205,16 @@ mod tests {
             .unwrap()
     }
 
+    #[test]
+    fn the_join_names_the_registry_providers() {
+        let j = ids_join("m");
+        for p in ExternalProvider::ALL {
+            assert!(j.contains(&format!("'{p}'")), "{p}");
+        }
+    }
+
     #[sqlx::test(migrations = false)]
-    async fn an_id_is_unique_per_kind_and_goes_with_its_media(db: sqlx::PgPool) {
+    async fn a_tmdb_id_is_unique_per_kind_the_others_are_not(db: sqlx::PgPool) {
         crate::db::migrate(&db).await.unwrap();
         let mut c = db.acquire().await.unwrap();
         let (movie, other, show) = (
@@ -174,21 +222,20 @@ mod tests {
             media(&db, MediaKind::Movie).await,
             media(&db, MediaKind::Series).await,
         );
-        let tmdb = ExternalProvider::Tmdb;
-        assert!(
-            link(&mut c, movie, MediaKind::Movie, tmdb, "603")
-                .await
-                .unwrap()
+        let (tmdb, tvdb) = (ExternalProvider::Tmdb, ExternalProvider::Tvdb);
+        let link =
+            async |c: &mut PgConnection, m, k, p, v: &str| link(c, m, k, p, v).await.unwrap();
+        assert_eq!(
+            link(&mut c, movie, MediaKind::Movie, tmdb, "603").await,
+            Link::Linked
         );
-        assert!(
-            !link(&mut c, other, MediaKind::Movie, tmdb, "603")
-                .await
-                .unwrap()
+        assert_eq!(
+            link(&mut c, other, MediaKind::Movie, tmdb, "603").await,
+            Link::Taken
         );
-        assert!(
-            link(&mut c, show, MediaKind::Series, tmdb, "603")
-                .await
-                .unwrap()
+        assert_eq!(
+            link(&mut c, show, MediaKind::Series, tmdb, "603").await,
+            Link::Linked
         );
         assert_eq!(
             find_numeric(&mut *c, MediaKind::Movie, tmdb, 603)
@@ -203,10 +250,24 @@ mod tests {
             Some(show)
         );
 
-        assert!(
-            link(&mut c, movie, MediaKind::Movie, tmdb, "604")
+        assert_eq!(
+            link(&mut c, movie, MediaKind::Movie, tvdb, "7").await,
+            Link::Linked
+        );
+        assert_eq!(
+            link(&mut c, other, MediaKind::Movie, tvdb, "7").await,
+            Link::Linked
+        );
+        assert_eq!(
+            find_numeric(&mut *c, MediaKind::Movie, tvdb, 7)
                 .await
-                .unwrap()
+                .unwrap(),
+            Some(movie)
+        );
+
+        assert_eq!(
+            link(&mut c, movie, MediaKind::Movie, tmdb, "604").await,
+            Link::Linked
         );
         assert_eq!(
             find_numeric(&mut *c, MediaKind::Movie, tmdb, 603)
@@ -214,14 +275,6 @@ mod tests {
                 .unwrap(),
             None
         );
-
-        // The series' 603 would clash with the movie's once their kinds are equal.
-        assert!(
-            link(&mut c, other, MediaKind::Movie, tmdb, "603")
-                .await
-                .unwrap()
-        );
-        assert!(rescope(&mut c, show, MediaKind::Movie).await.is_err());
 
         sqlx::query("DELETE FROM media WHERE id = $1")
             .bind(movie)
@@ -233,6 +286,44 @@ mod tests {
                 .await
                 .unwrap(),
             None
+        );
+        assert_eq!(
+            link(&mut c, movie, MediaKind::Movie, tmdb, "604").await,
+            Link::Gone
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_type_change_moves_the_ids_and_can_clash(db: sqlx::PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let (movie, show) = (
+            media(&db, MediaKind::Movie).await,
+            media(&db, MediaKind::Series).await,
+        );
+        let tmdb = ExternalProvider::Tmdb;
+        link(&mut c, movie, MediaKind::Movie, tmdb, "5")
+            .await
+            .unwrap();
+        link(&mut c, show, MediaKind::Series, tmdb, "5")
+            .await
+            .unwrap();
+        let retype = sqlx::query("UPDATE media SET type = 'series' WHERE id = $1")
+            .bind(movie)
+            .execute(&mut *c)
+            .await;
+        assert!(retype.is_err());
+        unlink(&mut c, show, tmdb).await.unwrap();
+        sqlx::query("UPDATE media SET type = 'series' WHERE id = $1")
+            .bind(movie)
+            .execute(&mut *c)
+            .await
+            .unwrap();
+        assert_eq!(
+            find_numeric(&mut *c, MediaKind::Series, tmdb, 5)
+                .await
+                .unwrap(),
+            Some(movie)
         );
     }
 
@@ -246,11 +337,9 @@ mod tests {
             tvdb: Some(2),
             imdb: Some("tt3".into()),
         };
-        assert!(
-            all.fill(&mut c, m, MediaKind::Series)
-                .await
-                .unwrap()
-                .is_empty()
+        assert_eq!(
+            all.fill(&mut c, m, MediaKind::Series).await.unwrap(),
+            Written::default()
         );
         let only_imdb = Ids {
             imdb: Some("tt4".into()),
@@ -258,22 +347,24 @@ mod tests {
         };
         only_imdb.fill(&mut c, m, MediaKind::Series).await.unwrap();
         let read = |p: &str| {
-            sqlx::query_scalar::<_, Option<String>>("SELECT external_id('media', $1, $2)")
-                .bind(m)
-                .bind(p.to_owned())
+            sqlx::query_scalar::<_, String>(
+                r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2"#,
+            )
+            .bind(m)
+            .bind(p.to_owned())
         };
-        assert_eq!(
-            read("tmdb").fetch_one(&db).await.unwrap().as_deref(),
-            Some("1")
-        );
-        assert_eq!(
-            read("imdb").fetch_one(&db).await.unwrap().as_deref(),
-            Some("tt4")
-        );
+        assert_eq!(read("tmdb").fetch_one(&db).await.unwrap(), "1");
+        assert_eq!(read("imdb").fetch_one(&db).await.unwrap(), "tt4");
         only_imdb
             .replace(&mut c, m, MediaKind::Series)
             .await
             .unwrap();
-        assert_eq!(read("tmdb").fetch_one(&db).await.unwrap(), None);
+        assert!(read("tmdb").fetch_optional(&db).await.unwrap().is_none());
+        sqlx::query("DELETE FROM media WHERE id = $1")
+            .bind(m)
+            .execute(&mut *c)
+            .await
+            .unwrap();
+        assert!(all.fill(&mut c, m, MediaKind::Series).await.unwrap().gone);
     }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, title FROM media WHERE id = (SELECT \"entityId\" FROM external_ids\n                     WHERE entity = 'media' AND scope = $2 AND provider = 'tmdb' AND value = $1::int4::text)",
+  "query": "SELECT id, title FROM media WHERE id = (SELECT \"mediaId\" FROM media_external_ids\n                     WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)",
   "describe": {
     "columns": [
       {
@@ -29,6 +29,7 @@
     "parameters": {
       "Left": [
         "Int4",
+        "Text",
         "Text"
       ]
     },
@@ -37,5 +38,5 @@
       false
     ]
   },
-  "hash": "2da09249d33afe7a0f5be76c1cfb245e5aaf07cc52296d881a85ff3779c65359"
+  "hash": "4f8cf768bcb22ea9938bced8626607a08b344880aabdfd7633bec1c2d36238cb"
 }

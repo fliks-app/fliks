@@ -1,6 +1,6 @@
 //! Queries of the importers (`importers.md` SQL 1-7).
-use crate::media::external_ids::Ids;
-use fliks_domain::media::{external_id::ExternalProvider, kind::MediaKind};
+use crate::media::external_ids::{self, Ids};
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
 
@@ -71,12 +71,20 @@ pub async fn media_by_tmdb(
 ) -> sqlx::Result<Option<Existing>> {
     sqlx::query_as!(
         Existing,
-        r#"SELECT id, year, monitored, external_id('media', id, 'imdb') AS imdb_id, overview,
-                  "qualityProfileId" AS quality_profile_id
-           FROM media WHERE id = (SELECT "entityId" FROM external_ids WHERE entity = 'media'
-             AND scope = $2 AND provider = 'tmdb' AND value = $1::int4::text)"#,
+        r#"SELECT m.id, m.year, m.monitored, ids.imdb AS imdb_id, m.overview,
+                  m."qualityProfileId" AS quality_profile_id
+           FROM media m
+           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $4)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $5) AS imdb
+             FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+           WHERE m.id = (SELECT "mediaId" FROM media_external_ids
+             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
         tmdb_id,
-        media_type.as_str()
+        media_type.as_str(),
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_optional(db)
     .await
@@ -120,7 +128,7 @@ pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteErr
         imdb: m.imdb_id.map(str::to_owned),
         ..Ids::default()
     };
-    if let Some(p) = ids.fill(&mut tx, id, m.media_type).await?.first() {
+    if let Some(p) = ids.fill(&mut tx, id, m.media_type).await?.taken.first() {
         return Err(WriteError::Held(*p));
     }
     tx.commit().await?;
@@ -162,7 +170,7 @@ pub async fn update_media(
         imdb: m.imdb_id.map(str::to_owned),
         ..Ids::default()
     };
-    if let Some(p) = ids.fill(&mut tx, m.id, kind).await?.first() {
+    if let Some(p) = ids.fill(&mut tx, m.id, kind).await?.taken.first() {
         return Err(WriteError::Held(*p));
     }
     tx.commit().await?;
@@ -207,9 +215,11 @@ pub async fn series_by_tmdb(db: &PgPool, tmdb_id: i32) -> sqlx::Result<Option<Se
         Series,
         r#"SELECT m.id, l.path AS library_path, m."folderName" AS folder_name
            FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
-           WHERE m.id = (SELECT "entityId" FROM external_ids WHERE entity = 'media'
-             AND scope = 'series' AND provider = 'tmdb' AND value = $1::int4::text)"#,
-        tmdb_id
+           WHERE m.id = (SELECT "mediaId" FROM media_external_ids
+             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
+        tmdb_id,
+        MediaKind::Series.as_str(),
+        external_ids::TMDB
     )
     .fetch_optional(db)
     .await

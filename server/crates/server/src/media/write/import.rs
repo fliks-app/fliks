@@ -17,7 +17,8 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
-    media::{external_id::ExternalProvider, kind::MediaKind},
+    external_id::ExternalProvider,
+    media::kind::MediaKind,
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
     nfo::NfoData,
 };
@@ -338,7 +339,7 @@ async fn insert_media(
         tvdb: d.tvdb_id,
         imdb: d.imdb_id.clone(),
     };
-    Ok((id, ids.fill(tx, id, imp.media_type).await?.is_empty()))
+    Ok((id, ids.fill(tx, id, imp.media_type).await?.taken.is_empty()))
 }
 
 const TMDB_FIELDS: [&str; 5] = [

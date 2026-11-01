@@ -5,7 +5,7 @@ use super::{
 };
 use crate::users::imported_user;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use fliks_domain::media::{external_id::ExternalProvider, kind::MediaKind};
+use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 

@@ -9,7 +9,7 @@ use crate::{
     },
     ingest::{MediaRow, load_media},
     libraries::{accessible_library_ids, assert_media_accessible},
-    media::external_ids,
+    media::external_ids::{self, Link},
     requests::MediaRef,
     state::AppState,
 };
@@ -21,7 +21,8 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::{external_id::ExternalProvider, kind::MediaKind},
+    external_id::ExternalProvider,
+    media::kind::MediaKind,
 };
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
@@ -83,27 +84,30 @@ impl BodyIds {
     /// Whether applying the ids changes what the media holds.
     fn differ(&self, m: &MediaRow) -> bool {
         let tmdb = |t: &Option<i32>| t.filter(|t| *t > 0);
-        let imdb = |i: &Option<String>| i.clone().filter(|i| !i.is_empty());
         self.tmdb.as_ref().is_some_and(|t| tmdb(t) != m.tmdb_id)
-            || self.imdb.as_ref().is_some_and(|i| imdb(i) != m.imdb_id)
+            || self.imdb.as_ref().is_some_and(|i| *i != m.imdb_id)
     }
 
-    /// `false` when another media of the kind holds one of the ids.
+    /// The first write that did not link: a held TMDB id, or a media removed meanwhile.
     async fn apply(
         &self,
         c: &mut PgConnection,
         id: i32,
         kind: MediaKind,
-    ) -> Result<bool, sqlx::Error> {
-        let mut free = true;
-        if let Some(t) = &self.tmdb {
-            let v = t.map(|t| t.to_string());
-            free &= external_ids::set(c, id, kind, ExternalProvider::Tmdb, v.as_deref()).await?;
+    ) -> Result<Link, sqlx::Error> {
+        let tmdb = self.tmdb.as_ref().map(|t| t.map(|t| t.to_string()));
+        let imdb = self.imdb.as_ref();
+        for (p, v) in [
+            (ExternalProvider::Tmdb, tmdb),
+            (ExternalProvider::Imdb, imdb.cloned()),
+        ] {
+            let Some(v) = v else { continue };
+            match external_ids::set(c, id, kind, p, v.as_deref()).await? {
+                Link::Linked => {}
+                other => return Ok(other),
+            }
         }
-        if let Some(i) = &self.imdb {
-            free &= external_ids::set(c, id, kind, ExternalProvider::Imdb, i.as_deref()).await?;
-        }
-        Ok(free)
+        Ok(Link::Linked)
     }
 }
 
@@ -123,8 +127,6 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     put!("type", b.kind("type")?, |v: Option<MediaKind>| Col::Text(
         v.map(|k| k.as_str().to_owned())
     ));
-    b.int("tmdbId")?;
-    b.str("imdbId")?;
     put!("overview", b.str("overview")?, Col::Text);
     put!("status", b.one_of("status", &STATUSES)?, |v| {
         Col::Enum("media_status_enum", v)
@@ -209,8 +211,8 @@ pub async fn create(
     let b = Body::new(v, &MEDIA_FIELDS[..18])?;
     b.required(b.str("title")?, "title", "must be a string")?;
     let media_type = b.required_kind("type")?;
-    let cols = columns(&b)?;
     let ids = body_ids(&b)?;
+    let cols = columns(&b)?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
     q.push(
         cols.iter()
@@ -228,7 +230,7 @@ pub async fn create(
     q.push(") RETURNING id");
     let mut tx = st.db.begin().await?;
     let id: i32 = q.build_query_scalar().fetch_one(&mut *tx).await?;
-    if !ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? {
+    if ids.apply(&mut tx, id, media_type).await.map_err(clash_or)? != Link::Linked {
         return Err(clash());
     }
     tx.commit().await?;
@@ -282,10 +284,12 @@ pub async fn apply_media_monitored(
     monitored: bool,
 ) -> Result<MonitoredChange, sqlx::Error> {
     let media = sqlx::query!(
-        r#"SELECT id, type AS "media_type!", external_id('media', id, 'tmdb')::int AS tmdb_id
-           FROM media WHERE id = ANY($1) AND monitored IS DISTINCT FROM $2"#,
+        r#"SELECT m.id, m.type AS "media_type!", t.value::int AS tmdb_id
+           FROM media m LEFT JOIN media_external_ids t ON t."mediaId" = m.id AND t.provider = $3
+           WHERE m.id = ANY($1) AND m.monitored IS DISTINCT FROM $2"#,
         ids,
-        monitored
+        monitored,
+        external_ids::TMDB
     )
     .fetch_all(&mut *c)
     .await?
@@ -337,9 +341,12 @@ pub async fn apply_season_monitored(
 ) -> Result<MonitoredChange, sqlx::Error> {
     let was = sqlx::query!(
         r#"SELECT s."seasonNumber" AS number, s.monitored AS was, m.id AS "media_id?",
-             m.type AS media_type, external_id('media', m.id, 'tmdb')::int AS tmdb_id
-           FROM seasons s LEFT JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
-        season_id
+             m.type AS media_type, t.value::int AS tmdb_id
+           FROM seasons s LEFT JOIN media m ON m.id = s."mediaId"
+           LEFT JOIN media_external_ids t ON t."mediaId" = m.id AND t.provider = $2
+           WHERE s.id = $1"#,
+        season_id,
+        external_ids::TMDB
     )
     .fetch_optional(&mut *c)
     .await?;
@@ -418,8 +425,8 @@ pub async fn update(
 ) -> Result<Json<Value>, AppError> {
     let id = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &MEDIA_FIELDS)?;
-    let cols = columns(&b)?;
     let ids = body_ids(&b)?;
+    let cols = columns(&b)?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -450,14 +457,11 @@ pub async fn update(
             _ => None,
         })
         .unwrap_or(media.media_type);
-    if kind != media.media_type {
-        external_ids::rescope(&mut tx, id, kind)
-            .await
-            .map_err(clash_or)?;
-    }
     if ids.differ(&media) {
-        if !ids.apply(&mut tx, id, kind).await.map_err(clash_or)? {
-            return Err(clash());
+        match ids.apply(&mut tx, id, kind).await.map_err(clash_or)? {
+            Link::Linked => {}
+            Link::Taken => return Err(clash()),
+            Link::Gone => return Err(crate::libraries::media_not_found(id)),
         }
         sqlx::query!(r#"UPDATE media SET "updatedAt" = now() WHERE id = $1"#, id)
             .execute(&mut *tx)

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.title, m.\"originalTitle\" AS original_title, m.year, m.type AS \"media_type!\",\n                  external_id('media', m.id, 'tmdb')::int AS tmdb_id, external_id('media', m.id, 'tvdb')::int AS tvdb_id,\n                  external_id('media', m.id, 'imdb') AS imdb_id, m.monitored,\n                  m.\"folderName\" AS folder_name, m.\"libraryId\" AS library_id, l.name AS \"library_name?\",\n                  l.path AS \"library_path?\", l.\"mediaTypes\" AS \"library_types?\"\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\" WHERE m.id = $1",
+  "query": "SELECT m.id, m.title, m.\"originalTitle\" AS original_title, m.year, m.type AS \"media_type!\",\n                  ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, ids.imdb AS imdb_id, m.monitored,\n                  m.\"folderName\" AS folder_name, m.\"libraryId\" AS library_id, l.name AS \"library_name?\",\n                  l.path AS \"library_path?\", l.\"mediaTypes\" AS \"library_types?\"\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $3)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $4) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -145,7 +145,10 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -165,5 +168,5 @@
       true
     ]
   },
-  "hash": "a8d0ccb6c03aba8077ea0940ca80b8af93eaf85b291562c04e561810edeec7cf"
+  "hash": "5a356811fa82fbf159d5cbc617607e1e8e2df05912d842c80f5f0fbeb0a60d7f"
 }

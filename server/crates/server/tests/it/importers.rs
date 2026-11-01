@@ -382,7 +382,7 @@ async fn preview_lists_roots_with_suggestions(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn radarr_import_writes_media_profiles_and_subtitles(pool: PgPool) {
     let c = ctx(pool).await;
-    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 'released', 'Old', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
+    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 'released', 'Old', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
     sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
         .execute(&c.pool).await.unwrap();
@@ -511,7 +511,8 @@ async fn sonarr_import_needs_v4_and_refreshes_new_series(pool: PgPool) {
     .await;
     assert_eq!((s, &b["imported"]), (201, &json!(2)));
     let rows: Vec<(i32, String, String)> = sqlx::query_as(
-        r#"SELECT external_id('media', id, 'tmdb')::int, status::text, "folderName" FROM media ORDER BY 1"#,
+        r#"SELECT e.value::int, m.status::text, m."folderName" FROM media m
+           JOIN media_external_ids e ON e."mediaId" = m.id AND e.provider = 'tmdb' ORDER BY 1"#,
     )
     .fetch_all(&c.pool)
     .await
@@ -541,7 +542,7 @@ async fn sonarr_import_writes_sidecar_subtitles(pool: PgPool) {
         .execute(&c.pool)
         .await
         .unwrap();
-    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (70, 'Parity Series A', 2021, 'series', 'continuing', 'Parity Series A', 2) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (2000)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
+    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (70, 'Parity Series A', 2021, 'series', 'continuing', 'Parity Series A', 2) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (2000)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
     sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (80, 70, 'Season 01/Parity Series A - S01E01.mkv', 1, 'x')"#)
         .execute(&c.pool).await.unwrap();
@@ -607,7 +608,7 @@ async fn seerr_import_creates_users_requests_and_refuses_a_second_run(pool: PgPo
     .execute(&c.pool)
     .await
     .unwrap();
-    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'M', 2020, 'movie', 'released', 'M', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
+    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'M', 2020, 'movie', 'released', 'M', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
     let mut events = c.st.hub.subscribe();
     setting(&c, "seerr_api_key", KEY).await;
@@ -710,7 +711,7 @@ async fn seerr_import_without_configuration_fails_through_the_event(pool: PgPool
 #[sqlx::test(migrations = false)]
 async fn radarr_extrafile_path_cannot_leave_the_media_folder(pool: PgPool) {
     let c = ctx(pool).await;
-    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 'released', 'Old', 1) RETURNING id, type) INSERT INTO external_ids (entity, "entityId", scope, provider, value) SELECT 'media', m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
+    sqlx::query(r#"WITH m AS (INSERT INTO media (id, title, year, type, status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 'released', 'Old', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (1001)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)
         .execute(&c.pool).await.unwrap();
     sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
         .execute(&c.pool).await.unwrap();

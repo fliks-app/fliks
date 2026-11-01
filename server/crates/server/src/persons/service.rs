@@ -276,8 +276,8 @@ async fn link_credits(
         let wanted: Vec<String> = ids.iter().map(i32::to_string).collect();
         let rows: Vec<(i32, String, i32)> = sqlx::query!(
             r#"SELECT m.id AS "id!", m.type AS "kind!", e.value::int AS "ext!"
-               FROM external_ids e JOIN media m ON m.id = e."entityId"
-               WHERE e.entity = 'media' AND e.provider = $3 AND e.value = ANY($1) AND m."libraryId" = ANY($2)
+               FROM media_external_ids e JOIN media m ON m.id = e."mediaId"
+               WHERE e.provider = $3 AND e.value = ANY($1) AND m."libraryId" = ANY($2)
                ORDER BY m.id ASC"#,
             &wanted,
             &libs,

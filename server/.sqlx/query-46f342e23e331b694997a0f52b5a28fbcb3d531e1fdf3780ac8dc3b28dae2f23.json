@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\", ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id\n               FROM media m\n               LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $5)::int AS tmdb,\n                 max(value) FILTER (WHERE provider = $6)::int AS tvdb,\n                 max(value) FILTER (WHERE provider = $7) AS imdb\n                 FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n               WHERE m.type = $3 AND m.\"libraryId\" = ANY($4)\n                 AND m.id IN (SELECT \"mediaId\" FROM media_external_ids WHERE kind = $3\n                              AND ((provider = $5 AND value = ANY($1)) OR (provider = $6 AND value = ANY($2))))\n               ORDER BY m.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tmdb_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "tvdb_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "Text",
+        "Int4Array",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "46f342e23e331b694997a0f52b5a28fbcb3d531e1fdf3780ac8dc3b28dae2f23"
+}

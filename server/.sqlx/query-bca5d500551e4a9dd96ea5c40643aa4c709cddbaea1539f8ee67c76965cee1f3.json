@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.type AS \"kind!\", e.value::int AS \"ext!\"\n               FROM external_ids e JOIN media m ON m.id = e.\"entityId\"\n               WHERE e.entity = 'media' AND e.provider = $3 AND e.value = ANY($1) AND m.\"libraryId\" = ANY($2)\n               ORDER BY m.id ASC",
+  "query": "SELECT m.id, m.type AS \"media_type!\", t.value::int AS tmdb_id\n           FROM media m LEFT JOIN media_external_ids t ON t.\"mediaId\" = m.id AND t.provider = $3\n           WHERE m.id = ANY($1) AND m.monitored IS DISTINCT FROM $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id!",
+        "name": "id",
         "type_info": "Int4",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "kind!",
+        "name": "media_type!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -27,15 +27,15 @@
       },
       {
         "ordinal": 2,
-        "name": "ext!",
+        "name": "tmdb_id",
         "type_info": "Int4",
         "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "TextArray",
         "Int4Array",
+        "Bool",
         "Text"
       ]
     },
@@ -45,5 +45,5 @@
       null
     ]
   },
-  "hash": "969f110ba018f876746d4e2e7503a86ed36ec90d12c6d40c946d6a7894d03ba1"
+  "hash": "bca5d500551e4a9dd96ea5c40643aa4c709cddbaea1539f8ee67c76965cee1f3"
 }

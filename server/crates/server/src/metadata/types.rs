@@ -1,6 +1,6 @@
 //! Shapes the clients share with their callers (`metadata.md` rules 6, 10, 34).
 use super::http::Upstream;
-use fliks_domain::media::external_id::ExternalProvider;
+use fliks_domain::external_id::ExternalProvider;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

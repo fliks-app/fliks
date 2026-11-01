@@ -3,6 +3,7 @@ pub mod acl;
 pub mod arr_import;
 pub mod burn_in;
 pub mod edl;
+pub mod external_id;
 pub mod js;
 pub mod language;
 pub mod livetv;

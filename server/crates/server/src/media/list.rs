@@ -171,7 +171,9 @@ fn push_scope(
         None => {}
     }
     if p.unidentified {
-        qb.push(" AND NOT EXISTS (SELECT 1 FROM external_ids x WHERE x.entity = 'media' AND x.\"entityId\" = media.id)");
+        qb.push(
+            " AND NOT EXISTS (SELECT 1 FROM media_external_ids x WHERE x.\"mediaId\" = media.id)",
+        );
     }
     match p
         .letter

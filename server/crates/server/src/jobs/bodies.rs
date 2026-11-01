@@ -92,14 +92,14 @@ impl MediaRow {
 }
 
 async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
-    let all: Vec<MediaRow> = sqlx::query_as(
+    let all: Vec<MediaRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT m.id, m.title, m."type" AS kind, m.status::text AS status, m."releaseDate" AS release_date,
                   m.year, m."metadataRefreshedAt" AS refreshed_at, m."posterUrl" AS poster, m.overview,
-                  external_id('media', m.id, 'tmdb')::int AS tmdb, external_id('media', m.id, 'tvdb')::int AS tvdb,
-                  external_id('media', m.id, 'imdb') AS imdb,
+                  ids.tmdb AS tmdb, ids.tvdb AS tvdb, ids.imdb AS imdb,
                   (m."type" = 'series' AND NOT EXISTS (SELECT 1 FROM seasons s WHERE s."mediaId" = m.id)) AS no_seasons
-           FROM media m ORDER BY m.id"#,
-    )
+           FROM media m {} ORDER BY m.id"#,
+        crate::media::external_ids::ids_join("m")
+    )))
     .fetch_all(db)
     .await?;
     let total = all.len();

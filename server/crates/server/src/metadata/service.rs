@@ -349,10 +349,18 @@ impl Row {
 
 async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
     let r = sqlx::query!(
-        r#"SELECT title, type AS "kind!", external_id('media', id, 'tmdb')::int AS tmdb,
-                  external_id('media', id, 'tvdb')::int AS tvdb, external_id('media', id, 'imdb') AS imdb,
-                  "preferredProvider" AS pref, "libraryId" AS lib FROM media WHERE id = $1"#,
-        id
+        r#"SELECT m.title, m.type AS "kind!", ids.tmdb, ids.tvdb, ids.imdb,
+                  m."preferredProvider" AS pref, m."libraryId" AS lib
+           FROM media m
+           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,
+             max(value) FILTER (WHERE provider = $3)::int AS tvdb,
+             max(value) FILTER (WHERE provider = $4) AS imdb
+           FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
+           WHERE m.id = $1"#,
+        id,
+        external_ids::TMDB,
+        external_ids::TVDB,
+        external_ids::IMDB
     )
     .fetch_optional(&st.db)
     .await?
@@ -374,13 +382,14 @@ type Source = (Provider, String);
 /// Links a cross-referenced id; one another media of the kind holds stays with that media.
 async fn set_external(st: &AppState, m: &Row, p: Provider, ext: i32) -> Result<(), sqlx::Error> {
     let mut c = st.db.acquire().await?;
-    let linked = external_ids::link(&mut c, m.id, m.kind, p.external(), &ext.to_string()).await?;
-    if !linked {
-        tracing::warn!(
+    match external_ids::link(&mut c, m.id, m.kind, p.external(), &ext.to_string()).await? {
+        external_ids::Link::Taken => tracing::warn!(
             "crossRef: {} - {} id {ext} belongs to another title",
             m.label(),
             p.name()
-        );
+        ),
+        external_ids::Link::Gone => tracing::info!("crossRef: {} was removed", m.label()),
+        external_ids::Link::Linked => {}
     }
     Ok(())
 }

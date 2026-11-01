@@ -1,4 +1,4 @@
-//! The id namespaces an entity is known by outside Fliks, as stored in `external_ids.provider`.
+//! The id namespaces an entity is known by outside Fliks, as stored in `media_external_ids.provider`.
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -19,11 +19,20 @@ impl ExternalProvider {
         }
     }
 
+    /// The provider as messages name it.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Tmdb => "TMDB",
+            Self::Tvdb => "TVDB",
+            Self::Imdb => "IMDb",
+        }
+    }
+
     pub fn parse(s: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.as_str() == s)
     }
 
-    /// Whether the provider's ids are positive integers (`external_ids` checks it).
+    /// Whether the provider's ids are positive integers (`media_external_ids` checks it).
     pub const fn is_numeric(self) -> bool {
         match self {
             Self::Tmdb | Self::Tvdb => true,
@@ -31,15 +40,21 @@ impl ExternalProvider {
         }
     }
 
+    /// Whether one id names at most one media of a kind: TMDB does, TVDB and IMDb do not (TMDB
+    /// splits a TVDB show into several, and a title can be catalogued twice).
+    pub const fn is_unique(self) -> bool {
+        match self {
+            Self::Tmdb => true,
+            Self::Tvdb | Self::Imdb => false,
+        }
+    }
+
     /// `value` as stored for this provider, or `None` when it is not an id of it.
     pub fn normalize(self, value: &str) -> Option<String> {
-        let ok = if self.is_numeric() {
-            (1..=9).contains(&value.len())
+        let ok = !self.is_numeric()
+            || ((1..=9).contains(&value.len())
                 && !value.starts_with('0')
-                && value.bytes().all(|b| b.is_ascii_digit())
-        } else {
-            !value.is_empty()
-        };
+                && value.bytes().all(|b| b.is_ascii_digit()));
         ok.then(|| value.to_owned())
     }
 }
@@ -60,6 +75,13 @@ mod tests {
             assert_eq!(P::parse(p.as_str()), Some(p));
         }
         assert_eq!(P::parse("TMDB"), None);
+        assert_eq!(P::Imdb.label(), "IMDb");
+    }
+
+    #[test]
+    fn only_tmdb_is_unique() {
+        let unique: Vec<_> = P::ALL.into_iter().filter(|p| p.is_unique()).collect();
+        assert_eq!(unique, [P::Tmdb]);
     }
 
     #[test]
@@ -69,6 +91,6 @@ mod tests {
             assert_eq!(P::Tvdb.normalize(bad), None, "{bad}");
         }
         assert_eq!(P::Imdb.normalize("tt0133093").as_deref(), Some("tt0133093"));
-        assert_eq!(P::Imdb.normalize(""), None);
+        assert_eq!(P::Imdb.normalize("").as_deref(), Some(""));
     }
 }

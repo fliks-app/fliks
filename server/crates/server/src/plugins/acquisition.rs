@@ -51,10 +51,11 @@ struct MediaRow {
     lp_audio: Option<Value>,
 }
 
-const MEDIA_SELECT: &str = r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
-    m."alternativeTitles" AS alternative_titles, m.year, m.runtime, external_id('media', m.id, 'imdb') AS imdb_id,
-    external_id('media', m.id, 'tmdb')::int AS tmdb_id, external_id('media', m.id, 'tvdb')::int AS tvdb_id,
-    m."libraryId" AS library_id, m.monitored,
+fn media_select() -> String {
+    format!(
+        r#"SELECT m.id, m.type AS kind, m.title, m."originalTitle" AS original_title,
+    m."alternativeTitles" AS alternative_titles, m.year, m.runtime, ids.imdb AS imdb_id,
+    ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, m."libraryId" AS library_id, m.monitored,
     m."minimumAvailability" AS minimum_availability, m."inCinemas" AS in_cinemas,
     m."digitalRelease" AS digital_release, m."physicalRelease" AS physical_release,
     m."releaseDate" AS release_date, m.status::text AS status,
@@ -62,7 +63,10 @@ const MEDIA_SELECT: &str = r#"SELECT m.id, m.type AS kind, m.title, m."originalT
     qp."resolutionUpgradeOnly" AS qp_res_only, qp."minCustomFormatScore" AS qp_min_cf,
     lp."audioLanguages" AS lp_audio
   FROM media m LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
-  LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId""#;
+  LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId" {}"#,
+        crate::media::external_ids::ids_join("m")
+    )
+}
 
 impl MediaRow {
     fn alt(&self) -> Vec<String> {
@@ -100,7 +104,8 @@ impl MediaRow {
 
 async fn media(db: &PgPool, id: i32) -> sqlx::Result<Option<MediaRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{MEDIA_SELECT} WHERE m.id = $1"
+        "{} WHERE m.id = $1",
+        media_select()
     )))
     .bind(id)
     .fetch_optional(db)

@@ -936,7 +936,11 @@ async fn parity() {
     let mut seeds: Vec<String> = vec!["base".into()];
     let selected: Vec<_> = files
         .iter()
-        .filter(|f| f.to_string_lossy().contains(&filter))
+        .filter(|f| {
+            let p = f.to_string_lossy();
+            filter.split_whitespace().next().is_none()
+                || filter.split_whitespace().any(|s| p.contains(s))
+        })
         .collect();
     for f in &selected {
         let sc: Value = serde_json::from_str(&read_rooted(f).unwrap()).unwrap_or_default();

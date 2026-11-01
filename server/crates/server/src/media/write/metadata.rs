@@ -14,7 +14,7 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
-use fliks_domain::{acl::Action, media::external_id::ExternalProvider};
+use fliks_domain::acl::Action;
 use serde_json::{Value, json};
 use sqlx::PgConnection;
 use std::collections::HashSet;
@@ -300,10 +300,13 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         tvdb: d.tvdb_id,
         imdb: d.imdb_id.clone(),
     };
-    let held = ids
+    let written = ids
         .fill(&mut *st.db.acquire().await?, id, media.media_type)
         .await?;
-    for p in held {
+    if written.gone {
+        return Err(crate::libraries::media_not_found(id));
+    }
+    for p in written.taken {
         tracing::warn!(
             "refresh of \"{}\" (#{id}): the {p} id belongs to another title",
             media.title
@@ -434,15 +437,6 @@ pub async fn identify(
     Ok((StatusCode::CREATED, Json(body)))
 }
 
-/// The provider as the conflict messages name it.
-fn id_label(p: ExternalProvider) -> &'static str {
-    match p {
-        ExternalProvider::Tmdb => "TMDB",
-        ExternalProvider::Tvdb => "TVDB",
-        ExternalProvider::Imdb => "IMDb",
-    }
-}
-
 async fn apply_identity(
     st: &AppState,
     media: &MediaRow,
@@ -456,18 +450,12 @@ async fn apply_identity(
             "Provide at least one external id to identify this media against",
         ));
     }
-    let ids = Ids {
-        tmdb,
-        tvdb,
-        imdb: imdb.filter(|i| !i.is_empty()),
-    };
+    let ids = Ids { tmdb, tvdb, imdb };
     let mut tx = st.db.begin().await?;
-    for (p, v) in [
-        (ExternalProvider::Tmdb, ids.tmdb.map(|t| t.to_string())),
-        (ExternalProvider::Tvdb, ids.tvdb.map(|t| t.to_string())),
-        (ExternalProvider::Imdb, ids.imdb.clone()),
-    ] {
-        let Some(v) = v else { continue };
+    for (p, v) in ids.entries() {
+        let Some(v) = v.filter(|_| p.is_unique()) else {
+            continue;
+        };
         let other = external_ids::find(&mut *tx, media.media_type, p, &v)
             .await?
             .filter(|o| *o != media.id);
@@ -477,18 +465,18 @@ async fn apply_identity(
                 .await?;
             return Err(AppError::conflict(format!(
                 "\"{title}\" (#{o}) already uses {} id {v} in this library",
-                id_label(p)
+                p.label()
             )));
         }
     }
-    if let Some(p) = ids
-        .replace(&mut tx, media.id, media.media_type)
-        .await?
-        .first()
-    {
+    let written = ids.replace(&mut tx, media.id, media.media_type).await?;
+    if written.gone {
+        return Err(crate::libraries::media_not_found(media.id));
+    }
+    if let Some(p) = written.taken.first() {
         return Err(AppError::conflict(format!(
             "Another title already uses this {} id in this library",
-            id_label(*p)
+            p.label()
         )));
     }
     sqlx::query!(

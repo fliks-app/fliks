@@ -261,18 +261,23 @@ async fn put_sets_clears_and_scopes_the_external_ids(pool: PgPool) {
         put(3, json!({"tmdbId": 603, "type": "series"})).await.0,
         200
     );
-    // A type change moves the ids to the new kind: it clashes with media 3's 603.
+    // An IMDb id is not unique.
+    assert_eq!(put(2, json!({"imdbId": "tt0133093"})).await.0, 200);
+    // A type change moves the ids with the media: it clashes with media 3's 603.
     assert_eq!(put(1, json!({"type": "series"})).await.0, 409);
-    let (s, m) = put(1, json!({"tmdbId": null, "imdbId": ""})).await;
+    let (s, m) = put(1, json!({"tmdbId": null, "imdbId": null})).await;
     assert_eq!(
         (s, &m["tmdbId"], &m["imdbId"]),
         (200, &Value::Null, &Value::Null)
     );
-    let left: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM external_ids WHERE "entityId" = 1"#)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let left: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(left, 0);
+    let (s, m) = put(1, json!({"imdbId": ""})).await;
+    assert_eq!((s, &m["imdbId"]), (200, &json!("")));
     assert_eq!(put(1, json!({"type": "series"})).await.0, 200);
 }
 
@@ -283,7 +288,7 @@ async fn removing_a_media_removes_its_external_ids(pool: PgPool) {
         .await;
     let (s, _) = c.send("DELETE", &c.admin, "/api/media/4", None).await;
     assert_eq!(s, 200);
-    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM external_ids")
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM media_external_ids")
         .fetch_one(&pool)
         .await
         .unwrap();
