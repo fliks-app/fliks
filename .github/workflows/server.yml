@@ -1,4 +1,4 @@
-# Rust server and plugin SDK, in parallel jobs: lint (fmt, clippy, sqlx offline cache), test (nextest with the plugin
+# Rust server and plugin SDK, in parallel jobs: lint (em dash, fmt, clippy, sqlx offline cache, parity seeds), test (nextest with the plugin
 # wasm fixture, openapi.json drift), plugin SDK tests, and Windows clippy. Parity runs locally.
 name: Server
 
@@ -59,6 +59,16 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Added lines only: older files carry dashes. A data fixture that tests a dash spells it —.
+      - name: no literal em dash in added server and client lines
+        if: github.event_name == 'pull_request'
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git diff -U0 --no-color FETCH_HEAD HEAD -- server client ':!*.md' |
+            awk -v d="$(printf '\342\200\224')" '/^\+\+\+ /{f=$2; next} /^\+/ && index($0,d){print f": "$0; bad=1} END{exit bad}'
       - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
@@ -85,6 +95,28 @@ jobs:
           else
             echo "::notice::no .sqlx directory, sqlx prepare check skipped"
           fi
+      # build.sh reads two probe fixtures of the pinned engine release; with PGHOST set it uses the runner's psql, no dump.
+      # Each group seed is then applied on a copy of the template, as the parity runner does.
+      - name: parity seeds build on the migrated schema
+        env:
+          PGHOST: localhost
+          PGUSER: fliks
+          PGPASSWORD: fliks
+          PGOPTIONS: -c client_min_messages=warning
+          FLIKS_ENGINE_FIXTURES: ${{ runner.temp }}/probe
+        run: |
+          ver=$(sed -n 's/^version=//p' ../engine.lock)
+          mkdir -p "$FLIKS_ENGINE_FIXTURES"
+          for n in h264-aac-mkv h264-aac-mp4; do
+            curl -fsSL -o "$FLIKS_ENGINE_FIXTURES/$n.json" "https://raw.githubusercontent.com/fliks-app/engine/v$ver/fixtures/probe/$n.json"
+          done
+          parity/seed/build.sh
+          for f in parity/seed/*.sql; do
+            [ "$f" = parity/seed/base.sql ] && continue
+            db=fliks_parity_$(basename "$f" .sql | tr - _)
+            psql -v ON_ERROR_STOP=1 -q -d postgres -c "CREATE DATABASE $db TEMPLATE fliks_parity_tpl"
+            psql -v ON_ERROR_STOP=1 -q -d "$db" -f "$f" >/dev/null
+          done
 
   test:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}

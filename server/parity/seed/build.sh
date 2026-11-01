@@ -6,8 +6,12 @@ mig="$here/../../migrations"
 probe="${FLIKS_ENGINE_FIXTURES:-$HOME/Documents/clement/code/fliks-engine/fixtures/probe}"
 db=${PARITY_TPL:-fliks_parity_tpl}
 
-# psql inside the container: credentials never leave it
-sql() { docker exec -i "${PARITY_PG:-fliks-postgres-1}" sh -c 'PGOPTIONS="-c client_min_messages=warning" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
+# psql inside the container (credentials never leave it), or the local psql when PGHOST is set (CI: PG* env, no dump)
+if [ -n "${PGHOST:-}" ]; then
+  sql() { PGOPTIONS="-c client_min_messages=warning" psql -v ON_ERROR_STOP=1 -q "$@"; }
+else
+  sql() { docker exec -i "${PARITY_PG:-fliks-postgres-1}" sh -c 'PGOPTIONS="-c client_min_messages=warning" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
+fi
 
 sql -d postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)" -c "CREATE DATABASE $db"
 for f in "$mig"/*.sql; do sql -d $db -1 <"$f"; done # one transaction per migration, as sqlx applies them
@@ -113,7 +117,9 @@ DECLARE r record;
 BEGIN
   FOR r IN SELECT c.table_name t FROM information_schema.columns c JOIN information_schema.tables x USING (table_schema, table_name)
            WHERE c.table_schema = 'public' AND c.column_name = 'updatedAt' AND x.table_type = 'BASE TABLE' LOOP
-    EXECUTE format('UPDATE %I SET "createdAt" = %L, "updatedAt" = %L', r.t, '2026-01-01', '2026-01-01');
+    EXECUTE format('UPDATE %I SET %s"updatedAt" = %L', r.t,
+      CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = r.t AND column_name = 'createdAt')
+        THEN '"createdAt" = ''2026-01-01'', ' ELSE '' END, '2026-01-01');
   END LOOP;
   FOR r IN SELECT table_name t FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'id' AND column_default LIKE 'nextval%' LOOP
     EXECUTE format('SELECT setval(pg_get_serial_sequence(%L, ''id''), COALESCE((SELECT max(id) FROM %I), 1), (SELECT count(*) > 0 FROM %I))', r.t, r.t, r.t);
@@ -122,6 +128,7 @@ END $$;
 SQL
 } | sql -d $db
 
+[ -n "${PGHOST:-}" ] && exit 0
 docker exec "${PARITY_PG:-fliks-postgres-1}" sh -c 'pg_dump -U "$POSTGRES_USER" --no-owner --no-privileges '"$db" |
   grep -v '^\\\(un\)\?restrict ' >"$here/base.sql"
 echo "wrote $here/base.sql"

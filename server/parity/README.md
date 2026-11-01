@@ -7,7 +7,8 @@ Needs docker (a PostgreSQL container, `fliks-postgres-1` unless `PARITY_PG` name
 
 ```bash
 CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target/<worktree> server/parity/run-all.sh [filter]
-# PARITY_MODES="up0 down1" limits the modes; PARITY_ENGINE_VERSION=<x.y.z> tests another engine release than engine.lock
+# PARITY_MODES limits the modes; a PR touching server SQL runs PARITY_MODES="up0 down1" over its touched groups in one call
+# (provider scenarios are `engine: down`: `up0` alone leaves their `expect`s stale); PARITY_ENGINE_VERSION=<x.y.z> tests another engine release than engine.lock
 ```
 
 It builds Rust (parity feature) once, downloads the engine pinned in `engine.lock`, creates its own
@@ -23,7 +24,7 @@ The sections below describe the pieces `run-all.sh` scripts, for debugging a sin
 
 ```bash
 ./media-gen.sh      # tiny files under /tmp/fliks-parity (idempotent)
-./seed/build.sh     # rebuilds template DB fliks_parity_tpl + seed/base.sql (drop the DBs freely)
+./seed/build.sh     # rebuilds template DB fliks_parity_tpl + seed/base.sql (drop the DBs freely); with PGHOST set it uses the local psql and writes no dump (CI)
 # template from the committed dump only (no fixtures needed):
 docker exec -i fliks-postgres-1 sh -c 'psql -U "$POSTGRES_USER" -qd postgres -c "DROP DATABASE IF EXISTS fliks_parity_tpl WITH (FORCE)" -c "CREATE DATABASE fliks_parity_tpl" && psql -U "$POSTGRES_USER" -qd fliks_parity_tpl' < seed/base.sql
 # then bring it to the current schema (base.sql is only rebuilt by seed/build.sh):

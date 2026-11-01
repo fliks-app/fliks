@@ -23,14 +23,38 @@ From `server/`:
 
 ```bash
 export CARGO_BUILD_JOBS=4
-export CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target
+export CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target   # main checkout only; worktrees: see below
 cargo test -p fliks_domain -- --test-threads=4 2>&1 | tail -30
 ../scripts/with-test-postgres.sh cargo test -p fliks-server -- --test-threads=4 2>&1 | tail -30
 cargo clippy --all-targets -- -D warnings 2>&1 | tail -30
 parity/run-all.sh   # full parity suite (parity/README.md)
 ```
 
-DB tests run against a throwaway PostgreSQL (`scripts/with-test-postgres.sh`), so concurrent runs never share `#[sqlx::test]` databases. One Rust build at a time across agents (shared `server/target`). Quiet: pipe test/clippy output through `tail -30`.
+DB tests run against a throwaway PostgreSQL (`scripts/with-test-postgres.sh`), so concurrent runs never share `#[sqlx::test]` databases. One Rust build at a time across agents (`fliks-heavy`). Quiet: pipe test/clippy output through `tail -30`.
+
+`cargo sqlx prepare --workspace -- --all-targets` regenerates `.sqlx` (run it on a database migrated to HEAD after any `query!` or migration change). Never edit `.sqlx` by hand.
+
+### Worktrees
+
+An agent in a worktree builds into its own target inside the worktree, never the shared `server/target` (it left stale `fliks_domain` rlibs across worktrees):
+
+```bash
+export CARGO_TARGET_DIR=$PWD/target RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0   # PWD = the worktree's server/
+```
+
+`sccache` is `~/.cargo/bin/sccache`. Not in CI, not in a committed `.cargo/config.toml`. The main checkout keeps the shared `server/target` above.
+
+## Before you open a PR
+
+- A migration: update `parity/seed/build.sh`, and the per-group `parity/seed/<group>.sql` when it adds a required column or table; CI rebuilds the seeds, so a break fails there.
+- Parity for any PR touching server SQL: `PARITY_MODES="up0 down1" parity/run-all.sh <touched group> <another>` as one batched call, not under `fliks-heavy` (run-all takes its own slot). Provider scenarios are `engine: down`: `up0` alone leaves their `expect`s stale.
+- A backfill (`UPDATE` in a migration) must not bump `updatedAt`: `ALTER TABLE t DISABLE TRIGGER set_updated_at` around it, then re-enable.
+- Every FK gets a non-partial index led by its columns (`tests/it/migrations.rs` asserts it); a partial index is useless to the cascade.
+- Wire bodies (`playlists/items.rs`): name the columns, never `to_jsonb(row)` of a whole table, so moving a column cannot move the wire.
+- Concurrent writers to the same rows: take an advisory lock or a row lock, and test the race.
+- `.sqlx` regenerated with `cargo sqlx prepare --workspace`, `openapi.json` and `BLESS=1` vectors current.
+- No real media titles in fixtures or tests (placeholders), no literal em dash in source (use `\u2014` in data fixtures; CI greps added lines).
+- fmt, clippy and the touched tests green through `fliks-heavy` before pushing.
 
 ## Layout
 
