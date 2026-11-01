@@ -2,7 +2,7 @@
 //! transaction; images and credits follow detached.
 use super::{body::Body, entity_or_404, metadata, resolve_profile};
 use crate::media::{
-    details::set_release_dates,
+    details::{set_release_dates, set_tmdb_collection},
     external_ids::{self, Ids},
     items,
 };
@@ -221,7 +221,7 @@ pub async fn import_title(
     });
     let (st2, details) = (st.clone(), d.clone());
     tokio::spawn(async move {
-        if let Err(e) = service::persist_credits(&st2, id, &details).await {
+        if let Err(e) = service::persist_credits(&st2, id, imp.media_type, &details).await {
             tracing::warn!("cast/metadata persist of media #{id} failed: {e}");
         }
     });
@@ -304,12 +304,11 @@ async fn insert_media(
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type,
              overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime,
-             "tmdbCollectionId", "tmdbCollectionName",
              monitored, "metadataRefreshedAt", "qualityProfileId", "languageProfileId", "libraryId",
              "folderName", "addedById")
            VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,
-             $10, $11, $12, $13, $14, $15,
-             true, now(), $16, $17, $18, NULLIF($19, ''), $20)
+             $10, $11, $12, $13,
+             true, now(), $14, $15, $16, NULLIF($17, ''), $18)
            RETURNING id"#,
         d.title,
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
@@ -324,8 +323,6 @@ async fn insert_media(
         d.rating,
         json!(d.genres),
         d.runtime,
-        d.tmdb_collection_id,
-        d.tmdb_collection_name,
         imp.quality_profile_id,
         imp.language_profile_id,
         imp.library_id,
@@ -346,6 +343,7 @@ async fn insert_media(
         false,
     )
     .await?;
+    set_tmdb_collection(tx, id, d.tmdb_collection()).await?;
     items::create_shell(tx, id, imp.media_type).await?;
     let ids = Ids {
         tmdb: d.tmdb_id,

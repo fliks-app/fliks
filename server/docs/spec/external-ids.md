@@ -36,7 +36,7 @@ The identity a media has in an outside system: a TMDB id, an IMDb id, later an O
 
 ## Not in scope
 
-`media."tmdbCollectionId"` (a collection's id, not the title's) keeps its column. Where it looks a media up by `tmdbId` it goes through rule 6's lookup.
+A collection's TMDB id (not the title's) lives in `collection_external_ids` (`media-details.md`). Where it looks a media up by `tmdbId` it goes through rule 6's lookup.
 
 ## Persons
 

@@ -194,13 +194,37 @@ async fn each_criterion_filters(pool: PgPool) {
     }
     exec(
         &pool,
-        &format!(r#"INSERT INTO media_metadata ("mediaId", "voteCount") VALUES ({a}, 500)"#),
+        &format!(r#"INSERT INTO movie_details ("mediaId", "voteCount") VALUES ({a}, 500)"#),
     )
     .await;
     assert_eq!(
         ids(&pool, json!({"ratingBelow": 5, "minVotes": 100})).await,
         vec![a]
     );
+    exec(
+        &pool,
+        &format!(r#"INSERT INTO series_details ("mediaId", "voteCount") VALUES ({b}, 50)"#),
+    )
+    .await;
+    exec(
+        &pool,
+        &format!("UPDATE media SET rating = 1 WHERE id = {b}"),
+    )
+    .await;
+    assert_eq!(
+        ids(&pool, json!({"ratingBelow": 5, "minVotes": 100})).await,
+        vec![a],
+        "a series' votes come from its own table"
+    );
+    assert_eq!(
+        ids(&pool, json!({"ratingBelow": 5, "minVotes": 10})).await,
+        vec![a, b]
+    );
+    exec(
+        &pool,
+        &format!(r#"UPDATE media SET rating = 9 WHERE id = {b}"#),
+    )
+    .await;
     exec(
         &pool,
         &format!(r#"INSERT INTO cleanup_exclusions ("mediaId") VALUES ({a})"#),

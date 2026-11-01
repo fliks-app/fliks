@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, meta.keywords AS \"keywords?\",\n       EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m LEFT JOIN media_metadata meta ON meta.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = $1 AND m.type = 'movie' AND m.id != $2\n  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))\n       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))\n       OR m.id = ANY($5))\n  AND ($6::int IS NULL OR m.\"tmdbCollectionId\" IS NULL OR m.\"tmdbCollectionId\" != $6)\nORDER BY m.id",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, meta.keywords AS \"keywords?\",\n       EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m LEFT JOIN movie_details meta ON meta.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = $1 AND m.type = 'movie' AND m.id != $2\n  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))\n       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))\n       OR m.id = ANY($5))\n  AND ($6::int IS NULL OR NOT EXISTS (\n        SELECT 1 FROM collection_entries e JOIN collection_external_ids x\n          ON x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb'\n        WHERE e.\"mediaId\" = m.id AND x.value = $6::int::text))\nORDER BY m.id",
   "describe": {
     "columns": [
       {
@@ -86,7 +86,7 @@
         "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "media_metadata",
+            "table": "movie_details",
             "name": "keywords"
           }
         }
@@ -120,5 +120,5 @@
       null
     ]
   },
-  "hash": "b295993269d7c67e996dd9df07b05c0d0ce4adb251bc6f4353573d3f673ffef5"
+  "hash": "8cba45efd1fcfcaaed4c6cb4fcdac79fa9c118d69d3176b41be940df26be8b26"
 }

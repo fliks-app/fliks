@@ -1,6 +1,9 @@
 //! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
 use super::{already_running, body::Body, entity_or_404, gate, subject};
-use crate::media::{details::set_release_dates, items};
+use crate::media::{
+    details::{set_release_dates, set_tmdb_collection},
+    items,
+};
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{
@@ -284,8 +287,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
              year = COALESCE($5, year), overview = COALESCE($6, overview),
              status = $7::text::media_status_enum, "posterUrl" = COALESCE($8, "posterUrl"),
              "fanartUrl" = COALESCE($9, "fanartUrl"), "logoUrl" = COALESCE($10, "logoUrl"),
-             rating = COALESCE($11, rating), genres = $12, runtime = COALESCE($13, runtime),
-             "tmdbCollectionId" = $14, "tmdbCollectionName" = $15
+             rating = COALESCE($11, rating), genres = $12, runtime = COALESCE($13, runtime)
            WHERE id = $1"#,
         id,
         d.title,
@@ -299,9 +301,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         d.logo_url,
         d.rating,
         json!(d.genres),
-        d.runtime,
-        d.tmdb_collection_id,
-        d.tmdb_collection_name
+        d.runtime
     )
     .execute(&mut *tx)
     .await?;
@@ -317,6 +317,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         true,
     )
     .await?;
+    set_tmdb_collection(&mut tx, id, d.tmdb_collection()).await?;
     tx.commit().await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
@@ -336,7 +337,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
         );
     }
     download_media_images(st, id, d).await;
-    service::persist_credits(st, id, d).await?;
+    service::persist_credits(st, id, media.media_type, d).await?;
     if media.has_seasons() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {

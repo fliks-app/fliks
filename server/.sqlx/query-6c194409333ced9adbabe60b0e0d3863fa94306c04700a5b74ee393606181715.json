@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT x.value FROM collection_entries e\n           JOIN collection_external_ids x ON x.\"collectionId\" = e.\"collectionId\" AND x.provider = 'tmdb'\n           WHERE e.\"mediaId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "collection_external_ids",
+            "name": "value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6c194409333ced9adbabe60b0e0d3863fa94306c04700a5b74ee393606181715"
+}

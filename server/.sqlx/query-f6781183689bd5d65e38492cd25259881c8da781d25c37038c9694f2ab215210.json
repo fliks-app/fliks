@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO series_details (\"mediaId\", tagline, popularity, \"voteCount\",\n                     \"originalLanguage\", \"productionCountries\", \"productionCompanies\", videos, keywords)\n                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n                   ON CONFLICT (\"mediaId\") DO UPDATE SET\n                     tagline = COALESCE(EXCLUDED.tagline, series_details.tagline),\n                     popularity = COALESCE(EXCLUDED.popularity, series_details.popularity),\n                     \"voteCount\" = COALESCE(EXCLUDED.\"voteCount\", series_details.\"voteCount\"),\n                     \"originalLanguage\" = COALESCE(EXCLUDED.\"originalLanguage\", series_details.\"originalLanguage\"),\n                     \"productionCountries\" = CASE WHEN $10 THEN EXCLUDED.\"productionCountries\" ELSE series_details.\"productionCountries\" END,\n                     \"productionCompanies\" = CASE WHEN $11 THEN EXCLUDED.\"productionCompanies\" ELSE series_details.\"productionCompanies\" END,\n                     videos = CASE WHEN $12 THEN EXCLUDED.videos ELSE series_details.videos END,\n                     keywords = CASE WHEN $13 THEN EXCLUDED.keywords ELSE series_details.keywords END",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Float8",
+        "Int4",
+        "Varchar",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f6781183689bd5d65e38492cd25259881c8da781d25c37038c9694f2ab215210"
+}

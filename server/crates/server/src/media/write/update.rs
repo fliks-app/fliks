@@ -10,7 +10,7 @@ use crate::{
     ingest::{MediaRow, load_media},
     libraries::{accessible_library_ids, assert_media_accessible},
     media::{
-        details::set_release_dates,
+        details::{drop_details, set_release_dates},
         external_ids::{self, Link},
         items,
     },
@@ -455,6 +455,9 @@ pub async fn update(
         crate::party::end_playing_items(&st, &movie_items).await?;
     }
     let mut tx = st.db.begin().await?;
+    if kind != media.media_type {
+        drop_details(&mut tx, id).await?;
+    }
     if !cols.is_empty() {
         let mut q = QueryBuilder::new("UPDATE media SET ");
         for (i, (k, c)) in cols.iter().enumerate() {

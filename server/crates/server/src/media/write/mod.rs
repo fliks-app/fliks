@@ -84,17 +84,9 @@ pub async fn entity(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
     let Some(mut v) = hydrate::items(db, &[id], see_paths).await?.pop() else {
         return Ok(None);
     };
-    let meta = sqlx::query_scalar!(
-        r#"SELECT jsonb_build_object('id', mm.id, 'createdAt', iso_ms(mm."createdAt"), 'updatedAt', iso_ms(mm."updatedAt"),
-             'budget', mm.budget::text, 'revenue', mm.revenue::text, 'tagline', mm.tagline, 'popularity', mm.popularity,
-             'voteCount', mm."voteCount", 'originalLanguage', mm."originalLanguage",
-             'productionCountries', mm."productionCountries", 'productionCompanies', mm."productionCompanies",
-             'videos', mm.videos, 'keywords', mm.keywords) AS "m!: Value"
-           FROM media_metadata mm WHERE mm."mediaId" = $1"#,
-        id
-    )
-    .fetch_optional(db)
-    .await?;
+    let meta = sqlx::query_scalar!(r#"SELECT media_details_json($1) AS "m: Value""#, id)
+        .fetch_one(db)
+        .await?;
     if let Some(o) = v.as_object_mut() {
         for k in ["files", "sizeOnDisk", "episodeStats"] {
             o.remove(k);

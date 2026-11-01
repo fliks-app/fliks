@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT media.id AS \"id!\", l.path AS lib_path, media.\"folderName\" AS folder_name,\n  (jsonb_build_object(\n    'id', media.id, 'createdAt', iso_ms(media.\"createdAt\"), 'updatedAt', iso_ms(media.\"updatedAt\"),\n    'title', media.title, 'originalTitle', media.\"originalTitle\", 'alternativeTitles', media.\"alternativeTitles\",\n    'year', media.year, 'type', media.type, 'tmdbId', ids.tmdb,\n    'imdbId', ids.imdb, 'tvdbId', ids.tvdb,\n    'overview', media.overview, 'status', media.status::text,\n    'monitored', media.monitored, 'preferredProvider', media.\"preferredProvider\", 'folderName', media.\"folderName\",\n    'posterUrl', media.\"posterUrl\", 'fanartUrl', media.\"fanartUrl\", 'logoUrl', media.\"logoUrl\")\n  || jsonb_build_object(\n    'additionalFanartUrls', to_jsonb(media.\"additionalFanartUrls\"),\n    'metadataRefreshedAt', iso_ms(media.\"metadataRefreshedAt\"), 'rating', media.rating, 'genres', media.genres,\n    'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,\n    'runtime', media.runtime, 'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,\n    'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date,\n    'minimumAvailability', media.\"minimumAvailability\")\n  || jsonb_build_object(\n    'libraryId', media.\"libraryId\", 'qualityProfileId', media.\"qualityProfileId\",\n    'languageProfileId', media.\"languageProfileId\", 'addedById', media.\"addedById\")\n  || jsonb_build_object(\n    'library', CASE WHEN l.id IS NULL THEN 'null'::jsonb ELSE\n      jsonb_build_object('id', l.id, 'createdAt', iso_ms(l.\"createdAt\"), 'updatedAt', iso_ms(l.\"updatedAt\"),\n        'name', l.name, 'icon', l.icon, 'color', l.color, 'mediaTypes', l.\"mediaTypes\",\n        'preferredProvider', l.\"preferredProvider\", 'path', l.path, 'label', l.label,\n        'metadataLanguage', l.\"metadataLanguage\", 'metadataRegion', l.\"metadataRegion\",\n        'defaultQualityProfileId', l.\"defaultQualityProfileId\", 'defaultLanguageProfileId', l.\"defaultLanguageProfileId\") END,\n    'qualityProfile', CASE WHEN qp.id IS NULL THEN 'null'::jsonb ELSE\n      jsonb_build_object('id', qp.id, 'createdAt', iso_ms(qp.\"createdAt\"), 'updatedAt', iso_ms(qp.\"updatedAt\"),\n        'name', qp.name, 'cutoff', qp.cutoff, 'items', qp.items, 'upgradeAllowed', qp.\"upgradeAllowed\",\n        'resolutionUpgradeOnly', qp.\"resolutionUpgradeOnly\", 'minCustomFormatScore', qp.\"minCustomFormatScore\") END,\n    'languageProfile', CASE WHEN lp.id IS NULL THEN 'null'::jsonb ELSE\n      jsonb_build_object('id', lp.id, 'createdAt', iso_ms(lp.\"createdAt\"), 'updatedAt', iso_ms(lp.\"updatedAt\"),\n        'name', lp.name, 'audioLanguages', lp.\"audioLanguages\", 'subtitleLanguages', lp.\"subtitleLanguages\") END,\n    'files', COALESCE((SELECT jsonb_agg(\n        jsonb_build_object('id', f.id, 'createdAt', iso_ms(f.\"createdAt\"), 'updatedAt', iso_ms(f.\"updatedAt\"),\n          'relativePath', f.\"relativePath\", 'size', f.size, 'quality', f.quality, 'language', f.language,\n          'streamInfo', f.\"streamInfo\", 'osdbHash', f.\"osdbHash\", 'osdbBytesize', f.\"osdbBytesize\",\n          'mediaId', f.\"mediaId\",\n          'episodeId', (SELECT fi.\"episodeId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = f.id)) ORDER BY f.id)\n      FROM media_files f WHERE f.\"mediaId\" = media.id\n        AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g.\"mediaId\" = media.id))), '[]'::jsonb),\n    'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f.\"mediaId\" = media.id), 0))\n  || CASE WHEN $2 THEN jsonb_build_object('fileCount',\n       (SELECT COUNT(*) FROM media_files f WHERE f.\"mediaId\" = media.id)) ELSE '{}'::jsonb END\n  || CASE WHEN media.type = 'series' AND st.total > 0 THEN\n       jsonb_build_object('episodeStats', jsonb_build_object('totalEpisodes', st.total, 'downloadedEpisodes', st.downloaded))\n     ELSE '{}'::jsonb END) AS \"json!: Value\"\nFROM media\nLEFT JOIN libraries l ON l.id = media.\"libraryId\"\nLEFT JOIN quality_profiles qp ON qp.id = media.\"qualityProfileId\"\nLEFT JOIN language_profiles lp ON lp.id = media.\"languageProfileId\"\nLEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name\n  FROM collection_entries e JOIN collections c ON c.id = e.\"collectionId\"\n  JOIN collection_external_ids x ON x.\"collectionId\" = c.id AND x.provider = 'tmdb'\n  WHERE e.\"mediaId\" = media.id ORDER BY c.id LIMIT 1) coll ON true\nLEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $4)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $5) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = media.id) ids ON true\nLEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_date,\n             max(date) FILTER (WHERE kind = 'digital') AS digital_date,\n             max(date) FILTER (WHERE kind = 'physical') AS physical_date,\n             max(date) FILTER (WHERE kind = 'release') AS release_date\n           FROM media_release_dates WHERE \"mediaId\" = media.id) dates ON true\nLEFT JOIN LATERAL (\n  SELECT COUNT(e.id) AS total,\n         COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = e.id)) AS downloaded\n  FROM item_groups s JOIN items e ON e.\"groupId\" = s.id\n  WHERE s.\"mediaId\" = media.id AND s.\"number\" > 0) st ON media.type = 'series'\nWHERE media.id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "lib_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "folder_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "folderName"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Bool",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "1af29969accf9c383877a0cacc4df0364e6d9d013adede4959b723d276e0d860"
+}

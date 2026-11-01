@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.type AS \"kind!\", m.\"libraryId\" AS library_id, m.genres, m.year, m.\"tmdbCollectionId\" AS collection_id,\n                  mm.keywords AS \"keywords?\"\n           FROM media m LEFT JOIN media_metadata mm ON mm.\"mediaId\" = m.id WHERE m.id = $1",
+  "query": "SELECT m.type AS \"kind!\", m.\"libraryId\" AS library_id, m.genres, m.year, coll.tmdb_id AS \"collection_id?\",\n                  mm.keywords AS \"keywords?\"\n           FROM media m LEFT JOIN movie_details mm ON mm.\"mediaId\" = m.id\n           LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name\n             FROM collection_entries e JOIN collections c ON c.id = e.\"collectionId\"\n             JOIN collection_external_ids x ON x.\"collectionId\" = c.id AND x.provider = 'tmdb'\n             WHERE e.\"mediaId\" = m.id ORDER BY c.id LIMIT 1) coll ON true WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -49,14 +49,9 @@
       },
       {
         "ordinal": 4,
-        "name": "collection_id",
+        "name": "collection_id?",
         "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "tmdbCollectionId"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
@@ -64,7 +59,7 @@
         "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "media_metadata",
+            "table": "movie_details",
             "name": "keywords"
           }
         }
@@ -84,5 +79,5 @@
       true
     ]
   },
-  "hash": "507305e5c144241b938f3579cefd0a0363885a5e08621539ae7bcbf7708369de"
+  "hash": "587f5595b4e80eb4159d611058dd04554ffa0ce34874076de7819dbef3ca39c6"
 }

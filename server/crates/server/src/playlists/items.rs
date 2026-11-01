@@ -152,12 +152,15 @@ pub async fn items(
         r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
                   (to_jsonb(m) - 'searchVector') || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
+                    'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
                     'digitalRelease', dates.digital_date, 'physicalRelease', dates.physical_date) AS "media!: Jsonb<Value>",
                   to_jsonb(l) AS "library!: Jsonb<Value>",
                   to_jsonb(q) AS "quality: Jsonb<Value>",
                   to_jsonb(lp) AS "language: Jsonb<Value>",
-                  to_jsonb(md) - 'mediaId' AS "metadata: Jsonb<Value>",
+                  COALESCE(to_jsonb(md) - 'mediaId' - 'kind',
+                    (to_jsonb(sd) - 'mediaId' - 'kind') || jsonb_build_object('budget', NULL, 'revenue', NULL))
+                    AS "metadata: Jsonb<Value>",
                   CASE WHEN e."groupId" IS NOT NULL THEN jsonb_build_object(
                     'id', e.id, 'createdAt', e."createdAt", 'updatedAt', e."updatedAt",
                     'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
@@ -186,7 +189,12 @@ pub async fn items(
                       FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
            LEFT JOIN quality_profiles q ON q.id = m."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"
-           LEFT JOIN media_metadata md ON md."mediaId" = m.id
+           LEFT JOIN movie_details md ON md."mediaId" = m.id
+           LEFT JOIN series_details sd ON sd."mediaId" = m.id
+           LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '') AS name
+             FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
+             JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
+             WHERE e."mediaId" = m.id ORDER BY c.id LIMIT 1) coll ON true
            LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN playback_states ps ON ps."userId" = $3 AND ps."itemId" = pi."itemId"
            WHERE pi."playlistId" = $1

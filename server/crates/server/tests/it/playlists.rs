@@ -231,6 +231,43 @@ async fn add_expands_series_and_seasons_and_skips_present(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn items_carry_the_details_of_their_kind_and_the_collection(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(
+        r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2);
+           INSERT INTO playlist_items ("playlistId", "itemId", position, "addedById") VALUES (1, 4, 0, 2), (1, 1, 1, 2);
+           INSERT INTO movie_details ("mediaId", budget, tagline) VALUES (1, 7, 'm');
+           INSERT INTO series_details ("mediaId", tagline) VALUES (2, 's');
+           WITH c AS (INSERT INTO collections (name) VALUES ('Saga') RETURNING id),
+                x AS (INSERT INTO collection_external_ids ("collectionId", provider, value) SELECT id, 'tmdb', '77' FROM c)
+           INSERT INTO collection_entries ("collectionId", "mediaId") SELECT id, 1 FROM c"#,
+    )
+    .await;
+    let (s, b) = c
+        .call(1, "GET", "/api/playlists/1/items", Value::Null)
+        .await;
+    assert_eq!(s, 200);
+    let (movie, series) = (&b[0]["media"], &b[1]["media"]);
+    assert_eq!(
+        (
+            movie["tmdbCollectionId"].clone(),
+            movie["tmdbCollectionName"].clone()
+        ),
+        (json!(77), json!("Saga"))
+    );
+    assert_eq!(series["tmdbCollectionId"], Value::Null);
+    let (m, s) = (&movie["metadata"], &series["metadata"]);
+    assert_eq!((&m["budget"], &m["tagline"]), (&json!("7"), &json!("m")));
+    assert_eq!(
+        (&s["budget"], &s["revenue"], &s["tagline"]),
+        (&Value::Null, &Value::Null, &json!("s"))
+    );
+    for meta in [m, s] {
+        assert!(meta.get("kind").is_none() && meta.get("mediaId").is_none());
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn auto_remove_touches_only_the_watchers_own_playlists(pool: PgPool) {
     let c = ctx(pool).await;
     for q in [

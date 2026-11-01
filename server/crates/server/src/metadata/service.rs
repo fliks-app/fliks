@@ -34,14 +34,14 @@ pub struct Details {
     pub alternative_titles: Vec<String>,
     pub tmdb_collection_id: Option<i32>,
     pub tmdb_collection_name: Option<String>,
-    pub(super) raw: Value,
+    pub(crate) raw: Value,
 }
 
-pub(super) fn s(v: &Value, k: &str) -> Option<String> {
+pub(crate) fn s(v: &Value, k: &str) -> Option<String> {
     v.get(k).and_then(Value::as_str).map(str::to_owned)
 }
 
-pub(super) fn n(v: &Value, k: &str) -> Option<i32> {
+pub(crate) fn n(v: &Value, k: &str) -> Option<i32> {
     v.get(k)
         .and_then(Value::as_i64)
         .and_then(|n| i32::try_from(n).ok())
@@ -59,6 +59,12 @@ fn strings(v: &Value, k: &str) -> Vec<String> {
 }
 
 impl Details {
+    /// The TMDB collection the provider names, its name `''` when it gives none.
+    pub fn tmdb_collection(&self) -> Option<(i32, &str)> {
+        let id = self.tmdb_collection_id?;
+        Some((id, self.tmdb_collection_name.as_deref().unwrap_or_default()))
+    }
+
     pub fn from_value(v: &Value) -> Self {
         Self {
             tmdb_id: n(v, "tmdbId"),

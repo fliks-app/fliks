@@ -1280,6 +1280,116 @@ async fn m1789000110_moves_release_dates_into_a_table_keyed_by_kind(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
+async fn m1789000120_splits_details_by_kind_and_moves_collections(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_120).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type, "tmdbCollectionId", "tmdbCollectionName", "metadataRefreshedAt") VALUES
+            (1, 'a', 'movie', 500, 'Old Name', '2026-01-01'),
+            (2, 'b', 'movie', 500, 'New Name', '2026-02-01'),
+            (3, 'c', 'series', NULL, NULL, NULL),
+            (4, 'd', 'movie', 501, NULL, NULL),
+            (5, 'e', 'movie', NULL, 'Orphan Name', NULL),
+            (6, 'f', 'movie', NULL, NULL, NULL);
+           INSERT INTO media_metadata (id, "mediaId", budget, "voteCount", keywords) VALUES
+            (7, 1, 100, 10, '["k"]'), (8, 3, NULL, 20, '["s"]'), (9, 6, 5, 1, NULL);
+           INSERT INTO media_metadata (id, "mediaId", "voteCount") VALUES (10, NULL, 99);
+           SELECT setval('media_metadata_id_seq', 10)"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_120).await;
+
+    let movies: Vec<(i32, i32)> = rows(
+        &pool,
+        r#"SELECT id, "mediaId" FROM movie_details ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(
+        movies,
+        vec![(7, 1), (9, 6)],
+        "a row without media is dropped"
+    );
+    let series: Vec<(i32, i32, Option<i32>)> = rows(
+        &pool,
+        r#"SELECT id, "mediaId", "voteCount" FROM series_details ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(series, vec![(8, 3, Some(20))], "a series row keeps its id");
+    let id: i32 =
+        sqlx::query_scalar(r#"INSERT INTO movie_details ("mediaId") VALUES (2) RETURNING id"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(id, 11, "both tables draw from one sequence");
+    for bad in [
+        r#"INSERT INTO movie_details ("mediaId") VALUES (3)"#,
+        r#"INSERT INTO series_details ("mediaId") VALUES (1)"#,
+        r#"INSERT INTO movie_details ("mediaId", kind) VALUES (4, 'series')"#,
+        r#"INSERT INTO series_details ("mediaId") VALUES (3)"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+
+    let collections: Vec<(i32, String, String)> = rows(
+        &pool,
+        r#"SELECT c.id, c.name, x.value FROM collections c
+           JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
+           ORDER BY x.value::int"#,
+    )
+    .await;
+    assert_eq!(
+        collections
+            .iter()
+            .map(|c| (&*c.1, &*c.2))
+            .collect::<Vec<_>>(),
+        [("New Name", "500"), ("", "501")],
+        "the latest refresh names the collection, an id without a name gets ''"
+    );
+    let entries: Vec<(i32, i32)> = rows(
+        &pool,
+        r#"SELECT e."mediaId", x.value::int FROM collection_entries e
+           JOIN collection_external_ids x ON x."collectionId" = e."collectionId" ORDER BY 1"#,
+    )
+    .await;
+    assert_eq!(entries, vec![(1, 500), (2, 500), (4, 501)]);
+    let pos: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM collection_entries WHERE position IS NOT NULL"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pos, 0);
+    let json: Option<serde_json::Value> = sqlx::query_scalar("SELECT media_details_json(3)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let json = json.unwrap();
+    assert_eq!(
+        (json["id"].as_i64(), json["budget"].is_null()),
+        (Some(8), true)
+    );
+    let none: Option<serde_json::Value> = sqlx::query_scalar("SELECT media_details_json(4)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(none.is_none(), "a media without details has none");
+    assert!(
+        sqlx::raw_sql("INSERT INTO collection_entries VALUES (1, 6, -1)")
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    sql(&pool, "DELETE FROM media WHERE id IN (1, 3)").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM collection_entries WHERE "mediaId" = 1)
+                + (SELECT COUNT(*) FROM series_details WHERE "mediaId" = 3)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "details and entries go with their media");
+}
+
+#[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
     fliks_server::db::migrate(&pool).await.unwrap();
 
