@@ -113,17 +113,15 @@ UPDATE media SET "posterUrl" = '/api/images/' || id || '/poster' WHERE id IN (21
 UPDATE media SET "searchVector" = NULL WHERE id = 24;
 
 -- the base movies' items move out of the episode id range the scenarios record
-ALTER TABLE item_parts DROP CONSTRAINT "FK_item_parts_item";
-ALTER TABLE playback_states DROP CONSTRAINT "FK_playback_states_item";
-ALTER TABLE playback_history DROP CONSTRAINT "FK_playback_history_item";
+DO $$ DECLARE r record; BEGIN
+  FOR r IN SELECT conrelid::regclass AS tbl, conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+            WHERE contype = 'f' AND confrelid IN ('items'::regclass, 'item_parts'::regclass) AND pg_get_constraintdef(oid) NOT LIKE '%ON UPDATE%'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
+    EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I %s ON UPDATE CASCADE', r.tbl, r.conname, r.def);
+  END LOOP;
+END $$;
 UPDATE items SET id = -id WHERE "groupId" IS NULL;
-UPDATE item_parts SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
-UPDATE playback_states SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
-UPDATE playback_history SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
-ALTER TABLE item_parts ADD CONSTRAINT "FK_item_parts_item" FOREIGN KEY ("itemId", "mediaId")
-  REFERENCES items (id, "mediaId") ON DELETE CASCADE;
-ALTER TABLE playback_states ADD CONSTRAINT "FK_playback_states_item" FOREIGN KEY ("itemId") REFERENCES items (id) ON DELETE CASCADE;
-ALTER TABLE playback_history ADD CONSTRAINT "FK_playback_history_item" FOREIGN KEY ("itemId") REFERENCES items (id) ON DELETE CASCADE;
 INSERT INTO editions ("mediaId", family)
   SELECT id, 'video' FROM media m WHERE NOT EXISTS (SELECT 1 FROM editions e WHERE e."mediaId" = m.id) ORDER BY id;
 INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "mediaId", "posterUrl", overview, "airDate") VALUES

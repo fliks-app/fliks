@@ -1,9 +1,13 @@
 -- Parity Series A season 1 gets a third episode, plus a specials season; markers in both states.
-ALTER TABLE item_parts DROP CONSTRAINT "FK_item_parts_item";
+DO $$ DECLARE r record; BEGIN
+  FOR r IN SELECT conrelid::regclass AS tbl, conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+            WHERE contype = 'f' AND confrelid IN ('items'::regclass, 'item_parts'::regclass) AND pg_get_constraintdef(oid) NOT LIKE '%ON UPDATE%'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
+    EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I %s ON UPDATE CASCADE', r.tbl, r.conname, r.def);
+  END LOOP;
+END $$;
 UPDATE items SET id = -id WHERE "groupId" IS NULL;
-UPDATE item_parts SET "itemId" = -"itemId" WHERE "itemId" IN (SELECT -id FROM items WHERE "groupId" IS NULL);
-ALTER TABLE item_parts ADD CONSTRAINT "FK_item_parts_item" FOREIGN KEY ("itemId", "mediaId")
-  REFERENCES items (id, "mediaId") ON DELETE CASCADE;
 SELECT setval('items_id_seq', (SELECT max(id) FROM items));
 INSERT INTO items ("number", title, "groupId", "mediaId", "editionId")
   VALUES (3, 'Episode 3', 1, 18, (SELECT id FROM editions WHERE "mediaId" = 18));
