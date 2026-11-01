@@ -6,7 +6,7 @@ import type { MediaType } from '../../enums/media-type.enum';
 
 export interface Person {
   id: number;
-  tmdbId: number;
+  tmdbId: number | null;
   name: string;
   avatarUrl: string | null;
   biography: string | null;
@@ -49,7 +49,7 @@ export interface PersonProviderCreditItem {
 }
 
 export interface PersonProviderCredits {
-  provider: string;
+  provider: string | null;
   cast: PersonProviderCreditItem[];
   crew: PersonProviderCreditItem[];
 }

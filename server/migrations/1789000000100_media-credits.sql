@@ -64,4 +64,5 @@ ALTER TABLE "persons" DROP CONSTRAINT "UQ_677a19ecc46b5da7b1a4314c82b",
 
 CREATE VIEW "person_ids" AS
 SELECT DISTINCT ON ("personId") "personId", "provider", "value"
-  FROM "person_external_ids" ORDER BY "personId", ("provider" = 'tmdb') DESC, "provider";
+  FROM "person_external_ids" WHERE "provider" IN ('tmdb', 'tvdb')
+ ORDER BY "personId", ("provider" = 'tmdb') DESC, "provider";

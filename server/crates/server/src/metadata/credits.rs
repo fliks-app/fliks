@@ -30,7 +30,9 @@ pub async fn persist_credits(st: &AppState, media_id: i32, d: &Details) -> Resul
     let (cast, crew) = (credits(d, "cast"), credits(d, "crew"));
     let all: Vec<&Value> = cast.iter().chain(&crew).collect();
     let mut unique: Vec<i32> = vec![];
-    for id in all.iter().filter_map(|c| ext(c)) {
+    // person_external_ids refuses ids outside 1..=999999999.
+    let valid = |i: &i32| (1..=999_999_999).contains(i);
+    for id in all.iter().filter_map(|c| ext(c)).filter(valid) {
         if !unique.contains(&id) {
             unique.push(id);
         }

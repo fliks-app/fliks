@@ -996,3 +996,28 @@ async fn a_person_without_an_id_is_served_and_never_refreshed(pool: PgPool) {
     assert_eq!(s, 200);
     assert_eq!(d, json!({"provider": null, "cast": [], "crew": []}));
 }
+
+#[sqlx::test(migrations = false)]
+async fn persisting_credits_skips_person_ids_the_table_refuses(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    media(&pool, 1, "movie", Some(603), None, 1).await;
+    let d = fliks_server::metadata::service::Details::from_value(&json!({
+        "provider": "tmdb", "title": "T",
+        "cast": [
+            {"externalId": 5, "name": "A", "character": "X", "order": 0},
+            {"externalId": 0, "name": "Z", "character": "X", "order": 1},
+            {"externalId": 1_000_000_000, "name": "Big", "character": "X", "order": 2},
+            {"externalId": -3, "name": "Neg", "character": "X", "order": 3}
+        ],
+    }));
+    fliks_server::metadata::service::persist_credits(&c.st, 1, &d)
+        .await
+        .unwrap();
+    let (persons, credits): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM persons), (SELECT COUNT(*) FROM media_credits)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((persons, credits), (1, 1));
+}

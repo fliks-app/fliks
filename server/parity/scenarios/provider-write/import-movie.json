@@ -259,7 +259,8 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/media/{mid}/cast"
+      "path": "/api/media/{mid}/cast",
+      "retryMs": 10000
     },
     {
       "as": "admin",
@@ -267,7 +268,7 @@
         "body": [
           {
             "department": "Directing",
-            "id": 1,
+            "id": 3,
             "job": "Director",
             "person": {
               "avatarUrl": null,
@@ -287,7 +288,7 @@
           },
           {
             "department": "Acting",
-            "id": 2,
+            "id": 4,
             "job": "Cameo",
             "person": {
               "avatarUrl": "/api/images/person/201?v=612f4295",
@@ -310,7 +311,8 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/media/{mid}/crew"
+      "path": "/api/media/{mid}/crew",
+      "retryMs": 10000
     }
   ]
 }
