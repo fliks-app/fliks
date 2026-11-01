@@ -214,7 +214,7 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
     let lang = lang(&st).await?;
     let go = Priority::Interactive;
     let mut found = md.of(primary).search(&search, &lang, go).await;
-    if let (Ok(r), Some(other)) = (&found, md.fallback(primary, Some(search.kind)))
+    if let (Ok(r), Some(other)) = (&found, md.fallback(primary, search.kind))
         && r.is_empty()
     {
         tracing::info!("no {} result, trying {}", primary.as_str(), other.as_str());

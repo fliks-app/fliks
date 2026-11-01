@@ -6,11 +6,13 @@ mod map;
 mod provider;
 mod routes;
 pub mod service;
+#[cfg(test)]
+mod stub;
 pub mod tmdb;
 pub mod tvdb;
 mod types;
 
-pub use http::Upstream;
+pub use http::{Guarded, Observed, Upstream};
 pub use language::{LanguageCache, Override};
 pub use provider::{MetadataProvider, Search};
 pub use routes::*;
@@ -82,14 +84,23 @@ impl Metadata {
         }
     }
 
-    /// The other provider that is configured and supports `kind` (any when `None`).
-    pub fn fallback(
+    fn other(
         &self,
         id: ExternalProvider,
-        kind: Option<MediaKind>,
+        wanted: impl Fn(&dyn MetadataProvider) -> bool,
     ) -> Option<ExternalProvider> {
-        ExternalProvider::ALL.into_iter().find(|o| {
-            *o != id && self.available(*o) && kind.is_none_or(|k| self.of(*o).supports(k))
-        })
+        ExternalProvider::ALL
+            .into_iter()
+            .find(|o| *o != id && self.available(*o) && wanted(self.of(*o)))
+    }
+
+    /// The other provider that is configured and supports `kind`.
+    pub fn fallback(&self, id: ExternalProvider, kind: MediaKind) -> Option<ExternalProvider> {
+        self.other(id, |p| p.supports(kind))
+    }
+
+    /// The other provider that is configured and describes people.
+    pub fn person_fallback(&self, id: ExternalProvider) -> Option<ExternalProvider> {
+        self.other(id, |p| p.has_persons())
     }
 }

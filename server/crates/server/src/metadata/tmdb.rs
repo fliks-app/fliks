@@ -544,7 +544,8 @@ impl Tmdb {
         }))
     }
 
-    /// Every season; at most 8 in flight, stub order kept, a failing season is dropped.
+    /// Every season; at most 8 in flight, stub order kept, a failing season is dropped unless the
+    /// provider is throttling: a partial list would make identify delete the missing seasons.
     pub async fn seasons(
         &self,
         id: i64,
@@ -556,16 +557,18 @@ impl Tmdb {
             .map(|stub| async move {
                 let n = stub["seasonNumber"].as_i64().unwrap_or_default();
                 match self.season(id, n, lang, p).await {
-                    Ok(s) => Some(s),
+                    Ok(s) => Ok(Some(s)),
+                    Err(e) if e.is_throttled() => Err(e),
                     Err(e) => {
                         tracing::warn!("failed to fetch season {n} for TV {id}: {e}");
-                        None
+                        Ok(None)
                     }
                 }
             })
             .buffered(SEASON_FETCH_CONCURRENCY)
             .collect::<Vec<_>>()
             .await;
+        let fetched = fetched.into_iter().collect::<Result<Vec<_>, _>>()?;
         Ok(fetched.into_iter().flatten().collect())
     }
 
@@ -685,8 +688,12 @@ impl MetadataProvider for Tmdb {
         true
     }
 
+    fn has_persons(&self) -> bool {
+        true
+    }
+
     fn limits(&self) -> Limits {
-        LIMITS
+        self.http.limits()
     }
 
     fn search<'a>(
@@ -864,5 +871,42 @@ pub fn tv_status(s: &str) -> &'static str {
         "In Production" => "announced",
         "Planned" => "tba",
         _ => "unknown",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metadata::stub::serve;
+    use fliks_domain::metadata::language::resolve;
+
+    /// A two-season series whose second season answers `second`.
+    async fn seasons_with(second: u16) -> Result<Vec<Value>, Upstream> {
+        let (url, _) = serve(move |path, _| match path {
+            "/tv/1" => (
+                200,
+                None,
+                r#"{"seasons":[{"season_number":1,"episode_count":1},{"season_number":2,"episode_count":1}]}"#.into(),
+            ),
+            "/tv/1/season/1" => (200, None, r#"{"season_number":1,"episodes":[]}"#.into()),
+            _ => (second, Some("0".into()), "{}".into()),
+        })
+        .await;
+        let tmdb = Tmdb::new(&url, "https://img", "key", Duration::from_secs(5));
+        tmdb.seasons(1, &resolve(None, None), Priority::Interactive)
+            .await
+    }
+
+    #[tokio::test]
+    async fn a_missing_season_is_dropped() {
+        assert_eq!(seasons_with(404).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_throttled_season_fails_the_list_instead_of_shortening_it() {
+        for status in [429, 503] {
+            let e = seasons_with(status).await.unwrap_err();
+            assert_eq!(e.status, Some(status));
+        }
     }
 }

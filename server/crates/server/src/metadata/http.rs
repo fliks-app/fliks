@@ -3,9 +3,10 @@
 use crate::sync::MutexExt;
 use fliks_domain::metadata::{
     breaker::{Breaker, Event, Outcome},
-    limiter::{Limiter, Limits, MAX_PAUSE_MS, Priority, WaitMs},
+    limiter::{Limiter, Limits, MAX_PAUSE_MS, Priority, Refused},
 };
 use futures_util::future::BoxFuture;
+use reqwest::header::HeaderMap;
 use serde_json::Value;
 use std::{
     error::Error,
@@ -19,6 +20,7 @@ use std::{
 /// An interactive call never waits longer than this, token waits and pauses together.
 const INTERACTIVE_BUDGET_MS: u64 = 5_000;
 const BACKGROUND_RETRIES: u32 = 3;
+const INTERACTIVE_RETRIES: u32 = 1;
 const SLOW_CALL_MS: u64 = 1_000;
 const DAY_MS: u64 = 86_400_000;
 
@@ -80,6 +82,11 @@ impl Upstream {
     /// The provider's daily quota is spent: no request was made.
     pub fn quota(name: &str) -> Self {
         Self::new(Some(429), format!("{name} daily quota spent"))
+    }
+
+    /// The provider (or the limiter) asks for fewer calls: 429 or 503.
+    pub fn is_throttled(&self) -> bool {
+        matches!(self.status, Some(429 | 503))
     }
 }
 
@@ -145,6 +152,17 @@ fn retry_after_ms(value: &str, now: SystemTime) -> Option<u64> {
     Some(at.duration_since(now).map_or(0, |d| d.as_millis() as u64))
 }
 
+/// What a provider reads off a response (`x-ratelimit-*` and the like).
+#[derive(Debug, Default)]
+pub struct Observed {
+    /// New limits for the limiter.
+    pub limits: Option<Limits>,
+    /// The daily quota is spent for the rest of the UTC day.
+    pub quota_spent: bool,
+}
+
+type Observer = Box<dyn Fn(u16, &HeaderMap) -> Observed + Send + Sync>;
+
 pub struct Guarded {
     name: &'static str,
     base: String,
@@ -153,6 +171,7 @@ pub struct Guarded {
     breaker: Mutex<Breaker>,
     clock: Arc<dyn Clock>,
     slow_logged: AtomicBool,
+    observer: Option<Observer>,
     /// Query parameters sent on every request (TMDB's `api_key`).
     fixed: Vec<(String, String)>,
 }
@@ -178,7 +197,37 @@ impl Guarded {
                 started: Instant::now(),
             }),
             slow_logged: AtomicBool::new(false),
+            observer: None,
             fixed,
+        }
+    }
+
+    /// Reads every response's status and headers (`Observed`).
+    pub fn with_observer(
+        mut self,
+        f: impl Fn(u16, &HeaderMap) -> Observed + Send + Sync + 'static,
+    ) -> Self {
+        self.observer = Some(Box::new(f));
+        self
+    }
+
+    pub fn limits(&self) -> Limits {
+        self.limiter.lock_clean().limits()
+    }
+
+    pub fn set_limits(&self, limits: Limits) {
+        self.limiter.lock_clean().set_limits(limits);
+    }
+
+    fn observe(&self, status: u16, headers: &HeaderMap) {
+        let Some(f) = &self.observer else { return };
+        let seen = f(status, headers);
+        let mut l = self.limiter.lock_clean();
+        if let Some(limits) = seen.limits {
+            l.set_limits(limits);
+        }
+        if seen.quota_spent {
+            l.on_quota_exhausted(self.clock.day());
         }
     }
 
@@ -215,15 +264,18 @@ impl Guarded {
         self.client.post(format!("{}{path}", self.base))
     }
 
-    /// Quota, then a token (waiting for it), counting the call; an interactive call gives up past its budget.
+    /// A token, waited for and counted against the quota; an interactive call gives up past its budget.
     async fn admit(&self, p: Priority, waited: &mut u64) -> Result<(), Upstream> {
-        let day = self.clock.day();
-        if self.limiter.lock_clean().quota_left(day) == Some(0) {
-            return Err(Upstream::quota(self.name));
-        }
         loop {
-            let taken = self.limiter.lock_clean().take(self.now(), p);
-            let Err(WaitMs(wait)) = taken else { break };
+            let taken = self
+                .limiter
+                .lock_clean()
+                .take(self.now(), self.clock.day(), p);
+            let wait = match taken {
+                Ok(()) => break,
+                Err(Refused::QuotaSpent) => return Err(Upstream::quota(self.name)),
+                Err(Refused::Wait(wait)) => wait,
+            };
             if p == Priority::Interactive && *waited + wait > INTERACTIVE_BUDGET_MS {
                 return Err(Upstream::new(
                     Some(429),
@@ -240,7 +292,6 @@ impl Guarded {
                 waited
             );
         }
-        self.limiter.lock_clean().count_call(day);
         Ok(())
     }
 
@@ -257,11 +308,12 @@ impl Guarded {
         }
     }
 
-    /// Sends the request through the limiter and the breaker and returns the 2xx JSON body.
+    /// Sends the request through the breaker and the limiter and returns the 2xx JSON body.
     pub async fn send(&self, req: reqwest::RequestBuilder, p: Priority) -> Result<Value, Upstream> {
         let (mut req, mut waited, mut retries) = (req, 0, 0);
+        // The throttle answer a retry follows: what the caller gets if the retry cannot go.
+        let mut last: Option<(Upstream, u16)> = None;
         loop {
-            self.admit(p, &mut waited).await?;
             let allowed = {
                 let mut b = self.breaker.lock_clean();
                 b.allow(self.now())
@@ -270,10 +322,19 @@ impl Guarded {
                 return Err(Upstream::new(
                     None,
                     format!(
-                        "{} circuit open \u{2014} upstream temporarily unreachable",
+                        "{} circuit open — upstream temporarily unreachable",
                         self.name
                     ),
                 ));
+            }
+            if let Err(refused) = self.admit(p, &mut waited).await {
+                return Err(match last {
+                    Some((err, status)) => {
+                        self.record(Outcome::of_status(status));
+                        err
+                    }
+                    None => refused,
+                });
             }
             let spare = req.try_clone();
             let resp = match req.send().await {
@@ -284,6 +345,7 @@ impl Guarded {
                 }
             };
             let status = resp.status().as_u16();
+            self.observe(status, resp.headers());
             if !resp.status().is_success() {
                 let after = resp
                     .headers()
@@ -292,14 +354,16 @@ impl Guarded {
                     .and_then(|v| retry_after_ms(v, SystemTime::now()));
                 let body: Value = resp.json().await.unwrap_or(Value::Null);
                 let err = Upstream::new(Some(status), http_reason(status, &body));
-                if matches!(status, 429 | 503) {
+                if err.is_throttled() {
                     let pause = self.throttled(after);
                     let fits = match p {
                         Priority::Background => retries < BACKGROUND_RETRIES,
-                        Priority::Interactive => waited + pause <= INTERACTIVE_BUDGET_MS,
+                        Priority::Interactive => {
+                            retries < INTERACTIVE_RETRIES && waited + pause <= INTERACTIVE_BUDGET_MS
+                        }
                     };
                     if let Some(next) = spare.filter(|_| fits) {
-                        (req, retries) = (next, retries + 1);
+                        (req, retries, last) = (next, retries + 1, Some((err, status)));
                         continue;
                     }
                 } else {
@@ -343,11 +407,8 @@ mod tests {
         assert_eq!(http_reason(404, &body), "HTTP 404 — nope");
     }
 
+    use crate::metadata::stub::serve;
     use std::sync::atomic::{AtomicU32, AtomicU64};
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-    };
 
     #[test]
     fn retry_after_is_seconds_or_a_date() {
@@ -388,32 +449,17 @@ mod tests {
         }
     }
 
-    /// A server answering each request with the next scripted `(status, Retry-After)`, then 200.
+    /// Each request gets the next scripted `(status, Retry-After)`, then 200.
     async fn stub(script: &[(u16, Option<&str>)]) -> (String, Arc<AtomicU32>) {
         let script: Vec<(u16, Option<String>)> = script
             .iter()
             .map(|(s, h)| (*s, h.map(str::to_owned)))
             .collect();
-        let hits = Arc::new(AtomicU32::new(0));
-        let seen = hits.clone();
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        tokio::spawn(async move {
-            loop {
-                let (mut sock, _) = listener.accept().await.unwrap();
-                let n = seen.fetch_add(1, Ordering::Relaxed) as usize;
-                let (status, after) = script.get(n).cloned().unwrap_or((200, None));
-                let mut buf = [0u8; 2048];
-                let _ = sock.read(&mut buf).await;
-                let retry = after.map_or(String::new(), |a| format!("Retry-After: {a}\r\n"));
-                let reply = format!(
-                    "HTTP/1.1 {status} X\r\n{retry}Content-Type: application/json\r\n\
-                     Content-Length: 2\r\nConnection: close\r\n\r\n{{}}"
-                );
-                let _ = sock.write_all(reply.as_bytes()).await;
-            }
-        });
-        (url, hits)
+        serve(move |_, n| {
+            let (status, after) = script.get(n as usize).cloned().unwrap_or((200, None));
+            (status, after, "{}".into())
+        })
+        .await
     }
 
     fn guarded(url: &str, limits: Limits) -> (Guarded, Arc<Fake>) {
@@ -435,73 +481,92 @@ mod tests {
         c.sleeps.lock().unwrap().clone()
     }
 
+    fn hits(h: &AtomicU32) -> u32 {
+        h.load(Ordering::Relaxed)
+    }
+
     #[tokio::test]
     async fn a_background_call_waits_out_retry_after_and_retries() {
-        let (url, hits) = stub(&[(429, Some("2"))]).await;
+        let (url, h) = stub(&[(429, Some("2"))]).await;
         let (g, clock) = guarded(&url, fast());
         assert!(call(&g, Priority::Background).await.is_ok());
-        assert_eq!(hits.load(Ordering::Relaxed), 2);
+        assert_eq!(hits(&h), 2);
         assert_eq!(sleeps(&clock), [2_000]);
         assert_eq!(g.breaker.lock().unwrap().failures, 0);
     }
 
     #[tokio::test]
     async fn without_retry_after_the_call_backs_off() {
-        let (url, hits) = stub(&[(429, None), (429, None)]).await;
+        let (url, h) = stub(&[(429, None), (429, None)]).await;
         let (g, clock) = guarded(&url, fast());
         assert!(call(&g, Priority::Background).await.is_ok());
-        assert_eq!(hits.load(Ordering::Relaxed), 3);
+        assert_eq!(hits(&h), 3);
         assert_eq!(sleeps(&clock), [1_000, 2_000]);
     }
 
     #[tokio::test]
     async fn a_background_call_gives_up_after_three_retries() {
-        let (url, hits) = stub(&[(503, None); 9]).await;
+        let (url, h) = stub(&[(503, None); 9]).await;
         let (g, clock) = guarded(&url, fast());
         let e = call(&g, Priority::Background).await.unwrap_err();
         assert_eq!(e.status, Some(503));
-        assert_eq!(hits.load(Ordering::Relaxed), 4);
+        assert_eq!(hits(&h), 4);
         assert_eq!(sleeps(&clock), [1_000, 2_000, 4_000]);
         // four answers, one failure for the breaker
         assert_eq!(g.breaker.lock().unwrap().failures, 1);
     }
 
     #[tokio::test]
-    async fn an_interactive_call_retries_within_five_seconds() {
-        let (url, hits) = stub(&[(429, Some("2"))]).await;
+    async fn an_interactive_call_retries_once_within_five_seconds() {
+        let (url, h) = stub(&[(429, Some("2"))]).await;
         let (g, clock) = guarded(&url, fast());
         assert!(call(&g, Priority::Interactive).await.is_ok());
-        assert_eq!(hits.load(Ordering::Relaxed), 2);
+        assert_eq!(hits(&h), 2);
         assert_eq!(sleeps(&clock), [2_000]);
+        let (url, h) = stub(&[(503, None); 9]).await;
+        let (g, clock) = guarded(&url, fast());
+        let e = call(&g, Priority::Interactive).await.unwrap_err();
+        assert_eq!(e.status, Some(503));
+        assert_eq!((hits(&h), sleeps(&clock)), (2, vec![1_000]));
+    }
+
+    #[tokio::test]
+    async fn an_immediate_retry_after_does_not_loop() {
+        let (url, h) = stub(&[(429, Some("0")); 9]).await;
+        let (g, _) = guarded(&url, fast());
+        let e = call(&g, Priority::Interactive).await.unwrap_err();
+        assert_eq!((e.status, hits(&h)), (Some(429), 2));
     }
 
     #[tokio::test]
     async fn an_interactive_call_gives_up_instead_of_waiting_past_five_seconds() {
-        let (url, hits) = stub(&[(429, Some("10"))]).await;
+        let (url, h) = stub(&[(429, Some("10"))]).await;
         let (g, clock) = guarded(&url, fast());
         let e = call(&g, Priority::Interactive).await.unwrap_err();
         assert_eq!(e.status, Some(429));
-        assert_eq!(hits.load(Ordering::Relaxed), 1);
+        assert_eq!(hits(&h), 1);
         assert!(sleeps(&clock).is_empty());
         // the pause holds the next interactive call too: it fails without a request
         let e = call(&g, Priority::Interactive).await.unwrap_err();
         assert_eq!(e.status, Some(429));
-        assert_eq!(hits.load(Ordering::Relaxed), 1);
+        assert_eq!(hits(&h), 1);
     }
 
     #[tokio::test]
-    async fn interactive_backoff_stops_when_the_total_would_pass_five_seconds() {
-        let (url, hits) = stub(&[(503, None); 9]).await;
-        let (g, clock) = guarded(&url, fast());
+    async fn the_429_received_is_what_the_caller_gets_when_the_budget_runs_out() {
+        let (url, h) = stub(&[(429, Some("4"))]).await;
+        // one token every 10 s: after the pause the retry would wait past the budget
+        let (g, clock) = guarded(&url, Limits::new(0.1, 1));
         let e = call(&g, Priority::Interactive).await.unwrap_err();
-        assert_eq!(e.status, Some(503));
-        assert_eq!(hits.load(Ordering::Relaxed), 3);
-        assert_eq!(sleeps(&clock), [1_000, 2_000]);
+        assert!(e.reason().starts_with("HTTP 429"), "{}", e.reason());
+        assert_eq!(hits(&h), 1);
+        assert_eq!(sleeps(&clock), [4_000]);
+        assert_eq!(g.breaker.lock().unwrap().failures, 1);
     }
 
     #[tokio::test]
     async fn a_spent_daily_quota_is_skipped_without_a_request_until_midnight() {
-        let (url, hits) = stub(&[]).await;
+        let (url, h) = stub(&[]).await;
         let (g, clock) = guarded(
             &url,
             Limits {
@@ -512,10 +577,59 @@ mod tests {
         assert!(call(&g, Priority::Background).await.is_ok());
         assert!(call(&g, Priority::Interactive).await.is_ok());
         let e = call(&g, Priority::Interactive).await.unwrap_err();
-        assert_eq!((e.status, hits.load(Ordering::Relaxed)), (Some(429), 2));
+        assert_eq!((e.status, hits(&h)), (Some(429), 2));
         clock.now.store(DAY_MS, Ordering::Relaxed);
         assert!(call(&g, Priority::Background).await.is_ok());
-        assert_eq!(hits.load(Ordering::Relaxed), 3);
+        assert_eq!(hits(&h), 3);
+    }
+
+    #[tokio::test]
+    async fn a_429_the_provider_calls_a_quota_error_spends_the_day() {
+        let (url, h) = stub(&[(429, None)]).await;
+        let (g, _) = guarded(&url, fast());
+        let g = g.with_observer(|status, _| Observed {
+            quota_spent: status == 429,
+            ..Observed::default()
+        });
+        let e = call(&g, Priority::Background).await.unwrap_err();
+        assert!(e.reason().starts_with("HTTP 429"), "{}", e.reason());
+        let e = call(&g, Priority::Background).await.unwrap_err();
+        assert!(e.reason().contains("quota"), "{}", e.reason());
+        assert_eq!(hits(&h), 1);
+    }
+
+    #[tokio::test]
+    async fn the_observer_can_change_the_limits() {
+        let (url, _) = stub(&[]).await;
+        let (g, _) = guarded(&url, fast());
+        let slower = Limits::new(2.0, 2);
+        let g = g.with_observer(move |_, _| Observed {
+            limits: Some(slower),
+            ..Observed::default()
+        });
+        assert!(call(&g, Priority::Background).await.is_ok());
+        assert_eq!(g.limits(), slower);
+        g.set_limits(fast());
+        assert_eq!(g.limits(), fast());
+    }
+
+    #[tokio::test]
+    async fn an_open_breaker_spends_no_token() {
+        let (url, h) = stub(&[(500, None); 3]).await;
+        let (g, _) = guarded(&url, Limits::new(1000.0, 4));
+        for _ in 0..3 {
+            let _ = call(&g, Priority::Interactive).await;
+        }
+        // the fourth burst token is still there: three calls took three
+        assert!(call(&g, Priority::Interactive).await.is_err());
+        assert_eq!(hits(&h), 3);
+        assert!(
+            g.limiter
+                .lock()
+                .unwrap()
+                .take(0, 0, Priority::Interactive)
+                .is_ok()
+        );
     }
 
     #[tokio::test]

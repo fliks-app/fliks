@@ -269,8 +269,12 @@ async fn count_episodes(st: &AppState, media_id: i32) -> Result<i64, sqlx::Error
 }
 
 /// Rescan and relink entry point: the bare rows a walk invented gain titles and stills.
-pub async fn refresh_series_episodes(st: &AppState, media: &MediaRow) -> Result<i64, AppError> {
-    let seasons = service::seasons_for_media(st, media.id, Priority::Background).await?;
+pub async fn refresh_series_episodes(
+    st: &AppState,
+    media: &MediaRow,
+    prio: Priority,
+) -> Result<i64, AppError> {
+    let seasons = service::seasons_for_media(st, media.id, prio).await?;
     apply_seasons(st, media.id, &seasons).await
 }
 

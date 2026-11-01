@@ -27,6 +27,7 @@ use fliks_domain::{
         kind::MediaKind,
         path::resolve,
     },
+    metadata::limiter::Priority,
     naming::{
         self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
         validate_folder_name,
@@ -385,7 +386,8 @@ pub async fn relink(
     ValidJson(v): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Create, Subject::Media)?;
-    let d = parse_relink(v, "")?;
+    let mut d = parse_relink(v, "")?;
+    d.priority = Priority::Interactive;
     check_transfer(&a, &d)?;
     Ok((StatusCode::CREATED, Json(relink_orphans(&st, &a, d).await?)))
 }

@@ -109,7 +109,7 @@ where
         Ok(v) => return Ok((v, primary)),
         Err(e) => e,
     };
-    let Some(other) = md.fallback(primary, None).filter(|_| e.is_not_found()) else {
+    let Some(other) = md.person_fallback(primary).filter(|_| e.is_not_found()) else {
         return Err((primary, e));
     };
     let v = call(other).await.map_err(|e| (other, e))?;

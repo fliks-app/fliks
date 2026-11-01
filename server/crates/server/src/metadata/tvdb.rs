@@ -85,7 +85,7 @@ impl Tvdb {
         }
     }
 
-    async fn token(&self, stale: Option<&str>, p: Priority) -> Result<String, Upstream> {
+    async fn token(&self, stale: Option<&str>) -> Result<String, Upstream> {
         let mut slot = self.auth.lock().await;
         if let Some(t) = slot.as_ref()
             && t.expires > Instant::now()
@@ -96,13 +96,9 @@ impl Tvdb {
         if self.key.is_empty() {
             return Err(Upstream::new(None, "TVDB API key not configured"));
         }
-        let data = self
-            .http
-            .send(
-                self.http.post("/login").json(&json!({"apikey": self.key})),
-                p,
-            )
-            .await?;
+        // Interactive: the lock is held across it, so it must not queue behind a background pause.
+        let login = self.http.post("/login").json(&json!({"apikey": self.key}));
+        let data = self.http.send(login, Priority::Interactive).await?;
         let value = get(get(&data, "data"), "token")
             .as_str()
             .ok_or_else(|| missing("token"))?
@@ -125,7 +121,7 @@ impl Tvdb {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), v.clone()))
             .collect();
-        let mut token = self.token(None, p).await?;
+        let mut token = self.token(None).await?;
         for attempt in 0..2 {
             match self
                 .http
@@ -133,7 +129,7 @@ impl Tvdb {
                 .await
             {
                 Err(e) if e.is_unauthorized() && attempt == 0 => {
-                    token = self.token(Some(&token), p).await?
+                    token = self.token(Some(&token)).await?
                 }
                 other => return other,
             }
@@ -158,7 +154,7 @@ impl Tvdb {
         lang: &Resolved,
         p: Priority,
     ) -> Result<Vec<Value>, Upstream> {
-        self.token(None, p).await?;
+        self.token(None).await?;
         let mut params = vec![
             ("q", query.to_owned()),
             ("type", MediaKind::from_tv(tv).as_str().into()),
@@ -218,7 +214,7 @@ impl Tvdb {
     }
 
     pub async fn season_stubs(&self, id: i64, p: Priority) -> Result<Vec<Value>, Upstream> {
-        self.token(None, p).await?;
+        self.token(None).await?;
         let mut counts: BTreeMap<i64, i64> = BTreeMap::new();
         for ep in self.all_episodes(id, p).await? {
             *counts
@@ -237,7 +233,7 @@ impl Tvdb {
         lang: &Resolved,
         p: Priority,
     ) -> Result<Vec<Value>, Upstream> {
-        self.token(None, p).await?;
+        self.token(None).await?;
         let code = lang.tvdb_code;
         let episodes = self.all_episodes(id, p).await?;
         let series = self
@@ -326,7 +322,7 @@ impl Tvdb {
         lang: &Resolved,
         p: Priority,
     ) -> Result<PersonDetails, Upstream> {
-        self.token(None, p).await?;
+        self.token(None).await?;
         let person = self
             .data(
                 &format!("/people/{id}/extended"),
@@ -358,7 +354,7 @@ impl Tvdb {
     }
 
     pub async fn credits_of(&self, id: i64, p: Priority) -> Result<Credits, Upstream> {
-        self.token(None, p).await?;
+        self.token(None).await?;
         let person = self.data(&format!("/people/{id}/extended"), &[], p).await?;
         let chars = arr(&person, "characters");
         let credit = |c: &Value| {
@@ -429,7 +425,7 @@ impl Tvdb {
         id: &str,
         p: Priority,
     ) -> Result<Option<(String, bool)>, Upstream> {
-        self.token(None, p).await?;
+        self.token(None).await?;
         let Ok(d) = self.data(&format!("/search/remoteid/{id}"), &[], p).await else {
             return Ok(None);
         };
@@ -454,8 +450,12 @@ impl MetadataProvider for Tvdb {
         true
     }
 
+    fn has_persons(&self) -> bool {
+        true
+    }
+
     fn limits(&self) -> Limits {
-        LIMITS
+        self.http.limits()
     }
 
     fn search<'a>(
@@ -501,15 +501,18 @@ impl MetadataProvider for Tvdb {
         Box::pin(async move { self.season_stubs(numeric(id)?, p).await })
     }
 
-    /// TVDB's remote-id lookup takes the id alone, whatever namespace it is in.
+    /// The remote-id lookup is used for IMDb ids only.
     fn find_by<'a>(
         &'a self,
-        _source: ExternalProvider,
+        source: ExternalProvider,
         id: &'a str,
         _lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Option<(String, MediaKind)>> {
         Box::pin(async move {
+            if source != ExternalProvider::Imdb {
+                return Ok(None);
+            }
             let found = self.find_by_external_id(id, p).await?;
             Ok(found.map(|(id, tv)| (id, MediaKind::from_tv(tv))))
         })

@@ -441,7 +441,7 @@ pub async fn import_for_request(
         Some("tmdb".into()),
         tmdb_id.to_string(),
         imp,
-        Priority::Background,
+        Priority::Interactive,
     )
     .await
 }

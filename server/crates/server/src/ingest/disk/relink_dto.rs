@@ -22,6 +22,8 @@ pub struct RelinkDto {
     pub(super) reorganize: bool,
     pub(super) transfer: Option<Method>,
     pub(super) files: Vec<RelinkFile>,
+    /// Background for a batch item; the single relink route makes it interactive.
+    pub(super) priority: Priority,
 }
 
 pub(super) const RELINK_FIELDS: [&str; 13] = [
@@ -147,6 +149,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
         reorganize: b.bool("reorganize")?.flatten().unwrap_or(false),
         transfer,
         files,
+        priority: Priority::Background,
     })
 }
 

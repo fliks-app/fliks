@@ -1,6 +1,6 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
-use fliks_domain::{external_id::ExternalProvider, metadata::limiter::Priority};
+use fliks_domain::external_id::ExternalProvider;
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -33,7 +33,7 @@ pub(super) async fn link_files(
     if media.has_seasons()
         && slot
         && identified
-        && let Err(e) = mw::refresh_series_episodes(st, media).await
+        && let Err(e) = mw::refresh_series_episodes(st, media, d.priority).await
     {
         tracing::warn!("Orphan relink: refreshSeriesEpisodes failed — {}", e.text());
     }
@@ -359,7 +359,7 @@ pub(super) async fn find_or_import(
             added_by: Some(a.user.id),
             monitored_seasons: None,
         };
-        mw::import_title(st, provider, ext.clone(), imp, Priority::Background).await
+        mw::import_title(st, provider, ext.clone(), imp, d.priority).await
     }
     .await;
     match imported {

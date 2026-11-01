@@ -24,6 +24,8 @@ pub trait MetadataProvider: Send + Sync {
     /// The registry key, as `preferredProvider` stores it.
     fn id(&self) -> ExternalProvider;
     fn supports(&self, kind: MediaKind) -> bool;
+    /// Whether `fetch_person` and `person_credits` are answered.
+    fn has_persons(&self) -> bool;
     fn limits(&self) -> Limits;
     fn search<'a>(
         &'a self,

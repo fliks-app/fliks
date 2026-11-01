@@ -36,7 +36,7 @@ async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Res
             media_type,
             &tmdb_id.to_string(),
             &lang,
-            Priority::Background,
+            Priority::Interactive,
         )
         .await
         .map_err(|e| e.to_string())
