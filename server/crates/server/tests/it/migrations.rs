@@ -1828,10 +1828,10 @@ async fn m1789000190_names_groups_and_items_in_the_remaining_tables(pool: PgPool
     sql(
         &pool,
         &format!(
-            r#"INSERT INTO likes ("userId", "mediaId", "itemId") VALUES (1, 1, {movie_item});
-              INSERT INTO content_recommendations ("senderId", "recipientId", "mediaId", "itemId")
-                VALUES (1, 2, 1, {movie_item});
-              INSERT INTO cleanup_exclusions ("mediaId", "itemId") VALUES (1, {movie_item})"#
+            r#"INSERT INTO likes (id, "userId", "mediaId", "itemId") VALUES (2, 1, 1, {movie_item});
+              INSERT INTO content_recommendations (id, "senderId", "recipientId", "mediaId", "itemId")
+                VALUES (2, 1, 2, 1, {movie_item});
+              INSERT INTO cleanup_exclusions (id, "mediaId", "itemId") VALUES (2, 1, {movie_item})"#
         ),
     )
     .await;
