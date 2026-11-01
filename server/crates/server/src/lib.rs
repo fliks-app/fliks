@@ -66,6 +66,7 @@ async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {
 
 pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
     let pool = connect(cfg).await?;
+    system::backup::before_migration(cfg, &pool).await?;
     db::migrate(&pool).await?;
     pool.close().await;
     Ok(())
@@ -81,6 +82,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         Err(_) => return Err("cannot reach the database: no answer within 10 s".into()),
     }
     let pool = connect(&cfg).await?;
+    system::backup::before_migration(&cfg, &pool).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;
     subtitles::sweep(&pool).await?;

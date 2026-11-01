@@ -601,3 +601,95 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         404
     );
 }
+
+fn pre_files(dir: &std::path::Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+fn cfg_for(url: &str, name: &str) -> Config {
+    let env = db_env(url, name);
+    Config::from_lookup(|k| env.get(k).cloned())
+}
+
+async fn pre_backup(
+    url: &str,
+    db: &str,
+    pool: &PgPool,
+    dir: &std::path::Path,
+) -> Result<(), String> {
+    fliks_server::system::backup::before_migration_in(&cfg_for(url, db), pool, dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tokio::test]
+async fn pre_migration_backup_on_scratch_databases() {
+    let Ok(url) = std::env::var("DATABASE_URL") else {
+        return;
+    };
+    if !have("pg_dump") {
+        return;
+    }
+    let total = sqlx::migrate!("../../migrations").migrations.len();
+    let dir = PathBuf::from(format!(
+        "/tmp/fliks-parity/pre-migration-{}",
+        fliks_server::config::random_hex(6)
+    ));
+
+    let behind = Scratch::create(&url, Some(total - 1)).await;
+    pre_backup(&url, &behind.name, &behind.pool, &dir)
+        .await
+        .unwrap();
+    let files = pre_files(&dir);
+    assert_eq!(files.len(), 1);
+    assert!(files[0].starts_with("fliks-pre-migration-v") && files[0].ends_with(".sql"));
+    assert!(
+        std::fs::read_to_string(dir.join(&files[0]))
+            .unwrap()
+            .contains("CREATE TABLE")
+    );
+
+    // A failing dump (unknown database) refuses to migrate.
+    let err = pre_backup(&url, "no_such_db", &behind.pool, &dir)
+        .await
+        .unwrap_err();
+    assert!(err.contains("migrations not applied"), "{err}");
+    assert_eq!(pre_files(&dir).len(), 1);
+    behind.drop_db().await;
+
+    // Retention keeps 3.
+    for _ in 0..4 {
+        let s = Scratch::create(&url, Some(total - 1)).await;
+        pre_backup(&url, &s.name, &s.pool, &dir).await.unwrap();
+        s.drop_db().await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    assert_eq!(pre_files(&dir).len(), 3);
+
+    // Up to date and empty databases dump nothing.
+    let before = pre_files(&dir);
+    let current = Scratch::create(&url, None).await;
+    pre_backup(&url, &current.name, &current.pool, &dir)
+        .await
+        .unwrap();
+    current.drop_db().await;
+    let fresh = Scratch::create(&url, Some(0)).await;
+    sqlx::query("DROP TABLE _sqlx_migrations")
+        .execute(&fresh.pool)
+        .await
+        .unwrap();
+    pre_backup(&url, &fresh.name, &fresh.pool, &dir)
+        .await
+        .unwrap();
+    fresh.drop_db().await;
+    assert_eq!(pre_files(&dir), before);
+    let _ = std::fs::remove_dir_all(&dir);
+}

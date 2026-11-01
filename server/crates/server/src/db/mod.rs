@@ -1,6 +1,6 @@
 pub mod migrate;
 
-pub use migrate::{MigrateError, adopt_typeorm, migrate};
+pub use migrate::{MigrateError, adopt_typeorm, migrate, pending_version};
 
 use fliks_domain::media::kind::{MediaKind, UnknownKind};
 
