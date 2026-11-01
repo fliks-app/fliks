@@ -53,7 +53,7 @@ struct MediaDetailView: View {
             VStack(alignment: .leading, spacing: 40) {
                 header(media)
 
-                if media.type == "series", let seasons = media.seasons, !seasons.isEmpty {
+                if media.type.hasChildren, let seasons = media.seasons, !seasons.isEmpty {
                     seasonPicker(seasons)
                     if let season = seasons.first(where: { $0.id == activeSeasonId }) {
                         episodesRail(season: season)
@@ -162,7 +162,7 @@ struct MediaDetailView: View {
     /// loaded here) — add it if the plain header target reads wrong once
     /// watched-tracking lands on this screen.
     private func playTarget(_ media: Media) -> PlayTarget? {
-        if media.type != "series" {
+        if !media.type.hasChildren {
             guard let fileId = resumeInfo?.mediaFileId ?? media.files?.first(where: { $0.episodeId == nil })?.id else {
                 return nil
             }
@@ -270,14 +270,14 @@ struct MediaDetailView: View {
     }
 
     private func watchedLabel(_ media: Media) -> String {
-        if media.type == "series" {
+        if media.type.hasChildren {
             return isWatched ? tr("media_detail.mark_series_unwatched") : tr("media_detail.mark_series_watched")
         }
         return isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched")
     }
 
     private func toggleWatched(_ media: Media) async {
-        guard media.type == "series" else {
+        guard media.type.hasChildren else {
             await watched.toggle(mediaId: mediaId)
             return
         }

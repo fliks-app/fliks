@@ -344,7 +344,7 @@ import UIKit
     /// resolved only when it has a downloaded file.
     private func resolveNextEpisode() {
         nextEpisode = nil
-        guard let media, media.type == "series", let episodeId, let seasons = media.seasons else { return }
+        guard let media, media.type.hasChildren, let episodeId, let seasons = media.seasons else { return }
         let sorted = seasons.sorted { $0.seasonNumber < $1.seasonNumber }
         for (si, season) in sorted.enumerated() {
             let eps = season.episodes.sorted { $0.episodeNumber < $1.episodeNumber }
