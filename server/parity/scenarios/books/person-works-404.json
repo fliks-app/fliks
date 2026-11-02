@@ -1,0 +1,19 @@
+{
+  "name": "books-person-works-404",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Person #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/persons/9999/works?role=author"
+    }
+  ]
+}

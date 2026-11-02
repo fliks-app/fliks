@@ -1,0 +1,28 @@
+{
+  "name": "books-chapters-audnexus",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "endSeconds": 60.0,
+            "source": "audnexus",
+            "startSeconds": 0.0,
+            "title": "Intro"
+          },
+          {
+            "endSeconds": 180.0,
+            "source": "audnexus",
+            "startSeconds": 60.0,
+            "title": "One"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/103/editions/104/chapters"
+    }
+  ]
+}

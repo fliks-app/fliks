@@ -1,0 +1,197 @@
+{
+  "name": "books-person-works-admin",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "series": [
+            {
+              "collection": {
+                "id": 101,
+                "name": "Parity Cycle"
+              },
+              "works": [
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [
+                        "text",
+                        "audio"
+                      ],
+                      "lastFamily": null,
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 1,
+                        "positionLabel": null
+                      }
+                    },
+                    "id": 101,
+                    "posterUrl": "/api/images/media/101/poster",
+                    "progressPercent": 0,
+                    "title": "Parity Book Alpha",
+                    "type": "book",
+                    "watched": false,
+                    "year": 2001
+                  },
+                  "position": 1,
+                  "positionEnd": null,
+                  "positionLabel": null
+                },
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [
+                        "audio"
+                      ],
+                      "lastFamily": "audio",
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 2,
+                        "positionLabel": "II"
+                      }
+                    },
+                    "id": 102,
+                    "posterUrl": null,
+                    "progressPercent": 100,
+                    "title": "Parity Book Beta",
+                    "type": "book",
+                    "watched": true,
+                    "year": 2005
+                  },
+                  "position": 2,
+                  "positionEnd": null,
+                  "positionLabel": "II"
+                },
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [],
+                      "lastFamily": null,
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 3,
+                        "positionLabel": null
+                      }
+                    },
+                    "id": 104,
+                    "posterUrl": null,
+                    "progressPercent": 0,
+                    "title": "Parity Book Hidden",
+                    "type": "book",
+                    "watched": false,
+                    "year": 2003
+                  },
+                  "position": 3,
+                  "positionEnd": null,
+                  "positionLabel": null
+                },
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [
+                        "audio"
+                      ],
+                      "lastFamily": null,
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 4,
+                        "positionLabel": null
+                      }
+                    },
+                    "id": 103,
+                    "posterUrl": null,
+                    "progressPercent": 0,
+                    "title": "Parity Book Gamma",
+                    "type": "book",
+                    "watched": false,
+                    "year": null
+                  },
+                  "position": 4,
+                  "positionEnd": null,
+                  "positionLabel": null
+                }
+              ]
+            },
+            {
+              "collection": {
+                "id": 102,
+                "name": "Parity Lonely"
+              },
+              "works": [
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [],
+                      "lastFamily": null,
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 3,
+                        "positionLabel": null
+                      }
+                    },
+                    "id": 104,
+                    "posterUrl": null,
+                    "progressPercent": 0,
+                    "title": "Parity Book Hidden",
+                    "type": "book",
+                    "watched": false,
+                    "year": 2003
+                  },
+                  "position": 1,
+                  "positionEnd": null,
+                  "positionLabel": null
+                }
+              ]
+            }
+          ],
+          "standalone": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/101/works?role=author"
+    }
+  ]
+}

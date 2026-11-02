@@ -1,0 +1,15 @@
+{
+  "name": "books-chapters-hidden-edition-admin",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/101/editions/102/chapters"
+    }
+  ]
+}

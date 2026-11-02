@@ -1,0 +1,30 @@
+{
+  "name": "books-persons-authors-admin-works",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "avatarUrl": null,
+            "id": 101,
+            "name": "Una Writer",
+            "sortName": "Writer, Una",
+            "workCount": 4
+          },
+          {
+            "avatarUrl": null,
+            "id": 103,
+            "name": "Aaron Zed",
+            "sortName": null,
+            "workCount": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons?role=author&sortBy=works"
+    }
+  ]
+}

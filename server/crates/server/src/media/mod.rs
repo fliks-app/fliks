@@ -1,5 +1,6 @@
 //! `/api/media` routes: reads (`media-query.md`) and writes (`media-write.md`).
 pub(crate) mod aggregates;
+pub(crate) mod books;
 mod calendar;
 pub mod details;
 pub mod editions;
@@ -8,7 +9,7 @@ pub mod field_sources;
 pub mod hydrate;
 pub mod items;
 pub(crate) mod list;
-mod params;
+pub(crate) mod params;
 mod related;
 mod routes;
 mod streams;

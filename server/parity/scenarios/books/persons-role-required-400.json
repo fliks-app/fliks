@@ -1,0 +1,21 @@
+{
+  "name": "books-persons-role-required-400",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "role must be one of the following values: author, narrator"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/persons"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "books-person-works-standalone",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "series": [],
+          "standalone": [
+            {
+              "book": {
+                "authors": [
+                  {
+                    "id": 103,
+                    "name": "Aaron Zed",
+                    "sortName": null
+                  }
+                ],
+                "formats": [],
+                "lastFamily": null,
+                "series": null
+              },
+              "id": 105,
+              "posterUrl": null,
+              "progressPercent": 0,
+              "title": "Parity Book Delta",
+              "type": "book",
+              "watched": false,
+              "year": 1999
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/103/works?role=author"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\" FROM media m\nWHERE m.type = 'book' AND m.\"libraryId\" = ANY($1) AND EXISTS (\n  SELECT 1 FROM media_credits mc WHERE mc.\"mediaId\" = m.id AND mc.\"personId\" = $2 AND mc.role = $3\n    AND (($3 = 'author' AND mc.\"editionId\" IS NULL)\n      OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e\n            WHERE e.id = mc.\"editionId\" AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($1)))))\nORDER BY m.title, m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "eac29cd25a94249bce12e743eb8cadeb58f4320d634ae84cac256fa8f7487d87"
+}

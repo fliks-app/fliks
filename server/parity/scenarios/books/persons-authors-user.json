@@ -1,0 +1,30 @@
+{
+  "name": "books-persons-authors-user",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatarUrl": null,
+            "id": 103,
+            "name": "Aaron Zed",
+            "sortName": null,
+            "workCount": 1
+          },
+          {
+            "avatarUrl": null,
+            "id": 101,
+            "name": "Una Writer",
+            "sortName": "Writer, Una",
+            "workCount": 3
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons?role=author"
+    }
+  ]
+}

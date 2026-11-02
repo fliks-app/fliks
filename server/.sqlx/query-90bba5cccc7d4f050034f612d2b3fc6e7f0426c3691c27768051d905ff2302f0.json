@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', c.id, 'name', c.name, 'count', COUNT(*)::int,\n  'maxPosition', max(COALESCE(e.\"positionEnd\", e.position))::float8,\n  'posters', COALESCE((ARRAY_AGG(m.\"posterUrl\" ORDER BY e.position NULLS LAST, m.id)\n                       FILTER (WHERE m.\"posterUrl\" IS NOT NULL))[1:4], ARRAY[]::text[])) AS \"json!: Value\"\nFROM collections c\nJOIN collection_entries e ON e.\"collectionId\" = c.id AND e.\"itemId\" IS NULL\nJOIN media m ON m.id = e.\"mediaId\"\nWHERE m.\"libraryId\" = ANY($1) AND ($2::text IS NULL OR m.type = $2) AND ($3::text IS NULL OR c.name ILIKE $3)\nGROUP BY c.id ORDER BY c.name ASC, c.id ASC LIMIT $4 OFFSET $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "90bba5cccc7d4f050034f612d2b3fc6e7f0426c3691c27768051d905ff2302f0"
+}

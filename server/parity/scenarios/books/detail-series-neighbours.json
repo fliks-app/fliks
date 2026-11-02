@@ -1,0 +1,194 @@
+{
+  "name": "books-detail-series-neighbours",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "book": {
+            "authors": [
+              {
+                "id": 101,
+                "name": "Una Writer",
+                "sortName": "Writer, Una"
+              }
+            ],
+            "editions": [
+              {
+                "coverUrl": null,
+                "durationSeconds": 150,
+                "externalIds": [],
+                "family": "audio",
+                "fieldSources": [],
+                "fileIds": [
+                  103,
+                  104
+                ],
+                "format": "m4b",
+                "hasFile": true,
+                "id": 103,
+                "itemId": 103,
+                "label": null,
+                "language": "fr",
+                "libraryId": null,
+                "narrators": [
+                  {
+                    "id": 102,
+                    "name": "Vic Voice",
+                    "sortName": null
+                  }
+                ],
+                "pageCount": null,
+                "published": null,
+                "publisher": null,
+                "title": null
+              }
+            ],
+            "originalLanguage": null,
+            "progress": null,
+            "series": [
+              {
+                "id": 101,
+                "name": "Parity Cycle",
+                "next": {
+                  "id": 103,
+                  "position": 4,
+                  "title": "Parity Book Gamma"
+                },
+                "position": 2,
+                "positionLabel": "II",
+                "previous": {
+                  "id": 101,
+                  "position": 1,
+                  "title": "Parity Book Alpha"
+                }
+              }
+            ],
+            "subjects": [],
+            "subtitle": null,
+            "translators": [
+              {
+                "id": 103,
+                "name": "Aaron Zed",
+                "sortName": null
+              }
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodeId": null,
+              "id": 103,
+              "language": null,
+              "mediaId": 102,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "M4B",
+              "relativePath": "beta-1.m4b",
+              "size": 1,
+              "streamInfo": {
+                "chapters": [
+                  {
+                    "endSeconds": 40,
+                    "startSeconds": 0,
+                    "title": "A"
+                  },
+                  {
+                    "endSeconds": 100,
+                    "startSeconds": 40,
+                    "title": "B"
+                  }
+                ],
+                "durationSeconds": 100
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodeId": null,
+              "id": 104,
+              "language": null,
+              "mediaId": 102,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "M4B",
+              "relativePath": "beta-2.m4b",
+              "size": 1,
+              "streamInfo": {
+                "chapters": [
+                  {
+                    "endSeconds": 50,
+                    "startSeconds": 0,
+                    "title": "C"
+                  }
+                ],
+                "durationSeconds": 50
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "folderName": "Parity Book Beta",
+          "genres": null,
+          "id": 102,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#8b5cf6",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "book",
+            "id": 3,
+            "label": null,
+            "mediaTypes": [
+              "book"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Books",
+            "preferredProvider": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "libraryId": 3,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": null,
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic book beta",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "tba",
+          "title": "Parity Book Beta",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": null,
+          "tvdbId": null,
+          "type": "book",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "year": 2005
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/102"
+    }
+  ]
+}

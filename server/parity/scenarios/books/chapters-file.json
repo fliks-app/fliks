@@ -1,0 +1,34 @@
+{
+  "name": "books-chapters-file",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "endSeconds": 40.0,
+            "source": "file",
+            "startSeconds": 0.0,
+            "title": "A"
+          },
+          {
+            "endSeconds": 100.0,
+            "source": "file",
+            "startSeconds": 40.0,
+            "title": "B"
+          },
+          {
+            "endSeconds": 150.0,
+            "source": "file",
+            "startSeconds": 100.0,
+            "title": "C"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/102/editions/103/chapters"
+    }
+  ]
+}

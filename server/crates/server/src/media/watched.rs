@@ -36,11 +36,12 @@ pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     )
 }
 
-/// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind.
+/// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind, 100 for a watched book.
 pub(crate) fn progress(uid: impl Display, m: &str) -> String {
     let seasonal = seasonal_array();
+    let (book, watched) = (MediaKind::Book.as_str(), predicate(&uid, m));
     format!(
-        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 ELSE COALESCE((
+        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 WHEN {m}.type = '{book}' AND ({watched}) THEN 100 ELSE COALESCE((
     SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
     FROM playback_states ps JOIN items i ON i.id = ps."itemId"
     WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND i."groupId" IS NULL
@@ -59,6 +60,7 @@ mod tests {
         assert!(predicate(1, "m").contains("ANY(ARRAY['series']::text[])"));
         let p = progress("$1", "m");
         assert!(p.contains("ELSE COALESCE(") && p.contains("), 0) END"));
+        assert!(p.contains("type = 'book' AND (CASE WHEN") && p.contains("THEN 100 ELSE"));
         assert!(!p.contains("'movie'") && !predicate(1, "m").contains("'movie'"));
     }
 }

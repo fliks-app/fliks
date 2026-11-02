@@ -1,0 +1,23 @@
+{
+  "name": "books-persons-narrators-admin",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "avatarUrl": null,
+            "id": 102,
+            "name": "Vic Voice",
+            "sortName": null,
+            "workCount": 2
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons?role=narrator"
+    }
+  ]
+}

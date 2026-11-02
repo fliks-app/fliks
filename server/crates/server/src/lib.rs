@@ -5,6 +5,7 @@ pub mod auth_token;
 pub mod books;
 pub mod busy;
 pub mod cleanup;
+pub mod collections;
 pub mod config;
 pub mod db;
 pub mod engine;
