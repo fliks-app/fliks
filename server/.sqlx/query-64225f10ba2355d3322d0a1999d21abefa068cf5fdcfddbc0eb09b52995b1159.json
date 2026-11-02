@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mediaId\" FROM media_files\n               WHERE \"folderId\" = $1 AND replace(\"relativePath\", '\\', '/') = $2 AND \"mediaId\" <> $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mediaId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mediaId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "64225f10ba2355d3322d0a1999d21abefa068cf5fdcfddbc0eb09b52995b1159"
+}

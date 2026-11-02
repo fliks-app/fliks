@@ -5,7 +5,7 @@ pub mod group;
 pub mod parts;
 pub mod tags;
 
-use super::{fsx, library::file_name, post_import::file_path, probe, rescan::PROBE_VERSION};
+use super::{library::file_name, post_import::file_path, probe, rescan::PROBE_VERSION};
 use crate::{
     books::koreader,
     images::paths::{Target, Variant},
@@ -154,19 +154,10 @@ pub async fn store_cover(st: &AppState, media: i32, bytes: &[u8]) {
     if has {
         return;
     }
-    let dir = crate::paths::cache_dir().join("covers");
-    let tmp = dir.join(fsx::tmp_name());
-    if tokio::fs::create_dir_all(&dir).await.is_err()
-        || tokio::fs::write(&tmp, bytes).await.is_err()
-    {
-        tracing::warn!("cover of book #{media}: cannot write the temporary picture");
-        return;
-    }
     let url = st
         .images
-        .store_from_disk(&tmp, &Target::media(media, Variant::Poster))
+        .store_bytes(bytes.to_vec(), &Target::media(media, Variant::Poster))
         .await;
-    let _ = tokio::fs::remove_file(&tmp).await;
     if let Some(url) = url
         && let Err(e) = sqlx::query!(
             r#"UPDATE media SET "posterUrl" = $2 WHERE id = $1 AND "posterUrl" IS NULL"#,
@@ -204,14 +195,8 @@ async fn anchored(db: &PgPool, media: i32) -> sqlx::Result<bool> {
     .await
 }
 
-/// The files of an anchored media that belong to its own work; the others go to `conflicts`.
-async fn own_work<'a>(
-    db: &PgPool,
-    media: i32,
-    files: &'a [Placed],
-    conflicts: &mut Vec<String>,
-) -> sqlx::Result<Vec<&'a Placed>> {
-    let known: Vec<String> = sqlx::query_scalar!(
+async fn known_paths(db: &PgPool, media: i32) -> sqlx::Result<Vec<String>> {
+    Ok(sqlx::query_scalar!(
         r#"SELECT "relativePath" FROM media_files WHERE "mediaId" = $1"#,
         media
     )
@@ -219,25 +204,59 @@ async fn own_work<'a>(
     .await?
     .into_iter()
     .map(|r| r.replace('\\', "/"))
-    .collect();
-    let mut all = known.clone();
-    all.extend(files.iter().map(|f| f.rel.replace('\\', "/")));
+    .collect())
+}
+
+/// The files of the media's own work: the one of its linked files, else of the first book file of `new`.
+fn own_paths(known: &[String], new: &[String]) -> HashSet<String> {
+    let all: Vec<String> = known.iter().chain(new).cloned().collect();
     let works = group::group(&all);
     let files_of = |w: &group::Work| -> HashSet<String> {
         w.versions.iter().flat_map(|v| v.files.clone()).collect()
     };
-    let Some(home) = works
+    let first = new.iter().find(|p| classify(p).is_some());
+    works
         .iter()
         .find(|w| files_of(w).iter().any(|p| known.contains(p)))
-        .or(works.first())
-    else {
-        return Ok(files.iter().collect());
-    };
-    let mine = files_of(home);
+        .or_else(|| {
+            works
+                .iter()
+                .find(|w| first.is_some_and(|f| files_of(w).contains(f)))
+        })
+        .map(files_of)
+        .unwrap_or_default()
+}
+
+/// Whether `rel` is a file of the work an anchored media owns, counting `pending` (the files a
+/// transfer already placed); always true for a media with no folder name.
+pub async fn is_own_work(
+    db: &PgPool,
+    media: i32,
+    pending: &[String],
+    rel: &str,
+) -> sqlx::Result<bool> {
+    if !anchored(db, media).await? {
+        return Ok(true);
+    }
+    let mut new: Vec<String> = pending.iter().map(|p| p.replace('\\', "/")).collect();
+    let rel = rel.replace('\\', "/");
+    new.push(rel.clone());
+    Ok(own_paths(&known_paths(db, media).await?, &new).contains(&rel))
+}
+
+/// The files of an anchored media that belong to its own work; the others go to `conflicts`.
+async fn own_work<'a>(
+    db: &PgPool,
+    media: i32,
+    files: &'a [Placed],
+    conflicts: &mut Vec<String>,
+) -> sqlx::Result<Vec<&'a Placed>> {
+    let new: Vec<String> = files.iter().map(|f| f.rel.replace('\\', "/")).collect();
+    let mine = own_paths(&known_paths(db, media).await?, &new);
     let mut out = vec![];
-    for f in files {
+    for (f, rel) in files.iter().zip(&new) {
         let name = file_name(&f.abs);
-        if classify(&name).is_none() || mine.contains(&f.rel.replace('\\', "/")) {
+        if classify(&name).is_none() || mine.contains(rel) {
             out.push(f);
         } else {
             conflicts.push(format!("{name}: belongs to another work of the folder"));
@@ -269,9 +288,11 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             .await
             .map_err(|e| format!("{name}: {e}"))?;
         let mtime = super::rescan::mtime_ms(&meta);
+        let mut found = None;
+        let mut found_cover = None;
         let (info, version) = if family == Family::Audio {
             let p = probe(st, &f.abs, false).await?;
-            facts.push((family, tag_facts(p.info.tags.as_ref())));
+            found = Some(tag_facts(p.info.tags.as_ref()));
             (
                 Some(serde_json::to_value(&p.info).map_err(|e| e.to_string())?),
                 Some(PROBE_VERSION),
@@ -283,19 +304,16 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
                     .await
                     .map_err(|e| e.to_string())?
                 {
-                    facts.push((
-                        family,
-                        Facts {
-                            language: e
-                                .meta
-                                .language
-                                .as_deref()
-                                .map(|l| normalize_language_code(Some(l)))
-                                .filter(|l| l != "und"),
-                            publisher: e.meta.publisher.clone(),
-                        },
-                    ));
-                    cover = cover.or(e.cover);
+                    found = Some(Facts {
+                        language: e
+                            .meta
+                            .language
+                            .as_deref()
+                            .map(|l| normalize_language_code(Some(l)))
+                            .filter(|l| l != "und"),
+                        publisher: e.meta.publisher.clone(),
+                    });
+                    found_cover = e.cover;
                 }
             }
             (None::<Value>, None)
@@ -325,6 +343,8 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             conflicts.push(format!("{name}: file already linked to another media"));
             continue;
         };
+        facts.extend(found.map(|f| (family, f)));
+        cover = cover.or(found_cover);
         if family == Family::Text {
             store_hash(&st.db, id, &f.abs).await;
         }

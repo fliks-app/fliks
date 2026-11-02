@@ -202,10 +202,13 @@ async fn ctx(pool: PgPool) -> Ctx {
         ("FLIKS_ENGINE_TOKEN", "tok".into()),
     ];
     let cfg = Config::from_lookup(|k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()));
-    let st = AppState::new(pool.clone(), cfg, SECRET);
+    let dir = tmp();
+    let images =
+        crate::images::ImageStore::with_root(dir.join("data"), &cfg.metadata.tmdb_image_url);
+    let mut st = AppState::new(pool.clone(), cfg, SECRET);
+    st.images = std::sync::Arc::new(images);
     st.engine.start_with(Some(pool.clone()), 4849).await;
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
-    let dir = tmp();
     sqlx::query(r#"INSERT INTO roles (id, name, permissions) VALUES (50, 'Editor', '["media.read","media.create","media.edit","media.delete"]')"#)
         .execute(&pool)
         .await
@@ -1458,8 +1461,70 @@ mod book_ingest {
         )
         .await;
         assert_eq!(s, 200);
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert!(eventually(|| !lib.join("Shared/Mirelune.epub").exists()).await);
         assert!(lib.join("Shared/Orfaline.epub").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn deleting_a_book_keeps_the_files_it_does_not_own(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Solo", "book").await;
+        epub(&lib.join("Solo/Sub/Mirelune.epub"));
+        touch(&lib.join("Solo/notes.txt"), b"mine");
+        books::register(&c.st, m, &placed(&c, &["Solo/Sub/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let (s, _) = call(
+            &c,
+            "DELETE",
+            &format!("/api/media/{m}"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 200);
+        assert!(eventually(|| !lib.join("Solo/Sub").exists()).await);
+        assert_eq!(fs::read(lib.join("Solo/notes.txt")).unwrap(), b"mine");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_second_work_is_refused_before_it_is_moved(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Mirelune", "book").await;
+        epub(&lib.join("Mirelune/Mirelune.epub"));
+        books::register(&c.st, m, &placed(&c, &["Mirelune/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let src = c.dir.join("inbox/Brumevent.epub");
+        epub(&src);
+        let guard = c.st.ingest.media.lock(m).await;
+        let out = library::ingest(
+            &c.st,
+            &guard,
+            Request {
+                media_id: m,
+                files: vec![File {
+                    path: src.clone(),
+                    episode_id: None,
+                }],
+                transfer: Method::Move,
+                fallback_quality: None,
+                release_name: None,
+                force: false,
+                uniquify_on_collision: true,
+                replace_existing: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!((out.errors.len(), out.already_present.len()), (1, 0));
+        assert!(src.exists());
+        assert!(!lib.join("Mirelune/Mirelune (2).epub").exists());
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
     }
 
     #[sqlx::test(migrations = false)]
@@ -1538,6 +1603,36 @@ mod book_ingest {
         assert_eq!(s, 200);
         assert!(eventually(|| !lib.join("Olympe Faucheval/Orfaline").exists()).await);
         assert!(lib.join("Olympe Faucheval").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn positions_close_up_when_a_part_goes_and_the_new_files_are_refused(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Orfaline", "book").await;
+        for r in ["01.mp3", "02.mp3", "03.mp3"] {
+            touch(&lib.join("Orfaline").join(r), b"x");
+        }
+        books::register(
+            &c.st,
+            m,
+            &placed(
+                &c,
+                &["Orfaline/01.mp3", "Orfaline/02.mp3", "Orfaline/03.mp3"],
+            ),
+        )
+        .await
+        .unwrap();
+        fs::remove_file(lib.join("Orfaline/01.mp3")).unwrap();
+        for r in ["Mirelune", "Brumevent"] {
+            epub(&lib.join(format!("Orfaline/{r}.epub")));
+        }
+        let counts = rescan(&c, m).await.unwrap();
+        assert_eq!((counts.removed, counts.added), (1, 0));
+        let positions: Vec<i32> = parts(&c, m).await.iter().map(|p| p.2).collect();
+        assert_eq!(positions, [0, 1]);
     }
 
     #[sqlx::test(migrations = false)]

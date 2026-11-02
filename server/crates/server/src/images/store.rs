@@ -382,6 +382,17 @@ impl ImageStore {
         self.serialized(t, self.run(t, &key, read, &shown)).await
     }
 
+    pub async fn store_bytes(&self, bytes: Vec<u8>, t: &Target) -> Option<String> {
+        if !t.is_valid() {
+            tracing::warn!("image {}: no such target", t.api_path());
+            return None;
+        }
+        let key = format!("bytes@{}", hash8(&bytes));
+        let shown = t.api_path();
+        self.serialized(t, self.run(t, &key, async { Ok(bytes) }, &shown))
+            .await
+    }
+
     pub fn has_image(&self, t: &Target) -> bool {
         t.is_valid() && t.file(self.root(), Size::Full).is_file()
     }

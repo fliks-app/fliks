@@ -505,6 +505,61 @@ pub fn remove_media_dir(dir: &Path) -> io::Result<()> {
     }
 }
 
+/// What a media delete takes off disk under `dir`: all of it, or for a book only the files it owns.
+#[derive(Debug)]
+pub struct Removal {
+    pub dir: PathBuf,
+    pub owned: Option<Vec<PathBuf>>,
+}
+
+impl Removal {
+    pub fn remove(&self) -> io::Result<()> {
+        match &self.owned {
+            Some(files) if fs::symlink_metadata(&self.dir).is_ok_and(|m| m.is_dir()) => {
+                remove_owned(&self.dir, files)
+            }
+            _ => remove_media_dir(&self.dir),
+        }
+    }
+}
+
+/// Unlinks `files`, then every directory from theirs up to `dir` that is left empty; anything
+/// else in there stays.
+fn remove_owned(dir: &Path, files: &[PathBuf]) -> io::Result<()> {
+    let mut dirs = vec![dir.to_path_buf()];
+    for f in files.iter().filter(|f| f.starts_with(dir)) {
+        match fs::symlink_metadata(f) {
+            Ok(m) if !m.is_dir() => match fs::remove_file(f) {
+                Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+                _ => {}
+            },
+            _ => {}
+        }
+        dirs.extend(
+            f.ancestors()
+                .skip(1)
+                .take_while(|a| *a != dir)
+                .map(Path::to_path_buf),
+        );
+    }
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    dirs.dedup();
+    for d in dirs {
+        match fs::remove_dir(&d) {
+            Err(e)
+                if !matches!(
+                    e.kind(),
+                    io::ErrorKind::NotFound | io::ErrorKind::DirectoryNotEmpty
+                ) =>
+            {
+                return Err(e);
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

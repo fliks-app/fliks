@@ -344,17 +344,20 @@ async fn book_pass(
             abs: abs.clone(),
         })
         .collect();
-    if fresh.is_empty() {
-        if let Err(e) = super::books::relay(st, media.id).await {
-            tracing::warn!("Rescan[media #{}]: {e}", media.id);
-        }
-        return Ok(());
-    }
-    let reg = super::books::register(st, media.id, &fresh)
-        .await
-        .map_err(AppError::internal)?;
+    let reg = if fresh.is_empty() {
+        super::books::Registration::default()
+    } else {
+        super::books::register(st, media.id, &fresh)
+            .await
+            .map_err(AppError::internal)?
+    };
     for why in &reg.conflicts {
         tracing::warn!("Rescan[media #{}]: {why}", media.id);
+    }
+    if reg.files.is_empty()
+        && let Err(e) = super::books::relay(st, media.id).await
+    {
+        tracing::warn!("Rescan[media #{}]: {e}", media.id);
     }
     c.added += reg.files.len() as i64;
     Ok(())

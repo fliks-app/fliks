@@ -14,7 +14,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::path::media_path,
+    media::{kind::MediaKind, path::media_path},
 };
 use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf};
@@ -42,6 +42,10 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
         .await
         .map_err(|e| e.to_string())?;
     let roots: Vec<PathBuf> = all.iter().map(|f| PathBuf::from(&f.path)).collect();
+    // A book removes only what it owns and the directories that end up empty: sharing is harmless.
+    if m.media_type == MediaKind::Book {
+        return fsx::removable_dir_of(&root, m.media_type, folder, &roots, &[]);
+    }
     let mut others: Vec<PathBuf> = sqlx::query!(
         r#"SELECT lf.path AS "lib!", m."folderName" AS "folder!" FROM media m
            JOIN (SELECT "mediaId", "folderId" FROM media_files
@@ -78,16 +82,24 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
     fsx::removable_dir_of(&root, m.media_type, folder, &roots, &others)
 }
 
-/// Rule 70 once per folder holding one of the media's files (`file_folders`) plus its target folder (libraries rule 55).
+/// What a delete leaves to remove from disk: the folders that held the media's files and, for a
+/// book, those files as `(folder id, relative path)`; both are unreadable once the rows are gone.
+#[derive(Default)]
+pub struct Leftover {
+    pub folders: Vec<i32>,
+    pub files: Vec<(i32, String)>,
+}
+
+/// Rule 70 once per folder holding one of the media's files plus its target folder (libraries rule 55).
 pub async fn media_dirs_to_remove(
     st: &AppState,
     m: &MediaRow,
-    file_folders: &[i32],
-) -> Vec<Result<PathBuf, String>> {
-    let mut ids = file_folders.to_vec();
+    left: &Leftover,
+) -> Vec<Result<fsx::Removal, String>> {
+    let mut ids = left.folders.clone();
     ids.extend(m.folder.as_ref().map(|f| f.id));
     let rows = match sqlx::query!(
-        r#"SELECT path FROM library_folders WHERE id = ANY($1) ORDER BY id"#,
+        r#"SELECT id, path FROM library_folders WHERE id = ANY($1) ORDER BY id"#,
         &ids
     )
     .fetch_all(&st.db)
@@ -99,7 +111,17 @@ pub async fn media_dirs_to_remove(
     let mut out = vec![];
     for r in rows {
         match media_dir_in(st, m, &r.path).await {
-            Ok(dir) => out.extend(dir.map(Ok)),
+            Ok(Some(dir)) => {
+                let owned = (m.media_type == MediaKind::Book).then(|| {
+                    left.files
+                        .iter()
+                        .filter(|(f, _)| *f == r.id)
+                        .filter_map(|(_, rel)| fsx::locate(&r.path, rel))
+                        .collect()
+                });
+                out.push(Ok(fsx::Removal { dir, owned }));
+            }
+            Ok(None) => {}
             Err(why) => out.push(Err(why)),
         }
     }
@@ -107,25 +129,32 @@ pub async fn media_dirs_to_remove(
 }
 
 /// `remove(id)` (rules 67-69): hook and row delete in one transaction; the caller holds the lock.
-/// Also answers the folders that held its files, unreadable once the rows are gone.
+/// Also answers what its files left on disk, unreadable once the rows are gone.
 pub async fn remove_media(
     st: &AppState,
     _guard: &tokio::sync::OwnedMutexGuard<()>,
     id: i32,
-) -> Result<(MediaRow, Vec<i32>), AppError> {
+) -> Result<(MediaRow, Leftover), AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let rows = sqlx::query!(
-        r#"SELECT id, "folderId" AS folder_id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+        r#"SELECT id, "folderId" AS folder_id, "relativePath" AS rel FROM media_files
+           WHERE "mediaId" = $1 ORDER BY id"#,
         id
     )
     .fetch_all(&st.db)
     .await?;
     let files: Vec<i32> = rows.iter().map(|r| r.id).collect();
-    let mut folders: Vec<i32> = rows.iter().map(|r| r.folder_id).collect();
-    folders.sort_unstable();
-    folders.dedup();
+    let mut left = Leftover {
+        folders: rows.iter().map(|r| r.folder_id).collect(),
+        files: vec![],
+    };
+    left.folders.sort_unstable();
+    left.folders.dedup();
+    if media.media_type == MediaKind::Book {
+        left.files = rows.into_iter().map(|r| (r.folder_id, r.rel)).collect();
+    }
     crate::party::end_playing(st, id).await?;
     let mut tx = st.db.begin().await?;
     crate::requests::Lifecycle::of(st)
@@ -145,7 +174,7 @@ pub async fn remove_media(
         media_type: media.media_type,
     });
     crate::media_servers::dispatch_detached(st, "media.deleted");
-    Ok((media, folders))
+    Ok((media, left))
 }
 
 /// `remove_media` plus the folders it judged contained; the caller holds the lock.
@@ -153,10 +182,10 @@ pub async fn remove_media_with_dir(
     st: &AppState,
     guard: &tokio::sync::OwnedMutexGuard<()>,
     id: i32,
-) -> Result<(MediaRow, Vec<PathBuf>), AppError> {
-    let (media, folders) = remove_media(st, guard, id).await?;
+) -> Result<(MediaRow, Vec<fsx::Removal>), AppError> {
+    let (media, left) = remove_media(st, guard, id).await?;
     let mut dirs = vec![];
-    for dir in media_dirs_to_remove(st, &media, &folders).await {
+    for dir in media_dirs_to_remove(st, &media, &left).await {
         match dir {
             Ok(d) => dirs.push(d),
             Err(why) => tracing::warn!(
@@ -169,9 +198,9 @@ pub async fn remove_media_with_dir(
     Ok((media, dirs))
 }
 
-/// Removes a folder `media_dirs_to_remove` judged contained.
-pub async fn remove_media_folder(dir: PathBuf) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || fsx::remove_media_dir(&dir))
+/// Removes what `media_dirs_to_remove` judged contained.
+pub async fn remove_media_folder(dir: fsx::Removal) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || dir.remove())
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())
@@ -196,32 +225,32 @@ pub async fn remove(
 ) -> Result<Json<Value>, AppError> {
     let id = gate(&st, &a, Action::Delete, id).await?;
     let guard = st.ingest.media.lock(id).await;
-    let (media, folders) = remove_media(&st, &guard, id).await?;
+    let (media, left) = remove_media(&st, &guard, id).await?;
     let user = a.user.id;
     let st2 = st.clone();
     tokio::spawn(async move {
         let _guard = guard;
         let m = &media;
-        for dir in media_dirs_to_remove(&st2, m, &folders).await {
+        for dir in media_dirs_to_remove(&st2, m, &left).await {
             match dir {
-                Ok(d) => match tokio::task::spawn_blocking({
-                    let d = d.clone();
-                    move || fsx::remove_media_dir(&d)
-                })
-                .await
-                {
-                    Ok(Ok(())) => tracing::info!("Deleted media folder on disk: {}", d.display()),
-                    Ok(Err(e)) => {
-                        tracing::error!(
-                            "Media file deletion failed: id={} title=\"{}\" path=\"{}\" error={e}",
-                            m.id,
-                            m.title,
-                            d.display()
-                        );
-                        delete_failed(&st2, user, m);
+                Ok(d) => {
+                    let path = d.dir.clone();
+                    match tokio::task::spawn_blocking(move || d.remove()).await {
+                        Ok(Ok(())) => {
+                            tracing::info!("Deleted media folder on disk: {}", path.display())
+                        }
+                        Ok(Err(e)) => {
+                            tracing::error!(
+                                "Media file deletion failed: id={} title=\"{}\" path=\"{}\" error={e}",
+                                m.id,
+                                m.title,
+                                path.display()
+                            );
+                            delete_failed(&st2, user, m);
+                        }
+                        Err(e) => tracing::error!("media folder removal task: {e}"),
                     }
-                    Err(e) => tracing::error!("media folder removal task: {e}"),
-                },
+                }
                 Err(why) => {
                     tracing::warn!("Media #{} \"{}\": folder kept ({why})", m.id, m.title);
                     delete_failed(&st2, user, m);

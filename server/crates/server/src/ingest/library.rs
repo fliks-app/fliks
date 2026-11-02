@@ -151,6 +151,16 @@ pub async fn ingest(
             }
             None => None,
         };
+        if req.transfer == Method::Move
+            && let Ok((src, _)) = fsx::regular_source(&f.path)
+            && let Some(o) = linked_to_other(&st.db, media.id, &src).await?
+        {
+            out.errors.push(format!(
+                "{}: source is linked to media #{o}",
+                file_name(&f.path)
+            ));
+            continue;
+        }
         let ctx = Ctx {
             st,
             media: &media,
@@ -162,7 +172,11 @@ pub async fn ingest(
             req: &req,
         };
         if book {
-            match ctx.one_book(&f, parts.get(&f.path).copied()).await? {
+            let pending: Vec<String> = placed.iter().map(|(p, _)| p.rel.clone()).collect();
+            match ctx
+                .one_book(&f, parts.get(&f.path).copied(), &pending)
+                .await?
+            {
                 Placed::Book(b) => placed.push((b, f.path.clone())),
                 Placed::Present => out
                     .already_present
@@ -338,6 +352,37 @@ fn component(base: &str, ext: &str) -> Result<String, String> {
     Ok(format!("{base}{ext}"))
 }
 
+/// The other media whose file row sits at `src`, so that moving it would unlink that row's file.
+async fn linked_to_other(db: &sqlx::PgPool, media: i32, src: &Path) -> Result<Option<i32>, String> {
+    let folders = sqlx::query!(r#"SELECT id, path FROM library_folders"#)
+        .fetch_all(db)
+        .await
+        .map_err(|e| e.to_string())?;
+    for f in folders {
+        let Some(rel) = dunce::canonicalize(&f.path)
+            .ok()
+            .and_then(|root| fsx::rel_under(&root, src))
+        else {
+            continue;
+        };
+        let owner = sqlx::query_scalar!(
+            r#"SELECT "mediaId" FROM media_files
+               WHERE "folderId" = $1 AND replace("relativePath", '\', '/') = $2 AND "mediaId" <> $3"#,
+            f.id,
+            rel,
+            media
+        )
+        .fetch_optional(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .flatten();
+        if owner.is_some() {
+            return Ok(owner);
+        }
+    }
+    Ok(None)
+}
+
 /// `(index, count)` of each source file within its version (`book-ingest.md` rule 8).
 fn book_parts(files: &[File]) -> std::collections::HashMap<PathBuf, (usize, usize)> {
     let paths: Vec<String> = files
@@ -358,7 +403,12 @@ fn book_parts(files: &[File]) -> std::collections::HashMap<PathBuf, (usize, usiz
 
 impl Ctx<'_> {
     /// A book file: no probe, no scan; placed under `mdir`, registered by the caller with its siblings.
-    async fn one_book(&self, f: &File, part: Option<(usize, usize)>) -> Result<Placed, String> {
+    async fn one_book(
+        &self,
+        f: &File,
+        part: Option<(usize, usize)>,
+        pending: &[String],
+    ) -> Result<Placed, String> {
         let name = file_name(&f.path);
         let Ok((src, _)) = fsx::regular_source(&f.path) else {
             return Ok(Placed::Error(format!(
@@ -411,6 +461,15 @@ impl Ctx<'_> {
             if let Some(other) = self.owner(&dest).await?.filter(|o| *o != m.id) {
                 return Ok(Placed::Error(format!(
                     "{name}: destination belongs to media #{other}"
+                )));
+            }
+            if let Some(rel) = fsx::rel_under(self.root.path(), &dest)
+                && !books::is_own_work(&self.st.db, m.id, pending, &rel)
+                    .await
+                    .map_err(|e| e.to_string())?
+            {
+                return Ok(Placed::Error(format!(
+                    "{name}: belongs to another work of the folder"
                 )));
             }
             tokio::fs::create_dir_all(&dir)

@@ -10,6 +10,7 @@ No public route. The store is an in-process Rust module (`images::store`) with t
 |---|---|---|
 | `ImageStore::download_and_store` | `url: &str`, `t: &Target` (`Target::media(id, variant)`, `Target::request(kind, tmdb_id, variant)`, `person`, `episode`, `season`, `livetv`) | `Option<String>`: `/api/images/...?v=<hash>` or `None` |
 | `ImageStore::store_from_disk` | `abs: &Path`, `t: &Target` | same |
+| `ImageStore::store_bytes` | `bytes: Vec<u8>`, `t: &Target` | same; source key `bytes@<hash>` |
 | `ImageStore::has_image` | `t: &Target` | `bool` (full file exists) |
 | `Target::api_path` / `Target::file` (`disk_path`) | `root`, `size` | `String` / `PathBuf` |
 
