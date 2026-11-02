@@ -412,10 +412,20 @@ pub async fn remove_library(
     )
     .fetch_all(&st.db)
     .await?;
-    let n = ids.len();
+    let mut n = 0;
     for m in ids {
         let guard = st.ingest.media.lock(m).await;
+        let here =
+            sqlx::query_scalar::<_, Option<i32>>(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+                .bind(m)
+                .fetch_optional(&st.db)
+                .await?
+                .flatten();
+        if here != Some(id) {
+            continue;
+        }
         remove_media(&st, &guard, m).await?;
+        n += 1;
     }
     sqlx::query!("DELETE FROM libraries WHERE id = $1", id)
         .execute(&st.db)

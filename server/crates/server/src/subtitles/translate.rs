@@ -364,6 +364,10 @@ async fn try_run(
     let cleaned = clean_subtitle(&serialize_srt(&out), &opts);
     let hi = source.hearing_impaired && !opts.remove_hi_tags;
     let suffix = sidecar_lang_suffix(target, source.forced, hi);
+    let _moves = st.folder_moves.read().await;
+    let (dirs, file) = files::fresh_dirs(&st.db, file.id, "no root")
+        .await
+        .map_err(|e| other(&e.text()))?;
     let rel = dirs
         .write_sidecar(&file.relative_path, &suffix, ".srt", cleaned.as_bytes())
         .map_err(|e| other(&e.text()))?;

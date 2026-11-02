@@ -780,3 +780,369 @@ async fn folder_delete_points_the_remaining_wants_at_the_new_default(pool: PgPoo
             .unwrap();
     assert_eq!(want, Some(f2));
 }
+
+fn put(c: &Ctx, rel: &str, bytes: &[u8]) {
+    let p = c.tmp.join(rel);
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::write(p, bytes).unwrap();
+}
+
+async fn folder_of_file(pool: &PgPool, media: i32) -> i32 {
+    sqlx::query_scalar(
+        r#"SELECT "folderId" FROM media_files WHERE "mediaId" = $1 ORDER BY id LIMIT 1"#,
+    )
+    .bind(media)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// The detached move settles when its activity entry is gone.
+async fn settled(c: &Ctx) {
+    for _ in 0..100 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        if c.st.hub.activity().list(1, 10).total == 0 {
+            return;
+        }
+    }
+    panic!("the move did not settle");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_move_keeps_the_rows_and_carries_files_and_sidecars(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1, f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    put(&c, "f1/Mv/1.mkv", b"one");
+    put(&c, "f1/Mv/0.en.srt", b"sub");
+    let file: i32 = sqlx::query_scalar(
+        r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO subtitle_files (language, "providerType", "filePath", "mediaId", "mediaFileId") VALUES ('en', 'disk', $1, $2, $3)"#)
+        .bind(c.tmp.join("f1/Mv/0.en.srt").to_string_lossy().into_owned())
+        .bind(id)
+        .bind(file)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, _) = call(
+        &c,
+        "POST",
+        &format!("/api/media/{id}/move"),
+        &c.admin,
+        json!({"folderId": f2}),
+    )
+    .await;
+    assert_eq!(s, 202);
+    settled(&c).await;
+    for n in ["0.mkv", "1.mkv", "0.en.srt"] {
+        assert!(c.tmp.join("f2/Mv").join(n).is_file(), "{n}");
+        assert!(!c.tmp.join("f1/Mv").join(n).exists(), "{n} left behind");
+    }
+    assert!(
+        !c.tmp.join("f1/Mv").exists(),
+        "the emptied directory is pruned"
+    );
+    let rows: Vec<(i32, i32)> = sqlx::query_as(
+        r#"SELECT id, "folderId" FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+    )
+    .bind(id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter().all(|r| r.1 == f2) && rows[0].0 == file,
+        "{rows:?}"
+    );
+    let sub: String =
+        sqlx::query_scalar(r#"SELECT "filePath" FROM subtitle_files WHERE "mediaId" = $1"#)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(sub, "Mv/0.en.srt");
+    let want: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "folderId" FROM wants WHERE "mediaId" = $1 LIMIT 1"#)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(want, Some(f2));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_move_never_overwrites_and_changes_nothing_when_refused(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1, f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    put(&c, "f1/Mv/1.mkv", b"one");
+    put(&c, "f2/Mv/1.mkv", b"foreign");
+    let uri = format!("/api/media/{id}/move");
+    let (s, _) = call(&c, "POST", &uri, &c.admin, json!({"folderId": f2})).await;
+    assert_eq!(s, 202);
+    settled(&c).await;
+    assert_eq!(
+        std::fs::read(c.tmp.join("f2/Mv/1.mkv")).unwrap(),
+        b"foreign"
+    );
+    assert!(
+        !c.tmp.join("f2/Mv/0.mkv").exists(),
+        "nothing is placed before the checks pass"
+    );
+    assert!(c.tmp.join("f1/Mv/0.mkv").is_file() && c.tmp.join("f1/Mv/1.mkv").is_file());
+    assert_eq!(folder_of_file(&pool, id).await, f1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_rerun_recognises_its_own_copy_and_resumes(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    std::fs::create_dir_all(c.tmp.join("f2/Mv")).unwrap();
+    std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
+    let uri = format!("/api/media/{id}/move");
+    assert_eq!(
+        call(&c, "POST", &uri, &c.admin, json!({"folderId": f2}))
+            .await
+            .0,
+        202
+    );
+    settled(&c).await;
+    assert_eq!(folder_of_file(&pool, id).await, f2);
+    assert!(!c.tmp.join("f1/Mv/0.mkv").exists());
+    assert_eq!(std::fs::read(c.tmp.join("f2/Mv/0.mkv")).unwrap(), b"zero");
+}
+
+#[sqlx::test(migrations = false)]
+async fn changing_library_moves_the_files_and_the_move_waits_for_ingest(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, _) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    call(
+        &c,
+        "POST",
+        "/api/libraries",
+        &c.admin,
+        json!({"name": "B", "path": dir(&c, "lib-b")}),
+    )
+    .await;
+    let reading = c.st.folder_moves.read().await;
+    let uri = format!("/api/media/{id}/library");
+    assert_eq!(
+        call(&c, "PATCH", &uri, &c.admin, json!({"libraryId": 2}))
+            .await
+            .0,
+        202
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(
+        c.tmp.join("f1/Mv/0.mkv").is_file(),
+        "a move ran under an ingest"
+    );
+    assert_eq!(
+        call(
+            &c,
+            "POST",
+            &format!("/api/media/{id}/move"),
+            &c.admin,
+            json!({"folderId": f1})
+        )
+        .await
+        .0,
+        409,
+        "one move at a time"
+    );
+    drop(reading);
+    settled(&c).await;
+    assert!(c.tmp.join("lib-b/Mv/0.mkv").is_file());
+    let lib: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(lib, Some(2));
+}
+
+async fn move_to(c: &Ctx, id: i32, folder: i32) -> u16 {
+    let uri = format!("/api/media/{id}/move");
+    call(c, "POST", &uri, &c.admin, json!({"folderId": folder}))
+        .await
+        .0
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_copy_that_is_not_the_same_file_is_not_taken_for_ours(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    put(&c, "f2/Mv/0.mkv", b"zero");
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    assert_eq!(
+        folder_of_file(&pool, id).await,
+        f1,
+        "an unrelated copy was adopted"
+    );
+    assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_move_carries_same_stem_companions(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    for n in ["0.mkv", "0.idx", "0.sub", "0.edl", "0.nfo", "other.nfo"] {
+        put(&c, &format!("f1/Mv/{n}"), n.as_bytes());
+    }
+    let file: i32 = sqlx::query_scalar(r#"SELECT id FROM media_files WHERE "mediaId" = $1"#)
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO subtitle_files (language, "providerType", "filePath", "mediaId", "mediaFileId") VALUES ('en', 'disk', 'Mv/0.sub', $1, $2)"#)
+        .bind(id)
+        .bind(file)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    for n in ["0.mkv", "0.idx", "0.sub", "0.edl", "0.nfo"] {
+        assert!(c.tmp.join("f2/Mv").join(n).is_file(), "{n} not carried");
+        assert!(!c.tmp.join("f1/Mv").join(n).exists(), "{n} left behind");
+    }
+    assert!(c.tmp.join("f1/Mv/other.nfo").is_file());
+    assert!(!c.tmp.join("f2/Mv/other.nfo").exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_sidecar_another_media_lists_stays_in_the_source(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let a = media_with_files(&pool, "Mv", &[f1]).await;
+    let b = media_with_files(&pool, "Other", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    put(&c, "f1/Mv/0.en.srt", b"sub");
+    for (m, rel) in [(a, "Mv/0.mkv"), (b, "Other/0.mkv")] {
+        let file: i32 = sqlx::query_scalar(
+            r#"SELECT id FROM media_files WHERE "mediaId" = $1 AND "relativePath" = $2"#,
+        )
+        .bind(m)
+        .bind(rel)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"INSERT INTO subtitle_files (language, "providerType", "filePath", "mediaId", "mediaFileId") VALUES ('en', 'disk', 'Mv/0.en.srt', $1, $2)"#)
+            .bind(m)
+            .bind(file)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    assert_eq!(move_to(&c, a, f2).await, 202);
+    settled(&c).await;
+    assert!(c.tmp.join("f2/Mv/0.en.srt").is_file());
+    assert!(
+        c.tmp.join("f1/Mv/0.en.srt").is_file(),
+        "the other media's sidecar was unlinked"
+    );
+    assert!(!c.tmp.join("f1/Mv/0.mkv").exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_destination_is_read_again_under_the_lock(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    let reading = c.st.folder_moves.read().await;
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    let moved = dir(&c, "f2-moved");
+    sqlx::query("UPDATE library_folders SET path = $2 WHERE id = $1")
+        .bind(f2)
+        .bind(&moved)
+        .execute(&pool)
+        .await
+        .unwrap();
+    drop(reading);
+    settled(&c).await;
+    assert!(c.tmp.join("f2-moved/Mv/0.mkv").is_file());
+    assert!(!c.tmp.join("f2/Mv").exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_library_delete_keeps_a_media_that_moved_out(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[]).await;
+    for n in ["B", "C"] {
+        call(&c, "POST", "/api/libraries", &c.admin, json!({"name": n})).await;
+    }
+    sqlx::query(r#"UPDATE media SET "libraryId" = 2 WHERE id = $1"#)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let guard = c.st.ingest.media.lock(id).await;
+    let del = spawn_call(&c, "DELETE", "/api/libraries/2".into(), json!(null));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    sqlx::query(r#"UPDATE media SET "libraryId" = 3 WHERE id = $1"#)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    drop(guard);
+    assert_eq!(del.await.unwrap().0, 200);
+    let lib: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+        .flatten();
+    assert_eq!(lib, Some(3), "the moved media was removed with the library");
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = false)]
+async fn a_source_left_after_the_commit_is_unlinked_by_the_next_run(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    let src_dir = c.tmp.join("f1/Mv");
+    std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::File::create(src_dir.join("probe")).is_ok() {
+        return; // permissions are not enforced (root)
+    }
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    let journal = || async {
+        sqlx::query_as::<_, (String, bool)>(
+            r#"SELECT plan::text, committed FROM media_moves WHERE "mediaId" = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+    };
+    let (plan, committed) = journal().await.expect("the pending unlink is journaled");
+    assert!(committed && plan.contains("0.mkv"), "{plan}");
+    assert!(src_dir.join("0.mkv").exists());
+    std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    assert!(!src_dir.join("0.mkv").exists(), "the rerun left the source");
+    assert!(journal().await.is_none());
+    assert!(c.tmp.join("f2/Mv/0.mkv").is_file());
+}

@@ -14,12 +14,9 @@
       },
       "expect": {
         "body": {
-          "code": "media_has_files",
-          "error": "Conflict",
-          "message": "This media has files and cannot be moved to another library",
-          "statusCode": 409
+          "ok": true
         },
-        "status": 409
+        "status": 202
       },
       "method": "PATCH",
       "path": "/api/media/104/library"

@@ -2051,10 +2051,23 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`PATCH /api/media/:id/library` (rule 29): 409 for a media with files (`code: media_has_files`), which a move cannot carry.",
+        "summary": "`PATCH /api/media/:id/library` (rule 29): a media with files moves them to the library's default folder.",
         "operationId": "patch_library",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/move": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "operationId": "move_media",
+        "responses": {
+          "202": {
             "description": ""
           }
         }

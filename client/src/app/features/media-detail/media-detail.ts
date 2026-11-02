@@ -381,7 +381,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if ((event['mediaId'] as number) !== m.id) return;
     if (event === this.lastHandledSseEvent) return;
     this.lastHandledSseEvent = event;
-    if (event.type === 'rescan.completed' || event.type === 'import.complete') {
+    if (
+      event.type === 'rescan.completed' ||
+      event.type === 'import.complete' ||
+      event.type === 'media.move.completed'
+    ) {
       void this.reloadMedia(m.id);
     } else if (event.type === 'metadata.refreshed') {
       void this.reloadMedia(m.id);
@@ -489,7 +493,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly selectedLibraryId = signal<number | null>(null);
-  readonly mediaHasFiles = computed(() => !!this.media()?.files?.length);
+  readonly selectedFolderId = signal<number | null>(null);
+  readonly selectedLibraryFolders = computed(
+    () => this.libraries().find((l) => l.id === this.selectedLibraryId())?.folders ?? [],
+  );
   readonly selectedProvider = signal<'tmdb' | 'tvdb' | null>(null);
   readonly libraryPatchSaving = signal(false);
   readonly libraryPatchSaved = signal(false);
@@ -844,7 +851,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return KIND_REGISTRY[this.expectedKind()].segment;
   }
 
+  onLibraryChange(id: number | null) {
+    this.selectedLibraryId.set(id);
+    this.selectedFolderId.set(null);
+  }
+
   openLibraryModal() {
+    this.selectedFolderId.set(null);
     this.libraryPatchSaved.set(false);
     this.libraryModal()?.showModal();
   }
@@ -859,7 +872,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.libraryPatchSaving.set(true);
     this.libraryPatchSaved.set(false);
     try {
-      let updated = libId !== m.libraryId ? await this.mediaService.patchLibrary(m.id, libId) : m;
+      const libraryChanged = libId !== m.libraryId;
+      const folderId =
+        this.selectedFolderId() ?? (libraryChanged ? this.selectedLibraryFolders()[0]?.id : null);
+      let updated = m;
+      if (folderId != null) {
+        await this.mediaService.moveToFolder(m.id, folderId);
+        this.toast.info(this.translate.instant('media_detail.move_started'));
+      } else if (libraryChanged) {
+        updated = await this.mediaService.patchLibrary(m.id, libId);
+      }
       if (providerChanged) {
         updated = await this.mediaService.update(m.id, {
           preferredProvider: provider,

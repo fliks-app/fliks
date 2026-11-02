@@ -9,7 +9,6 @@
           name="library"
           appTvSelect
           [ngModel]="selectedLibraryId()"
-          [disabled]="libraryLocked()"
           (ngModelChange)="selectedLibraryIdChange.emit($event)"
         >
           <option [ngValue]="null">{{ 'media_detail.no_library' | translate }}</option>
@@ -17,10 +16,26 @@
             <option [ngValue]="l.id">{{ l.name }}</option>
           }
         </select>
-        @if (libraryLocked()) {
-          <span class="label-text-alt opacity-60">{{ 'errors.media_has_files' | translate }}</span>
-        }
       </label>
+      @if (folders().length > 1) {
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'media_detail.folder_label' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            name="folder"
+            appTvSelect
+            [ngModel]="selectedFolderId()"
+            (ngModelChange)="selectedFolderIdChange.emit($event)"
+          >
+            @if (!libraryChanged()) {
+              <option [ngValue]="null">{{ 'media_detail.folder_current' | translate }}</option>
+            }
+            @for (f of folders(); track f.id) {
+              <option [ngValue]="f.id">{{ f.name }}</option>
+            }
+          </select>
+        </label>
+      }
       <label class="form-control w-full">
         <span class="label-text">{{ 'media_detail.provider_section_title' | translate }}</span>
         <select

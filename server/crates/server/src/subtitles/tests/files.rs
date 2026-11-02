@@ -434,6 +434,66 @@ async fn a_sync_job_runs_end_to_end_and_a_failure_is_recorded(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn sidecar_writes_wait_for_a_move_in_flight(pool: PgPool) {
+    let c = ctx(pool).await;
+    let img = row(
+        &c,
+        "en",
+        "embedded",
+        None,
+        Some("hdmv_pgs_subtitle"),
+        Some(2),
+    )
+    .await;
+    script_job(
+        &c,
+        "m1",
+        job_snapshot(
+            "m1",
+            "SubtitleOcr",
+            "done",
+            json!({"type": "SubtitleOcr", "srt": SRT}),
+            None,
+        ),
+    );
+    let moving = c.st.folder_moves.write().await;
+    let up = crate::subtitles::service::upload(
+        &c.st,
+        c.media,
+        c.file,
+        None,
+        crate::subtitles::service::Upload {
+            name: "x.srt".into(),
+            bytes: SRT.as_bytes().to_vec(),
+            language: Some("en".into()),
+            forced: None,
+            hearing_impaired: None,
+        },
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), up)
+            .await
+            .is_err(),
+        "an upload wrote under a move"
+    );
+    let uri = format!("/api/media/{}/subtitles/{img}/ocr", c.media);
+    let (s, ph) = call(&c, "POST", &uri, &c.admin, Some(json!({}))).await;
+    assert_eq!(s, 201, "{ph}");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let n = || async {
+        sqlx::query_scalar::<_, i64>(
+            r#"SELECT count(*) FROM subtitle_files WHERE "filePath" IS NOT NULL AND "providerType" <> 'embedded'"#,
+        )
+        .fetch_one(&c.pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(n().await, 0, "a sidecar row landed under a move");
+    drop(moving);
+    until("ocr done", || async { n().await == 1 }).await;
+}
+
+#[sqlx::test]
 async fn an_ocr_job_runs_end_to_end_and_a_failed_run_stays_failed(pool: PgPool) {
     let c = ctx(pool).await;
     let img = row(

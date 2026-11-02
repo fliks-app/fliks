@@ -364,6 +364,49 @@ pub fn move_file(src: &Path, dest: &Path, replace: bool) -> io::Result<bool> {
     }
 }
 
+/// A hard link of `src` at `dest`: `Some(false)` when `dest` exists, `None` when the filesystem refuses
+/// to link (another device, no permission) and a copy is needed.
+pub fn link_new(src: &Path, dest: &Path) -> io::Result<Option<bool>> {
+    fs::create_dir_all(dest.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
+    match fs::hard_link(src, dest) {
+        Ok(()) => Ok(Some(true)),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(Some(false)),
+        Err(_) => Ok(None),
+    }
+}
+
+/// A copy of `src` at `dest` that leaves `src` alone and never replaces: W2 carrying the mtime.
+/// `Ok(false)` when `dest` exists.
+pub fn copy_new(src: &Path, dest: &Path) -> io::Result<bool> {
+    let mtime = fs::metadata(src)?.modified()?;
+    let tmp = copy_to_tmp(src, dest)?;
+    let r = fs::File::options()
+        .write(true)
+        .open(&tmp)
+        .and_then(|f| f.set_modified(mtime))
+        .and_then(|()| rename_noreplace(&tmp, dest));
+    if r.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    reap_later(dest);
+    match r {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Removes the empty directories from `dir` up to, never including, `root`.
+pub fn prune_empty(root: &Path, dir: &Path) {
+    let mut d = dir;
+    while d != root && d.starts_with(root) && fs::remove_dir(d).is_ok() {
+        match d.parent() {
+            Some(p) => d = p,
+            None => break,
+        }
+    }
+}
+
 /// W3: temps older than 24 h in `dest`'s directory, detached, regular files only.
 fn reap_later(dest: &Path) {
     let Some(dir) = dest.parent().map(Path::to_path_buf) else {

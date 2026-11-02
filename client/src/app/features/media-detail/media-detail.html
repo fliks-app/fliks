@@ -420,11 +420,14 @@
       <app-media-detail-library-modal
         [libraries]="libraries()"
         [selectedLibraryId]="selectedLibraryId()"
-        [libraryLocked]="mediaHasFiles()"
+        [folders]="selectedLibraryFolders()"
+        [selectedFolderId]="selectedFolderId()"
+        [libraryChanged]="selectedLibraryId() !== media()?.libraryId"
         [selectedProvider]="selectedProvider()"
         [saving]="libraryPatchSaving()"
         [saved]="libraryPatchSaved()"
-        (selectedLibraryIdChange)="selectedLibraryId.set($event)"
+        (selectedLibraryIdChange)="onLibraryChange($event)"
+        (selectedFolderIdChange)="selectedFolderId.set($event)"
         (selectedProviderChange)="selectedProvider.set($event)"
         (save)="saveLibrary()"
       />

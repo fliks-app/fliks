@@ -269,6 +269,19 @@ pub enum SseEvent {
         title: String,
         error: String,
     },
+    #[serde(rename = "media.move.completed")]
+    MediaMoveCompleted {
+        media_id: i64,
+        title: String,
+        files: i64,
+        leftover: i64,
+    },
+    #[serde(rename = "media.move.failed")]
+    MediaMoveFailed {
+        media_id: i64,
+        title: String,
+        error: String,
+    },
     #[serde(rename = "media.files.delete_failed")]
     MediaFilesDeleteFailed { media_id: i64, title: String },
     #[serde(rename = "player.command")]

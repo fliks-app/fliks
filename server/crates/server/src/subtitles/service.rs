@@ -222,7 +222,7 @@ pub async fn download(
         .iter()
         .find(|p| p.kind == c.provider_type)
         .ok_or_else(|| AppError::not_found("No matching provider found"))?;
-    let (media, file) = resolve_file(st, media_id, file_id, episode_id).await?;
+    let (_, file) = resolve_file(st, media_id, file_id, episode_id).await?;
     let start = Instant::now();
     let got = match Provider::new(&provider.kind, &provider.settings, &st.subtitles) {
         Ok(imp) => imp.download(c).await,
@@ -256,8 +256,9 @@ pub async fn download(
     let hearing_impaired = c.hearing_impaired && !opts.remove_hi_tags;
     let suffix = sidecar_lang_suffix(&lang, c.forced, hearing_impaired);
     let cleaned = clean_subtitle(&decode_text(&bytes), &opts);
-    let dirs = media.dirs(files::NO_ROOT_ADD)?;
-    let rel = { dirs.write_sidecar(&file.relative_path, &suffix, ".srt", cleaned.as_bytes())? };
+    let _moves = st.folder_moves.read().await;
+    let (dirs, file) = files::fresh_dirs(&st.db, file.id, files::NO_ROOT_ADD).await?;
+    let rel = dirs.write_sidecar(&file.relative_path, &suffix, ".srt", cleaned.as_bytes())?;
     let new = New {
         media_id,
         media_file_id: file_id,
@@ -351,6 +352,7 @@ pub async fn upload(
     if !CUES.is_match(&text) {
         return Err(AppError::bad_request("File holds no subtitle cues"));
     }
+    let _moves = st.folder_moves.read().await;
     let (media, file) = resolve_file(st, media_id, file_id, episode_id).await?;
     let lang = normalize_language_code(up.language.as_deref());
     let parsed = fliks_domain::subtitle_name::parse_subtitle_filename(&up.name);

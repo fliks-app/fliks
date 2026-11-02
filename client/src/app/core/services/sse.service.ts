@@ -581,6 +581,26 @@ export class SseService implements OnDestroy {
           this.translate.instant('sse.rescan_failed', { title: event['title'] ?? '' }),
         );
         break;
+      case 'media.move.completed': {
+        const title = event['title'] ?? '';
+        const leftover = Number(event['leftover'] ?? 0);
+        if (leftover > 0) {
+          this.toast.warning(
+            this.translate.instant('sse.media_move_leftover', { title, count: leftover }),
+          );
+        } else {
+          this.toast.success(this.translate.instant('sse.media_move_completed', { title }));
+        }
+        break;
+      }
+      case 'media.move.failed':
+        this.toast.error(
+          this.translate.instant('sse.media_move_failed', {
+            title: event['title'] ?? '',
+            error: event['error'] ?? '',
+          }),
+        );
+        break;
       case 'media.files.delete_failed':
         this.toast.error(
           this.translate.instant('sse.media_files_delete_failed', {

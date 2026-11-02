@@ -128,6 +128,8 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 17 | `rescan.started` | U(requesting admin) | `{mediaId: number, title: string}`; emitted before the `has` check, so a 409 duplicate still announces it |
 | 18 | `rescan.completed` | U(requesting admin) | `{mediaId, title, added: number, removed: number, updated: number, subtitleRemovedMissing?: number, subtitleRemovedDuplicates?: number}` |
 | 19 | `rescan.failed` | U(requesting admin) | `{mediaId: number, title: string, error: string}` |
+| 19a | `media.move.completed` | U(requesting admin) | `{mediaId: number, title: string, files: number, leftover: number}` |
+| 19b | `media.move.failed` | U(requesting admin) | `{mediaId: number, title: string, error: string}` |
 | 20 | `media.files.delete_failed` | U(requesting admin) | `{mediaId: number, title: string}` |
 | 21 | `player.command` | C (the session's `sseConnectionId` when still connected), else U(session owner) | `{sessionId: string, mediaFileId: number, userId: number, action: 'pause'|'play'|'stop'|'message', message?: string}` |
 | 22 | `markers.season.completed` | B | `{mediaId: number, seasonId: number, seasonNumber: number, introsDetected: number}` |
