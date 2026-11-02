@@ -19,7 +19,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
     metadata::limiter::Priority,
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
@@ -124,9 +124,9 @@ async fn duplicate(
     id: i32,
 ) -> Result<(), AppError> {
     let p = if tvdb {
-        ExternalProvider::Tvdb
+        Namespace::TVDB
     } else {
-        ExternalProvider::Tmdb
+        Namespace::TMDB
     };
     let hit = external_ids::find_numeric(&st.db, media_type, p, id).await?;
     match hit {
@@ -460,14 +460,42 @@ pub async fn import_for_request(
     media_type: MediaKind,
     tmdb_id: i32,
     profiles: (Option<i32>, Option<i32>),
+    target: (Option<i32>, Option<i32>),
+    added_by: Option<i32>,
+    seasons: Option<Vec<i32>>,
+) -> Result<i32, AppError> {
+    import_in(
+        st,
+        media_type,
+        (Namespace::TMDB, &tmdb_id.to_string()),
+        profiles,
+        target,
+        added_by,
+        seasons,
+    )
+    .await
+}
+
+/// `import_for_request` for an id of any namespace a provider serves.
+pub async fn import_in(
+    st: &AppState,
+    media_type: MediaKind,
+    (ns, value): (Namespace, &str),
+    profiles: (Option<i32>, Option<i32>),
     (library_id, folder_id): (Option<i32>, Option<i32>),
     added_by: Option<i32>,
     seasons: Option<Vec<i32>>,
 ) -> Result<i32, AppError> {
-    if !st.metadata.available(ExternalProvider::Tmdb) {
-        return Err(AppError::bad_request("TMDB API key is not configured"));
+    if ns == Namespace::TMDB {
+        if !st.metadata.available(ns) {
+            return Err(AppError::bad_request("TMDB API key is not configured"));
+        }
+        if let Ok(tmdb) = value.parse() {
+            duplicate(st, media_type, false, tmdb).await?;
+        }
+    } else if !st.metadata.available(ns) {
+        return Err(AppError::bad_request("the provider is not available"));
     }
-    duplicate(st, media_type, false, tmdb_id).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
     let imp = Import {
@@ -483,8 +511,8 @@ pub async fn import_for_request(
     };
     import_title(
         st,
-        Some("tmdb".into()),
-        tmdb_id.to_string(),
+        Some(ns.as_str().into()),
+        value.to_owned(),
         imp,
         Priority::Interactive,
     )
@@ -502,7 +530,7 @@ pub async fn import_tmdb(
     let b = Body::new(v, &TMDB_FIELDS)?;
     let c = common(&b)?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
-    if !st.metadata.available(ExternalProvider::Tmdb) {
+    if !st.metadata.available(Namespace::TMDB) {
         return Err(AppError::bad_request("TMDB API key is not configured"));
     }
     duplicate(&st, c.media_type, false, tmdb).await?;

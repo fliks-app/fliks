@@ -186,20 +186,6 @@ impl Plugins {
                 ExternalProvider::parse(n).is_some()
             })
             .map_err(|reason| fail(reason, "a namespace of the provider block is refused"))?;
-            namespaces::claim(
-                &self.db,
-                id,
-                pkg.verified_by_key_id.as_deref(),
-                &namespaces::declared(block),
-            )
-            .await
-            .map_err(|e| db_fail("db-provision-failed", e))?
-            .map_err(|name| {
-                fail(
-                    "namespace-signer-changed",
-                    format!("namespace \"{name}\" belongs to another signer: uninstall the plugin with data deletion first"),
-                )
-            })?;
         }
         if manifest::requests_network(m) && !pkg.network_internal {
             return Err(fail(
@@ -237,6 +223,22 @@ impl Plugins {
                 "invalid-component",
                 "the metadata-provider export and the manifest's provider block must come together",
             ));
+        }
+        if let Some(block) = m.get("provider") {
+            namespaces::claim(
+                &self.db,
+                id,
+                pkg.verified_by_key_id.as_deref(),
+                &namespaces::declared(block),
+            )
+            .await
+            .map_err(|e| db_fail("db-provision-failed", e))?
+            .map_err(|name| {
+                fail(
+                    "namespace-signer-changed",
+                    format!("namespace \"{name}\" belongs to another signer: uninstall the plugin with data deletion first"),
+                )
+            })?;
         }
         packages::upsert_registration(&self.db, id, m)
             .await

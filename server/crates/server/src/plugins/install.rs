@@ -313,6 +313,23 @@ impl Plugins {
             }
             manifest::check_files(i)
                 .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
+            if let Some(block) = m.get("provider")
+                && let Err(name) = super::namespaces::check_install(
+                    &self.db,
+                    i.signed_by.as_deref(),
+                    &super::namespaces::declared(block),
+                )
+                .await
+                .map_err(internal)?
+            {
+                return Err(ie(
+                    StatusCode::CONFLICT,
+                    "PLUGIN_NAMESPACE_SIGNER",
+                    format!(
+                        "namespace \"{name}\" belongs to another signer: uninstall the plugin with data deletion first"
+                    ),
+                ));
+            }
             if m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true) {
                 let kept = super::db::kept(&self.db, id).await.map_err(internal)?;
                 if !super::db::may_adopt(&kept, i.signed_by.as_deref()) {

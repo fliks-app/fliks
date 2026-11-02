@@ -1,4 +1,5 @@
 //! The `provider` manifest block and plugin id namespaces (`docs/spec/provider-plugins.md`).
+use crate::external_id::Namespace;
 use regex::{Regex, RegexBuilder};
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
@@ -277,6 +278,57 @@ impl IdRule {
     }
 }
 
+/// Rule 14: at most this many namespaces under a record's `ids`, and values under one of them.
+pub const MAX_IDS_NAMESPACES: usize = 32;
+pub const MAX_IDS_PER_NAMESPACE: usize = 16;
+
+/// Rules 14, 26 and 28 on a record: `ids` (namespace to an id or an array of ids) keeps the
+/// namespaces the core knows, normalised; a third-party provider (`official` false) keeps only its
+/// own and the non-unique core ones, and `tmdbId` goes. Returns how many entries were dropped.
+pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) -> usize {
+    let mut dropped = 0;
+    if !official && rec.remove("tmdbId").is_some() {
+        dropped += 1;
+    }
+    let Some(ids) = rec.remove("ids") else {
+        return dropped;
+    };
+    let Value::Object(ids) = ids else {
+        return dropped + 1;
+    };
+    let mut kept = Map::new();
+    for (name, v) in ids.into_iter().take(MAX_IDS_NAMESPACES) {
+        let ns = Namespace::parse(&name).filter(|n| {
+            official || own.contains(&n.as_str()) || (n.core().is_some() && !n.is_unique())
+        });
+        let Some(ns) = ns else {
+            dropped += 1;
+            continue;
+        };
+        let raw: Vec<&Value> = match &v {
+            Value::Array(a) => a.iter().take(MAX_IDS_PER_NAMESPACE).collect(),
+            one => vec![one],
+        };
+        let ok: Vec<Value> = raw
+            .into_iter()
+            .filter_map(|x| ns.normalize(x.as_str()?).map(Value::String))
+            .collect();
+        dropped += usize::from(ok.is_empty());
+        if !ok.is_empty() {
+            kept.insert(
+                name,
+                if v.is_array() {
+                    Value::Array(ok)
+                } else {
+                    ok[0].clone()
+                },
+            );
+        }
+    }
+    rec.insert("ids".into(), Value::Object(kept));
+    dropped
+}
+
 /// Registration checks of the declared namespaces, in manifest order: the reason of the first
 /// failure. `is_core` tells whether a bare name is a core namespace, `official` whether the
 /// package is signed by a compiled-in key.
@@ -310,6 +362,26 @@ pub fn check_namespaces(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn ids_of_a_third_party_record_keep_only_its_own_and_non_unique_namespaces() {
+        Namespace::declare("org.ids.t:aid", "^[1-9][0-9]*$", "preserve").unwrap();
+        let rec = |v: Value| v.as_object().unwrap().clone();
+        let input = json!({"tmdbId": 5, "title": "t", "ids": {
+            "tmdb": "603", "imdb": "tt1", "org.ids.t:aid": ["7", "x"], "org.ids.t:nope": "1",
+            "tvdb": "012", "openlibrary": "OL1W"}});
+        let mut third = rec(input.clone());
+        assert_eq!(sanitize_ids(&mut third, false, &["org.ids.t:aid"]), 5);
+        assert_eq!(third["ids"], json!({"imdb": "tt1", "org.ids.t:aid": ["7"]}));
+        assert!(!third.contains_key("tmdbId") && third.contains_key("title"));
+        let mut official = rec(input);
+        sanitize_ids(&mut official, true, &[]);
+        assert_eq!(official["ids"]["tmdb"], "603");
+        assert!(official.contains_key("tmdbId"));
+        let mut bad = rec(json!({"ids": ["x"]}));
+        assert_eq!(sanitize_ids(&mut bad, false, &[]), 1);
+        assert!(!bad.contains_key("ids"));
+    }
 
     #[test]
     fn classes() {

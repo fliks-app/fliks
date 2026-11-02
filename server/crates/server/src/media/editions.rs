@@ -1,6 +1,6 @@
 //! The facts, provenance and release date of an edition (`docs/spec/books.md` rules 5, 8 and 9).
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{family::Family, release::ReleaseKind},
     metadata::field::Field,
 };
@@ -44,7 +44,7 @@ pub async fn locked_fields(c: impl PgExecutor<'_>, edition: i32) -> sqlx::Result
 pub async fn set_field_sources(
     c: &mut PgConnection,
     edition: i32,
-    provenance: &[(Field, ExternalProvider)],
+    provenance: &[(Field, Namespace)],
 ) -> sqlx::Result<()> {
     sqlx::query!(
         r#"DELETE FROM edition_field_sources WHERE "editionId" = $1 AND NOT locked"#,

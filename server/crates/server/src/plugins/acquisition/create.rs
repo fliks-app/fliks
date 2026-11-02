@@ -1,12 +1,10 @@
 //! `media.resolveOrCreate` (`plugins.md` rule 57).
 use super::*;
-use crate::media::{external_ids, write::import_for_request};
+use crate::media::{external_ids, write::import_in};
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
 use crate::requests::{TitleKey, lock_title};
-use fliks_domain::external_id::ExternalProvider;
-
-const TMDB: ExternalProvider = ExternalProvider::Tmdb;
+use fliks_domain::external_id::Namespace;
 
 /// The media of the work `ids` name, imported when the library has none.
 pub async fn resolve_or_create(
@@ -19,19 +17,7 @@ pub async fn resolve_or_create(
     let kind = MediaKind::parse(kind)
         .filter(|k| k.families().contains(&Family::Video))
         .ok_or_else(|| host_err("unsupported-kind", format!("kind \"{kind}\" is not served")))?;
-    let tmdb = ids
-        .iter()
-        .find(|i| i.provider == TMDB.as_str())
-        .ok_or_else(|| {
-            host_err(
-                "unsupported-provider",
-                "a tmdb id is needed to name the work",
-            )
-        })?;
-    let tmdb: i32 = TMDB
-        .normalize(&tmdb.value)
-        .and_then(|v| v.parse().ok())
-        .ok_or_else(|| host_err("ERR_VALIDATION", "tmdb id is not a canonical integer"))?;
+    let (ns, value) = entry(st, kind, ids)?;
     let library = library_id
         .map(i32::try_from)
         .transpose()
@@ -45,13 +31,20 @@ pub async fn resolve_or_create(
         .execute(&mut *tx)
         .await
         .map_err(db_err)?;
-    lock_title(&mut tx, &TitleKey::tmdb(kind, tmdb))
-        .await
-        .map_err(lock_err)?;
-    let found = external_ids::find_numeric(&mut *tx, kind, TMDB, tmdb).await;
+    lock_title(
+        &mut tx,
+        &TitleKey {
+            media_type: kind,
+            provider: ns,
+            external_id: value.clone(),
+        },
+    )
+    .await
+    .map_err(lock_err)?;
+    let found = external_ids::find(&mut *tx, kind, ns, &value).await;
     let id = match found.map_err(db_err)? {
         Some(id) => id,
-        None => create(st, kind, tmdb, (library, folder)).await?,
+        None => create(st, kind, (ns, &value), (library, folder)).await?,
     };
     tx.commit().await.map_err(db_err)?;
     Ok(id as u32)
@@ -68,23 +61,36 @@ fn lock_err(e: sqlx::Error) -> HostError {
 async fn create(
     st: &AppState,
     kind: MediaKind,
-    tmdb: i32,
+    (ns, value): (Namespace, &str),
     (library, folder): (Option<i32>, Option<i32>),
 ) -> Result<i32, HostError> {
-    if !st.metadata.available(TMDB) {
-        return Err(host_err("unsupported-provider", "TMDB is not configured"));
+    if !st.metadata.available(ns) {
+        return Err(host_err(
+            "unsupported-provider",
+            "the provider is not available",
+        ));
     }
-    match import_for_request(st, kind, tmdb, (None, None), (library, folder), None, None).await {
+    match import_in(
+        st,
+        kind,
+        (ns, value),
+        (None, None),
+        (library, folder),
+        None,
+        None,
+    )
+    .await
+    {
         Ok(id) => Ok(id),
         // Held by an import that does not take the title lock: the media exists now.
-        Err(e) if e.status() == 409 => external_ids::find_numeric(&st.db, kind, TMDB, tmdb)
+        Err(e) if e.status() == 409 => external_ids::find(&st.db, kind, ns, value)
             .await
             .map_err(db_err)?
             .ok_or_else(|| {
                 host_err(
                     "ERR_CONFLICT",
                     format!(
-                        "an id of provider \"{TMDB}\" is held by another media of kind \"{kind}\""
+                        "an id of provider \"{ns}\" is held by another media of kind \"{kind}\""
                     ),
                 )
             }),
@@ -97,4 +103,34 @@ async fn create(
             e.text(),
         )),
     }
+}
+
+/// Rule 57: the first id of a unique core namespace an available provider serves, else the first
+/// id of any namespace an available provider serves for `kind`; each id normalised by its namespace.
+fn entry(
+    st: &AppState,
+    kind: MediaKind,
+    ids: &[t::ExternalId],
+) -> Result<(Namespace, String), HostError> {
+    let served = |ns: Namespace| {
+        st.metadata.available(ns) && st.metadata.get(ns).is_some_and(|p| p.supports(kind))
+    };
+    let known: Vec<(Namespace, String)> = ids
+        .iter()
+        .filter_map(|i| {
+            let ns = Namespace::parse(&i.provider)?;
+            Some((ns, ns.normalize(&i.value)?))
+        })
+        .collect();
+    known
+        .iter()
+        .find(|(ns, _)| ns.is_unique() && served(*ns))
+        .or_else(|| known.iter().find(|(ns, _)| served(*ns)))
+        .cloned()
+        .ok_or_else(|| {
+            host_err(
+                "unsupported-provider",
+                "no id names the work for an available provider",
+            )
+        })
 }

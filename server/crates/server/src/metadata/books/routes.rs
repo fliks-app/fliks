@@ -29,7 +29,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -51,7 +51,7 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
         )
 }
 
-fn meta_fail(p: ExternalProvider, e: MetaError) -> AppError {
+fn meta_fail(p: Namespace, e: MetaError) -> AppError {
     match e {
         MetaError::Upstream(e) => fail(p, &e, true),
         MetaError::Db(e) => e.into(),
@@ -63,8 +63,8 @@ fn unknown_provider(name: &str) -> AppError {
 }
 
 /// A registered provider that supports books.
-fn book_provider(md: &Metadata, name: &str) -> Result<ExternalProvider, AppError> {
-    ExternalProvider::parse(name)
+fn book_provider(md: &Metadata, name: &str) -> Result<Namespace, AppError> {
+    Namespace::parse(name)
         .filter(|p| md.get(*p).is_some_and(|x| x.supports(MediaKind::Book)))
         .ok_or_else(|| unknown_provider(name))
 }
@@ -83,9 +83,9 @@ fn page(q: &[(String, String)]) -> Result<u32, AppError> {
 }
 
 /// The namespace a provider names its ids in when they name an edition (`asin` for Audible).
-fn namespace(p: ExternalProvider) -> &'static str {
+fn namespace(p: Namespace) -> &'static str {
     match p {
-        ExternalProvider::Audible => ExternalProvider::Asin.as_str(),
+        Namespace::AUDIBLE => Namespace::ASIN.as_str(),
         p => p.as_str(),
     }
 }
@@ -122,7 +122,7 @@ fn opt(v: Option<String>) -> Value {
 }
 
 /// A `BookSearchResult` without its `mediaId`; `None` for a hit with no id or title.
-fn hit(p: ExternalProvider, v: &Value) -> Option<Value> {
+fn hit(p: Namespace, v: &Value) -> Option<Value> {
     let r = v.as_object()?;
     Some(json!({
         "provider": p.as_str(),
@@ -142,7 +142,7 @@ fn hit(p: ExternalProvider, v: &Value) -> Option<Value> {
 /// Sets `mediaId` of each result: the lowest readable book holding its id (rule 19).
 async fn with_media_ids(db: &PgPool, acl: &[i32], hits: &mut [Value]) -> Result<(), sqlx::Error> {
     let key = |h: &Value| {
-        let p = h["provider"].as_str().and_then(ExternalProvider::parse);
+        let p = h["provider"].as_str().and_then(Namespace::parse);
         (
             p.map_or("", namespace).to_owned(),
             h["externalId"].as_str().unwrap_or_default().to_owned(),
@@ -254,7 +254,7 @@ pub async fn search_book(State(st): State<AppState>, a: Authed, Query(q): Pairs)
     Ok(Json(Value::Array(hits)))
 }
 
-fn edition_entry(p: ExternalProvider, r: &Value) -> Option<Value> {
+fn edition_entry(p: Namespace, r: &Value) -> Option<Value> {
     let r = r.as_object()?;
     let duration = r
         .get("durationSeconds")
@@ -291,7 +291,7 @@ fn edition_entry(p: ExternalProvider, r: &Value) -> Option<Value> {
 #[utoipa::path(get, path = "/api/metadata/{provider}/book/{externalId}", responses((status = 200)))]
 pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
     let PathParams((name, id)) = ids?;
-    if ExternalProvider::parse(&name) != Some(ANCHOR) || st.metadata.get(ANCHOR).is_none() {
+    if Namespace::parse(&name) != Some(ANCHOR) || st.metadata.get(ANCHOR).is_none() {
         return Err(unknown_provider(&name));
     }
     let work = work_id(&id)
@@ -419,7 +419,7 @@ enum Level {
 }
 
 /// The level, provider and normalised value of a PUT body or DELETE query (rules 23-25).
-fn parse(b: &Body) -> Result<(Level, ExternalProvider, String), AppError> {
+fn parse(b: &Body) -> Result<(Level, Namespace, String), AppError> {
     let bad = |m: String| AppError::bad_request(vec![m]);
     let level = b.required(
         b.one_of("level", &["work", "edition"])?,
@@ -444,8 +444,8 @@ fn parse(b: &Body) -> Result<(Level, ExternalProvider, String), AppError> {
         return Ok((Level::Work, ANCHOR, work));
     }
     let edition = edition.ok_or_else(|| bad("editionId must be an integer number".into()))?;
-    let allowed = EDITION_NAMESPACES.map(ExternalProvider::as_str).join(", ");
-    let provider = ExternalProvider::parse(&provider)
+    let allowed = EDITION_NAMESPACES.map(Namespace::as_str).join(", ");
+    let provider = Namespace::parse(&provider)
         .filter(|p| EDITION_NAMESPACES.contains(p))
         .ok_or_else(|| {
             bad(format!(
@@ -521,10 +521,10 @@ async fn put_edition(
     st: &AppState,
     g: &Gate,
     edition: i32,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: String,
 ) -> Result<(), AppError> {
-    let replace = provider != ExternalProvider::Isbn;
+    let replace = provider != Namespace::ISBN;
     let Some(mut m) = stored(&st.db, g.media, Some(edition)).await? else {
         let mut tx = st.db.begin().await?;
         if replace {

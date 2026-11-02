@@ -7,7 +7,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::{language::Resolved, limiter::Priority},
     persons::{Owned, link, needs_refresh, tsquery},
@@ -99,8 +99,8 @@ async fn call_provider<T, Fut>(
     md: &Metadata,
     db: &PgPool,
     p: &mut Person,
-    call: impl Fn(ExternalProvider) -> Fut,
-) -> Result<(T, ExternalProvider), (ExternalProvider, Upstream)>
+    call: impl Fn(Namespace) -> Fut,
+) -> Result<(T, Namespace), (Namespace, Upstream)>
 where
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
@@ -267,7 +267,7 @@ pub async fn detail(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppErro
 async fn link_credits(
     st: &AppState,
     a: &Authed,
-    served: ExternalProvider,
+    served: Namespace,
     credits: Credits,
 ) -> Result<(Vec<Value>, Vec<Value>), AppError> {
     let ids: Vec<i32> = credits

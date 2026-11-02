@@ -399,7 +399,7 @@ async fn a_media_link_skips_an_openlibrary_edition_or_author_id(pool: PgPool) {
             &mut conn,
             1,
             MediaKind::Book,
-            fliks_domain::external_id::ExternalProvider::OpenLibrary,
+            fliks_domain::external_id::Namespace::OPENLIBRARY,
             id,
         )
         .await

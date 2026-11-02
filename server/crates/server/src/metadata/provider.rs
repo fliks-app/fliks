@@ -1,7 +1,7 @@
 //! The one surface the server asks a metadata provider through (`metadata-orchestrator.md` rules 1-7).
 use super::{Credits, PersonDetails, Upstream};
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::{
         language::Resolved,
@@ -46,13 +46,13 @@ impl<'a> Search<'a> {
 
 /// An edition named by an id namespace: `(Isbn, "978...")`, `(Asin, "B0...")`, `(OpenLibrary, "OL...M")`.
 pub struct EditionRef<'a> {
-    pub namespace: ExternalProvider,
+    pub namespace: Namespace,
     pub value: &'a str,
 }
 
 pub trait MetadataProvider: Send + Sync {
     /// The registry key, as `preferredProvider` stores it.
-    fn id(&self) -> ExternalProvider;
+    fn id(&self) -> Namespace;
     fn supports(&self, kind: MediaKind) -> bool;
     /// Whether `fetch_person` and `person_credits` are answered.
     fn has_persons(&self) -> bool;
@@ -97,7 +97,7 @@ pub trait MetadataProvider: Send + Sync {
     /// The id and kind this provider knows the work of `source`'s `id` by.
     fn find_by<'a>(
         &'a self,
-        source: ExternalProvider,
+        source: Namespace,
         id: &'a str,
         lang: &'a Resolved,
         p: Priority,

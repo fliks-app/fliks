@@ -6,7 +6,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{family::Family, kind::MediaKind},
     metadata::{
         book_match::{Candidate, Hints, MIN_CONFIDENCE, score},
@@ -30,7 +30,7 @@ pub struct BookHints {
 pub struct BookMatch {
     /// The OpenLibrary work id (`OL...W`).
     pub work: String,
-    pub edition: Vec<(ExternalProvider, String)>,
+    pub edition: Vec<(Namespace, String)>,
     pub confidence: u8,
 }
 
@@ -50,12 +50,12 @@ pub async fn identify(
             region: None,
         }))
         .await?;
-    let mut edition: Vec<(ExternalProvider, String)> = vec![];
+    let mut edition: Vec<(Namespace, String)> = vec![];
     let hinted = h
         .isbns
         .iter()
-        .map(|i| (ExternalProvider::Isbn, i.as_str()))
-        .chain(h.asin.as_deref().map(|a| (ExternalProvider::Asin, a)));
+        .map(|i| (Namespace::ISBN, i.as_str()))
+        .chain(h.asin.as_deref().map(|a| (Namespace::ASIN, a)));
     for (ns, v) in hinted {
         if let Some(v) = edition_id(ns, v)
             && !edition.contains(&(ns, v.clone()))

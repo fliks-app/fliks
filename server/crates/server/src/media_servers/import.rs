@@ -5,7 +5,7 @@ use super::{
 };
 use crate::users::imported_user;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 
@@ -155,7 +155,7 @@ fn tmdb_of(raw: Option<&str>) -> Option<i32> {
 }
 
 async fn media_id(db: &PgPool, kind: MediaKind, tmdb: i32) -> sqlx::Result<Option<i32>> {
-    crate::media::external_ids::find_numeric(db, kind, ExternalProvider::Tmdb, tmdb).await
+    crate::media::external_ids::find_numeric(db, kind, Namespace::TMDB, tmdb).await
 }
 
 /// `true` when a row was written, `false` for an unmatched item or one Fliks played more recently.

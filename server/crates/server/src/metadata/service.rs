@@ -6,7 +6,7 @@ use crate::{
     media::{external_ids, field_sources::locked_fields},
     state::AppState,
 };
-use fliks_domain::external_id::ExternalProvider;
+use fliks_domain::external_id::Namespace;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::metadata::{
     field::Field,
@@ -173,7 +173,7 @@ pub struct Lookup {
 }
 
 /// Any provider failure is a generic 500; the reason is only logged.
-fn fail(p: ExternalProvider, e: Upstream) -> AppError {
+fn fail(p: Namespace, e: Upstream) -> AppError {
     tracing::warn!("metadata request failed on {}: {e}", p.as_str());
     AppError::plain(
         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -181,7 +181,7 @@ fn fail(p: ExternalProvider, e: Upstream) -> AppError {
     )
 }
 
-fn fail_meta(p: ExternalProvider, e: MetaError) -> AppError {
+fn fail_meta(p: Namespace, e: MetaError) -> AppError {
     match e {
         MetaError::Upstream(e) => fail(p, e),
         MetaError::Db(e) => e.into(),
@@ -223,7 +223,7 @@ async fn language(st: &AppState, lib: Option<&Lib>) -> Result<Resolved, sqlx::Er
 
 async fn read_record(
     st: &AppState,
-    p: ExternalProvider,
+    p: Namespace,
     kind: MediaKind,
     external_id: &str,
     lang: &Resolved,
@@ -243,7 +243,7 @@ async fn read_record(
 
 async fn read_details(
     st: &AppState,
-    p: ExternalProvider,
+    p: Namespace,
     kind: MediaKind,
     external_id: &str,
     lang: &Resolved,
@@ -255,7 +255,7 @@ async fn read_details(
 
 async fn read_seasons(
     st: &AppState,
-    p: ExternalProvider,
+    p: Namespace,
     external_id: &str,
     lang: &Resolved,
     prio: Priority,
@@ -272,14 +272,14 @@ async fn read_seasons(
 /// The id `target` knows this work by: its own id off the details, else an IMDB lookup.
 async fn cross_reference_id(
     st: &AppState,
-    target: ExternalProvider,
+    target: Namespace,
     d: &Details,
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Option<String>, AppError> {
     match (target, d.tmdb_id, d.tvdb_id) {
-        (ExternalProvider::Tmdb, Some(id), _) if id != 0 => return Ok(Some(id.to_string())),
-        (ExternalProvider::Tvdb, _, Some(id)) if id != 0 => return Ok(Some(id.to_string())),
+        (Namespace::TMDB, Some(id), _) if id != 0 => return Ok(Some(id.to_string())),
+        (Namespace::TVDB, _, Some(id)) if id != 0 => return Ok(Some(id.to_string())),
         _ => {}
     }
     let Some(imdb) = d.imdb_id.as_deref().filter(|i| !i.is_empty()) else {
@@ -288,7 +288,7 @@ async fn cross_reference_id(
     let found = st
         .metadata
         .of(target)
-        .find_by(ExternalProvider::Imdb, imdb, lang, prio)
+        .find_by(Namespace::IMDB, imdb, lang, prio)
         .await
         .map_err(|e| fail(target, e))?;
     Ok(found.map(|(id, _)| id))
@@ -297,8 +297,8 @@ async fn cross_reference_id(
 /// The details and provenance of `records` merged in the order of `first`.
 fn merged(
     kind: MediaKind,
-    records: &[(ExternalProvider, Map<String, Value>)],
-    first: ExternalProvider,
+    records: &[(Namespace, Map<String, Value>)],
+    first: Namespace,
     locked: &[Field],
 ) -> (Details, Provenance) {
     let (m, provenance) = merge(records, &FieldOrder::new(kind, &[first]), locked);
@@ -309,12 +309,12 @@ fn merged(
 async fn read_for_library(
     st: &AppState,
     kind: MediaKind,
-    found: ExternalProvider,
+    found: Namespace,
     external_id: &str,
     lib: Option<&Lib>,
     lang: &Resolved,
     prio: Priority,
-) -> Result<(ExternalProvider, String, Details, Provenance), AppError> {
+) -> Result<(Namespace, String, Details, Provenance), AppError> {
     let record = read_record(st, found, kind, external_id, lang, prio).await?;
     let details = Details::from_value(&Value::Object(record.clone()));
     let keep = |record| {
@@ -327,7 +327,7 @@ async fn read_for_library(
     else {
         return Ok(keep(record));
     };
-    let target = match ExternalProvider::parse(pref) {
+    let target = match Namespace::parse(pref) {
         Some(p) if p == found => return Ok(keep(record)),
         Some(p) if st.metadata.available(p) => p,
         _ => {
@@ -383,15 +383,15 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
         vec![]
     };
     if details.tmdb_id.is_none_or(|t| t == 0)
-        && st.metadata.available(ExternalProvider::Tmdb)
+        && st.metadata.available(Namespace::TMDB)
         && let Some(tvdb) = details.tvdb_id.filter(|t| *t != 0)
     {
         let cross = st
             .metadata
-            .of(ExternalProvider::Tmdb)
-            .find_by(ExternalProvider::Tvdb, &tvdb.to_string(), &lang, prio)
+            .of(Namespace::TMDB)
+            .find_by(Namespace::TVDB, &tvdb.to_string(), &lang, prio)
             .await
-            .map_err(|e| fail(ExternalProvider::Tmdb, e))?;
+            .map_err(|e| fail(Namespace::TMDB, e))?;
         if let Some((tmdb, _)) = cross {
             details.tmdb_id = tmdb.parse().ok();
         }
@@ -452,15 +452,10 @@ async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
     })
 }
 
-type Source = (ExternalProvider, String);
+type Source = (Namespace, String);
 
 /// Links a cross-referenced id; one another media of the kind holds stays with that media.
-async fn set_external(
-    st: &AppState,
-    m: &Row,
-    p: ExternalProvider,
-    ext: i32,
-) -> Result<(), sqlx::Error> {
+async fn set_external(st: &AppState, m: &Row, p: Namespace, ext: i32) -> Result<(), sqlx::Error> {
     let mut c = st.db.acquire().await?;
     match external_ids::link(&mut c, m.id, m.kind, p, &ext.to_string()).await? {
         external_ids::Link::Taken => tracing::warn!(
@@ -478,20 +473,20 @@ async fn set_external(
 async fn external_id_for(
     st: &AppState,
     m: &Row,
-    p: ExternalProvider,
+    p: Namespace,
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Option<String>, AppError> {
     let direct = match p {
-        ExternalProvider::Tmdb => m.tmdb_id,
-        ExternalProvider::Tvdb => m.tvdb_id,
+        Namespace::TMDB => m.tmdb_id,
+        Namespace::TVDB => m.tvdb_id,
         _ => None,
     };
     if let Some(id) = direct.filter(|i| *i != 0) {
         return Ok(Some(id.to_string()));
     }
     let label = m.label();
-    let found = async |via: ExternalProvider, source: ExternalProvider, id: &str| {
+    let found = async |via: Namespace, source: Namespace, id: &str| {
         st.metadata
             .of(via)
             .find_by(source, id, lang, prio)
@@ -500,10 +495,9 @@ async fn external_id_for(
     };
     let imdb = m.imdb_id.as_deref().filter(|i| !i.is_empty());
     match p {
-        ExternalProvider::Tvdb => {
+        Namespace::TVDB => {
             if let Some(imdb) = imdb
-                && let Some((id, _)) =
-                    found(ExternalProvider::Tvdb, ExternalProvider::Imdb, imdb).await?
+                && let Some((id, _)) = found(Namespace::TVDB, Namespace::IMDB, imdb).await?
                 && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tvdbId={id} via IMDB");
@@ -511,15 +505,8 @@ async fn external_id_for(
                 return Ok(Some(id));
             }
             if let Some(tmdb) = m.tmdb_id.filter(|t| *t != 0) {
-                let d = read_details(
-                    st,
-                    ExternalProvider::Tmdb,
-                    m.kind,
-                    &tmdb.to_string(),
-                    lang,
-                    prio,
-                )
-                .await?;
+                let d = read_details(st, Namespace::TMDB, m.kind, &tmdb.to_string(), lang, prio)
+                    .await?;
                 if let Some(tvdb) = d.tvdb_id.filter(|t| *t != 0) {
                     tracing::info!("crossRef: {label} - found tvdbId={tvdb} via TMDB");
                     set_external(st, m, p, tvdb).await?;
@@ -527,10 +514,9 @@ async fn external_id_for(
                 }
             }
         }
-        ExternalProvider::Tmdb => {
+        Namespace::TMDB => {
             if let Some(imdb) = imdb
-                && let Some((id, _)) =
-                    found(ExternalProvider::Tmdb, ExternalProvider::Imdb, imdb).await?
+                && let Some((id, _)) = found(Namespace::TMDB, Namespace::IMDB, imdb).await?
                 && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tmdbId={id} via IMDB");
@@ -538,12 +524,8 @@ async fn external_id_for(
                 return Ok(Some(id));
             }
             if let Some(tvdb) = m.tvdb_id.filter(|t| *t != 0)
-                && let Some((id, _)) = found(
-                    ExternalProvider::Tmdb,
-                    ExternalProvider::Tvdb,
-                    &tvdb.to_string(),
-                )
-                .await?
+                && let Some((id, _)) =
+                    found(Namespace::TMDB, Namespace::TVDB, &tvdb.to_string()).await?
                 && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tmdbId={id} via TVDB");
@@ -570,7 +552,7 @@ async fn try_preferred(
 ) -> Result<Option<Source>, AppError> {
     let label = m.label();
     tracing::info!("resolveProvider: {label} - {origin} prefers {pref}");
-    let Some(p) = ExternalProvider::parse(pref).filter(|p| st.metadata.available(*p)) else {
+    let Some(p) = Namespace::parse(pref).filter(|p| st.metadata.available(*p)) else {
         tracing::warn!(
             "resolveProvider: {label} - {origin} preferred {pref} but not available (no API key?)"
         );
@@ -618,20 +600,20 @@ async fn resolve_provider(
         );
     }
     let id = |v: Option<i32>| v.filter(|i| *i != 0);
-    if let Some(t) = id(m.tmdb_id).filter(|_| st.metadata.available(ExternalProvider::Tmdb)) {
-        return Ok((ExternalProvider::Tmdb, t.to_string()));
+    if let Some(t) = id(m.tmdb_id).filter(|_| st.metadata.available(Namespace::TMDB)) {
+        return Ok((Namespace::TMDB, t.to_string()));
     }
-    if let Some(t) = id(m.tvdb_id).filter(|_| st.metadata.available(ExternalProvider::Tvdb)) {
-        return Ok((ExternalProvider::Tvdb, t.to_string()));
+    if let Some(t) = id(m.tvdb_id).filter(|_| st.metadata.available(Namespace::TVDB)) {
+        return Ok((Namespace::TVDB, t.to_string()));
     }
     if let Some(t) = id(m.tmdb_id) {
-        return Ok((ExternalProvider::Tmdb, t.to_string()));
+        return Ok((Namespace::TMDB, t.to_string()));
     }
     if m.imdb_id.as_deref().is_some_and(|i| !i.is_empty())
-        && st.metadata.available(ExternalProvider::Tmdb)
-        && let Some(ext) = external_id_for(st, m, ExternalProvider::Tmdb, lang, prio).await?
+        && st.metadata.available(Namespace::TMDB)
+        && let Some(ext) = external_id_for(st, m, Namespace::TMDB, lang, prio).await?
     {
-        return Ok((ExternalProvider::Tmdb, ext));
+        return Ok((Namespace::TMDB, ext));
     }
     Err(AppError::bad_request(
         "No provider ID available for this media",
@@ -647,7 +629,7 @@ async fn single_season(
     cache: &mut HashMap<String, Vec<SeasonDetails>>,
     prio: Priority,
 ) -> Result<Option<SeasonDetails>, AppError> {
-    if *p == ExternalProvider::Tmdb {
+    if *p == Namespace::TMDB {
         let v = st
             .metadata
             .tmdb

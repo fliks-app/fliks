@@ -1,8 +1,6 @@
 //! Snapshots, provenance and locks (`docs/spec/metadata-orchestrator.md` rules 29-37).
 use super::{Ctx, ctx, media, person};
-use fliks_domain::{
-    external_id::ExternalProvider, media::kind::MediaKind, metadata::limiter::Priority,
-};
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::limiter::Priority};
 use futures_util::FutureExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -124,7 +122,7 @@ async fn a_locked_field_survives_a_refresh(pool: PgPool) {
 
 fn key(id: &str) -> fliks_server::metadata::Key {
     fliks_server::metadata::Key {
-        provider: ExternalProvider::Tmdb,
+        provider: Namespace::TMDB,
         resource: "work",
         kind: MediaKind::Movie,
         id: id.into(),

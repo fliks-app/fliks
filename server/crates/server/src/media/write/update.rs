@@ -26,7 +26,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
 };
 use serde_json::{Value, json};
@@ -108,10 +108,7 @@ impl BodyIds {
     ) -> Result<Link, sqlx::Error> {
         let tmdb = self.tmdb.as_ref().map(|t| t.map(|t| t.to_string()));
         let imdb = self.imdb.as_ref();
-        for (p, v) in [
-            (ExternalProvider::Tmdb, tmdb),
-            (ExternalProvider::Imdb, imdb.cloned()),
-        ] {
+        for (p, v) in [(Namespace::TMDB, tmdb), (Namespace::IMDB, imdb.cloned())] {
             let Some(v) = v else { continue };
             match external_ids::set(c, id, kind, p, v.as_deref()).await? {
                 Link::Linked => {}

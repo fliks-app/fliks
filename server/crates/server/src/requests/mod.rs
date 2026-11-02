@@ -17,7 +17,7 @@ use axum::{
     Router,
     routing::{get, post},
 };
-use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 
 pub use lifecycle::{Lifecycle, MediaRef, spawn, spawn_reconcile};
 pub use routes::*;
@@ -37,7 +37,7 @@ pub struct PortError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TitleKey {
     pub media_type: MediaKind,
-    pub provider: ExternalProvider,
+    pub provider: Namespace,
     pub external_id: String,
 }
 
@@ -45,7 +45,7 @@ impl TitleKey {
     pub fn tmdb(media_type: MediaKind, tmdb_id: i32) -> Self {
         Self {
             media_type,
-            provider: ExternalProvider::Tmdb,
+            provider: Namespace::TMDB,
             external_id: tmdb_id.to_string(),
         }
     }
@@ -58,7 +58,7 @@ impl TitleKey {
     }
 
     pub fn tmdb_id(&self) -> Option<i32> {
-        (self.provider == ExternalProvider::Tmdb)
+        (self.provider == Namespace::TMDB)
             .then(|| self.external_id.parse().ok())
             .flatten()
     }

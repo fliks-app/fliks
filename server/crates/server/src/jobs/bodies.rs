@@ -9,7 +9,7 @@ use crate::{
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use fliks_domain::{
-    external_id::ExternalProvider, media::kind::MediaKind, metadata::limiter::Priority, refresh,
+    external_id::Namespace, media::kind::MediaKind, metadata::limiter::Priority, refresh,
 };
 use fliks_engine_core::api::JobPriority;
 use sqlx::{FromRow, PgPool};
@@ -61,7 +61,7 @@ async fn backup_job(st: &AppState) -> Outcome {
 }
 
 fn tmdb_configured(st: &AppState, job: &str) -> bool {
-    let set = st.metadata.available(ExternalProvider::Tmdb);
+    let set = st.metadata.available(Namespace::TMDB);
     if !set {
         tracing::warn!("{job}: TMDB_API_KEY not configured");
     }

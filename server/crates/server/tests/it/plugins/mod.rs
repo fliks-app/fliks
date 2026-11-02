@@ -3,6 +3,7 @@
 mod api;
 mod create;
 mod harness;
+mod namespaces;
 mod net;
 mod provider;
 mod provider_host;

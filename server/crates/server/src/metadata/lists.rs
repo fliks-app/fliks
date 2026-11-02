@@ -2,7 +2,7 @@
 use super::{Metadata, Upstream};
 use crate::sync::MutexExt;
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::{language::Resolved, limiter::Priority},
 };
@@ -10,9 +10,9 @@ use serde_json::Value;
 
 impl Metadata {
     /// The first available provider of the kind's order that serves lists, else TMDB.
-    pub fn lister(&self, kind: MediaKind) -> ExternalProvider {
+    pub fn lister(&self, kind: MediaKind) -> Namespace {
         self.pick(None, self.order(kind), |p| p.has_lists(kind))
-            .unwrap_or(ExternalProvider::Tmdb)
+            .unwrap_or(Namespace::TMDB)
     }
 
     /// `name` for `kind`; the last good copy answers when the live call fails, except for `discover`.
@@ -23,7 +23,7 @@ impl Metadata {
         params: &[(String, String)],
         lang: &Resolved,
         p: Priority,
-    ) -> Result<Value, (ExternalProvider, Upstream)> {
+    ) -> Result<Value, (Namespace, Upstream)> {
         let id = self.lister(kind);
         let live = self.of(id).list(kind, name, params, lang, p).await;
         if name == "discover" {
@@ -66,8 +66,8 @@ mod tests {
     struct Lists(AtomicBool);
 
     impl MetadataProvider for Lists {
-        fn id(&self) -> ExternalProvider {
-            ExternalProvider::Tmdb
+        fn id(&self) -> Namespace {
+            Namespace::TMDB
         }
         fn supports(&self, _: MediaKind) -> bool {
             true
@@ -139,7 +139,7 @@ mod tests {
         }
         fn find_by<'a>(
             &'a self,
-            _: ExternalProvider,
+            _: Namespace,
             _: &'a str,
             _: &'a Resolved,
             _: Priority,

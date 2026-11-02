@@ -2,7 +2,7 @@
 use super::TitleKey;
 use crate::media::external_ids;
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, wants::WantSpec},
 };
 use serde_json::Value;
@@ -22,7 +22,7 @@ pub struct Req {
     pub user_id: Option<i32>,
     pub media_type: MediaKind,
     pub kind: String,
-    pub provider: ExternalProvider,
+    pub provider: Namespace,
     pub external_id: String,
     pub title: String,
     pub status: String,
@@ -63,7 +63,7 @@ impl TryFrom<RawReq> for Req {
             user_id: r.user_id,
             media_type: crate::db::kind(&r.media_type)?,
             kind: r.kind,
-            provider: ExternalProvider::parse(&r.provider).ok_or_else(|| {
+            provider: Namespace::parse(&r.provider).ok_or_else(|| {
                 sqlx::Error::Decode(format!("unknown provider {}", r.provider).into())
             })?,
             external_id: r.external_id,

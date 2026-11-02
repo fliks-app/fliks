@@ -1,4 +1,5 @@
 //! `provider_namespaces`: who owns a plugin namespace, and what goes with it (`provider-plugins.md` 5.1).
+use fliks_domain::external_id::Namespace;
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -28,8 +29,29 @@ pub fn declared(block: &Value) -> Vec<Declared<'_>> {
         .collect()
 }
 
-/// Records the namespaces on first activation; later ones refresh label, pattern and case.
-/// `Err(name)` when another signer holds `name` (nothing is written).
+/// Whether a package signed by `signer` may hold the namespaces `list`: free, its own, or an unsigned
+/// one (a signed package takes it over, as `may_adopt` does for kept data). `Err(name)` otherwise.
+pub async fn check_install(
+    db: &PgPool,
+    signer: Option<&str>,
+    list: &[Declared<'_>],
+) -> sqlx::Result<Result<(), String>> {
+    let names: Vec<&str> = list.iter().map(|n| n.name).collect();
+    let held: Option<String> = sqlx::query_scalar(
+        r#"SELECT name FROM provider_namespaces
+           WHERE name = ANY($1) AND "signerKeyId" IS NOT NULL AND "signerKeyId" IS DISTINCT FROM $2
+           LIMIT 1"#,
+    )
+    .bind(&names)
+    .bind(signer)
+    .fetch_optional(db)
+    .await?;
+    Ok(held.map_or(Ok(()), Err))
+}
+
+/// Records the namespaces on first activation; later ones refresh label, pattern and case, and a
+/// signed package takes over an unsigned row. `Err(name)` when another signer holds `name`
+/// (nothing is written).
 pub async fn claim(
     db: &PgPool,
     plugin_id: &str,
@@ -42,8 +64,10 @@ pub async fn claim(
             r#"INSERT INTO provider_namespaces (name, "pluginId", "signerKeyId", "idPattern", "case", label)
                VALUES ($1, $2, $3, $4, $5, $6)
                ON CONFLICT (name) DO UPDATE
-                 SET "idPattern" = EXCLUDED."idPattern", "case" = EXCLUDED."case", label = EXCLUDED.label
+                 SET "idPattern" = EXCLUDED."idPattern", "case" = EXCLUDED."case", label = EXCLUDED.label,
+                     "signerKeyId" = EXCLUDED."signerKeyId"
                  WHERE provider_namespaces."signerKeyId" IS NOT DISTINCT FROM EXCLUDED."signerKeyId"
+                    OR provider_namespaces."signerKeyId" IS NULL
                RETURNING name"#,
         )
         .bind(n.name)
@@ -59,12 +83,29 @@ pub async fn claim(
         }
     }
     tx.commit().await?;
+    for n in list {
+        Namespace::declare(n.name, n.id_pattern, n.case);
+    }
     Ok(Ok(()))
 }
 
+/// Declares every stored namespace (kept ones included) so stored ids and settings parse at boot.
+pub async fn load(db: &PgPool) -> sqlx::Result<()> {
+    let rows: Vec<(String, String, String)> =
+        sqlx::query_as(r#"SELECT name, "idPattern", "case" FROM provider_namespaces"#)
+            .fetch_all(db)
+            .await?;
+    for (name, pattern, case) in rows {
+        if Namespace::declare(&name, &pattern, &case).is_none() {
+            tracing::warn!("provider namespace \"{name}\" has a pattern the core refuses");
+        }
+    }
+    Ok(())
+}
+
 /// `DELETE /api/plugins/:id?deleteData=true`: the plugin's namespaces and every id, snapshot and
-/// source under them, in one transaction. An unfinished request on such an id fails with
-/// `provider-removed`; a finished one keeps its row.
+/// source under them, in one transaction. An unfinished request with no media on such an id fails
+/// with `provider-removed`; the others keep their row.
 pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     let names: Vec<String> =
@@ -77,7 +118,8 @@ pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     }
     sqlx::query(
         r#"UPDATE requests SET status = 'failed', "declinedReason" = 'provider-removed'
-           WHERE provider = ANY($1) AND status IN ('pending', 'approved', 'processing')"#,
+           WHERE provider = ANY($1) AND "mediaId" IS NULL
+             AND status IN ('pending', 'approved', 'processing')"#,
     )
     .bind(&names)
     .execute(&mut *tx)

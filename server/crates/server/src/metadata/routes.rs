@@ -16,7 +16,7 @@ use axum::{
     http::StatusCode,
     routing::get,
 };
-use fliks_domain::external_id::ExternalProvider;
+use fliks_domain::external_id::Namespace;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::{
     media::query::js_parse_int,
@@ -74,7 +74,7 @@ pub(crate) fn bare(pairs: &[(String, String)], key: &str) -> Option<String> {
     (!v.is_empty()).then(|| v.join(","))
 }
 
-pub(crate) fn unavailable(what: &str, provider: ExternalProvider, e: &Upstream) -> AppError {
+pub(crate) fn unavailable(what: &str, provider: Namespace, e: &Upstream) -> AppError {
     AppError::with_message(
         StatusCode::SERVICE_UNAVAILABLE,
         format!(
@@ -86,7 +86,7 @@ pub(crate) fn unavailable(what: &str, provider: ExternalProvider, e: &Upstream) 
 }
 
 /// An upstream 404 on a detail route is a 404, everything else a 503.
-pub(crate) fn fail(provider: ExternalProvider, e: &Upstream, detail: bool) -> AppError {
+pub(crate) fn fail(provider: Namespace, e: &Upstream, detail: bool) -> AppError {
     if detail && e.is_not_found() {
         return AppError::not_found("not_found");
     }
@@ -206,9 +206,7 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
         None => preferred(&st.db, bare(&q, "mediaId").as_deref()).await?,
     };
     let kind = MediaKind::from_tv(tv);
-    let primary = md
-        .resolve(name.as_deref(), kind)
-        .unwrap_or(ExternalProvider::Tmdb);
+    let primary = md.resolve(name.as_deref(), kind).unwrap_or(Namespace::TMDB);
     let search = Search::text(kind, query, year(bare(&q, "year").as_deref()));
     let lang = lang(&st).await?;
     let go = Priority::Interactive;
@@ -343,8 +341,8 @@ pub async fn discover_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs)
 }
 
 /// `registry.get(name)` (availability unchecked) and the canonical integer id.
-fn target(md: &Metadata, provider: &str, id: &str) -> Result<(ExternalProvider, i64), AppError> {
-    let p = ExternalProvider::parse(provider)
+fn target(md: &Metadata, provider: &str, id: &str) -> Result<(Namespace, i64), AppError> {
+    let p = Namespace::parse(provider)
         .filter(|p| md.get(*p).is_some())
         .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {provider}")))?;
     Ok((p, i64::from(int_param(id)?)))
@@ -352,7 +350,7 @@ fn target(md: &Metadata, provider: &str, id: &str) -> Result<(ExternalProvider, 
 
 pub(crate) type Ids = Result<PathParams<(String, String)>, AppError>;
 
-async fn details(st: &AppState, p: ExternalProvider, kind: MediaKind, id: i64) -> Res {
+async fn details(st: &AppState, p: Namespace, kind: MediaKind, id: i64) -> Res {
     let l = lang(st).await?;
     let v = st
         .metadata
@@ -363,7 +361,7 @@ async fn details(st: &AppState, p: ExternalProvider, kind: MediaKind, id: i64) -
     Ok(Json(v))
 }
 
-async fn seasons_of(st: &AppState, p: ExternalProvider, id: i64, stubs: bool) -> Res {
+async fn seasons_of(st: &AppState, p: Namespace, id: i64, stubs: bool) -> Res {
     let l = lang(st).await?;
     let (id, go, series) = (id.to_string(), Priority::Interactive, MediaKind::Series);
     let provider = st.metadata.of(p);
@@ -409,13 +407,7 @@ pub async fn legacy_movie(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    details(
-        &st,
-        ExternalProvider::Tmdb,
-        MediaKind::Movie,
-        i64::from(id?.0),
-    )
-    .await
+    details(&st, Namespace::TMDB, MediaKind::Movie, i64::from(id?.0)).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
@@ -424,13 +416,7 @@ pub async fn legacy_tv(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    details(
-        &st,
-        ExternalProvider::Tmdb,
-        MediaKind::Series,
-        i64::from(id?.0),
-    )
-    .await
+    details(&st, Namespace::TMDB, MediaKind::Series, i64::from(id?.0)).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
@@ -439,5 +425,5 @@ pub async fn legacy_seasons(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    seasons_of(&st, ExternalProvider::Tmdb, i64::from(id?.0), false).await
+    seasons_of(&st, Namespace::TMDB, i64::from(id?.0), false).await
 }

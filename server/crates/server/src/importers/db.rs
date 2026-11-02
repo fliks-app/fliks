@@ -4,7 +4,7 @@ use crate::media::{
     items::{self, NewWant},
     wants,
 };
-use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
 
@@ -12,7 +12,7 @@ use sqlx::{PgPool, types::Json};
 #[derive(Debug)]
 pub enum WriteError {
     Db(sqlx::Error),
-    Held(ExternalProvider),
+    Held(Namespace),
 }
 
 impl From<sqlx::Error> for WriteError {

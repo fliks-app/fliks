@@ -1,7 +1,7 @@
 //! The snapshot cache and single-flight in front of the providers (`metadata-orchestrator.md` rules 29-33).
 use super::{EditionRef, MetaError, Metadata, Upstream};
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::{language::Resolved, limiter::Priority},
 };
@@ -19,7 +19,7 @@ use std::{
 /// What one provider answer is stored and shared under.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Key {
-    pub provider: ExternalProvider,
+    pub provider: Namespace,
     pub resource: &'static str,
     pub kind: MediaKind,
     pub id: String,
@@ -46,7 +46,7 @@ impl Drop for Release {
 impl Metadata {
     fn key(
         &self,
-        p: ExternalProvider,
+        p: Namespace,
         resource: &'static str,
         kind: MediaKind,
         id: &str,
@@ -64,7 +64,7 @@ impl Metadata {
     /// The work record of `id`, from its snapshot or the provider.
     pub async fn work(
         &self,
-        p: ExternalProvider,
+        p: Namespace,
         kind: MediaKind,
         id: &str,
         lang: &Resolved,
@@ -88,7 +88,7 @@ impl Metadata {
     /// The children of `id` (the seasons of a series, the editions of a book), from its snapshot or the provider.
     pub async fn children(
         &self,
-        p: ExternalProvider,
+        p: Namespace,
         kind: MediaKind,
         id: &str,
         lang: &Resolved,
@@ -117,8 +117,8 @@ impl Metadata {
     /// look the namespace up. A foreign namespace is keyed `<namespace>:<value>` (`book-metadata.md` rule 6).
     pub async fn edition(
         &self,
-        p: ExternalProvider,
-        e: (ExternalProvider, &str),
+        p: Namespace,
+        e: (Namespace, &str),
         lang: &Resolved,
         prio: Priority,
     ) -> Result<Option<Value>, MetaError> {
