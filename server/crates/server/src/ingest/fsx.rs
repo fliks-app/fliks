@@ -1,6 +1,9 @@
 //! Contained filesystem writes under a library root (`ingest.md` rules 1-15, W1-W16).
 use crate::engine::resolve::lexical_resolve;
-use fliks_domain::naming::validate_folder_name;
+use fliks_domain::{
+    media::kind::MediaKind,
+    naming::{validate_folder_name, validate_folder_path},
+};
 use std::{
     fs, io,
     path::{Component, Path, PathBuf},
@@ -39,9 +42,22 @@ impl Root {
 
     /// `M`: the root for a root-level movie, else `Lc/<folderName>` once the name is one component.
     pub fn media_dir(&self, folder_name: Option<&str>) -> Result<PathBuf, String> {
+        self.media_dir_of(MediaKind::Movie, folder_name)
+    }
+
+    /// [`Self::media_dir`] for a media of `kind`: a book's folder name may hold several components.
+    pub fn media_dir_of(
+        &self,
+        kind: MediaKind,
+        folder_name: Option<&str>,
+    ) -> Result<PathBuf, String> {
+        let valid = |f| match kind {
+            MediaKind::Book => validate_folder_path(f),
+            _ => validate_folder_name(f),
+        };
         match folder_name.filter(|f| !f.is_empty()) {
             None => Ok(self.0.clone()),
-            Some(f) => validate_folder_name(f)
+            Some(f) => valid(f)
                 .map(|f| self.0.join(f))
                 .map_err(|_| format!("Invalid folder name \"{f}\"")),
         }
@@ -421,10 +437,27 @@ pub fn removable_media_dir(
     library_roots: &[PathBuf],
     other_media_dirs: &[PathBuf],
 ) -> Result<Option<PathBuf>, String> {
+    removable_dir_of(
+        root,
+        MediaKind::Movie,
+        folder_name,
+        library_roots,
+        other_media_dirs,
+    )
+}
+
+/// [`removable_media_dir`] for a media of `kind`.
+pub fn removable_dir_of(
+    root: &Root,
+    kind: MediaKind,
+    folder_name: &str,
+    library_roots: &[PathBuf],
+    other_media_dirs: &[PathBuf],
+) -> Result<Option<PathBuf>, String> {
     if folder_name.is_empty() {
         return Ok(None);
     }
-    let dir = root.media_dir(Some(folder_name))?;
+    let dir = root.media_dir_of(kind, Some(folder_name))?;
     let meta = match fs::symlink_metadata(&dir) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
@@ -470,6 +503,62 @@ pub fn remove_media_dir(dir: &Path) -> io::Result<()> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         r => r,
     }
+}
+
+/// What a media delete takes off disk under `dir`: all of it, or for a book only the files it owns.
+#[derive(Debug)]
+pub struct Removal {
+    pub dir: PathBuf,
+    pub owned: Option<Vec<PathBuf>>,
+}
+
+impl Removal {
+    pub fn remove(&self) -> io::Result<()> {
+        match &self.owned {
+            Some(files) if fs::symlink_metadata(&self.dir).is_ok_and(|m| m.is_dir()) => {
+                remove_owned(&self.dir, files)
+            }
+            Some(_) => Ok(()),
+            None => remove_media_dir(&self.dir),
+        }
+    }
+}
+
+/// Unlinks `files`, then every directory from theirs up to `dir` that is left empty; anything
+/// else in there stays.
+fn remove_owned(dir: &Path, files: &[PathBuf]) -> io::Result<()> {
+    let mut dirs = vec![dir.to_path_buf()];
+    for f in files.iter().filter(|f| f.starts_with(dir)) {
+        match fs::symlink_metadata(f) {
+            Ok(m) if !m.is_dir() => match fs::remove_file(f) {
+                Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+                _ => {}
+            },
+            _ => {}
+        }
+        dirs.extend(
+            f.ancestors()
+                .skip(1)
+                .take_while(|a| *a != dir)
+                .map(Path::to_path_buf),
+        );
+    }
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    dirs.dedup();
+    for d in dirs {
+        match fs::remove_dir(&d) {
+            Err(e)
+                if !matches!(
+                    e.kind(),
+                    io::ErrorKind::NotFound | io::ErrorKind::DirectoryNotEmpty
+                ) =>
+            {
+                return Err(e);
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

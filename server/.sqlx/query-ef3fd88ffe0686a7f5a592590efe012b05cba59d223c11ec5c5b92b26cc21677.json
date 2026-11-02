@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"folderId\" AS folder_id FROM media_files WHERE \"mediaId\" = $1 ORDER BY id",
+  "query": "SELECT id, \"folderId\" AS folder_id, \"relativePath\" AS rel FROM media_files\n           WHERE \"mediaId\" = $1 ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "folderId"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "rel",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
       }
     ],
     "parameters": {
@@ -33,8 +44,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "310aeb786e9a8471781fb8e9dc9e22068f0e78ed91fa583170c8ae5fc19b54db"
+  "hash": "ef3fd88ffe0686a7f5a592590efe012b05cba59d223c11ec5c5b92b26cc21677"
 }

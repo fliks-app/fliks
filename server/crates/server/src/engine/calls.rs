@@ -6,7 +6,7 @@ use super::{
 use fliks_engine_core::api::{
     CacheDeleteResult, CacheSummary, CapabilitiesResponse, EstimateSizesRequest, HeartbeatRequest,
     HeartbeatResponse, IntroDetectRequest, IntroDetectResponse, JobAccepted, JobRequest,
-    JobSnapshot, LiveSnapshot, MediaInfo, MediaRef, OpenLiveRequest, OpenLiveResponse,
+    JobSnapshot, LiveSnapshot, MediaFamily, MediaInfo, MediaRef, OpenLiveRequest, OpenLiveResponse,
     OpenSessionRequest, OpenSessionResponse, ProbeRequest, ProbeResult, QualityEstimate,
     SessionAction, SessionCommand, SessionSnapshot,
 };
@@ -15,6 +15,8 @@ use serde::Serialize;
 use std::{fmt, time::Instant};
 
 const DEFAULT_RENDER_NODE: &str = "/dev/dri/renderD128";
+/// Largest cover picture read from the engine (`book-ingest.md` rule 14).
+const COVER_MAX_BYTES: usize = 16 << 20;
 
 /// A failed engine call; the 503 variants carry the 4.x messages.
 #[derive(Debug)]
@@ -423,6 +425,34 @@ impl Engine {
             Ok(())
         } else {
             Err(EngineError::http("DELETE job", &reply))
+        }
+    }
+
+    /// The stored cover picture of a file the `Cover` job ran on; `None` when there is none.
+    pub async fn cover(&self, media_file_id: i32) -> Result<Option<Vec<u8>>, EngineError> {
+        let (status, body) = self
+            .need()?
+            .get_bytes(&format!("/v1/covers/{media_file_id}"), COVER_MAX_BYTES)
+            .await?;
+        match status.as_u16() {
+            404 => Ok(None),
+            s if (200..300).contains(&s) => body
+                .map(Some)
+                .ok_or_else(|| EngineError::Other("cover over the size cap".into())),
+            s => Err(EngineError::Other(format!("GET cover -> {s}"))),
+        }
+    }
+
+    /// Whether the adopted engine runs `kind` on files of `family` (`hello.jobFamilies`); a kind it
+    /// does not list applies to video only.
+    pub async fn job_applies(&self, kind: &str, family: MediaFamily) -> bool {
+        let listed = self
+            .hello()
+            .await
+            .and_then(|h| h.job_families.into_iter().find(|j| j.kind == kind));
+        match listed {
+            Some(j) => j.families.contains(&family),
+            None => family == MediaFamily::Video,
         }
     }
 

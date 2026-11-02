@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT w.\"folderId\" AS \"id!\" FROM wants w JOIN media m ON m.id = w.\"mediaId\"\n           JOIN library_folders f ON f.id = w.\"folderId\" AND f.\"libraryId\" = m.\"libraryId\"\n           WHERE w.\"mediaId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "wants",
+            "name": "folderId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ba7aeba6b36824f58e6694a7ba476ddd2b5aa2477c3584235e30a5f50f820164"
+}

@@ -285,6 +285,16 @@ pub fn validate_folder_name(name: &str) -> Result<&str, FolderNameError> {
     }
 }
 
+/// A book's folder name: `/`-separated components, each one valid for [`validate_folder_name`].
+pub fn validate_folder_path(name: &str) -> Result<&str, FolderNameError> {
+    if name.contains('\\') {
+        return Err(FolderNameError::Separator);
+    }
+    name.split('/')
+        .try_for_each(|c| validate_folder_name(c).map(drop))?;
+    Ok(name)
+}
+
 /// Drops leftover tokens, `undefined`, path-hostile characters and empty brackets.
 fn sanitize(name: &str) -> String {
     let s = rx!(r"\{[^}]*\}").replace_all(name, "");

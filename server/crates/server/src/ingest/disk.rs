@@ -1,6 +1,6 @@
 //! Disk import routes (`ingest.md` rules 60-93): orphan scan, preview, relink and its batch.
 use super::{
-    MediaRow, fsx, is_video,
+    MediaRow, books, fsx, is_video,
     library::{self, caller_nums, file_name},
     load_media, naming_formats,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
@@ -30,7 +30,7 @@ use fliks_domain::{
     metadata::limiter::Priority,
     naming::{
         self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
-        validate_folder_name,
+        validate_folder_name, validate_folder_path,
     },
     nfo::NfoData,
     release::parsing::{quality::parse_release_quality, title::extract_media_title},
@@ -38,7 +38,7 @@ use fliks_domain::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -138,9 +138,10 @@ struct Group {
     files: Vec<FileEntry>,
 }
 
-/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only.
-fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-    if depth > 3 {
+/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only. Book
+/// files, when the library takes books, are read one level deeper and never through a link.
+fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
+    if depth > if book { BOOK_DEPTH } else { 3 } {
         return;
     }
     let Ok(rd) = fs::read_dir(dir) else {
@@ -151,11 +152,17 @@ fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     let mut subdirs = vec![];
     for e in entries {
         let name = e.file_name().to_string_lossy().into_owned();
-        if e.file_type().is_ok_and(|t| t.is_dir()) {
+        let kind = e.file_type();
+        if kind.as_ref().is_ok_and(|t| t.is_dir()) {
             if !(depth > 0 && is_bonus_dir(&name)) {
                 subdirs.push(e.path());
             }
-        } else if is_video(&name)
+        } else if book && books::is_book_file(&name) {
+            if kind.is_ok_and(|t| t.is_file()) {
+                out.push(e.path());
+            }
+        } else if depth <= 3
+            && is_video(&name)
             && !is_sample_file(&name)
             && fs::metadata(e.path()).is_ok_and(|m| m.is_file())
         {
@@ -163,9 +170,12 @@ fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
         }
     }
     for s in subdirs {
-        collect(&s, depth + 1, out);
+        collect(&s, depth + 1, book, out);
     }
 }
+
+/// `Author/Series/Title/CD1/part`: the root, four folders, then the file.
+const BOOK_DEPTH: usize = 4;
 
 fn progress(st: &AppState, key: &str, root: &str, current: usize, total: usize) {
     st.hub.emit(SseEvent::TaskProgress {
@@ -211,18 +221,24 @@ async fn scan_under(
     folder_id: Option<i32>,
     types: &[MediaKind],
     provider: &str,
-    linked: &HashSet<PathBuf>,
+    linked: &HashMap<PathBuf, String>,
 ) -> Scanned {
     let key = format!("OrphanScan:{root}");
     let r = PathBuf::from(root);
+    let book = types.contains(&MediaKind::Book);
     let all = tokio::task::spawn_blocking(move || {
         let mut out = vec![];
-        collect(&r, 0, &mut out);
+        collect(&r, 0, book, &mut out);
         out
     })
     .await
     .unwrap_or_default();
-    let unlinked: Vec<&PathBuf> = all.iter().filter(|p| !linked.contains(*p)).collect();
+    let (book_files, video): (Vec<&PathBuf>, Vec<&PathBuf>) =
+        all.iter().partition(|p| books::is_book_file(&file_name(p)));
+    let unlinked: Vec<&PathBuf> = video
+        .into_iter()
+        .filter(|p| !linked.contains_key(*p))
+        .collect();
     let total = unlinked.len() + 1;
     progress(st, &key, root, 0, total);
     let root_p = Path::new(root);
@@ -305,6 +321,9 @@ async fn scan_under(
             .and_then(|n| n.year)
             .or(ex.year.map(i64::from));
     }
+    let works = book_groups(root_p, folder_id, provider, &book_files, linked).await;
+    orphan_count += works.iter().map(|g| g.files.len()).sum::<usize>();
+    groups.extend(works);
     progress(st, &key, root, total, total);
     st.hub.activity().remove(&key);
     Scanned {
@@ -312,6 +331,74 @@ async fn scan_under(
         scanned_files: all.len(),
         orphan_count,
     }
+}
+
+/// The works the book files make (`book-ingest.md` rules 2-4 and 10), one orphan group each for the
+/// works that have a file still unlinked. `files` is every book file of the root, linked or not:
+/// a work is anchored by its folder only when it is alone there.
+async fn book_groups(
+    root: &Path,
+    folder_id: Option<i32>,
+    provider: &str,
+    files: &[&PathBuf],
+    linked: &HashMap<PathBuf, String>,
+) -> Vec<Group> {
+    let by_rel: HashMap<String, &PathBuf> = files
+        .iter()
+        .filter_map(|p| Some((fsx::rel_under(root, p)?, *p)))
+        .collect();
+    let rels: Vec<String> = by_rel.keys().cloned().collect();
+    let works = books::group::group(&rels);
+    let mut out = vec![];
+    for (i, w) in works.iter().enumerate() {
+        let all: Vec<&String> = w.versions.iter().flat_map(|v| &v.files).collect();
+        let fresh: Vec<&&String> = all
+            .iter()
+            .filter(|r| !linked.contains_key(by_rel[**r]))
+            .collect();
+        if fresh.is_empty() {
+            continue;
+        }
+        let below = format!("{}/", w.dir);
+        let alone = !works
+            .iter()
+            .enumerate()
+            .any(|(j, o)| j != i && (o.dir == w.dir || o.dir.starts_with(&below)));
+        let mine = all
+            .iter()
+            .filter_map(|r| linked.get(by_rel[*r]))
+            .all(|owner| *owner == w.dir);
+        let anchor = (!w.dir.is_empty() && alone && mine).then(|| w.dir.clone());
+        let guess = fliks_domain::books::filename::parse_path(&w.name_path);
+        let mut entries = vec![];
+        for rel in fresh {
+            let abs = by_rel[*rel];
+            entries.push(FileEntry {
+                file_path: abs.to_string_lossy().into_owned(),
+                filename: file_name(abs),
+                size: tokio::fs::metadata(abs).await.map_or(0, |m| m.len()),
+                quality_name: "",
+                quality_id: 0,
+                season_number: None,
+                episode_number: None,
+                episode_end: None,
+            });
+        }
+        out.push(Group {
+            folder_id,
+            group_key: format!("book:{}", w.name_path),
+            media_type: MediaKind::Book,
+            folder_name: anchor.unwrap_or_default(),
+            guess_title: guess
+                .title
+                .unwrap_or_else(|| w.dir.rsplit('/').next().unwrap_or_default().to_owned()),
+            guess_year: guess.year.map(i64::from),
+            nfo: None,
+            suggested_provider: provider.to_owned(),
+            files: entries,
+        });
+    }
+    out
 }
 
 fn scanned_json(
@@ -352,19 +439,23 @@ pub async fn scan(
         return Err(AppError::not_found(format!("Library #{id} not found")));
     }
     let lib = require_path(&st, id).await?;
-    let linked: HashSet<PathBuf> = sqlx::query!(
-        r#"SELECT mf."relativePath" AS rel, lf.path AS folder FROM media_files mf
-           JOIN library_folders lf ON lf.id = mf."folderId" WHERE lf."libraryId" = $1"#,
+    let linked: HashMap<PathBuf, String> = sqlx::query!(
+        r#"SELECT mf."relativePath" AS rel, lf.path AS folder, COALESCE(m."folderName", '') AS "owner!"
+           FROM media_files mf JOIN library_folders lf ON lf.id = mf."folderId"
+           LEFT JOIN media m ON m.id = mf."mediaId" WHERE lf."libraryId" = $1"#,
         id
     )
     .fetch_all(&st.db)
     .await?
     .into_iter()
     .map(|r| {
-        PathBuf::from(resolve(
-            &fliks_domain::media::path::join(&r.folder, &r.rel.replace('\\', "/")),
-            "/",
-        ))
+        (
+            PathBuf::from(resolve(
+                &fliks_domain::media::path::join(&r.folder, &r.rel.replace('\\', "/")),
+                "/",
+            )),
+            r.owner,
+        )
     })
     .collect();
     let mut scanned = vec![];
@@ -431,7 +522,7 @@ pub async fn preview(
         }
         Ok(_) => {}
     }
-    let scanned = scan_under(&st, &root, None, &types, &provider, &HashSet::new()).await;
+    let scanned = scan_under(&st, &root, None, &types, &provider, &HashMap::new()).await;
     Ok((
         StatusCode::CREATED,
         Json(scanned_json(&root, None, vec![scanned])),
@@ -559,9 +650,12 @@ fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppErro
             MediaKind::Series => {}
         }
     }
-    validate_folder_name(name)
-        .map(str::to_owned)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name \"{name}\"")))
+    match media_type {
+        MediaKind::Book => validate_folder_path(name),
+        _ => validate_folder_name(name),
+    }
+    .map(str::to_owned)
+    .map_err(|_| AppError::bad_request(format!("Invalid folder name \"{name}\"")))
 }
 
 /// `relinkOrphans` (rules 76-92).

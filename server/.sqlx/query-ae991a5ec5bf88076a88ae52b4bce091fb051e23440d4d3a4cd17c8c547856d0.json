@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE editions SET format = COALESCE(format, $2), \"durationSeconds\" = COALESCE(\"durationSeconds\", $3),\n                 language = COALESCE(language, $4), publisher = COALESCE(publisher, $5)\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ae991a5ec5bf88076a88ae52b4bce091fb051e23440d4d3a4cd17c8c547856d0"
+}

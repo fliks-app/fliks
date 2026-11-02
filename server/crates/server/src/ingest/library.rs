@@ -1,7 +1,7 @@
 //! `LibraryIngestService.ingest` (`ingest.md` rules 17-33): files into a media's folder, never
 //! replacing what is there unless asked, then the rows, the event and the post-import queue.
 use super::{
-    MediaRow, Probed, fsx, load_media, naming_formats, probe,
+    MediaRow, Probed, books, fsx, load_media, naming_formats, probe,
     transfer::{self, Method},
 };
 use crate::{
@@ -12,8 +12,8 @@ use crate::{
 use fliks_domain::{
     media::{VIDEO_EXTS, family::Family, kind::MediaKind},
     naming::{
-        self, EpisodeNumbers, HasTitle, MovieFile, SeriesFile, extract_release_group,
-        match_special_by_title, parse_episode_numbers,
+        self, BookNameTokens, EpisodeNumbers, HasTitle, MovieFile, SeriesFile,
+        extract_release_group, match_special_by_title, parse_episode_numbers,
     },
 };
 use fliks_engine_core::api::{MediaInfo, SourceScan};
@@ -114,25 +114,80 @@ pub async fn ingest(
     if req.files.is_empty() {
         return Ok(out);
     }
+    let book = media.media_type == MediaKind::Book;
     let root = fsx::Root::open(&folder.path)
         .map_err(|e| format!("Library root \"{}\": {e}", folder.path))?;
-    let mdir = root.media_dir(media.folder_name.as_deref())?;
+    let mdir = media.dir_in(&root)?;
     let formats = naming_formats(&st.db).await.map_err(|e| e.to_string())?;
     let allowed = transfer::companion_exts(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    for f in select(&media, std::mem::take(&mut req.files)).await {
+    let chosen = select(&media, std::mem::take(&mut req.files)).await;
+    let parts = if book {
+        book_parts(&chosen)
+    } else {
+        Default::default()
+    };
+    let mut placed: Vec<(books::Placed, PathBuf)> = vec![];
+    for f in chosen {
+        // A book's files go to the folder of their family (`book-ingest.md` rule 8).
+        let target = if book {
+            match books::classify(&file_name(&f.path)) {
+                Some((family, _)) => books::folder_for(&st.db, media.id, family)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                None => None,
+            }
+            .filter(|t| t.id != folder.id)
+        } else {
+            None
+        };
+        let other = match &target {
+            Some(t) => {
+                let r = fsx::Root::open(&t.path)
+                    .map_err(|e| format!("Library root \"{}\": {e}", t.path))?;
+                let d = media.dir_in(&r)?;
+                Some((r, d, t.id))
+            }
+            None => None,
+        };
+        if req.transfer == Method::Move
+            && let Ok((src, _)) = fsx::regular_source(&f.path)
+            && let Some(o) = linked_to_other(&st.db, media.id, &src).await?
+        {
+            out.errors.push(format!(
+                "{}: source is linked to media #{o}",
+                file_name(&f.path)
+            ));
+            continue;
+        }
         let ctx = Ctx {
             st,
             media: &media,
-            root: &root,
-            folder_id: folder.id,
-            mdir: &mdir,
+            root: other.as_ref().map_or(&root, |o| &o.0),
+            folder_id: other.as_ref().map_or(folder.id, |o| o.2),
+            mdir: other.as_ref().map_or(&mdir, |o| &o.1),
             formats: &formats,
             allowed: &allowed,
             req: &req,
         };
+        if book {
+            let pending: Vec<String> = placed.iter().map(|(p, _)| p.rel.clone()).collect();
+            match ctx
+                .one_book(&f, parts.get(&f.path).copied(), &pending)
+                .await?
+            {
+                Placed::Book(b) => placed.push((b, f.path.clone())),
+                Placed::Present => out
+                    .already_present
+                    .push(f.path.to_string_lossy().into_owned()),
+                Placed::Error(e) => out.errors.push(e),
+                Placed::Imported(_) => {}
+            }
+            continue;
+        }
         match ctx.one(&f).await? {
+            Placed::Book(_) => {}
             Placed::Imported(i) => out.imported.push(i),
             Placed::Present => out
                 .already_present
@@ -140,10 +195,39 @@ pub async fn ingest(
             Placed::Error(e) => out.errors.push(e),
         }
     }
+    let mut family = Family::Video;
+    if !placed.is_empty() {
+        let files: Vec<books::Placed> = placed
+            .iter()
+            .map(|(p, _)| books::Placed {
+                folder_id: p.folder_id,
+                rel: p.rel.clone(),
+                abs: p.abs.clone(),
+            })
+            .collect();
+        let reg = books::register(st, media.id, &files).await?;
+        out.errors.extend(reg.conflicts);
+        for r in reg.files {
+            let Some((_, source)) = placed.iter().find(|(p, _)| p.rel == r.rel) else {
+                continue;
+            };
+            family = r.family;
+            out.imported.push(Imported {
+                file_id: r.file_id,
+                relative_path: r.rel,
+                quality: r.format,
+                episode_id: None,
+                season_number: None,
+                episode_number: None,
+                episode_end: None,
+                source_path: source.clone(),
+            });
+        }
+    }
     if out.imported.is_empty() {
         return Ok(out);
     }
-    let carried = if req.replace_existing {
+    let carried = if req.replace_existing && !book {
         remove_superseded(st, &media, &out.imported).await
     } else {
         vec![]
@@ -151,7 +235,7 @@ pub async fn ingest(
     let one = (out.imported.len() == 1).then(|| &out.imported[0]);
     st.hub.emit_domain(DomainEvent::MediaFilesImported {
         media_id: i64::from(media.id),
-        family: Family::Video,
+        family,
         season_number: one.and_then(|i| i.season_number).map(i64::from),
         episode_number: one.and_then(|i| i.episode_number).map(i64::from),
         source: if req.release_name.is_some() {
@@ -183,7 +267,7 @@ pub async fn ingest(
 
 /// Rule 19 (largest file by its real size; on a tie the later one) unless a series season pack.
 async fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
-    if media.has_seasons() && files.len() > 1 {
+    if (media.has_seasons() && files.len() > 1) || media.media_type == MediaKind::Book {
         return files;
     }
     let mut best: Option<(u64, File)> = None;
@@ -223,6 +307,7 @@ fn clock(secs: f64) -> String {
 
 enum Placed {
     Imported(Imported),
+    Book(books::Placed),
     Present,
     Error(String),
 }
@@ -244,6 +329,11 @@ pub fn file_component(base: &str, ext: &str) -> Result<String, String> {
     if !VIDEO_EXTS.contains(&ext_l.as_str()) {
         return Err(format!("not a video extension: \"{ext}\""));
     }
+    component(base, ext)
+}
+
+/// The name check of `file_component` without the extension list, for the files of a book.
+fn component(base: &str, ext: &str) -> Result<String, String> {
     let base = base.trim();
     let mut cut = 255usize.saturating_sub(ext.len()).min(base.len());
     while !base.is_char_boundary(cut) {
@@ -262,7 +352,151 @@ pub fn file_component(base: &str, ext: &str) -> Result<String, String> {
     Ok(format!("{base}{ext}"))
 }
 
+/// The other media whose file row sits at `src`, so that moving it would unlink that row's file.
+async fn linked_to_other(db: &sqlx::PgPool, media: i32, src: &Path) -> Result<Option<i32>, String> {
+    let folders = sqlx::query!(r#"SELECT id, path FROM library_folders"#)
+        .fetch_all(db)
+        .await
+        .map_err(|e| e.to_string())?;
+    for f in folders {
+        let Some(rel) = dunce::canonicalize(&f.path)
+            .ok()
+            .and_then(|root| fsx::rel_under(&root, src))
+        else {
+            continue;
+        };
+        let owner = sqlx::query_scalar!(
+            r#"SELECT "mediaId" FROM media_files
+               WHERE "folderId" = $1 AND replace("relativePath", '\', '/') = $2 AND "mediaId" <> $3"#,
+            f.id,
+            rel,
+            media
+        )
+        .fetch_optional(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .flatten();
+        if owner.is_some() {
+            return Ok(owner);
+        }
+    }
+    Ok(None)
+}
+
+/// `(index, count)` of each source file within its version (`book-ingest.md` rule 8).
+fn book_parts(files: &[File]) -> std::collections::HashMap<PathBuf, (usize, usize)> {
+    let paths: Vec<String> = files
+        .iter()
+        .map(|f| f.path.to_string_lossy().trim_start_matches('/').to_owned())
+        .collect();
+    let mut out = std::collections::HashMap::new();
+    for v in books::group::group(&paths)
+        .into_iter()
+        .flat_map(|w| w.versions)
+    {
+        for (i, p) in v.files.iter().enumerate() {
+            out.insert(PathBuf::from(format!("/{p}")), (i, v.files.len()));
+        }
+    }
+    out
+}
+
 impl Ctx<'_> {
+    /// A book file: no probe, no scan; placed under `mdir`, registered by the caller with its siblings.
+    async fn one_book(
+        &self,
+        f: &File,
+        part: Option<(usize, usize)>,
+        pending: &[String],
+    ) -> Result<Placed, String> {
+        let name = file_name(&f.path);
+        let Ok((src, _)) = fsx::regular_source(&f.path) else {
+            return Ok(Placed::Error(format!(
+                "{name}: source is not a regular file"
+            )));
+        };
+        if !books::is_book_file(&name) {
+            return Ok(Placed::Error(format!("{name}: not a book file")));
+        }
+        let m = self.media;
+        let ext = transfer::split_ext(&name).1.to_owned();
+        let mut base = naming::apply_book_format(
+            &self.formats.book,
+            &BookNameTokens {
+                title: m.title.clone(),
+                year: m.year.map(i64::from),
+                ..Default::default()
+            },
+        );
+        if let Some((i, _)) = part.filter(|(_, n)| *n > 1) {
+            base = format!("{base} - {:02}", i + 1);
+        }
+        let mut file = match component(&base, &ext) {
+            Ok(n) => n,
+            Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
+        };
+        let dir = self.mdir.to_path_buf();
+        let (dest_at, src_at) = (dir.join(&file), src.clone());
+        let at_dest = tokio::task::spawn_blocking(move || {
+            dunce::canonicalize(dest_at).is_ok_and(|d| d == src_at)
+        })
+        .await
+        .unwrap_or(false);
+        if !at_dest {
+            if self.collides(&dir, &file).await? {
+                if !self.req.uniquify_on_collision {
+                    return Ok(Placed::Present);
+                }
+                match self.free_name(&dir, &base, &ext).await? {
+                    Some(n) => file = n,
+                    None => return Ok(Placed::Error(format!("{name}: no free name up to (99)"))),
+                }
+            }
+            let dest = dir.join(&file);
+            if !self.root.contains(&dir, false) || !dir.starts_with(self.mdir) {
+                return Ok(Placed::Error(format!(
+                    "{name}: destination outside the library root"
+                )));
+            }
+            if let Some(other) = self.owner(&dest).await?.filter(|o| *o != m.id) {
+                return Ok(Placed::Error(format!(
+                    "{name}: destination belongs to media #{other}"
+                )));
+            }
+            if let Some(rel) = fsx::rel_under(self.root.path(), &dest)
+                && !books::is_own_work(&self.st.db, m.id, pending, &rel)
+                    .await
+                    .map_err(|e| e.to_string())?
+            {
+                return Ok(Placed::Error(format!(
+                    "{name}: belongs to another work of the folder"
+                )));
+            }
+            tokio::fs::create_dir_all(&dir)
+                .await
+                .map_err(|e| format!("{name}: {e}"))?;
+            tracing::info!("Ingesting \"{}\" -> \"{}\"", src.display(), dest.display());
+            let method = self.req.transfer;
+            let (s, d) = (src.clone(), dest.clone());
+            let done =
+                tokio::task::spawn_blocking(move || transfer::transfer_file(&s, &d, method, false))
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .map_err(|e| format!("{name}: {e}"))?;
+            if !done {
+                return Ok(Placed::Present);
+            }
+        }
+        let dest = dir.join(&file);
+        let rel =
+            fsx::rel_under(self.root.path(), &dest).ok_or("computed dest outside media folder")?;
+        Ok(Placed::Book(books::Placed {
+            folder_id: self.folder_id,
+            rel,
+            abs: dest,
+        }))
+    }
+
     async fn one(&self, f: &File) -> Result<Placed, String> {
         let name = file_name(&f.path);
         let Ok((src, _)) = fsx::regular_source(&f.path) else {
@@ -496,7 +730,7 @@ impl Ctx<'_> {
     /// `<base> (n)<ext>` for n in 2..=99; `None` when every one is taken.
     async fn free_name(&self, dir: &Path, base: &str, ext: &str) -> Result<Option<String>, String> {
         for n in 2..=99 {
-            let Ok(name) = file_component(&format!("{base} ({n})"), ext) else {
+            let Ok(name) = component(&format!("{base} ({n})"), ext) else {
                 return Ok(None);
             };
             if !self.collides(dir, &name).await? {

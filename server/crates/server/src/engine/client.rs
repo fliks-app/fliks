@@ -115,6 +115,27 @@ impl Client {
             .await
     }
 
+    /// A binary answer (an image): the status and the body, `None` when it is longer than `max`.
+    pub async fn get_bytes(
+        &self,
+        path: &str,
+        max: usize,
+    ) -> reqwest::Result<(StatusCode, Option<Vec<u8>>)> {
+        let mut res = self.request(Method::GET, path).send().await?;
+        let status = res.status();
+        if res.content_length().is_some_and(|n| n > max as u64) {
+            return Ok((status, None));
+        }
+        let mut body = vec![];
+        while let Some(chunk) = res.chunk().await? {
+            if body.len() + chunk.len() > max {
+                return Ok((status, None));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok((status, Some(body)))
+    }
+
     pub async fn delete(
         &self,
         path: &str,

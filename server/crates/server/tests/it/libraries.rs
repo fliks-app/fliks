@@ -725,9 +725,10 @@ async fn removing_a_media_clears_its_directory_in_every_folder(pool: PgPool) {
         std::fs::create_dir_all(c.tmp.join(f).join("Multi")).unwrap();
     }
     let guard = c.st.ingest.media.lock(id).await;
-    let (_, mut dirs) = fliks_server::media::write::remove_media_with_dir(&c.st, &guard, id)
+    let (_, dirs) = fliks_server::media::write::remove_media_with_dir(&c.st, &guard, id)
         .await
         .unwrap();
+    let mut dirs: Vec<_> = dirs.into_iter().map(|d| d.dir).collect();
     dirs.sort();
     assert_eq!(dirs, vec![c.tmp.join("f1/Multi"), c.tmp.join("f2/Multi")]);
 }

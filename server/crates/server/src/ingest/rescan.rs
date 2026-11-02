@@ -1,6 +1,6 @@
 //! `MediaRescanService` (`ingest.md` rules 38-54): disk walk, row reconcile, analyze, link in place.
 use super::{
-    MediaRow, drop_thumbnails, fsx, is_video,
+    MediaRow, drop_thumbnails, fsx,
     library::{Ep, file_name, season_episodes},
     load_media, probe,
 };
@@ -10,7 +10,10 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    media::bonus::{is_bonus_dir, is_sample_file},
+    media::{
+        bonus::{is_bonus_dir, is_sample_file},
+        kind::MediaKind,
+    },
     metadata::limiter::Priority,
     naming::{EpisodeNumbers, match_special_by_title, parse_episode_numbers},
     release::parsing::{
@@ -36,7 +39,7 @@ pub struct Counts {
 }
 
 /// Bumped when a probe stores something new, so unchanged files are probed again once.
-const PROBE_VERSION: i32 = 2;
+pub(super) const PROBE_VERSION: i32 = 2;
 
 struct Row {
     id: i32,
@@ -61,9 +64,7 @@ fn media_dir(media: &MediaRow) -> Result<(fsx::Root, PathBuf), AppError> {
         })?;
     let missing = |d: &str| AppError::bad_request(format!("Media folder not found: {d}"));
     let root = fsx::Root::open(lib).map_err(|_| missing(lib))?;
-    let dir = root
-        .media_dir(media.folder_name.as_deref())
-        .map_err(AppError::bad_request)?;
+    let dir = media.dir_in(&root).map_err(AppError::bad_request)?;
     let real = dunce::canonicalize(&dir).map_err(|_| missing(&dir.to_string_lossy()))?;
     if !real.is_dir() || !real.starts_with(root.path()) {
         return Err(missing(&dir.to_string_lossy()));
@@ -76,13 +77,14 @@ struct Walk {
     complete: bool,
 }
 
-/// Rule 40: depth 3, links never followed into, only regular video files.
+/// Rule 40: depth 3, links never followed into, only regular video files (book files: never a link).
 fn walk(
     dir: &Path,
     root: &Path,
     depth: usize,
     linked: &HashSet<String>,
     bonus: bool,
+    kind: MediaKind,
     out: &mut Walk,
 ) {
     if depth > 3 {
@@ -108,11 +110,15 @@ fn walk(
     for e in entries.flatten() {
         let path = e.path();
         if e.file_type().is_ok_and(|t| t.is_dir()) {
-            walk(&path, root, depth + 1, linked, in_bonus, out);
+            walk(&path, root, depth + 1, linked, in_bonus, kind, out);
             continue;
         }
         let n = e.file_name().to_string_lossy().into_owned();
-        if !is_video(&n) || !fs::metadata(&path).is_ok_and(|m| m.is_file()) {
+        let regular = match kind {
+            MediaKind::Book => e.file_type().is_ok_and(|t| t.is_file()),
+            _ => fs::metadata(&path).is_ok_and(|m| m.is_file()),
+        };
+        if !super::books::owns(kind, &n) || !regular {
             continue;
         }
         let known = fsx::rel_under(root, &path).is_some_and(|r| linked.contains(&r));
@@ -130,6 +136,9 @@ async fn rescan_folders(
 ) -> Result<Vec<crate::libraries::Folder>, AppError> {
     let mut ids: Vec<i32> = rows.iter().map(|r| r.folder_id).collect();
     ids.extend(media.folder.iter().map(|f| f.id));
+    if media.media_type == MediaKind::Book {
+        ids.extend(super::books::want_folders(&st.db, media.id).await?);
+    }
     Ok(sqlx::query!(
         r#"SELECT id, path FROM library_folders WHERE id = ANY($1) ORDER BY id"#,
         &ids
@@ -240,6 +249,9 @@ pub async fn rescan_files(
             .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
             .collect();
         applied = async {
+            if media.media_type == MediaKind::Book {
+                return book_pass(st, &m, &base, &kept, &disk, &linked, &mut c).await;
+            }
             refresh_existing(st, &m, &base, &kept, &slots, &mut c, &mut touched).await?;
             add_new(st, &m, &disk, &linked, &slots, &mut c, &mut touched).await
         }
@@ -258,7 +270,9 @@ pub async fn rescan_files(
     }
     // A stamped row must get its embedded detection even when a later step failed.
     // An interrupted walk proves nothing about the sidecars on disk.
-    reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
+    if media.media_type != MediaKind::Book {
+        reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
+    }
     applied?;
     tracing::info!(
         "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
@@ -278,6 +292,77 @@ pub async fn rescan_files(
     Ok(c)
 }
 
+/// A book's rows are refreshed and its new files registered together (`book-ingest.md` rule 6).
+async fn book_pass(
+    st: &AppState,
+    media: &MediaRow,
+    base: &Path,
+    kept: &[&Row],
+    disk: &[(String, PathBuf)],
+    linked: &HashSet<String>,
+    c: &mut Counts,
+) -> Result<(), AppError> {
+    let known: Vec<super::books::KnownFile> = kept
+        .iter()
+        .map(|r| super::books::KnownFile {
+            id: r.id,
+            rel: r.rel.clone(),
+            size: r.size,
+            mtime_ms: r.mtime_ms,
+            probe_version: r.probe_version,
+        })
+        .collect();
+    let refs: Vec<&super::books::KnownFile> = known.iter().collect();
+    c.updated += super::books::refresh(st, base, &refs)
+        .await
+        .map_err(AppError::internal)?;
+    let Some(folder) = media.folder.as_ref() else {
+        return Ok(());
+    };
+    let new: Vec<String> = disk
+        .iter()
+        .filter(|(r, _)| !linked.contains(r))
+        .map(|(r, _)| r.clone())
+        .collect();
+    let owned: HashSet<String> = sqlx::query_scalar!(
+        r#"SELECT "relativePath" FROM media_files
+           WHERE "folderId" = $1 AND "mediaId" <> $2 AND "relativePath" = ANY($3)"#,
+        folder.id,
+        media.id,
+        &new
+    )
+    .fetch_all(&st.db)
+    .await?
+    .into_iter()
+    .collect();
+    let fresh: Vec<super::books::Placed> = disk
+        .iter()
+        .filter(|(r, _)| !linked.contains(r) && !owned.contains(r))
+        .map(|(rel, abs)| super::books::Placed {
+            folder_id: folder.id,
+            rel: rel.clone(),
+            abs: abs.clone(),
+        })
+        .collect();
+    let reg = if fresh.is_empty() {
+        super::books::Registration::default()
+    } else {
+        super::books::register(st, media.id, &fresh)
+            .await
+            .map_err(AppError::internal)?
+    };
+    for why in &reg.conflicts {
+        tracing::warn!("Rescan[media #{}]: {why}", media.id);
+    }
+    if reg.files.is_empty()
+        && let Err(e) = super::books::relay(st, media.id).await
+    {
+        tracing::warn!("Rescan[media #{}]: {e}", media.id);
+    }
+    c.added += reg.files.len() as i64;
+    Ok(())
+}
+
 fn norm(r: &str) -> String {
     r.replace('\\', "/")
 }
@@ -295,12 +380,13 @@ async fn walk_media(
     };
     if media.folder_name.as_deref().is_some_and(|f| !f.is_empty()) {
         let (d, b, l) = (dir.to_path_buf(), base.to_path_buf(), linked.clone());
+        let kind = media.media_type;
         w = tokio::task::spawn_blocking(move || {
             let mut w = Walk {
                 files: vec![],
                 complete: true,
             };
-            walk(&d, &b, 0, &l, false, &mut w);
+            walk(&d, &b, 0, &l, false, kind, &mut w);
             w
         })
         .await
@@ -758,7 +844,7 @@ async fn reconcile_subtitles(
     }
 }
 
-fn mtime_ms(m: &fs::Metadata) -> Option<i64> {
+pub(super) fn mtime_ms(m: &fs::Metadata) -> Option<i64> {
     let d = m
         .modified()
         .ok()?
@@ -940,14 +1026,20 @@ pub struct Linked {
     pub created: bool,
 }
 
-/// `linkExistingFileInPlace` (rules 52-53); the caller holds the media's lock.
-pub async fn link_in_place(
+/// Where a file lies inside one of the media's folders (`ingest.md` rules 52-53).
+pub struct Located {
+    pub folder: crate::libraries::Folder,
+    pub rel: String,
+    pub real: PathBuf,
+    pub size: u64,
+}
+
+/// The folder of the media's library that contains `abs` and the path of the file in it.
+pub async fn locate_in_place(
     st: &AppState,
-    _guard: &OwnedMutexGuard<()>,
     media: &MediaRow,
     abs: &Path,
-    nums: Option<EpisodeNumbers>,
-) -> Result<Result<Linked, String>, AppError> {
+) -> Result<Result<Located, String>, AppError> {
     let outside = || Ok(Err("file outside the media folder".to_owned()));
     // The target folder first, then the library's others: the file's folder is the one containing it.
     let mut candidates: Vec<crate::libraries::Folder> = media.folder.iter().cloned().collect();
@@ -968,7 +1060,7 @@ pub async fn link_in_place(
     let mut roots = vec![];
     for folder in candidates {
         if let Ok(root) = fsx::Root::open(&folder.path)
-            && let Ok(dir) = root.media_dir(media.folder_name.as_deref())
+            && let Ok(dir) = media.dir_in(&root)
         {
             roots.push((folder, root, dir));
         }
@@ -994,14 +1086,44 @@ pub async fn link_in_place(
     };
     let named = media.folder_name.as_deref().filter(|f| !f.is_empty());
     let rel = named.map_or_else(|| inner.clone(), |f| format!("{f}/{inner}"));
-    if !is_video(&file_name(&real)) {
-        return Ok(Err("not a video file".into()));
+    if !super::books::owns(media.media_type, &file_name(&real)) {
+        return Ok(Err(if media.media_type == MediaKind::Book {
+            "not a book file"
+        } else {
+            "not a video file"
+        }
+        .into()));
     }
-    if named.is_none() && inner.contains('/') {
+    if named.is_none() && inner.contains('/') && media.media_type != MediaKind::Book {
         return Ok(Err(
             "a title with no folder can only own files at the library root".into(),
         ));
     }
+    Ok(Ok(Located {
+        folder,
+        rel,
+        real,
+        size: meta.len(),
+    }))
+}
+
+/// `linkExistingFileInPlace` (rules 52-53); the caller holds the media's lock.
+pub async fn link_in_place(
+    st: &AppState,
+    _guard: &OwnedMutexGuard<()>,
+    media: &MediaRow,
+    abs: &Path,
+    nums: Option<EpisodeNumbers>,
+) -> Result<Result<Linked, String>, AppError> {
+    let Located {
+        folder,
+        rel,
+        real,
+        size,
+    } = match locate_in_place(st, media, abs).await? {
+        Ok(l) => l,
+        Err(e) => return Ok(Err(e)),
+    };
     if let Some(held) = sqlx::query!(
         r#"SELECT id, "mediaId" AS media_id FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2"#,
         folder.id,
@@ -1042,7 +1164,7 @@ pub async fn link_in_place(
         media.id,
         folder.id,
         rel,
-        meta.len() as i64,
+        size as i64,
         parse_release_quality(&name).quality.name
     )
     .fetch_one(&st.db)
