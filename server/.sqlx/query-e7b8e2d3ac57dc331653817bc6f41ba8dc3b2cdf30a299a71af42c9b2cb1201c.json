@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH it AS (\n             SELECT ip.\"itemId\" AS item, ip.version FROM item_parts ip\n             JOIN items i ON i.id = ip.\"itemId\" JOIN editions e ON e.id = i.\"editionId\"\n             WHERE ip.\"mediaFileId\" = $1 AND e.family = 'audio'\n             ORDER BY ip.\"itemId\" LIMIT 1)\n           SELECT ip.\"mediaFileId\" AS id, (f.\"streamInfo\"->>'durationSeconds')::float8 AS duration\n           FROM it JOIN item_parts ip ON ip.\"itemId\" = it.item AND ip.version = it.version\n           JOIN media_files f ON f.id = ip.\"mediaFileId\"\n           ORDER BY ip.position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "duration",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "e7b8e2d3ac57dc331653817bc6f41ba8dc3b2cdf30a299a71af42c9b2cb1201c"
+}

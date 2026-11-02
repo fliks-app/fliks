@@ -13,6 +13,7 @@ Every route here is under `/api/stream` and takes `JwtOrApiKeyGuard`; none takes
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
 | `POST /api/stream/:mediaFileId/playback-info` | `JwtOrApiKeyGuard`; policies none | body `DeviceProfileDto` (below); query `burnInSubtitleId`, `startAt`, `audioStreamIndex`, `startQuality`, `download` (`'1'` = true), `replaces` (a session id to retire, rule 13), `preRollFirst` (`'1'` = true, rule 20), `token`, `sid`; headers `x-fliks-sse-connection`, `user-agent` | `EnginePlaybackInfo` JSON (rule 23) | 400 DTO validation; 400 `err.message` when the engine answers 400; 404 file/ACL; 503 engine states (rules 4, 5, 14) | opens an engine session, creates presence, registers QoE, may schedule re-probe/scan, writes `playback_states` row (rules 4-23) |
+| `POST /api/items/:itemId/playback-info` | `StreamAuthed` | the audio item of a book: `item-delivery.md` rules 1-10 | | | |
 | `GET /api/stream/info/qualities/:mediaFileId` | `JwtOrApiKeyGuard`; none | param only | engine `POST /v1/estimate-sizes` array `QualityEstimate[]`, verbatim | 404 (resolveFile); 503 `The streaming engine is not running` (no engine client) | none |
 | `GET /api/stream/info/hw-accel` | `JwtOrApiKeyGuard`; none | - | `{ hwAccel: string }` | - | none |
 | `GET /api/stream/info/tonemap-algos` | `JwtOrApiKeyGuard`; none | - | `{ available: string[] }` | - | none |

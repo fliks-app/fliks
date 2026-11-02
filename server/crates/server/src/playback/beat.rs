@@ -29,22 +29,61 @@ use std::{collections::HashMap, sync::Mutex};
 const DEBOUNCE_MS: i64 = 30_000;
 const SEEK_SECONDS: f64 = 30.0;
 const PRUNE_MS: i64 = DEBOUNCE_MS * 10;
+/// Serialised size above which a reader's locator is not stored.
+const LOCATOR_MAX: usize = 8 * 1024;
+
+/// The wire `episodeId` of an item: its id when it is grouped.
+async fn episode_of(db: &sqlx::PgPool, item: i32) -> Result<Option<i32>, AppError> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT id FROM items WHERE id = $1 AND "groupId" IS NOT NULL"#,
+        item
+    )
+    .fetch_optional(db)
+    .await?)
+}
+
+/// What a text beat reports of the reading position (`item-delivery.md` rule 19).
+#[derive(Clone, PartialEq)]
+struct Reading {
+    progression: Option<f64>,
+    locator: Option<Value>,
+}
+
+/// When, at which position and with which reading the last write happened.
+type LastWrite = (i64, f64, Option<Reading>);
 
 /// Last history write per `user:media:episode`, per process and never persisted (rules 1, 13, 14).
 #[derive(Default)]
-pub struct Debounce(Mutex<HashMap<String, (i64, f64)>>);
+pub struct Debounce(Mutex<HashMap<String, LastWrite>>);
 
 impl Debounce {
     /// Decides and, on a flush, records the write before it happens, so a failed write still debounces.
+    #[cfg(test)]
     fn flush(&self, key: &str, now: i64, pos: f64, dur: f64, state_changed: bool) -> bool {
+        self.flush_reading(key, now, pos, dur, state_changed, None)
+    }
+
+    /// `flush`, also writing when `reading` differs from the one of the last write.
+    fn flush_reading(
+        &self,
+        key: &str,
+        now: i64,
+        pos: f64,
+        dur: f64,
+        state_changed: bool,
+        reading: Option<Reading>,
+    ) -> bool {
         let mut map = self.0.lock_clean();
-        let last = map.get(key).copied();
-        let seeked = last.is_none_or(|(_, p)| (pos - p).abs() > SEEK_SECONDS);
-        let due = now - last.map_or(0, |(at, _)| at) >= DEBOUNCE_MS;
-        let go = state_changed || watched::completes(pos, dur) || seeked || due;
+        let last = map.get(key);
+        let seeked = last.is_none_or(|(_, p, _)| (pos - p).abs() > SEEK_SECONDS);
+        let due = now - last.map_or(0, |(at, _, _)| *at) >= DEBOUNCE_MS;
+        let moved = reading
+            .as_ref()
+            .is_some_and(|r| last.is_none_or(|(_, _, l)| l.as_ref() != Some(r)));
+        let go = state_changed || watched::completes(pos, dur) || seeked || due || moved;
         if go {
-            map.insert(key.to_owned(), (now, pos));
-            map.retain(|_, (at, _)| *at >= now - PRUNE_MS);
+            map.insert(key.to_owned(), (now, pos, reading));
+            map.retain(|_, (at, _, _)| *at >= now - PRUNE_MS);
         }
         go
     }
@@ -305,9 +344,16 @@ pub async fn heartbeat(
     let episode = int(&body, "episodeId")
         .map(|e| i32::try_from(e).unwrap_or(-1))
         .filter(|e| *e != 0);
+    let named = int(&body, "itemId")
+        .map(|i| i32::try_from(i).unwrap_or(-1))
+        .filter(|i| *i != 0);
+    let acl = match named {
+        Some(_) => crate::libraries::accessible_library_ids(&st.db, &a).await?,
+        None => vec![],
+    };
     let mut resolved = match bound_file {
         Some(bound) => {
-            let item = super::db::named_item(&st.db, media, episode).await?;
+            let item = super::db::beat_item(&st.db, media, episode, named, &acl).await?;
             check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
             Some(item)
         }
@@ -324,7 +370,7 @@ pub async fn heartbeat(
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
         let item = match resolved {
             Some(item) => item,
-            None => super::db::named_item(&st.db, media, episode).await?,
+            None => super::db::beat_item(&st.db, media, episode, named, &acl).await?,
         };
         resolved = Some(item);
         let before = st.presence.peek(sid);
@@ -345,18 +391,37 @@ pub async fn heartbeat(
         }
     }
     let history_user = attributed.unwrap_or(user);
-    let key = format!("{history_user}:{media}:{}", episode.unwrap_or(0));
+    let key = match named {
+        Some(item) => format!("{history_user}:{media}:i{item}"),
+        None => format!("{history_user}:{media}:{}", episode.unwrap_or(0)),
+    };
     let (pos, dur) = (
         num(&body, "positionSeconds").unwrap_or(0.0),
         num(&body, "durationSeconds").unwrap_or(0.0),
     );
+    let progression = num(&body, "progression")
+        .filter(|p| p.is_finite())
+        .map(|p| p.clamp(0.0, 1.0));
+    let locator = body
+        .get("locator")
+        .filter(|l| l.is_object() && l.to_string().len() <= LOCATOR_MAX)
+        .cloned();
+    let text_done = progression.is_some_and(|p| p >= fliks_domain::media::finish::TEXT_SHARE);
     let client_played_at = int(&body, "playedAt")
         .and_then(DateTime::from_timestamp_millis)
         .map(|t| t.min(Utc::now()));
     if client_played_at.is_none()
-        && !st
-            .debounce
-            .flush(&key, now_ms() as i64, pos, dur, state_changed)
+        && !st.debounce.flush_reading(
+            &key,
+            now_ms() as i64,
+            pos,
+            dur,
+            state_changed || text_done,
+            (progression.is_some() || locator.is_some()).then(|| Reading {
+                progression,
+                locator: locator.clone(),
+            }),
+        )
     {
         return Ok(reply(lost, None));
     }
@@ -370,11 +435,16 @@ pub async fn heartbeat(
     };
     let item = match resolved {
         Some(item) => item,
-        None => super::db::named_item(&st.db, media, episode).await?,
+        None => super::db::beat_item(&st.db, media, episode, named, &acl).await?,
     };
     let Some(item) = item else {
         return Ok(reply(lost, Some(None)));
     };
+    let episode = match named {
+        Some(_) => episode_of(&st.db, item).await?,
+        None => episode,
+    };
+    let (family, last_chapter_start) = watched::finish_context(&st.db, item, file).await?;
     let watch = Watch {
         position: pos,
         duration: dur,
@@ -382,6 +452,10 @@ pub async fn heartbeat(
         item,
         episode,
         client_played_at,
+        family,
+        last_chapter_start,
+        progression,
+        locator,
     };
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     Ok(reply(lost, Some(saved)))
@@ -457,6 +531,21 @@ mod tests {
             d.flush("other", 45_000, 3.0, 0.0, false),
             "keys are independent"
         );
+    }
+
+    #[test]
+    fn a_moved_reading_position_flushes_and_an_unchanged_one_does_not() {
+        let d = Debounce::default();
+        let at = |p: f64, href: &str| Reading {
+            progression: Some(p),
+            locator: Some(json!({"href": href})),
+        };
+        let beat = |now, r| d.flush_reading("t", now, 0.0, 0.0, false, Some(r));
+        assert!(beat(1_000, at(0.1, "a")), "first beat");
+        assert!(!beat(11_000, at(0.1, "a")), "same position, 10 s on");
+        assert!(beat(12_000, at(0.2, "a")), "progression moved");
+        assert!(beat(13_000, at(0.2, "b")), "locator moved");
+        assert!(!beat(14_000, at(0.2, "b")));
     }
 
     #[test]

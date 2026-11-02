@@ -141,6 +141,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         playback::toggle_series_watched,
         playback::toggle_season_watched,
         crate::stream::playback_info,
+        crate::stream::item_playback_info,
         crate::stream::qualities,
         crate::stream::hw_accel,
         crate::stream::tonemap_algos,

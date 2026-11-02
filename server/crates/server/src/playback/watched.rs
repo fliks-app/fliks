@@ -1,8 +1,12 @@
 //! The watched toggles and the watch recorded by the heartbeat (`docs/spec/playback-state.md`).
-use super::db::{find_state, fk, named_item};
+use super::db::{beat_item, find_state, fk};
 use crate::http::AppError;
 use crate::playlists::remove_watched_from_auto_playlists;
 use chrono::{DateTime, Utc};
+use fliks_domain::media::{
+    family::Family,
+    finish::{self, Standing},
+};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -50,8 +54,10 @@ pub async fn toggle_watched(
     media: i32,
     file: Option<i32>,
     episode: Option<i32>,
+    item: Option<i32>,
+    acl: &[i32],
 ) -> Result<Value, AppError> {
-    let item = named_item(db, media, episode)
+    let item = beat_item(db, media, episode, item, acl)
         .await?
         .ok_or_else(|| AppError::not_found("not_found"))?;
     let existing = find_state(db, user, item).await?;
@@ -265,11 +271,52 @@ pub struct Watch {
     pub episode: Option<i32>,
     /// When the client played it, for an offline replay; `None` for a live beat.
     pub client_played_at: Option<DateTime<Utc>>,
+    /// The family of the item's edition, which decides when it is finished.
+    pub family: Family,
+    pub last_chapter_start: Option<f64>,
+    pub progression: Option<f64>,
+    pub locator: Option<Value>,
 }
 
-/// Seconds before the end, or the fraction of the runtime, from which a title counts as watched.
+/// The video rule: also the zone in which every beat of any family is written.
 pub fn completes(pos: f64, dur: f64) -> bool {
-    dur > 0.0 && (pos >= dur - 30.0 || pos >= dur * 0.9)
+    finish::video(pos, dur)
+}
+
+/// The family of an item and, for an audio item, the start of its last chapter on the timeline of the
+/// version holding `file` (only with two chapters or more).
+pub async fn finish_context(
+    db: &PgPool,
+    item: i32,
+    file: i32,
+) -> sqlx::Result<(Family, Option<f64>)> {
+    let family = sqlx::query_scalar!(
+        r#"SELECT e.family FROM items i JOIN editions e ON e.id = i."editionId" WHERE i.id = $1"#,
+        item
+    )
+    .fetch_optional(db)
+    .await?
+    .and_then(|f| Family::parse(&f))
+    .unwrap_or(Family::Video);
+    if family != Family::Audio {
+        return Ok((family, None));
+    }
+    let last = sqlx::query_scalar!(
+        r#"WITH v AS (SELECT version FROM item_parts WHERE "itemId" = $1 AND "mediaFileId" = $2),
+parts AS (SELECT ip."mediaFileId" AS fid,
+    COALESCE(sum(COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0))
+      OVER (ORDER BY ip.position ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS off
+  FROM item_parts ip JOIN media_files f ON f.id = ip."mediaFileId", v
+  WHERE ip."itemId" = $1 AND ip.version = v.version),
+ch AS (SELECT parts.off + mk."startSeconds" AS s FROM parts
+  JOIN item_markers mk ON mk."itemId" = $1 AND mk."mediaFileId" = parts.fid AND mk.kind = 'chapter')
+SELECT CASE WHEN count(*) >= 2 THEN max(s) END::float8 AS last FROM ch"#,
+        item,
+        file
+    )
+    .fetch_one(db)
+    .await?;
+    Ok((family, last))
 }
 
 /// Writes an offline replay stamped with the time it was played.
@@ -288,7 +335,8 @@ async fn write_replay(
                SET "positionSeconds" = $2,
                    "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
                    completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = $5,
-                   "playedAt" = CASE WHEN $6 THEN $5 ELSE "playedAt" END, "mediaFileId" = $7
+                   "playedAt" = CASE WHEN $6 THEN $5 ELSE "playedAt" END, "mediaFileId" = $7,
+                   progression = COALESCE($8, progression), locator = COALESCE($9, locator)
                WHERE id = $1"#,
         )
         .bind(e.id)
@@ -297,12 +345,14 @@ async fn write_replay(
         .bind(completed)
         .bind(at)
         .bind(watched)
-        .bind(w.file),
+        .bind(w.file)
+        .bind(w.progression)
+        .bind(&w.locator),
         None => sqlx::query(
             r#"INSERT INTO playback_states
                  ("userId", "itemId", "mediaFileId", "positionSeconds",
-                  "durationSeconds", completed, "lastPlayedAt", "playedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $8 THEN $7 END)"#,
+                  "durationSeconds", completed, "lastPlayedAt", "playedAt", progression, locator)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $8 THEN $7 END, $9, $10)"#,
         )
         .bind(user)
         .bind(w.item)
@@ -311,7 +361,9 @@ async fn write_replay(
         .bind(w.duration)
         .bind(completed)
         .bind(at)
-        .bind(watched),
+        .bind(watched)
+        .bind(w.progression)
+        .bind(&w.locator),
     }
     .execute(db)
     .await
@@ -358,8 +410,14 @@ pub async fn record_watch(
         .zip(existing.as_ref())
         .is_some_and(|(at, e)| e.last_played_at > at);
     let was_completed = existing.as_ref().is_some_and(|e| e.completed);
-    let completed = completes(w.position, w.duration) || (replay.is_some() && was_completed);
-    let watched = w.position >= 5.0;
+    let standing = Standing {
+        position: w.position,
+        duration: w.duration,
+        progression: w.progression,
+        last_chapter_start: w.last_chapter_start,
+    };
+    let completed = finish::finished(w.family, &standing) || (replay.is_some() && was_completed);
+    let watched = w.position >= 5.0 || w.progression.is_some_and(|p| p > 0.0);
     let saved = if stale {
         Ok(())
     } else if let Some(at) = replay {
@@ -371,14 +429,17 @@ pub async fn record_watch(
                SET "positionSeconds" = $2,
                    "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
                    completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = now(),
-                   "playedAt" = CASE WHEN $5 THEN now() ELSE "playedAt" END, "mediaFileId" = $6
+                   "playedAt" = CASE WHEN $5 THEN now() ELSE "playedAt" END, "mediaFileId" = $6,
+                   progression = COALESCE($7, progression), locator = COALESCE($8, locator)
                WHERE id = $1"#,
                 e.id,
                 w.position,
                 w.duration,
                 completed,
                 watched,
-                w.file
+                w.file,
+                w.progression,
+                w.locator
             )
             .execute(db)
             .await
@@ -386,15 +447,17 @@ pub async fn record_watch(
             None => sqlx::query!(
                 r#"INSERT INTO playback_states
                  ("userId", "itemId", "mediaFileId", "positionSeconds",
-                  "durationSeconds", completed, "lastPlayedAt", "playedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, now(), CASE WHEN $7 THEN now() END)"#,
+                  "durationSeconds", completed, "lastPlayedAt", "playedAt", progression, locator)
+               VALUES ($1, $2, $3, $4, $5, $6, now(), CASE WHEN $7 THEN now() END, $8, $9)"#,
                 user,
                 w.item,
                 w.file,
                 w.position,
                 w.duration,
                 completed,
-                watched
+                watched,
+                w.progression,
+                w.locator
             )
             .execute(db)
             .await
