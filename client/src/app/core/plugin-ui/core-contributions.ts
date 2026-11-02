@@ -44,8 +44,8 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
     items: [
       { id: 'core.general', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.general', action: { kind: 'route', path: '/admin/settings/general' } },
       { id: 'core.libraries', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.libraries', action: { kind: 'route', path: '/admin/settings/libraries' } },
-      { id: 'core.email', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.email', action: { kind: 'route', path: '/admin/settings/email' } },
       { id: 'core.naming', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.naming', action: { kind: 'route', path: '/admin/settings/naming' } },
+      { id: 'core.email', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.email', action: { kind: 'route', path: '/admin/settings/email' } },
     ],
   },
   {
