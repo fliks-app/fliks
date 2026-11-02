@@ -57,11 +57,11 @@ describe('BookPreviewComponent', () => {
 
   it('shows the folder select only when the library has several folders', async () => {
     const one = setup([lib(1, [{ id: 5, name: 'a' }])]);
-    expect((await settle(one.fixture)).querySelectorAll('select').length).toBe(0);
+    expect((await settle(one.fixture)).querySelectorAll('app-library-folder-select select').length).toBe(0);
     TestBed.resetTestingModule();
 
     const many = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
-    expect((await settle(many.fixture)).querySelectorAll('select').length).toBe(1);
+    expect((await settle(many.fixture)).querySelectorAll('app-library-folder-select select').length).toBe(1);
   });
 
   it('adds with the chosen library and folder, then opens the book', async () => {
@@ -69,10 +69,25 @@ describe('BookPreviewComponent', () => {
     await settle(fixture);
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
-    expect(req.request.body).toEqual({ type: 'book', provider: 'openlibrary', externalId: 'OL1W', libraryId: 1, folderId: 5 });
+    expect(req.request.body).toEqual({ type: 'book', provider: 'openlibrary', externalId: 'OL1W', libraryId: 1, folderId: 5,
+      wants: [{ family: 'text', language: null }, { family: 'audio', language: null }] });
     req.flush({ id: 42, type: 'book' });
     await pending;
     expect(navigate).toHaveBeenCalledWith(['/books', '42']);
+  });
+
+  it('adds with the wants edited in the editor', async () => {
+    const { fixture, http } = setup([lib(1)]);
+    const el = await settle(fixture);
+    const rows = el.querySelectorAll('[data-testid="want-row"]');
+    expect(rows).toHaveLength(2);
+    (rows[1].querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const pending = fixture.componentInstance.add();
+    const req = http.expectOne('/api/media/import');
+    expect(req.request.body.wants).toEqual([{ family: 'text', language: null }]);
+    req.flush({ id: 42, type: 'book' });
+    await pending;
   });
 
   it('offers no Add without the import permission', async () => {

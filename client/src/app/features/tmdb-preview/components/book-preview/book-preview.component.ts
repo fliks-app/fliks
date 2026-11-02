@@ -8,6 +8,8 @@ import { LibrariesApiService, LibrarySummary } from '../../../../core/services/a
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { mediaDetailLink } from '../../../../core/media-kinds';
+import type { WantSpec } from '../../../../core/services/api/wants-api.service';
+import { WantsEditorComponent } from '../../../../shared/components/wants-editor/wants-editor';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import {
   LibraryFolderSelectComponent,
@@ -17,7 +19,7 @@ import {
 /** The add preview of a book: the work, its editions, and Add. Requests for books are not offered yet. */
 @Component({
   selector: 'app-book-preview',
-  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, LibraryFolderSelectComponent],
+  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, LibraryFolderSelectComponent, WantsEditorComponent],
   templateUrl: './book-preview.component.html',
 })
 export class BookPreviewComponent implements OnInit {
@@ -37,6 +39,10 @@ export class BookPreviewComponent implements OnInit {
   protected readonly libraries = signal<LibrarySummary[]>([]);
   protected readonly libraryId = signal<number | null>(null);
   protected readonly folderId = signal<number | null>(null);
+  protected readonly wants = signal<WantSpec[]>([
+    { family: 'text', language: null },
+    { family: 'audio', language: null },
+  ]);
 
   protected readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   protected readonly bookLibraries = computed(() => this.libraries().filter((l) => l.mediaTypes.includes('book')));
@@ -88,6 +94,7 @@ export class BookPreviewComponent implements OnInit {
         type: 'book',
         provider: this.provider(),
         externalId: this.externalId(),
+        wants: this.wants(),
         ...(libraryId != null ? { libraryId } : {}),
         ...(this.folders().length > 1 && folderId != null ? { folderId } : {}),
       });

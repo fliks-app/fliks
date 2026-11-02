@@ -15,12 +15,13 @@ import { LucideChevronLeft } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
 import { PersonBooksComponent } from './person-books';
+import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 @Component({
   selector: 'app-person-detail',
   imports: [
-    CachedSrcDirective, PersonBooksComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
+    CachedSrcDirective, PersonBooksComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
   templateUrl: './person-detail.html',
 })
 export class PersonDetailComponent implements OnInit {

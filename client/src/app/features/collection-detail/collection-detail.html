@@ -11,6 +11,10 @@
       }
     </div>
 
+    @if (isBookSeries()) {
+      <app-follow-toggle kind="series" [targetId]="d.id" />
+    }
+
     @if (tiles().length === 0) {
       <p class="text-base-content/50 text-center py-6">{{ 'books_people.no_entries' | translate }}</p>
     } @else {

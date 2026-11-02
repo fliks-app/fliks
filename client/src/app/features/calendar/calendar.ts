@@ -43,12 +43,14 @@ export class CalendarComponent implements OnInit {
   readonly showDigital = signal(this.loadFilter('digital'));
   readonly showPhysical = signal(this.loadFilter('physical'));
   readonly showAiring = signal(this.loadFilter('airing'));
+  readonly showRelease = signal(this.loadFilter('release'));
   readonly filteredEntries = computed(() => {
     let result = this.entries();
     if (!this.showCinema()) result = result.filter((e) => e.event !== 'cinema');
     if (!this.showDigital()) result = result.filter((e) => e.event !== 'digital');
     if (!this.showPhysical()) result = result.filter((e) => e.event !== 'physical');
     if (!this.showAiring()) result = result.filter((e) => e.event !== 'airing');
+    if (!this.showRelease()) result = result.filter((e) => e.event !== 'release');
     return result;
   });
 
@@ -160,6 +162,7 @@ export class CalendarComponent implements OnInit {
       digital: this.showDigital,
       physical: this.showPhysical,
       airing: this.showAiring,
+      release: this.showRelease,
     };
     const s = signalMap[event];
     if (s) {
@@ -174,6 +177,7 @@ export class CalendarComponent implements OnInit {
       case 'digital': return this.showDigital();
       case 'physical': return this.showPhysical();
       case 'airing': return this.showAiring();
+      case 'release': return this.showRelease();
       default: return true;
     }
   }

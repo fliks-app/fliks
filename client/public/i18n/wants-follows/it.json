@@ -1,0 +1,52 @@
+{
+  "system": {
+    "cmd_follow_refresh": "Segui le novità"
+  },
+  "calendar": {
+    "legend_release": "Uscita"
+  },
+  "wants": {
+    "title": "Formati e lingue",
+    "family": "Formato",
+    "language": "Lingua",
+    "any_language": "Qualsiasi lingua",
+    "add": "Aggiungi un formato",
+    "remove": "Rimuovi",
+    "save": "Salva",
+    "saved": "Desideri salvati",
+    "owned": "Posseduto",
+    "missing": "Mancante"
+  },
+  "follows": {
+    "saved": "Seguito salvato",
+    "stopped": "Seguito interrotto",
+    "edit": "Modifica",
+    "cancel": "Annulla",
+    "save": "Salva",
+    "library": "Libreria",
+    "wants": "Desiderato come",
+    "person": {
+      "on": "Novità seguite",
+      "start": "Segui le novità",
+      "stop": "Smetti di seguire",
+      "hint": "I nuovi titoli di questo autore vengono aggiunti alla libreria e desiderati come scelto."
+    },
+    "series": {
+      "on": "Serie osservata",
+      "start": "Osserva questa serie",
+      "stop": "Smetti di osservare",
+      "hint": "I nuovi volumi di questa serie vengono aggiunti alla libreria e desiderati come scelto."
+    }
+  },
+  "wanted": {
+    "title": "Cercati",
+    "subtitle": "Ciò che la libreria cerca ancora.",
+    "all_kinds": "Tutti",
+    "any_release": "Qualsiasi uscita",
+    "released": "Usciti",
+    "upcoming": "In arrivo",
+    "load_error": "Impossibile caricare l'elenco.",
+    "empty": "Non si cerca nulla.",
+    "more": "Mostra altro"
+  }
+}

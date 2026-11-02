@@ -13,6 +13,7 @@ import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
 import type { BookMedia } from './book-media';
 import { BookSourcesComponent } from './book-sources.component';
+import { BookWantsComponent } from './book-wants.component';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 
 const UNOFFICIAL_PROVIDERS = ['audible', 'audnexus'];
@@ -39,6 +40,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
     BookChaptersComponent,
     BookWorksRowComponent,
     BookSourcesComponent,
+    BookWantsComponent,
   ],
   templateUrl: './book-work.component.html',
   host: { class: 'block' },

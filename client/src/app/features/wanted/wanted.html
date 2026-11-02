@@ -1,0 +1,68 @@
+<div class="flex flex-col gap-4">
+  <div>
+    <h1 class="page-title">{{ 'wanted.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60">{{ 'wanted.subtitle' | translate }}</p>
+  </div>
+
+  <div class="flex flex-wrap gap-2" data-testid="wanted-filters">
+    <div class="join">
+      <button type="button" class="btn btn-sm join-item" [class.btn-active]="kind() === null" (click)="setKind(null)">
+        {{ 'wanted.all_kinds' | translate }}
+      </button>
+      @for (k of kinds; track k) {
+        <button type="button" class="btn btn-sm join-item" [class.btn-active]="kind() === k" (click)="setKind(k)">
+          {{ registry[k].requestLabelKey | translate }}
+        </button>
+      }
+    </div>
+    <div class="join">
+      <button type="button" class="btn btn-sm join-item" [class.btn-active]="released() === null" (click)="setReleased(null)">
+        {{ 'wanted.any_release' | translate }}
+      </button>
+      <button type="button" class="btn btn-sm join-item" [class.btn-active]="released() === true" (click)="setReleased(true)">
+        {{ 'wanted.released' | translate }}
+      </button>
+      <button type="button" class="btn btn-sm join-item" [class.btn-active]="released() === false" (click)="setReleased(false)">
+        {{ 'wanted.upcoming' | translate }}
+      </button>
+    </div>
+  </div>
+
+  @if (failed()) {
+    <div role="alert" class="alert alert-error">{{ 'wanted.load_error' | translate }}</div>
+  }
+
+  @if (rows().length === 0 && !loading() && !failed()) {
+    <p class="text-base-content/50 text-center py-8" data-testid="wanted-empty">{{ 'wanted.empty' | translate }}</p>
+  }
+
+  <ul class="flex flex-col gap-1">
+    @for (r of rows(); track r.wantId) {
+      <li>
+        <a [routerLink]="link(r)" class="flex items-center gap-3 rounded-lg p-2 hover:bg-base-200" data-testid="wanted-row">
+          <span class="w-10 shrink-0 aspect-2/3 rounded bg-base-300 overflow-hidden">
+            @if (r.posterUrl) {
+              <img class="size-full object-cover" [cachedSrc]="r.posterUrl | resolveUrl: 'thumb'" alt="" />
+            }
+          </span>
+          <span class="flex-1 min-w-0">
+            <span class="block font-medium truncate">{{ r.title }}@if (r.year) { <span class="text-base-content/50"> ({{ r.year }})</span> }</span>
+            <span class="block text-sm text-base-content/60">
+              {{ 'families.' + r.family | translate }}@if (language(r.language); as l) { · {{ l }} }
+              @if (r.releaseDate) { · {{ r.releaseDate | localeDate: { dateStyle: 'medium' } }} }
+            </span>
+          </span>
+          <span class="badge badge-sm badge-ghost">{{ registry[r.type].requestLabelKey | translate }}</span>
+        </a>
+      </li>
+    }
+  </ul>
+
+  @if (loading()) {
+    <div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>
+  } @else if (more()) {
+    <button type="button" class="btn btn-outline btn-sm self-center" data-testid="wanted-more" (click)="loadMore()">
+      {{ 'wanted.more' | translate }}
+    </button>
+  }
+</div>

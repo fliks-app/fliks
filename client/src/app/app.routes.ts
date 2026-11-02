@@ -286,6 +286,12 @@ export const routes: Routes = [
         data: { titleKey: 'calendar.title' },
       },
       {
+        path: 'wanted',
+        loadComponent: () =>
+          import('./features/wanted/wanted').then((m) => m.WantedComponent),
+        data: { titleKey: 'wanted.title' },
+      },
+      {
         path: 'live-tv',
         canActivate: [permissionGuard('livetv.read', '/')],
         loadComponent: () =>

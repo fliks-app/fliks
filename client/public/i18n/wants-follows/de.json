@@ -1,0 +1,52 @@
+{
+  "system": {
+    "cmd_follow_refresh": "Neuerscheinungen verfolgen"
+  },
+  "calendar": {
+    "legend_release": "Erscheinung"
+  },
+  "wants": {
+    "title": "Formate und Sprachen",
+    "family": "Format",
+    "language": "Sprache",
+    "any_language": "Jede Sprache",
+    "add": "Format hinzufügen",
+    "remove": "Entfernen",
+    "save": "Speichern",
+    "saved": "Wünsche gespeichert",
+    "owned": "Vorhanden",
+    "missing": "Fehlt"
+  },
+  "follows": {
+    "saved": "Folgen gespeichert",
+    "stopped": "Folgen beendet",
+    "edit": "Bearbeiten",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "library": "Bibliothek",
+    "wants": "Gewünscht als",
+    "person": {
+      "on": "Neuerscheinungen werden verfolgt",
+      "start": "Neuerscheinungen verfolgen",
+      "stop": "Nicht mehr folgen",
+      "hint": "Neue Titel dieser Autorin oder dieses Autors werden zur Bibliothek hinzugefügt und wie gewählt gewünscht."
+    },
+    "series": {
+      "on": "Serie wird beobachtet",
+      "start": "Serie beobachten",
+      "stop": "Nicht mehr beobachten",
+      "hint": "Neue Bände dieser Serie werden zur Bibliothek hinzugefügt und wie gewählt gewünscht."
+    }
+  },
+  "wanted": {
+    "title": "Gesucht",
+    "subtitle": "Was die Bibliothek noch sucht.",
+    "all_kinds": "Alle",
+    "any_release": "Jedes Erscheinungsdatum",
+    "released": "Erschienen",
+    "upcoming": "Demnächst",
+    "load_error": "Die Liste konnte nicht geladen werden.",
+    "empty": "Nichts wird gesucht.",
+    "more": "Mehr anzeigen"
+  }
+}

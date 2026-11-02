@@ -155,6 +155,7 @@
   }
 
   @if (canEdit()) {
+    <app-book-wants [mediaId]="m.id" />
     <app-book-sources [mediaId]="m.id" [editions]="b.editions" />
   }
 </div>
