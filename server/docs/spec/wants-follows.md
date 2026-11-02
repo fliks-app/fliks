@@ -1,0 +1,38 @@
+# Spec: wants, follows, the wanted list and the calendar
+
+Scope: the per-work wants (family x language) of any media, the follows of an author and the watch of a series, the scheduled `FollowRefresh` job that turns the new titles they find into monitored media, the wanted list and the release calendar over every kind. Requests, quotas and auto-approval (3.4) and the download plugin categories (3.2) are out. The plan is `plans/books-audiobooks.plan.md` sections 3.5 and 3.11; the table `wants` is `items.md` rules 29-34, widened to `text` and `audio` by `books.md` rule 1. Domain rules: `fliks_domain::media::wants`.
+
+## Wants
+
+1. A want is one row of `wants`: `family`, `language` (edition language, `NULL` is any), `qualityProfileId`, `folderId`. `UNIQUE NULLS NOT DISTINCT (mediaId, family, language)`. `fliks_domain::media::wants::parse_wants(json, kind)` reads a list of `{family, language?, qualityProfileId?}`: 1 to 8 distinct entries, families of the kind (`MediaKind::families`), `language` normalised with `normalize_language_code` (`und` and non-codes refused, `video` takes none), unknown keys refused. A failure is a 400 with its message.
+2. A want is satisfied when an edition of its family, in its language when it has one, holds an item with a part; for `video` of a kind without seasons when the media has a file, and for a kind with seasons when no monitored aired episode of a monitored season lacks a part (`media-query.md` Q-M). `GET /api/media/:id/wants` answers `{wants: [{id, family, language, qualityProfileId, folderId, satisfied}]}` ordered by `family`, `language NULLS FIRST`, `id`; permission `media.read`, a media outside the caller's libraries is a 404.
+3. `PUT /api/media/:id/wants` with `{wants}` (permission `media.update`, same 404) replaces the wants of the media and answers rule 2's body. Under `SELECT ... FOR UPDATE` of the media row: a want absent from the list is deleted, one present keeps its row (its `qualityProfileId` is replaced only when the entry names one), a new one takes the `folderId` of the media's other wants, else the library default folder. A list that would leave a `video` kind without its single `video` want is refused by rule 1's distinctness (one family). `media."updatedAt"` is bumped. Two concurrent replacements serialise on the row lock; the last one wins whole.
+4. `POST /api/media/import` for a `book` takes `wants` (rule 1); absent means one want per family, any language. They replace the shell's wants before the media is returned.
+
+## Follows and watches
+
+5. `person_follows("userId", "personId", role, "newReleases", "libraryId", wants jsonb, since, "refreshedAt")`, `PRIMARY KEY ("userId", "personId", role)`, `role` under `CHECK (role IN ('author'))`. Cascades on the user, the person and the library. `libraryId` is where discovered titles are added; `wants` (rule 1 form, for a `book`) is what they are wished with; `since` is the day the follow was made.
+6. `series_watches("userId", "collectionId", "libraryId", wants jsonb, since, "refreshedAt")`, `PRIMARY KEY ("userId", "collectionId")`, same cascades and meaning.
+7. `GET /api/persons/:id/follow` answers `{follow: null | {role, newReleases, libraryId, wants, since}, canFollow}`; `canFollow` is true when the person has an `author` credit or an `openlibrary` id. `PUT` with `{libraryId, wants?, newReleases?}` (permission `media.create`, the library readable by the caller, accepting `book`, with a root folder) upserts the follow of the caller (`since` is kept on an update); `DELETE` removes it and answers 204 whether or not it existed. A person without `canFollow` is a 400. `GET|PUT|DELETE /api/collections/:id/watch` are the same for a series (a collection with a readable book entry); the body and answer use `watch` for `follow`.
+8. `GET /api/follows` lists the caller's follows: `{persons: [{personId, name, role, newReleases, libraryId, wants, since, refreshedAt}], series: [{collectionId, name, libraryId, wants, since, refreshedAt}]}`.
+
+## The refresh job
+
+9. `FollowRefresh` is a core job (`scheduler.md` rule 10): cron `0 06 * * *`, label `system.cmd_follow_refresh`, triggerable. It runs under the `jobs::Running` claim, so a second run in the process is refused, and under the per-work lock of rule 12, so a second process is harmless.
+10. Discovery of an author: the anchor provider (`ANCHOR`, work level) is asked `search` of kind `book` at background priority with `author_id` (the person's `openlibrary` id) when it has one, else `author` (the name), pages 1 to 3, stopping at an empty page. A hit is kept when its `authors` hold the person (by id when the follow has one, else by `same_name`). A series watch asks `search` with `title` the collection name and `author` the name of the first author of its entries, and keeps hits whose first series entry has the collection's name (`same_name`). A provider failure ends that follow's pass, never the job; the rest of the follows run.
+11. A hit is new when `is_new(parse_release(releaseDate or year), since)`. Titles without a date, or before `since`, are the backlist: they stay missing on the author page and are never added. A follow with `newReleases` false, or a person who is no longer an author of anything, is skipped.
+12. For each new hit, in one transaction held open on a dedicated connection: `pg_advisory_xact_lock(hashtext('follows:work:' || provider || ':' || value))`, then the follow row `FOR SHARE` (gone: stop), then skip when `media_external_ids` or `discovered_works` already holds the work, else create the book as `POST /api/media/import` does (same code, `addedById` the follower, interactive-free background priority, no event for a failed import), replace its wants by the follow's, insert `discovered_works(provider, value, mediaId)` and commit. A failure before the commit leaves nothing: the work is tried again next run. `discovered_works` is never cleaned: a title the user deletes is not added again. Creating a follow or editing its wants blocks on the row lock while a title is being added, and the added title is created with the wants committed before the lock was taken.
+13. The job stamps `refreshedAt` of every follow it processed, logs one line per added title and a total, and ends `failed` only when every follow of a non-empty run failed.
+14. An added title is a monitored `book` of the follow's library with its release date: it is on the calendar and on the wanted list until a file satisfies each want. The user's permission is checked when the follow is made, not at every run.
+
+## The wanted list
+
+15. `GET /api/wanted?type=&released=&page=&limit=` (permission `media.read`): one row per unsatisfied want (rule 2) of a monitored media in a readable library. `type` is a media kind; `released=true` keeps media with no release date or one on or before today (UTC), `false` the later ones. Paging as `GET /api/media` (`page` from 1, `limit` default 25, at most 100). Order: `release date DESC NULLS LAST, media id, family, language NULLS FIRST, want id`. The answer is `{data: [{mediaId, type, title, year, posterUrl, releaseDate, family, language, wantId}], total}`.
+
+## The calendar
+
+16. `GET /api/media/calendar` (`media-query.md` rules 47-51) already reads every kind without seasons through `media_release_dates` (`media-details.md` rule 8): a `book` appears with `event: 'release'` on its work-level date, `type: 'book'`, and `type=book` filters to it. A title added by rule 12 is such a media. No other change.
+
+## Migration
+
+17. `1789000000470_follows.sql` creates the three tables with a non-partial index on every foreign key; it backfills nothing.

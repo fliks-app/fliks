@@ -29,7 +29,7 @@ Scope: what the `book` kind adds to the data model: the kind and its families, t
 
 15. A book is `watched` when any of its items is completed; `progressPercent` is 100 once watched, else the progress of the most recently played item. The progress of each edition stays on the work page (`BookDetail.progress`).
 16. The volumes missing from a series are the integers `1..max(position)` that no owned entry covers (`positionEnd` extends an entry to a range). No provider series listing exists in phase 1; the Audible series ASIN is stored for later.
-17. Phase 1 adds books, it does not request them: the preview offers "Add" (permission `media.write`), no request button for `book`, and "follow new releases" and series monitoring are hidden (they need `person_follows` and wants, phase 3.3).
+17. The preview offers "Add" (permission `media.write`) with the wants to create (`wants-follows.md` rule 4), no request button for `book` (requests are 3.4); "follow new releases" and series watches are `wants-follows.md` rules 5-14.
 18. Cleanup handles a book as a whole media, at the `book` level (`cleanup.md`).
 19. A book counts in `GET /api/media/counts` and `GET /api/counts` under `books`, in a user's `bookQuotaLimit` (a `Quotas` serialiser entry per kind) and in the social stats as `booksFinished` (`MediaKind::count_key` and `completed_stat_key`).
 

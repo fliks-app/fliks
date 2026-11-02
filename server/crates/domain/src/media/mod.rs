@@ -8,6 +8,7 @@ pub mod query;
 pub mod release;
 pub mod search;
 pub mod similarity;
+pub mod wants;
 
 /// Container extensions treated as a playable video file (lower-case, dot-prefixed).
 pub const VIDEO_EXTS: [&str; 14] = [

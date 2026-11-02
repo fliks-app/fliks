@@ -1,7 +1,7 @@
 //! `POST /api/media/import` for a book (`docs/spec/book-metadata.md` rule 21).
 use super::{
     body::Body,
-    import::{folder_format, resolve_target},
+    import::{Target, folder_format, resolve_target},
 };
 use crate::{
     events::DomainEvent,
@@ -12,6 +12,7 @@ use crate::{
         external_ids::{self},
         hydrate,
         items::{self, NewWant},
+        wants,
     },
     metadata::{
         Override, Upstream,
@@ -28,12 +29,20 @@ use crate::{
 use axum::{Json, http::StatusCode};
 use fliks_domain::{
     media::kind::MediaKind,
+    media::wants::{WantSpec, parse_wants},
     metadata::limiter::Priority,
     naming::{self, BookNameTokens, validate_folder_path},
 };
 use serde_json::Value;
 
-const FIELDS: [&str; 5] = ["type", "provider", "externalId", "libraryId", "folderId"];
+const FIELDS: [&str; 6] = [
+    "type",
+    "provider",
+    "externalId",
+    "libraryId",
+    "folderId",
+    "wants",
+];
 const TAKEN: &str = "This title is already in the library";
 
 pub(super) async fn import_book(
@@ -62,6 +71,39 @@ pub(super) async fn import_book(
     }
     let target = resolve_target(st, a, MediaKind::Book, library, folder).await?;
 
+    let wants = match b.0.get("wants") {
+        None => None,
+        Some(w) => Some(parse_wants(w, MediaKind::Book).map_err(|m| bad(&m))?),
+    };
+    let id = create_book(
+        st,
+        &target,
+        folder,
+        Some(a.user.id).filter(|u| *u != 0),
+        &work,
+        Priority::Interactive,
+        wants.as_deref(),
+    )
+    .await?;
+    let acl = accessible_library_ids(&st.db, a).await?;
+    let mut media = hydrate::detail_for(&st.db, id, paths_visible(&a.perms), Some(&acl))
+        .await?
+        .ok_or_else(|| crate::libraries::media_not_found(id))?;
+    media["book"] = books::detail(&st.db, id, a.user.id, &acl).await?;
+    Ok((StatusCode::CREATED, Json(media)))
+}
+
+/// Creates the book of an anchor work in `target` from its provider record, wished with `wants` (default: one
+/// per family) and added by `user`. A failure after the row exists deletes it.
+pub(crate) async fn create_book(
+    st: &AppState,
+    target: &Target,
+    folder: Option<i32>,
+    user: Option<i32>,
+    work: &str,
+    prio: Priority,
+    wants: Option<&[WantSpec]>,
+) -> Result<i32, AppError> {
     let over = sqlx::query!(
         r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
         target.id
@@ -76,7 +118,6 @@ pub(super) async fn import_book(
             region: over.region,
         }))
         .await?;
-    let prio = Priority::Interactive;
     let meta_fail = |e| match e {
         crate::metadata::MetaError::Upstream(e) => fail(ANCHOR, &e, true),
         crate::metadata::MetaError::Db(e) => e.into(),
@@ -90,7 +131,7 @@ pub(super) async fn import_book(
     }
     let Value::Object(record) = st
         .metadata
-        .work(ANCHOR, MediaKind::Book, &work, &lang, prio)
+        .work(ANCHOR, MediaKind::Book, work, &lang, prio)
         .await
         .map_err(meta_fail)?
     else {
@@ -134,7 +175,7 @@ pub(super) async fn import_book(
         year.map(|y| y as i32),
         target.id,
         name,
-        Some(a.user.id).filter(|u| *u != 0)
+        user
     )
     .fetch_one(&mut *tx)
     .await
@@ -155,6 +196,9 @@ pub(super) async fn import_book(
         },
     )
     .await?;
+    if let Some(w) = wants {
+        wants::replace(&mut tx, id, w).await?;
+    }
     tx.commit().await?;
 
     let undo = async |e: AppError| {
@@ -167,7 +211,7 @@ pub(super) async fn import_book(
         e
     };
     let m = BookMatch {
-        work: work.clone(),
+        work: work.to_owned(),
         edition: vec![],
         confidence: 100,
     };
@@ -188,12 +232,7 @@ pub(super) async fn import_book(
         external_ids: external_ids::refs(&st.db, id).await?,
         media_type: MediaKind::Book,
         library_id: Some(i64::from(target.id)),
-        added_by_user_id: Some(i64::from(a.user.id)).filter(|u| *u != 0),
+        added_by_user_id: user.map(i64::from),
     });
-    let acl = accessible_library_ids(&st.db, a).await?;
-    let mut media = hydrate::detail_for(&st.db, id, paths_visible(&a.perms), Some(&acl))
-        .await?
-        .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    media["book"] = books::detail(&st.db, id, a.user.id, &acl).await?;
-    Ok((StatusCode::CREATED, Json(media)))
+    Ok(id)
 }
