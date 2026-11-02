@@ -5,7 +5,7 @@ import { Observable, forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 /** Per-track namespace files under `i18n/<ns>/{lang}.json`, merged over the core file. */
-export const I18N_FEATURE_FILES = ['books-library', 'books-work', 'books-people', 'books-search', 'books-audio'];
+export const I18N_FEATURE_FILES = ['books-library', 'books-work', 'books-people', 'books-search', 'books-audio', 'wants-follows'];
 
 /** Charge les JSON i18n via HttpBackend, hors interceptors, pour éviter la dépendance circulaire TranslateService ↔ errorInterceptor. */
 export function translateBrowserLoaderFactory(

@@ -1,0 +1,41 @@
+<div class="flex flex-col gap-2" data-testid="wants-editor">
+  @for (w of wants(); track $index; let i = $index) {
+    <div class="flex flex-wrap items-center gap-2" data-testid="want-row">
+      <select
+        appTvSelect
+        class="select select-bordered select-sm"
+        [attr.aria-label]="'wants.family' | translate"
+        [ngModel]="w.family"
+        (ngModelChange)="set(i, { family: $event })"
+      >
+        @for (f of families; track f) {
+          <option [ngValue]="f">{{ 'families.' + f | translate }}</option>
+        }
+      </select>
+      <select
+        appTvSelect
+        class="select select-bordered select-sm"
+        [attr.aria-label]="'wants.language' | translate"
+        [ngModel]="w.language"
+        (ngModelChange)="set(i, { language: $event })"
+      >
+        <option [ngValue]="null">{{ 'wants.any_language' | translate }}</option>
+        @for (l of languages(); track l) {
+          <option [ngValue]="l">{{ label(l) }}</option>
+        }
+      </select>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        [disabled]="!canRemove()"
+        [attr.aria-label]="'wants.remove' | translate"
+        (click)="remove(i)"
+      >
+        {{ 'wants.remove' | translate }}
+      </button>
+    </div>
+  }
+  <button type="button" class="btn btn-ghost btn-sm self-start" [disabled]="!canAdd()" (click)="add()">
+    {{ 'wants.add' | translate }}
+  </button>
+</div>

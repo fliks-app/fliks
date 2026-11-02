@@ -55,6 +55,10 @@
                 </select>
               </label>
             }
+            <div>
+              <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
+              <app-wants-editor [(wants)]="wants" />
+            </div>
             <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
             <button type="button" class="btn btn-primary btn-sm self-start" [disabled]="adding() || !bookLibraries().length" (click)="add()">
               @if (adding()) {

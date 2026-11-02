@@ -1,0 +1,52 @@
+{
+  "system": {
+    "cmd_follow_refresh": "Suivre les nouveautés"
+  },
+  "calendar": {
+    "legend_release": "Parution"
+  },
+  "wants": {
+    "title": "Formats et langues",
+    "family": "Format",
+    "language": "Langue",
+    "any_language": "Toutes les langues",
+    "add": "Ajouter un format",
+    "remove": "Retirer",
+    "save": "Enregistrer",
+    "saved": "Souhaits enregistrés",
+    "owned": "Possédé",
+    "missing": "Manquant"
+  },
+  "follows": {
+    "saved": "Suivi enregistré",
+    "stopped": "Suivi arrêté",
+    "edit": "Modifier",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "library": "Bibliothèque",
+    "wants": "Souhaités en",
+    "person": {
+      "on": "Nouveautés suivies",
+      "start": "Suivre les nouveautés",
+      "stop": "Ne plus suivre",
+      "hint": "Les nouveaux titres de cet auteur sont ajoutés à la bibliothèque et souhaités comme choisi."
+    },
+    "series": {
+      "on": "Série surveillée",
+      "start": "Surveiller cette série",
+      "stop": "Ne plus surveiller",
+      "hint": "Les nouveaux tomes de cette série sont ajoutés à la bibliothèque et souhaités comme choisi."
+    }
+  },
+  "wanted": {
+    "title": "Recherchés",
+    "subtitle": "Ce que la bibliothèque cherche encore.",
+    "all_kinds": "Tous",
+    "any_release": "Toutes parutions",
+    "released": "Parus",
+    "upcoming": "À paraître",
+    "load_error": "Impossible de charger la liste.",
+    "empty": "Rien n'est recherché.",
+    "more": "Afficher plus"
+  }
+}

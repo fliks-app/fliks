@@ -81,6 +81,7 @@ export interface BookPreview extends BookSearchResult {
 //   201 = the MD of the created book. Requests for books are phase 3.4: the preview offers Add only.
 export interface BookImportBody {
   type: 'book'; provider: string; externalId: string; libraryId?: number; folderId?: number;
+  wants?: { family: 'text' | 'audio'; language: string | null }[];
 }
 
 // GET/PUT/DELETE /api/media/:id/sources  (Sources panel)

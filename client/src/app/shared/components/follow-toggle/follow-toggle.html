@@ -1,0 +1,52 @@
+@if (available()) {
+  <div class="flex flex-col gap-3" data-testid="follow-toggle">
+    <div class="flex flex-wrap items-center gap-2">
+      @if (current()) {
+        <span class="badge badge-success badge-outline" data-testid="following">{{ prefix() + '.on' | translate }}</span>
+        <button type="button" class="btn btn-ghost btn-sm" data-testid="follow-edit" (click)="open()">
+          {{ 'follows.edit' | translate }}
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" data-testid="follow-stop" [disabled]="busy()" (click)="stop()">
+          {{ prefix() + '.stop' | translate }}
+        </button>
+      } @else {
+        <button type="button" class="btn btn-outline btn-sm" data-testid="follow-start" (click)="open()">
+          {{ prefix() + '.start' | translate }}
+        </button>
+      }
+    </div>
+
+    @if (editing()) {
+      <div class="flex flex-col gap-3 rounded-lg bg-base-200 p-3 max-w-md" data-testid="follow-panel">
+        <p class="text-sm text-base-content/70">{{ prefix() + '.hint' | translate }}</p>
+        @if (libraries().length > 1) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'follows.library' | translate }}</span>
+            <select
+              appTvSelect
+              class="select select-bordered select-sm w-full"
+              [ngModel]="libraryId()"
+              (ngModelChange)="libraryId.set(+$event)"
+            >
+              @for (l of libraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        <div>
+          <span class="label-text text-base-content/60">{{ 'follows.wants' | translate }}</span>
+          <app-wants-editor [(wants)]="wants" />
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary btn-sm" data-testid="follow-save" [disabled]="busy() || libraryId() === null" (click)="save()">
+            {{ 'follows.save' | translate }}
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="editing.set(false)">
+            {{ 'follows.cancel' | translate }}
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+}

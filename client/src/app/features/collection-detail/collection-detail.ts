@@ -4,6 +4,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../core/services/api/books-api.service';
 import type { CollectionDetail } from '../../core/services/api/books.models';
 import { mediaDetailLink } from '../../core/media-kinds';
+import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 
 type Entry = CollectionDetail['entries'][number];
@@ -13,7 +14,7 @@ export type Tile =
 
 @Component({
   selector: 'app-collection-detail',
-  imports: [TranslatePipe, RouterLink, MediaCardComponent],
+  imports: [TranslatePipe, RouterLink, MediaCardComponent, FollowToggleComponent],
   templateUrl: './collection-detail.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -34,6 +35,9 @@ export class CollectionDetailComponent {
     ];
     return all.sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity));
   });
+
+  /** A series of books can be watched for new volumes. */
+  readonly isBookSeries = computed(() => this.detail()?.entries.some((e) => e.media.type === 'book') ?? false);
 
   readonly nextUp = computed(() => {
     const d = this.detail();

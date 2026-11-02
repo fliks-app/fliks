@@ -5,6 +5,7 @@
       <p class="text-sm text-base-content/60 capitalize">{{ currentDate() | localeDate:{ month: 'long', year: 'numeric' } }}</p>
     </div>
     <div class="flex gap-2">
+      <a routerLink="/wanted" class="btn btn-ghost btn-sm" data-testid="calendar-wanted">{{ 'wanted.title' | translate }}</a>
       <button type="button" class="btn btn-ghost btn-sm" (click)="prevMonth()">«</button>
       <button type="button" class="btn btn-ghost btn-sm" (click)="nextMonth()">»</button>
     </div>
@@ -96,6 +97,13 @@
       [class.opacity-40]="!isFilterActive('airing')"
       (click)="toggleFilter('airing')">
       <span class="w-3 h-3 rounded bg-secondary/20"></span>{{ 'calendar.legend_airing' | translate }}
+    </button>
+    <button type="button"
+      class="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-opacity cursor-pointer"
+      [class.opacity-100]="isFilterActive('release')"
+      [class.opacity-40]="!isFilterActive('release')"
+      (click)="toggleFilter('release')">
+      <span class="w-3 h-3 rounded bg-primary/20"></span>{{ 'calendar.legend_release' | translate }}
     </button>
   </div>
 </div>
