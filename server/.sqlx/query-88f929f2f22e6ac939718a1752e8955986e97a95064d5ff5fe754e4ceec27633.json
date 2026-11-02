@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_release_dates (\"mediaId\", \"editionId\", kind, date)\n           VALUES ($1, $2, $3, $4::text::date)\n           ON CONFLICT ON CONSTRAINT \"UQ_media_release_dates\" DO UPDATE SET date = EXCLUDED.date\n           WHERE media_release_dates.date IS DISTINCT FROM EXCLUDED.date",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "88f929f2f22e6ac939718a1752e8955986e97a95064d5ff5fe754e4ceec27633"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edition_field_sources (\"editionId\", field, provider)\n           SELECT $1, f, p FROM UNNEST($2::text[], $3::text[]) AS t(f, p)\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6f796316f548348ffed556eeb50dabd4ad35eca9d2ba62bb1cb261fde75f781"
+}

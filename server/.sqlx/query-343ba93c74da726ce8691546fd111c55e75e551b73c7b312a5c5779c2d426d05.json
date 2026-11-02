@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.title, m.\"preferredProvider\" AS pref, l.\"preferredProvider\" AS lib,\n             l.\"metadataLanguage\" AS lang, l.\"metadataRegion\" AS region\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           WHERE m.id = $1 AND m.type = 'book'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pref",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "preferredProvider"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "lib",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "preferredProvider"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "lang",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "metadataLanguage"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "region",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "metadataRegion"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "343ba93c74da726ce8691546fd111c55e75e551b73c7b312a5c5779c2d426d05"
+}

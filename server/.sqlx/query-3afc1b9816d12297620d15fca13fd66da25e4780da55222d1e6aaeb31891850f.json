@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO person_external_ids (\"personId\", provider, value) VALUES ($1, $2, $3)\n               ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3afc1b9816d12297620d15fca13fd66da25e4780da55222d1e6aaeb31891850f"
+}

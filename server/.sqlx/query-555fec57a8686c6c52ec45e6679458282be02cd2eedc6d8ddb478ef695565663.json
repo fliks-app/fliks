@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media_credits WHERE \"mediaId\" = $1 AND role = $2 AND \"editionId\" IS NOT DISTINCT FROM $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "555fec57a8686c6c52ec45e6679458282be02cd2eedc6d8ddb478ef695565663"
+}

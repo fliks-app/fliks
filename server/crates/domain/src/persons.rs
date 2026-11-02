@@ -19,6 +19,33 @@ pub fn tsquery(q: &str) -> Option<String> {
     (!runs.is_empty()).then(|| runs.join(" & "))
 }
 
+const PARTICLES: [&str; 16] = [
+    "de", "du", "des", "del", "della", "di", "da", "van", "von", "der", "den", "ter", "la", "le",
+    "el", "al",
+];
+
+/// The sort form of a name: `Le Guin, Ursula K.` for `Ursula K. Le Guin`, a lowercase particle after
+/// the given names (`La Fontaine, Jean de`). `None` for one word or a name that already has a comma.
+pub fn sort_name(name: &str) -> Option<String> {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    if words.len() < 2 || name.contains(',') {
+        return None;
+    }
+    let particle = |w: &str| PARTICLES.contains(&w.to_lowercase().as_str());
+    let mut start = words.len() - 1;
+    while start > 1 && particle(words[start - 1]) {
+        start -= 1;
+    }
+    let (given, family) = words.split_at(start);
+    let lead = family[..family.len() - 1]
+        .iter()
+        .take_while(|w| w.chars().next().is_some_and(char::is_lowercase))
+        .count();
+    let (tail, family) = family.split_at(lead);
+    let rest: Vec<&str> = given.iter().chain(tail).copied().collect();
+    Some(format!("{}, {}", family.join(" "), rest.join(" ")))
+}
+
 /// A media row a credit can link to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Owned {
@@ -46,6 +73,22 @@ mod tests {
         assert!(!needs_refresh(Some(now - REFRESH_AFTER_MS), now));
         assert!(needs_refresh(Some(now - REFRESH_AFTER_MS - 1), now));
         assert!(!needs_refresh(Some(now), now));
+    }
+
+    #[test]
+    fn sort_names() {
+        for (name, want) in [
+            ("Victor Hugo", Some("Hugo, Victor")),
+            ("Ursula K. Le Guin", Some("Le Guin, Ursula K.")),
+            ("Jean de La Fontaine", Some("La Fontaine, Jean de")),
+            ("Ludwig van Beethoven", Some("Beethoven, Ludwig van")),
+            ("bell hooks", Some("hooks, bell")),
+            ("Homer", None),
+            ("Hugo, Victor", None),
+            ("  ", None),
+        ] {
+            assert_eq!(sort_name(name).as_deref(), want, "{name}");
+        }
     }
 
     #[test]

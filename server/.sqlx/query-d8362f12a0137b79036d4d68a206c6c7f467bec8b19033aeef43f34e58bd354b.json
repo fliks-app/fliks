@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET title = COALESCE($2, title), year = COALESCE($3, year),\n             overview = COALESCE($4, overview), \"posterUrl\" = COALESCE($5, \"posterUrl\"),\n             rating = COALESCE($6, rating), \"metadataRefreshedAt\" = now()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Text",
+        "Varchar",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d8362f12a0137b79036d4d68a206c6c7f467bec8b19033aeef43f34e58bd354b"
+}

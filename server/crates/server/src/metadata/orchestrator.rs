@@ -1,5 +1,5 @@
 //! The snapshot cache and single-flight in front of the providers (`metadata-orchestrator.md` rules 29-33).
-use super::{MetaError, Metadata, Upstream};
+use super::{EditionRef, MetaError, Metadata, Upstream};
 use fliks_domain::{
     external_id::ExternalProvider,
     media::kind::MediaKind,
@@ -110,6 +110,42 @@ impl Metadata {
             Value::Array(all) => Ok(all),
             _ => Ok(vec![]),
         }
+    }
+
+    /// The edition `e` names as `p` records it, from its snapshot or the provider; `None` when `p` cannot
+    /// look the namespace up. A foreign namespace is keyed `<namespace>:<value>` (`book-metadata.md` rule 6).
+    pub async fn edition(
+        &self,
+        p: ExternalProvider,
+        e: (ExternalProvider, &str),
+        lang: &Resolved,
+        prio: Priority,
+    ) -> Result<Option<Value>, MetaError> {
+        let provider = self.providers[&p].provider.clone();
+        let ttl = provider.snapshot_ttl();
+        let (namespace, value) = (e.0, e.1.to_owned());
+        let id = if namespace == p {
+            value.clone()
+        } else {
+            format!("{namespace}:{value}")
+        };
+        let lang_owned = lang.clone();
+        let call = move || {
+            async move {
+                let e = EditionRef {
+                    namespace,
+                    value: &value,
+                };
+                let found = provider.fetch_edition(&e, &lang_owned, prio).await?;
+                Ok(found.unwrap_or(Value::Null))
+            }
+            .boxed()
+        };
+        let key = self.key(p, "edition", MediaKind::Book, &id, lang);
+        Ok(match self.snapshot(key, prio, ttl, call).await? {
+            Value::Null => None,
+            v => Some(v),
+        })
     }
 
     /// A record not expired answers without a call; else `fetch` runs once, in its own task, for every

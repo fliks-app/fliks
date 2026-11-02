@@ -69,6 +69,13 @@ impl Metadata {
         }
     }
 
+    /// Registers a provider under its own id, available (tests).
+    #[cfg(test)]
+    pub(crate) fn register(&mut self, provider: Arc<dyn MetadataProvider>) {
+        self.providers
+            .insert(provider.id(), Entry { on: true, provider });
+    }
+
     /// The provider registered under `id`, available or not.
     pub fn get(&self, id: ExternalProvider) -> Option<&dyn MetadataProvider> {
         self.providers.get(&id).map(|e| &*e.provider)

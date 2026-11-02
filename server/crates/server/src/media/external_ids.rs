@@ -132,6 +132,105 @@ pub async fn unlink(
     Ok(())
 }
 
+/// The id namespaces an edition holds (`edition_external_ids` checks them).
+pub const EDITION_NAMESPACES: [ExternalProvider; 5] = [
+    ExternalProvider::Isbn,
+    ExternalProvider::Asin,
+    ExternalProvider::OpenLibrary,
+    ExternalProvider::GoogleBooks,
+    ExternalProvider::Bnf,
+];
+
+/// `value` as an edition id of `provider`, or `None` when the provider names no edition by it
+/// (an OpenLibrary work or author id is not one).
+pub fn edition_id(provider: ExternalProvider, value: &str) -> Option<String> {
+    let v = provider.normalize(value)?;
+    let edition = EDITION_NAMESPACES.contains(&provider)
+        && (provider != ExternalProvider::OpenLibrary || v.ends_with('M'));
+    edition.then_some(v)
+}
+
+/// Adds an id to an edition (it keeps the ones it has); `false` when the value is no edition id of the
+/// provider or the edition is gone.
+pub async fn link_edition(
+    c: &mut PgConnection,
+    edition: i32,
+    media: i32,
+    provider: ExternalProvider,
+    value: &str,
+) -> sqlx::Result<bool> {
+    let Some(value) = edition_id(provider, value) else {
+        return Ok(false);
+    };
+    let done = sqlx::query!(
+        r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"#,
+        edition,
+        media,
+        provider.as_str(),
+        value
+    )
+    .execute(c)
+    .await;
+    match done {
+        Ok(_) => Ok(true),
+        Err(e) if db_code(&e).as_deref() == Some("23503") => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Removes one id of an edition, or every id of `provider` when `value` is `None`.
+pub async fn unlink_edition(
+    c: &mut PgConnection,
+    edition: i32,
+    provider: ExternalProvider,
+    value: Option<&str>,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"DELETE FROM edition_external_ids
+           WHERE "editionId" = $1 AND provider = $2 AND ($3::text IS NULL OR value = $3)"#,
+        edition,
+        provider.as_str(),
+        value
+    )
+    .execute(c)
+    .await?;
+    Ok(())
+}
+
+/// The edition holding `value` for `provider`; the lowest id when several do.
+pub async fn find_edition(
+    db: impl PgExecutor<'_>,
+    provider: ExternalProvider,
+    value: &str,
+) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar!(
+        r#"SELECT "editionId" FROM edition_external_ids
+           WHERE provider = $1 AND value = $2 ORDER BY "editionId" LIMIT 1"#,
+        provider.as_str(),
+        value
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// Every id of an edition, by provider then value.
+pub async fn edition_ids(
+    db: impl PgExecutor<'_>,
+    edition: i32,
+) -> sqlx::Result<Vec<(ExternalProvider, String)>> {
+    let rows = sqlx::query!(
+        r#"SELECT provider, value FROM edition_external_ids WHERE "editionId" = $1 ORDER BY provider, value"#,
+        edition
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| Some((ExternalProvider::parse(&r.provider)?, r.value)))
+        .collect())
+}
+
 /// `link`, or `unlink` when there is no id to set.
 pub async fn set(
     c: &mut PgConnection,
@@ -393,6 +492,73 @@ mod tests {
             .await
             .unwrap();
         assert!(all.fill(&mut c, m, MediaKind::Series).await.unwrap().gone);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_keeps_several_ids_and_a_lookup_takes_the_lowest(db: sqlx::PgPool) {
+        use ExternalProvider::{Isbn, OpenLibrary};
+        crate::db::migrate(&db).await.unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let m = media(&db, MediaKind::Book).await;
+        let mut ids = vec![];
+        for _ in 0..2 {
+            let e = sqlx::query_scalar(
+                r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'text') RETURNING id"#,
+            )
+            .bind(m)
+            .fetch_one(&mut *c)
+            .await
+            .unwrap();
+            ids.push(e);
+        }
+        let (a, b) = (ids[0], ids[1]);
+        assert!(
+            link_edition(&mut c, a, m, Isbn, "0-306-40615-2")
+                .await
+                .unwrap()
+        );
+        assert!(
+            link_edition(&mut c, a, m, Isbn, "9780306406157")
+                .await
+                .unwrap()
+        );
+        assert!(
+            link_edition(&mut c, b, m, Isbn, "9780306406157")
+                .await
+                .unwrap()
+        );
+        assert!(
+            link_edition(&mut c, a, m, OpenLibrary, "OL5M")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !link_edition(&mut c, a, m, OpenLibrary, "OL1W")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !link_edition(&mut c, a, m, ExternalProvider::Tmdb, "5")
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            find_edition(&mut *c, Isbn, "9780306406157").await.unwrap(),
+            Some(a)
+        );
+        assert_eq!(
+            edition_ids(&mut *c, a).await.unwrap(),
+            [
+                (Isbn, "9780306406157".to_owned()),
+                (OpenLibrary, "OL5M".to_owned())
+            ]
+        );
+        unlink_edition(&mut c, a, Isbn, None).await.unwrap();
+        assert_eq!(
+            find_edition(&mut *c, Isbn, "9780306406157").await.unwrap(),
+            Some(b)
+        );
+        assert_eq!(edition_ids(&mut *c, a).await.unwrap().len(), 1);
     }
 
     #[sqlx::test(migrations = false)]

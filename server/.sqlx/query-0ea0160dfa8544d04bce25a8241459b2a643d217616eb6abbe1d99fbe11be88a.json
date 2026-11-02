@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"editionId\" FROM edition_external_ids\n           WHERE provider = $1 AND value = $2 ORDER BY \"editionId\" LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "editionId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "edition_external_ids",
+            "name": "editionId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0ea0160dfa8544d04bce25a8241459b2a643d217616eb6abbe1d99fbe11be88a"
+}
