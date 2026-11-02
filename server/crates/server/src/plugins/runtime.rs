@@ -37,10 +37,35 @@ wasmtime::component::bindgen!({
     require_store_data_send: true,
 });
 
+/// The `provider` world, for the `metadata-provider` export only: its other interfaces are the `plugin` world's.
+mod provider_world {
+    wasmtime::component::bindgen!({
+        path: "../plugin-sdk/wit",
+        world: "fliks:plugin/provider",
+        imports: { default: async },
+        exports: { default: async },
+        with: {
+            "fliks:plugin/types": super::fliks::plugin::types,
+            "fliks:plugin/host": super::fliks::plugin::host,
+            "fliks:plugin/db": super::fliks::plugin::db,
+            "fliks:plugin/log": super::fliks::plugin::log,
+            "wasi:cli": wasmtime_wasi::p2::bindings::cli,
+            "wasi:clocks": wasmtime_wasi::p2::bindings::clocks,
+            "wasi:filesystem": wasmtime_wasi::p2::bindings::filesystem,
+            "wasi:io": wasmtime_wasi::p2::bindings::io,
+            "wasi:random": wasmtime_wasi::p2::bindings::random,
+            "wasi:sockets": wasmtime_wasi::p2::bindings::sockets,
+            "wasi:http": wasmtime_wasi_http::p2::bindings::http,
+        },
+        require_store_data_send: true,
+    });
+}
+
 pub use fliks::plugin::db::{DbError, Param, RowSet, Value};
 pub use fliks::plugin::types::{
     HealthReport, HostError, HttpRequest, HttpResponse, ManifestCheck, Principal,
 };
+pub use provider_world::exports::fliks::plugin::metadata_provider as wit_provider;
 
 pub const EPOCH_TICK: Duration = Duration::from_millis(100);
 
@@ -93,6 +118,8 @@ pub struct HostConfig {
     pub lease_extra: Duration,
     pub idle_after: Duration,
     pub db_retry: Duration,
+    /// Delays before a bundled provider that tripped the breaker registers again: first, then every.
+    pub provider_retry: (Duration, Duration),
     pub http_max: usize,
     pub http_queue: usize,
     pub task_max: usize,
@@ -126,6 +153,7 @@ impl HostConfig {
             lease_extra: Duration::from_secs(60),
             idle_after: Duration::from_secs(600),
             db_retry: Duration::from_secs(30),
+            provider_retry: (Duration::from_secs(600), Duration::from_secs(1800)),
             http_max: 4,
             http_queue: 32,
             task_max: 2,
@@ -224,6 +252,10 @@ pub struct Shared {
     pub ingest_roots: Vec<String>,
     /// The manifest carries a `provider` block.
     pub provider: bool,
+    /// Every key of the provider's `requires` resolves non-empty (`provider-plugins.md` rule 41).
+    pub requires_ok: AtomicBool,
+    /// The provider answered `unauthorized` since its settings last changed (rule 15).
+    pub unauthorized: AtomicBool,
     /// Bumped by a stop: instances of an older generation trap at their next epoch tick.
     pub era: AtomicU64,
     pub stopped: Notify,
@@ -311,7 +343,16 @@ impl ResourceLimiter for Ctx {
 pub struct Inst {
     store: Store<Ctx>,
     guest: Plugin,
+    /// The `metadata-provider` export of a provider's instance.
+    prov: Option<wit_provider::Guest>,
     cfg_gen: u64,
+}
+
+impl Inst {
+    pub fn provider(&mut self) -> (&wit_provider::Guest, &mut Store<Ctx>) {
+        let prov = self.prov.as_ref().expect("a provider instance");
+        (prov, &mut self.store)
+    }
 }
 
 impl Drop for Inst {
@@ -342,6 +383,7 @@ pub enum LaneKind {
     Http,
     Task,
     Job,
+    Provider,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -402,6 +444,9 @@ pub struct PluginRt {
     pub event: Lane,
     pub http: Lane,
     pub task: Lane,
+    /// A plugin with a `provider` block only (`provider-plugins.md` rule 50).
+    pub provider: Option<Lane>,
+    provider_idx: Option<wit_provider::GuestIndices>,
     pub jobs: HashMap<String, Lane>,
     sup: Mutex<Sup>,
     state: watch::Sender<State>,
@@ -429,6 +474,9 @@ impl std::fmt::Display for SpawnError {
 }
 
 const RING: usize = 64;
+/// `provider-plugins.md` rule 50.
+const PROVIDER_INSTANCES: usize = 8;
+const PROVIDER_QUEUE: usize = 64;
 fn over_plugin_budget(total: usize, grow: usize, mem_max: usize) -> bool {
     total.saturating_add(grow) > mem_max.saturating_mul(PLUGIN_MEM_FACTOR)
 }
@@ -450,7 +498,12 @@ impl PluginRt {
         internal: bool,
     ) -> anyhow::Result<Arc<Self>> {
         let env = sh.env.clone();
-        let pre = PluginPre::new(env.linker.instantiate_pre(component)?)?;
+        let instance_pre = env.linker.instantiate_pre(component)?;
+        let provider_idx = sh
+            .provider
+            .then(|| wit_provider::GuestIndices::new(&instance_pre))
+            .transpose()?;
+        let pre = PluginPre::new(instance_pre)?;
         let jobs = manifest["jobs"]
             .as_array()
             .into_iter()
@@ -468,6 +521,10 @@ impl PluginRt {
             event: Lane::new(LaneKind::Event, 1, 0),
             http: Lane::new(LaneKind::Http, c.http_max, c.http_queue),
             task: Lane::new(LaneKind::Task, c.task_max, 0),
+            provider: provider_idx
+                .is_some()
+                .then(|| Lane::new(LaneKind::Provider, PROVIDER_INSTANCES, PROVIDER_QUEUE)),
+            provider_idx,
             jobs,
             sup: Mutex::new(Sup {
                 crashes: VecDeque::new(),
@@ -532,6 +589,7 @@ impl PluginRt {
     fn lanes(&self) -> impl Iterator<Item = &Lane> {
         [&self.core, &self.event, &self.http, &self.task]
             .into_iter()
+            .chain(&self.provider)
             .chain(self.jobs.values())
     }
 
@@ -599,20 +657,38 @@ impl PluginRt {
             .unwrap_or_default();
         let fail = |e: String| SpawnError::Failed(e);
         let work = async {
-            let guest = self
-                .pre
-                .instantiate_async(&mut store)
-                .await
-                .map_err(|e| fail(format!("{e:?}")))?;
+            let (guest, prov) = match &self.provider_idx {
+                None => (
+                    self.pre
+                        .instantiate_async(&mut store)
+                        .await
+                        .map_err(|e| fail(format!("{e:?}")))?,
+                    None,
+                ),
+                Some(idx) => {
+                    let instance = self
+                        .pre
+                        .instance_pre()
+                        .instantiate_async(&mut store)
+                        .await
+                        .map_err(|e| fail(format!("{e:?}")))?;
+                    let guest =
+                        Plugin::new(&mut store, &instance).map_err(|e| fail(format!("{e:?}")))?;
+                    let prov = idx
+                        .load(&mut store, &instance)
+                        .map_err(|e| fail(format!("{e:?}")))?;
+                    (guest, Some(prov))
+                }
+            };
             let check = guest
                 .fliks_plugin_guest()
                 .call_hello(&mut store, &env.cfg.core_version, &config)
                 .await
                 .map_err(|e| fail(format!("{e:?}")))?
                 .map_err(fail)?;
-            Ok::<_, SpawnError>((guest, check))
+            Ok::<_, SpawnError>((guest, prov, check))
         };
-        let (guest, check) = match tokio::time::timeout(hello, work).await {
+        let (guest, prov, check) = match tokio::time::timeout(hello, work).await {
             Ok(r) => r?,
             Err(_) => return Err(fail("hello deadline".into())),
         };
@@ -633,6 +709,7 @@ impl PluginRt {
         Ok(Inst {
             store,
             guest,
+            prov,
             cfg_gen: self.cfg_gen.load(Ordering::SeqCst),
         })
     }

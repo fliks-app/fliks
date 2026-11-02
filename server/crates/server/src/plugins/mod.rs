@@ -17,6 +17,7 @@ pub mod logs;
 pub mod manifest;
 pub mod outbound;
 pub mod packages;
+pub mod provider;
 mod register;
 pub mod registry;
 pub mod routes;
@@ -42,7 +43,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -191,6 +192,8 @@ pub struct Pending {
     rt: Option<Arc<PluginRt>>,
     declared: registry::Declared,
     registered: Registered,
+    /// The package is a bundled provider (`provider-plugins.md` rule 48).
+    bundled: bool,
 }
 
 impl Plugins {
@@ -485,6 +488,9 @@ impl Plugins {
             let Some(owner) = fliks_domain::plugins::setting_owner(key, ids.iter().copied()) else {
                 continue;
             };
+            if let Some(rt) = live.iter().find(|r| &*r.sh.id == owner && r.sh.provider) {
+                tokio::spawn(provider::refresh_availability(rt.clone()));
+            }
             if Some(owner) == origin {
                 continue;
             }

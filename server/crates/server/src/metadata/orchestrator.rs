@@ -70,8 +70,8 @@ impl Metadata {
         lang: &Resolved,
         prio: Priority,
     ) -> Result<Value, MetaError> {
-        let provider = self.providers[&p].provider.clone();
-        let ttl = provider.snapshot_ttl();
+        let provider = self.of(p);
+        let ttl = provider.snapshot_ttl("work");
         let (id_owned, lang_owned) = (id.to_owned(), lang.clone());
         let call = move || {
             async move {
@@ -93,8 +93,8 @@ impl Metadata {
         lang: &Resolved,
         prio: Priority,
     ) -> Result<Vec<Value>, MetaError> {
-        let provider = self.providers[&p].provider.clone();
-        let ttl = provider.snapshot_ttl();
+        let provider = self.of(p);
+        let ttl = provider.snapshot_ttl("children");
         let (id_owned, lang_owned) = (id.to_owned(), lang.clone());
         let call = move || {
             async move {
@@ -121,8 +121,8 @@ impl Metadata {
         lang: &Resolved,
         prio: Priority,
     ) -> Result<Option<Value>, MetaError> {
-        let provider = self.providers[&p].provider.clone();
-        let ttl = provider.snapshot_ttl();
+        let provider = self.of(p);
+        let ttl = provider.snapshot_ttl("edition");
         let (namespace, value) = (e.0, e.1.to_owned());
         let id = if namespace == p {
             value.clone()

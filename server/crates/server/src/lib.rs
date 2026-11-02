@@ -140,6 +140,9 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     jobs::spawn(&state);
     subtitles::scheduler::spawn_tick(&state);
     state.plugins.spawn(&state);
+    if let Err(e) = state.metadata.load_orders().await {
+        tracing::warn!("metadata provider order not loaded: {e}");
+    }
     state.plugins.boot().await;
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
