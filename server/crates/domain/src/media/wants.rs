@@ -1,5 +1,5 @@
 //! Wants, follows and discovery rules (`docs/spec/wants-follows.md`).
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use unicode_normalization::UnicodeNormalization;
@@ -85,6 +85,24 @@ pub fn parse_release(text: &str) -> Option<NaiveDate> {
     NaiveDate::from_ymd_opt(year, month, day)
 }
 
+/// The last day a provider's date text can mean: the end of the year or month when it is coarser.
+pub fn parse_release_end(text: &str) -> Option<NaiveDate> {
+    let first = parse_release(text)?;
+    let (y, m) = (first.year(), first.month());
+    match text.trim().splitn(3, '-').count() {
+        1 => NaiveDate::from_ymd_opt(y, 12, 31),
+        2 => {
+            let next = if m == 12 {
+                NaiveDate::from_ymd_opt(y + 1, 1, 1)
+            } else {
+                NaiveDate::from_ymd_opt(y, m + 1, 1)
+            };
+            next.and_then(|n| n.pred_opt())
+        }
+        _ => Some(first),
+    }
+}
+
 /// A title is new for a follow when its release is known and not before the day the follow began.
 pub fn is_new(release: Option<NaiveDate>, since: NaiveDate) -> bool {
     release.is_some_and(|r| r >= since)
@@ -158,6 +176,15 @@ mod tests {
         assert_eq!(parse_release("2027-03-09T10:00:00Z"), Some(d(2027, 3, 9)));
         assert_eq!(parse_release("2027-13"), None);
         assert_eq!(parse_release("soon"), None);
+    }
+
+    #[test]
+    fn a_coarse_release_ends_with_its_period() {
+        assert_eq!(parse_release_end("2026"), Some(d(2026, 12, 31)));
+        assert_eq!(parse_release_end("2026-02"), Some(d(2026, 2, 28)));
+        assert_eq!(parse_release_end("2026-12"), Some(d(2026, 12, 31)));
+        assert_eq!(parse_release_end("2026-02-03"), Some(d(2026, 2, 3)));
+        assert_eq!(parse_release_end("x"), None);
     }
 
     #[test]

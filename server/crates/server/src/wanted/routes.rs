@@ -77,18 +77,11 @@ pub async fn wants_put(
         .await?;
     let specs =
         parse_wants(list, crate::db::kind(&kind)?).map_err(|m| AppError::bad_request(vec![m]))?;
+    wants::check_profiles(&st.db, &specs).await?;
     let mut tx = st.db.begin().await?;
     wants::replace(&mut tx, id, &specs)
         .await
-        .map_err(|e| match e {
-            sqlx::Error::Database(d) if d.code().as_deref() == Some("23503") => {
-                AppError::bad_request(vec![
-                    "qualityProfileId is not a profile of the want's family",
-                ])
-            }
-            sqlx::Error::RowNotFound => crate::libraries::media_not_found(id),
-            e => e.into(),
-        })?;
+        .map_err(|e| wants::write_error(e, id))?;
     tx.commit().await?;
     wants_body(&st, id).await
 }

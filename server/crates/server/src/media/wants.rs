@@ -1,4 +1,5 @@
 //! The wished editions of a media (`docs/spec/items.md` rules 29-34, `docs/spec/wants-follows.md`).
+use crate::http::AppError;
 use chrono::NaiveDate;
 use fliks_domain::media::{kind::MediaKind, wants::WantSpec};
 use serde::Serialize;
@@ -71,6 +72,66 @@ pub async fn list(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Vec<Want>
     .bind(media)
     .fetch_all(db)
     .await
+}
+
+/// The quality profile ids of `specs` that are no profile of their want's family.
+async fn unknown_profiles(db: impl PgExecutor<'_>, specs: &[WantSpec]) -> sqlx::Result<Vec<i32>> {
+    let ids: Vec<i32> = specs.iter().filter_map(|s| s.quality_profile_id).collect();
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let known: Vec<(i32, String)> =
+        sqlx::query_as("SELECT id, family FROM quality_profiles WHERE id = ANY($1)")
+            .bind(&ids)
+            .fetch_all(db)
+            .await?;
+    Ok(specs
+        .iter()
+        .filter_map(|s| {
+            let q = s.quality_profile_id?;
+            (!known
+                .iter()
+                .any(|(id, f)| *id == q && f == s.family.as_str()))
+            .then_some(q)
+        })
+        .collect())
+}
+
+/// A 400 when a spec names a quality profile that does not exist for its family.
+pub async fn check_profiles(db: impl PgExecutor<'_>, specs: &[WantSpec]) -> Result<(), AppError> {
+    match unknown_profiles(db, specs).await?.first() {
+        Some(q) => Err(AppError::bad_request(vec![format!(
+            "qualityProfileId {q} is not a profile of the want's family"
+        )])),
+        None => Ok(()),
+    }
+}
+
+/// Unsets the profile ids `check_profiles` would refuse (a profile deleted since the specs were saved).
+pub async fn drop_unknown_profiles(
+    db: impl PgExecutor<'_>,
+    specs: &mut [WantSpec],
+) -> sqlx::Result<()> {
+    let bad = unknown_profiles(db, specs).await?;
+    for s in specs.iter_mut() {
+        if s.quality_profile_id.is_some_and(|q| bad.contains(&q)) {
+            s.quality_profile_id = None;
+        }
+    }
+    Ok(())
+}
+
+/// The HTTP error of a failed `replace`: a profile deleted meanwhile is a 400, a vanished media a 404.
+pub fn write_error(e: sqlx::Error, media: i32) -> AppError {
+    match e {
+        sqlx::Error::Database(d) if d.code().as_deref() == Some("23503") => {
+            AppError::bad_request(vec![
+                "qualityProfileId is not a profile of the want's family",
+            ])
+        }
+        sqlx::Error::RowNotFound => crate::libraries::media_not_found(media),
+        e => e.into(),
+    }
 }
 
 /// Replaces the wants of a media by `specs` under the media's row lock (`wants-follows.md` rule 3).

@@ -7,6 +7,7 @@ CREATE TABLE "person_follows" (
   "wants" jsonb NOT NULL,
   "since" date NOT NULL DEFAULT CURRENT_DATE,
   "refreshedAt" timestamptz,
+  "failedAdds" integer NOT NULL DEFAULT 0,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "PK_person_follows" PRIMARY KEY ("userId", "personId", "role"),
@@ -23,6 +24,7 @@ CREATE TABLE "series_watches" (
   "wants" jsonb NOT NULL,
   "since" date NOT NULL DEFAULT CURRENT_DATE,
   "refreshedAt" timestamptz,
+  "failedAdds" integer NOT NULL DEFAULT 0,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "PK_series_watches" PRIMARY KEY ("userId", "collectionId")

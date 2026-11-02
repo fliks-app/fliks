@@ -30,6 +30,7 @@ fn provider() -> Fake {
         hit("OL9W", "2999-01-01", ("Una Roe", "OL7A")),
         hit("OL8W", "2001-05-01", ("Una Roe", "OL7A")),
         hit("OL10W", "2999-02-01", ("Else Where", "OL99A")),
+        hit("OL11W", "2999-03-01", ("Una Roe", "OL55A")),
     ];
     for id in ["OL9W", "OL8W", "OL10W"] {
         ol.works.insert(
@@ -370,8 +371,10 @@ async fn the_refresh_adds_each_new_title_once_with_the_follow_wants(pool: PgPool
         "SELECT count(*) FROM media_external_ids WHERE provider = 'openlibrary' AND value = 'OL9W'";
     assert_eq!(c.count(added).await, 1);
     assert_eq!(
-        c.count("SELECT count(*) FROM media_external_ids WHERE value IN ('OL8W', 'OL10W')")
-            .await,
+        c.count(
+            "SELECT count(*) FROM media_external_ids WHERE value IN ('OL8W', 'OL10W', 'OL11W')"
+        )
+        .await,
         0
     );
     let (id, user, monitored): (i32, Option<i32>, bool) =
@@ -385,10 +388,15 @@ async fn the_refresh_adds_each_new_title_once_with_the_follow_wants(pool: PgPool
         .await;
     assert_eq!(wants_of(&v), vec![("text".into(), Some("fr".into()))]);
     assert!(
-        c.count(r#"SELECT count(*) FROM person_follows WHERE "refreshedAt" IS NOT NULL"#)
+        c.count(r#"SELECT count(*) FROM person_follows WHERE "refreshedAt" IS NOT NULL AND "failedAdds" = 0"#)
             .await
             == 1
     );
+    let ledger: Option<i32> = sqlx::query_scalar(r#"SELECT "mediaId" FROM discovered_works"#)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(ledger, Some(id));
 
     refresh_follows(&c.st).await.unwrap();
     assert_eq!(
@@ -466,30 +474,147 @@ async fn a_follow_removed_or_paused_adds_nothing(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_follow_edit_waits_for_a_title_being_added(pool: PgPool) {
+async fn a_follower_who_may_no_longer_add_adds_nothing(pool: PgPool) {
     let c = ctx(pool).await;
     follow(&c).await;
-    let mut lock = c.pool.begin().await.unwrap();
-    sqlx::query(r#"SELECT 1 FROM person_follows WHERE "userId" = 1 FOR SHARE"#)
-        .execute(&mut *lock)
+    sqlx::query("UPDATE users SET enabled = false WHERE id = 1")
+        .execute(&c.pool)
         .await
         .unwrap();
-    let put = c.admin(
-        "PUT",
-        "/api/persons/1/follow",
-        Some(json!({"libraryId": 1, "wants": [{"family": "audio"}]})),
+    refresh_follows(&c.st).await.unwrap();
+    assert_eq!(
+        c.count("SELECT count(*) FROM media WHERE type = 'book'")
+            .await,
+        0
     );
-    let release = async {
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        lock.commit().await.unwrap();
-    };
-    let ((s, _), ()) = tokio::join!(put, release);
-    assert_eq!(s, 200);
-    let w: Value = sqlx::query_scalar("SELECT wants FROM person_follows")
-        .fetch_one(&c.pool)
+    sqlx::query("UPDATE users SET enabled = true WHERE id = 1")
+        .execute(&c.pool)
         .await
         .unwrap();
-    assert_eq!(w[0]["family"], "audio");
+    sqlx::query("DELETE FROM person_follows")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    // the reader has no media.create
+    sqlx::query(
+        r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants, since)
+           VALUES (2, 1, 'author', 1, '[{"family":"text"}]', '2020-01-01')"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    refresh_follows(&c.st).await.unwrap();
+    assert_eq!(
+        c.count("SELECT count(*) FROM media WHERE type = 'book'")
+            .await,
+        0
+    );
+    // and an admin who lost the library is skipped too
+    sqlx::query("DELETE FROM person_follows")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    follow(&c).await;
+    sqlx::query("DELETE FROM media_credits")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM person_external_ids")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    refresh_follows(&c.st).await.unwrap();
+    assert_eq!(
+        c.count("SELECT count(*) FROM media WHERE type = 'book'")
+            .await,
+        0
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_deleted_quality_profile_is_dropped_and_a_bad_one_is_refused(pool: PgPool) {
+    let c = ctx(pool).await;
+    let bad = json!({"libraryId": 1, "wants": [{"family": "text", "qualityProfileId": 99999}]});
+    assert_eq!(
+        c.admin("PUT", "/api/persons/1/follow", Some(bad)).await.0,
+        400
+    );
+    sqlx::query(
+        r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants, since)
+           VALUES (1, 1, 'author', 1, '[{"family":"text","qualityProfileId":99999}]', '2020-01-01')"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    refresh_follows(&c.st).await.unwrap();
+    assert_eq!(
+        c.count("SELECT count(*) FROM media WHERE type = 'book'")
+            .await,
+        1
+    );
+    assert_eq!(
+        c.count("SELECT count(*) FROM wants WHERE \"qualityProfileId\" IS NOT NULL")
+            .await,
+        0
+    );
+    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL8W",
+                      "wants": [{"family": "text", "qualityProfileId": 99999}]});
+    assert_eq!(
+        c.admin("POST", "/api/media/import", Some(body)).await.0,
+        400
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_year_only_title_of_the_follow_year_is_new(pool: PgPool) {
+    let c = ctx(pool).await;
+    let mut fake = provider();
+    fake.found = vec![json!({"externalId": "OL9W", "title": "Beta", "year": 2999,
+                             "authors": [{"name": "Una Roe", "id": "OL7A"}]})];
+    let st = state(&c.pool, vec![fake]);
+    sqlx::query(
+        r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants, since)
+           VALUES (1, 1, 'author', 1, '[{"family":"text"}]', '2999-06-01')"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    refresh_follows(&st).await.unwrap();
+    assert_eq!(
+        c.count("SELECT count(*) FROM media WHERE type = 'book'")
+            .await,
+        1
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_goes_to_the_folder_of_a_language_specific_want(pool: PgPool) {
+    let c = ctx(pool).await;
+    let id = c.book().await;
+    let extra: i32 = sqlx::query_scalar(
+        r#"INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/extra') RETURNING id"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    c.admin(
+        "PUT",
+        &format!("/api/media/{id}/wants"),
+        Some(json!({"wants": [{"family": "text", "language": "fr"}]})),
+    )
+    .await;
+    sqlx::query(r#"UPDATE wants SET "folderId" = $1 WHERE "mediaId" = $2"#)
+        .bind(extra)
+        .bind(id)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let f =
+        crate::ingest::books::folder_for(&c.pool, id, fliks_domain::media::family::Family::Text)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(f.id, extra);
 }
 
 #[sqlx::test(migrations = false)]

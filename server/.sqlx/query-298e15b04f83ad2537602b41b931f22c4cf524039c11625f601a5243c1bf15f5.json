@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(wf.id, df.\"folderId\") AS \"id?\", COALESCE(wf.path, df.path) AS \"path?\"\n           FROM media m\n           LEFT JOIN LATERAL (SELECT \"folderId\" FROM wants WHERE \"mediaId\" = m.id AND family = $2\n                              ORDER BY language NULLS FIRST, id LIMIT 1) w ON true\n           LEFT JOIN library_folders wf ON wf.id = w.\"folderId\" AND wf.\"libraryId\" = m.\"libraryId\"\n           LEFT JOIN library_default_folders df ON df.\"libraryId\" = m.\"libraryId\"\n           WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id?",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "path?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "298e15b04f83ad2537602b41b931f22c4cf524039c11625f601a5243c1bf15f5"
+}

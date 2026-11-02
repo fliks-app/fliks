@@ -66,12 +66,13 @@ pub struct Registration {
     pub conflicts: Vec<String>,
 }
 
-/// The folder a new file of `family` goes to: the media's want of that family, else the library default.
+/// The folder a new file of `family` goes to: the media's first want of that family (any language first), else the library default.
 pub async fn folder_for(db: &PgPool, media: i32, family: Family) -> sqlx::Result<Option<Folder>> {
     let r = sqlx::query!(
         r#"SELECT COALESCE(wf.id, df."folderId") AS "id?", COALESCE(wf.path, df.path) AS "path?"
            FROM media m
-           LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = $2 AND w.language IS NULL
+           LEFT JOIN LATERAL (SELECT "folderId" FROM wants WHERE "mediaId" = m.id AND family = $2
+                              ORDER BY language NULLS FIRST, id LIMIT 1) w ON true
            LEFT JOIN library_folders wf ON wf.id = w."folderId" AND wf."libraryId" = m."libraryId"
            LEFT JOIN library_default_folders df ON df."libraryId" = m."libraryId"
            WHERE m.id = $1"#,

@@ -75,14 +75,20 @@ pub(super) async fn import_book(
         None => None,
         Some(w) => Some(parse_wants(w, MediaKind::Book).map_err(|m| bad(&m))?),
     };
+    if let Some(w) = &wants {
+        wants::check_profiles(&st.db, w).await?;
+    }
     let id = create_book(
         st,
-        &target,
-        folder,
-        Some(a.user.id).filter(|u| *u != 0),
-        &work,
-        Priority::Interactive,
-        wants.as_deref(),
+        &NewBook {
+            target: &target,
+            folder,
+            user: Some(a.user.id).filter(|u| *u != 0),
+            work: &work,
+            prio: Priority::Interactive,
+            wants: wants.as_deref(),
+            discovered: false,
+        },
     )
     .await?;
     let acl = accessible_library_ids(&st.db, a).await?;
@@ -93,17 +99,29 @@ pub(super) async fn import_book(
     Ok((StatusCode::CREATED, Json(media)))
 }
 
-/// Creates the book of an anchor work in `target` from its provider record, wished with `wants` (default: one
-/// per family) and added by `user`. A failure after the row exists deletes it.
-pub(crate) async fn create_book(
-    st: &AppState,
-    target: &Target,
-    folder: Option<i32>,
-    user: Option<i32>,
-    work: &str,
-    prio: Priority,
-    wants: Option<&[WantSpec]>,
-) -> Result<i32, AppError> {
+/// What `create_book` makes: the anchor `work` in `target`, wished with `wants` (default: one per family),
+/// added by `user`; `discovered` also writes the `discovered_works` ledger row with the media.
+pub(crate) struct NewBook<'a> {
+    pub target: &'a Target,
+    pub folder: Option<i32>,
+    pub user: Option<i32>,
+    pub work: &'a str,
+    pub prio: Priority,
+    pub wants: Option<&'a [WantSpec]>,
+    pub discovered: bool,
+}
+
+/// Creates the book from its provider record; a failure after the row exists deletes it.
+pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32, AppError> {
+    let NewBook {
+        target,
+        folder,
+        user,
+        work,
+        prio,
+        wants,
+        discovered,
+    } = *new;
     let over = sqlx::query!(
         r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
         target.id
@@ -197,11 +215,31 @@ pub(crate) async fn create_book(
     )
     .await?;
     if let Some(w) = wants {
-        wants::replace(&mut tx, id, w).await?;
+        wants::replace(&mut tx, id, w)
+            .await
+            .map_err(|e| wants::write_error(e, id))?;
+    }
+    if discovered {
+        sqlx::query(
+            r#"INSERT INTO discovered_works (provider, value, "mediaId") VALUES ($1, $2, $3)
+               ON CONFLICT DO NOTHING"#,
+        )
+        .bind(ANCHOR.as_str())
+        .bind(work)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     }
     tx.commit().await?;
 
     let undo = async |e: AppError| {
+        if let Err(d) = sqlx::query(r#"DELETE FROM discovered_works WHERE "mediaId" = $1"#)
+            .bind(id)
+            .execute(&st.db)
+            .await
+        {
+            tracing::warn!("ledger row of book #{id} left behind: {d}");
+        }
         if let Err(d) = sqlx::query!("DELETE FROM media WHERE id = $1", id)
             .execute(&st.db)
             .await

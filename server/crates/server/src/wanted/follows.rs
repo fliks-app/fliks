@@ -6,7 +6,10 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::accessible_library_ids,
-    media::write::{body::Body, resolve_target_in},
+    media::{
+        wants,
+        write::{body::Body, resolve_target_in},
+    },
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -65,6 +68,9 @@ async fn read_put(st: &AppState, a: &Authed, v: Value, watch: bool) -> Result<Pu
             .map(|w| parse_wants(w, MediaKind::Book))
             .transpose()
             .map_err(|m| AppError::bad_request(vec![m]))?;
+    if let Some(w) = &wants {
+        wants::check_profiles(&st.db, w).await?;
+    }
     let new_releases = b.bool("newReleases")?.flatten();
     let acl = accessible_library_ids(&st.db, a).await?;
     resolve_target_in(st, &acl, MediaKind::Book, Some(library), None).await?;
@@ -274,6 +280,8 @@ struct PersonRow {
     #[serde(with = "crate::http::json::iso_ms::opt")]
     #[sqlx(rename = "refreshedAt")]
     refreshed_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[sqlx(rename = "failedAdds")]
+    failed_adds: i32,
 }
 
 #[derive(Serialize, FromRow)]
@@ -289,13 +297,15 @@ struct SeriesRow {
     #[serde(with = "crate::http::json::iso_ms::opt")]
     #[sqlx(rename = "refreshedAt")]
     refreshed_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[sqlx(rename = "failedAdds")]
+    failed_adds: i32,
 }
 
 #[utoipa::path(get, path = "/api/follows", responses((status = 200)))]
 pub async fn follows(State(st): State<AppState>, a: Authed) -> Res {
     a.require(Action::Read, Subject::Media)?;
     let persons: Vec<PersonRow> = sqlx::query_as(
-        r#"SELECT f."personId", p.name, f.role, f."newReleases", f."libraryId", f.wants, f.since, f."refreshedAt"
+        r#"SELECT f."personId", p.name, f.role, f."newReleases", f."libraryId", f.wants, f.since, f."refreshedAt", f."failedAdds"
            FROM person_follows f JOIN persons p ON p.id = f."personId"
            WHERE f."userId" = $1 ORDER BY p.name, p.id"#,
     )
@@ -303,7 +313,7 @@ pub async fn follows(State(st): State<AppState>, a: Authed) -> Res {
     .fetch_all(&st.db)
     .await?;
     let series: Vec<SeriesRow> = sqlx::query_as(
-        r#"SELECT w."collectionId", c.name, w."libraryId", w.wants, w.since, w."refreshedAt"
+        r#"SELECT w."collectionId", c.name, w."libraryId", w.wants, w.since, w."refreshedAt", w."failedAdds"
            FROM series_watches w JOIN collections c ON c.id = w."collectionId"
            WHERE w."userId" = $1 ORDER BY c.name, c.id"#,
     )
