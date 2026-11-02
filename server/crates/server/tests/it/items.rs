@@ -387,7 +387,7 @@ async fn a_book_is_created_without_edition_or_item_and_keeps_its_kind(pool: PgPo
     assert_eq!(owned, 0);
     assert_media_have_shells(&pool, &[]).await;
 
-    sqlx::raw_sql(r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m'); UPDATE media SET "libraryId" = 1"#)
+    sqlx::raw_sql(r#"INSERT INTO libraries (id, name) VALUES (1, 'L'); INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m'); UPDATE media SET "libraryId" = 1"#)
         .execute(&pool)
         .await
         .unwrap();
