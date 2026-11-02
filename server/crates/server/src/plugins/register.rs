@@ -268,7 +268,7 @@ impl Plugins {
             provider: m.get("provider").is_some(),
             defaults: defaults::for_plugin(m, pkg.verified_by_key_id.is_some()),
             requires_ok: AtomicBool::new(false),
-            unauthorized: AtomicBool::new(false),
+            unauthorized: AtomicU64::new(0),
             era: AtomicU64::new(0),
             stopped: Notify::new(),
             mem_total: Default::default(),
@@ -374,7 +374,13 @@ impl Plugins {
             }
             Ok(_) => {
                 let id = p.id.clone();
-                Err(self.fail(&id, fail("spawn-failed", rt.message())).await)
+                let f = fail("spawn-failed", rt.message());
+                // An admin's newer runtime of the id is not ours to stop.
+                if self.rt(&id).is_some_and(|r| Arc::ptr_eq(&r, &rt)) {
+                    Err(self.fail(&id, f).await)
+                } else {
+                    Err(f)
+                }
             }
             Err(_) => {
                 let detail = Some(rt.message())

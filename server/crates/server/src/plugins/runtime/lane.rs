@@ -8,6 +8,8 @@ pub struct Lane {
     pub(super) idle: Mutex<Vec<(Inst, Instant)>>,
     pub live: AtomicUsize,
     pub(super) sem: Semaphore,
+    /// Instances a `background` call may hold: one is left to the others.
+    bg: Semaphore,
     pub(super) waiting: AtomicUsize,
     pub(super) retry_at: Mutex<Option<Instant>>,
     /// Whether the lane's last call saw a `db` call fail `unavailable`.
@@ -33,6 +35,8 @@ pub struct Budget {
     pub inclusive: bool,
     /// A timeout re-creates the instance without counting a crash; the caller owns the escalation.
     pub soft: bool,
+    /// Background work never takes the lane's last instance.
+    pub background: bool,
 }
 
 impl Budget {
@@ -42,6 +46,7 @@ impl Budget {
             queue_wait: deadline,
             inclusive: false,
             soft: false,
+            background: false,
         }
     }
 }
@@ -55,6 +60,7 @@ impl Lane {
             idle: Mutex::new(Vec::new()),
             live: AtomicUsize::new(0),
             sem: Semaphore::new(max),
+            bg: Semaphore::new(max.saturating_sub(1).max(1)),
             waiting: AtomicUsize::new(0),
             retry_at: Mutex::new(None),
             last_db: AtomicBool::new(false),
@@ -101,17 +107,27 @@ impl Lane {
             });
         }
         let _w = Waiting(&self.waiting);
-        let _permit = if self.queue == 0 {
-            self.sem.try_acquire().map_err(|_| CallError::Busy)?
+        let (_bg, _permit) = if self.queue == 0 {
+            (None, self.sem.try_acquire().map_err(|_| CallError::Busy)?)
         } else {
             let wait = if budget.inclusive {
                 budget.deadline
             } else {
                 budget.queue_wait
             };
-            match tokio::time::timeout_at(entered + wait, self.sem.acquire()).await {
-                Ok(p) => p.expect("never closed"),
-                Err(_) => return Err(CallError::Unavailable("queue wait".into())),
+            let at = entered + wait;
+            let waited = || CallError::Unavailable("queue wait".into());
+            let bg = if budget.background {
+                match tokio::time::timeout_at(at, self.bg.acquire()).await {
+                    Ok(p) => Some(p.expect("never closed")),
+                    Err(_) => return Err(waited()),
+                }
+            } else {
+                None
+            };
+            match tokio::time::timeout_at(at, self.sem.acquire()).await {
+                Ok(p) => (bg, p.expect("never closed")),
+                Err(_) => return Err(waited()),
             }
         };
         let until = if budget.inclusive {
@@ -149,7 +165,7 @@ impl Lane {
         let inst = slot.inst.as_mut().expect("held");
         {
             let d = inst.store.data_mut();
-            d.deadline = until.into_std();
+            d.set_deadline(until.into_std());
             d.db_unavailable = false;
         }
         let cfg_gen = rt.cfg_gen.load(Ordering::SeqCst);

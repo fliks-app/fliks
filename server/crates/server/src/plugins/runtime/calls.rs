@@ -82,6 +82,7 @@ impl PluginRt {
                 queue_wait: d.pre_roll,
                 inclusive: true,
                 soft: false,
+                background: false,
             }
         } else {
             Budget {
@@ -89,6 +90,7 @@ impl PluginRt {
                 queue_wait: d.queue_wait,
                 inclusive: false,
                 soft: false,
+                background: false,
             }
         };
         self.http
@@ -159,6 +161,11 @@ impl PluginRt {
             )
             .await?
             .map_err(CallError::Guest)
+    }
+
+    /// Bumped by each settings change.
+    pub fn config_gen(&self) -> u64 {
+        self.cfg_gen.load(Ordering::SeqCst)
     }
 
     /// Every live instance sees `config-changed` before its next call.

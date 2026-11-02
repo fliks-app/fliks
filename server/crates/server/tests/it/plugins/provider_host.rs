@@ -89,6 +89,14 @@ async fn a_provider_plugin_answers_through_the_trait() {
         None,
         "not a declared input"
     );
+    assert_eq!(
+        by(Ns::Imdb, "tt3").await.unwrap(),
+        None,
+        "an id of another namespace than the key"
+    );
+    let bad = Search::text(MediaKind::Series, "scalars", None);
+    let e = p.search(&bad, &lang, GO).await.unwrap_err();
+    assert_eq!(e.status, Some(502), "a list of non-objects");
     let e = p.fetch_person("1", &lang, GO).await.unwrap_err();
     assert_eq!(e.status, Some(404), "undeclared call");
     assert_eq!(md.resolve(None, MediaKind::Series), Some(Ns::Tmdb));
@@ -215,6 +223,99 @@ async fn a_bundled_provider_registers_again_after_the_breaker() {
             && h.st.metadata.available(Ns::Tmdb)
     })
     .await;
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stale_unauthorized_does_not_withdraw_the_provider_after_new_settings() {
+    let Some((s, h, lang)) = up("pvstale", |_| {}, |_| {}).await else {
+        return;
+    };
+    let md = &h.st.metadata;
+    let p = md.of(Ns::Tmdb);
+    let call = {
+        let lang = lang.clone();
+        tokio::spawn(async move {
+            p.fetch_work(MediaKind::Series, "slow-unauthorized", &lang, GO)
+                .await
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    h.set(&format!("plugin.{ID}.token"), "new").await;
+    let e = call.await.unwrap().unwrap_err();
+    assert_eq!(e.status, Some(401));
+    assert!(md.available(Ns::Tmdb), "the 401 answered the old key");
+    let e = work(&h, MediaKind::Series, "unauthorized", &lang)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status, Some(401));
+    assert!(!md.available(Ns::Tmdb), "a 401 under the new key counts");
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn id_reads_stay_in_the_named_namespace() {
+    let Some((s, h, lang)) = up("pvnamed", |_| {}, |_| {}).await else {
+        return;
+    };
+    let md = &h.st.metadata;
+    assert_eq!(md.named(None), Ns::Tmdb);
+    assert_eq!(md.named(Some("tvdb")), Ns::Tmdb, "tvdb has no key");
+    let e = work(&h, MediaKind::Series, "unauthorized", &lang)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status, Some(401));
+    assert_eq!(
+        md.named(None),
+        Ns::Tmdb,
+        "an unavailable TMDB is not swapped for another namespace"
+    );
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_undeclared_find_by_answers_none() {
+    let edit = |m: &mut Value| m["provider"]["kinds"] = json!({"series": ["search", "work"]});
+    let Some((s, h, lang)) = up("pvnofind", |_| {}, edit).await else {
+        return;
+    };
+    let p = h.st.metadata.of(Ns::Tmdb);
+    assert_eq!(p.find_by(Ns::Imdb, "tt1", &lang, GO).await.unwrap(), None);
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn background_calls_leave_an_instance_to_an_interactive_one() {
+    let Some((s, h, lang)) = up("pvbg", |_| {}, |_| {}).await else {
+        return;
+    };
+    let p = h.st.metadata.of(Ns::Tmdb);
+    let bg: Vec<_> = (0..8)
+        .map(|_| {
+            let (p, lang) = (p.clone(), lang.clone());
+            tokio::spawn(async move {
+                p.fetch_work(MediaKind::Series, "slow", &lang, Priority::Background)
+                    .await
+            })
+        })
+        .collect();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let t = std::time::Instant::now();
+    p.fetch_work(MediaKind::Series, "1", &lang, GO)
+        .await
+        .unwrap();
+    assert!(
+        t.elapsed() < Duration::from_millis(600),
+        "{:?}",
+        t.elapsed()
+    );
+    for b in bg {
+        b.await.unwrap().unwrap();
+    }
     h.finish().await;
     s.finish().await;
 }

@@ -105,6 +105,14 @@ impl Metadata {
         d.providers.insert(id, provider);
     }
 
+    /// The built-in of `id` when its key is configured: what a plugin of the same key falls back on.
+    pub fn configured_builtin(&self, id: ExternalProvider) -> Option<Arc<dyn MetadataProvider>> {
+        self.builtin
+            .get(&id)
+            .filter(|e| e.on)
+            .map(|e| e.provider.clone())
+    }
+
     /// The provider that answers for `id` and whether it is available: a plugin's while it is, else
     /// the built-in, else a plugin's that went away (its calls fail 503).
     fn slot(&self, id: ExternalProvider) -> Option<(bool, Arc<dyn MetadataProvider>)> {
@@ -176,9 +184,11 @@ impl Metadata {
         self.pick(name, self.order(kind), |p| p.supports(kind))
     }
 
-    /// The named provider iff it is available and describes people, else the first that does.
-    pub fn resolve_person(&self, name: Option<&str>) -> Option<ExternalProvider> {
-        self.pick(name, self.person_order(), |p| p.has_persons())
+    /// The named provider iff it is available, else TMDB: an id is read in one namespace only.
+    pub fn named(&self, name: Option<&str>) -> ExternalProvider {
+        name.and_then(ExternalProvider::parse)
+            .filter(|p| self.available(*p))
+            .unwrap_or(ExternalProvider::Tmdb)
     }
 
     /// The first other provider of the kind's order that is available and supports `kind`.

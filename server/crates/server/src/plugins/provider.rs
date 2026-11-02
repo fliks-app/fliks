@@ -5,7 +5,7 @@ use super::runtime::{
 };
 use super::{Plugins, packages};
 use crate::metadata::{
-    Call, Credits, EditionRef, MetadataProvider, PersonDetails, Search, Upstream,
+    Call, Credits, EditionRef, Metadata, MetadataProvider, PersonDetails, Search, Upstream,
 };
 use fliks_domain::{
     external_id::ExternalProvider,
@@ -66,8 +66,12 @@ impl Block {
             chapters: strs(&b["chapterNamespaces"]),
             limits: Limits {
                 rate_per_sec: l["ratePerSec"].as_f64().unwrap_or(1.0),
-                burst: l["burst"].as_u64().unwrap_or(1) as u32,
-                daily_quota: l["dailyQuota"].as_u64().map(|q| q as u32),
+                burst: l["burst"]
+                    .as_u64()
+                    .and_then(|b| u32::try_from(b).ok())
+                    .filter(|b| *b >= 1)
+                    .unwrap_or(1),
+                daily_quota: l["dailyQuota"].as_u64().and_then(|q| u32::try_from(q).ok()),
                 background_share: l["backgroundShare"].as_f64().unwrap_or(0.75),
             },
             ttl: b["snapshotTtlSecs"]
@@ -84,6 +88,8 @@ pub struct PluginProvider {
     rt: Arc<PluginRt>,
     key: ExternalProvider,
     block: Block,
+    /// The configured built-in of the same key: it answers what the plugin does not declare.
+    shadow: Option<Arc<dyn MetadataProvider>>,
 }
 
 fn bad(why: &str) -> Upstream {
@@ -98,7 +104,7 @@ fn undeclared() -> Upstream {
 }
 
 /// Rule 14: a JSON document of at most 16 MiB, an object or (`array`) an array.
-fn record(json: &str, array: bool) -> Result<Value, Upstream> {
+fn parse(json: &str, array: bool) -> Result<Value, Upstream> {
     if json.len() > MAX_RECORD {
         return Err(bad("over 16 MiB"));
     }
@@ -113,9 +119,10 @@ fn record(json: &str, array: bool) -> Result<Value, Upstream> {
     Ok(v)
 }
 
-fn list(json: &str) -> Result<Vec<Value>, Upstream> {
-    match record(json, true)? {
-        Value::Array(a) => Ok(a),
+fn parse_list(json: &str) -> Result<Vec<Value>, Upstream> {
+    match parse(json, true)? {
+        Value::Array(a) if a.iter().all(Value::is_object) => Ok(a),
+        Value::Array(_) => Err(bad("an element is not an object")),
         _ => unreachable!("checked"),
     }
 }
@@ -143,20 +150,50 @@ fn call_error(e: CallError) -> Upstream {
 
 impl PluginProvider {
     /// The provider of a plugin whose first namespace is a core one; later namespaces are PV.10.
-    pub fn new(rt: Arc<PluginRt>) -> Option<Self> {
+    pub fn new(rt: Arc<PluginRt>, md: &Metadata) -> Option<Self> {
         let b = rt.manifest.get("provider")?;
         let block = Block::parse(b);
         let key = ExternalProvider::parse(block.namespaces.first()?)?;
-        Some(Self { rt, key, block })
+        Some(Self {
+            rt,
+            key,
+            block,
+            shadow: md.configured_builtin(key),
+        })
+    }
+
+    fn declares(&self, kind: Option<MediaKind>, cap: &str) -> bool {
+        self.block
+            .kinds
+            .iter()
+            .any(|(k, caps)| kind.is_none_or(|w| w == *k) && caps.iter().any(|c| c == cap))
     }
 
     fn has(&self, kind: Option<MediaKind>, cap: &str) -> Result<(), Upstream> {
-        let ok = self
-            .block
-            .kinds
-            .iter()
-            .any(|(k, caps)| kind.is_none_or(|w| w == *k) && caps.iter().any(|c| c == cap));
-        ok.then_some(()).ok_or_else(undeclared)
+        self.declares(kind, cap)
+            .then_some(())
+            .ok_or_else(undeclared)
+    }
+
+    /// The built-in that answers a call the plugin does not declare, if there is one.
+    fn built_in(&self, kind: Option<MediaKind>, cap: &str) -> Option<&Arc<dyn MetadataProvider>> {
+        self.shadow.as_ref().filter(|_| !self.declares(kind, cap))
+    }
+
+    /// Rule 14, for the breaker: every record the plugin answered is counted once.
+    fn checked<T>(&self, r: Result<T, Upstream>) -> Result<T, Upstream> {
+        if let Some(gate) = &self.rt.sh.gate {
+            gate.record_checked(r.is_ok());
+        }
+        r
+    }
+
+    fn record(&self, json: &str, array: bool) -> Result<Value, Upstream> {
+        self.checked(parse(json, array))
+    }
+
+    fn list(&self, json: &str) -> Result<Vec<Value>, Upstream> {
+        self.checked(parse_list(json))
     }
 
     fn own(&self, value: &str) -> ExternalId {
@@ -189,20 +226,26 @@ impl PluginProvider {
             queue_wait: Duration::from_secs(queue),
             inclusive: false,
             soft: false,
+            background: p == Priority::Background,
         };
+        let cfg_gen = self.rt.config_gen();
         match self.rt.provider_call(budget, READY_WAIT, p, f).await {
             Ok(Ok(r)) => Ok(r),
-            Ok(Err(e)) => Err(self.upstream(e)),
+            Ok(Err(e)) => Err(self.upstream(e, cfg_gen)),
             Err(e) => Err(call_error(e)),
         }
     }
 
-    fn upstream(&self, e: wit::ProviderError) -> Upstream {
+    /// `cfg_gen`: the settings generation the call began under; a 401 of an older one is stale.
+    fn upstream(&self, e: wit::ProviderError, cfg_gen: u64) -> Upstream {
         use wit::ProviderError as E;
         match e {
             E::NotFound | E::Unsupported => Upstream::new(Some(404), "not found"),
             E::Unauthorized => {
-                self.rt.sh.unauthorized.store(true, Ordering::SeqCst);
+                self.rt
+                    .sh
+                    .unauthorized
+                    .fetch_max(cfg_gen + 1, Ordering::SeqCst);
                 Upstream::new(Some(401), "unauthorized")
             }
             E::RateLimited(retry) => {
@@ -223,10 +266,11 @@ impl MetadataProvider for PluginProvider {
 
     fn supports(&self, kind: MediaKind) -> bool {
         self.block.kinds.iter().any(|(k, _)| *k == kind)
+            || self.shadow.as_ref().is_some_and(|b| b.supports(kind))
     }
 
     fn has_persons(&self) -> bool {
-        self.has(None, "person").is_ok()
+        self.declares(None, "person") || self.shadow.as_ref().is_some_and(|b| b.has_persons())
     }
 
     fn limits(&self) -> Limits {
@@ -238,7 +282,7 @@ impl MetadataProvider for PluginProvider {
         let sh = &self.rt.sh;
         self.rt.state() == State::Ready
             && sh.requires_ok.load(Ordering::SeqCst)
-            && !sh.unauthorized.load(Ordering::SeqCst)
+            && sh.unauthorized.load(Ordering::SeqCst) <= self.rt.config_gen()
     }
 
     fn snapshot_ttl(&self, resource: &str) -> Option<Duration> {
@@ -256,6 +300,9 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
         async move {
+            if let Some(b) = self.built_in(Some(q.kind), "search") {
+                return b.search(q, lang, p).await;
+            }
             self.has(Some(q.kind), "search")?;
             let wq = wit::SearchQuery {
                 kind: q.kind.as_str().to_owned(),
@@ -278,7 +325,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            list(&json)
+            self.list(&json)
         }
         .boxed()
     }
@@ -291,6 +338,9 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Value> {
         async move {
+            if let Some(b) = self.built_in(Some(kind), "work") {
+                return b.fetch_work(kind, id, lang, p).await;
+            }
             self.has(Some(kind), "work")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -302,7 +352,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            record(&json, false)
+            self.record(&json, false)
         }
         .boxed()
     }
@@ -315,6 +365,9 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
         async move {
+            if let Some(b) = self.built_in(Some(kind), "children") {
+                return b.fetch_children(kind, id, lang, p).await;
+            }
             self.has(Some(kind), "children")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -326,7 +379,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            list(&json)
+            self.list(&json)
         }
         .boxed()
     }
@@ -339,6 +392,9 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
         async move {
+            if let Some(b) = self.built_in(Some(kind), "childStubs") {
+                return b.child_stubs(kind, id, lang, p).await;
+            }
             self.has(Some(kind), "childStubs")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -350,7 +406,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            list(&json)
+            self.list(&json)
         }
         .boxed()
     }
@@ -363,12 +419,15 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Option<(String, MediaKind)>> {
         async move {
-            self.has(None, "findBy")?;
-            if !self
-                .block
-                .find_by
-                .iter()
-                .any(|n| n.as_str() == source.as_str())
+            if let Some(b) = self.built_in(None, "findBy") {
+                return b.find_by(source, id, lang, p).await;
+            }
+            if !self.declares(None, "findBy")
+                || !self
+                    .block
+                    .find_by
+                    .iter()
+                    .any(|n| n.as_str() == source.as_str())
             {
                 return Ok(None);
             }
@@ -385,9 +444,8 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let own = |n: &str| self.block.namespaces.iter().any(|o| o == n);
             Ok(found.and_then(|(id, kind)| {
-                own(&id.provider)
+                (id.provider == self.key.as_str())
                     .then(|| MediaKind::parse(&kind).map(|k| (id.value, k)))
                     .flatten()
             }))
@@ -402,6 +460,9 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, PersonDetails> {
         async move {
+            if let Some(b) = self.built_in(None, "person") {
+                return b.fetch_person(id, lang, p).await;
+            }
             self.has(None, "person")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -412,7 +473,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let v = record(&json, false)?;
+            let v = self.record(&json, false)?;
             let s = |k: &str| v[k].as_str().map(str::to_owned);
             Ok(PersonDetails {
                 name: s("name"),
@@ -434,6 +495,9 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Credits> {
         async move {
+            if let Some(b) = self.built_in(None, "credits") {
+                return b.person_credits(id, lang, p).await;
+            }
             self.has(None, "credits")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -444,16 +508,18 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let v = record(&json, false)?;
+            let v = self.record(&json, false)?;
             let side = |k: &str| {
                 v[k].as_array()
                     .cloned()
                     .ok_or_else(|| bad("credits without cast and crew"))
             };
-            Ok(Credits {
-                cast: side("cast")?,
-                crew: side("crew")?,
-            })
+            self.checked(side("cast").and_then(|cast| {
+                Ok(Credits {
+                    cast,
+                    crew: side("crew")?,
+                })
+            }))
         }
         .boxed()
     }
@@ -465,12 +531,15 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Option<Value>> {
         async move {
-            self.has(None, "edition")?;
-            if !self
-                .block
-                .edition
-                .iter()
-                .any(|n| n.as_str() == e.namespace.as_str())
+            if let Some(b) = self.built_in(None, "edition") {
+                return b.fetch_edition(e, lang, p).await;
+            }
+            if !self.declares(None, "edition")
+                || !self
+                    .block
+                    .edition
+                    .iter()
+                    .any(|n| n.as_str() == e.namespace.as_str())
             {
                 return Ok(None);
             }
@@ -487,7 +556,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            json.map(|j| record(&j, false)).transpose()
+            self.checked(json.map(|j| parse(&j, false)).transpose())
         }
         .boxed()
     }
@@ -499,9 +568,11 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Option<Value>> {
         async move {
-            self.has(None, "chapters")?;
+            if let Some(b) = self.built_in(None, "chapters") {
+                return b.fetch_chapters(asin, lang, p).await;
+            }
             let ns = ExternalProvider::Asin.as_str();
-            if !self.block.chapters.iter().any(|n| n.as_str() == ns) {
+            if !self.declares(None, "chapters") || !self.block.chapters.iter().any(|n| n == ns) {
                 return Ok(None);
             }
             let edition = ExternalId {
@@ -517,16 +588,15 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            json.map(|j| record(&j, false)).transpose()
+            self.checked(json.map(|j| parse(&j, false)).transpose())
         }
         .boxed()
     }
 }
 
-/// Re-reads whether every key of `requires` resolves non-empty and forgets an `unauthorized` answer.
+/// Re-reads whether every key of `requires` resolves non-empty.
 pub async fn refresh_availability(rt: Arc<PluginRt>) {
     let sh = &rt.sh;
-    sh.unauthorized.store(false, Ordering::SeqCst);
     let cfg = super::imports::config_for(&sh.env.core, &sh.id, None)
         .await
         .unwrap_or_default();
@@ -546,8 +616,12 @@ impl Plugins {
             return;
         };
         refresh_availability(rt.clone()).await;
+        // No await from here to the insert: a runtime replaced meanwhile must not overwrite the newer one.
+        if !self.rt(id).is_some_and(|r| Arc::ptr_eq(&r, rt)) {
+            return;
+        }
         if let Some(app) = self.app() {
-            match PluginProvider::new(rt.clone()) {
+            match PluginProvider::new(rt.clone(), &app.metadata) {
                 Some(provider) => app.metadata.add_plugin(Arc::new(provider)),
                 None => {
                     tracing::info!("provider \"{id}\" has no core first namespace: not registered")
@@ -568,8 +642,12 @@ impl Plugins {
         tokio::spawn(async move {
             let id = rt.sh.id.to_string();
             let mut w = rt.watch();
-            if w.wait_for(|s| *s == State::Failed).await.is_err() {
-                return;
+            match w
+                .wait_for(|s| matches!(s, State::Failed | State::Stopped))
+                .await
+            {
+                Ok(s) if *s == State::Failed => {}
+                _ => return,
             }
             let (first, every) = rt.sh.env.cfg.provider_retry;
             let me = &st.plugins;

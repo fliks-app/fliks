@@ -256,8 +256,8 @@ pub struct Shared {
     pub defaults: Vec<(String, String)>,
     /// Every key of the provider's `requires` resolves non-empty (`provider-plugins.md` rule 41).
     pub requires_ok: AtomicBool,
-    /// The provider answered `unauthorized` since its settings last changed (rule 15).
-    pub unauthorized: AtomicBool,
+    /// One more than the config generation of the call that last answered `unauthorized`, 0 for none (rule 15).
+    pub unauthorized: AtomicU64,
     /// Bumped by a stop: instances of an older generation trap at their next epoch tick.
     pub era: AtomicU64,
     pub stopped: Notify,
@@ -287,6 +287,12 @@ impl Ctx {
     /// The priority of the export about to run in this Store (`provider-plugins.md` rule 58).
     pub fn set_priority(&mut self, p: Priority) {
         self.out.priority = p;
+    }
+
+    /// When the call in this Store is interrupted; the outbound hook never waits past it.
+    pub fn set_deadline(&mut self, at: Instant) {
+        self.deadline = at;
+        self.out.deadline = at;
     }
 }
 
@@ -633,6 +639,7 @@ impl PluginRt {
                 permits: self.sh.outbound.clone(),
                 gate: self.sh.gate.clone(),
                 priority: Priority::Background,
+                deadline: Instant::now() + env.cfg.deadlines.hello,
                 over: env.cfg.upstream_override.clone(),
             },
             sh: self.sh.clone(),

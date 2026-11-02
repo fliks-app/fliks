@@ -21,6 +21,9 @@ impl Plugin for Fixture {
 
 impl MetadataProvider for Fixture {
     fn search(q: SearchQuery, _lang: Lang) -> Result<String, ProviderError> {
+        if q.query == "scalars" {
+            return Ok("[1]".into());
+        }
         Ok(json!([{ "title": q.query, "ids": { "org.example.anime:aid": "1" } }]).to_string())
     }
     fn fetch_work(_kind: String, id: ExternalId, lang: Lang) -> Result<String, ProviderError> {
@@ -36,6 +39,14 @@ impl MetadataProvider for Fixture {
                 Ok(s)
             }
             "unauthorized" => Err(ProviderError::Unauthorized),
+            "slow" => {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                Ok(json!({ "title": "slow" }).to_string())
+            }
+            "slow-unauthorized" => {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                Err(ProviderError::Unauthorized)
+            }
             "unsupported" => Err(ProviderError::Unsupported),
             "limited" => Err(ProviderError::RateLimited(Some(7))),
             "upstream" => Err(ProviderError::Upstream(UpstreamError {
@@ -53,8 +64,8 @@ impl MetadataProvider for Fixture {
         source: ExternalId,
         _lang: Lang,
     ) -> Result<Option<(ExternalId, String)>, ProviderError> {
-        Ok((source.value == "tt1").then(|| {
-            let provider = "tmdb".to_owned();
+        Ok(matches!(source.value.as_str(), "tt1" | "tt3").then(|| {
+            let provider = if source.value == "tt1" { "tmdb" } else { "other" }.to_owned();
             (ExternalId { provider, value: "1".into() }, "series".into())
         }))
     }
