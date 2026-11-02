@@ -1,4 +1,5 @@
 //! `subtitle_files` rows and their JSON (`subtitles.md` rules 4-5).
+use crate::libraries::HIDDEN_FILES_FROM;
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgExecutor};
@@ -231,6 +232,23 @@ pub async fn of_media(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Ve
         r#"SELECT {COLS} FROM subtitle_files WHERE "mediaId" = $1 ORDER BY language ASC, score DESC, id ASC"#
     )))
     .bind(media_id)
+    .fetch_all(db)
+    .await
+}
+
+/// `of_media` without the subtitles of files hidden from `ids` (`books.md` rule 22).
+pub async fn of_media_visible(
+    db: impl PgExecutor<'_>,
+    media_id: i32,
+    ids: &[i32],
+) -> sqlx::Result<Vec<Row>> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT {COLS} FROM subtitle_files s WHERE "mediaId" = $1
+           AND ("mediaFileId" IS NULL OR NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = s."mediaFileId"))
+           ORDER BY language ASC, score DESC, id ASC"#
+    )))
+    .bind(media_id)
+    .bind(ids)
     .fetch_all(db)
     .await
 }

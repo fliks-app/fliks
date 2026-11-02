@@ -37,18 +37,31 @@ pub async fn gate_media(st: &AppState, a: &Authed, id: i32) -> Res<()> {
     assert_media_accessible(&st.db, id, &ids).await
 }
 
+/// The edition gate of a file, after `gate_media`.
+pub async fn gate_file(st: &AppState, a: &Authed, file: i32) -> Res<()> {
+    let ids = accessible_library_ids(&st.db, a).await?;
+    crate::libraries::assert_file_accessible(&st.db, file, &ids).await
+}
+
 /// The media gate plus the binding of the subtitle to it (rule 3).
 pub async fn gate_subtitle(st: &AppState, a: &Authed, media: i32, sub: i32) -> Res<()> {
     gate_media(st, a, media).await?;
-    let found: Option<i32> =
-        sqlx::query_scalar(r#"SELECT id FROM subtitle_files WHERE id = $1 AND "mediaId" = $2"#)
-            .bind(sub)
-            .bind(media)
-            .fetch_optional(&st.db)
-            .await?;
-    found
-        .map(|_| ())
-        .ok_or_else(|| AppError::not_found(format!("Subtitle #{sub} not found")))
+    let found: Option<Option<i32>> = sqlx::query_scalar(
+        r#"SELECT "mediaFileId" FROM subtitle_files WHERE id = $1 AND "mediaId" = $2"#,
+    )
+    .bind(sub)
+    .bind(media)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some(file) = found else {
+        return Err(AppError::not_found(format!("Subtitle #{sub} not found")));
+    };
+    match file {
+        Some(f) => gate_file(st, a, f)
+            .await
+            .map_err(|_| AppError::not_found(format!("Subtitle #{sub} not found"))),
+        None => Ok(()),
+    }
 }
 
 type One = Result<PathParams<i32>, AppError>;
@@ -72,7 +85,8 @@ pub async fn list(State(st): State<AppState>, a: Authed, id: One) -> Res<Json<Ve
     policy(&a, Action::Read)?;
     let PathParams(id) = id?;
     gate_media(&st, &a, id).await?;
-    let rows = model::of_media(&st.db, id).await?;
+    let ids = accessible_library_ids(&st.db, &a).await?;
+    let rows = model::of_media_visible(&st.db, id, &ids).await?;
     Ok(Json(
         rows.iter()
             .map(|r| {
@@ -157,6 +171,7 @@ pub async fn auto(
     let PathParams(id) = id?;
     gate_media(&st, &a, id).await?;
     let b: AutoBody = from_value(body.0)?;
+    gate_file(&st, &a, b.media_file_id).await?;
     let media = files::load_media(&st.db, id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Media #{id} not found")))?;
@@ -202,6 +217,7 @@ pub async fn search_missing(
     let PathParams(id) = id?;
     gate_media(&st, &a, id).await?;
     let b: FileBody = from_value(body.0)?;
+    gate_file(&st, &a, b.media_file_id).await?;
     let downloaded = super::scheduler::search_missing_for_media(&st, id, b.media_file_id).await;
     Ok((StatusCode::CREATED, Json(json!({"downloaded": downloaded}))))
 }
@@ -226,6 +242,7 @@ pub async fn download(
     let PathParams(id) = id?;
     gate_media(&st, &a, id).await?;
     let b: DownloadBody = from_value(body.0)?;
+    gate_file(&st, &a, b.media_file_id).await?;
     let saved = service::download(&st, id, b.media_file_id, b.episode_id, &b.search_result).await?;
     Ok((StatusCode::CREATED, Json(saved.json())))
 }
@@ -303,6 +320,7 @@ pub async fn upload(
         .get("mediaFileId")
         .and_then(|v| js_integer(v))
         .ok_or_else(|| AppError::bad_request("mediaFileId is required"))?;
+    gate_file(&st, &a, file_id).await?;
     let episode = fields
         .get("episodeId")
         .filter(|v| !v.is_empty())

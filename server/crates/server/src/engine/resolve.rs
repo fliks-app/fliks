@@ -375,6 +375,7 @@ async fn resolve_file(
     .await?
     .ok_or(Fail::Denied)?;
     check_library(st, user, perms, row.library_id).await?;
+    check_file_edition(st, user, perms, id).await?;
     let absolute = crate::ingest::fsx::locate(&row.folder_path, &row.stored).ok_or(Fail::Denied)?;
     tokio::fs::metadata(&absolute)
         .await
@@ -385,6 +386,21 @@ async fn resolve_file(
         return Err(Fail::Denied);
     }
     Ok(real)
+}
+
+/// The edition gate of a file: its editions' libraries must be in the user's scope.
+async fn check_file_edition(
+    st: &AppState,
+    user: &UserRow,
+    perms: &Permissions,
+    file: i32,
+) -> Result<(), Fail> {
+    let ids =
+        crate::libraries::library_ids_of(&st.db, user.id, perms.can(Action::Manage, &Subject::All))
+            .await?;
+    crate::libraries::assert_file_accessible(&st.db, file, &ids)
+        .await
+        .map_err(|_| Fail::Denied)
 }
 
 /// An external subtitle's file: under the media directory by realpath, a regular file, never a link.
@@ -417,6 +433,9 @@ async fn subtitle_on_disk(
             .bind(id)
             .fetch_one(&st.db)
             .await?;
+    if let Some(f) = file_id {
+        check_file_edition(st, user, perms, f).await?;
+    }
     let media =
         crate::subtitles::files::load_media_of(&st.db, media_id.ok_or(Fail::Denied)?, file_id)
             .await?

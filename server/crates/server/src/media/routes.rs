@@ -247,6 +247,7 @@ pub async fn media_streams(
     let PathParams((id, file)) = ids?;
     let libs = accessible_library_ids(&st.db, &a).await?;
     assert_media_accessible(&st.db, id, &libs).await?;
+    crate::libraries::assert_file_accessible(&st.db, file, &libs).await?;
     Ok(Json(streams::streams(&st, id, file).await?))
 }
 

@@ -15,9 +15,11 @@
       },
       "expect": {
         "body": {
-          "downloaded": []
+          "error": "Not Found",
+          "message": "MediaFile #9999 not found",
+          "statusCode": 404
         },
-        "status": 201
+        "status": 404
       },
       "method": "POST",
       "path": "/api/media/1/subtitles/search-missing"

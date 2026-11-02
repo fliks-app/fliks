@@ -663,6 +663,61 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_file_whose_edition_sits_in_a_hidden_library_is_denied(pool: PgPool) {
+        let w = world(pool).await;
+        let p = &w.c.pool;
+        let media: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM media_files WHERE id = $1"#)
+            .bind(w.file)
+            .fetch_one(p)
+            .await
+            .unwrap();
+        let mut conn = p.acquire().await.unwrap();
+        crate::media::items::create_shell(
+            &mut conn,
+            media,
+            fliks_domain::media::kind::MediaKind::Movie,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        drop(conn);
+        let link = crate::media::items::Link {
+            file: w.file,
+            owner: None,
+            last: None,
+        };
+        crate::media::items::attach(p, media, &[link])
+            .await
+            .unwrap();
+        let ask = |token: &str, purpose: &str| {
+            resolve(
+                &w,
+                json!({"mediaId": w.file, "credential": token, "purpose": purpose, "streamIndex": 3}),
+            )
+        };
+        for purpose in ["stream", "download", "sprite", "subtitle"] {
+            let (_, b) = ask(&w.member.1, purpose).await;
+            assert_eq!(b["allow"], true, "{purpose}");
+        }
+        sqlx::query(r#"INSERT INTO libraries (name) VALUES ('Hidden')"#)
+            .execute(p)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"UPDATE editions SET "libraryId" = (SELECT id FROM libraries WHERE name = 'Hidden')
+               WHERE "mediaId" = $1"#,
+        )
+        .bind(media)
+        .execute(p)
+        .await
+        .unwrap();
+        for purpose in ["stream", "download", "sprite", "subtitle"] {
+            assert_eq!(ask(&w.member.1, purpose).await.1, denied(), "{purpose}");
+            assert_eq!(ask(&w.admin.1, purpose).await.1["allow"], true, "{purpose}");
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
         let w = world(pool).await;
         let live =
