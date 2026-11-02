@@ -12,56 +12,18 @@
 
   <!-- View tabs: a spatial-nav row so `↑` from below lands on them instead of bridging to the fixed topbar. -->
   <nav appTvRow class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
-    <button
-      type="button"
-      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-      [class.bg-base-300]="viewMode() === 'all'"
-      [class.text-base-content/70]="viewMode() !== 'all'"
-      [class.hover:bg-base-200]="viewMode() !== 'all'"
-      (click)="setViewMode('all')"
-    >
-      {{ libraryName() }}
-    </button>
-    <button
-      type="button"
-      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-      [class.bg-base-300]="viewMode() === 'suggestions'"
-      [class.text-base-content/70]="viewMode() !== 'suggestions'"
-      [class.hover:bg-base-200]="viewMode() !== 'suggestions'"
-      (click)="setViewMode('suggestions')"
-    >
-      {{ 'library.view_suggestions' | translate }}
-    </button>
-    <button
-      type="button"
-      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-      [class.bg-base-300]="viewMode() === 'genres'"
-      [class.text-base-content/70]="viewMode() !== 'genres'"
-      [class.hover:bg-base-200]="viewMode() !== 'genres'"
-      (click)="setViewMode('genres')"
-    >
-      {{ 'library.view_genres' | translate }}
-    </button>
-    <button
-      type="button"
-      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-      [class.bg-base-300]="viewMode() === 'collections'"
-      [class.text-base-content/70]="viewMode() !== 'collections'"
-      [class.hover:bg-base-200]="viewMode() !== 'collections'"
-      (click)="setViewMode('collections')"
-    >
-      {{ 'library.view_collections' | translate }}
-    </button>
-    <button
-      type="button"
-      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-      [class.bg-base-300]="viewMode() === 'likes'"
-      [class.text-base-content/70]="viewMode() !== 'likes'"
-      [class.hover:bg-base-200]="viewMode() !== 'likes'"
-      (click)="setViewMode('likes')"
-    >
-      {{ 'library.view_likes' | translate }}
-    </button>
+    @for (t of tabs(); track t.mode) {
+      <button
+        type="button"
+        class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
+        [class.bg-base-300]="viewMode() === t.mode"
+        [class.text-base-content/70]="viewMode() !== t.mode"
+        [class.hover:bg-base-200]="viewMode() !== t.mode"
+        (click)="setViewMode(t.mode)"
+      >
+        {{ t.labelKey ? (t.labelKey | translate) : libraryName() }}
+      </button>
+    }
   </nav>
 
   <app-import-progress-banner />
@@ -111,10 +73,9 @@
           [ngModel]="sortBy()"
           (ngModelChange)="onSortByChange($event)"
         >
-          <option value="title">{{ 'library.sort_title' | translate }}</option>
-          <option value="year">{{ 'library.sort_year' | translate }}</option>
-          <option value="added">{{ 'library.sort_added' | translate }}</option>
-          <option value="rating">{{ 'library.sort_rating' | translate }}</option>
+          @for (o of sortOptions(); track o.value) {
+            <option [value]="o.value">{{ o.labelKey | translate }}</option>
+          }
         </select>
         <button
           type="button"
@@ -163,6 +124,7 @@
 
           <div class="p-3 min-w-56 space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-x-6 lg:gap-y-4 lg:min-w-md">
           <!-- Section: Surveillance -->
+          @if (!bookOnly()) {
           <div>
             <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
               {{ 'library.filter_monitoring_label' | translate }}
@@ -197,6 +159,7 @@
               </label>
             </div>
           </div>
+          }
 
           <!-- Section: Vu -->
           <div>
@@ -231,10 +194,22 @@
                 />
                 <span class="text-sm">{{ 'library.filter_unwatched' | translate }}</span>
               </label>
+              @if (bookOnly()) {
+                <label class="flex items-center gap-2 cursor-pointer py-1">
+                  <input
+                    type="radio" name="library-filter-watched"
+                    class="radio radio-sm radio-primary"
+                    [checked]="filterWatched() === 'inProgress'"
+                    (change)="filterWatched.set('inProgress'); onFilterChange()"
+                  />
+                  <span class="text-sm">{{ 'books_library.filter_in_progress' | translate }}</span>
+                </label>
+              }
             </div>
           </div>
 
           <!-- Section: Statut -->
+          @if (!bookOnly()) {
           <div>
             <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
               {{ 'library.filter_status_label' | translate }}
@@ -278,6 +253,58 @@
               </label>
             </div>
           </div>
+          }
+
+          <!-- Section: book format, language, people -->
+          @if (bookOnly()) {
+            <div>
+              <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+                {{ 'books_library.filter_format' | translate }}
+              </h4>
+              <div class="space-y-1">
+                @for (o of formatOptions; track o.value) {
+                  <label class="flex items-center gap-2 cursor-pointer py-1">
+                    <input
+                      type="radio" name="library-filter-format"
+                      class="radio radio-sm radio-primary"
+                      [checked]="(bookFilters()['format'] ?? '') === o.value"
+                      (change)="setBookFilter('format', o.value)"
+                    />
+                    <span class="text-sm">{{ o.labelKey | translate }}</span>
+                  </label>
+                }
+              </div>
+            </div>
+            <div class="space-y-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_language' | translate }}</span>
+                <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['language'] ?? ''" (ngModelChange)="setBookFilter('language', $event)">
+                  <option value="">{{ 'books_library.filter_any' | translate }}</option>
+                  @for (code of languageCodes; track code) {
+                    <option [value]="code">{{ code | localizeLanguage }}</option>
+                  }
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_author' | translate }}</span>
+                <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['authorId'] ?? ''" (ngModelChange)="setBookFilter('authorId', $event)">
+                  <option value="">{{ 'books_library.filter_any' | translate }}</option>
+                  @for (p of authorsList(); track p.id) {
+                    <option [value]="'' + p.id">{{ p.name }}</option>
+                  }
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_narrator' | translate }}</span>
+                <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['narratorId'] ?? ''" (ngModelChange)="setBookFilter('narratorId', $event)">
+                  <option value="">{{ 'books_library.filter_any' | translate }}</option>
+                  @for (p of narratorsList(); track p.id) {
+                    <option [value]="'' + p.id">{{ p.name }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+          }
         </div>
         </app-dropdown-menu>
       </div>
@@ -437,14 +464,13 @@
     @if (list.all().length > 0) {
       <div class="flex flex-wrap items-center justify-end gap-x-8 gap-y-1 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
         <div><span class="font-semibold">{{ 'legend.total' | translate }}</span> {{ list.total() }}</div>
-        @if (hasMovies()) {
-          <div><span class="font-semibold">{{ 'legend.movie_files' | translate }}</span> {{ movieFileCount() }}</div>
+        @for (s of kindStats(); track s.labelKey) {
+          <div><span class="font-semibold">{{ s.labelKey | translate }}</span> {{ s.done }}@if (s.total !== null) { / {{ s.total }}}</div>
         }
-        @if (hasSeries()) {
-          <div><span class="font-semibold">{{ 'legend.episodes' | translate }}</span> {{ downloadedEpisodes() }} / {{ totalEpisodes() }}</div>
+        @if (!bookOnly()) {
+          <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
+          <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
         }
-        <div><span class="font-semibold">{{ 'legend.monitored' | translate }}</span> {{ monitoredCount() }}</div>
-        <div><span class="font-semibold">{{ 'legend.unmonitored' | translate }}</span> {{ list.total() - monitoredCount() }}</div>
       </div>
     }
   } @else if (viewMode() === 'suggestions') {
@@ -604,6 +630,70 @@
             [subtitle]="(c.count <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate: { count: c.count }"
             (clicked)="pickCollection(c.id)"
           />
+        }
+      </div>
+    }
+  } @else if (viewMode() === 'series') {
+    <p class="text-sm text-base-content/50 mb-4">
+      {{ (seriesList().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: seriesList().length } }}
+    </p>
+    @if (seriesLoading() && !seriesList().length) {
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
+        @for (i of skeletonCards; track i) {
+          <app-card-skeleton [aspect]="'square'" />
+        }
+      </div>
+    } @else if (!seriesList().length) {
+      <div class="text-center py-24 text-base-content/50">
+        <p class="text-lg">{{ 'books_library.series_empty' | translate }}</p>
+      </div>
+    } @else {
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
+        @for (c of seriesList(); track c.id) {
+          <app-mosaic-card
+            [posters]="c.posters"
+            [label]="c.name"
+            [subtitle]="c.maxPosition && c.maxPosition > c.count ? ('books_library.series_progress' | translate: { count: c.count, max: c.maxPosition }) : ((c.count <= 1 ? 'books_library.books_count_one' : 'books_library.books_count_other') | translate: { count: c.count })"
+            (clicked)="openSeries(c.id)"
+          />
+        }
+      </div>
+    }
+  } @else if (viewMode() === 'authors') {
+    <p class="text-sm text-base-content/50 mb-4 flex items-center gap-3">
+      <span>{{ (authorsList().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: authorsList().length } }}</span>
+      <a routerLink="/persons" [queryParams]="{ role: 'author' }" class="link link-hover">{{ 'books_library.authors_all' | translate }}</a>
+    </p>
+    @if (authorsLoading() && !authorsList().length) {
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4 animate-pulse">
+        @for (i of skeletonCards; track i) {
+          <app-card-skeleton [aspect]="'square'" />
+        }
+      </div>
+    } @else if (!authorsList().length) {
+      <div class="text-center py-24 text-base-content/50">
+        <p class="text-lg">{{ 'books_library.authors_empty' | translate }}</p>
+      </div>
+    } @else {
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4 tv:gap-8 p-1">
+        @for (p of authorsList(); track p.id) {
+          <a [routerLink]="['/persons', p.id]" [queryParams]="{ role: 'author' }" class="flex flex-col items-center gap-2 group cursor-pointer">
+            <div class="avatar">
+              <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+                @if (p.avatarUrl) {
+                  <img [cachedSrc]="p.avatarUrl | resolveUrl:'thumb'" [alt]="p.name" loading="lazy" />
+                } @else {
+                  <div class="bg-base-300 flex items-center justify-center w-full h-full text-2xl font-bold text-base-content/30">
+                    {{ p.name.charAt(0) }}
+                  </div>
+                }
+              </div>
+            </div>
+            <span class="text-xs sm:text-sm text-center font-medium truncate w-full">{{ p.name }}</span>
+            <span class="text-[10px] text-base-content/50 -mt-1.5 truncate w-full text-center">
+              {{ (p.workCount <= 1 ? 'books_library.books_count_one' : 'books_library.books_count_other') | translate: { count: p.workCount } }}
+            </span>
+          </a>
         }
       </div>
     }

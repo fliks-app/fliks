@@ -2,10 +2,11 @@ import { Component, booleanAttribute, ElementRef, InjectionToken, input, output,
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload } from '@lucide/angular';
+import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
+import type { BookListInfo } from '../../../core/services/api/books.models';
 import { computeMediaBarStatus } from '../../utils/media-status.util';
 import { MediaService } from '../../../core/services/api/media.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -64,7 +65,7 @@ export interface CardDownloadState {
   selector: 'app-media-card',
   imports: [
     CachedSrcDirective, PosterMosaicComponent,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload,
+    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones,
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
@@ -95,6 +96,17 @@ export class MediaCardComponent {
 
   // Data source (auto-derives imageUrl, title, rating, link, playable, status badge)
   readonly media = input<Media | null>(null);
+
+  /** A book's list row (`media.book` when the card is fed by `[media]`). */
+  readonly book = input<BookListInfo | null>(null);
+  protected readonly bookInfo = computed(
+    () => this.book() ?? (this.media() as (Media & { book?: BookListInfo }) | null)?.book ?? null,
+  );
+  /** An audio cover is square: it sits on a blurred fill inside the 2:3 frame. */
+  protected readonly squareCover = computed(() => {
+    const b = this.bookInfo();
+    return !!b && (b.lastFamily ?? (b.formats.length === 1 ? b.formats[0] : 'text')) === 'audio';
+  });
 
   // Layout
   readonly aspect = input<MediaCardAspect>('portrait');
@@ -409,14 +421,20 @@ export class MediaCardComponent {
     const m = this.media();
     return m ? !!(m.files?.length) : false;
   });
+  protected readonly _topLeftBadge = computed(() => {
+    const series = this.bookInfo()?.series;
+    return this.topLeftBadge() ?? (series ? `#${series.positionLabel ?? series.position ?? ''}` : undefined);
+  });
   protected readonly _subtitle = computed(() => {
     if (this.subtitle() !== undefined) return this.subtitle();
+    const authors = this.bookInfo()?.authors;
+    if (authors?.length) return authors.map((a) => a.name).join(', ');
     const m = this.media();
     if (m?.year) return '' + m.year;
     return undefined;
   });
   protected readonly _barStatus = computed((): BarStatus | null => {
-    if (this.hideStatusBar()) return null;
+    if (this.hideStatusBar() || this.bookInfo()) return null;
     const m = this.media();
     return m ? computeMediaBarStatus(m) : null;
   });
@@ -513,7 +531,7 @@ export class MediaCardComponent {
     'core.like': () => this.liked() !== null,
     'core.remove': () => this.dismissable(),
     // Identity and metadata re-read need a library row; search/discovery cards have none.
-    'core.identify': () => this.media()?.id != null,
+    'core.identify': () => this.media()?.id != null && !this.bookInfo(),
     'core.refresh_metadata': () => this.media()?.id != null,
   };
 
@@ -620,7 +638,7 @@ export class MediaCardComponent {
     if (this.status()) return this.status();
     if (this.badge()) return null;
     const m = this.media();
-    if (!m) return null;
+    if (!m || this.bookInfo()) return null;
     const s = computeMediaBarStatus(m);
     if (s === 'missing-monitored' || s === 'missing-unmonitored') return 'missing';
     return null;
@@ -639,6 +657,8 @@ export class MediaCardComponent {
           text: this.translate.instant('media_card.type_series'),
           class: 'badge-secondary',
         };
+      case 'book':
+        return { text: this.translate.instant('books_library.type_book'), class: 'badge-accent' };
       default:
         return null;
     }

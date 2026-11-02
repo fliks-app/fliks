@@ -10,13 +10,19 @@ import {
   ElementRef,
   ViewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
+import { MediaService, Media, GenreSummary, CollectionSummary, SearchParams } from '../../core/services/api/media.service';
+import { BooksApiService } from '../../core/services/api/books-api.service';
+import type { BookListInfo, CollectionSummary as SeriesSummary, PersonListItem } from '../../core/services/api/books.models';
+import { SUBTITLE_LANGUAGE_CODES } from '../../core/constants/subtitle-languages';
+import { LocalizeLanguagePipe } from '../../core/pipes/localize-language.pipe';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import {
   SocialApiService,
   ReceivedRecommendation,
@@ -61,10 +67,46 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 /** Top-bar tab — `all` is the existing library grid (label = library name),
  *  `suggestions` / `genres` are placeholders for upcoming views. */
-export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections' | 'likes';
+export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections' | 'likes' | 'series' | 'authors';
 export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
-type FilterWatched = '' | 'watched' | 'unwatched';
+type FilterWatched = '' | 'watched' | 'unwatched' | 'inProgress';
+type BookMedia = Media & { book?: BookListInfo };
+/** Book-only list keys: the server answers 400 for them on another type. */
+interface BookQuery { format?: string; language?: string; authorId?: number; narratorId?: number; inProgress?: true }
+const BOOK_FILTER_KEYS = ['format', 'language', 'authorId', 'narratorId'] as const;
+
+/** Footer counter of each kind: a new MediaType fails to compile until it declares one. */
+const KIND_STATS: Record<MediaType, (m: Media) => { key: string; labelKey: string; done: number; total: number | null }> = {
+  movie: (m) => ({ key: 'movie', labelKey: 'legend.movie_files', done: m.files?.length ? 1 : 0, total: null }),
+  series: (m) => ({
+    key: 'series',
+    labelKey: 'legend.episodes',
+    done: m.episodeStats?.downloadedEpisodes ?? 0,
+    total: m.episodeStats?.totalEpisodes ?? 0,
+  }),
+  book: (m) => ({
+    key: 'book',
+    labelKey: 'books_library.legend_with_file',
+    done: (m as BookMedia).book?.formats.length ? 1 : 0,
+    total: null,
+  }),
+};
+
+const MEDIA_SORTS = [
+  { value: 'title', labelKey: 'library.sort_title' },
+  { value: 'year', labelKey: 'library.sort_year' },
+  { value: 'added', labelKey: 'library.sort_added' },
+  { value: 'rating', labelKey: 'library.sort_rating' },
+];
+const BOOK_SORTS = [
+  { value: 'title', labelKey: 'library.sort_title' },
+  { value: 'author', labelKey: 'books_library.sort_author' },
+  { value: 'series', labelKey: 'books_library.sort_series' },
+  { value: 'added', labelKey: 'library.sort_added' },
+  { value: 'published', labelKey: 'books_library.sort_published' },
+  { value: 'progress', labelKey: 'books_library.sort_progress' },
+];
 
 /** Natural default order per sort field: Title A→Z, date/rating fields newest/best first. Applied when `sortBy` changes. */
 const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
@@ -72,6 +114,10 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   year: 'DESC',
   added: 'DESC',
   rating: 'DESC',
+  author: 'ASC',
+  series: 'ASC',
+  published: 'DESC',
+  progress: 'DESC',
 };
 
 @Component({
@@ -85,6 +131,10 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     TvSelectDirective,
     HorizontalScrollerComponent,
     FormsModule,
+    RouterLink,
+    LocalizeLanguagePipe,
+    ResolveUrlPipe,
+    CachedSrcDirective,
     TranslatePipe,
     LucideSearch,
     LucideSlidersHorizontal,
@@ -105,6 +155,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 })
 export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
+  private readonly booksApi = inject(BooksApiService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly playableMedia = inject(PlayableMediaService);
@@ -156,6 +207,26 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
   readonly mixedLibrary = computed(() => (this.library()?.mediaTypes.length ?? 0) > 1);
+  readonly hasBooks = computed(() => !!this.library()?.mediaTypes.includes('book'));
+  /** Book filters and sorts need `type=book`, so only a library of books alone gets them. */
+  readonly bookOnly = computed(() => {
+    const kinds = this.library()?.mediaTypes;
+    return !!kinds?.length && kinds.every((k) => k === 'book');
+  });
+  readonly sortOptions = computed(() => (this.bookOnly() ? BOOK_SORTS : MEDIA_SORTS));
+  readonly tabs = computed(() => {
+    const books = this.hasBooks();
+    const bookOnly = this.bookOnly();
+    const tab = (mode: LibraryViewMode, labelKey: string | null) => ({ mode, labelKey });
+    return [
+      tab('all', bookOnly ? 'books_library.tab_books' : null),
+      ...(bookOnly ? [] : [tab('suggestions', 'library.view_suggestions')]),
+      ...(books ? [tab('series', 'books_library.tab_series'), tab('authors', 'books_library.tab_authors')] : []),
+      tab('genres', 'library.view_genres'),
+      ...(bookOnly ? [] : [tab('collections', 'library.view_collections')]),
+      tab('likes', 'library.view_likes'),
+    ];
+  });
   readonly libraryName = signal('');
 
   readonly list = new InfiniteScrollList<Media>();
@@ -168,6 +239,21 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly filterStatus = signal('');
   readonly filterWatched = signal<FilterWatched>('');
   readonly viewMode = signal<LibraryViewMode>('all');
+  readonly bookFilters = signal<Record<string, string>>({});
+  readonly formatOptions = [
+    { value: '', labelKey: 'books_library.filter_any' },
+    { value: 'text', labelKey: 'books_library.format_text' },
+    { value: 'audio', labelKey: 'books_library.format_audio' },
+  ];
+  readonly languageCodes = SUBTITLE_LANGUAGE_CODES;
+
+  // ── Series and Authors views (book libraries) ───────────────────────
+  readonly seriesList = signal<SeriesSummary[]>([]);
+  readonly seriesLoading = signal(true);
+  /** Feeds the Authors tab and the author filter. */
+  readonly authorsList = signal<PersonListItem[]>([]);
+  readonly narratorsList = signal<PersonListItem[]>([]);
+  readonly authorsLoading = signal(true);
 
   // ── Suggestions view ────────────────────────────────────────────────
   /** Continue-watching items, scoped to the active library. */
@@ -212,29 +298,24 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly likesLoading = signal(true);
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
-  readonly movieFileCount = computed(() =>
-    this.list.all().filter((m) => m.type === 'movie' && (m.files?.length ?? 0) > 0).length,
-  );
-  readonly totalMovies = computed(() =>
-    this.list.all().filter((m) => m.type === 'movie').length,
-  );
-  readonly totalSeries = computed(() =>
-    this.list.all().filter((m) => m.type === 'series').length,
-  );
-  readonly totalEpisodes = computed(() =>
-    this.list.all().reduce((sum, m) => sum + (m.episodeStats?.totalEpisodes ?? 0), 0),
-  );
-  readonly downloadedEpisodes = computed(() =>
-    this.list.all().reduce((sum, m) => sum + (m.episodeStats?.downloadedEpisodes ?? 0), 0),
-  );
-  readonly hasMovies = computed(() => this.totalMovies() > 0);
-  readonly hasSeries = computed(() => this.totalSeries() > 0);
+  readonly kindStats = computed(() => {
+    const acc = new Map<string, { labelKey: string; done: number; total: number | null }>();
+    for (const m of this.list.all()) {
+      const s = KIND_STATS[m.type](m);
+      const cur = acc.get(s.key) ?? { labelKey: s.labelKey, done: 0, total: s.total === null ? null : 0 };
+      cur.done += s.done;
+      if (cur.total !== null && s.total !== null) cur.total += s.total;
+      acc.set(s.key, cur);
+    }
+    return [...acc.values()];
+  });
 
   readonly alphabet = ALPHABET;
   readonly hasActiveFilters = computed(() =>
     this.filterMonitored() !== '' ||
     this.filterStatus() !== '' ||
-    this.filterWatched() !== '',
+    this.filterWatched() !== '' ||
+    BOOK_FILTER_KEYS.some((k) => !!this.bookFilters()[k]),
   );
 
   @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
@@ -448,10 +529,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.filterWatched.set(
         (qp.get('watched') ?? stored['watched'] ?? '') as FilterWatched,
       );
-      this.sortBy.set(qp.get('sortBy') ?? stored['sortBy'] ?? 'title');
+      const sortBy = qp.get('sortBy') ?? stored['sortBy'] ?? 'title';
+      this.sortBy.set(this.sortOptions().some((o) => o.value === sortBy) ? sortBy : 'title');
       this.sortOrder.set(
         (qp.get('sortOrder') ?? stored['sortOrder'] ?? 'ASC') as SortOrder,
       );
+      this.bookFilters.set(Object.fromEntries(BOOK_FILTER_KEYS.map((k) => [k, qp.get(k) ?? stored[k] ?? ''])));
       // View / genre / collection are navigation state read only from the URL, never persisted filters, so a fresh open lands on `all`.
       this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
       this.selectedGenre.set(qp.get('genre') ?? '');
@@ -466,7 +549,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
       await this.load(lib.id);
       if (scrollKey) this.scrollMemory.restore(scrollKey, this.injector);
       void this.loadLikes();
-      if (this.viewMode() === 'suggestions') {
+      if (this.hasBooks()) void this.loadBookPeople(lib.id);
+      if (this.viewMode() === 'series') {
+        void this.loadSeries();
+      } else if (this.viewMode() === 'suggestions') {
         // Deep-link `?view=suggestions` or back-nav with the persisted mode: fetch suggestions alongside the grid.
         void this.loadSuggestions();
       } else if (this.viewMode() === 'genres') {
@@ -491,6 +577,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.filterWatched.set((qp.get('watched') ?? '') as FilterWatched);
       this.sortBy.set(qp.get('sortBy') ?? 'title');
       this.sortOrder.set((qp.get('sortOrder') ?? 'ASC') as SortOrder);
+      this.bookFilters.set(Object.fromEntries(BOOK_FILTER_KEYS.map((k) => [k, qp.get(k) ?? ''])));
       this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
       this.selectedGenre.set(qp.get('genre') ?? '');
       const collId = qp.get('collectionId');
@@ -504,6 +591,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
         if (this.viewMode() === 'genres') void this.loadGenres();
         else if (this.viewMode() === 'collections') void this.loadCollections();
         else if (this.viewMode() === 'suggestions') void this.loadSuggestions();
+        else if (this.viewMode() === 'series') void this.loadSeries();
       }
     });
   }
@@ -517,6 +605,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     void this.loadLikes();
     if (this.viewMode() === 'suggestions') void this.loadSuggestions();
     else if (this.viewMode() === 'genres') void this.loadGenres();
+    else if (this.viewMode() === 'series') void this.loadSeries();
   }
 
   ngOnDestroy() {
@@ -580,13 +669,24 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.onFilterChange();
   }
 
+  setBookFilter(key: (typeof BOOK_FILTER_KEYS)[number], value: string) {
+    this.bookFilters.update((f) => ({ ...f, [key]: value }));
+    this.onFilterChange();
+  }
+
+  openSeries(id: number) {
+    void this.router.navigate(['/collections', id]);
+  }
+
   setViewMode(mode: LibraryViewMode) {
     if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
     this.scrollOwnTo(0);
     // Tab switches stay on one history entry so back returns to the previous page, not through every tab.
     this.syncQueryParams(false);
-    if (mode === 'suggestions') {
+    if (mode === 'series') {
+      void this.loadSeries();
+    } else if (mode === 'suggestions') {
       void this.loadSuggestions();
     } else if (mode === 'genres') {
       void this.loadGenres();
@@ -623,6 +723,32 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.selectedCollectionId.set(null);
     this.syncQueryParams();
     void this.load(this.library()?.id);
+  }
+
+  private async loadSeries(): Promise<void> {
+    const lib = this.library();
+    if (!lib) return;
+    if (!this.seriesList().length) this.seriesLoading.set(true);
+    try {
+      const rows = await this.booksApi.collections({ libraryId: lib.id, kind: 'book' }).catch(() => null);
+      if (rows) this.seriesList.set(rows);
+    } finally {
+      this.seriesLoading.set(false);
+    }
+  }
+
+  private async loadBookPeople(libraryId: number): Promise<void> {
+    try {
+      const [authors, narrators] = await Promise.all(
+        (['author', 'narrator'] as const).map((role) =>
+          this.booksApi.persons({ role, libraryId, sortBy: 'name' }).catch(() => null),
+        ),
+      );
+      if (authors) this.authorsList.set(authors);
+      if (narrators) this.narratorsList.set(narrators);
+    } finally {
+      this.authorsLoading.set(false);
+    }
   }
 
   private async loadCollections(): Promise<void> {
@@ -769,6 +895,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.filterWatched()) p['watched'] = this.filterWatched();
     if (this.sortBy() !== 'title') p['sortBy'] = this.sortBy();
     if (this.sortOrder() !== 'ASC') p['sortOrder'] = this.sortOrder();
+    for (const k of BOOK_FILTER_KEYS) if (this.bookFilters()[k]) p[k] = this.bookFilters()[k];
     return p;
   }
 
@@ -812,6 +939,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.genresLoading.set(false);
     this.collectionsLoading.set(false);
     this.likesLoading.set(false);
+    this.seriesLoading.set(false);
+    this.authorsLoading.set(false);
   }
 
   private async load(libraryId?: number, silent = false) {
@@ -829,7 +958,18 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const monitored = this.filterMonitored();
     const fs = this.filterStatus();
     const fw = this.filterWatched();
-    const params = {
+    const bookFilters = this.bookFilters();
+    const params: SearchParams & BookQuery = {
+      ...(this.bookOnly()
+        ? {
+            type: 'book' as const,
+            format: bookFilters['format'] || undefined,
+            language: bookFilters['language'] || undefined,
+            authorId: Number(bookFilters['authorId']) || undefined,
+            narratorId: Number(bookFilters['narratorId']) || undefined,
+            inProgress: fw === 'inProgress' ? true : undefined,
+          }
+        : {}),
       libraryId,
       q: this.searchQuery() || undefined,
       sortBy: this.sortBy(),
@@ -843,7 +983,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       excludeWatched: fw === 'unwatched' ? true : undefined,
       limit: 0,
       view: 'grid',
-    } as const;
+    };
     const gen = ++this.loadGen;
     try {
       const [res, watchedIds] = await Promise.all([

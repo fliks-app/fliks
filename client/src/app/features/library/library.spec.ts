@@ -13,7 +13,9 @@ import { PlayableMediaService } from '../../core/services/playable-media.service
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
-import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
+import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { BooksApiService } from '../../core/services/api/books-api.service';
+import { bookListInfoFixture, collectionSummaryFixture, personListItemFixture } from '../../core/services/api/books.fixtures';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -118,6 +120,13 @@ function createHarness(remembered?: number) {
       { provide: LikesApiService, useValue: {} },
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
+      {
+        provide: BooksApiService,
+        useValue: {
+          collections: vi.fn(async () => [collectionSummaryFixture]),
+          persons: vi.fn(async () => [personListItemFixture]),
+        },
+      },
       { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), url: signal(null) } },
       { provide: DisplaySettingsService, useValue: { settings: signal({ homeBackground: false }) } },
       {
@@ -383,5 +392,92 @@ describe('LibraryComponent — page scroll', () => {
     } finally {
       if (original) Object.defineProperty(window, 'scrollY', original);
     }
+  });
+});
+
+function bookMedia(id: number, withFile: boolean): Media {
+  return { ...media(id, `Book ${id}`), type: 'book', book: { ...bookListInfoFixture, formats: withFile ? ['text'] : [] } } as Media;
+}
+
+function library(mediaTypes: LibrarySummary['mediaTypes']): LibrarySummary {
+  return { id: 1, name: 'lib', mediaTypes } as LibrarySummary;
+}
+
+describe('LibraryComponent: book library', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  it('offers Books, Series and Authors and drops the video-only tabs', () => {
+    const { component } = createHarness();
+    component.library.set(library(['book']));
+    expect(component.tabs().map((t) => t.mode)).toEqual(['all', 'series', 'authors', 'genres', 'likes']);
+    expect(component.sortOptions().map((o) => o.value)).toEqual(['title', 'author', 'series', 'added', 'published', 'progress']);
+  });
+
+  it('keeps the video tabs and sorts in a mixed library and adds Series and Authors', () => {
+    const { component } = createHarness();
+    component.library.set(library(['movie', 'book']));
+    expect(component.tabs().map((t) => t.mode)).toEqual(['all', 'suggestions', 'series', 'authors', 'genres', 'collections', 'likes']);
+    expect(component.sortOptions().map((o) => o.value)).toEqual(['title', 'year', 'added', 'rating']);
+  });
+
+  it('shows no book tab in a video library', () => {
+    const { component } = createHarness();
+    component.library.set(library(['movie']));
+    expect(component.tabs().map((t) => t.mode)).not.toContain('series');
+  });
+
+  it('sends the book filters with type=book, and not for a mixed library', async () => {
+    const { component } = createHarness();
+    const getAll = TestBed.inject(MediaService).getAll as ReturnType<typeof vi.fn>;
+    component.library.set(library(['book']));
+    component.bookFilters.set({ format: 'audio', language: 'fr', authorId: '1', narratorId: '2' });
+    component.filterWatched.set('inProgress');
+    component.sortBy.set('author');
+    await load(component, false);
+    expect(getAll.mock.calls[0][0]).toMatchObject({
+      type: 'book', format: 'audio', language: 'fr', authorId: 1, narratorId: 2, inProgress: true, sortBy: 'author',
+    });
+
+    getAll.mockClear();
+    component.library.set(library(['movie', 'book']));
+    await load(component, false);
+    const sent = getAll.mock.calls[0][0];
+    expect(sent.type).toBeUndefined();
+    expect(sent.format).toBeUndefined();
+    expect(sent.inProgress).toBeUndefined();
+  });
+
+  it('reloads when a book filter changes', async () => {
+    const { component } = createHarness();
+    component.library.set(library(['book']));
+    spyWindowScrollTo();
+    const getAll = TestBed.inject(MediaService).getAll as ReturnType<typeof vi.fn>;
+    component.setBookFilter('format', 'text');
+    expect(component.hasActiveFilters()).toBe(true);
+    await vi.waitFor(() => expect(getAll.mock.calls[0][0]).toMatchObject({ type: 'book', format: 'text' }));
+  });
+
+  it('loads the series of the library and opens one', async () => {
+    const { component } = createHarness();
+    component.library.set(library(['book']));
+    spyWindowScrollTo();
+    component.setViewMode('series');
+    await vi.waitFor(() => expect(component.seriesList()).toEqual([collectionSummaryFixture]));
+    const books = TestBed.inject(BooksApiService).collections as ReturnType<typeof vi.fn>;
+    expect(books).toHaveBeenCalledWith({ libraryId: 1, kind: 'book' });
+    component.openSeries(10);
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/collections', 10]);
+  });
+
+  it('folds the footer counters per kind', () => {
+    const { component } = createHarness();
+    component.list.setItems([bookMedia(1, true), bookMedia(2, false), media(3, 'Movie')], (m) => m.title);
+    expect(component.kindStats()).toEqual([
+      { labelKey: 'books_library.legend_with_file', done: 1, total: null },
+      { labelKey: 'legend.movie_files', done: 0, total: null },
+    ]);
   });
 });
