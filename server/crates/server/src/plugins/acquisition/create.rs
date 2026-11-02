@@ -115,22 +115,30 @@ fn entry(
     let served = |ns: Namespace| {
         st.metadata.available(ns) && st.metadata.get(ns).is_some_and(|p| p.supports(kind))
     };
-    let known: Vec<(Namespace, String)> = ids
+    let parsed: Vec<(Namespace, Option<String>)> = ids
         .iter()
-        .filter_map(|i| {
-            let ns = Namespace::parse(&i.provider)?;
-            Some((ns, ns.normalize(&i.value)?))
-        })
+        .filter_map(|i| Some((Namespace::parse(&i.provider)?, i.value.as_str())))
+        .map(|(ns, v)| (ns, ns.normalize(v)))
         .collect();
-    known
+    let known: Vec<(Namespace, String)> = parsed
+        .iter()
+        .filter_map(|(ns, v)| Some((*ns, v.clone()?)))
+        .collect();
+    let picked = known
         .iter()
         .find(|(ns, _)| ns.is_unique() && served(*ns))
         .or_else(|| known.iter().find(|(ns, _)| served(*ns)))
-        .cloned()
-        .ok_or_else(|| {
-            host_err(
-                "unsupported-provider",
-                "no id names the work for an available provider",
-            )
-        })
+        .cloned();
+    if picked.is_none() && parsed.iter().any(|(ns, v)| v.is_none() && served(*ns)) {
+        return Err(host_err(
+            "ERR_VALIDATION",
+            "an id is not valid for its namespace",
+        ));
+    }
+    picked.ok_or_else(|| {
+        host_err(
+            "unsupported-provider",
+            "no id names the work for an available provider",
+        )
+    })
 }

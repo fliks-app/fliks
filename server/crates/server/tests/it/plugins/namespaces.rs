@@ -25,8 +25,9 @@ async fn count(db: &PgPool, q: &str) -> i64 {
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrations = false)]
 async fn claims_follow_the_signer_rule(db: PgPool) {
+    fliks_server::db::migrate(&db).await.unwrap();
     assert_eq!(
         claim(&db, "org.x", None, &[ns("org.x:a")]).await.unwrap(),
         Ok(())
@@ -67,8 +68,9 @@ async fn claims_follow_the_signer_rule(db: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrations = false)]
 async fn delete_data_clears_one_plugin_only(db: PgPool) {
+    fliks_server::db::migrate(&db).await.unwrap();
     claim(&db, "org.x", None, &[ns("org.x:a")])
         .await
         .unwrap()
@@ -149,8 +151,9 @@ async fn delete_data_clears_one_plugin_only(db: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrations = false)]
 async fn the_shape_checks_refuse_malformed_plugin_namespaces(db: PgPool) {
+    fliks_server::db::migrate(&db).await.unwrap();
     for bad in [
         r#"INSERT INTO requests ("mediaType", kind, provider, "externalId", title) VALUES ('book', 'add', 'org.x:A', '1', 't')"#,
         r#"INSERT INTO requests ("mediaType", kind, provider, "externalId", title) VALUES ('book', 'add', 'org.x:a', '', 't')"#,

@@ -46,7 +46,7 @@
       {
         "ordinal": 5,
         "name": "pref",
-        "type_info": "Varchar",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "media",
