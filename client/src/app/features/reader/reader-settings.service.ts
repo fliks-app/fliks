@@ -16,6 +16,8 @@ export interface ReaderSettings {
   margins: ReaderMargins;
   /** Continuous scroll instead of pages. */
   scroll: boolean;
+  /** PDF page width as a multiple of the fit-to-width size. */
+  zoom: number;
 }
 
 export interface ThemeColors {
@@ -26,6 +28,7 @@ export interface ThemeColors {
 
 export const FONT_SIZE_RANGE = { min: 0.8, max: 2, step: 0.1 } as const;
 export const LINE_HEIGHT_RANGE = { min: 1.2, max: 2.2, step: 0.1 } as const;
+export const ZOOM_RANGE = { min: 0.5, max: 3, step: 0.25 } as const;
 export const READER_THEMES: readonly ReaderTheme[] = ['light', 'sepia', 'dark'];
 export const READER_FONTS: readonly ReaderFont[] = ['publisher', 'serif', 'sans'];
 export const READER_MARGINS: readonly ReaderMargins[] = ['narrow', 'normal', 'wide'];
@@ -37,6 +40,7 @@ export const READER_DEFAULTS: ReaderSettings = {
   lineHeight: 1.5,
   margins: 'normal',
   scroll: false,
+  zoom: 1,
 };
 
 const GUTTER_PX: Record<ReaderMargins, number> = { narrow: 12, normal: 32, wide: 64 };
@@ -99,6 +103,7 @@ export function sanitizeReaderSettings(raw: unknown): ReaderSettings {
     lineHeight: clamp(r['lineHeight'], LINE_HEIGHT_RANGE, READER_DEFAULTS.lineHeight),
     margins: oneOf(READER_MARGINS, r['margins'], READER_DEFAULTS.margins),
     scroll: typeof r['scroll'] === 'boolean' ? r['scroll'] : READER_DEFAULTS.scroll,
+    zoom: clamp(r['zoom'], ZOOM_RANGE, READER_DEFAULTS.zoom),
   };
 }
 

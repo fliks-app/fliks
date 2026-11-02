@@ -1,15 +1,22 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { HttpFetcher, Link, Manifest, Publication, type FetchImplementation, type Locator } from '@readium/shared';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SKIP_ERROR_TOAST } from '../../core/interceptors/error.interceptor';
 
-/** Where a reader stands: `progression` 0..1 over the whole book, `locator` a serialised Readium locator. */
+/** The item being read: its media, its id and the file whose beat carries the progress. */
+export interface ReaderTarget {
+  mediaId: number;
+  itemId: number;
+  fileId: number;
+}
+
+/** Where a reader stands: `progression` 0..1 over the whole book, `locator` a Readium locator (or a PDF page). */
 export interface ReaderProgress {
   progression: number;
-  locator: string;
+  locator: Record<string, unknown>;
 }
 
 export interface OpenedPublication {
@@ -17,11 +24,9 @@ export interface OpenedPublication {
   positions: Locator[];
 }
 
-/** Every server call of the reader, against `/api/books/{itemId}`:
- *  - `pub/manifest.json`: Readium web publication manifest, links `positions.json`;
- *  - `pub/positions.json`: the position list;
- *  - `pub/{zip path}`: the book's resources, sanitised;
- *  - `GET|PUT progress`: `{progression, locator}` of the signed-in user. */
+/** Every server call of the reader:
+ *  - `/api/books/{itemId}/pub/*`: Readium manifest, positions and sanitised resources (EPUB);
+ *  - `GET|PUT /api/playback/media/{mediaId}/state`: the progression and locator of the item. */
 @Injectable({ providedIn: 'root' })
 export class ReaderApiService {
   private readonly http = inject(HttpClient);
@@ -44,21 +49,24 @@ export class ReaderApiService {
     return { publication, positions: await publication.positionsFromManifest() };
   }
 
-  /** Null when the user has not started the book. */
-  async loadProgress(itemId: number): Promise<ReaderProgress | null> {
-    try {
-      return await firstValueFrom(
-        this.http.get<ReaderProgress>(`/api/books/${itemId}/progress`, { context: silent() }),
-      );
-    } catch (err) {
-      if (err instanceof HttpErrorResponse && err.status === 404) return null;
-      throw err;
-    }
+  /** Null when the user has not started the item. */
+  async loadProgress(t: ReaderTarget): Promise<Partial<ReaderProgress> | null> {
+    return firstValueFrom(
+      this.http.get<Partial<ReaderProgress> | null>(`/api/playback/media/${t.mediaId}/state`, {
+        params: { itemId: t.itemId },
+        context: silent(),
+      }),
+    );
   }
 
-  saveProgress(itemId: number, progress: ReaderProgress): Promise<void> {
+  /** A text beat names the item and carries no time; the server finishes the item at 0.99. */
+  saveProgress(t: ReaderTarget, p: ReaderProgress): Promise<void> {
     return firstValueFrom(
-      this.http.put<void>(`/api/books/${itemId}/progress`, progress, { context: silent() }),
+      this.http.put<void>(
+        `/api/playback/media/${t.mediaId}/state`,
+        { positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, ...p },
+        { context: silent() },
+      ),
     );
   }
 

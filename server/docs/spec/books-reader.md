@@ -1,6 +1,6 @@
 # Spec: EPUB reader routes (Readium manifest and sanitised resources)
 
-Scope: what the web reader reads of an EPUB edition: the Readium Web Publication manifest, the positions list and the resources of the archive. An EPUB comes from an indexer and its XHTML can carry script: served on the app origin it would act with the `fliks_access` cookie, so every resource is rewritten and served under a strict CSP (`plans/books-audiobooks.plan.md` section 3.8, spike `plans/reader-spike.md`). The package reader is `fliks_domain::books::package` (pure); the routes, the zip access and the rewriter are `fliks_server::books::reader`. The client reader is out of scope.
+Scope: what the web reader reads of an EPUB edition: the Readium Web Publication manifest, the positions list and the resources of the archive. An EPUB comes from an indexer and its XHTML can carry script: served on the app origin it would act with the `fliks_access` cookie, so every resource is rewritten and served under a strict CSP (`plans/books-audiobooks.plan.md` section 3.8, spike `plans/reader-spike.md`). The package reader is `fliks_domain::books::package` (pure); the routes, the zip access and the rewriter are `fliks_server::books::reader`. The client reader is described in the last section, as far as it constrains the server.
 
 ## Routes
 
@@ -48,3 +48,10 @@ Scope: what the web reader reads of an EPUB edition: the Readium Web Publication
 ## Known limits
 
 19. No `Range`, no cache validators, and the zip is opened on every request. `META-INF/encryption.xml` is not read: obfuscated fonts are served as stored. A manifest entry named `manifest.json` or `positions.json` at the archive root is shadowed by the two fixed routes. Requests made by the browser inside the frame carry the cookie only, so native bundles need a path token (decided with the client, 2.6).
+
+## Client reader
+
+20. The EPUB reader (Readium navigator) draws each chapter in an `iframe` whose `sandbox` is `allow-same-origin` only: no script of the book runs, and the toolkit's logic stays in the app realm. Links the book opens are limited to absolute `http`, `https`, `mailto` and `tel` URLs (`noopener,noreferrer`).
+21. The reader reads and writes the position of an item through the playback routes, never through a reader route: `GET /api/playback/media/:mediaId/state?itemId=` for `progression` and `locator`, `PUT` of the same path (the heartbeat of `item-delivery.md` rules 15 and 18-19, `mediaFileId` the EPUB or PDF file, no `sessionId`) debounced to one beat per pause.
+22. A PDF is read from the engine's data plane (`GET /api/stream/:fileId`, `item-delivery.md` rule 14) by pdf.js with its worker served from the app's own origin (`/pdfjs/pdf.worker.min.mjs`); its locator is `{ page }` and its `progression` is `(page - 1) / (pages - 1)`, so the last page finishes the book (rule 22 of `item-delivery.md`).
+23. pdf.js runs with `useWasm: false` and `enableXfa: false`, so the app CSP needs nothing for it: the worker script is `worker-src 'self'`, pages are drawn on canvases (`img-src`, `blob:` not needed), and the document is fetched with `connect-src 'self'`. `script-src` never gains `'unsafe-eval'`, `'wasm-unsafe-eval'` or `blob:`.

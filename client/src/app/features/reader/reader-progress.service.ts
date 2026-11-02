@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { ReaderApiService, type ReaderProgress } from './reader-api.service';
+import { ReaderApiService, type ReaderProgress, type ReaderTarget } from './reader-api.service';
 
 /** A page turn fires several position events; one save per pause is enough. */
 export const PROGRESS_DEBOUNCE_MS = 2000;
@@ -8,11 +8,11 @@ export const PROGRESS_DEBOUNCE_MS = 2000;
 @Injectable()
 export class ReaderProgressService {
   private readonly api = inject(ReaderApiService);
-  private pending: { itemId: number; progress: ReaderProgress } | null = null;
+  private pending: { target: ReaderTarget; progress: ReaderProgress } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  report(itemId: number, progress: ReaderProgress): void {
-    this.pending = { itemId, progress };
+  report(target: ReaderTarget, progress: ReaderProgress): void {
+    this.pending = { target, progress };
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.flush(), PROGRESS_DEBOUNCE_MS);
   }
@@ -25,7 +25,7 @@ export class ReaderProgressService {
     this.pending = null;
     if (!send) return;
     try {
-      await this.api.saveProgress(send.itemId, send.progress);
+      await this.api.saveProgress(send.target, send.progress);
     } catch {
       // Best effort: reading goes on without a server.
     }

@@ -57,9 +57,9 @@ export const routes: Routes = [
       import('./features/player/player').then((m) => m.PlayerComponent),
   },
   {
-    path: 'read/:itemId',
+    path: 'read/:mediaId/:itemId',
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard, noTvGuard],
-    loadComponent: () => import('./features/reader/reader').then((m) => m.ReaderComponent),
+    loadComponent: () => import('./features/reader/reader-page').then((m) => m.ReaderPageComponent),
   },
   {
     path: 'party/:token',

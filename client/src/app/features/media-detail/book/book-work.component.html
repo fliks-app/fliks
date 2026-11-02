@@ -92,18 +92,30 @@
       @if (families().length) {
         <div class="mt-4 flex flex-wrap items-center gap-2">
           @for (f of families(); track f; let first = $first) {
-            <button
-              type="button"
-              class="btn"
-              [class.btn-primary]="first"
-              [class.btn-outline]="!first"
-              [disabled]="f === 'text'"
-              data-testid="format-button"
-              [title]="f === 'text' ? ('books_work.soon' | translate) : ''"
-              (click)="listen()"
-            >
-              {{ (f === 'text' ? 'books_work.read' : 'books_work.listen') | translate }}
-            </button>
+            @if (f === 'text' && readLink(); as readRoute) {
+              <a
+                class="btn"
+                [class.btn-primary]="first"
+                [class.btn-outline]="!first"
+                [routerLink]="readRoute"
+                data-testid="format-button"
+              >
+                {{ 'books_work.read' | translate }}
+              </a>
+            } @else {
+              <button
+                type="button"
+                class="btn"
+                [class.btn-primary]="first"
+                [class.btn-outline]="!first"
+                [disabled]="f === 'text'"
+                data-testid="format-button"
+                [title]="f === 'text' ? ('books_work.soon' | translate) : ''"
+                (click)="listen()"
+              >
+                {{ (f === 'text' ? 'books_work.read' : 'books_work.listen') | translate }}
+              </button>
+            }
           }
           @if (percent() !== null) {
             <span class="text-sm text-base-content/60">

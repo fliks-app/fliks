@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  input,
   OnDestroy,
   ViewEncapsulation,
   afterNextRender,
@@ -12,7 +13,6 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideArrowLeft, LucideListTree, LucideSettings, LucideX } from '@lucide/angular';
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from '@readium/navigator';
@@ -23,7 +23,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { provideCssSelectorGenerator, sandboxContentFrames } from './frame-hardening';
 import { bookProgression } from './book-progress';
 import { allowedExternalLink } from './link-scheme';
-import { ReaderApiService } from './reader-api.service';
+import { ReaderApiService, type ReaderTarget } from './reader-api.service';
 import { READER_KEY_BINDINGS, readerKeyAction, type ReaderKeyAction } from './reader-keys';
 import { ReaderProgressService } from './reader-progress.service';
 import {
@@ -72,8 +72,9 @@ const sliderValue = (e: Event): number => Number((e.target as HTMLInputElement).
   },
 })
 export class ReaderComponent implements OnDestroy {
+  readonly target = input.required<ReaderTarget>();
+
   private readonly api = inject(ReaderApiService);
-  private readonly route = inject(ActivatedRoute);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly navbar = inject(NavbarService);
@@ -82,7 +83,6 @@ export class ReaderComponent implements OnDestroy {
   private readonly progress = inject(ReaderProgressService);
 
   private readonly pageHost = viewChild.required<ElementRef<HTMLElement>>('pageHost');
-  private readonly itemId = Number(this.route.snapshot.paramMap.get('itemId'));
   private navigator: EpubNavigator | null = null;
   private positions: Locator[] = [];
   private stopSandbox: (() => void) | null = null;
@@ -137,8 +137,8 @@ export class ReaderComponent implements OnDestroy {
   private async open(): Promise<void> {
     try {
       const [{ publication, positions }, saved] = await Promise.all([
-        this.api.open(this.itemId),
-        this.api.loadProgress(this.itemId),
+        this.api.open(this.target().itemId),
+        this.api.loadProgress(this.target()),
       ]);
       if (this.destroyed) return;
       this.positions = positions;
@@ -189,10 +189,7 @@ export class ReaderComponent implements OnDestroy {
     const total = bookProgression(locator, this.positions);
     this.totalProgression.set(total);
     this.currentHref.set(pathOf(locator.href));
-    this.progress.report(this.itemId, {
-      progression: total,
-      locator: JSON.stringify(locator.serialize()),
-    });
+    this.progress.report(this.target(), { progression: total, locator: locator.serialize() as Record<string, unknown> });
   }
 
   protected onKeydown(e: KeyboardEvent): void {
@@ -219,6 +216,18 @@ export class ReaderComponent implements OnDestroy {
         break;
       case 'prev':
         nav?.goBackward(false, noop);
+        break;
+      case 'start':
+        if (this.positions[0]) nav?.go(this.positions[0], false, noop);
+        break;
+      case 'end':
+        if (this.positions.length) nav?.go(this.positions[this.positions.length - 1], false, noop);
+        break;
+      case 'toc':
+        this.openPanel('toc');
+        break;
+      case 'settings':
+        this.openPanel('settings');
         break;
       case 'close':
         if (this.panel()) this.closePanel();
@@ -271,10 +280,10 @@ export class ReaderComponent implements OnDestroy {
   }
 }
 
-function parseLocator(raw: string | undefined): Locator | undefined {
-  if (!raw) return undefined;
+function parseLocator(raw: unknown): Locator | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
   try {
-    return Locator.deserialize(JSON.parse(raw));
+    return Locator.deserialize(raw as never);
   } catch {
     return undefined;
   }

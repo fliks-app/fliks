@@ -3958,6 +3958,8 @@
     "layout": "Disposição",
     "layout_paginated": "Páginas",
     "layout_scroll": "Deslocamento",
-    "open_failed": "Não foi possível abrir este livro."
+    "open_failed": "Não foi possível abrir este livro.",
+    "zoom_out": "Reduzir",
+    "zoom_in": "Ampliar"
   }
 }
