@@ -64,4 +64,4 @@ ALTER TABLE "edition_external_ids" DROP CONSTRAINT "CK_edition_external_ids_prov
 
 -- A preferred provider may now be a plugin namespace (up to 84 bytes).
 ALTER TABLE "media" ALTER COLUMN "preferredProvider" TYPE text;
-ALTER TABLE "seasons" ALTER COLUMN "preferredProvider" TYPE text;
+ALTER TABLE "item_groups" ALTER COLUMN "preferredProvider" TYPE text;

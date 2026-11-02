@@ -137,7 +137,7 @@ pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
         "DELETE FROM discovered_works WHERE provider = ANY($1)",
         r#"UPDATE libraries SET "preferredProvider" = NULL WHERE "preferredProvider" = ANY($1)"#,
         r#"UPDATE media SET "preferredProvider" = NULL WHERE "preferredProvider" = ANY($1)"#,
-        r#"UPDATE seasons SET "preferredProvider" = NULL WHERE "preferredProvider" = ANY($1)"#,
+        r#"UPDATE item_groups SET "preferredProvider" = NULL WHERE "preferredProvider" = ANY($1)"#,
         "DELETE FROM provider_namespaces WHERE name = ANY($1)",
     ] {
         sqlx::query(sqlx::AssertSqlSafe(q))
