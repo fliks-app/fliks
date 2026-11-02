@@ -1,0 +1,42 @@
+@if (loading()) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (detail(); as d) {
+  <div class="flex flex-col gap-6">
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="page-title">{{ d.name }}</h1>
+      @if (nextUp(); as next) {
+        <a class="btn btn-primary btn-sm" [routerLink]="next">{{ 'books_people.continue' | translate }}</a>
+      }
+    </div>
+
+    @if (tiles().length === 0) {
+      <p class="text-base-content/50 text-center py-6">{{ 'books_people.no_entries' | translate }}</p>
+    } @else {
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+        @for (t of tiles(); track $index) {
+          @if (t.kind === 'entry') {
+            <app-media-card
+              [imageUrl]="t.entry.media.posterUrl"
+              [title]="t.entry.media.title"
+              [subtitle]="t.entry.media.year?.toString()"
+              [topLeftBadge]="t.entry.positionLabel ? '#' + t.entry.positionLabel : undefined"
+              [status]="t.entry.media.watched ? 'watched' : null"
+              [progressPercent]="t.entry.media.progressPercent"
+              [highlighted]="t.entry.media.id === d.nextUp"
+              [link]="link(t.entry)"
+            />
+          } @else {
+            <div
+              class="aspect-[2/3] rounded-lg border border-dashed border-base-content/20 flex items-center justify-center text-center text-xs text-base-content/40 p-2"
+              data-missing
+            >
+              {{ 'books_people.missing_position' | translate: { position: t.position } }}
+            </div>
+          }
+        }
+      </div>
+    }
+  </div>
+}

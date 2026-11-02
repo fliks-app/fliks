@@ -13,6 +13,7 @@ import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { PersonsApiService, Person } from '../../core/services/api/persons-api.service';
+import { BooksApiService } from '../../core/services/api/books-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
@@ -30,6 +31,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 })
 export class PersonsComponent implements OnInit, OnDestroy {
   private readonly personsApi = inject(PersonsApiService);
+  private readonly booksApi = inject(BooksApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
@@ -48,6 +50,11 @@ export class PersonsComponent implements OnInit, OnDestroy {
   readonly searchQuery = signal('');
   readonly filterRole = signal('');
   readonly alphabet = ALPHABET;
+  /** `?role=author|narrator` lists the book people of the library instead of the cast and crew. */
+  readonly bookRole = (['author', 'narrator'] as const).find(
+    (r) => r === this.route.snapshot.queryParamMap.get('role'),
+  );
+  readonly workCounts = new Map<number, number>();
 
   private allResults: Person[] = [];
 
@@ -93,6 +100,7 @@ export class PersonsComponent implements OnInit, OnDestroy {
 
   private syncQueryParams() {
     const params: Record<string, string> = {};
+    if (this.bookRole) params['role'] = this.bookRole;
     if (this.searchQuery()) params['q'] = this.searchQuery();
     void this.router.navigate([], { queryParams: params, replaceUrl: true });
     this.saveFilters();
@@ -115,13 +123,24 @@ export class PersonsComponent implements OnInit, OnDestroy {
   private async load(silent = false) {
     if (!silent) this.loading.set(true);
     try {
-      const results = await this.personsApi.search(this.searchQuery());
+      const results = this.bookRole ? await this.loadBookPeople(this.bookRole) : await this.personsApi.search(this.searchQuery());
       results.sort((a, b) => a.name.localeCompare(b.name));
       this.allResults = results;
       this.applyFilter();
     } finally {
       if (!silent) this.loading.set(false);
     }
+  }
+
+  private async loadBookPeople(role: 'author' | 'narrator'): Promise<Person[]> {
+    const params: Record<string, string> = { role };
+    if (this.searchQuery()) params['q'] = this.searchQuery();
+    const items = await this.booksApi.persons(params);
+    items.forEach((i) => this.workCounts.set(i.id, i.workCount));
+    return items.map((i) => ({
+      id: i.id, tmdbId: null, name: i.name, avatarUrl: i.avatarUrl, biography: null, birthday: null,
+      deathday: null, placeOfBirth: null, knownForDepartment: null, departments: [], metadataRefreshedAt: null,
+    }));
   }
 
   private applyFilter() {
