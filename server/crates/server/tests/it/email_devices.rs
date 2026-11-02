@@ -15,7 +15,7 @@ use tokio::{
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
-const BOOK: &[u8] = b"PK\x03\x04 fake epub bytes";
+const BOOK: &[u8] = b"\xff\xfe\xfd\xfc\xfb\xfa\xf9\xf8\xf7\xf6\xf5\xf4";
 
 struct Dir(PathBuf);
 
@@ -394,10 +394,7 @@ async fn a_book_is_mailed_with_its_file_and_logged(pool: PgPool) {
     );
     assert!(!head.to_lowercase().contains("bcc:"));
     assert!(mail.contains(r#"filename="a.epub""#), "{mail}");
-    assert!(
-        mail.contains("UEsDBCBmYWtlIGVwdWIgYnl0ZXM="),
-        "base64 of the file"
-    );
+    assert!(mail.contains("//79/Pv6+fj39vX0"), "base64 of the file");
     let (_, log) = c.call("GET", "/api/book-sends", &c.a, None).await;
     assert_eq!(
         (
