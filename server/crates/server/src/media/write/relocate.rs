@@ -68,23 +68,19 @@ struct Move {
     keep: bool,
 }
 
-#[derive(Serialize, Deserialize)]
 struct Journal {
     committed: bool,
     moves: Vec<Move>,
 }
 
-fn journal_key(id: i32) -> String {
-    format!("media_move:{id}")
-}
-
 async fn save_journal(db: impl sqlx::PgExecutor<'_>, id: i32, j: &Journal) -> sqlx::Result<()> {
     sqlx::query(
-        r#"INSERT INTO app_settings (key, value) VALUES ($1, $2)
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()"#,
+        r#"INSERT INTO media_moves ("mediaId", plan, committed) VALUES ($1, $2, $3)
+           ON CONFLICT ("mediaId") DO UPDATE SET plan = EXCLUDED.plan, committed = EXCLUDED.committed"#,
     )
-    .bind(journal_key(id))
-    .bind(serde_json::to_string(j).unwrap_or_default())
+    .bind(id)
+    .bind(sqlx::types::Json(&j.moves))
+    .bind(j.committed)
     .execute(db)
     .await
     .map(drop)
@@ -319,22 +315,19 @@ fn unlink_sources(id: i32, moves: Vec<Move>) -> Vec<Move> {
 /// A committed move whose sources could not all be unlinked (a crash, a busy file) finishes here
 /// on the media's next move; a source a row points at again is left alone.
 async fn finish_pending(st: &AppState, id: i32) {
-    let raw =
-        sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_settings WHERE key = $1")
-            .bind(journal_key(id))
-            .fetch_optional(&st.db)
-            .await
-            .ok()
-            .flatten()
-            .flatten();
-    let Some(j) = raw
-        .and_then(|r| serde_json::from_str::<Journal>(&r).ok())
-        .filter(|j| j.committed)
-    else {
+    let Some((moves, true)) = sqlx::query_as::<_, (sqlx::types::Json<Vec<Move>>, bool)>(
+        r#"SELECT plan, committed FROM media_moves WHERE "mediaId" = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten()
+    .map(|(m, c)| (m.0, c)) else {
         return;
     };
     let mut todo = Vec::new();
-    for m in j.moves.into_iter().filter(|m| !m.keep) {
+    for m in moves.into_iter().filter(|m| !m.keep) {
         let held = sqlx::query_scalar::<_, bool>(
             r#"SELECT EXISTS (SELECT 1 FROM media_files f JOIN library_folders lf ON lf.id = f."folderId"
                WHERE lf.path = $1 AND f."relativePath" = $2)"#,
@@ -354,8 +347,8 @@ async fn finish_pending(st: &AppState, id: i32) {
 /// Drops the journal once every source is gone, else keeps the sources still to unlink.
 async fn settle_journal(st: &AppState, id: i32, left: Vec<Move>) {
     let r = if left.is_empty() {
-        sqlx::query("DELETE FROM app_settings WHERE key = $1")
-            .bind(journal_key(id))
+        sqlx::query(r#"DELETE FROM media_moves WHERE "mediaId" = $1"#)
+            .bind(id)
             .execute(&st.db)
             .await
             .map(drop)

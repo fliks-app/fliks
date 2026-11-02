@@ -1128,18 +1128,16 @@ async fn a_source_left_after_the_commit_is_unlinked_by_the_next_run(pool: PgPool
     assert_eq!(move_to(&c, id, f2).await, 202);
     settled(&c).await;
     let journal = || async {
-        sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_settings WHERE key = $1")
-            .bind(format!("media_move:{id}"))
-            .fetch_optional(&pool)
-            .await
-            .unwrap()
-            .flatten()
+        sqlx::query_as::<_, (String, bool)>(
+            r#"SELECT plan::text, committed FROM media_moves WHERE "mediaId" = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
     };
-    let j = journal().await.expect("the pending unlink is journaled");
-    assert!(
-        j.contains("\"committed\":true") && j.contains("0.mkv"),
-        "{j}"
-    );
+    let (plan, committed) = journal().await.expect("the pending unlink is journaled");
+    assert!(committed && plan.contains("0.mkv"), "{plan}");
     assert!(src_dir.join("0.mkv").exists());
     std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(move_to(&c, id, f2).await, 202);
