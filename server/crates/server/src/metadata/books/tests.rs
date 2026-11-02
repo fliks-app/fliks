@@ -26,30 +26,31 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-const SECRET: &str = "0123456789abcdef0123456789abcdef";
-const ISBN: &str = "9780306406157";
+pub(super) const SECRET: &str = "0123456789abcdef0123456789abcdef";
+pub(super) const ISBN: &str = "9780306406157";
 const P: Priority = Priority::Interactive;
 
 #[derive(Default)]
-struct Fake {
+pub(super) struct Fake {
     id: Option<ExternalProvider>,
-    works: HashMap<String, Value>,
+    pub(super) works: HashMap<String, Value>,
+    pub(super) children: HashMap<String, Vec<Value>>,
     editions: HashMap<(ExternalProvider, String), Value>,
     finds: HashMap<(ExternalProvider, String), String>,
-    found: Vec<Value>,
-    broken: bool,
+    pub(super) found: Vec<Value>,
+    pub(super) broken: bool,
     calls: Mutex<Vec<String>>,
 }
 
 impl Fake {
-    fn new(id: ExternalProvider) -> Self {
+    pub(super) fn new(id: ExternalProvider) -> Self {
         Self {
             id: Some(id),
             ..Self::default()
         }
     }
 
-    fn edition(mut self, ns: ExternalProvider, v: &str, record: Value) -> Self {
+    pub(super) fn edition(mut self, ns: ExternalProvider, v: &str, record: Value) -> Self {
         self.editions.insert((ns, v.into()), record);
         self
     }
@@ -83,6 +84,9 @@ impl MetadataProvider for Fake {
         _: Priority,
     ) -> Call<'a, Vec<Value>> {
         self.log("search");
+        if self.broken {
+            return down();
+        }
         let r = self.found.clone();
         Box::pin(async move { Ok(r) })
     }
@@ -100,11 +104,12 @@ impl MetadataProvider for Fake {
     fn fetch_children<'a>(
         &'a self,
         _: MediaKind,
-        _: &'a str,
+        id: &'a str,
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Vec<Value>> {
-        Box::pin(async { Ok(vec![]) })
+        let r = self.children.get(id).cloned().unwrap_or_default();
+        Box::pin(async move { Ok(r) })
     }
     fn child_stubs<'a>(
         &'a self,
@@ -163,7 +168,7 @@ impl MetadataProvider for Fake {
     }
 }
 
-fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
+pub(super) fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
     let mut st = AppState::new(db.clone(), Config::from_lookup(|_| None), SECRET);
     let m: &mut Metadata = Arc::get_mut(&mut st.metadata).unwrap();
     for f in fakes {
@@ -172,7 +177,7 @@ fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
     st
 }
 
-fn anchor() -> Fake {
+pub(super) fn anchor() -> Fake {
     let mut f = Fake::new(OpenLibrary);
     f.works.insert(
         "OL1W".into(),

@@ -1,0 +1,126 @@
+{
+  "engine": "down",
+  "name": "book-metadata-import-400",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "OL1M",
+        "provider": "openlibrary",
+        "type": "book"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "externalId must be an Open Library work id"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "OL1W",
+        "provider": "googlebooks",
+        "type": "book"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "provider must be one of the following values: openlibrary"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "OL1W",
+        "folderId": 999999,
+        "libraryId": 3,
+        "provider": "openlibrary",
+        "type": "book"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.folder_not_in_library",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "OL1W",
+        "libraryId": 3,
+        "provider": "openlibrary",
+        "qualityProfileId": 1,
+        "type": "book"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property qualityProfileId should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "OL1W",
+        "libraryId": 999,
+        "provider": "openlibrary",
+        "type": "book"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "externalId": "OL1W",
+        "provider": "openlibrary",
+        "type": "book"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    }
+  ]
+}

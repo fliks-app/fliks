@@ -1,0 +1,80 @@
+{
+  "engine": "down",
+  "name": "book-metadata-sources-read",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "editions": [
+            {
+              "editionId": 101,
+              "ids": [
+                {
+                  "provider": "isbn",
+                  "value": "9780000000002"
+                }
+              ]
+            }
+          ],
+          "work": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "editions": [
+            {
+              "editionId": 101,
+              "ids": [
+                {
+                  "provider": "isbn",
+                  "value": "9780000000002"
+                }
+              ]
+            },
+            {
+              "editionId": 102,
+              "ids": []
+            }
+          ],
+          "work": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #104 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/104/sources"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/media/101/sources"
+    }
+  ]
+}

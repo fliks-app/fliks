@@ -1,0 +1,145 @@
+{
+  "engine": "down",
+  "name": "book-metadata-sources-put-400",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "level": "work",
+        "provider": "asin",
+        "value": "B000000001"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "provider must be one of the following values: openlibrary"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "level": "work",
+        "provider": "openlibrary",
+        "value": "OL1M"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "value must be an Open Library work id"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "level": "edition",
+        "provider": "isbn",
+        "value": "9780306406157"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "editionId must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "editionId": 101,
+        "level": "edition",
+        "provider": "isbn",
+        "value": "123"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "value is not a isbn edition id"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "extra": 1,
+        "level": "work",
+        "provider": "openlibrary",
+        "value": "OL1W"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "user",
+      "body": {
+        "level": "work",
+        "provider": "openlibrary",
+        "value": "OL1W"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "level": "work",
+        "provider": "openlibrary",
+        "value": "OL1W"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    }
+  ]
+}

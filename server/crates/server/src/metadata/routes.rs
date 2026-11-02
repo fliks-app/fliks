@@ -25,12 +25,12 @@ use fliks_domain::{
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-type Pairs = Query<Vec<(String, String)>>;
-type Res = Result<Json<Value>, AppError>;
+pub(crate) type Pairs = Query<Vec<(String, String)>>;
+pub(crate) type Res = Result<Json<Value>, AppError>;
 
 pub fn router() -> Router<AppState> {
     let m = "/api/metadata";
-    Router::new()
+    super::books::routes::routes(Router::new())
         .route(&format!("{m}/search/movie"), get(search_movie))
         .route(&format!("{m}/search/tv"), get(search_tv))
         .route(&format!("{m}/trending/movie"), get(trending_movie))
@@ -65,7 +65,7 @@ pub fn router() -> Router<AppState> {
 }
 
 /// A bare `@Query` string; a repeated key is an array to the pipe, joined here (only `q` rejects it).
-fn bare(pairs: &[(String, String)], key: &str) -> Option<String> {
+pub(crate) fn bare(pairs: &[(String, String)], key: &str) -> Option<String> {
     let v: Vec<&str> = pairs
         .iter()
         .filter(|(k, _)| k == key)
@@ -74,7 +74,7 @@ fn bare(pairs: &[(String, String)], key: &str) -> Option<String> {
     (!v.is_empty()).then(|| v.join(","))
 }
 
-fn unavailable(what: &str, provider: ExternalProvider, e: &Upstream) -> AppError {
+pub(crate) fn unavailable(what: &str, provider: ExternalProvider, e: &Upstream) -> AppError {
     AppError::with_message(
         StatusCode::SERVICE_UNAVAILABLE,
         format!(
@@ -86,7 +86,7 @@ fn unavailable(what: &str, provider: ExternalProvider, e: &Upstream) -> AppError
 }
 
 /// An upstream 404 on a detail route is a 404, everything else a 503.
-fn fail(provider: ExternalProvider, e: &Upstream, detail: bool) -> AppError {
+pub(crate) fn fail(provider: ExternalProvider, e: &Upstream, detail: bool) -> AppError {
     if detail && e.is_not_found() {
         return AppError::not_found("not_found");
     }
@@ -186,7 +186,7 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
 
 type MediaIds = (i32, Option<i32>, Option<i32>);
 
-async fn lang(st: &AppState) -> Result<Resolved, AppError> {
+pub(crate) async fn lang(st: &AppState) -> Result<Resolved, AppError> {
     Ok(st.metadata.lang.resolve(None).await?)
 }
 
@@ -395,7 +395,7 @@ fn target(md: &Metadata, provider: &str, id: &str) -> Result<(ExternalProvider, 
     Ok((p, i64::from(int_param(id)?)))
 }
 
-type Ids = Result<PathParams<(String, String)>, AppError>;
+pub(crate) type Ids = Result<PathParams<(String, String)>, AppError>;
 
 async fn details(st: &AppState, p: ExternalProvider, kind: MediaKind, id: i64) -> Res {
     let l = lang(st).await?;
