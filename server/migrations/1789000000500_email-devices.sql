@@ -1,4 +1,4 @@
--- Addresses a user mails books to (Kindle, Kobo, PocketBook), and the log of those mailings.
+-- Addresses a user mails books to (Kindle, PocketBook), and the log of those mailings.
 CREATE TABLE "email_devices" (
   "id" serial PRIMARY KEY,
   "userId" integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,

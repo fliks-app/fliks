@@ -47,6 +47,7 @@ pub fn parse_address(s: &str) -> Option<Address> {
         .then(|| s.parse().ok())?
 }
 
+/// `file_name` is already an `attachment_name`.
 /// The envelope and the wire bytes, so the message and the file behind it are freed before the send.
 pub fn book_raw(
     from: &Mailbox,
@@ -66,7 +67,7 @@ fn book(
     mime: &str,
     data: Vec<u8>,
 ) -> Result<Message, String> {
-    let name = attachment_name(file_name);
+    let name = file_name.to_owned();
     let content_type = ContentType::parse(mime).map_err(|e| e.to_string())?;
     Message::builder()
         .from(from.clone())
@@ -121,7 +122,7 @@ mod tests {
         let (_, raw) = book_raw(
             &from,
             to,
-            "x/y\r\nBcc: z@example.com.epub",
+            &attachment_name("x/y\r\nBcc: z@example.com.epub"),
             "application/epub+zip",
             b"PK".to_vec(),
         )

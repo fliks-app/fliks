@@ -4,6 +4,7 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { EmailDevice, EmailDevicesApiService } from '../../core/services/api/email-devices-api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { AccountEmailDevicesComponent } from './email-devices';
 
@@ -31,6 +32,7 @@ function setup(canSend = true) {
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: EmailDevicesApiService, useValue: api },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => p === 'settings.access' } },
       { provide: ConfirmationService, useValue: { confirm: async () => true } },
     ],
   });
@@ -48,6 +50,11 @@ describe('AccountEmailDevicesComponent', () => {
     await cmp.create();
     expect(api.create).toHaveBeenCalledWith({ name: 'Kitchen', kind: 'kindle', address: 'me@kindle.com' });
     expect(cmp.name()).toBe('');
+  });
+
+  it('offers the other kind only to who manages settings', () => {
+    const { cmp } = setup();
+    expect(cmp.kinds).toContain('other');
   });
 
   it('knows when the role cannot send', async () => {

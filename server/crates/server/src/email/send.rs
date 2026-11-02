@@ -26,8 +26,8 @@ const PER_HOUR: i64 = 20;
 const IN_FLIGHT: i64 = 3;
 const RECENT: i64 = 20;
 const ERROR_MAX: usize = 300;
-/// Mails build the whole attachment in memory, so only a few run at once.
-static SLOTS: Semaphore = Semaphore::const_new(2);
+/// A mail holds the file, its base64 body and the wire copy (3-4 times the file), so one at a time.
+static SLOTS: Semaphore = Semaphore::const_new(1);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,29 +78,26 @@ pub async fn send(
     if file.size > smtp.max_bytes {
         return Err(AppError::payload_too_large("send_to_device.error_too_big"));
     }
-    let relative = sqlx::query_scalar!(
-        r#"SELECT "relativePath" FROM media_files WHERE id = $1"#,
-        file.id
-    )
-    .fetch_one(&st.db)
-    .await?;
-    let name = message::attachment_name(&relative);
+    let name = message::attachment_name(&file.relative_path);
     let mut tx = st.db.begin().await?;
     // The user row serialises two requests, so the limits hold.
     sqlx::query_scalar!(
-        r#"SELECT id FROM users WHERE id = $1 FOR UPDATE"#,
+        r#"SELECT id FROM users WHERE id = $1 FOR NO KEY UPDATE"#,
         a.user.id
     )
     .fetch_one(&mut *tx)
     .await?;
     let device = sqlx::query!(
-        r#"SELECT name, address, formats FROM email_devices WHERE id = $1 AND "userId" = $2"#,
+        r#"SELECT name, kind, address, formats FROM email_devices WHERE id = $1 AND "userId" = $2"#,
         id,
         a.user.id
     )
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| AppError::not_found("email_devices.error_unknown"))?;
+    if device.kind == "other" && !a.perms.can(Action::Manage, &Subject::Settings) {
+        return Err(AppError::forbidden("email_devices.error_kind_forbidden"));
+    }
     if !device.formats.iter().any(|f| f == ext) {
         return Err(AppError::bad_request("send_to_device.error_format"));
     }
@@ -144,6 +141,7 @@ pub async fn send(
         id: row.id,
         path: file.absolute,
         name: row.file_name.clone(),
+        size: file.size,
         mime: book_format(&file.ext).unwrap_or("application/octet-stream"),
         to: device.address,
     };
@@ -155,6 +153,7 @@ struct Job {
     id: i32,
     path: PathBuf,
     name: String,
+    size: u64,
     mime: &'static str,
     to: String,
 }
@@ -211,17 +210,20 @@ async fn deliver(st: &AppState, job: Job) -> Result<(), Failure> {
         .map_err(|e| fail("internal", e))?
         .ok_or_else(|| fail("not_configured", "smtp no longer configured"))?;
     let mut data = Vec::new();
-    tokio::fs::File::open(&job.path)
+    let read = async {
+        tokio::fs::File::open(&job.path)
+            .await?
+            .take(smtp.max_bytes + 1)
+            .read_to_end(&mut data)
+            .await
+    };
+    tokio::time::timeout(Smtp::budget(job.size as usize), read)
         .await
-        .map_err(|e| fail("file_unreadable", e))?
-        .take(smtp.max_bytes + 1)
-        .read_to_end(&mut data)
-        .await
+        .map_err(|_| fail("file_unreadable", "file read timed out"))?
         .map_err(|e| fail("file_unreadable", e))?;
     if data.len() as u64 > smtp.max_bytes {
         return Err(fail("too_big", "file grew past the limit"));
     }
-    let budget = Smtp::budget(data.len());
     let to = message::parse_address(&job.to).ok_or_else(|| fail("internal", "stored address"))?;
     let from = smtp.from.clone();
     // Encoding the attachment is CPU work, so it stays off the async workers.
@@ -232,7 +234,7 @@ async fn deliver(st: &AppState, job: Job) -> Result<(), Failure> {
     .map_err(|e| fail("internal", e))?
     .map_err(|e| fail("internal", e))?;
     let transport = smtp.transport().map_err(|e| fail("not_configured", e))?;
-    match tokio::time::timeout(budget, transport.send_raw(&envelope, &raw)).await {
+    match tokio::time::timeout(Smtp::budget(raw.len()), transport.send_raw(&envelope, &raw)).await {
         Err(_) => Err(fail("timeout", "smtp i/o timed out")),
         Ok(Ok(_)) => Ok(()),
         Ok(Err(e)) if e.is_permanent() || e.is_transient() => Err(fail("rejected", e)),
@@ -291,9 +293,9 @@ pub async fn test_send(
     let outcome = async {
         let mail = message::test(&smtp.from, to)?;
         let transport = smtp.transport()?;
-        transport
-            .send(mail)
+        tokio::time::timeout(Smtp::budget(0), transport.send(mail))
             .await
+            .map_err(|_| "the mail server took too long".to_owned())?
             .map(drop)
             .map_err(|e| e.to_string())
     }

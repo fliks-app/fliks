@@ -16,7 +16,7 @@ pub const KEYS: [&str; 7] = [
     "smtp_from",
     "smtp_max_attachment_mb",
 ];
-/// Amazon's own limit; also what bounds the memory of a mail (about 2.4 times the file).
+/// Amazon's own limit; a mail holds 3-4 times the file in memory.
 const MAX_MB: u64 = 50;
 const TIMEOUT: Duration = Duration::from_secs(30);
 

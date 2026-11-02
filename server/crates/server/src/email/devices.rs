@@ -161,7 +161,7 @@ pub async fn create(
     let mut tx = st.db.begin().await?;
     // The user row serialises two creations, so the cap holds.
     sqlx::query_scalar!(
-        r#"SELECT id FROM users WHERE id = $1 FOR UPDATE"#,
+        r#"SELECT id FROM users WHERE id = $1 FOR NO KEY UPDATE"#,
         a.user.id
     )
     .fetch_one(&mut *tx)

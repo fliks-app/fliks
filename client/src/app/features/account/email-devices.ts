@@ -9,6 +9,7 @@ import {
   EmailDeviceKind,
   EmailDevicesApiService,
 } from '../../core/services/api/email-devices-api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 
@@ -19,12 +20,16 @@ import { ToastService } from '../../core/services/toast.service';
   templateUrl: './email-devices.html',
 })
 export class AccountEmailDevicesComponent implements OnInit {
+  private readonly auth = inject(AuthService);
   private readonly api = inject(EmailDevicesApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  readonly kinds: EmailDeviceKind[] = ['kindle', 'pocketbook', 'other'];
+  /** `other` takes any address, so the server keeps it to who manages settings. */
+  readonly kinds: EmailDeviceKind[] = this.auth.hasPermission('settings.access')
+    ? ['kindle', 'pocketbook', 'other']
+    : ['kindle', 'pocketbook'];
   readonly enabled = signal(true);
   readonly canSend = signal(true);
   readonly devices = signal<EmailDevice[]>([]);

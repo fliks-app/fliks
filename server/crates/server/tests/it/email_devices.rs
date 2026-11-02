@@ -701,3 +701,26 @@ async fn a_stuck_send_stops_counting_as_unfinished_after_15_minutes(pool: PgPool
     .unwrap();
     assert_eq!(c.send(&c.a, dev, 1).await.0, 202);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_send_to_an_other_device_needs_settings_access(pool: PgPool) {
+    let c = ctx(pool, "other").await;
+    let (port, _) = smtp("250 queued").await;
+    c.configure(port).await;
+    sqlx::query(
+        r#"INSERT INTO email_devices ("userId", name, kind, address, formats)
+           VALUES (2, 'Any', 'other', 'x@example.com', '{epub}')"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let id: i32 = sqlx::query_scalar("SELECT id FROM email_devices")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let (s, b) = c.send(&c.a, i64::from(id), 1).await;
+    assert_eq!(
+        (s, b["message"].as_str()),
+        (403, Some("email_devices.error_kind_forbidden"))
+    );
+}
