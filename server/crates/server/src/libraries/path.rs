@@ -91,27 +91,31 @@ pub fn normalize(path: &str) -> String {
 }
 
 /// Boot check: warns for every pair of folders of different libraries that name one directory
-/// (case, symlink or bind-mount variants); nothing is changed.
+/// (case, symlink or bind-mount variants); nothing is changed. The filesystem work runs on a
+/// blocking thread so a hung mount stalls only this check.
 pub async fn warn_overlapping_folders(db: &sqlx::PgPool) -> sqlx::Result<()> {
     let folders =
         sqlx::query!(r#"SELECT "libraryId" AS library_id, path FROM library_folders ORDER BY id"#)
             .fetch_all(db)
             .await?;
-    for (i, a) in folders.iter().enumerate() {
-        for b in &folders[i + 1..] {
-            if a.library_id != b.library_id
-                && crate::ingest::fsx::same_dir(Path::new(&a.path), Path::new(&b.path))
-            {
-                tracing::warn!(
-                    "library #{} \"{}\" and library #{} \"{}\" are one directory: media there is listed twice",
-                    a.library_id,
-                    a.path,
-                    b.library_id,
-                    b.path
-                );
+    let _ = tokio::task::spawn_blocking(move || {
+        for (i, a) in folders.iter().enumerate() {
+            for b in &folders[i + 1..] {
+                if a.library_id != b.library_id
+                    && crate::ingest::fsx::same_dir(Path::new(&a.path), Path::new(&b.path))
+                {
+                    tracing::warn!(
+                        "library #{} \"{}\" and library #{} \"{}\" are one directory: media there is listed twice",
+                        a.library_id,
+                        a.path,
+                        b.library_id,
+                        b.path
+                    );
+                }
             }
         }
-    }
+    })
+    .await;
     Ok(())
 }
 

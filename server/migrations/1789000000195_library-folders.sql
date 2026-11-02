@@ -39,7 +39,7 @@ ALTER TABLE "media_files" ENABLE TRIGGER set_updated_at;
 ALTER TABLE "media_files"
   ALTER COLUMN "folderId" SET NOT NULL,
   ADD CONSTRAINT "FK_media_files_folder" FOREIGN KEY ("folderId") REFERENCES "library_folders"("id") ON DELETE RESTRICT,
-  ADD CONSTRAINT "CK_media_files_relative_path" CHECK ("relativePath" <> '' AND "relativePath" !~ '(^/|(^|/)\.\.(/|$)|//)'),
+  ADD CONSTRAINT "CK_media_files_relative_path" CHECK ("relativePath" <> '' AND "relativePath" !~ '(^/|(^|/)\.{1,2}(/|$)|//)'),
   DROP CONSTRAINT "UQ_89a6bf94332e9f2715c4d06b36c",
   ADD CONSTRAINT "UQ_media_files_folder_path" UNIQUE ("folderId", "relativePath");
 CREATE INDEX "IDX_media_files_mediaId" ON "media_files" ("mediaId");

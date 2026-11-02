@@ -2248,17 +2248,6 @@ async fn m1789000200_keeps_the_sort_creator_of_a_book_current(pool: PgPool) {
     assert_eq!(bumped(&pool).await, 1, "any other change does");
 }
 
-async fn m195_error(pool: &PgPool) -> String {
-    let m = MIGRATOR
-        .iter()
-        .find(|m| m.version == 1_789_000_000_195)
-        .unwrap();
-    sqlx::raw_sql(m.sql.as_ref())
-        .execute(pool)
-        .await
-        .expect_err("the migration refuses")
-        .to_string()
-}
 const PREFLIGHT: i64 = 1_789_000_000_015;
 const FOLDERS: i64 = 1_789_000_000_195;
 
@@ -2285,16 +2274,15 @@ async fn m1789000015_normalises_paths_and_places_orphans(pool: PgPool) {
     sql(
         &pool,
         r#"INSERT INTO libraries (id, name, path, "mediaTypes") VALUES
-             (1, 'a', '/m/a/', '["movie"]'), (2, 'b', '/m/b', '["series"]'), (3, 'c', '/m/b/', '["series"]'),
-             (4, 'd', '//m//d//', '["movie","series"]'), (5, 'e', '/m/e', '["movie"]'), (6, 'f', '/m/f/', '["movie"]'),
-             (7, 'g', '/m/f', '["movie"]');
+             (1, 'a', '/m/a/', '["movie"]'), (2, 'b', '/m/b', '["series"]'),
+             (4, 'd', '//m//d//', '["movie","series"]'), (5, 'e', '/m/e', '["movie"]'), (6, 'f', '/m/f/', '["movie"]');
            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
              (1, 'orphan', 'movie', NULL, 'O'), (2, 'bare', 'movie', NULL, 'P'), (3, 'in-d', 'movie', 4, 'D');
            INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
              (1, 1, 'o.mkv', 1, 'q'), (2, 3, '/m/d/D/abs.mkv', 1, 'q'), (3, 3, 'a\b.mkv', 1, 'q')"#,
     )
     .await;
-    // A film no single library takes: libraries 1, 5, 6 and 7 accept movies, 4 does too.
+    // A film no single library takes: libraries 1, 5 and 6 accept movies, 4 does too.
     let e = first_refusal(&pool, PREFLIGHT).await.expect("refused");
     assert_eq!(e.0, PREFLIGHT);
     assert!(
@@ -2321,13 +2309,11 @@ async fn m1789000015_normalises_paths_and_places_orphans(pool: PgPool) {
         vec![
             (1, "/m/a".into()),
             (2, "/m/b".into()),
-            (3, "/m/b/".into()),
             (4, "/m/d".into()),
             (5, "/m/e".into()),
-            (6, "/m/f/".into()),
-            (7, "/m/f".into()),
+            (6, "/m/f".into()),
         ],
-        "the library already written normalised, else the lowest id, takes the normalised path"
+        "every path is stored normalised"
     );
 
     apply(&pool, |v| v > PREFLIGHT && v < FOLDERS).await;
@@ -2385,7 +2371,7 @@ async fn m1789000015_refuses_what_it_cannot_place_with_the_sql_to_fix_it(pool: P
     let e = m15_error(&pool).await;
     assert!(
         e.contains("library(ies) 2 hold files but have no path")
-            && e.contains("UPDATE libraries SET path"),
+            && e.contains("UPDATE libraries SET path = '<directory>' WHERE id = 2;"),
         "{e}"
     );
 
@@ -2399,7 +2385,9 @@ async fn m1789000015_refuses_what_it_cannot_place_with_the_sql_to_fix_it(pool: P
     let e = m15_error(&pool).await;
     assert!(
         e.contains("2 media file(s) would share one path")
-            && e.contains("DELETE FROM media_files WHERE id IN (3, 5)"),
+            && e.contains("file 3 (media 3) duplicates file 2 (media 2)")
+            && e.contains("file 5 (media 3) duplicates file 4 (media 2)")
+            && e.contains("DELETE FROM media_files WHERE id = 5;"),
         "{e}"
     );
 
@@ -2407,19 +2395,115 @@ async fn m1789000015_refuses_what_it_cannot_place_with_the_sql_to_fix_it(pool: P
     sql(
         &pool,
         r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
-             (6, 2, '/elsewhere/c.mkv', 1, 'q'), (7, 2, 'a/../d.mkv', 1, 'q'), (8, 2, 'e//f.mkv', 1, 'q'), (9, 2, '', 1, 'q')"#,
+             (6, 2, '/elsewhere/c.mkv', 1, 'q'), (7, 2, 'a/../d.mkv', 1, 'q'), (8, 2, 'e//f.mkv', 1, 'q'), (9, 2, '', 1, 'q'),
+             (10, 2, 'g/./h.mkv', 1, 'q')"#,
     )
     .await;
     let e = m15_error(&pool).await;
     assert!(
-        e.contains("4 media file(s) have a relativePath") && e.contains("(first ids: 6, 7, 8, 9)"),
+        e.contains("5 media file(s) have a relativePath")
+            && e.contains("(first ids: 6, 7, 8, 9, 10; re-run until clean)"),
         "{e}"
     );
     assert_eq!(
         count(&pool, "media_files").await,
-        6,
+        7,
         "a refusal changes nothing"
     );
+
+    sql(&pool, "DELETE FROM media_files WHERE id > 5").await;
+    sql(
+        &pool,
+        r#"UPDATE media SET "folderName" = 'a/../b' WHERE id = 2"#,
+    )
+    .await;
+    let e = m15_error(&pool).await;
+    assert!(
+        e.contains("1 media have a folderName") && e.contains("(first ids: 2; re-run until clean)"),
+        "{e}"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000015_refuses_libraries_sharing_a_directory_and_files_of_no_media(pool: PgPool) {
+    apply_until(&pool, PREFLIGHT).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m'), (2, 'b', '/m'), (3, 'c', '/m/'), (4, 'd', '/n');
+           INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'x', 'movie', 1);
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (1, 1, 'x.mkv', 1, 'q'), (2, NULL, 'y.mkv', 1, 'q')"#,
+    )
+    .await;
+    let e = m15_error(&pool).await;
+    assert!(
+        e.contains("1 media file(s) belong to no media")
+            && e.contains(r#"UPDATE media_files SET "mediaId" = <media id> WHERE id = 2;"#)
+            && e.contains("DELETE FROM media_files WHERE id IN (2)")
+            && e.contains("cascades"),
+        "{e}"
+    );
+    sql(&pool, "DELETE FROM media_files WHERE id = 2").await;
+    let e = m15_error(&pool).await;
+    for id in 1..=3 {
+        assert!(
+            e.contains(&format!(
+                "UPDATE libraries SET path = '<directory>' WHERE id = {id};"
+            )),
+            "{e}"
+        );
+    }
+    assert!(
+        e.contains("libraries 1, 2, 3 share /m") && !e.contains("WHERE id = 4;"),
+        "{e}"
+    );
+    sql(
+        &pool,
+        "UPDATE libraries SET path = '/m2' WHERE id = 2; UPDATE libraries SET path = '/m3' WHERE id = 3",
+    )
+    .await;
+    apply_only(&pool, PREFLIGHT).await;
+    apply(&pool, |v| v > PREFLIGHT && v < FOLDERS).await;
+    apply_only(&pool, FOLDERS).await;
+    assert_eq!(count(&pool, "library_folders").await, 4);
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000015_lists_each_collision_with_the_sql_that_keeps_its_rows(pool: PgPool) {
+    apply_until(&pool, PREFLIGHT).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, path) VALUES (1, 'a', '/m');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+             (2, 'y', 'movie', 1, 'Y'), (3, 'z', 'movie', 1, 'Y');
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES
+             (2, 2, 'a.mkv', 1, 'q'), (3, 3, 'a.mkv', 1, 'q');
+           INSERT INTO subtitle_files (id, language, "providerType", "filePath", "mediaId", "mediaFileId")
+             VALUES (1, 'en', 'disk', 'a.srt', 3, 3)"#,
+    )
+    .await;
+    let e = m15_error(&pool).await;
+    for want in [
+        "file 3 (media 3) duplicates file 2 (media 2)",
+        r#"UPDATE playback_states SET "mediaFileId" = 2 WHERE "mediaFileId" = 3;"#,
+        r#"UPDATE subtitle_files SET "mediaFileId" = 2 WHERE "mediaFileId" = 3;"#,
+        "DELETE FROM media_files WHERE id = 3;",
+        "cascades",
+    ] {
+        assert!(e.contains(want), "{want}: {e}");
+    }
+    sql(
+        &pool,
+        r#"UPDATE subtitle_files SET "mediaFileId" = 2 WHERE "mediaFileId" = 3;
+           DELETE FROM media_files WHERE id = 3"#,
+    )
+    .await;
+    apply_only(&pool, PREFLIGHT).await;
+    let subs: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM subtitle_files WHERE "mediaFileId" = 2"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(subs, 1, "the sidecar followed the kept file");
 }
 
 async fn m15_error(pool: &PgPool) -> String {

@@ -165,7 +165,7 @@ pub async fn update_media(
         r#"UPDATE media SET title = $2, year = $3,
                   "folderName" = CASE WHEN has.files THEN "folderName" ELSE $4 END,
                   overview = $5,
-                  "libraryId" = CASE WHEN has.files THEN "libraryId" ELSE $6 END, "updatedAt" = now()
+                  "libraryId" = CASE WHEN has.files THEN COALESCE("libraryId", $6) ELSE $6 END, "updatedAt" = now()
            FROM (SELECT EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1) AS files) has
            WHERE id = $1"#,
         m.id,
