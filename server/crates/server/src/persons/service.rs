@@ -2,7 +2,7 @@ use crate::{
     http::{AppError, auth::Authed},
     images::{ImageStore, paths::Target},
     libraries::{accessible_library_ids, paths_visible},
-    media::hydrate,
+    media::{books, hydrate},
     metadata::{Credits, Metadata, Upstream},
     state::AppState,
 };
@@ -348,4 +348,98 @@ pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Valu
     })?;
     let (cast, crew) = link_credits(st, a, served, credits).await?;
     Ok(json!({"provider": p.provider, "cast": cast, "crew": crew}))
+}
+
+/// `books-api.md` A9: the people credited in `role` (`author` or `narrator`) on readable books.
+pub async fn people(
+    db: &PgPool,
+    role: &str,
+    scope: &[i32],
+    acl: &[i32],
+    tsq: Option<&str>,
+    by_works: bool,
+    paging: Option<(i64, i64)>,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName", 'avatarUrl', p."avatarUrl",
+  'workCount', COUNT(DISTINCT m.id)::int) AS "json!: Value"
+FROM persons p JOIN media_credits mc ON mc."personId" = p.id JOIN media m ON m.id = mc."mediaId"
+WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND mc.role = $3
+  AND (($3 = 'author' AND mc."editionId" IS NULL)
+    OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e
+          WHERE e.id = mc."editionId" AND COALESCE(e."libraryId", m."libraryId") = ANY($2))))
+  AND ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', $4))
+GROUP BY p.id
+ORDER BY CASE WHEN $5 THEN -COUNT(DISTINCT m.id) ELSE 0 END, COALESCE(p."sortName", p.name), p.id
+LIMIT $6 OFFSET $7"#,
+        scope,
+        acl,
+        role,
+        tsq,
+        by_works,
+        paging.map(|p| p.0),
+        paging.map(|p| p.1)
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// `books-api.md` A9: the readable books of a person in `role`, by series and standalone.
+pub async fn works(
+    db: &PgPool,
+    id: i32,
+    role: &str,
+    uid: i32,
+    acl: &[i32],
+) -> Result<Value, AppError> {
+    find(db, id).await?;
+    let works = sqlx::query_scalar!(
+        r#"SELECT m.id AS "id!" FROM media m
+WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND EXISTS (
+  SELECT 1 FROM media_credits mc WHERE mc."mediaId" = m.id AND mc."personId" = $2 AND mc.role = $3
+    AND (($3 = 'author' AND mc."editionId" IS NULL)
+      OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e
+            WHERE e.id = mc."editionId" AND COALESCE(e."libraryId", m."libraryId") = ANY($1)))))
+ORDER BY m.title, m.id"#,
+        acl,
+        id,
+        role
+    )
+    .fetch_all(db)
+    .await?;
+    let entries = sqlx::query!(
+        r#"SELECT c.id AS "cid!", c.name AS "cname!", e."mediaId" AS "media_id!", e.position::float8 AS position,
+  e."positionEnd"::float8 AS position_end, e."positionLabel" AS position_label
+FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
+WHERE e."itemId" IS NULL AND e."mediaId" = ANY($1)
+ORDER BY c.name, c.id, e.position NULLS LAST, e."mediaId""#,
+        &works
+    )
+    .fetch_all(db)
+    .await?;
+    let media = books::summaries(db, &works, uid, acl).await?;
+    let num = crate::collections::service::num;
+    let mut series: Vec<Value> = vec![];
+    let mut last = None;
+    for e in &entries {
+        if last != Some(e.cid) {
+            series.push(json!({"collection": {"id": e.cid, "name": e.cname}, "works": []}));
+            last = Some(e.cid);
+        }
+        let Some(m) = media.get(&e.media_id) else {
+            continue;
+        };
+        if let Some(w) = series.last_mut().and_then(|s| s["works"].as_array_mut()) {
+            w.push(json!({
+                "position": e.position.map(num), "positionEnd": e.position_end.map(num),
+                "positionLabel": e.position_label, "media": m,
+            }));
+        }
+    }
+    let standalone: Vec<&Value> = works
+        .iter()
+        .filter(|w| !entries.iter().any(|e| e.media_id == **w))
+        .filter_map(|w| media.get(w))
+        .collect();
+    Ok(json!({"series": series, "standalone": standalone}))
 }

@@ -1,6 +1,6 @@
 //! `GET /api/media` and `recently-added` (`media-query.md` rules 14-27, 33-34, 67-72).
 use super::{
-    hydrate,
+    books, hydrate,
     params::{Recent, Search},
     wants::video_want_join,
 };
@@ -117,6 +117,7 @@ fn push_scope(
             .push_bind(v.to_string())
             .push(")");
     }
+    push_book_filters(qb, p, ids, uid);
     for (table, col, v) in [
         ("w", "qualityProfileId", p.quality_profile_id),
         ("media", "languageProfileId", p.language_profile_id),
@@ -181,6 +182,57 @@ fn push_scope(
     }
 }
 
+/// ` AND` an edition `e` readable through its own library, else the work's (`books.md` rule 22).
+fn push_visible(qb: &mut QueryBuilder<Postgres>, ids: &[i32]) {
+    qb.push(" AND COALESCE(e.\"libraryId\", media.\"libraryId\") = ANY(")
+        .push_bind(ids.to_vec())
+        .push(")");
+}
+
+/// `books-api.md` A1; `Search::parse` already refused these keys for any other type.
+fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], uid: i32) {
+    if let Some(f) = &p.format {
+        qb.push(" AND EXISTS (SELECT 1 FROM editions e JOIN items i ON i.\"editionId\" = e.id JOIN item_parts ip ON ip.\"itemId\" = i.id WHERE e.\"mediaId\" = media.id AND e.family = ")
+            .push_bind(f.clone());
+        push_visible(qb, ids);
+        qb.push(")");
+    }
+    if let Some(l) = &p.language {
+        qb.push(" AND EXISTS (SELECT 1 FROM editions e WHERE e.\"mediaId\" = media.id AND lower(e.language) = lower(")
+            .push_bind(l.clone())
+            .push(")");
+        push_visible(qb, ids);
+        qb.push(")");
+    }
+    if let Some(a) = p.author_id {
+        qb.push(" AND EXISTS (SELECT 1 FROM media_credits c WHERE c.\"mediaId\" = media.id AND c.role = 'author' AND c.\"editionId\" IS NULL AND c.\"personId\" = ")
+            .push_bind(a)
+            .push(")");
+    }
+    if let Some(n) = p.narrator_id {
+        qb.push(" AND EXISTS (SELECT 1 FROM media_credits c JOIN editions e ON e.id = c.\"editionId\" WHERE c.\"mediaId\" = media.id AND c.role = 'narrator' AND c.\"personId\" = ")
+            .push_bind(n);
+        push_visible(qb, ids);
+        qb.push(")");
+    }
+    if let Some(s) = p.series_id {
+        qb.push(" AND EXISTS (SELECT 1 FROM collection_entries ce WHERE ce.\"mediaId\" = media.id AND ce.\"itemId\" IS NULL AND ce.\"collectionId\" = ")
+            .push_bind(s)
+            .push(")");
+    }
+    if p.in_progress {
+        qb.push(format!(
+            " AND NOT ({}) AND EXISTS (SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps.\"itemId\" JOIN editions e ON e.id = i.\"editionId\" WHERE ps.\"userId\" = ",
+            super::watched::predicate(uid, "media")
+        ));
+        qb.push_bind(uid).push(
+            " AND i.\"mediaId\" = media.id AND ps.completed = false AND ps.\"positionSeconds\" > 0",
+        );
+        push_visible(qb, ids);
+        qb.push(")");
+    }
+}
+
 fn push_tsquery(qb: &mut QueryBuilder<Postgres>, q: &str) {
     let tsq = prefix_tsquery(q);
     if tsq.is_empty() {
@@ -228,12 +280,29 @@ fn push_cutoff(qb: &mut QueryBuilder<Postgres>, map: &QualityMap) {
     qb.push(" < c.cr END ");
 }
 
-fn order_sql(p: &Search) -> &'static str {
+/// The first series of a work (lowest collection id), as `books-api.md` A3 reads it.
+const FIRST_SERIES: &str = r#"(SELECT {col} FROM collection_entries se JOIN collections sc ON sc.id = se."collectionId"
+  WHERE se."mediaId" = media.id AND se."itemId" IS NULL ORDER BY sc.id LIMIT 1)"#;
+
+const PUBLISHED: &str = r#"COALESCE((SELECT d.date FROM media_release_dates d
+  WHERE d."mediaId" = media.id AND d."editionId" IS NULL AND d.kind = 'release'),
+  CASE WHEN media.year BETWEEN 1 AND 9999 THEN make_date(media.year, 1, 1) END)"#;
+
+/// `books-api.md` A2: the book sorts put works without the data last in either direction.
+fn order_sql(p: &Search, dir: &str) -> String {
+    let nulls_last = |e: &str| format!("{e} {dir} NULLS LAST");
     match p.sort_by.as_deref() {
-        Some("year") => "media.year",
-        Some("added") | Some("createdAt") => "media.\"createdAt\"",
-        Some("rating") => "media.rating",
-        _ => "media.title",
+        Some("year") => format!("media.year {dir}"),
+        Some("added") | Some("createdAt") => format!("media.\"createdAt\" {dir}"),
+        Some("rating") => format!("media.rating {dir}"),
+        Some("author") => format!("{}, media.title ASC", nulls_last("media.\"sortCreator\"")),
+        Some("series") => format!(
+            "{}, {}, media.title ASC",
+            nulls_last(&FIRST_SERIES.replace("{col}", "sc.name")),
+            nulls_last(&FIRST_SERIES.replace("{col}", "se.position"))
+        ),
+        Some("published") => format!("{}, media.title ASC", nulls_last(PUBLISHED)),
+        _ => format!("media.title {dir}"),
     }
 }
 
@@ -278,7 +347,7 @@ pub async fn find_all(
             } else {
                 "ASC"
             };
-            qb.push(format!(" ORDER BY {} {dir}, media.id ASC", order_sql(p)));
+            qb.push(format!(" ORDER BY {}, media.id ASC", order_sql(p, dir)));
         }
     }
     if let Some((limit, offset)) = paging {
@@ -297,8 +366,9 @@ pub async fn find_all(
         qb.build_query_scalar().fetch_one(db).await?
     };
 
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
     attach_watched(db, &mut data, &page_ids, uid).await?;
+    books::attach_list_info(db, &mut data, uid, ids).await?;
     Ok(Page { data, total })
 }
 
@@ -309,6 +379,23 @@ async fn attach_watched(
     ids: &[i32],
     uid: i32,
 ) -> Result<(), sqlx::Error> {
+    let by_id = watched_map(db, ids, uid).await?;
+    for (item, id) in data.iter_mut().zip(ids) {
+        let (watched, progress) = by_id.get(id).copied().unwrap_or((false, 0));
+        if let Some(o) = item.as_object_mut() {
+            o.insert("watched".into(), watched.into());
+            o.insert("progressPercent".into(), progress.into());
+        }
+    }
+    Ok(())
+}
+
+/// `(watched, progressPercent)` of `ids` for `uid` (rule 27).
+pub(crate) async fn watched_map(
+    db: &PgPool,
+    ids: &[i32],
+    uid: i32,
+) -> Result<HashMap<i32, (bool, i32)>, sqlx::Error> {
     let rows: Vec<(i32, bool, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT m.id::int, ({}), ({}) FROM media m WHERE m.id = ANY($2::int[])",
         super::watched::predicate("$1", "m"),
@@ -318,18 +405,10 @@ async fn attach_watched(
     .bind(ids)
     .fetch_all(db)
     .await?;
-    let by_id: HashMap<i32, (bool, i32)> = rows
+    Ok(rows
         .into_iter()
         .map(|(id, watched, progress)| (id, (watched, progress)))
-        .collect();
-    for (item, id) in data.iter_mut().zip(ids) {
-        let (watched, progress) = by_id.get(id).copied().unwrap_or((false, 0));
-        if let Some(o) = item.as_object_mut() {
-            o.insert("watched".into(), watched.into());
-            o.insert("progressPercent".into(), progress.into());
-        }
-    }
-    Ok(())
+        .collect())
 }
 
 /// Rule 33, Q-R: newest additions by media, by file, or both; `id ASC` breaks ties.
@@ -371,5 +450,7 @@ pub async fn recently_added(
     });
     qb.push(", media.id ASC LIMIT ").push_bind(p.limit);
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
-    hydrate::items(db, &page_ids, see_paths).await
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, false, Some(ids)).await?;
+    books::attach_list_info(db, &mut data, uid, ids).await?;
+    Ok(data)
 }

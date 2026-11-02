@@ -1,0 +1,478 @@
+{
+  "name": "books-list-sort-published",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "book": {
+                "authors": [
+                  {
+                    "id": 103,
+                    "name": "Aaron Zed",
+                    "sortName": null
+                  }
+                ],
+                "formats": [],
+                "lastFamily": null,
+                "series": null
+              },
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [],
+              "folderName": "Parity Book Delta",
+              "genres": null,
+              "id": 105,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#8b5cf6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "book",
+                "id": 3,
+                "label": null,
+                "mediaTypes": [
+                  "book"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Books",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 3,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": null,
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 0,
+              "status": "tba",
+              "title": "Parity Book Delta",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": null,
+              "tvdbId": null,
+              "type": "book",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 1999
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "book": {
+                "authors": [
+                  {
+                    "id": 101,
+                    "name": "Una Writer",
+                    "sortName": "Writer, Una"
+                  }
+                ],
+                "formats": [
+                  "text"
+                ],
+                "lastFamily": "text",
+                "series": {
+                  "id": 101,
+                  "name": "Parity Cycle",
+                  "position": 1,
+                  "positionLabel": null
+                }
+              },
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "episodeId": null,
+                  "id": 101,
+                  "language": null,
+                  "mediaId": 101,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "EPUB",
+                  "relativePath": "alpha.epub",
+                  "size": 1,
+                  "streamInfo": {},
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Parity Book Alpha",
+              "genres": null,
+              "id": 101,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#8b5cf6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "book",
+                "id": 3,
+                "label": null,
+                "mediaTypes": [
+                  "book"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Books",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 3,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": null,
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic book alpha",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/media/101/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": "2001-05-01",
+              "runtime": null,
+              "sizeOnDisk": 1,
+              "status": "tba",
+              "title": "Parity Book Alpha",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": null,
+              "tvdbId": null,
+              "type": "book",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2001
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "book": {
+                "authors": [
+                  {
+                    "id": 101,
+                    "name": "Una Writer",
+                    "sortName": "Writer, Una"
+                  }
+                ],
+                "formats": [
+                  "audio"
+                ],
+                "lastFamily": null,
+                "series": {
+                  "id": 101,
+                  "name": "Parity Cycle",
+                  "position": 2,
+                  "positionLabel": "II"
+                }
+              },
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "episodeId": null,
+                  "id": 103,
+                  "language": null,
+                  "mediaId": 102,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "M4B",
+                  "relativePath": "beta-1.m4b",
+                  "size": 1,
+                  "streamInfo": {
+                    "chapters": [
+                      {
+                        "endSeconds": 40,
+                        "startSeconds": 0,
+                        "title": "A"
+                      },
+                      {
+                        "endSeconds": 100,
+                        "startSeconds": 40,
+                        "title": "B"
+                      }
+                    ],
+                    "durationSeconds": 100
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "episodeId": null,
+                  "id": 104,
+                  "language": null,
+                  "mediaId": 102,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "M4B",
+                  "relativePath": "beta-2.m4b",
+                  "size": 1,
+                  "streamInfo": {
+                    "chapters": [
+                      {
+                        "endSeconds": 50,
+                        "startSeconds": 0,
+                        "title": "C"
+                      }
+                    ],
+                    "durationSeconds": 50
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Parity Book Beta",
+              "genres": null,
+              "id": 102,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#8b5cf6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "book",
+                "id": 3,
+                "label": null,
+                "mediaTypes": [
+                  "book"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Books",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 3,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": null,
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic book beta",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 2,
+              "status": "tba",
+              "title": "Parity Book Beta",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": null,
+              "tvdbId": null,
+              "type": "book",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2005
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "book": {
+                "authors": [],
+                "formats": [],
+                "lastFamily": null,
+                "series": null
+              },
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [],
+              "folderName": "Parity Book Epsilon",
+              "genres": null,
+              "id": 106,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#8b5cf6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "book",
+                "id": 3,
+                "label": null,
+                "mediaTypes": [
+                  "book"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Books",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 3,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": null,
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 0,
+              "status": "tba",
+              "title": "Parity Book Epsilon",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": null,
+              "tvdbId": null,
+              "type": "book",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2010
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "book": {
+                "authors": [
+                  {
+                    "id": 101,
+                    "name": "Una Writer",
+                    "sortName": "Writer, Una"
+                  }
+                ],
+                "formats": [
+                  "audio"
+                ],
+                "lastFamily": null,
+                "series": {
+                  "id": 101,
+                  "name": "Parity Cycle",
+                  "position": 4,
+                  "positionLabel": null
+                }
+              },
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "episodeId": null,
+                  "id": 105,
+                  "language": null,
+                  "mediaId": 103,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "MP3",
+                  "relativePath": "gamma.mp3",
+                  "size": 1,
+                  "streamInfo": {
+                    "durationSeconds": 300
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Parity Book Gamma",
+              "genres": null,
+              "id": 103,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#8b5cf6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "book",
+                "id": 3,
+                "label": null,
+                "mediaTypes": [
+                  "book"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Books",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 3,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": null,
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1,
+              "status": "tba",
+              "title": "Parity Book Gamma",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": null,
+              "tvdbId": null,
+              "type": "book",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": null
+            }
+          ],
+          "total": 5
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?type=book&sortBy=published&limit=0"
+    }
+  ]
+}

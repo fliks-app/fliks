@@ -1,5 +1,5 @@
 use super::{
-    aggregates, calendar as cal, hydrate, list,
+    aggregates, books, calendar as cal, hydrate, list,
     params::{Calendar, Recent, Search, bare},
     related, streams, tracking,
 };
@@ -17,7 +17,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::query::js_number,
+    media::{kind::MediaKind, query::js_number},
 };
 use serde_json::{Value, json};
 
@@ -41,6 +41,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/media/{id}/cast", get(media_cast))
         .route("/api/media/{id}/crew", get(media_crew))
         .route("/api/media/{id}/streams/{mediaFileId}", get(media_streams))
+        .route(
+            "/api/media/{id}/editions/{editionId}/chapters",
+            get(edition_chapters),
+        )
 }
 
 /// Guards run before the pipes: 401, then 403, then the id's 400, then the library ACL's 404.
@@ -167,11 +171,15 @@ pub async fn get_media(
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Result<Json<Value>, AppError> {
-    let (id, _) = gate(&st, &a, id).await?;
-    hydrate::detail(&st.db, id, paths_visible(&a.perms))
+    let (id, acl) = gate(&st, &a, id).await?;
+    let mut media = hydrate::detail_for(&st.db, id, paths_visible(&a.perms), Some(&acl))
         .await?
-        .map(Json)
-        .ok_or_else(|| media_not_found(id))
+        .ok_or_else(|| media_not_found(id))?;
+    if media["type"] == MediaKind::Book.as_str() {
+        let book = books::detail(&st.db, id, a.user.id, &acl).await?;
+        media["book"] = book;
+    }
+    Ok(Json(media))
 }
 
 /// `Number(limit)`: finite and above 0 caps at 30, anything else is 12 (rule 53).
@@ -240,6 +248,19 @@ pub async fn media_streams(
     let libs = accessible_library_ids(&st.db, &a).await?;
     assert_media_accessible(&st.db, id, &libs).await?;
     Ok(Json(streams::streams(&st, id, file).await?))
+}
+
+#[utoipa::path(get, path = "/api/media/{id}/editions/{editionId}/chapters", responses((status = 200)))]
+pub async fn edition_chapters(
+    State(st): State<AppState>,
+    a: Authed,
+    ids: Result<PathParams<(i32, i32)>, AppError>,
+) -> Result<Json<Vec<Value>>, AppError> {
+    a.require(Action::Read, Subject::Media)?;
+    let PathParams((id, edition)) = ids?;
+    let acl = accessible_library_ids(&st.db, &a).await?;
+    assert_media_accessible(&st.db, id, &acl).await?;
+    Ok(Json(books::chapters(&st.db, id, edition, &acl).await?))
 }
 
 /// `counts.md`: the sidebar counters; each degrades to empty without its ability, never a 403.

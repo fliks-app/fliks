@@ -1,0 +1,212 @@
+{
+  "name": "books-detail-admin",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "book": {
+            "authors": [
+              {
+                "id": 101,
+                "name": "Una Writer",
+                "sortName": "Writer, Una"
+              }
+            ],
+            "editions": [
+              {
+                "coverUrl": null,
+                "durationSeconds": null,
+                "externalIds": [
+                  {
+                    "provider": "isbn",
+                    "value": "9780000000002"
+                  }
+                ],
+                "family": "text",
+                "fieldSources": [
+                  {
+                    "field": "title",
+                    "locked": false,
+                    "provider": "openlibrary"
+                  }
+                ],
+                "fileIds": [
+                  101
+                ],
+                "format": "epub",
+                "hasFile": true,
+                "id": 101,
+                "itemId": 101,
+                "label": "Paper",
+                "language": "fr",
+                "libraryId": null,
+                "narrators": [],
+                "pageCount": 300,
+                "published": "2002-02-02",
+                "publisher": "Parity Press",
+                "title": null
+              },
+              {
+                "coverUrl": null,
+                "durationSeconds": 3600,
+                "externalIds": [],
+                "family": "audio",
+                "fieldSources": [],
+                "fileIds": [
+                  102
+                ],
+                "format": "m4b",
+                "hasFile": true,
+                "id": 102,
+                "itemId": 102,
+                "label": "Hidden audio",
+                "language": "en",
+                "libraryId": 4,
+                "narrators": [
+                  {
+                    "id": 102,
+                    "name": "Vic Voice",
+                    "sortName": null
+                  }
+                ],
+                "pageCount": null,
+                "published": null,
+                "publisher": null,
+                "title": null
+              }
+            ],
+            "originalLanguage": "en",
+            "progress": null,
+            "series": [
+              {
+                "id": 101,
+                "name": "Parity Cycle",
+                "next": {
+                  "id": 102,
+                  "position": 2,
+                  "title": "Parity Book Beta"
+                },
+                "position": 1,
+                "positionLabel": null,
+                "previous": null
+              }
+            ],
+            "subjects": [
+              "Fiction",
+              "Parity"
+            ],
+            "subtitle": "A synthetic subtitle",
+            "translators": []
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodeId": null,
+              "id": 101,
+              "language": null,
+              "mediaId": 101,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "EPUB",
+              "relativePath": "alpha.epub",
+              "size": 1,
+              "streamInfo": {},
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodeId": null,
+              "id": 102,
+              "language": null,
+              "mediaId": 101,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "M4B",
+              "relativePath": "alpha.m4b",
+              "size": 1,
+              "streamInfo": {},
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "folderName": "Parity Book Alpha",
+          "genres": null,
+          "id": 101,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#8b5cf6",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "book",
+            "id": 3,
+            "label": null,
+            "mediaTypes": [
+              "book"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Books",
+            "path": "/tmp/fliks-parity/media/books",
+            "preferredProvider": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "libraryId": 3,
+          "logoUrl": null,
+          "metadata": {
+            "budget": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "id": 1,
+            "keywords": null,
+            "originalLanguage": "en",
+            "popularity": null,
+            "productionCompanies": null,
+            "productionCountries": null,
+            "revenue": null,
+            "tagline": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "videos": null,
+            "voteCount": null
+          },
+          "metadataRefreshedAt": null,
+          "minimumAvailability": null,
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic book alpha",
+          "path": "/tmp/fliks-parity/media/books/Parity Book Alpha",
+          "physicalRelease": null,
+          "posterUrl": "/api/images/media/101/poster",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": "2001-05-01",
+          "runtime": null,
+          "seasons": [],
+          "status": "tba",
+          "title": "Parity Book Alpha",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": null,
+          "tvdbId": null,
+          "type": "book",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "year": 2001
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/101"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "books-person-works-narrator",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "series": [
+            {
+              "collection": {
+                "id": 101,
+                "name": "Parity Cycle"
+              },
+              "works": [
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [
+                        "audio"
+                      ],
+                      "lastFamily": null,
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 2,
+                        "positionLabel": "II"
+                      }
+                    },
+                    "id": 102,
+                    "posterUrl": null,
+                    "progressPercent": 0,
+                    "title": "Parity Book Beta",
+                    "type": "book",
+                    "watched": false,
+                    "year": 2005
+                  },
+                  "position": 2,
+                  "positionEnd": null,
+                  "positionLabel": "II"
+                }
+              ]
+            }
+          ],
+          "standalone": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/102/works?role=narrator"
+    }
+  ]
+}

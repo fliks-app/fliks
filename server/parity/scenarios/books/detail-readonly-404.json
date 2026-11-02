@@ -1,0 +1,19 @@
+{
+  "name": "books-detail-readonly-404",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #101 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/101"
+    }
+  ]
+}

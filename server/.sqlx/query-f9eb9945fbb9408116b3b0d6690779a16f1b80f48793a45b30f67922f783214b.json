@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id AS \"edition!\", i.id AS \"item!\", ps.completed AS \"completed!\",\n  CASE WHEN ps.completed THEN 1.0::float8\n       WHEN ps.\"durationSeconds\" > 0 THEN LEAST(1.0, ps.\"positionSeconds\" / ps.\"durationSeconds\")\n       ELSE 0.0::float8 END AS \"progression!\",\n  iso_ms(ps.\"lastPlayedAt\") AS \"last_played!\"\nFROM playback_states ps JOIN items i ON i.id = ps.\"itemId\" JOIN editions e ON e.id = i.\"editionId\"\nJOIN media m ON m.id = i.\"mediaId\"\nWHERE ps.\"userId\" = $1 AND i.\"mediaId\" = $2 AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($3)\nORDER BY ps.\"lastPlayedAt\" DESC, ps.id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "edition!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "editions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "item!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "completed!",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "completed"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "progression!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_played!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "f9eb9945fbb9408116b3b0d6690779a16f1b80f48793a45b30f67922f783214b"
+}

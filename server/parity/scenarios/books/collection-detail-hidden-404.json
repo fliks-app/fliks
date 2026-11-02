@@ -1,0 +1,19 @@
+{
+  "name": "books-collection-detail-hidden-404",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Collection #102 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/collections/102"
+    }
+  ]
+}

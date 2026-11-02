@@ -1,0 +1,23 @@
+{
+  "name": "books-collections-paged",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 1,
+            "id": 102,
+            "maxPosition": 1,
+            "name": "Parity Lonely",
+            "posters": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/collections?limit=1&page=2"
+    }
+  ]
+}

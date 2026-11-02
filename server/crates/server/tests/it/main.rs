@@ -2,6 +2,7 @@
 mod auth;
 mod auth_routes;
 mod backup_restore;
+mod books_api;
 mod burn_in;
 mod cleanup_bulk;
 mod events_ticket;

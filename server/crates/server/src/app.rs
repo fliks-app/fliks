@@ -1,8 +1,8 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, cleanup, events, fs, images, importers, jobs, libraries, livetv, markers, media,
-    media_servers, metadata, notifications, persons, playback, playlists, profiles, qoe, remote,
-    requests, roles, settings, social, state::AppState, subtitles, system, users,
+    auth, cleanup, collections, events, fs, images, importers, jobs, libraries, livetv, markers,
+    media, media_servers, metadata, notifications, persons, playback, playlists, profiles, qoe,
+    remote, requests, roles, settings, social, state::AppState, subtitles, system, users,
 };
 use axum::{Router, extract::Request, response::Response, routing::any};
 use std::path::PathBuf;
@@ -283,9 +283,14 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::legacy_movie,
         metadata::legacy_tv,
         metadata::legacy_seasons,
+        collections::list,
+        collections::detail,
+        media::edition_chapters,
         persons::search,
         persons::detail,
         persons::provider_credits,
+        persons::list,
+        persons::works,
         requests::create,
         requests::list,
         requests::title_state,
@@ -412,6 +417,7 @@ fn api() -> Router<AppState> {
         .merge(media_servers::router())
         .merge(markers::router())
         .merge(metadata::router())
+        .merge(collections::router())
         .merge(persons::router())
         .merge(system::api())
         .merge(jobs::router())

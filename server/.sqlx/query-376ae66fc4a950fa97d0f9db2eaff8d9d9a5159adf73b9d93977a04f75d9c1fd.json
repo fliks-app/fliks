@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.body AS \"body!\" FROM metadata_snapshots s\nWHERE s.provider = 'audnexus' AND s.resource = 'chapters' AND s.kind = $2 AND s.language = ''\n  AND s.\"externalId\" = (SELECT min(x.value) FROM edition_external_ids x WHERE x.\"editionId\" = $1 AND x.provider = 'asin')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "body!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "metadata_snapshots",
+            "name": "body"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "376ae66fc4a950fa97d0f9db2eaff8d9d9a5159adf73b9d93977a04f75d9c1fd"
+}

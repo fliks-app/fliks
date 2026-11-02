@@ -1,0 +1,21 @@
+{
+  "name": "books-list-key-without-type-400",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "format is only valid with type=book"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?format=audio"
+    }
+  ]
+}

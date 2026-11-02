@@ -18,15 +18,15 @@ pub const STATUSES: [&str; 6] = [
 pub const MODES: [&str; 3] = ["media", "file", "both"];
 
 /// The values of every key, in order; a repeated key is an array.
-struct Reader<'a> {
+pub(crate) struct Reader<'a> {
     pairs: &'a Pairs,
-    errors: Vec<String>,
+    pub(crate) errors: Vec<String>,
 }
 
 const NUMBER_MSG: &str = "must be a number conforming to the specified constraints";
 
 impl<'a> Reader<'a> {
-    fn new(pairs: &'a Pairs, known: &[&str]) -> Self {
+    pub(crate) fn new(pairs: &'a Pairs, known: &[&str]) -> Self {
         let mut errors = vec![];
         for (k, _) in pairs {
             if !known.contains(&k.as_str())
@@ -40,7 +40,7 @@ impl<'a> Reader<'a> {
         Self { pairs, errors }
     }
 
-    fn all(&self, key: &str) -> Vec<&'a str> {
+    pub(crate) fn all(&self, key: &str) -> Vec<&'a str> {
         self.pairs
             .iter()
             .filter(|(k, _)| k == key)
@@ -48,7 +48,7 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
-    fn string(&mut self, key: &str) -> Option<String> {
+    pub(crate) fn string(&mut self, key: &str) -> Option<String> {
         match self.all(key).as_slice() {
             [] => None,
             [v] => Some((*v).to_owned()),
@@ -59,7 +59,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn one_of(&mut self, key: &str, allowed: &[&str]) -> Option<String> {
+    pub(crate) fn one_of(&mut self, key: &str, allowed: &[&str]) -> Option<String> {
         let v = self.all(key);
         if v.is_empty() {
             return None;
@@ -76,13 +76,13 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn kind(&mut self, key: &str) -> Option<MediaKind> {
+    pub(crate) fn kind(&mut self, key: &str) -> Option<MediaKind> {
         self.one_of(key, &MediaKind::NAMES)
             .and_then(|s| MediaKind::parse(&s))
     }
 
     /// `@Type(() => Number)` + `IsNumber`: an array, NaN or an infinity is a 400.
-    fn number(&mut self, key: &str) -> Option<f64> {
+    pub(crate) fn number(&mut self, key: &str) -> Option<f64> {
         match self.all(key).as_slice() {
             [] => None,
             [v] => match js_number(v).filter(|n| n.is_finite()) {
@@ -100,7 +100,7 @@ impl<'a> Reader<'a> {
     }
 
     /// A number bound to an int4 column: anything else is a 400.
-    fn int(&mut self, key: &str) -> Option<i32> {
+    pub(crate) fn int(&mut self, key: &str) -> Option<i32> {
         let n = self.number(key)?;
         if n.fract() == 0.0 && (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&n) {
             Some(n as i32)
@@ -111,12 +111,12 @@ impl<'a> Reader<'a> {
     }
 
     /// Only the exact string `true` is true; an array is false.
-    fn flag(&self, key: &str) -> Option<bool> {
+    pub(crate) fn flag(&self, key: &str) -> Option<bool> {
         let v = self.all(key);
         (!v.is_empty()).then(|| v == ["true"])
     }
 
-    fn finish(self) -> Result<(), AppError> {
+    pub(crate) fn finish(self) -> Result<(), AppError> {
         if self.errors.is_empty() {
             Ok(())
         } else {
@@ -154,11 +154,27 @@ pub struct Search {
     pub requested_by_me: bool,
     /// `view=grid`: slim `files` (rule 14a).
     pub grid: bool,
+    pub format: Option<String>,
+    pub language: Option<String>,
+    pub author_id: Option<i32>,
+    pub narrator_id: Option<i32>,
+    pub series_id: Option<i32>,
+    pub in_progress: bool,
 }
+
+/// Query keys that only mean something for a book (`books-api.md` A1).
+const BOOK_KEYS: [&str; 6] = [
+    "format",
+    "language",
+    "authorId",
+    "narratorId",
+    "seriesId",
+    "inProgress",
+];
 
 impl Search {
     pub fn parse(pairs: &Pairs) -> Result<Self, AppError> {
-        const KEYS: [&str; 26] = [
+        const KEYS: [&str; 32] = [
             "q",
             "type",
             "status",
@@ -185,8 +201,19 @@ impl Search {
             "onlyWatched",
             "requestedByMe",
             "view",
+            "format",
+            "language",
+            "authorId",
+            "narratorId",
+            "seriesId",
+            "inProgress",
         ];
         let mut r = Reader::new(pairs, &KEYS);
+        let families: Vec<&str> = MediaKind::Book
+            .families()
+            .iter()
+            .map(|f| f.as_str())
+            .collect();
         let genres = match r.all("genres").as_slice() {
             [one] => one
                 .split(',')
@@ -228,7 +255,22 @@ impl Search {
             only_watched: r.flag("onlyWatched") == Some(true),
             requested_by_me: r.flag("requestedByMe") == Some(true),
             grid: r.one_of("view", &["grid"]).is_some(),
+            format: r.one_of("format", &families),
+            language: r.string("language"),
+            author_id: r.int("authorId"),
+            narrator_id: r.int("narratorId"),
+            series_id: r.int("seriesId"),
+            in_progress: r.flag("inProgress") == Some(true),
         };
+        if s.media_type != Some(MediaKind::Book) {
+            let present: Vec<_> = BOOK_KEYS
+                .into_iter()
+                .filter(|k| !r.all(k).is_empty())
+                .collect();
+            for k in present {
+                r.errors.push(format!("{k} is only valid with type=book"));
+            }
+        }
         r.finish()?;
         s.paging()?;
         Ok(s)
@@ -236,26 +278,35 @@ impl Search {
 
     /// `(limit, offset)` when paginated (`limit > 0`), literals rounded like Postgres reads them.
     pub fn paging(&self) -> Result<Option<(i64, i64)>, AppError> {
-        let (page, limit) = (self.page.unwrap_or(1.0), self.limit.unwrap_or(25.0));
-        if limit <= 0.0 {
-            return Ok(None);
-        }
-        let offset = (page - 1.0) * limit;
-        let (l, o) = (limit.round(), offset.round());
-        if o < 0.0 {
-            return Err(AppError::bad_request(vec![
-                "page must not be less than 1".to_owned(),
-            ]));
-        }
-        for (k, v) in [("limit", l), ("page", o)] {
-            if v >= 9.2e18 {
-                return Err(AppError::bad_request(vec![format!(
-                    "{k} must not be greater than 9.2e18"
-                )]));
-            }
-        }
-        Ok(Some((l as i64, o as i64)))
+        paging_of(self.page, self.limit, 25.0)
     }
+}
+
+/// `(limit, offset)` of `page`/`limit`; a `limit` of 0 or less (the default when `default_limit` is 0) is unpaginated.
+pub(crate) fn paging_of(
+    page: Option<f64>,
+    limit: Option<f64>,
+    default_limit: f64,
+) -> Result<Option<(i64, i64)>, AppError> {
+    let (page, limit) = (page.unwrap_or(1.0), limit.unwrap_or(default_limit));
+    if limit <= 0.0 {
+        return Ok(None);
+    }
+    let offset = (page - 1.0) * limit;
+    let (l, o) = (limit.round(), offset.round());
+    if o < 0.0 {
+        return Err(AppError::bad_request(vec![
+            "page must not be less than 1".to_owned(),
+        ]));
+    }
+    for (k, v) in [("limit", l), ("page", o)] {
+        if v >= 9.2e18 {
+            return Err(AppError::bad_request(vec![format!(
+                "{k} must not be greater than 9.2e18"
+            )]));
+        }
+    }
+    Ok(Some((l as i64, o as i64)))
 }
 
 #[derive(Debug)]

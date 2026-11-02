@@ -1,0 +1,19 @@
+{
+  "name": "books-chapters-hidden-edition-404",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Edition #102 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/101/editions/102/chapters"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\", jsonb_build_object('id', m.id, 'type', m.type, 'title', m.title, 'year', m.year,\n  'posterUrl', m.\"posterUrl\") AS \"json!: Value\"\nFROM media m WHERE m.id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "51f3aeb39bdf1458c36b4509dd18a4b5807dd3b8b8166a5aef52505010be6058"
+}

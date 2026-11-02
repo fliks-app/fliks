@@ -451,6 +451,32 @@
         }
       }
     },
+    "/api/collections": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/collections/{id}": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "operationId": "detail",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/commands": {
       "get": {
         "tags": [
@@ -1876,6 +1902,19 @@
         }
       }
     },
+    "/api/media/{id}/editions/{editionId}/chapters": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "edition_chapters",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media/{id}/episodes/{episodeId}/refresh": {
       "post": {
         "tags": [
@@ -3010,6 +3049,19 @@
         }
       }
     },
+    "/api/persons": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/persons/search": {
       "get": {
         "tags": [
@@ -3042,6 +3094,19 @@
           "persons"
         ],
         "operationId": "provider_credits",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/persons/{id}/works": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "works",
         "responses": {
           "200": {
             "description": ""

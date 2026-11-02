@@ -1,0 +1,32 @@
+{
+  "name": "books-collections-admin",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 4,
+            "id": 101,
+            "maxPosition": 4,
+            "name": "Parity Cycle",
+            "posters": [
+              "/api/images/media/101/poster"
+            ]
+          },
+          {
+            "count": 1,
+            "id": 102,
+            "maxPosition": 1,
+            "name": "Parity Lonely",
+            "posters": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/collections?kind=book&q=parity"
+    }
+  ]
+}

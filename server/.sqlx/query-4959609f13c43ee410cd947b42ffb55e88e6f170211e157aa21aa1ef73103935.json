@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\", jsonb_build_object(\n  'authors', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p.\"sortName\") ORDER BY a.position, a.id)\n      FROM (SELECT c.id, c.position, c.\"personId\" FROM media_credits c\n            WHERE c.\"mediaId\" = m.id AND c.role = 'author' AND c.\"editionId\" IS NULL\n            ORDER BY c.position, c.id LIMIT 3) a\n      JOIN persons p ON p.id = a.\"personId\"), '[]'::jsonb),\n  'series', (SELECT jsonb_build_object('id', c.id, 'name', c.name, 'position', e.position::float8, 'positionLabel', e.\"positionLabel\")\n      FROM collection_entries e JOIN collections c ON c.id = e.\"collectionId\"\n      WHERE e.\"mediaId\" = m.id AND e.\"itemId\" IS NULL ORDER BY c.id LIMIT 1),\n  'formats', COALESCE((SELECT jsonb_agg(f.family ORDER BY f.ord) FROM unnest($4::text[]) WITH ORDINALITY f(family, ord)\n      WHERE EXISTS (SELECT 1 FROM editions e JOIN items i ON i.\"editionId\" = e.id JOIN item_parts ip ON ip.\"itemId\" = i.id\n                    WHERE e.\"mediaId\" = m.id AND e.family = f.family\n                      AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($3))), '[]'::jsonb),\n  'lastFamily', (SELECT e.family FROM playback_states ps JOIN items i ON i.id = ps.\"itemId\" JOIN editions e ON e.id = i.\"editionId\"\n      WHERE ps.\"userId\" = $2 AND i.\"mediaId\" = m.id AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($3)\n      ORDER BY ps.\"lastPlayedAt\" DESC, ps.id DESC LIMIT 1)\n) AS \"json!: Value\"\nFROM media m WHERE m.id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4",
+        "Int4Array",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "4959609f13c43ee410cd947b42ffb55e88e6f170211e157aa21aa1ef73103935"
+}
