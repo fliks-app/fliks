@@ -1,0 +1,235 @@
+<div
+  class="fixed inset-0 overflow-hidden"
+  [style.background-color]="colors().background"
+  [style.color]="colors().text"
+>
+  <!-- The toolkit sizes the host to its line length; the wrapper centres it and leaves the text clear of the bars. -->
+  <div
+    class="absolute inset-x-0 flex justify-center"
+    style="top: max(3rem, calc(env(safe-area-inset-top) + 2.5rem)); bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2.5rem))"
+  >
+    <div #pageHost class="reader-host relative h-full"></div>
+  </div>
+
+  @if (loading()) {
+    <div class="absolute inset-0 flex items-center justify-center">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  }
+
+  @if (panel()) {
+    <button
+      type="button"
+      class="absolute inset-0 z-20 cursor-default"
+      tabindex="-1"
+      [attr.aria-label]="'common.close' | translate"
+      (click)="closePanel()"
+    ></button>
+  }
+
+  <header
+    class="absolute inset-x-0 top-0 z-30 flex items-center gap-1 bg-base-100/90 px-2 text-base-content backdrop-blur transition-opacity duration-200"
+    style="padding-top: env(safe-area-inset-top); padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right))"
+    [class.opacity-0]="!chromeVisible()"
+    [class.pointer-events-none]="!chromeVisible()"
+  >
+    <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'reader.back' | translate" (click)="back()">
+      <svg lucideArrowLeft class="h-5 w-5"></svg>
+    </button>
+    <h1 class="min-w-0 flex-1 truncate px-2 text-sm font-medium">{{ title() }}</h1>
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle"
+      [class.btn-active]="panel() === 'toc'"
+      [attr.aria-label]="'reader.contents' | translate"
+      [attr.aria-expanded]="panel() === 'toc'"
+      (click)="openPanel('toc')"
+    >
+      <svg lucideListTree class="h-5 w-5"></svg>
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle"
+      [class.btn-active]="panel() === 'settings'"
+      [attr.aria-label]="'reader.settings' | translate"
+      [attr.aria-expanded]="panel() === 'settings'"
+      (click)="openPanel('settings')"
+    >
+      <svg lucideSettings class="h-5 w-5"></svg>
+    </button>
+  </header>
+
+  <footer
+    class="absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-base-100/90 px-4 py-2 text-base-content backdrop-blur transition-opacity duration-200"
+    style="padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right))"
+    [class.opacity-0]="!chromeVisible()"
+    [class.pointer-events-none]="!chromeVisible()"
+  >
+    <input
+      type="range"
+      class="range range-xs flex-1"
+      min="0"
+      max="1000"
+      step="1"
+      [attr.dir]="rtl() ? 'rtl' : 'ltr'"
+      [attr.aria-label]="'reader.progress' | translate"
+      [value]="shownProgression() * 1000"
+      (input)="onScrub($event)"
+      (change)="onSeek($event)"
+    />
+    <span class="w-10 shrink-0 text-right text-xs tabular-nums">{{ (shownProgression() * 100).toFixed(0) }}%</span>
+  </footer>
+
+  @if (panel() === 'toc') {
+    <aside
+      class="absolute bottom-0 left-0 z-30 flex w-80 max-w-[85vw] flex-col border-r px-3 border-base-300 bg-base-100 text-base-content shadow-xl"
+      style="top: calc(env(safe-area-inset-top) + 3.5rem)"
+      role="dialog"
+      [attr.aria-label]="'reader.contents' | translate"
+    >
+      <div class="flex items-center justify-between py-2">
+        <h2 class="font-semibold">{{ 'reader.contents' | translate }}</h2>
+        <button type="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.close' | translate" (click)="closePanel()">
+          <svg lucideX class="h-4 w-4"></svg>
+        </button>
+      </div>
+      <ul class="scroll-ring-safe menu min-h-0 flex-1 flex-nowrap overflow-y-auto pb-3">
+        @for (row of toc(); track $index) {
+          <li>
+            <button
+              type="button"
+              class="text-left"
+              [class.menu-active]="$index === currentRow()"
+              [style.padding-inline-start.rem]="0.75 + row.depth * 1"
+              [attr.aria-current]="$index === currentRow() ? 'location' : null"
+              (click)="goToChapter(row.link)"
+            >
+              {{ row.title }}
+            </button>
+          </li>
+        } @empty {
+          <li class="px-3 py-2 text-sm text-base-content/60">{{ 'reader.no_contents' | translate }}</li>
+        }
+      </ul>
+    </aside>
+  }
+
+  @if (panel() === 'settings') {
+    <aside
+      class="absolute right-2 z-30 flex max-h-[calc(100%-5rem)] w-80 max-w-[calc(100vw-1rem)] flex-col rounded-box border border-base-300 bg-base-100 p-3 text-base-content shadow-xl"
+      style="top: calc(env(safe-area-inset-top) + 3.5rem)"
+      role="dialog"
+      [attr.aria-label]="'reader.settings' | translate"
+    >
+      <div class="scroll-ring-safe min-h-0 flex-1 space-y-4 overflow-y-auto">
+        <label class="block">
+          <span class="mb-1 flex justify-between text-sm">
+            {{ 'reader.font_size' | translate }}
+            <span class="tabular-nums text-base-content/60">{{ (settings().fontSize * 100).toFixed(0) }}%</span>
+          </span>
+          <input
+            type="range"
+            class="range range-xs w-full"
+            [min]="fontSizeRange.min"
+            [max]="fontSizeRange.max"
+            [step]="fontSizeRange.step"
+            [value]="settings().fontSize"
+            (input)="change('fontSize', numberOf($event))"
+          />
+        </label>
+
+        <fieldset>
+          <legend class="mb-1 text-sm">{{ 'reader.font_family' | translate }}</legend>
+          <div class="join w-full">
+            @for (font of fonts; track font) {
+              <button
+                type="button"
+                class="btn btn-sm join-item flex-1"
+                [class.btn-active]="settings().fontFamily === font"
+                [attr.aria-pressed]="settings().fontFamily === font"
+                (click)="change('fontFamily', font)"
+              >
+                {{ 'reader.font_' + font | translate }}
+              </button>
+            }
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="mb-1 text-sm">{{ 'reader.theme' | translate }}</legend>
+          <div class="join w-full">
+            @for (swatch of swatches; track swatch.theme) {
+              <button
+                type="button"
+                class="btn btn-sm join-item flex-1 gap-2"
+                [class.btn-active]="settings().theme === swatch.theme"
+                [attr.aria-pressed]="settings().theme === swatch.theme"
+                (click)="change('theme', swatch.theme)"
+              >
+                <span class="inline-block h-3 w-3 rounded-full border border-base-content/30" [style.background-color]="swatch.color"></span>
+                {{ 'reader.theme_' + swatch.theme | translate }}
+              </button>
+            }
+          </div>
+        </fieldset>
+
+        <label class="block">
+          <span class="mb-1 flex justify-between text-sm">
+            {{ 'reader.line_spacing' | translate }}
+            <span class="tabular-nums text-base-content/60">{{ settings().lineHeight.toFixed(1) }}</span>
+          </span>
+          <input
+            type="range"
+            class="range range-xs w-full"
+            [min]="lineHeightRange.min"
+            [max]="lineHeightRange.max"
+            [step]="lineHeightRange.step"
+            [value]="settings().lineHeight"
+            (input)="change('lineHeight', numberOf($event))"
+          />
+        </label>
+
+        <fieldset>
+          <legend class="mb-1 text-sm">{{ 'reader.margins' | translate }}</legend>
+          <div class="join w-full">
+            @for (margin of margins; track margin) {
+              <button
+                type="button"
+                class="btn btn-sm join-item flex-1"
+                [class.btn-active]="settings().margins === margin"
+                [attr.aria-pressed]="settings().margins === margin"
+                (click)="change('margins', margin)"
+              >
+                {{ 'reader.margins_' + margin | translate }}
+              </button>
+            }
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="mb-1 text-sm">{{ 'reader.layout' | translate }}</legend>
+          <div class="join w-full">
+            <button
+              type="button"
+              class="btn btn-sm join-item flex-1"
+              [class.btn-active]="!settings().scroll"
+              [attr.aria-pressed]="!settings().scroll"
+              (click)="change('scroll', false)"
+            >
+              {{ 'reader.layout_paginated' | translate }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm join-item flex-1"
+              [class.btn-active]="settings().scroll"
+              [attr.aria-pressed]="settings().scroll"
+              (click)="change('scroll', true)"
+            >
+              {{ 'reader.layout_scroll' | translate }}
+            </button>
+          </div>
+        </fieldset>
+      </div>
+    </aside>
+  }
+</div>

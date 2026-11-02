@@ -84,7 +84,7 @@ describe('BookWorkComponent', () => {
     expect(queue.autoplay()).toBe(true);
   });
 
-  it('puts the family last played, with only the audio button enabled', async () => {
+  it('puts the family last played first, the listen button enabled and the read button a link to the reader', async () => {
     const { fixture, http, el } = await setup();
     http.expectOne('/api/collections/10').flush(collectionDetailFixture);
     http.expectOne('/api/persons/1/works?role=author').flush(personWorksFixture);
@@ -92,7 +92,8 @@ describe('BookWorkComponent', () => {
     await settle(fixture);
     const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="format-button"]'));
     expect(buttons.map((b) => b.textContent!.trim())).toEqual(['books_work.listen', 'books_work.read']);
-    expect(buttons.map((b) => b.disabled)).toEqual([false, true]);
+    expect(buttons[0].disabled).toBe(false);
+    expect(buttons[1].getAttribute('href')).toBe('/read/1/1000');
     expect(buttons[0].classList).toContain('btn-primary');
     expect(el.textContent).toContain('books_work.progress');
   });

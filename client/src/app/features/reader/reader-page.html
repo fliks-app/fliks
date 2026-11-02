@@ -1,0 +1,11 @@
+@if (opened(); as o) {
+  @if (o.format === 'pdf') {
+    <app-pdf-reader [target]="o.target" [title]="o.title" (closed)="back()" />
+  } @else {
+    <app-reader [target]="o.target" />
+  }
+} @else {
+  <div class="fixed inset-0 flex items-center justify-center">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+}

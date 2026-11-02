@@ -63,6 +63,16 @@ export class BookWorkComponent {
     return lead ? [lead.family, ...all.filter((f) => f !== lead.family)] : [];
   });
 
+  /** The reader route of the text edition last read, else the first readable one. */
+  protected readonly readLink = computed(() => {
+    const { editions, progress } = this.book();
+    const readable = editions.filter(
+      (e) => e.family === 'text' && e.itemId != null && e.fileIds.length && ['epub', 'pdf'].includes(e.format ?? ''),
+    );
+    const e = readable.find((x) => x.id === progress?.editionId) ?? readable[0];
+    return e ? ['/read', this.media().id, e.itemId] : null;
+  });
+
   protected readonly narrators = computed(() => [
     ...new Map(this.book().editions.flatMap((e) => e.narrators).map((n) => [n.id, n])).values(),
   ]);
