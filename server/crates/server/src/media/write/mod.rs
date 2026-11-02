@@ -1,6 +1,6 @@
 //! `/api/media` write routes and `DELETE /api/libraries/:id` (`docs/spec/media-write.md`).
 pub(crate) mod body;
-mod book_import;
+pub(crate) mod book_import;
 mod companions;
 mod delete;
 mod import;

@@ -6,7 +6,7 @@ pub mod merge;
 mod route_tests;
 pub mod routes;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use fliks_domain::external_id::ExternalProvider;
 use serde_json::{Map, Value};

@@ -2,7 +2,7 @@ use crate::http::{layers, static_files};
 use crate::{
     auth, cleanup, collections, events, fs, images, importers, jobs, libraries, livetv, markers,
     media, media_servers, metadata, notifications, persons, playback, playlists, profiles, qoe,
-    remote, requests, roles, settings, social, state::AppState, subtitles, system, users,
+    remote, requests, roles, settings, social, state::AppState, subtitles, system, users, wanted,
 };
 use axum::{Router, extract::Request, response::Response, routing::any};
 use std::path::PathBuf;
@@ -318,6 +318,16 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         persons::provider_credits,
         persons::list,
         persons::works,
+        wanted::wants_get,
+        wanted::wants_put,
+        wanted::wanted,
+        wanted::follows,
+        wanted::follow_get,
+        wanted::follow_put,
+        wanted::follow_delete,
+        wanted::watch_get,
+        wanted::watch_put,
+        wanted::watch_delete,
         requests::create,
         requests::list,
         requests::title_state,
@@ -450,6 +460,7 @@ fn api() -> Router<AppState> {
         .merge(metadata::router())
         .merge(collections::router())
         .merge(persons::router())
+        .merge(crate::wanted::router())
         .merge(system::api())
         .merge(jobs::router())
         .merge(jobs::book_import::router())

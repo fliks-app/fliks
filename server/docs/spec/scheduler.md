@@ -39,7 +39,7 @@ Scope: the `commands` table and its audit wrapper (`run_audited`), the cron runn
 
 ### D. `GET /commands/schedulers`
 
-10. Core entries, in this order, `triggerable: true`, `pluginId: null`. All five are fired by Rust (rules 22, 23, 30, 31).
+10. Core entries, in this order, `triggerable: true`, `pluginId: null`. All are fired by Rust (rules 22, 23, 30, 31).
 
     | name | cron (verbatim string) | labelKey |
     |---|---|---|
@@ -49,9 +49,10 @@ Scope: the `commands` table and its audit wrapper (`run_audited`), the cron runn
     | `SubtitleSearch` | `0 0-23/6 * * *` | `system.cmd_subtitle_search` |
     | `SubtitleUpgrade` | `0 0-23/6 * * *` | `system.cmd_subtitle_upgrade` |
     | `MediaCleanup` | `0 05 * * *` | `system.cmd_media_cleanup` |
+    | `FollowRefresh` | `0 06 * * *` | `system.cmd_follow_refresh` |
 
     The cron strings are verbatim, part of the contract; the client shows them.
-11. After the core five come the live TV jobs in this order (`LiveTvSourceRefresh`, `LiveTvGuideRefresh`, `LiveTvGuidePrune`, `pluginId: null`, `lastRun`/`lastStatus` from `commands` like core), then the plugin-declared jobs `{name, cron, triggerable, labelKey, lastRun: null, lastStatus: null, pluginId}` (a plugin's runs have no `commands` row, rule 13).
+11. After the core jobs come the live TV jobs in this order (`LiveTvSourceRefresh`, `LiveTvGuideRefresh`, `LiveTvGuidePrune`, `pluginId: null`, `lastRun`/`lastStatus` from `commands` like core), then the plugin-declared jobs `{name, cron, triggerable, labelKey, lastRun: null, lastStatus: null, pluginId}` (a plugin's runs have no `commands` row, rule 13).
 12. `lastRun` / `lastStatus` = `startedOn` / `status` of the newest row of that name by `createdAt` (a `queued` row gives `lastRun: null, lastStatus: 'queued'`), else both `null`; one query for all non-plugin names (SQL). `nextRun` = next fire time strictly after now, computed in the zone of rule 9 and serialized as UTC ISO-8601 with ms and `Z`.
 13. A plugin job never gets a `commands` row: core owns that trail, the plugin's run does not.
 
@@ -111,6 +112,7 @@ None in the `settings` table (the only settings-gated tick is the subtitle one).
 | `PruneOldCommands` | Rust | `0 03 * * *` | none | rule 26 | none |
 | `RefreshPluginSources` | Rust | `0 3 * * *`, manual | none | rule 30 | `RefreshPluginSources` |
 | `MediaCleanup` | Rust | `0 05 * * *`, manual | `cleanup_max_per_run` | `cleanup.md` rules 11-18 | `MediaCleanup` |
+| `FollowRefresh` | Rust | `0 06 * * *`, manual | none | `wants-follows.md` rules 9-14 | `FollowRefresh` |
 | `RefreshMissingMetadata` | Rust | manual only | `TMDB_API_KEY`, `METADATA_STALE_AFTER_MONTHS` | rule 25 | `RefreshMissingMetadata`, `manual` |
 | `RescanAll`, `RescanMissingFiles` | Rust | manual only | none | rule 27 | same name, `manual` |
 | `GenerateSprites`, `GenerateMissingSprites` | Rust | manual only | none | rule 28 | same name, `manual` |

@@ -50,6 +50,7 @@ pub mod sync;
 pub mod system;
 pub mod users;
 pub mod vetted;
+pub mod wanted;
 
 use config::Config;
 use sqlx::{Connection, PgConnection, PgPool, postgres::PgPoolOptions};

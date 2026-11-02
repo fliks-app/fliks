@@ -64,6 +64,14 @@
             "lastStatus": null
           },
           {
+            "cron": "0 06 * * *",
+            "labelKey": "system.cmd_follow_refresh",
+            "name": "FollowRefresh",
+            "pluginId": null,
+            "triggerable": true,
+            "lastStatus": null
+          },
+          {
             "cron": "0 0-23/1 * * *",
             "labelKey": "liveTv.jobs.sourceRefresh",
             "name": "LiveTvSourceRefresh",

@@ -27,31 +27,31 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub(super) const SECRET: &str = "0123456789abcdef0123456789abcdef";
-pub(super) const ISBN: &str = "9780306406157";
+pub(crate) const SECRET: &str = "0123456789abcdef0123456789abcdef";
+pub(crate) const ISBN: &str = "9780306406157";
 const P: Priority = Priority::Interactive;
 
 #[derive(Default)]
-pub(super) struct Fake {
+pub(crate) struct Fake {
     id: Option<ExternalProvider>,
-    pub(super) works: HashMap<String, Value>,
-    pub(super) children: HashMap<String, Vec<Value>>,
+    pub(crate) works: HashMap<String, Value>,
+    pub(crate) children: HashMap<String, Vec<Value>>,
     editions: HashMap<(ExternalProvider, String), Value>,
     finds: HashMap<(ExternalProvider, String), String>,
-    pub(super) found: Vec<Value>,
-    pub(super) broken: bool,
+    pub(crate) found: Vec<Value>,
+    pub(crate) broken: bool,
     calls: Mutex<Vec<String>>,
 }
 
 impl Fake {
-    pub(super) fn new(id: ExternalProvider) -> Self {
+    pub(crate) fn new(id: ExternalProvider) -> Self {
         Self {
             id: Some(id),
             ..Self::default()
         }
     }
 
-    pub(super) fn edition(mut self, ns: ExternalProvider, v: &str, record: Value) -> Self {
+    pub(crate) fn edition(mut self, ns: ExternalProvider, v: &str, record: Value) -> Self {
         self.editions.insert((ns, v.into()), record);
         self
     }
@@ -169,7 +169,7 @@ impl MetadataProvider for Fake {
     }
 }
 
-pub(super) fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
+pub(crate) fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
     let mut st = AppState::new(db.clone(), Config::from_lookup(|_| None), SECRET);
     let m: &mut Metadata = Arc::get_mut(&mut st.metadata).unwrap();
     for f in fakes {
@@ -178,7 +178,7 @@ pub(super) fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
     st
 }
 
-pub(super) fn anchor() -> Fake {
+pub(crate) fn anchor() -> Fake {
     let mut f = Fake::new(OpenLibrary);
     f.works.insert(
         "OL1W".into(),
