@@ -120,6 +120,21 @@ pub async fn file_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option
     .await
 }
 
+/// The file and its media's directories, read afresh: call it under `folder_moves.read()`, so a
+/// move cannot land between the sidecar write and its row.
+pub async fn fresh_dirs(
+    db: &sqlx::PgPool,
+    file_id: i32,
+    no_root: &str,
+) -> Result<(Dirs, FileRow), AppError> {
+    let gone = || AppError::not_found(format!("MediaFile #{file_id} not found"));
+    let file = file_by_id(db, file_id).await?.ok_or_else(gone)?;
+    let media = load_media_of(db, file.media_id.ok_or_else(gone)?, Some(file_id))
+        .await?
+        .ok_or_else(gone)?;
+    Ok((media.dirs(no_root)?, file))
+}
+
 pub async fn files_of_media(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Vec<FileRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {FILE_COLS} FROM media_files WHERE "mediaId" = $1 ORDER BY id"#

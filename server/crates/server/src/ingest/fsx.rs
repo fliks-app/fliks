@@ -364,15 +364,20 @@ pub fn move_file(src: &Path, dest: &Path, replace: bool) -> io::Result<bool> {
     }
 }
 
-/// A copy of `src` at `dest` that leaves `src` alone and never replaces: a hard link, else W2 carrying the
-/// mtime so a rerun recognises it. `Ok(false)` when `dest` exists.
-pub fn place_copy(src: &Path, dest: &Path) -> io::Result<bool> {
+/// A hard link of `src` at `dest`: `Some(false)` when `dest` exists, `None` when the filesystem refuses
+/// to link (another device, no permission) and a copy is needed.
+pub fn link_new(src: &Path, dest: &Path) -> io::Result<Option<bool>> {
     fs::create_dir_all(dest.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
     match fs::hard_link(src, dest) {
-        Ok(()) => return Ok(true),
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return Ok(false),
-        Err(_) => {}
+        Ok(()) => Ok(Some(true)),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(Some(false)),
+        Err(_) => Ok(None),
     }
+}
+
+/// A copy of `src` at `dest` that leaves `src` alone and never replaces: W2 carrying the mtime.
+/// `Ok(false)` when `dest` exists.
+pub fn copy_new(src: &Path, dest: &Path) -> io::Result<bool> {
     let mtime = fs::metadata(src)?.modified()?;
     let tmp = copy_to_tmp(src, dest)?;
     let r = fs::File::options()
@@ -388,20 +393,6 @@ pub fn place_copy(src: &Path, dest: &Path) -> io::Result<bool> {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
         Err(e) => Err(e),
-    }
-}
-
-/// Whether `a` and `b` sit on one device; `false` when unknown, so a copy is assumed.
-pub fn same_device(a: &Path, b: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        matches!((fs::metadata(a), fs::metadata(b)), (Ok(x), Ok(y)) if x.dev() == y.dev())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (a, b);
-        false
     }
 }
 

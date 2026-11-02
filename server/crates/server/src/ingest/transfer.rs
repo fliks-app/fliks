@@ -77,13 +77,13 @@ pub struct Companions<'a> {
     pub allowed: &'a [String],
 }
 
-/// Rules 14-15 (W5): every failure is logged and skipped; nothing existing is ever replaced.
-pub fn transfer_companions(c: &Companions) {
-    let Ok(entries) = fs::read_dir(c.src_dir) else {
-        return;
+/// The files of `dir` that ride along with the video whose stem is `base` (rules 14-15).
+pub fn companion_names(dir: &Path, base: &str, allowed: &[String]) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
     };
     let entries: Vec<_> = entries.flatten().collect();
-    let base = c.source_base.to_lowercase();
+    let base = base.to_lowercase();
     let longer: Vec<String> = entries
         .iter()
         .filter_map(|e| e.file_name().into_string().ok())
@@ -91,6 +91,7 @@ pub fn transfer_companions(c: &Companions) {
         .map(|n| split_ext(&n).0.to_lowercase())
         .filter(|s| s.len() > base.len() && s.starts_with(&base))
         .collect();
+    let mut names = Vec::new();
     for e in entries {
         if !e.file_type().is_ok_and(|t| t.is_file()) {
             continue;
@@ -100,23 +101,33 @@ pub fn transfer_companions(c: &Companions) {
         };
         let (stem, ext) = split_ext(&name);
         let (stem_l, ext_l) = (stem.to_lowercase(), ext.to_lowercase());
-        if !c.allowed.contains(&ext_l) || !stem_l.starts_with(&base) {
+        if !allowed.contains(&ext_l) || !stem_l.starts_with(&base) {
             continue;
         }
-        let exact = stem_l == base;
-        if (ext_l == ".edl" && !exact) || super::is_video(&name) {
+        if (ext_l == ".edl" && stem_l != base) || super::is_video(&name) {
             continue;
         }
         if longer.iter().any(|l| stem_l.starts_with(l.as_str())) {
             tracing::warn!("companion \"{name}\" belongs to a longer-named video, skipped");
             continue;
         }
+        names.push(name);
+    }
+    names
+}
+
+/// Rules 14-15 (W5): every failure is logged and skipped; nothing existing is ever replaced.
+pub fn transfer_companions(c: &Companions) {
+    let base = c.source_base.to_lowercase();
+    for name in companion_names(c.src_dir, c.source_base, c.allowed) {
+        let (stem, ext) = split_ext(&name);
+        let exact = stem.to_lowercase() == base;
         let dest_name = match language_hint(stem).filter(|_| !exact) {
             Some(h) => format!("{}.{h}{ext}", c.new_base),
             None => format!("{}{ext}", c.new_base),
         };
         let dest: PathBuf = c.dest_dir.join(&dest_name);
-        match transfer_file(&e.path(), &dest, c.method, false) {
+        match transfer_file(&c.src_dir.join(&name), &dest, c.method, false) {
             Ok(true) => {}
             Ok(false) => {
                 tracing::warn!("companion \"{dest_name}\" already exists, \"{name}\" kept")
