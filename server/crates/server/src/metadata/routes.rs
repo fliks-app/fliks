@@ -20,7 +20,7 @@ use fliks_domain::external_id::ExternalProvider;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::{
     media::query::js_parse_int,
-    metadata::{discover, language::Resolved, limiter::Priority},
+    metadata::{language::Resolved, limiter::Priority},
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -233,8 +233,25 @@ pub async fn search_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs) -
     search(st, a, q, true).await
 }
 
-async fn listed(st: &AppState, a: &Authed, tv: bool, live: Result<Value, Upstream>) -> Res {
-    let v = live.map_err(|e| fail(ExternalProvider::Tmdb, &e, false))?;
+async fn listed(
+    st: &AppState,
+    a: &Authed,
+    tv: bool,
+    name: &str,
+    params: &[(String, String)],
+) -> Res {
+    let l = lang(st).await?;
+    let v = st
+        .metadata
+        .list(
+            MediaKind::from_tv(tv),
+            name,
+            params,
+            &l,
+            Priority::Interactive,
+        )
+        .await
+        .map_err(|(p, e)| fail(p, &e, false))?;
     let items = v.as_array().cloned().unwrap_or_default();
     Ok(Json(enrich(&st.db, a, items, tv).await?))
 }
@@ -247,104 +264,53 @@ fn window(q: &[(String, String)]) -> &'static str {
     }
 }
 
+fn trending(q: &[(String, String)]) -> [(String, String); 1] {
+    [("window".into(), window(q).into())]
+}
+
 #[utoipa::path(get, path = "/api/metadata/trending/movie", responses((status = 200)))]
 pub async fn trending_movie(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
-    let l = lang(&st).await?;
-    listed(
-        &st,
-        &a,
-        false,
-        st.metadata
-            .tmdb
-            .trending(false, window(&q), &l, Priority::Interactive)
-            .await,
-    )
-    .await
+    listed(&st, &a, false, "trending", &trending(&q)).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/popular/movie", responses((status = 200)))]
 pub async fn popular_movie(State(st): State<AppState>, a: Authed) -> Res {
-    let l = lang(&st).await?;
-    listed(
-        &st,
-        &a,
-        false,
-        st.metadata
-            .tmdb
-            .popular(false, &l, Priority::Interactive)
-            .await,
-    )
-    .await
+    listed(&st, &a, false, "popular", &[]).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/upcoming/movie", responses((status = 200)))]
 pub async fn upcoming_movie(State(st): State<AppState>, a: Authed) -> Res {
-    let l = lang(&st).await?;
-    listed(
-        &st,
-        &a,
-        false,
-        st.metadata
-            .tmdb
-            .upcoming(false, &l, Priority::Interactive)
-            .await,
-    )
-    .await
+    listed(&st, &a, false, "upcoming", &[]).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/trending/tv", responses((status = 200)))]
 pub async fn trending_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
-    let l = lang(&st).await?;
-    listed(
-        &st,
-        &a,
-        true,
-        st.metadata
-            .tmdb
-            .trending(true, window(&q), &l, Priority::Interactive)
-            .await,
-    )
-    .await
+    listed(&st, &a, true, "trending", &trending(&q)).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/popular/tv", responses((status = 200)))]
 pub async fn popular_tv(State(st): State<AppState>, a: Authed) -> Res {
-    let l = lang(&st).await?;
-    listed(
-        &st,
-        &a,
-        true,
-        st.metadata
-            .tmdb
-            .popular(true, &l, Priority::Interactive)
-            .await,
-    )
-    .await
+    listed(&st, &a, true, "popular", &[]).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/upcoming/tv", responses((status = 200)))]
 pub async fn upcoming_tv(State(st): State<AppState>, a: Authed) -> Res {
-    let l = lang(&st).await?;
-    listed(
-        &st,
-        &a,
-        true,
-        st.metadata
-            .tmdb
-            .upcoming(true, &l, Priority::Interactive)
-            .await,
-    )
-    .await
+    listed(&st, &a, true, "upcoming", &[]).await
 }
 
 async fn genres(st: &AppState, tv: bool) -> Res {
     let l = lang(st).await?;
     let v = st
         .metadata
-        .tmdb
-        .genres(tv, &l, Priority::Interactive)
+        .list(
+            MediaKind::from_tv(tv),
+            "genres",
+            &[],
+            &l,
+            Priority::Interactive,
+        )
         .await
-        .map_err(|e| fail(ExternalProvider::Tmdb, &e, false))?;
+        .map_err(|(p, e)| fail(p, &e, false))?;
     Ok(Json(v))
 }
 
@@ -359,21 +325,11 @@ pub async fn genres_tv(State(st): State<AppState>, _a: Authed) -> Res {
 }
 
 async fn discovered(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> Res {
-    let opts = discover::parse(
-        bare(&q, "genres").as_deref(),
-        bare(&q, "sort").as_deref(),
-        bare(&q, "voteGte").as_deref(),
-        bare(&q, "yearGte").as_deref(),
-        bare(&q, "yearLte").as_deref(),
-    );
-    let l = lang(&st).await?;
-    let found = st
-        .metadata
-        .tmdb
-        .discover(tv, &opts, &l, Priority::Interactive)
-        .await;
-    let results = found.map_err(|e| fail(ExternalProvider::Tmdb, &e, false))?;
-    Ok(Json(enrich(&st.db, &a, results, tv).await?))
+    let params: Vec<_> = ["genres", "sort", "voteGte", "yearGte", "yearLte"]
+        .into_iter()
+        .filter_map(|k| Some((k.to_owned(), bare(&q, k)?)))
+        .collect();
+    listed(&st, &a, tv, "discover", &params).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/discover/movie", responses((status = 200)))]

@@ -319,3 +319,60 @@ async fn background_calls_leave_an_instance_to_an_interactive_one() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn lists_go_through_the_plugin_and_are_validated() {
+    let edit = |m: &mut Value| m["provider"]["kinds"]["series"] = json!(["lists"]);
+    let Some((s, h, lang)) = up("pvlist", |_| {}, edit).await else {
+        return;
+    };
+    let md = &h.st.metadata;
+    let tv = MediaKind::Series;
+    let list = |kind, name: &'static str, params: &[(&str, &str)]| {
+        let params: Vec<_> = params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let lang = lang.clone();
+        async move { md.list(kind, name, &params, &lang, GO).await }
+    };
+    assert_eq!(md.lister(tv), Ns::Tmdb);
+    let got = list(tv, "trending", &[("window", "day")]).await.unwrap();
+    assert_eq!(got[0]["title"], format!("series:day:{}", lang.tmdb_locale));
+    let got = list(tv, "discover", &[("genres", "28,12"), ("yearGte", "1999")])
+        .await
+        .unwrap();
+    assert_eq!(
+        got[0]["title"],
+        r#"[("genres", "28,12"), ("yearGte", "1999")]"#
+    );
+    assert_eq!(list(tv, "genres", &[]).await.unwrap()[0]["name"], "Action");
+    for name in ["popular", "upcoming"] {
+        let (id, e) = list(tv, name, &[]).await.unwrap_err();
+        assert_eq!(
+            (id, e.status),
+            (Ns::Tmdb, Some(502)),
+            "{name}: a malformed list"
+        );
+    }
+    let (_, e) = list(MediaKind::Movie, "trending", &[]).await.unwrap_err();
+    assert_eq!(e.status, Some(404), "undeclared for the kind");
+
+    let (st, body) = h
+        .call(
+            "GET",
+            "/api/metadata/trending/tv?window=day",
+            Some(&h.user),
+            None,
+        )
+        .await;
+    assert_eq!(st, 200, "{body}");
+    assert_eq!(body[0]["title"], format!("series:day:{}", lang.tmdb_locale));
+    assert_eq!(body[0]["existingMediaId"], Value::Null);
+    let (st, _) = h
+        .call("GET", "/api/metadata/popular/tv", Some(&h.user), None)
+        .await;
+    assert_eq!(st, 503);
+    h.finish().await;
+    s.finish().await;
+}

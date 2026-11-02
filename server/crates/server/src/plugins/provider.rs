@@ -199,7 +199,7 @@ impl PluginProvider {
         self.checked(parse(json, array))
     }
 
-    fn list(&self, json: &str) -> Result<Vec<Value>, Upstream> {
+    fn array(&self, json: &str) -> Result<Vec<Value>, Upstream> {
         self.checked(parse_list(json))
     }
 
@@ -332,7 +332,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.list(&json)
+            self.array(&json)
         }
         .boxed()
     }
@@ -386,7 +386,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.list(&json)
+            self.array(&json)
         }
         .boxed()
     }
@@ -413,7 +413,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.list(&json)
+            self.array(&json)
         }
         .boxed()
     }
@@ -527,6 +527,39 @@ impl MetadataProvider for PluginProvider {
                     crew: side("crew")?,
                 })
             }))
+        }
+        .boxed()
+    }
+
+    fn has_lists(&self, kind: MediaKind) -> bool {
+        self.declares(Some(kind), "lists")
+            || self.shadow.as_ref().is_some_and(|b| b.has_lists(kind))
+    }
+
+    fn list<'a>(
+        &'a self,
+        kind: MediaKind,
+        name: &'a str,
+        params: &'a [(String, String)],
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Value> {
+        async move {
+            if let Some(b) = self.built_in(Some(kind), "lists") {
+                return b.list(kind, name, params, lang, p).await;
+            }
+            self.has(Some(kind), "lists")?;
+            let (name, params, lang) = (name.to_owned(), params.to_vec(), lang_of(lang));
+            let json = self
+                .call(false, p, move |i| {
+                    Box::pin(async move {
+                        let (g, s) = i.provider();
+                        g.call_list(s, &kind.as_str().to_owned(), &name, &params, &lang)
+                            .await
+                    })
+                })
+                .await?;
+            self.array(&json).map(Value::Array)
         }
         .boxed()
     }

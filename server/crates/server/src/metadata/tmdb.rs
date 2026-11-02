@@ -8,19 +8,18 @@ use super::{
     provider::{Call, MetadataProvider, Search, numeric},
     types::{Credits, PersonDetails},
 };
-use crate::sync::MutexExt;
 use fliks_domain::{
     external_id::ExternalProvider,
     media::kind::MediaKind,
     metadata::{
-        discover::Options,
+        discover::{self, Options},
         language::Resolved,
         limiter::{Limits, Priority},
     },
 };
 use futures_util::{StreamExt, stream};
 use serde_json::{Map, Value, json};
-use std::{collections::HashMap, sync::Mutex, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 pub const API_URL: &str = "https://api.themoviedb.org/3";
 pub const IMAGE_URL: &str = "https://image.tmdb.org/t/p";
@@ -37,8 +36,6 @@ const LIMITS: Limits = Limits {
 pub struct Tmdb {
     http: Guarded,
     img: String,
-    /// Last good copy of each global list (rule 17); never expires.
-    stale: Mutex<HashMap<String, Value>>,
 }
 
 type Query = Vec<(String, String)>;
@@ -68,7 +65,6 @@ impl Tmdb {
                 LIMITS,
             ),
             img: img.trim_end_matches('/').to_owned(),
-            stale: Mutex::default(),
         }
     }
 
@@ -76,28 +72,7 @@ impl Tmdb {
         self.http.get_json(path, &query, p).await
     }
 
-    /// Serves the last good copy of `key` when a live fetch fails; a cold failure propagates.
-    async fn with_stale(
-        &self,
-        key: String,
-        fetch: impl Future<Output = Result<Value, Upstream>>,
-    ) -> Result<Value, Upstream> {
-        match fetch.await {
-            Ok(v) => {
-                self.stale.lock_clean().insert(key, v.clone());
-                Ok(v)
-            }
-            Err(e) => match self.stale.lock_clean().get(&key) {
-                Some(v) => {
-                    tracing::warn!("TMDB {key} unavailable, serving last cached copy");
-                    Ok(v.clone())
-                }
-                None => Err(e),
-            },
-        }
-    }
-
-    fn list(&self, data: &Value, tv: bool) -> Result<Value, Upstream> {
+    fn mapped(&self, data: &Value, tv: bool) -> Result<Value, Upstream> {
         Ok(Value::Array(
             results(data)?.iter().map(|r| self.result(r, tv)).collect(),
         ))
@@ -163,31 +138,23 @@ impl Tmdb {
         p: Priority,
     ) -> Result<Value, Upstream> {
         let kind = if tv { "tv" } else { "movie" };
-        let key = format!("trending:{kind}:{window}:{}", lang.tmdb_locale);
         let path = format!("/trending/{kind}/{window}");
-        self.with_stale(key, async {
-            let d = self
-                .get(&path, q(&[("language", &lang.tmdb_locale)]), p)
-                .await?;
-            self.list(&d, tv)
-        })
-        .await
+        let d = self
+            .get(&path, q(&[("language", &lang.tmdb_locale)]), p)
+            .await?;
+        self.mapped(&d, tv)
     }
 
     pub async fn popular(&self, tv: bool, lang: &Resolved, p: Priority) -> Result<Value, Upstream> {
         let kind = if tv { "tv" } else { "movie" };
-        let key = format!("popular:{kind}:{}", lang.tmdb_locale);
-        self.with_stale(key, async {
-            let d = self
-                .get(
-                    &format!("/{kind}/popular"),
-                    q(&[("language", &lang.tmdb_locale)]),
-                    p,
-                )
-                .await?;
-            self.list(&d, tv)
-        })
-        .await
+        let d = self
+            .get(
+                &format!("/{kind}/popular"),
+                q(&[("language", &lang.tmdb_locale)]),
+                p,
+            )
+            .await?;
+        self.mapped(&d, tv)
     }
 
     pub async fn upcoming(
@@ -196,40 +163,28 @@ impl Tmdb {
         lang: &Resolved,
         p: Priority,
     ) -> Result<Value, Upstream> {
-        let (key, path, params) = if tv {
-            (
-                format!("upcoming:tv:{}", lang.tmdb_locale),
-                "/tv/on_the_air",
-                q(&[("language", &lang.tmdb_locale)]),
-            )
+        let (path, params) = if tv {
+            ("/tv/on_the_air", q(&[("language", &lang.tmdb_locale)]))
         } else {
             (
-                format!("upcoming:movie:{}:{}", lang.tmdb_locale, lang.region),
                 "/movie/upcoming",
                 q(&[("language", &lang.tmdb_locale), ("region", &lang.region)]),
             )
         };
-        self.with_stale(key, async {
-            let d = self.get(path, params, p).await?;
-            self.list(&d, tv)
-        })
-        .await
+        let d = self.get(path, params, p).await?;
+        self.mapped(&d, tv)
     }
 
     pub async fn genres(&self, tv: bool, lang: &Resolved, p: Priority) -> Result<Value, Upstream> {
         let kind = if tv { "tv" } else { "movie" };
-        let key = format!("genres:{kind}:{}", lang.tmdb_locale);
-        self.with_stale(key, async {
-            let d = self
-                .get(
-                    &format!("/genre/{kind}/list"),
-                    q(&[("language", &lang.tmdb_locale)]),
-                    p,
-                )
-                .await?;
-            Ok(d.get("genres").cloned().unwrap_or(Value::Null))
-        })
-        .await
+        let d = self
+            .get(
+                &format!("/genre/{kind}/list"),
+                q(&[("language", &lang.tmdb_locale)]),
+                p,
+            )
+            .await?;
+        Ok(d.get("genres").cloned().unwrap_or(Value::Null))
     }
 
     pub async fn discover(
@@ -694,6 +649,48 @@ impl MetadataProvider for Tmdb {
 
     fn limits(&self) -> Limits {
         self.http.limits()
+    }
+
+    fn has_lists(&self, kind: MediaKind) -> bool {
+        kind.is_video()
+    }
+
+    fn list<'a>(
+        &'a self,
+        kind: MediaKind,
+        name: &'a str,
+        params: &'a [(String, String)],
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Value> {
+        Box::pin(async move {
+            let tv = kind == MediaKind::Series;
+            let param = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+            match name {
+                "trending" => {
+                    let window = if param("window") == Some("day") {
+                        "day"
+                    } else {
+                        "week"
+                    };
+                    self.trending(tv, window, lang, p).await
+                }
+                "popular" => self.popular(tv, lang, p).await,
+                "upcoming" => self.upcoming(tv, lang, p).await,
+                "genres" => self.genres(tv, lang, p).await,
+                "discover" => {
+                    let opts = discover::parse(
+                        param("genres"),
+                        param("sort"),
+                        param("voteGte"),
+                        param("yearGte"),
+                        param("yearLte"),
+                    );
+                    Ok(Value::Array(self.discover(tv, &opts, lang, p).await?))
+                }
+                _ => Err(Upstream::new(Some(404), "unknown list")),
+            }
+        })
     }
 
     fn search<'a>(

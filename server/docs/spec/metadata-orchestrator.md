@@ -9,7 +9,7 @@ Scope: how the server reaches a metadata provider. The per-provider mappings sta
 3. Records are the JSON shapes `metadata.md` rules 24, 25, 31, 32 and 34 already describe: nothing about the wire or the mappings changes. `find_by(source, id)` answers `(id, kind)` or `None`; a source the provider cannot look up is `None` without a call (TMDB looks up IMDb and TVDB ids, TVDB looks up IMDb ids).
 4. A provider id is a string. TMDB and TVDB parse it as an integer; callers validate it before the call (`metadata.md` rule 39), so an unparsable id never reaches a provider.
 5. `metadata::types::Provider` does not exist: `ExternalProvider` is the provider name everywhere (`tmdb`, `tvdb`).
-6. TMDB's lists (trending, popular, upcoming, genres, discover) are not part of the trait: no other provider has them. They stay methods of the TMDB client, with the stale list cache of `metadata.md` rule 17 unchanged.
+6. The lists (trending, popular, upcoming, genres, discover) are `MetadataProvider::list`, answered by a provider whose `has_lists(kind)` is true (TMDB, a provider plugin that declares `lists`; `provider-plugins.md` rule 44). The stale list cache of `metadata.md` rule 17 is held by `Metadata`, not by a client.
 7. The TVDB login single-flight (`metadata.md` rule 19) stays inside the TVDB client. The login is always sent at interactive priority: the login lock is held across it and must not wait behind a background pause.
 8. TMDB `seasons` drops a season whose own call fails (`metadata.md` rule 31), except when the answer is a 429 or a 503, or the limiter refused the call: then the whole call fails, because a shortened list makes identify delete the seasons that are missing from it.
 

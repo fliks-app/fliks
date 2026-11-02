@@ -3,6 +3,7 @@ pub mod books;
 mod credits;
 mod http;
 mod language;
+mod lists;
 mod map;
 mod orchestrator;
 mod provider;
@@ -28,7 +29,7 @@ use fliks_domain::{
 };
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
@@ -54,12 +55,14 @@ struct Dynamic {
 /// The providers by registry key (`metadata-orchestrator.md` rules 8-10).
 pub struct Metadata {
     pub lang: LanguageCache,
-    /// TMDB's lists (trending, popular, upcoming, genres, discover) are not part of the trait.
+    /// The concrete client for what the trait does not carry (seasons).
     pub tmdb: Arc<tmdb::Tmdb>,
     builtin: HashMap<ExternalProvider, Entry>,
     dynamic: RwLock<Dynamic>,
     db: sqlx::PgPool,
     flights: orchestrator::Flights,
+    /// Last good copy of each global list (rule 17); never expires.
+    stale: Mutex<HashMap<String, serde_json::Value>>,
 }
 
 impl Metadata {
@@ -76,6 +79,7 @@ impl Metadata {
             lang: LanguageCache::new(db.clone()),
             db,
             flights: Default::default(),
+            stale: Mutex::default(),
             builtin: HashMap::from([
                 (
                     ExternalProvider::Tmdb,
