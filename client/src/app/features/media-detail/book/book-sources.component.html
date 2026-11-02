@@ -1,0 +1,105 @@
+<app-collapsible-section
+  [heading]="'books_work.sources' | translate"
+  persistKey="book-sources"
+  [defaultOpen]="false"
+>
+  @if (sources(); as s) {
+    <ul class="flex flex-col divide-y divide-base-300 mb-4">
+      <li class="flex flex-wrap items-center gap-2 py-2" data-testid="source-row">
+        <span class="font-medium w-28">{{ 'books_work.source_work' | translate }}</span>
+        @if (s.work; as w) {
+          <span class="badge badge-sm">{{ w.provider }}</span>
+          <span class="font-mono text-sm">{{ w.value }}</span>
+          <span class="ml-auto flex gap-1">
+            <button type="button" class="btn btn-xs btn-ghost" (click)="relink('work', null, w.provider, w.value)">
+              {{ 'books_work.relink' | translate }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost text-error"
+              [disabled]="busy()"
+              (click)="unlink('work', null, w.provider, w.value)"
+            >
+              {{ 'books_work.unlink' | translate }}
+            </button>
+          </span>
+        } @else {
+          <span class="text-base-content/60">{{ 'books_work.not_linked' | translate }}</span>
+        }
+      </li>
+      @for (e of s.editions; track e.editionId) {
+        @for (id of e.ids; track id.provider + id.value) {
+          <li class="flex flex-wrap items-center gap-2 py-2" data-testid="source-row">
+            <span class="font-medium w-28 truncate">
+              {{ editionOf(e.editionId) ? label(editionOf(e.editionId)!) : '#' + e.editionId }}
+            </span>
+            <span class="badge badge-sm">{{ id.provider }}</span>
+            <span class="font-mono text-sm">{{ id.value }}</span>
+            <span class="ml-auto flex gap-1">
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost"
+                (click)="relink('edition', e.editionId, id.provider, id.value)"
+              >
+                {{ 'books_work.relink' | translate }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost text-error"
+                [disabled]="busy()"
+                (click)="unlink('edition', e.editionId, id.provider, id.value)"
+              >
+                {{ 'books_work.unlink' | translate }}
+              </button>
+            </span>
+          </li>
+        }
+      }
+    </ul>
+  }
+
+  <form class="flex flex-wrap items-end gap-2" (submit)="$event.preventDefault(); save()">
+    <label class="flex flex-col gap-1 text-sm">
+      {{ 'books_work.level' | translate }}
+      <select
+        class="select select-sm"
+        [value]="level()"
+        (change)="setLevel($any($event.target).value)"
+      >
+        <option value="work">{{ 'books_work.level_work' | translate }}</option>
+        <option value="edition">{{ 'books_work.level_edition' | translate }}</option>
+      </select>
+    </label>
+    @if (level() === 'edition') {
+      <label class="flex flex-col gap-1 text-sm">
+        {{ 'books_work.edition' | translate }}
+        <select class="select select-sm" (change)="editionId.set(+$any($event.target).value)">
+          @for (e of editions(); track e.id) {
+            <option [value]="e.id" [selected]="e.id === editionId()">{{ label(e) }}</option>
+          }
+        </select>
+      </label>
+    }
+    <label class="flex flex-col gap-1 text-sm">
+      {{ 'books_work.provider' | translate }}
+      <select class="select select-sm" (change)="provider.set($any($event.target).value)">
+        @for (p of providers(); track p) {
+          <option [value]="p" [selected]="p === provider()">{{ p }}</option>
+        }
+      </select>
+    </label>
+    <label class="flex flex-col gap-1 text-sm">
+      {{ 'books_work.value' | translate }}
+      <input
+        type="text"
+        class="input input-sm font-mono"
+        [value]="value()"
+        (input)="value.set($any($event.target).value)"
+      />
+    </label>
+    <button type="submit" class="btn btn-sm btn-primary" [disabled]="!canSave()">
+      {{ 'books_work.link' | translate }}
+    </button>
+  </form>
+  <p class="mt-2 text-xs text-base-content/60">{{ 'books_work.sources_hint' | translate }}</p>
+</app-collapsible-section>

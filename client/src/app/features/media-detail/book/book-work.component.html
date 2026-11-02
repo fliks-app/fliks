@@ -1,0 +1,147 @@
+@let m = media();
+@let b = book();
+
+<header class="relative isolate -mx-4 -mt-4 px-4 pt-16 pb-8">
+  <!-- Clipped on its own so the hero content keeps its focus rings. -->
+  <div class="absolute inset-0 overflow-hidden -z-10" aria-hidden="true" data-testid="backdrop">
+    @if (m.posterUrl) {
+      <img
+        class="size-full object-cover scale-125 blur-3xl opacity-40"
+        [cachedSrc]="m.posterUrl | resolveUrl: 'thumb'"
+        alt=""
+      />
+    }
+    <div class="absolute inset-0 bg-linear-to-b from-transparent to-base-100"></div>
+  </div>
+
+  <div class="flex gap-6 lg:gap-10">
+    <div class="w-32 sm:w-40 lg:w-56 shrink-0 aspect-2/3 rounded-xl overflow-hidden bg-base-300 shadow-xl">
+      @if (m.posterUrl) {
+        <img class="size-full object-cover" [cachedSrc]="m.posterUrl | resolveUrl: 'medium'" [alt]="m.title" />
+      }
+    </div>
+
+    <div class="flex-1 min-w-0 flex flex-col gap-2">
+      <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ m.title }}</h1>
+      @if (b.subtitle) {
+        <p class="text-lg text-base-content/70">{{ b.subtitle }}</p>
+      }
+
+      @if (b.authors.length) {
+        <p data-testid="authors">
+          @for (a of b.authors; track a.id; let last = $last) {
+            <a class="link link-hover font-medium" [routerLink]="['/persons', a.id]" [queryParams]="{ role: 'author' }">{{ a.name }}</a
+            >@if (!last) {
+              <span>, </span>
+            }
+          }
+        </p>
+      }
+      @if (b.translators.length) {
+        <p class="text-sm text-base-content/60">
+          {{ 'books_work.translated_by' | translate }} {{ b.translators.map((t) => t.name).join(', ') }}
+        </p>
+      }
+
+      @if (narrators().length) {
+        <p class="text-sm text-base-content/60" data-testid="narrators">
+          {{ 'books_work.narrated_by' | translate }}
+          @for (n of narrators(); track n.id; let last = $last) {
+            <a class="link link-hover" [routerLink]="['/persons', n.id]" [queryParams]="{ role: 'narrator' }">{{ n.name }}</a
+            >@if (!last) {
+              <span>, </span>
+            }
+          }
+        </p>
+      }
+
+      @for (s of b.series; track s.id) {
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" data-testid="series">
+          <a class="link link-hover" [routerLink]="['/collections', s.id]">
+            @if (s.positionLabel ?? s.position; as n) {
+              {{ 'books_work.volume_of' | translate: { n: n, series: s.name } }}
+            } @else {
+              {{ 'books_work.in_series' | translate: { series: s.name } }}
+            }
+          </a>
+          @if (s.previous; as p) {
+            <a class="link link-hover text-base-content/60" data-testid="previous" [routerLink]="link(p.id)">
+              {{ 'books_work.previous' | translate: { title: p.title } }}
+            </a>
+          }
+          @if (s.next; as n) {
+            <a class="link link-hover text-base-content/60" data-testid="next" [routerLink]="link(n.id)">
+              {{ 'books_work.next' | translate: { title: n.title } }}
+            </a>
+          }
+        </div>
+      }
+
+      @if (b.subjects.length) {
+        <div class="flex flex-wrap gap-1 mt-1">
+          @for (s of b.subjects; track s) {
+            <span class="badge badge-sm badge-ghost">{{ s }}</span>
+          }
+        </div>
+      }
+
+      @if (m.overview) {
+        <p class="mt-2 max-w-3xl text-base-content/80">{{ m.overview }}</p>
+      }
+
+      @if (families().length) {
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          @for (f of families(); track f; let first = $first) {
+            <button
+              type="button"
+              class="btn"
+              [class.btn-primary]="first"
+              [class.btn-outline]="!first"
+              disabled
+              data-testid="format-button"
+              [title]="'books_work.soon' | translate"
+            >
+              {{ (f === 'text' ? 'books_work.read' : 'books_work.listen') | translate }}
+            </button>
+          }
+          @if (percent() !== null) {
+            <span class="text-sm text-base-content/60">
+              {{ 'books_work.progress' | translate: { percent: percent() } }}
+            </span>
+          }
+        </div>
+      }
+
+      @if (unofficial()) {
+        <p class="mt-2 text-xs text-base-content/60" data-testid="unofficial">
+          {{ 'books_work.unofficial' | translate }}
+        </p>
+      }
+    </div>
+  </div>
+</header>
+
+<div class="flex flex-col gap-8">
+  @if (seriesItems().length && b.series[0]; as s) {
+    <app-book-works-row
+      [heading]="'books_work.row_series' | translate: { series: s.name }"
+      [items]="seriesItems()"
+      [currentId]="m.id"
+    />
+  }
+  @if (authorItems().length && b.authors[0]; as a) {
+    <app-book-works-row
+      [heading]="'books_work.row_author' | translate: { author: a.name }"
+      [items]="authorItems()"
+    />
+  }
+
+  @if (b.editions.length) {
+    <app-book-editions [editions]="b.editions" />
+    <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
+  }
+
+  @if (canEdit()) {
+    <app-book-sources [mediaId]="m.id" [editions]="b.editions" />
+  }
+</div>
