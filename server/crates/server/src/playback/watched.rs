@@ -55,8 +55,9 @@ pub async fn toggle_watched(
     file: Option<i32>,
     episode: Option<i32>,
     item: Option<i32>,
+    acl: &[i32],
 ) -> Result<Value, AppError> {
-    let item = beat_item(db, media, episode, item)
+    let item = beat_item(db, media, episode, item, acl)
         .await?
         .ok_or_else(|| AppError::not_found("not_found"))?;
     let existing = find_state(db, user, item).await?;

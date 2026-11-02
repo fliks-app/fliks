@@ -28,21 +28,21 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
 
 ## Resolver
 
-11. For `stream` and `download`, a file linked to an item of an `audio` edition answers `parts` in place of `path`: the parts of its item (the lowest-numbered one, `items.md` rule 22) in the version the file belongs to, in `position` order, one `{path, durationS?, format}` per part, a one-file item included. Each part passes the file gate of rule 4 (a failing part denies the whole answer). `ttlS` is the usual 60.
+11. For `stream` and `download`, a file linked to an item of an `audio` edition answers `parts` beside its own `path` (the engine's file route reads only `path`, so a direct play or download of a part works): the parts of its item (the lowest-numbered one, `items.md` rule 22) in the version the file belongs to, in `position` order, one `{path, durationS?, format}` per part, a one-file item included. Each part passes the file gate of rule 4 (a failing part denies the whole answer). `ttlS` is the usual 60.
 12. Every other file answers `path` as before; video is unchanged. `sprite` and `subtitle` purposes are unchanged.
 13. `format` is the MIME type of the file for an audio extension (the engine's `audio_mime`: `mp3 audio/mpeg`, `m4a`/`m4b audio/mp4`, `aac audio/aac`, `flac audio/flac`, `ogg`/`oga`/`opus audio/ogg`, `wav audio/wav`) and a text one of the ingest list (`epub application/epub+zip`, `pdf application/pdf`, `azw3 application/vnd.amazon.ebook`, `mobi application/x-mobipocket-ebook`, `fb2 application/x-fictionbook+xml`, `cbz application/vnd.comicbook+zip`); a video file still carries none. The same table gives `DecideMedia.contentType` and each part's `format`.
 14. A text file is delivered by the engine's data plane as a Direct Play: `GET /api/stream/{fileId}` and `?download=1`, behind the resolver with `path` and `format`, no session, with a stream token minted for `{mediaFileId}`. A hidden edition's file is denied (`engine-glue.md` rule 41).
 
 ## Item identity on the playback routes
 
-15. `itemId` (integer) names the item directly: in the body of the heartbeat and of `toggle-watched`, and in the query of `GET` and `DELETE state`. The item must belong to the path `mediaId`, else it names none (the answer of an unknown pair: empty body, no-op, 404 `not_found`, `{state: null}`). When `itemId` is present `episodeId` is not read.
+15. `itemId` (integer) names the item directly: in the body of the heartbeat and of `toggle-watched`, and in the query of `GET` and `DELETE state`. The item must belong to the path `mediaId` and to a visible edition (`COALESCE(editions."libraryId", media."libraryId")` among the caller's libraries, like rule 1), else it names none (the answer of an unknown pair: empty body, no-op, 404 `not_found`, `{state: null}`). When `itemId` is present `episodeId` is not read.
 16. Without `itemId` the pair `(mediaId, episodeId?)` resolves as before, so a book with several editions is still `409 ambiguous_item`. The wire `episodeId` of a state, of `remote.state` and of the history is the item's id only when the item is grouped, whatever named it.
 17. The heartbeat's debounce key is `<user>:<media>:i<itemId>` when `itemId` is given, so two editions of one book never share a flush. A file-bound token must be a part of the named item (the route's auth in `heartbeat.md`).
 
 ## Progression and locator
 
 18. `playback_states."progression"` (`double precision`, null, `CHECK` between 0 and 1) is the share of a text item read; `"locator"` (`jsonb`, null) is the reading position the reader gave (a Readium locator), opaque to the host. Audio and video leave both null.
-19. A beat carrying `progression` (a finite number, clamped to 0..1) and `locator` (a JSON object whose serialisation is at most 8 KiB, else ignored) writes them with the row; a beat without them keeps what is stored. `positionSeconds` and `durationSeconds` stay as received (a text beat usually sends none).
+19. A beat carrying `progression` (a finite number, clamped to 0..1) and `locator` (a JSON object whose serialisation is at most 8 KiB, else ignored) writes them with the row; a beat without them keeps what is stored. A change of `progression` or `locator` since the last write flushes the debounce, so the last reading position is not lost. `positionSeconds` and `durationSeconds` stay as received (a text beat usually sends none).
 20. The state row serialises `progression` and `locator` only when not null, so the video payloads keep their keys.
 21. Reads of the progress of a book use it: `BookDetail.progress.progression` is 1 when completed, else the row's `progression` when set, else `positionSeconds / durationSeconds` capped at 1; `inProgress=true` (`books-api.md` A1) counts an unfinished state whose `positionSeconds` or `progression` is above 0.
 
@@ -55,7 +55,7 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
     - `image`: never.
     A music rule (scrobble) belongs here when a music kind exists; none is defined yet.
 23. The last chapter start of an audio item is read from the `chapter` markers of its version's parts shifted by their offsets (rule 5), when the heartbeat names an audio item.
-24. `completed` is recomputed on every written beat, as before; an offline replay keeps its rule (`heartbeat.md` rule 21) with the same family rule. The debounce flushes every beat of the finish zone: the video zone, and a text `progression` of 0.99 or more.
+24. `completed` is recomputed on every written beat, as before; an offline replay keeps its rule (`heartbeat.md` rule 21) with the same family rule. The debounce flushes every beat of the finish zone: the video zone, and a text `progression` of 0.99 or more; and a beat whose `progression` or `locator` differs from the last write's (rule 19).
 
 ## Migration
 

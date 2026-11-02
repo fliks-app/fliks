@@ -275,7 +275,9 @@ pub async fn get_state(
     PathParams(media): PathParams<i32>,
     Query(q): Q,
 ) -> Result<Response, AppError> {
-    let Some(item) = db::beat_item(&st.db, media, episode_param(&q), item_param(&q)).await? else {
+    let acl = accessible_library_ids(&st.db, &a).await?;
+    let Some(item) = db::beat_item(&st.db, media, episode_param(&q), item_param(&q), &acl).await?
+    else {
         return Ok(empty());
     };
     let row = db::find_state(&st.db, a.user.id, item).await?;
@@ -289,7 +291,10 @@ pub async fn delete_state(
     PathParams(media): PathParams<i32>,
     Query(q): Q,
 ) -> Result<Response, AppError> {
-    if let Some(item) = db::beat_item(&st.db, media, episode_param(&q), item_param(&q)).await? {
+    let acl = accessible_library_ids(&st.db, &a).await?;
+    if let Some(item) =
+        db::beat_item(&st.db, media, episode_param(&q), item_param(&q), &acl).await?
+    {
         db::delete_state(&st.db, a.user.id, item).await?;
     }
     Ok(empty())
@@ -340,6 +345,7 @@ pub async fn toggle_watched(
     ValidJson(body): ValidJson<ToggleBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let episode = body.episode_id.filter(|e| *e != 0);
+    let acl = accessible_library_ids(&st.db, &a).await?;
     let saved = watched::toggle_watched(
         &st.db,
         a.user.id,
@@ -347,6 +353,7 @@ pub async fn toggle_watched(
         body.media_file_id,
         episode,
         body.item_id.filter(|i| *i != 0),
+        &acl,
     )
     .await?;
     Ok((StatusCode::CREATED, Json(saved)))

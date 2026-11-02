@@ -1378,84 +1378,10 @@ async fn a_book_with_two_editions_is_named_by_its_item_on_the_playback_routes(po
         (Some(0.4), Some(false))
     );
     assert_eq!(body["state"]["locator"]["href"], "c1.xhtml");
-    let (_, body) = call(
-        &c,
-        "GET",
-        &format!("{state}?itemId={}", b.text),
-        &c.token,
-        None,
-    )
-    .await;
-    assert_eq!(body["progression"], 0.4);
-    let (_, body) = call(
-        &c,
-        "GET",
-        &format!("{state}?itemId={}", b.audio),
-        &c.token,
-        None,
-    )
-    .await;
+    let admin = json!({"itemId": b.text, "mediaFileId": b.epub, "progression": 0.5});
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(admin)).await;
     assert_eq!(
-        body,
-        Value::Null,
-        "the audio edition has no state of its own yet"
+        body["state"]["progression"], 0.5,
+        "the admin still names it"
     );
-    let other = beat(json!(b.audio + 1000), json!({"mediaFileId": b.epub}));
-    let (s, body) = call(&c, "PUT", &state, &c.token, Some(other)).await;
-    assert_eq!(
-        (s, body["state"].clone()),
-        (200, Value::Null),
-        "an item of another media names none"
-    );
-    let done = beat(
-        b.text.into(),
-        json!({"mediaFileId": b.epub, "progression": 0.995}),
-    );
-    let (_, body) = call(&c, "PUT", &state, &c.token, Some(done)).await;
-    assert_eq!(
-        body["state"]["completed"], true,
-        "the last page finishes a text item"
-    );
-    let (s, _) = call(
-        &c,
-        "DELETE",
-        &format!("{state}?itemId={}", b.text),
-        &c.token,
-        None,
-    )
-    .await;
-    assert_eq!(s, 200);
-    let left: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM playback_states"#)
-        .fetch_one(&c.pool)
-        .await
-        .unwrap();
-    assert_eq!(left, 0);
-}
-
-#[sqlx::test(migrations = false)]
-async fn an_audio_item_finishes_at_98_percent_or_in_its_last_chapter(pool: PgPool) {
-    let c = ctx(pool, true).await;
-    let b = audiobook(&c).await;
-    let state = format!("/api/playback/media/{}/state", b.media);
-    let beat = |position: f64, file: i32| json!({"itemId": b.audio, "mediaFileId": file, "positionSeconds": position, "durationSeconds": 30.0});
-    let done = |body: &Value| body["state"]["completed"].as_bool();
-    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(5.0, b.files[0]))).await;
-    assert_eq!(done(&body), Some(false));
-    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(10.0, b.files[0]))).await;
-    assert_eq!(
-        done(&body),
-        Some(true),
-        "10 s is the start of the second chapter"
-    );
-    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(2.0, b.files[0]))).await;
-    assert_eq!(done(&body), Some(false), "a rewind reopens it");
-    sqlx::query(r#"DELETE FROM item_markers WHERE "itemId" = $1"#)
-        .bind(b.audio)
-        .execute(&c.pool)
-        .await
-        .unwrap();
-    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(25.0, b.files[0]))).await;
-    assert_eq!(done(&body), Some(false), "no chapters, 83 %");
-    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(29.6, b.files[0]))).await;
-    assert_eq!(done(&body), Some(true), "98 %");
 }

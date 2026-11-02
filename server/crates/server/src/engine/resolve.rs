@@ -378,8 +378,8 @@ async fn locate(
     match req.purpose {
         ResolvePurpose::Stream | ResolvePurpose::Download => {
             let parts = crate::stream::audio_parts_of_file(&st.db, id as i32).await?;
+            let format = crate::stream::book_format(&crate::stream::extname(&file));
             if parts.is_empty() {
-                let format = crate::stream::book_format(&crate::stream::extname(&file));
                 return Ok(found(Some(file), format));
             }
             let mut out = Vec::with_capacity(parts.len());
@@ -397,7 +397,7 @@ async fn locate(
             }
             Ok(ResolveResponse {
                 parts: out,
-                ..found(None, None)
+                ..found(Some(file), format)
             })
         }
         ResolvePurpose::Sprite => {

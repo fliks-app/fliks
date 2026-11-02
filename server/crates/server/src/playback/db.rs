@@ -131,18 +131,23 @@ pub async fn named_item(
     Ok(row.item)
 }
 
-/// `named_item`, or the item `item` names when it belongs to `media` (`item-delivery.md` rule 15).
+/// `named_item`, or the item `item` names when it belongs to `media` and its edition is in `acl`
+/// (`item-delivery.md` rule 15); a hidden item names none.
 pub async fn beat_item(
     db: impl sqlx::PgExecutor<'_>,
     media: i32,
     episode: Option<i32>,
     item: Option<i32>,
+    acl: &[i32],
 ) -> Result<Option<i32>, AppError> {
     match item {
         Some(id) => Ok(sqlx::query_scalar!(
-            r#"SELECT id FROM items WHERE id = $1 AND "mediaId" = $2"#,
+            r#"SELECT i.id FROM items i JOIN editions e ON e.id = i."editionId" JOIN media m ON m.id = i."mediaId"
+               WHERE i.id = $1 AND i."mediaId" = $2 AND m."libraryId" = ANY($3)
+                 AND COALESCE(e."libraryId", m."libraryId") = ANY($3)"#,
             id,
-            media
+            media,
+            acl
         )
         .fetch_optional(db)
         .await?),

@@ -973,12 +973,13 @@ mod resolve {
         };
         let part = |n: &str| json!({"path": dir(n), "durationS": 12.5, "format": "audio/mpeg"});
         let owner = w.member.0.to_string();
-        for file in [f[0], f[1]] {
+        for (file, own) in [(f[0], "p1.mp3"), (f[1], "p2.mp3")] {
             for purpose in ["stream", "download"] {
                 let (_, b) = ask(file, &w.member.1, purpose).await;
                 assert_eq!(
                     b,
-                    json!({"allow": true, "ownerId": owner, "ttlS": 60.0, "parts": [part("p1.mp3"), part("p2.mp3")]}),
+                    json!({"allow": true, "ownerId": owner, "ttlS": 60.0, "path": dir(own), "format": "audio/mpeg",
+                           "parts": [part("p1.mp3"), part("p2.mp3")]}),
                     "{file} {purpose}"
                 );
             }
@@ -986,7 +987,7 @@ mod resolve {
         let (_, b) = ask(f[2], &w.member.1, "stream").await;
         let solo = json!([{"path": dir("solo.m4b"), "durationS": 12.5, "format": "audio/mp4"}]);
         assert_eq!(b["parts"], solo, "an item of one file still answers parts");
-        assert!(b.get("path").is_none());
+        assert_eq!(b["path"], dir("solo.m4b"), "the file route reads the path");
         let (_, b) = ask(f[3], &w.member.1, "download").await;
         assert_eq!(
             b,
