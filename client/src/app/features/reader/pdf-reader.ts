@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injector,
   OnDestroy,
   ViewEncapsulation,
   afterNextRender,
@@ -62,6 +63,7 @@ export class PdfReaderComponent implements OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly settingsStore = inject(ReaderSettingsService);
   private readonly progress = inject(ReaderProgressService);
+  private readonly injector = inject(Injector);
   private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
 
   private doc: PDFDocumentProxy | null = null;
@@ -92,7 +94,8 @@ export class PdfReaderComponent implements OnDestroy {
     afterNextRender(() => void this.open());
     effect(() => {
       this.pageWidth();
-      untracked(() => this.reobserve());
+      this.pages();
+      untracked(() => afterNextRender(() => this.reobserve(), { injector: this.injector }));
     });
   }
 
@@ -128,19 +131,16 @@ export class PdfReaderComponent implements OnDestroy {
       this.viewportWidth.set(root.clientWidth);
       this.resizer = new ResizeObserver(() => this.viewportWidth.set(root.clientWidth));
       this.resizer.observe(root);
-      this.pages.set(Array.from({ length: doc.numPages }, (_, i) => i + 1));
-      this.loading.set(false);
+      this.observer = new IntersectionObserver(
+        (entries) =>
+          entries.forEach((e) => e.isIntersecting && void this.render(Number((e.target as HTMLElement).dataset['page']))),
+        { root, rootMargin: RENDER_MARGIN },
+      );
       const resumeAt = pdfPageOf(saved?.locator, doc.numPages);
       this.page.set(resumeAt);
-      queueMicrotask(() => {
-        this.observer = new IntersectionObserver(
-          (entries) =>
-            entries.forEach((e) => e.isIntersecting && void this.render(Number((e.target as HTMLElement).dataset['page']))),
-          { root, rootMargin: RENDER_MARGIN },
-        );
-        this.reobserve();
-        this.scrollToPage(resumeAt);
-      });
+      this.pages.set(Array.from({ length: doc.numPages }, (_, i) => i + 1));
+      this.loading.set(false);
+      afterNextRender(() => this.scrollToPage(resumeAt), { injector: this.injector });
     } catch {
       if (this.destroyed) return;
       this.toast.error(this.translate.instant('reader.open_failed'));
@@ -203,7 +203,7 @@ export class PdfReaderComponent implements OnDestroy {
   protected zoom(delta: number): void {
     const n = this.page();
     this.settingsStore.save({ zoom: this.settings().zoom + delta });
-    queueMicrotask(() => this.scrollToPage(n));
+    afterNextRender(() => this.scrollToPage(n), { injector: this.injector });
   }
 
   protected setTheme(theme: ReaderTheme): void {
