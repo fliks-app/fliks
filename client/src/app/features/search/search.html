@@ -50,7 +50,7 @@
   <!-- Media type: drives search + discover (reloads the discover genre list).
        Spans the filter-column width, the three tabs sharing it equally. -->
   @if (state.tab() === 'videos') {
-    <app-content-type-toggle class="w-full lg:w-60" [value]="state.contentType()" (valueChange)="setContentType($event)" />
+    <app-content-type-toggle class="w-full lg:w-72" [withBooks]="true" [value]="state.contentType()" (valueChange)="setContentType($event)" />
   }
 
   @if (state.tab() === 'people') {
@@ -73,6 +73,74 @@
       </div>
     } @else {
       <p class="text-base-content/50 text-center py-12">{{ (state.hasQuery() ? 'social.no_people_results' : 'search.discover_people_hint') | translate }}</p>
+    }
+  } @else if (state.contentType() === 'book') {
+    <!-- Books: library works, authors and series, then the book providers -->
+    @if (!state.hasQuery()) {
+      <p class="text-base-content/50 text-center py-12">{{ 'books_search.hint' | translate }}</p>
+    } @else if (state.localLoading() || bookLoading()) {
+      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+    } @else {
+      <div class="flex flex-col gap-6">
+        @if (state.localResults().length) {
+          <div>
+            <h2 class="text-lg font-semibold mb-3">{{ 'books_search.section_books' | translate }}</h2>
+            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
+              @for (media of state.localResults(); track media.id) {
+                <app-media-card [media]="media" />
+              }
+            </div>
+          </div>
+        }
+        @if (bookAuthors().length) {
+          <div>
+            <h2 class="text-lg font-semibold mb-3">{{ 'books_search.section_authors' | translate }}</h2>
+            <ul class="flex flex-col gap-1 max-w-xl">
+              @for (a of bookAuthors(); track a.id) {
+                <li>
+                  <a class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/persons', a.id]">
+                    <span class="min-w-0 truncate font-medium">{{ a.name }}</span>
+                    <span class="badge badge-sm badge-ghost">{{ ('books_search.work_count_' + (a.workCount === 1 ? 'one' : 'other')) | translate: { count: a.workCount } }}</span>
+                  </a>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+        @if (bookSeries().length) {
+          <div>
+            <h2 class="text-lg font-semibold mb-3">{{ 'books_search.section_series' | translate }}</h2>
+            <ul class="flex flex-col gap-1 max-w-xl">
+              @for (s of bookSeries(); track s.id) {
+                <li>
+                  <a class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/collections', s.id]">
+                    <span class="min-w-0 truncate font-medium">{{ s.name }}</span>
+                    <span class="badge badge-sm badge-ghost">{{ ('books_search.work_count_' + (s.count === 1 ? 'one' : 'other')) | translate: { count: s.count } }}</span>
+                  </a>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+        @if (bookExternal().length) {
+          <div>
+            <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
+            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
+              @for (row of bookExternal(); track row.provider + ':' + row.externalId) {
+                <app-media-card [imageUrl]="row.coverUrl" [title]="row.title" [subtitle]="row.authors.join(', ')" [badge]="row.mediaId ? 'library' : null" [link]="bookLink(row)" />
+              }
+            </div>
+          </div>
+        }
+        @if (!state.localResults().length && !bookAuthors().length && !bookSeries().length && !bookExternal().length) {
+          <div class="text-center py-8">
+            <p class="text-base-content/50">{{ 'search.no_results' | translate }}</p>
+            @if (!state.externalEnabled()) {
+              <button class="btn btn-primary btn-sm mt-4" (click)="toggleExternal()">{{ 'search.enable_external' | translate }}</button>
+            }
+          </div>
+        }
+      </div>
     }
   } @else if (!state.hasQuery()) {
     <!-- Discover / library browse: filter sidebar (desktop) + content -->

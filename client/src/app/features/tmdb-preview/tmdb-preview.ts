@@ -34,6 +34,7 @@ import { RequestEditModalComponent } from '../requests/request-edit-modal/reques
 import { RequestDeclineFlow, RequestEditFlow } from '../requests/request-flows';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
+import { BookPreviewComponent } from './components/book-preview/book-preview.component';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { LucideFilm, LucideUser, LucidePlay, LucidePlus } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
@@ -65,7 +66,7 @@ interface PreviewSeed {
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, DefaultFocusDirective, TvRowDirective, TvSectionDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, BookPreviewComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, DefaultFocusDirective, TvRowDirective, TvSectionDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   templateUrl: './tmdb-preview.html',
 })
 export class TmdbPreviewComponent implements OnInit, OnDestroy {
@@ -239,6 +240,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    if (this.type() === 'book') return;
     // Hero chrome from the first frame, so the skeleton sits where the page will.
     this.navbar.enterHeroPage(this.seed?.title ?? '');
     // Feeds the request form and the manager's edit modal; the import modal

@@ -52,7 +52,7 @@ function createHarness() {
       }),
       {
         provide: ActivatedRoute,
-        useValue: { snapshot: { paramMap: { get: () => null } } },
+        useValue: { snapshot: { paramMap: { get: () => null }, data: { kind: 'movie' } } },
       },
       { provide: Router, useValue: { url: '/discover', navigate } },
       { provide: MetadataService, useValue: { getDetails } },

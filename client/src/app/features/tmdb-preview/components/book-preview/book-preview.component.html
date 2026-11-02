@@ -1,0 +1,113 @@
+<div class="flex flex-col gap-6 max-w-4xl mx-auto">
+  @if (failed()) {
+    <div role="alert" class="alert alert-error text-sm">{{ 'books_search.preview_error' | translate }}</div>
+  } @else if (!book()) {
+    <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+  } @else {
+    @let b = book()!;
+    <div class="flex flex-col sm:flex-row gap-6">
+      <div class="w-40 shrink-0 self-center sm:self-start aspect-[2/3] rounded-lg bg-base-200 overflow-hidden">
+        @if (b.coverUrl) {
+          <img [src]="b.coverUrl" alt="" class="size-full object-cover" />
+        }
+      </div>
+      <div class="flex flex-col gap-3 min-w-0">
+        <div>
+          <h1 class="text-2xl font-bold">{{ b.title }}</h1>
+          @if (b.subtitle) {
+            <p class="text-base-content/70">{{ b.subtitle }}</p>
+          }
+        </div>
+        <p class="text-base-content/80">
+          {{ authors() }}@if (b.year) { · {{ b.year }}}
+        </p>
+        @if (seriesLabel()) {
+          <p class="text-sm text-base-content/60">{{ seriesLabel() }}</p>
+        }
+        @if (b.subjects.length) {
+          <div class="flex flex-wrap gap-1">
+            @for (s of b.subjects; track s) {
+              <span class="badge badge-ghost badge-sm">{{ s }}</span>
+            }
+          </div>
+        }
+        @if (b.description) {
+          <p class="text-sm whitespace-pre-line">{{ b.description }}</p>
+        }
+        @if (b.unofficial) {
+          <p class="text-xs text-base-content/50">{{ 'books_search.unofficial' | translate }}</p>
+        }
+
+        <div data-preview-actions class="flex flex-col gap-3 max-w-sm">
+          @if (inLibraryLink(); as link) {
+            <a class="btn btn-primary btn-sm self-start" [routerLink]="link">{{ 'books_search.open_in_library' | translate }}</a>
+          } @else if (canImport()) {
+            @if (bookLibraries().length === 0 && libraries().length) {
+              <div role="alert" class="alert alert-warning text-sm py-2">{{ 'discover.no_compatible_library' | translate }}</div>
+            }
+            @if (bookLibraries().length > 1) {
+              <label class="form-control w-full">
+                <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+                <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="libraryId()" (ngModelChange)="selectLibrary($event ? +$event : null)">
+                  @for (l of bookLibraries(); track l.id) {
+                    <option [ngValue]="l.id">{{ l.name }}</option>
+                  }
+                </select>
+              </label>
+            }
+            @if (folders().length > 1) {
+              <label class="form-control w-full">
+                <span class="label-text text-base-content/60">{{ 'books_search.folder' | translate }}</span>
+                <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="folderId()" (ngModelChange)="folderId.set($event ? +$event : null)">
+                  @for (f of folders(); track f.id) {
+                    <option [ngValue]="f.id">{{ f.path }}</option>
+                  }
+                </select>
+              </label>
+            }
+            <button type="button" class="btn btn-primary btn-sm self-start" [disabled]="adding() || !bookLibraries().length" (click)="add()">
+              @if (adding()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'discover.add_to_library' | translate }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
+    @if (b.editions.length) {
+      <section>
+        <h2 class="text-lg font-semibold mb-3">{{ 'books_search.editions' | translate }}</h2>
+        <ul class="flex flex-col gap-2">
+          @for (e of b.editions; track e.provider + ':' + e.externalId) {
+            <li class="rounded-lg bg-base-200 p-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span class="badge badge-sm">{{ 'families.' + e.family | translate }}</span>
+              @if (e.format) {
+                <span class="uppercase text-base-content/70">{{ e.format }}</span>
+              }
+              <span class="font-medium min-w-0 truncate">{{ e.title ?? b.title }}</span>
+              @if (e.language) {
+                <span class="text-base-content/60">{{ e.language }}</span>
+              }
+              @if (e.publisher) {
+                <span class="text-base-content/60">{{ e.publisher }}</span>
+              }
+              @if (e.published) {
+                <span class="text-base-content/60">{{ e.published }}</span>
+              }
+              @if (e.durationSeconds) {
+                <span class="text-base-content/60">{{ duration(e.durationSeconds) }}</span>
+              } @else if (e.pageCount) {
+                <span class="text-base-content/60">{{ ('books_search.pages_' + (e.pageCount === 1 ? 'one' : 'other')) | translate: { count: e.pageCount } }}</span>
+              }
+              @if (e.narrators.length) {
+                <span class="text-base-content/60">{{ 'books_search.narrated_by' | translate: { names: e.narrators.join(', ') } }}</span>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</div>

@@ -1,1 +1,19 @@
-{}
+{
+  "books_search": {
+    "filter_books": "Bücher",
+    "hint": "Suche nach Büchern, Autoren und Reihen.",
+    "section_books": "Bücher",
+    "section_authors": "Autoren",
+    "section_series": "Reihen",
+    "work_count_one": "{{count}} Werk",
+    "work_count_other": "{{count}} Werke",
+    "preview_error": "Dieses Buch konnte nicht geladen werden.",
+    "unofficial": "Einige Angaben stammen aus inoffiziellen Quellen.",
+    "open_in_library": "In deiner Bibliothek öffnen",
+    "folder": "Ordner",
+    "editions": "Ausgaben",
+    "pages_one": "{{count}} Seite",
+    "pages_other": "{{count}} Seiten",
+    "narrated_by": "Gelesen von {{names}}"
+  }
+}

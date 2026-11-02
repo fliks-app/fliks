@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SearchContentType } from './search-filters';
 
@@ -12,9 +12,11 @@ import { SearchContentType } from './search-filters';
 })
 export class ContentTypeToggleComponent {
   readonly value = model<SearchContentType>('all');
-  protected readonly types: { value: SearchContentType; labelKey: string }[] = [
+  readonly withBooks = input(false);
+  protected readonly types = computed<{ value: SearchContentType; labelKey: string }[]>(() => [
     { value: 'all', labelKey: 'search.filter_all' },
     { value: 'movie', labelKey: 'search.filter_movies' },
     { value: 'series', labelKey: 'search.filter_series' },
-  ];
+    ...(this.withBooks() ? [{ value: 'book' as const, labelKey: 'books_search.filter_books' }] : []),
+  ]);
 }

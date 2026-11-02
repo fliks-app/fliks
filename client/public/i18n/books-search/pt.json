@@ -1,1 +1,19 @@
-{}
+{
+  "books_search": {
+    "filter_books": "Livros",
+    "hint": "Procure livros, autores e séries.",
+    "section_books": "Livros",
+    "section_authors": "Autores",
+    "section_series": "Séries",
+    "work_count_one": "{{count}} obra",
+    "work_count_other": "{{count}} obras",
+    "preview_error": "Não foi possível carregar este livro.",
+    "unofficial": "Alguns dados vêm de fontes não oficiais.",
+    "open_in_library": "Abrir na sua biblioteca",
+    "folder": "Pasta",
+    "editions": "Edições",
+    "pages_one": "{{count}} página",
+    "pages_other": "{{count}} páginas",
+    "narrated_by": "Narrado por {{names}}"
+  }
+}

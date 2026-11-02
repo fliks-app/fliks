@@ -1,1 +1,19 @@
-{}
+{
+  "books_search": {
+    "filter_books": "Libri",
+    "hint": "Cerca libri, autori e serie.",
+    "section_books": "Libri",
+    "section_authors": "Autori",
+    "section_series": "Serie",
+    "work_count_one": "{{count}} opera",
+    "work_count_other": "{{count}} opere",
+    "preview_error": "Impossibile caricare questo libro.",
+    "unofficial": "Alcuni dati provengono da fonti non ufficiali.",
+    "open_in_library": "Apri nella tua libreria",
+    "folder": "Cartella",
+    "editions": "Edizioni",
+    "pages_one": "{{count}} pagina",
+    "pages_other": "{{count}} pagine",
+    "narrated_by": "Letto da {{names}}"
+  }
+}
