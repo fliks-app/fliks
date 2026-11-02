@@ -33,7 +33,7 @@ export interface BookEdition {
   coverUrl: string | null; durationSeconds: number | null; pageCount: number | null;
   libraryId: number | null; label: string | null; narrators: PersonRef[];
   hasFile: boolean; fileIds: number[];
-  externalIds: { provider: 'isbn' | 'asin' | 'openlibrary' | 'googlebooks' | 'bnf'; value: string }[];
+  externalIds: { provider: string; value: string }[];
   fieldSources: { field: string; provider: string | null; locked: boolean }[];
 }
 
@@ -63,7 +63,7 @@ export interface PersonWorks {
 
 // GET /api/metadata/search/book?q=&title=&author=&isbn=&language=&page=
 export interface BookSearchResult {
-  provider: 'openlibrary' | 'audible' | 'googlebooks' | 'bnf'; externalId: string; kind: 'book';
+  provider: string; externalId: string; kind: 'book';
   title: string; subtitle: string | null; authors: string[]; year: number | null; coverUrl: string | null;
   series: { name: string; position: string | null } | null; editionCount: number | null;
   mediaId: number | null;          // already in a library the caller can read
@@ -77,15 +77,15 @@ export interface BookPreview extends BookSearchResult {
               durationSeconds: number | null; pageCount: number | null }[];
   unofficial: boolean;             // true when a field comes from Audible or Audnexus (UI mention)
 }
-// POST /api/media/import  body adds: { type: 'book', provider: 'openlibrary', externalId, libraryId?, folderId? }
+// POST /api/media/import  body adds: { type: 'book', provider, externalId, libraryId?, folderId? }
 //   201 = the MD of the created book. Requests for books are phase 3.4: the preview offers Add only.
 export interface BookImportBody {
-  type: 'book'; provider: 'openlibrary'; externalId: string; libraryId?: number; folderId?: number;
+  type: 'book'; provider: string; externalId: string; libraryId?: number; folderId?: number;
 }
 
 // GET/PUT/DELETE /api/media/:id/sources  (Sources panel)
 export interface BookSources {
-  work: { provider: 'openlibrary'; value: string } | null;
+  work: { provider: string; value: string } | null;
   editions: { editionId: number; ids: BookEdition['externalIds'] }[];
 }
 // PUT  /api/media/:id/sources -> BookSources (relinks and refreshes)
