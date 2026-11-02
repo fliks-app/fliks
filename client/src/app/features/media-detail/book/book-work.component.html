@@ -97,9 +97,10 @@
               class="btn"
               [class.btn-primary]="first"
               [class.btn-outline]="!first"
-              disabled
+              [disabled]="f === 'text'"
               data-testid="format-button"
-              [title]="'books_work.soon' | translate"
+              [title]="f === 'text' ? ('books_work.soon' | translate) : ''"
+              (click)="listen()"
             >
               {{ (f === 'text' ? 'books_work.read' : 'books_work.listen') | translate }}
             </button>

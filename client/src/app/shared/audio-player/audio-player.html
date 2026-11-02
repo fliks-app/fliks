@@ -1,0 +1,190 @@
+@if (audio.track(); as t) {
+  <div
+    appTvRow
+    class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
+    style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))"
+    data-testid="audio-mini"
+  >
+    <button
+      type="button"
+      class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left"
+      [attr.aria-label]="'audio_player.open' | translate"
+      (click)="audio.expand()"
+    >
+      <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300">
+        @if (t.coverUrl | resolveUrl: 'thumb'; as cover) {
+          <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" />
+        }
+      </div>
+      <span class="min-w-0 flex-1">
+        <span class="block truncate text-sm font-semibold">{{ t.title }}</span>
+        <span class="block truncate text-xs text-base-content/60">{{ chapter()?.title ?? t.artist }}</span>
+        <progress class="progress progress-primary mt-1 h-1 w-full" [value]="percent()" max="100"></progress>
+      </span>
+    </button>
+    @if (audio.loading()) {
+      <span class="loading loading-spinner loading-sm mx-3"></span>
+    } @else {
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle"
+        (click)="audio.toggle()"
+        [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate"
+      >
+        @if (audio.playing()) {
+          <svg lucidePause class="h-5 w-5"></svg>
+        } @else {
+          <svg lucidePlay class="h-5 w-5"></svg>
+        }
+      </button>
+    }
+    <button type="button" class="btn btn-ghost btn-circle" (click)="audio.close()" [attr.aria-label]="'audio_player.close' | translate">
+      <svg lucideX class="h-5 w-5"></svg>
+    </button>
+  </div>
+}
+
+<dialog #dialog class="modal" (close)="onDialogClose()">
+  @if (audio.track(); as t) {
+    <div class="modal-box flex h-full max-h-none w-full max-w-none flex-col gap-4 rounded-none p-4 sm:p-6 lg:mx-auto lg:h-auto lg:max-h-[92vh] lg:max-w-3xl lg:rounded-2xl" data-testid="audio-full">
+      <div class="flex items-center gap-2">
+        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.collapse()" [attr.aria-label]="'audio_player.collapse' | translate">
+          <svg lucideChevronDown class="h-6 w-6"></svg>
+        </button>
+        <h2 class="min-w-0 flex-1 truncate text-center text-base font-semibold">{{ t.title }}</h2>
+        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.close()" [attr.aria-label]="'audio_player.close' | translate">
+          <svg lucideX class="h-5 w-5"></svg>
+        </button>
+      </div>
+
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-ring-safe sm:flex-row" appTvSection>
+        <div class="flex shrink-0 flex-col items-center gap-3 sm:w-64">
+          <div class="aspect-square w-full max-w-64 overflow-hidden rounded-xl bg-base-300">
+            @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
+              <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" />
+            }
+          </div>
+          <div class="text-center">
+            <div class="text-sm text-base-content/60">{{ t.artist }}</div>
+            <div class="font-medium">
+              {{ chapter()?.title ?? ('audio_player.chapter_n' | translate: { n: audio.chapterIndex() + 1 }) }}
+            </div>
+          </div>
+        </div>
+
+        <div class="flex min-w-0 flex-1 flex-col gap-4">
+          <section class="scroll-ring-safe max-h-56 overflow-y-auto" appTvSection>
+            <h3 class="menu-title px-0">{{ 'audio_player.chapters' | translate }}</h3>
+            <ol class="flex flex-col">
+              @for (c of audio.chapters(); track $index; let i = $index) {
+                <li>
+                  <button
+                    type="button"
+                    class="flex w-full justify-between gap-4 rounded-lg px-2 py-1.5 text-left"
+                    [class.bg-base-300]="i === audio.chapterIndex()"
+                    [attr.aria-current]="i === audio.chapterIndex() ? 'true' : null"
+                    (click)="audio.seek(c.start)"
+                  >
+                    <span class="truncate">{{ c.title ?? ('audio_player.chapter_n' | translate: { n: i + 1 }) }}</span>
+                    <span class="tabular-nums text-base-content/60">{{ clock(c.start) }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
+          </section>
+
+          <section class="scroll-ring-safe max-h-40 overflow-y-auto" appTvSection>
+            <div class="flex items-center justify-between">
+              <h3 class="menu-title px-0">{{ 'audio_player.bookmarks' | translate }}</h3>
+              <button type="button" class="btn btn-ghost btn-sm gap-1" (click)="audio.addBookmark()">
+                <svg lucideBookmarkPlus class="h-4 w-4"></svg>
+                {{ 'audio_player.bookmark_add' | translate }}
+              </button>
+            </div>
+            @for (b of audio.bookmarks(); track b.position) {
+              <div class="flex items-center gap-1" appTvRow>
+                <button type="button" class="flex-1 rounded-lg px-2 py-1.5 text-left tabular-nums" (click)="goTo(b)">
+                  {{ clock(b.position) }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm btn-circle"
+                  (click)="audio.removeBookmark(b)"
+                  [attr.aria-label]="'audio_player.bookmark_remove' | translate"
+                >
+                  <svg lucideTrash2 class="h-4 w-4"></svg>
+                </button>
+              </div>
+            } @empty {
+              <p class="text-sm text-base-content/60">{{ 'audio_player.no_bookmarks' | translate }}</p>
+            }
+          </section>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <input
+          type="range"
+          class="range range-primary range-xs w-full"
+          min="0"
+          max="1000"
+          [value]="percent() * 10"
+          (change)="onSeek($event)"
+          [attr.aria-label]="'audio_player.seek' | translate"
+        />
+        <div class="flex justify-between text-xs tabular-nums text-base-content/60">
+          <span>{{ clock(audio.position()) }}</span>
+          <span>-{{ clock(audio.duration() - audio.position()) }}</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-center gap-1 sm:gap-3" appTvRow>
+        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.previousChapter()" [attr.aria-label]="'audio_player.previous_chapter' | translate">
+          <svg lucideSkipBack class="h-6 w-6"></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.skip(-audio.skipBack())" [attr.aria-label]="'audio_player.skip_back' | translate: { s: audio.skipBack() }">
+          <svg lucideRotateCcw class="h-6 w-6"></svg>
+        </button>
+        <button type="button" class="btn btn-primary btn-circle btn-lg" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
+          @if (audio.loading()) {
+            <span class="loading loading-spinner"></span>
+          } @else if (audio.playing()) {
+            <svg lucidePause class="h-7 w-7"></svg>
+          } @else {
+            <svg lucidePlay class="h-7 w-7"></svg>
+          }
+        </button>
+        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.skip(audio.skipForward())" [attr.aria-label]="'audio_player.skip_forward' | translate: { s: audio.skipForward() }">
+          <svg lucideRotateCw class="h-6 w-6"></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.nextChapter()" [attr.aria-label]="'audio_player.next_chapter' | translate">
+          <svg lucideSkipForward class="h-6 w-6"></svg>
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-center gap-2" appTvRow>
+        <button type="button" class="btn btn-sm gap-1" (click)="cycleRate()" [attr.aria-label]="'audio_player.speed' | translate">
+          <svg lucideGauge class="h-4 w-4"></svg>
+          {{ audio.rate() }}x
+        </button>
+        <button type="button" class="btn btn-sm" (click)="cycleSkipBack()">
+          {{ 'audio_player.skip_back' | translate: { s: audio.skipBack() } }}
+        </button>
+        <button type="button" class="btn btn-sm" (click)="cycleSkipForward()">
+          {{ 'audio_player.skip_forward' | translate: { s: audio.skipForward() } }}
+        </button>
+        <button type="button" class="btn btn-sm gap-1" [class.btn-primary]="audio.sleep()" (click)="cycleSleep()">
+          <svg lucideMoon class="h-4 w-4"></svg>
+          @if (audio.sleep()?.kind === 'chapter') {
+            {{ 'audio_player.sleep_chapter' | translate }}
+          } @else if (sleepLabel(); as left) {
+            {{ left }}
+          } @else {
+            {{ 'audio_player.sleep' | translate }}
+          }
+        </button>
+      </div>
+    </div>
+  }
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

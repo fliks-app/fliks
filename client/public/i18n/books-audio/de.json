@@ -1,0 +1,23 @@
+{
+  "audio_player": {
+    "open": "Player öffnen",
+    "play": "Wiedergabe",
+    "pause": "Pause",
+    "close": "Player schließen",
+    "collapse": "Verkleinern",
+    "seek": "Position",
+    "previous_chapter": "Vorheriges Kapitel",
+    "next_chapter": "Nächstes Kapitel",
+    "skip_back": "Zurück {{s}} s",
+    "skip_forward": "Vor {{s}} s",
+    "speed": "Wiedergabegeschwindigkeit",
+    "sleep": "Schlaf-Timer",
+    "sleep_chapter": "Ende des Kapitels",
+    "chapters": "Kapitel",
+    "chapter_n": "Kapitel {{n}}",
+    "bookmarks": "Lesezeichen",
+    "bookmark_add": "Lesezeichen hinzufügen",
+    "bookmark_remove": "Lesezeichen entfernen",
+    "no_bookmarks": "Noch keine Lesezeichen"
+  }
+}

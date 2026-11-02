@@ -46,6 +46,8 @@ import { IdentifyModalHostComponent } from '../components/identify-modal-host/id
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
+import { AudioPlayerComponent } from '../audio-player/audio-player';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
@@ -90,6 +92,7 @@ const PAIRING_TTL_MS = 600_000;
     LucideCloudOff, LucideDownload, LucideRotateCw,
     RemotePickerComponent,
     CastOverlayComponent,
+    AudioPlayerComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
     RecommendModalComponent,
@@ -152,6 +155,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
   private readonly session = inject(PlaybackSession);
+  private readonly audio = inject(AudioPlayerService);
   protected readonly nowPlayingTitle = computed(() => this.session.nowPlaying()?.title ?? '');
   readonly appUpdate = inject(AppUpdateService);
   private readonly updateModal = viewChild(AppUpdateModalComponent);
@@ -205,10 +209,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
     const dock = this.navbar.phoneDock() ? '4rem + env(safe-area-inset-bottom, 0px)' : '0px';
     return `calc(${dock} + 1rem)`;
   });
-  /** `chromeBottom` plus the cast mini-bar (3.5rem, borders, 0.5rem gap) while it shows: what content and sticky bars clear. */
-  readonly chromeBottomTotal = computed(() =>
-    !this.device.isTv() && !this.session.isLocal() ? `calc(${this.chromeBottom()} + 4.25rem)` : this.chromeBottom(),
-  );
+  /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
+  readonly chromeBottomTotal = computed(() => {
+    const bars = (!this.device.isTv() && !this.session.isLocal() ? 1 : 0) + (this.audio.active() ? 1 : 0);
+    return bars ? `calc(${this.chromeBottom()} + ${bars * 4.25}rem)` : this.chromeBottom();
+  });
 
   // Android status bar icons: the app is dark-only, so light=false always.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
