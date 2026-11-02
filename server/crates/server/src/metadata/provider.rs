@@ -114,6 +114,21 @@ pub trait MetadataProvider: Send + Sync {
         lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Credits>;
+    /// Whether `list` is answered for `kind`.
+    fn has_lists(&self, _kind: MediaKind) -> bool {
+        false
+    }
+    /// A global list (`trending`, `popular`, `upcoming`, `genres`, `discover`) as a JSON array.
+    fn list<'a>(
+        &'a self,
+        _kind: MediaKind,
+        _name: &'a str,
+        _params: &'a [(String, String)],
+        _lang: &'a Resolved,
+        _p: Priority,
+    ) -> Call<'a, Value> {
+        Box::pin(async { Err(Upstream::new(Some(404), "the provider has no lists")) })
+    }
     /// One edition record (`book-metadata.md` rule 4 keys); `None` for a namespace the provider cannot look up, without a call.
     fn fetch_edition<'a>(
         &'a self,

@@ -64,6 +64,30 @@ impl MetadataProvider for Fixture {
     ) -> Result<String, ProviderError> {
         Ok(json!([{ "seasonNumber": 1, "episodes": [] }]).to_string())
     }
+    fn list(
+        kind: String,
+        name: String,
+        params: Vec<(String, String)>,
+        lang: Lang,
+    ) -> Result<String, ProviderError> {
+        let got = |k: &str| {
+            params
+                .iter()
+                .find(|(n, _)| n == k)
+                .map_or("", |(_, v)| v.as_str())
+        };
+        match name.as_str() {
+            "trending" => Ok(
+                json!([{ "title": format!("{kind}:{}:{}", got("window"), lang.locale) }])
+                    .to_string(),
+            ),
+            "discover" => Ok(json!([{ "title": format!("{params:?}") }]).to_string()),
+            "genres" => Ok(json!([{ "id": 1, "name": "Action" }]).to_string()),
+            "popular" => Ok("[1]".into()),
+            "upcoming" => Ok("{}".into()),
+            _ => Err(ProviderError::Unsupported),
+        }
+    }
     fn find_by(
         source: ExternalId,
         _lang: Lang,
