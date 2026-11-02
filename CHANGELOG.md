@@ -1,5 +1,47 @@
 # Changelog
 
+## [6.0.0](https://github.com/fliks-app/fliks/compare/v5.2.1...v6.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **plugins:** media.imported, media.removed, request.created and request.approved carry externalIds [{provider, value}] instead of tmdbId; media.files.imported and acquisition.grabbed carry a family.
+* **plugins:** the core accepts pluginApi 3 only. A pluginApi 2 plugin is marked failed with an actionable status until a pluginApi 3 build is installed.
+
+### Features
+
+* **books:** add the book metadata provider parsers ([#2216](https://github.com/fliks-app/fliks/issues/2216)) ([5fbd916](https://github.com/fliks-app/fliks/commit/5fbd916c2cbb90ba1b13ef1de68c3fd2ccf57b95))
+* **books:** add the ISBN, OPF, file name and KOReader hash parsers ([#2214](https://github.com/fliks-app/fliks/issues/2214)) ([c2a0c43](https://github.com/fliks-app/fliks/commit/c2a0c43a023f4fe63351fe595377f65c6061ac74))
+* **client:** add book search and the add preview ([#2258](https://github.com/fliks-app/fliks/issues/2258)) ([055310c](https://github.com/fliks-app/fliks/commit/055310c2bdf6cb409dfd40fb211692c14c80dd05))
+* **client:** add the author, narrator and series pages ([#2259](https://github.com/fliks-app/fliks/issues/2259)) ([181b8d0](https://github.com/fliks-app/fliks/commit/181b8d043c756a2d4d22a909466544072d2465c3))
+* **client:** add the book kind and its client contract ([#2251](https://github.com/fliks-app/fliks/issues/2251)) ([a1e3fb9](https://github.com/fliks-app/fliks/commit/a1e3fb9bf9670012db569454ccf7bf1a2570a13f))
+* **client:** add the book work page ([#2262](https://github.com/fliks-app/fliks/issues/2262)) ([a92c2ed](https://github.com/fliks-app/fliks/commit/a92c2ed3aea5adce0f9c542bb9d400ff565cc825))
+* **client:** add the books library page and book cards ([#2261](https://github.com/fliks-app/fliks/issues/2261)) ([d887273](https://github.com/fliks-app/fliks/commit/d887273a8aa2c3b8f4edf04989e7d9eb61ab910c))
+* **plugins:** add the metadata provider plugin contract ([#2256](https://github.com/fliks-app/fliks/issues/2256)) ([2a82c83](https://github.com/fliks-app/fliks/commit/2a82c83328e85e5d4c40f7f9f75b258538ae96fe))
+* **plugins:** give provider plugins Fliks default keys with a reset ([#2267](https://github.com/fliks-app/fliks/issues/2267)) ([d9a22d4](https://github.com/fliks-app/fliks/commit/d9a22d49c8a754fd735109e252205187b5b8a070))
+* **plugins:** pluginApi 3 with kinds, families and units ([#2243](https://github.com/fliks-app/fliks/issues/2243)) ([8ca5e96](https://github.com/fliks-app/fliks/commit/8ca5e9624fb53865d014d0fe7e1278c444d95f45))
+* **plugins:** rate-limit provider plugins outbound calls ([#2266](https://github.com/fliks-app/fliks/issues/2266)) ([f1dcce3](https://github.com/fliks-app/fliks/commit/f1dcce3510a09376bab5e016a7dc8d6b866e5069))
+* **plugins:** resolve or create a work by external ids ([#2250](https://github.com/fliks-app/fliks/issues/2250)) ([1701619](https://github.com/fliks-app/fliks/commit/17016199c8e312d1c25fb8f4cc5975a47d188e9e))
+* **server:** add book naming formats ([#2260](https://github.com/fliks-app/fliks/issues/2260)) ([265b70f](https://github.com/fliks-app/fliks/commit/265b70f51d5536e6e3dae984f443eaabf195c06e))
+* **server:** add the book kind and its contract ([#2254](https://github.com/fliks-app/fliks/issues/2254)) ([1815d36](https://github.com/fliks-app/fliks/commit/1815d36defdc702ec6e6e0e8bcaa90d8a52c80ac))
+* **server:** add the book read routes ([#2265](https://github.com/fliks-app/fliks/issues/2265)) ([a6cd549](https://github.com/fliks-app/fliks/commit/a6cd5499e901f1a7cdf23064ccfacd2161db12ad))
+* **server:** back up the database before pending migrations ([#2245](https://github.com/fliks-app/fliks/issues/2245)) ([99c4522](https://github.com/fliks-app/fliks/commit/99c45220e7d020e9b55ec674698a39605f2e3036))
+* **server:** identify and link books to provider records ([#2264](https://github.com/fliks-app/fliks/issues/2264)) ([bab6e71](https://github.com/fliks-app/fliks/commit/bab6e7127063799297d4ec687aea773a0903918f))
+* **server:** merge provider records per field and track their sources ([#2230](https://github.com/fliks-app/fliks/issues/2230)) ([4d0a2d1](https://github.com/fliks-app/fliks/commit/4d0a2d1e7dff4e0664f274d23942c5ce3b0d3029))
+* **server:** rate limit metadata providers behind one trait ([#2228](https://github.com/fliks-app/fliks/issues/2228)) ([9d94f9a](https://github.com/fliks-app/fliks/commit/9d94f9a3f4b873f5655aa7c21574ea9a170a01b5))
+
+
+### Bug Fixes
+
+* **parity:** drop parties.create from the remaining roles without requests.create ([#2211](https://github.com/fliks-app/fliks/issues/2211)) ([faf6a10](https://github.com/fliks-app/fliks/commit/faf6a10c3c926cbf96c45586dc8f9e9172d451a5))
+* **parity:** drop parties.create from the roles without requests.create ([#2208](https://github.com/fliks-app/fliks/issues/2208)) ([6680036](https://github.com/fliks-app/fliks/commit/6680036f66161c7bd73896e24d8caa5e8b2efbe1))
+* **plugin-sdk:** report a 6.x core from the test harness ([#2253](https://github.com/fliks-app/fliks/issues/2253)) ([866c610](https://github.com/fliks-app/fliks/commit/866c6107ec411450a5dfaf0319f5c7b34ccf3fb5))
+* **plugins:** update a plugin that fails at boot right away ([#2231](https://github.com/fliks-app/fliks/issues/2231)) ([6ed4040](https://github.com/fliks-app/fliks/commit/6ed40401b79056972a596ae4aebb6c428f53fc0d))
+* **server:** accept credentialSource in the engine resolve body ([#2247](https://github.com/fliks-app/fliks/issues/2247)) ([57788c0](https://github.com/fliks-app/fliks/commit/57788c051799df55f47e6c98f48e321a621d974c))
+* **server:** keep scheduled jobs off during parity runs ([#2263](https://github.com/fliks-app/fliks/issues/2263)) ([747b04e](https://github.com/fliks-app/fliks/commit/747b04efd76daa028b8fd0cbe3ca5b97d7b3f5af))
+* **server:** keep the oldest pre-migration dump of the pending chain ([#2255](https://github.com/fliks-app/fliks/issues/2255)) ([5c1a402](https://github.com/fliks-app/fliks/commit/5c1a402e3af99e8bb1343e9fc381b69b4495a651))
+* **tv:** match the Tizen and webOS device profiles to their decoders ([#2232](https://github.com/fliks-app/fliks/issues/2232)) ([2b9410a](https://github.com/fliks-app/fliks/commit/2b9410ad3a791656acc6283d468ab647219f664d)), closes [#2205](https://github.com/fliks-app/fliks/issues/2205)
+
 ## [5.2.1](https://github.com/fliks-app/fliks/compare/v5.2.0...v5.2.1) (2026-10-30)
 
 
