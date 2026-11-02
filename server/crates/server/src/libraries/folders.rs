@@ -403,6 +403,14 @@ pub async fn remove(
                 e.into()
             }
         })?;
+    sqlx::query(
+        r#"UPDATE wants w SET "folderId" = df."folderId"
+           FROM media m JOIN library_default_folders df ON df."libraryId" = m."libraryId"
+           WHERE w."mediaId" = m.id AND m."libraryId" = $1 AND w."folderId" IS NULL"#,
+    )
+    .bind(library)
+    .execute(&mut *tx)
+    .await?;
     let rest = ordered_ids(&mut tx, library).await?;
     renumber(&mut tx, &rest).await?;
     touch(&mut tx, library).await?;

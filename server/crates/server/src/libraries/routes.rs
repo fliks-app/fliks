@@ -255,6 +255,10 @@ pub async fn update(
         dto.metadata_region.clone().flatten().as_deref(),
         8,
     )?;
+    let _moves = match dto.path {
+        Some(_) => Some(st.folder_moves.write().await),
+        None => None,
+    };
     let mut tx = st.db.begin().await?;
     let exists = sqlx::query_scalar!(
         r#"SELECT EXISTS (SELECT 1 FROM libraries WHERE id = $1) AS "e!""#,

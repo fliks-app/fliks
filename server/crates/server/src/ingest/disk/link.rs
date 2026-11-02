@@ -140,6 +140,9 @@ async fn relink_in_place(
         )
         .execute(&st.db)
         .await?;
+        if current.library_id.is_none() {
+            crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
+        }
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
     if current.library_id.is_none() {

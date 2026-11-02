@@ -19,7 +19,7 @@ use fliks_domain::{
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 /// Rule 70 for the folder rooted at `lib`: the media directory a delete may remove, `Err` with the reason it is kept.
@@ -45,22 +45,14 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
         .await
         .map_err(|e| e.to_string())?;
     let roots: Vec<PathBuf> = all.iter().map(|f| PathBuf::from(&f.path)).collect();
-    // Folders never overlap (libraries rule 50), so only a legacy overlapping one can hold a clashing directory.
-    let near: Vec<i32> = all
-        .iter()
-        .filter(|f| fsx::dirs_overlap(Path::new(&f.path), root.path()))
-        .map(|f| f.id)
-        .collect();
     let others: Vec<PathBuf> = sqlx::query!(
         r#"SELECT lf.path AS "lib!", m."folderName" AS "folder!" FROM media m
            JOIN (SELECT "mediaId", "folderId" FROM media_files
-                 WHERE "folderId" = ANY($2) AND "mediaId" IS NOT NULL
-                 UNION SELECT "mediaId", "folderId" FROM media_target_folders
-                 WHERE "folderId" = ANY($2)) x ON x."mediaId" = m.id
+                 WHERE "mediaId" IS NOT NULL
+                 UNION SELECT "mediaId", "folderId" FROM media_target_folders) x ON x."mediaId" = m.id
            JOIN library_folders lf ON lf.id = x."folderId"
            WHERE m.id <> $1 AND m."folderName" <> ''"#,
-        m.id,
-        &near
+        m.id
     )
     .fetch_all(&st.db)
     .await
@@ -206,7 +198,7 @@ pub async fn remove(
                     Ok(Ok(())) => tracing::info!("Deleted media folder on disk: {}", d.display()),
                     Ok(Err(e)) => {
                         tracing::error!(
-                            "Media file deletion failed — id={} title=\"{}\" path=\"{}\" error={e}",
+                            "Media file deletion failed: id={} title=\"{}\" path=\"{}\" error={e}",
                             m.id,
                             m.title,
                             d.display()

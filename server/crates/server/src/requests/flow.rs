@@ -660,7 +660,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
                                 crate::media::write::remove_media_folder(path.clone()).await
                             {
                                 tracing::error!(
-                                    "Media file deletion failed after delete request #{id} — title=\"{}\" path=\"{}\" error={e}",
+                                    "Media file deletion failed after delete request #{id}: title=\"{}\" path=\"{}\" error={e}",
                                     removed.title,
                                     path.display()
                                 );

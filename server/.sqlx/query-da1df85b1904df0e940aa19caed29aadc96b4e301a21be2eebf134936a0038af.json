@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT lf.path AS \"lib!\", m.\"folderName\" AS \"folder!\" FROM media m\n           JOIN (SELECT \"mediaId\", \"folderId\" FROM media_files\n                 WHERE \"folderId\" = ANY($2) AND \"mediaId\" IS NOT NULL\n                 UNION SELECT \"mediaId\", \"folderId\" FROM media_target_folders\n                 WHERE \"folderId\" = ANY($2)) x ON x.\"mediaId\" = m.id\n           JOIN library_folders lf ON lf.id = x.\"folderId\"\n           WHERE m.id <> $1 AND m.\"folderName\" <> ''",
+  "query": "SELECT lf.path AS \"lib!\", m.\"folderName\" AS \"folder!\" FROM media m\n           JOIN (SELECT \"mediaId\", \"folderId\" FROM media_files\n                 WHERE \"mediaId\" IS NOT NULL\n                 UNION SELECT \"mediaId\", \"folderId\" FROM media_target_folders) x ON x.\"mediaId\" = m.id\n           JOIN library_folders lf ON lf.id = x.\"folderId\"\n           WHERE m.id <> $1 AND m.\"folderName\" <> ''",
   "describe": {
     "columns": [
       {
@@ -28,8 +28,7 @@
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Int4Array"
+        "Int4"
       ]
     },
     "nullable": [
@@ -37,5 +36,5 @@
       true
     ]
   },
-  "hash": "1263a75e5991792f2ea228356695f91afd6f07c4e7aa73a5beacbb0803920833"
+  "hash": "da1df85b1904df0e940aa19caed29aadc96b4e301a21be2eebf134936a0038af"
 }

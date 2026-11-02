@@ -150,6 +150,7 @@ pub async fn rescan_files(
     _guard: &OwnedMutexGuard<()>,
     media_id: i32,
 ) -> Result<Counts, AppError> {
+    let _moves = st.folder_moves.read().await;
     let media = load_media(&st.db, media_id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media_id))?;

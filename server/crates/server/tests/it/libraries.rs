@@ -731,3 +731,51 @@ async fn removing_a_media_clears_its_directory_in_every_folder(pool: PgPool) {
     dirs.sort();
     assert_eq!(dirs, vec![c.tmp.join("f1/Multi"), c.tmp.join("f2/Multi")]);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_media_dir_reached_through_a_symlink_in_another_folder_is_kept(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Shared", &[f1]).await;
+    media_with_files(&pool, "Link", &[f2]).await;
+    std::fs::create_dir_all(c.tmp.join("f1/Shared")).unwrap();
+    std::os::unix::fs::symlink(c.tmp.join("f1/Shared"), c.tmp.join("f2/Link")).unwrap();
+    let guard = c.st.ingest.media.lock(id).await;
+    let (_, dirs) = fliks_server::media::write::remove_media_with_dir(&c.st, &guard, id)
+        .await
+        .unwrap();
+    assert!(dirs.is_empty(), "{dirs:?}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_legacy_path_change_waits_for_the_folder_lock(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    call(&c, "POST", "/api/libraries", &c.admin, json!({"name": "A"})).await;
+    let reading = c.st.folder_moves.read().await;
+    let uri = "/api/libraries/1".to_string();
+    let patch = spawn_call(&c, "PATCH", uri, json!({"path": dir(&c, "p")}));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(
+        !patch.is_finished(),
+        "a legacy path change ran under an ingest"
+    );
+    drop(reading);
+    assert_eq!(patch.await.unwrap().0, 200);
+}
+
+#[sqlx::test(migrations = false)]
+async fn folder_delete_points_the_remaining_wants_at_the_new_default(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let idle = media_with_files(&pool, "Idle", &[]).await;
+    let url = format!("/api/libraries/1/folders/{f1}");
+    let (s, _) = call(&c, "DELETE", &url, &c.admin, json!(null)).await;
+    assert_eq!(s, 200);
+    let want: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "folderId" FROM wants WHERE "mediaId" = $1 LIMIT 1"#)
+            .bind(idle)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(want, Some(f2));
+}
