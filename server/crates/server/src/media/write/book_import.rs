@@ -29,7 +29,7 @@ use axum::{Json, http::StatusCode};
 use fliks_domain::{
     media::kind::MediaKind,
     metadata::limiter::Priority,
-    naming::{self, BookNameTokens, validate_folder_name},
+    naming::{self, BookNameTokens, validate_folder_path},
 };
 use serde_json::Value;
 
@@ -120,7 +120,7 @@ pub(super) async fn import_book(
             ..Default::default()
         },
     );
-    let name = validate_folder_name(&name)
+    let name = validate_folder_path(&name)
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
         .to_owned();
 

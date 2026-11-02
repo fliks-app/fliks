@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT lf.path AS \"lib!\", f.\"relativePath\" AS \"rel!\" FROM media_files f\n               JOIN library_folders lf ON lf.id = f.\"folderId\"\n               WHERE f.\"mediaId\" <> $1 AND starts_with(replace(f.\"relativePath\", '\\', '/'), $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "lib!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "rel!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "842c88ac51d43810c67bf56506090a89187d1a1827cb59aef67e332386b64e86"
+}

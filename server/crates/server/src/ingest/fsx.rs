@@ -1,6 +1,9 @@
 //! Contained filesystem writes under a library root (`ingest.md` rules 1-15, W1-W16).
 use crate::engine::resolve::lexical_resolve;
-use fliks_domain::naming::validate_folder_name;
+use fliks_domain::{
+    media::kind::MediaKind,
+    naming::{validate_folder_name, validate_folder_path},
+};
 use std::{
     fs, io,
     path::{Component, Path, PathBuf},
@@ -39,9 +42,22 @@ impl Root {
 
     /// `M`: the root for a root-level movie, else `Lc/<folderName>` once the name is one component.
     pub fn media_dir(&self, folder_name: Option<&str>) -> Result<PathBuf, String> {
+        self.media_dir_of(MediaKind::Movie, folder_name)
+    }
+
+    /// [`Self::media_dir`] for a media of `kind`: a book's folder name may hold several components.
+    pub fn media_dir_of(
+        &self,
+        kind: MediaKind,
+        folder_name: Option<&str>,
+    ) -> Result<PathBuf, String> {
+        let valid = |f| match kind {
+            MediaKind::Book => validate_folder_path(f),
+            _ => validate_folder_name(f),
+        };
         match folder_name.filter(|f| !f.is_empty()) {
             None => Ok(self.0.clone()),
-            Some(f) => validate_folder_name(f)
+            Some(f) => valid(f)
                 .map(|f| self.0.join(f))
                 .map_err(|_| format!("Invalid folder name \"{f}\"")),
         }
@@ -421,10 +437,27 @@ pub fn removable_media_dir(
     library_roots: &[PathBuf],
     other_media_dirs: &[PathBuf],
 ) -> Result<Option<PathBuf>, String> {
+    removable_dir_of(
+        root,
+        MediaKind::Movie,
+        folder_name,
+        library_roots,
+        other_media_dirs,
+    )
+}
+
+/// [`removable_media_dir`] for a media of `kind`.
+pub fn removable_dir_of(
+    root: &Root,
+    kind: MediaKind,
+    folder_name: &str,
+    library_roots: &[PathBuf],
+    other_media_dirs: &[PathBuf],
+) -> Result<Option<PathBuf>, String> {
     if folder_name.is_empty() {
         return Ok(None);
     }
-    let dir = root.media_dir(Some(folder_name))?;
+    let dir = root.media_dir_of(kind, Some(folder_name))?;
     let meta = match fs::symlink_metadata(&dir) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),

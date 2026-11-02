@@ -147,3 +147,17 @@ fn folder_name_validator() {
     assert_eq!(validate_folder_name("a\0b"), Err(FolderNameError::Nul));
     assert_eq!(validate_folder_name("..."), Ok("..."));
 }
+
+#[test]
+fn folder_path_validator() {
+    assert_eq!(validate_folder_path("Title"), Ok("Title"));
+    assert_eq!(
+        validate_folder_path("Author/Series/Title"),
+        Ok("Author/Series/Title")
+    );
+    for bad in [
+        "", "a//b", "a/", "/a", "a/./b", "a/../b", "..", "a\\b", "a/b\0",
+    ] {
+        assert!(validate_folder_path(bad).is_err(), "{bad:?}");
+    }
+}

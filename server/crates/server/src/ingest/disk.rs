@@ -30,7 +30,7 @@ use fliks_domain::{
     metadata::limiter::Priority,
     naming::{
         self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
-        validate_folder_name,
+        validate_folder_name, validate_folder_path,
     },
     nfo::NfoData,
     release::parsing::{quality::parse_release_quality, title::extract_media_title},
@@ -38,7 +38,7 @@ use fliks_domain::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -138,10 +138,10 @@ struct Group {
     files: Vec<FileEntry>,
 }
 
-/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only (and
-/// book files when the library takes books).
+/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only. Book
+/// files, when the library takes books, are read one level deeper and never through a link.
 fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
-    if depth > 3 {
+    if depth > if book { BOOK_DEPTH } else { 3 } {
         return;
     }
     let Ok(rd) = fs::read_dir(dir) else {
@@ -152,12 +152,18 @@ fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
     let mut subdirs = vec![];
     for e in entries {
         let name = e.file_name().to_string_lossy().into_owned();
-        if e.file_type().is_ok_and(|t| t.is_dir()) {
+        let kind = e.file_type();
+        if kind.as_ref().is_ok_and(|t| t.is_dir()) {
             if !(depth > 0 && is_bonus_dir(&name)) {
                 subdirs.push(e.path());
             }
-        } else if ((is_video(&name) && !is_sample_file(&name))
-            || (book && books::is_book_file(&name)))
+        } else if book && books::is_book_file(&name) {
+            if kind.is_ok_and(|t| t.is_file()) {
+                out.push(e.path());
+            }
+        } else if depth <= 3
+            && is_video(&name)
+            && !is_sample_file(&name)
             && fs::metadata(e.path()).is_ok_and(|m| m.is_file())
         {
             out.push(e.path());
@@ -167,6 +173,9 @@ fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
         collect(&s, depth + 1, book, out);
     }
 }
+
+/// `Author/Series/Title/CD1/part`: the root, four folders, then the file.
+const BOOK_DEPTH: usize = 4;
 
 fn progress(st: &AppState, key: &str, root: &str, current: usize, total: usize) {
     st.hub.emit(SseEvent::TaskProgress {
@@ -212,7 +221,7 @@ async fn scan_under(
     folder_id: Option<i32>,
     types: &[MediaKind],
     provider: &str,
-    linked: &HashSet<PathBuf>,
+    linked: &HashMap<PathBuf, String>,
 ) -> Scanned {
     let key = format!("OrphanScan:{root}");
     let r = PathBuf::from(root);
@@ -224,11 +233,13 @@ async fn scan_under(
     })
     .await
     .unwrap_or_default();
-    let unlinked: Vec<&PathBuf> = all.iter().filter(|p| !linked.contains(*p)).collect();
-    let total = unlinked.len() + 1;
-    let (book_files, unlinked): (Vec<&PathBuf>, Vec<&PathBuf>) = unlinked
+    let (book_files, video): (Vec<&PathBuf>, Vec<&PathBuf>) =
+        all.iter().partition(|p| books::is_book_file(&file_name(p)));
+    let unlinked: Vec<&PathBuf> = video
         .into_iter()
-        .partition(|p| books::is_book_file(&file_name(p)));
+        .filter(|p| !linked.contains_key(*p))
+        .collect();
+    let total = unlinked.len() + 1;
     progress(st, &key, root, 0, total);
     let root_p = Path::new(root);
     let mut groups: Vec<Group> = vec![];
@@ -310,8 +321,9 @@ async fn scan_under(
             .and_then(|n| n.year)
             .or(ex.year.map(i64::from));
     }
-    orphan_count += book_files.len();
-    groups.extend(book_groups(root_p, folder_id, provider, &book_files).await);
+    let works = book_groups(root_p, folder_id, provider, &book_files, linked).await;
+    orphan_count += works.iter().map(|g| g.files.len()).sum::<usize>();
+    groups.extend(works);
     progress(st, &key, root, total, total);
     st.hub.activity().remove(&key);
     Scanned {
@@ -321,12 +333,15 @@ async fn scan_under(
     }
 }
 
-/// The works the book files make (`book-ingest.md` rules 2-4 and 10), one orphan group each.
+/// The works the book files make (`book-ingest.md` rules 2-4 and 10), one orphan group each for the
+/// works that have a file still unlinked. `files` is every book file of the root, linked or not:
+/// a work is anchored by its folder only when it is alone there.
 async fn book_groups(
     root: &Path,
     folder_id: Option<i32>,
     provider: &str,
     files: &[&PathBuf],
+    linked: &HashMap<PathBuf, String>,
 ) -> Vec<Group> {
     let by_rel: HashMap<String, &PathBuf> = files
         .iter()
@@ -335,13 +350,29 @@ async fn book_groups(
     let rels: Vec<String> = by_rel.keys().cloned().collect();
     let works = books::group::group(&rels);
     let mut out = vec![];
-    for w in &works {
-        let alone = works.iter().filter(|o| o.dir == w.dir).count() == 1;
-        let top = (!w.dir.is_empty() && !w.dir.contains('/') && alone).then(|| w.dir.clone());
+    for (i, w) in works.iter().enumerate() {
+        let all: Vec<&String> = w.versions.iter().flat_map(|v| &v.files).collect();
+        let fresh: Vec<&&String> = all
+            .iter()
+            .filter(|r| !linked.contains_key(by_rel[**r]))
+            .collect();
+        if fresh.is_empty() {
+            continue;
+        }
+        let below = format!("{}/", w.dir);
+        let alone = !works
+            .iter()
+            .enumerate()
+            .any(|(j, o)| j != i && (o.dir == w.dir || o.dir.starts_with(&below)));
+        let mine = all
+            .iter()
+            .filter_map(|r| linked.get(by_rel[*r]))
+            .all(|owner| *owner == w.dir);
+        let anchor = (!w.dir.is_empty() && alone && mine).then(|| w.dir.clone());
         let guess = fliks_domain::books::filename::parse_path(&w.name_path);
         let mut entries = vec![];
-        for rel in w.versions.iter().flat_map(|v| &v.files) {
-            let abs = by_rel[rel];
+        for rel in fresh {
+            let abs = by_rel[*rel];
             entries.push(FileEntry {
                 file_path: abs.to_string_lossy().into_owned(),
                 filename: file_name(abs),
@@ -357,7 +388,7 @@ async fn book_groups(
             folder_id,
             group_key: format!("book:{}", w.name_path),
             media_type: MediaKind::Book,
-            folder_name: top.unwrap_or_default(),
+            folder_name: anchor.unwrap_or_default(),
             guess_title: guess
                 .title
                 .unwrap_or_else(|| w.dir.rsplit('/').next().unwrap_or_default().to_owned()),
@@ -408,19 +439,23 @@ pub async fn scan(
         return Err(AppError::not_found(format!("Library #{id} not found")));
     }
     let lib = require_path(&st, id).await?;
-    let linked: HashSet<PathBuf> = sqlx::query!(
-        r#"SELECT mf."relativePath" AS rel, lf.path AS folder FROM media_files mf
-           JOIN library_folders lf ON lf.id = mf."folderId" WHERE lf."libraryId" = $1"#,
+    let linked: HashMap<PathBuf, String> = sqlx::query!(
+        r#"SELECT mf."relativePath" AS rel, lf.path AS folder, COALESCE(m."folderName", '') AS "owner!"
+           FROM media_files mf JOIN library_folders lf ON lf.id = mf."folderId"
+           LEFT JOIN media m ON m.id = mf."mediaId" WHERE lf."libraryId" = $1"#,
         id
     )
     .fetch_all(&st.db)
     .await?
     .into_iter()
     .map(|r| {
-        PathBuf::from(resolve(
-            &fliks_domain::media::path::join(&r.folder, &r.rel.replace('\\', "/")),
-            "/",
-        ))
+        (
+            PathBuf::from(resolve(
+                &fliks_domain::media::path::join(&r.folder, &r.rel.replace('\\', "/")),
+                "/",
+            )),
+            r.owner,
+        )
     })
     .collect();
     let mut scanned = vec![];
@@ -487,7 +522,7 @@ pub async fn preview(
         }
         Ok(_) => {}
     }
-    let scanned = scan_under(&st, &root, None, &types, &provider, &HashSet::new()).await;
+    let scanned = scan_under(&st, &root, None, &types, &provider, &HashMap::new()).await;
     Ok((
         StatusCode::CREATED,
         Json(scanned_json(&root, None, vec![scanned])),
@@ -615,9 +650,12 @@ fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppErro
             MediaKind::Series => {}
         }
     }
-    validate_folder_name(name)
-        .map(str::to_owned)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name \"{name}\"")))
+    match media_type {
+        MediaKind::Book => validate_folder_path(name),
+        _ => validate_folder_name(name),
+    }
+    .map(str::to_owned)
+    .map_err(|_| AppError::bad_request(format!("Invalid folder name \"{name}\"")))
 }
 
 /// `relinkOrphans` (rules 76-92).

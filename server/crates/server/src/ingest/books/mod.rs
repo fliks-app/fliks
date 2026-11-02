@@ -22,6 +22,7 @@ use fliks_engine_core::api::MediaTags;
 use serde_json::{Map, Value};
 use sqlx::{PgConnection, PgPool};
 use std::{
+    collections::HashSet,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
@@ -49,8 +50,16 @@ pub struct Placed {
 
 pub struct Registered {
     pub file_id: i32,
+    pub rel: String,
     pub family: Family,
     pub format: String,
+}
+
+/// What `register` did: the files it wrote, and one message per file it left alone.
+#[derive(Default)]
+pub struct Registration {
+    pub files: Vec<Registered>,
+    pub conflicts: Vec<String>,
 }
 
 /// The folder a new file of `family` goes to: the media's want of that family, else the library default.
@@ -132,6 +141,7 @@ async fn store_hash(db: &PgPool, file: i32, abs: &Path) {
 
 /// The picture becomes the work's poster when it has none.
 pub async fn store_cover(st: &AppState, media: i32, bytes: &[u8]) {
+    let _one = st.ingest.covers.lock(media).await;
     let has = sqlx::query_scalar!(
         r#"SELECT "posterUrl" IS NOT NULL AS "has!" FROM media WHERE id = $1"#,
         media
@@ -185,15 +195,71 @@ fn tag_facts(t: Option<&MediaTags>) -> Facts {
     }
 }
 
-/// Inserts or updates the rows of `files`, then lays out every file of the media (rule 6).
-pub async fn register(
-    st: &AppState,
+async fn anchored(db: &PgPool, media: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(
+        r#"SELECT COALESCE("folderName", '') <> '' AS "a!" FROM media WHERE id = $1"#,
+        media
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// The files of an anchored media that belong to its own work; the others go to `conflicts`.
+async fn own_work<'a>(
+    db: &PgPool,
     media: i32,
-    files: &[Placed],
-) -> Result<Vec<Registered>, String> {
+    files: &'a [Placed],
+    conflicts: &mut Vec<String>,
+) -> sqlx::Result<Vec<&'a Placed>> {
+    let known: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT "relativePath" FROM media_files WHERE "mediaId" = $1"#,
+        media
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|r| r.replace('\\', "/"))
+    .collect();
+    let mut all = known.clone();
+    all.extend(files.iter().map(|f| f.rel.replace('\\', "/")));
+    let works = group::group(&all);
+    let files_of = |w: &group::Work| -> HashSet<String> {
+        w.versions.iter().flat_map(|v| v.files.clone()).collect()
+    };
+    let Some(home) = works
+        .iter()
+        .find(|w| files_of(w).iter().any(|p| known.contains(p)))
+        .or(works.first())
+    else {
+        return Ok(files.iter().collect());
+    };
+    let mine = files_of(home);
     let mut out = vec![];
+    for f in files {
+        let name = file_name(&f.abs);
+        if classify(&name).is_none() || mine.contains(&f.rel.replace('\\', "/")) {
+            out.push(f);
+        } else {
+            conflicts.push(format!("{name}: belongs to another work of the folder"));
+        }
+    }
+    Ok(out)
+}
+
+/// Inserts or updates the rows of `files`, then lays out every file of the media (rule 6).
+pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Registration, String> {
+    let mut out = vec![];
+    let mut conflicts = vec![];
     let mut facts: Vec<(Family, Facts)> = vec![];
     let mut cover = None;
+    let anchored = anchored(&st.db, media).await.map_err(|e| e.to_string())?;
+    let files: Vec<&Placed> = if anchored {
+        own_work(&st.db, media, files, &mut conflicts)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        files.iter().collect()
+    };
     for f in files {
         let name = file_name(&f.abs);
         let Some((family, format)) = classify(&name) else {
@@ -234,7 +300,7 @@ pub async fn register(
             }
             (None::<Value>, None)
         };
-        let id = sqlx::query_scalar!(
+        let Some(id) = sqlx::query_scalar!(
             r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "streamInfo",
                  "mtimeMs", "probeVersion")
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -255,22 +321,27 @@ pub async fn register(
         .fetch_optional(&st.db)
         .await
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("{name}: file already linked to another media"))?;
+        else {
+            conflicts.push(format!("{name}: file already linked to another media"));
+            continue;
+        };
         if family == Family::Text {
             store_hash(&st.db, id, &f.abs).await;
         }
         out.push(Registered {
             file_id: id,
+            rel: f.rel.clone(),
             family,
             format,
         });
     }
     if out.is_empty() {
-        return Ok(out);
+        return Ok(Registration {
+            files: out,
+            conflicts,
+        });
     }
-    lay_out(&st.db, media, &facts)
-        .await
-        .map_err(|e| e.to_string())?;
+    lay_out(&st.db, media, anchored, &facts).await?;
     if let Some(c) = cover {
         store_cover(st, media, &c).await;
     }
@@ -278,7 +349,16 @@ pub async fn register(
         st.ingest.queue.enqueue(st, r.file_id);
     }
     st.ingest.settle.schedule(st, media);
-    Ok(out)
+    Ok(Registration {
+        files: out,
+        conflicts,
+    })
+}
+
+/// Lays out the files the media has again, after a rescan removed some.
+pub async fn relay(st: &AppState, media: i32) -> Result<(), String> {
+    let anchored = anchored(&st.db, media).await.map_err(|e| e.to_string())?;
+    lay_out(&st.db, media, anchored, &[]).await
 }
 
 struct Known {
@@ -331,21 +411,41 @@ async fn ensure(c: &mut PgConnection, media: i32, family: Family) -> sqlx::Resul
     Ok((edition, item))
 }
 
-/// Rules 5-7: the editions, items and parts of every file the media has.
-async fn lay_out(db: &PgPool, media: i32, facts: &[(Family, Facts)]) -> sqlx::Result<()> {
+/// Rules 5-7: the editions, items and parts of every file the media has; an anchored media
+/// (rule 10) holds one work, and its files making more are refused.
+async fn lay_out(
+    db: &PgPool,
+    media: i32,
+    anchored: bool,
+    facts: &[(Family, Facts)],
+) -> Result<(), String> {
     let rows = sqlx::query_as!(
         Known,
         r#"SELECT id, "relativePath" AS rel, "streamInfo" AS info FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
         media
     )
     .fetch_all(db)
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
     let paths: Vec<String> = rows.iter().map(|r| r.rel.replace('\\', "/")).collect();
+    let works = group::group(&paths);
+    if anchored && works.len() > 1 {
+        return Err(format!("media #{media}: its folder holds several works"));
+    }
+    let versions: Vec<group::Version> = works.into_iter().flat_map(|w| w.versions).collect();
+    lay_out_tx(db, media, &rows, &versions, facts)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn lay_out_tx(
+    db: &PgPool,
+    media: i32,
+    rows: &[Known],
+    versions: &[group::Version],
+    facts: &[(Family, Facts)],
+) -> sqlx::Result<()> {
     let by_path = |p: &str| rows.iter().find(|r| r.rel.replace('\\', "/") == p);
-    let versions: Vec<group::Version> = group::group(&paths)
-        .into_iter()
-        .flat_map(|w| w.versions)
-        .collect();
     let mut tx = db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media).await?;
     for family in [Family::Text, Family::Audio] {

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id FROM media m WHERE m.\"libraryId\" = $1 AND m.type = $2 AND m.\"folderName\" = ''\n               AND EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id\n                           AND f.\"folderId\" = ANY($4) AND f.\"relativePath\" = ANY($3))\n               ORDER BY m.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "TextArray",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ba7e627cd2c58e368c864b43ca5790f5c26d0eec0e0984c2c18ccfaabaf8f5a2"
+}

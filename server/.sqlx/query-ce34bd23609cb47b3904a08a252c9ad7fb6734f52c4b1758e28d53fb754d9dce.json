@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT mf.\"relativePath\" AS rel, lf.path AS folder FROM media_files mf\n           JOIN library_folders lf ON lf.id = mf.\"folderId\" WHERE lf.\"libraryId\" = $1",
+  "query": "SELECT mf.\"relativePath\" AS rel, lf.path AS folder, COALESCE(m.\"folderName\", '') AS \"owner!\"\n           FROM media_files mf JOIN library_folders lf ON lf.id = mf.\"folderId\"\n           LEFT JOIN media m ON m.id = mf.\"mediaId\" WHERE lf.\"libraryId\" = $1",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,12 @@
             "name": "path"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "owner!",
+        "type_info": "Varchar",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -33,8 +39,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "32a2f8bf5231a16dc307360159a8898681dfd69e70350d361f7cf578c2d05828"
+  "hash": "ce34bd23609cb47b3904a08a252c9ad7fb6734f52c4b1758e28d53fb754d9dce"
 }

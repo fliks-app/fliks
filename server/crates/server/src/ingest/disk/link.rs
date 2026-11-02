@@ -177,8 +177,9 @@ async fn relink_in_place(
         if !placed.is_empty() {
             match books::register(st, media.id, &placed).await {
                 Ok(done) => {
-                    linked += done.len() as i64;
-                    if let Some(first) = done.first() {
+                    linked += done.files.len() as i64;
+                    errors.extend(done.conflicts);
+                    if let Some(first) = done.files.first() {
                         st.hub.emit_domain(DomainEvent::MediaFilesImported {
                             media_id: i64::from(media.id),
                             family: first.family,
@@ -295,7 +296,7 @@ pub(super) async fn confirm_import(
             Some(_) => {}
             None => {
                 let folder = pin_folder(&formats, &media);
-                if validate_folder_name(&folder).is_err() {
+                if folder_error(media.media_type, &folder) {
                     errors.push(format!("{name}: invalid folder name \"{folder}\""));
                     continue;
                 }
@@ -398,6 +399,14 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
                 tmdb_id,
             },
         ),
+    }
+}
+
+/// Whether `name` is no valid `folderName` for a media of `kind` (a book's may hold several components).
+fn folder_error(kind: MediaKind, name: &str) -> bool {
+    match kind {
+        MediaKind::Book => naming::validate_folder_path(name).is_err(),
+        _ => validate_folder_name(name).is_err(),
     }
 }
 
@@ -565,9 +574,12 @@ async fn target_folder(
                 },
             ),
         };
-        validate_folder_name(&named)
-            .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-            .to_owned()
+        if folder_error(d.media_type, &named) {
+            return Err(AppError::bad_request(format!(
+                "Invalid folder name for \"{title}\""
+            )));
+        }
+        named
     } else {
         d.folder_name.clone()
     })
@@ -580,18 +592,32 @@ async fn existing_unmatched(
     folder: &str,
 ) -> Result<Option<i32>, AppError> {
     Ok(if folder.is_empty() {
+        // A loose media is found by the paths its files hold under the library folder.
+        let roots: Vec<&crate::libraries::Folder> = lib
+            .folders
+            .iter()
+            .filter(|f| d.folder_id.is_none_or(|id| id == f.id))
+            .collect();
         let wanted: Vec<String> = d
             .files
             .iter()
-            .map(|f| file_name(Path::new(&f.path)))
+            .flat_map(|f| {
+                let abs = PathBuf::from(resolve(&f.path, "/"));
+                roots
+                    .iter()
+                    .filter_map(move |r| fsx::rel_under(Path::new(&resolve(&r.path, "/")), &abs))
+            })
             .collect();
+        let folders: Vec<i32> = roots.iter().map(|f| f.id).collect();
         sqlx::query_scalar!(
             r#"SELECT m.id FROM media m WHERE m."libraryId" = $1 AND m.type = $2 AND m."folderName" = ''
-               AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."relativePath" = ANY($3))
+               AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id
+                           AND f."folderId" = ANY($4) AND f."relativePath" = ANY($3))
                ORDER BY m.id LIMIT 1"#,
             lib.id,
             d.media_type.as_str(),
-            &wanted
+            &wanted,
+            &folders
         )
         .fetch_optional(&st.db)
         .await?

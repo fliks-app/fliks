@@ -117,7 +117,7 @@ pub async fn ingest(
     let book = media.media_type == MediaKind::Book;
     let root = fsx::Root::open(&folder.path)
         .map_err(|e| format!("Library root \"{}\": {e}", folder.path))?;
-    let mdir = root.media_dir(media.folder_name.as_deref())?;
+    let mdir = media.dir_in(&root)?;
     let formats = naming_formats(&st.db).await.map_err(|e| e.to_string())?;
     let allowed = transfer::companion_exts(&st.db)
         .await
@@ -146,7 +146,7 @@ pub async fn ingest(
             Some(t) => {
                 let r = fsx::Root::open(&t.path)
                     .map_err(|e| format!("Library root \"{}\": {e}", t.path))?;
-                let d = r.media_dir(media.folder_name.as_deref())?;
+                let d = media.dir_in(&r)?;
                 Some((r, d, t.id))
             }
             None => None,
@@ -191,21 +191,22 @@ pub async fn ingest(
                 abs: p.abs.clone(),
             })
             .collect();
-        for (r, (p, source)) in books::register(st, media.id, &files)
-            .await?
-            .into_iter()
-            .zip(placed)
-        {
+        let reg = books::register(st, media.id, &files).await?;
+        out.errors.extend(reg.conflicts);
+        for r in reg.files {
+            let Some((_, source)) = placed.iter().find(|(p, _)| p.rel == r.rel) else {
+                continue;
+            };
             family = r.family;
             out.imported.push(Imported {
                 file_id: r.file_id,
-                relative_path: p.rel,
+                relative_path: r.rel,
                 quality: r.format,
                 episode_id: None,
                 season_number: None,
                 episode_number: None,
                 episode_end: None,
-                source_path: source,
+                source_path: source.clone(),
             });
         }
     }

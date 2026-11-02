@@ -1185,7 +1185,7 @@ mod book_ingest {
         let done = books::register(&c.st, m, &placed(&c, &["Mirelune/Mirelune.epub"]))
             .await
             .unwrap();
-        assert_eq!(done.len(), 1);
+        assert_eq!(done.files.len(), 1);
         let e: (String, Option<String>, Option<String>, Option<String>) = sqlx::query_as(
             r#"SELECT family, format, language, publisher FROM editions WHERE "mediaId" = $1"#,
         )
@@ -1418,5 +1418,227 @@ mod book_ingest {
         let text = groups.iter().find(|g| g["folderName"] == "").unwrap();
         assert_eq!(text["guessTitle"], "Le Phare des Brumes");
         assert_eq!(b["orphanCount"], 3);
+    }
+
+    async fn shelf(c: &Ctx) -> i32 {
+        library(c, "B", &c.dir.join("books"), r#"["book"]"#).await
+    }
+
+    async fn loose(c: &Ctx, l: i32, title: &str) -> i32 {
+        let m = media(c, l, title, "book").await;
+        sqlx::query(r#"UPDATE media SET "folderName" = '' WHERE id = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        m
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn deleting_a_book_keeps_the_files_a_loose_book_owns_in_its_folder(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let a = media(&c, l, "Shared", "book").await;
+        let b = loose(&c, l, "Other").await;
+        epub(&lib.join("Shared/Mirelune.epub"));
+        epub(&lib.join("Shared/Orfaline.epub"));
+        books::register(&c.st, a, &placed(&c, &["Shared/Mirelune.epub"]))
+            .await
+            .unwrap();
+        books::register(&c.st, b, &placed(&c, &["Shared/Orfaline.epub"]))
+            .await
+            .unwrap();
+        let (s, _) = call(
+            &c,
+            "DELETE",
+            &format!("/api/media/{a}"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 200);
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert!(lib.join("Shared/Orfaline.epub").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_rescan_leaves_the_files_of_other_books_in_the_folder(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let a = media(&c, l, "Shared", "book").await;
+        let b = loose(&c, l, "Other").await;
+        for r in ["Mirelune", "Orfaline", "Brumevent"] {
+            epub(&lib.join(format!("Shared/{r}.epub")));
+        }
+        books::register(&c.st, a, &placed(&c, &["Shared/Mirelune.epub"]))
+            .await
+            .unwrap();
+        books::register(&c.st, b, &placed(&c, &["Shared/Orfaline.epub"]))
+            .await
+            .unwrap();
+        let counts = rescan(&c, a).await.unwrap();
+        assert_eq!(counts.added, 0);
+        assert_eq!(
+            parts(&c, a).await,
+            [("Shared/Mirelune.epub".to_owned(), 0, 0)]
+        );
+        assert_eq!(
+            parts(&c, b).await,
+            [("Shared/Orfaline.epub".to_owned(), 0, 0)]
+        );
+        let reg = books::register(
+            &c.st,
+            a,
+            &placed(&c, &["Shared/Brumevent.epub", "Shared/Orfaline.epub"]),
+        )
+        .await
+        .unwrap();
+        assert_eq!((reg.files.len(), reg.conflicts.len()), (0, 2));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_book_in_an_author_folder_rescans_and_deletes_with_its_folder(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Olympe Faucheval/Orfaline", "book").await;
+        for r in ["01.mp3", "02.mp3"] {
+            touch(&lib.join("Olympe Faucheval/Orfaline").join(r), b"x");
+        }
+        books::register(
+            &c.st,
+            m,
+            &placed(
+                &c,
+                &[
+                    "Olympe Faucheval/Orfaline/01.mp3",
+                    "Olympe Faucheval/Orfaline/02.mp3",
+                ],
+            ),
+        )
+        .await
+        .unwrap();
+        touch(&lib.join("Olympe Faucheval/Orfaline/03.mp3"), b"x");
+        assert_eq!(rescan(&c, m).await.unwrap().added, 1);
+        std::fs::remove_file(lib.join("Olympe Faucheval/Orfaline/01.mp3")).unwrap();
+        assert_eq!(rescan(&c, m).await.unwrap().removed, 1);
+        let positions: Vec<i32> = parts(&c, m).await.iter().map(|p| p.2).collect();
+        assert_eq!(positions, [0, 1]);
+        let (s, _) = call(
+            &c,
+            "DELETE",
+            &format!("/api/media/{m}"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 200);
+        assert!(eventually(|| !lib.join("Olympe Faucheval/Orfaline").exists()).await);
+        assert!(lib.join("Olympe Faucheval").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_orphan_scan_anchors_a_deep_work_and_not_a_shared_folder(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("shelf");
+        let l = library(&c, "B", &lib, r#"["book"]"#).await;
+        for r in [
+            "Olympe Faucheval/Cycle/Orfaline/CD1/01.mp3",
+            "Olympe Faucheval/Cycle/Orfaline/CD2/01.mp3",
+            "Duo/Mirelune.epub",
+            "Duo/Brumevent.epub",
+            "Mixte/Nuee.epub",
+            "Mixte/Cave/01.mp3",
+        ] {
+            touch(&lib.join(r), b"x");
+        }
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        let mut named: Vec<(String, usize)> = b["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                (
+                    g["folderName"].as_str().unwrap().to_owned(),
+                    g["files"].as_array().unwrap().len(),
+                )
+            })
+            .collect();
+        named.sort();
+        assert_eq!(
+            named,
+            [
+                ("".to_owned(), 1),
+                ("".to_owned(), 1),
+                ("".to_owned(), 1),
+                ("Mixte/Cave".to_owned(), 1),
+                ("Olympe Faucheval/Cycle/Orfaline".to_owned(), 2),
+            ]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_linked_work_makes_its_folder_shared_for_the_orphan_scan(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let a = loose(&c, l, "Linked").await;
+        epub(&lib.join("Duo/Mirelune.epub"));
+        touch(&lib.join("Duo/Brumevent.epub"), b"x");
+        books::register(&c.st, a, &placed(&c, &["Duo/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        let groups = b["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0]["folderName"], "");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_cover_is_checked_and_stored_under_one_lock(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Mirelune", "book").await;
+        let mut png = vec![];
+        image::RgbImage::new(2, 2)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let held = c.st.ingest.covers.lock(m).await;
+        let st = c.st.clone();
+        let task = tokio::spawn(async move { books::store_cover(&st, m, &png).await });
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        sqlx::query(r#"UPDATE media SET "posterUrl" = 'kept' WHERE id = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        drop(held);
+        task.await.unwrap();
+        let poster: Option<String> =
+            sqlx::query_scalar(r#"SELECT "posterUrl" FROM media WHERE id = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(poster.as_deref(), Some("kept"));
     }
 }

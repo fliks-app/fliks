@@ -54,6 +54,7 @@ impl<K: Eq + Hash + Clone> KeyedLocks<K> {
 pub struct Shared {
     pub media: KeyedLocks<i32>,
     pub unmatched: KeyedLocks<String>,
+    pub covers: KeyedLocks<i32>,
     pub unmatched_holders: Mutex<HashMap<i32, usize>>,
     pub queue: post_import::Queue,
     pub settle: post_import::Settle,
@@ -89,6 +90,11 @@ impl MediaRow {
             self.folder.as_ref().map(|f| f.path.as_str()),
             self.folder_name.as_deref(),
         )
+    }
+
+    /// `M` of this media under `root`.
+    pub fn dir_in(&self, root: &fsx::Root) -> Result<std::path::PathBuf, String> {
+        root.media_dir_of(self.media_type, self.folder_name.as_deref())
     }
 
     pub fn lifecycle_ref(&self) -> crate::requests::MediaRef {

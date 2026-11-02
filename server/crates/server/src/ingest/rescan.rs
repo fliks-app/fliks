@@ -64,9 +64,7 @@ fn media_dir(media: &MediaRow) -> Result<(fsx::Root, PathBuf), AppError> {
         })?;
     let missing = |d: &str| AppError::bad_request(format!("Media folder not found: {d}"));
     let root = fsx::Root::open(lib).map_err(|_| missing(lib))?;
-    let dir = root
-        .media_dir(media.folder_name.as_deref())
-        .map_err(AppError::bad_request)?;
+    let dir = media.dir_in(&root).map_err(AppError::bad_request)?;
     let real = dunce::canonicalize(&dir).map_err(|_| missing(&dir.to_string_lossy()))?;
     if !real.is_dir() || !real.starts_with(root.path()) {
         return Err(missing(&dir.to_string_lossy()));
@@ -79,7 +77,7 @@ struct Walk {
     complete: bool,
 }
 
-/// Rule 40: depth 3, links never followed into, only regular video files.
+/// Rule 40: depth 3, links never followed into, only regular video files (book files: never a link).
 fn walk(
     dir: &Path,
     root: &Path,
@@ -116,7 +114,11 @@ fn walk(
             continue;
         }
         let n = e.file_name().to_string_lossy().into_owned();
-        if !super::books::owns(kind, &n) || !fs::metadata(&path).is_ok_and(|m| m.is_file()) {
+        let regular = match kind {
+            MediaKind::Book => e.file_type().is_ok_and(|t| t.is_file()),
+            _ => fs::metadata(&path).is_ok_and(|m| m.is_file()),
+        };
+        if !super::books::owns(kind, &n) || !regular {
             continue;
         }
         let known = fsx::rel_under(root, &path).is_some_and(|r| linked.contains(&r));
@@ -317,21 +319,44 @@ async fn book_pass(
     let Some(folder) = media.folder.as_ref() else {
         return Ok(());
     };
-    let fresh: Vec<super::books::Placed> = disk
+    let new: Vec<String> = disk
         .iter()
         .filter(|(r, _)| !linked.contains(r))
+        .map(|(r, _)| r.clone())
+        .collect();
+    let owned: HashSet<String> = sqlx::query_scalar!(
+        r#"SELECT "relativePath" FROM media_files
+           WHERE "folderId" = $1 AND "mediaId" <> $2 AND "relativePath" = ANY($3)"#,
+        folder.id,
+        media.id,
+        &new
+    )
+    .fetch_all(&st.db)
+    .await?
+    .into_iter()
+    .collect();
+    let fresh: Vec<super::books::Placed> = disk
+        .iter()
+        .filter(|(r, _)| !linked.contains(r) && !owned.contains(r))
         .map(|(rel, abs)| super::books::Placed {
             folder_id: folder.id,
             rel: rel.clone(),
             abs: abs.clone(),
         })
         .collect();
-    if !fresh.is_empty() {
-        let added = super::books::register(st, media.id, &fresh)
-            .await
-            .map_err(AppError::internal)?;
-        c.added += added.len() as i64;
+    if fresh.is_empty() {
+        if let Err(e) = super::books::relay(st, media.id).await {
+            tracing::warn!("Rescan[media #{}]: {e}", media.id);
+        }
+        return Ok(());
     }
+    let reg = super::books::register(st, media.id, &fresh)
+        .await
+        .map_err(AppError::internal)?;
+    for why in &reg.conflicts {
+        tracing::warn!("Rescan[media #{}]: {why}", media.id);
+    }
+    c.added += reg.files.len() as i64;
     Ok(())
 }
 
@@ -1032,7 +1057,7 @@ pub async fn locate_in_place(
     let mut roots = vec![];
     for folder in candidates {
         if let Ok(root) = fsx::Root::open(&folder.path)
-            && let Ok(dir) = root.media_dir(media.folder_name.as_deref())
+            && let Ok(dir) = media.dir_in(&root)
         {
             roots.push((folder, root, dir));
         }

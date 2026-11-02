@@ -42,7 +42,7 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
         .await
         .map_err(|e| e.to_string())?;
     let roots: Vec<PathBuf> = all.iter().map(|f| PathBuf::from(&f.path)).collect();
-    let others: Vec<PathBuf> = sqlx::query!(
+    let mut others: Vec<PathBuf> = sqlx::query!(
         r#"SELECT lf.path AS "lib!", m."folderName" AS "folder!" FROM media m
            JOIN (SELECT "mediaId", "folderId" FROM media_files
                  WHERE "mediaId" IS NOT NULL
@@ -57,7 +57,25 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
     .into_iter()
     .filter_map(|r| media_path(Some(&r.lib), Some(&r.folder)).map(PathBuf::from))
     .collect();
-    fsx::removable_media_dir(&root, folder, &roots, &others)
+    // A file another media owns inside the folder, whatever that media's folder name.
+    let prefix = format!("{folder}/");
+    others.extend(
+        sqlx::query!(
+            r#"SELECT lf.path AS "lib!", f."relativePath" AS "rel!" FROM media_files f
+               JOIN library_folders lf ON lf.id = f."folderId"
+               WHERE f."mediaId" <> $1 AND starts_with(replace(f."relativePath", '\', '/'), $2)"#,
+            m.id,
+            prefix
+        )
+        .fetch_all(&st.db)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter_map(|r| {
+            media_path(Some(&r.lib), Some(&r.rel.replace('\\', "/"))).map(PathBuf::from)
+        }),
+    );
+    fsx::removable_dir_of(&root, m.media_type, folder, &roots, &others)
 }
 
 /// Rule 70 once per folder holding one of the media's files (`file_folders`) plus its target folder (libraries rule 55).
