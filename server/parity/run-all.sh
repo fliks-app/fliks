@@ -95,11 +95,11 @@ ENGVER=${PARITY_ENGINE_VERSION:-$(sed -n 's/^version=//p' "$ROOT/engine.lock")}
 ENGSHA=$(sed -n 's/^sha256_linux_x64=//p' "$ROOT/engine.lock")
 ENGURL=https://github.com/fliks-app/engine/releases/download/v$ENGVER
 # another version (PARITY_ENGINE_VERSION) is checked against the sha256 published with that release
-[ "$ENGVER" = "$(sed -n 's/^version=//p' "$ROOT/engine.lock")" ] || ENGSHA=$(curl -fsSL "$ENGURL/fliks-engine-linux-x64.sha256" | cut -d' ' -f1)
+[ "$ENGVER" = "$(sed -n 's/^version=//p' "$ROOT/engine.lock")" ] || ENGSHA=$(curl -fsSL --retry 5 --retry-all-errors "$ENGURL/fliks-engine-linux-x64.sha256" | cut -d' ' -f1)
 ENGBIN=$CARGO_TARGET_DIR/engine-$ENGVER
 if [ ! -x "$ENGBIN" ]; then
   log "downloading engine v$ENGVER"
-  curl -fsSL -o "$ENGBIN.tmp" "$ENGURL/fliks-engine-linux-x64" || die "engine download failed"
+  curl -fsSL --retry 5 --retry-all-errors -o "$ENGBIN.tmp" "$ENGURL/fliks-engine-linux-x64" || die "engine download failed"
   [ "$(sha256sum "$ENGBIN.tmp" | cut -d' ' -f1)" = "$ENGSHA" ] || die "engine sha256 differs from engine.lock"
   chmod +x "$ENGBIN.tmp" && mv "$ENGBIN.tmp" "$ENGBIN"
 fi

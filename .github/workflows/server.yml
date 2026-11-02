@@ -108,7 +108,7 @@ jobs:
           ver=$(sed -n 's/^version=//p' ../engine.lock)
           mkdir -p "$FLIKS_ENGINE_FIXTURES"
           for n in h264-aac-mkv h264-aac-mp4; do
-            curl -fsSL -o "$FLIKS_ENGINE_FIXTURES/$n.json" "https://raw.githubusercontent.com/fliks-app/engine/v$ver/fixtures/probe/$n.json"
+            curl -fsSL --retry 5 --retry-all-errors -o "$FLIKS_ENGINE_FIXTURES/$n.json" "https://raw.githubusercontent.com/fliks-app/engine/v$ver/fixtures/probe/$n.json"
           done
           parity/seed/build.sh
           for f in parity/seed/*.sql; do
@@ -238,7 +238,7 @@ jobs:
       # The engine release's own ffmpeg, as in its image (the runner has none).
       - name: ffmpeg
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/ffmpeg.deb" https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-1/jellyfin-ffmpeg8_8.1.2-1-noble_amd64.deb
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/ffmpeg.deb" https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-1/jellyfin-ffmpeg8_8.1.2-1-noble_amd64.deb
           sudo apt-get install -y -qq "$RUNNER_TEMP/ffmpeg.deb"
           sudo ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg
           sudo ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe
