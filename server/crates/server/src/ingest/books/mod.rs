@@ -3,6 +3,7 @@
 pub mod archive;
 pub mod group;
 pub mod parts;
+pub mod plan;
 pub mod tags;
 
 use super::{library::file_name, post_import::file_path, probe, rescan::PROBE_VERSION};

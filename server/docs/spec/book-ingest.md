@@ -7,6 +7,7 @@ Scope: how book files enter the library: grouping files into editions, archive r
 - Ingest writes files, editions, items and parts, never external ids, facts, credits or series: those go through `metadata::books::link::attach(st, media, edition, &BookMatch, Priority)` (`book-metadata.md`).
 - Identification starts from `BookHints` (ISBNs, ASIN, title, authors, narrators, language, series, year, family) read from the file (`books-files.md`) and the engine's `info.tags` and `info.cover`, and calls `metadata::books::identify::identify`.
 - A book gets one edition per family found, each with one ungrouped item (`books.md` rules 3 and 4). The folder of a file comes from `folder_for(library, family)` of the library folders spec.
+- Adopting an existing library, and the queue of works left unidentified, is `book-import.md`: its classifier (`ingest::books::plan`) answers the work grouping and anchors of rules 2-4 and 10 for the orphan scan and the bulk job alike.
 - No engine work is part of phase 1: the server reads `hello.jobFamilies`, runs the `Cover` job and keeps `info.tags`.
 
 ## Rules

@@ -9,7 +9,7 @@ mod provider;
 mod routes;
 pub mod service;
 #[cfg(test)]
-mod stub;
+pub(crate) mod stub;
 pub mod tmdb;
 pub mod tvdb;
 mod types;

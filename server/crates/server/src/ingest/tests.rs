@@ -193,6 +193,13 @@ fn probe_ok() -> Value {
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
+    ctx_with(pool, None).await
+}
+
+async fn ctx_with(
+    pool: PgPool,
+    provider: Option<std::sync::Arc<dyn crate::metadata::MetadataProvider>>,
+) -> Ctx {
     crate::db::migrate(&pool).await.unwrap();
     let fake = Fake::start().await;
     fake.hello(Some(hello_body(&RUNTIME, "x")));
@@ -207,6 +214,11 @@ async fn ctx(pool: PgPool) -> Ctx {
         crate::images::ImageStore::with_root(dir.join("data"), &cfg.metadata.tmdb_image_url);
     let mut st = AppState::new(pool.clone(), cfg, SECRET);
     st.images = std::sync::Arc::new(images);
+    if let Some(p) = provider {
+        std::sync::Arc::get_mut(&mut st.metadata)
+            .unwrap()
+            .register(p);
+    }
     st.engine.start_with(Some(pool.clone()), 4849).await;
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     sqlx::query(r#"INSERT INTO roles (id, name, permissions) VALUES (50, 'Editor', '["media.read","media.create","media.edit","media.delete"]')"#)
@@ -1735,5 +1747,492 @@ mod book_ingest {
                 .await
                 .unwrap();
         assert_eq!(poster.as_deref(), Some("kept"));
+    }
+}
+
+mod book_import {
+    use super::*;
+    use crate::{
+        jobs::book_import,
+        metadata::{
+            Call, EditionRef, Guarded, MetadataProvider, PersonDetails, Search, Upstream,
+            stub::serve,
+        },
+    };
+    use fliks_domain::{
+        external_id::ExternalProvider,
+        media::kind::MediaKind,
+        metadata::{
+            language::Resolved,
+            limiter::{Limits, Priority},
+        },
+    };
+    use std::{
+        sync::{Arc, Mutex},
+        time::{Duration, Instant},
+    };
+
+    /// OpenLibrary stand-in behind a real `Guarded`: a title answers a hit when its number is not a
+    /// multiple of three, and every call is recorded with its priority.
+    struct Stubbed {
+        g: Guarded,
+        limits: Limits,
+        priorities: Mutex<Vec<Priority>>,
+        busy: Mutex<(u32, u32)>,
+    }
+
+    fn number(s: &str) -> u32 {
+        s.chars()
+            .filter(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0)
+    }
+
+    impl Stubbed {
+        async fn call(&self, path: String, p: Priority) -> Result<Value, Upstream> {
+            self.priorities.lock().unwrap().push(p);
+            {
+                let mut b = self.busy.lock().unwrap();
+                b.0 += 1;
+                b.1 = b.1.max(b.0);
+            }
+            let r = self.g.get_json(&path, &[], p).await;
+            self.busy.lock().unwrap().0 -= 1;
+            r
+        }
+    }
+
+    fn gone<T: Send + 'static>() -> Call<'static, T> {
+        Box::pin(async { Err(Upstream::new(Some(500), "unused")) })
+    }
+
+    impl MetadataProvider for Stubbed {
+        fn id(&self) -> ExternalProvider {
+            ExternalProvider::OpenLibrary
+        }
+        fn supports(&self, kind: MediaKind) -> bool {
+            kind == MediaKind::Book
+        }
+        fn has_persons(&self) -> bool {
+            false
+        }
+        fn limits(&self) -> Limits {
+            self.limits
+        }
+        fn search<'a>(
+            &'a self,
+            q: &'a Search<'a>,
+            _: &'a Resolved,
+            p: Priority,
+        ) -> Call<'a, Vec<Value>> {
+            Box::pin(async move {
+                let title = q.title.unwrap_or_default();
+                let n = number(title);
+                let hit = self.call(format!("/search/{n}"), p).await?;
+                if hit["hit"] != true {
+                    return Ok(vec![]);
+                }
+                let authors: Vec<Value> = q.author.iter().map(|a| json!({"name": a})).collect();
+                Ok(vec![
+                    json!({"externalId": format!("OL{n}W"), "title": title, "authors": authors}),
+                ])
+            })
+        }
+        fn fetch_work<'a>(
+            &'a self,
+            _: MediaKind,
+            id: &'a str,
+            _: &'a Resolved,
+            p: Priority,
+        ) -> Call<'a, Value> {
+            Box::pin(async move {
+                self.call(format!("/work/{}", number(id)), p).await?;
+                Ok(
+                    json!({"title": format!("Work {id}"), "authors": [{"name": format!("Writer {id}")}]}),
+                )
+            })
+        }
+        fn fetch_children<'a>(
+            &'a self,
+            _: MediaKind,
+            _: &'a str,
+            _: &'a Resolved,
+            _: Priority,
+        ) -> Call<'a, Vec<Value>> {
+            gone()
+        }
+        fn child_stubs<'a>(
+            &'a self,
+            _: MediaKind,
+            _: &'a str,
+            _: &'a Resolved,
+            _: Priority,
+        ) -> Call<'a, Vec<Value>> {
+            gone()
+        }
+        fn find_by<'a>(
+            &'a self,
+            _: ExternalProvider,
+            _: &'a str,
+            _: &'a Resolved,
+            _: Priority,
+        ) -> Call<'a, Option<(String, MediaKind)>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn fetch_person<'a>(
+            &'a self,
+            _: &'a str,
+            _: &'a Resolved,
+            _: Priority,
+        ) -> Call<'a, PersonDetails> {
+            gone()
+        }
+        fn person_credits<'a>(
+            &'a self,
+            _: &'a str,
+            _: &'a Resolved,
+            _: Priority,
+        ) -> Call<'a, crate::metadata::Credits> {
+            gone()
+        }
+        fn fetch_edition<'a>(
+            &'a self,
+            _: &'a EditionRef<'a>,
+            _: &'a Resolved,
+            _: Priority,
+        ) -> Call<'a, Option<Value>> {
+            Box::pin(async { Ok(None) })
+        }
+    }
+
+    /// The stub, its limits and the instant of every request it served.
+    async fn stubbed(limits: Limits) -> (Arc<Stubbed>, Arc<Mutex<Vec<Instant>>>) {
+        let seen = Arc::new(Mutex::new(vec![]));
+        let log = seen.clone();
+        let (url, _) = serve(move |path, _| {
+            log.lock().unwrap().push(Instant::now());
+            let hit = path
+                .strip_prefix("/search/")
+                .is_none_or(|n| !number(n).is_multiple_of(3));
+            (200, None, json!({"hit": hit}).to_string())
+        })
+        .await;
+        let g = Guarded::new("stub", &url, Duration::from_secs(5), vec![], limits);
+        let p = Stubbed {
+            g,
+            limits,
+            priorities: Mutex::default(),
+            busy: Mutex::default(),
+        };
+        (Arc::new(p), seen)
+    }
+
+    fn work(c: &Ctx, n: u32) {
+        let (a, t) = (format!("Author{n:04}"), format!("Title{n:04}"));
+        touch(
+            &c.dir.join(format!("books/{a}/{t}/{t}.epub")),
+            format!("book {n}").as_bytes(),
+        );
+    }
+
+    async fn shelf(c: &Ctx) -> i32 {
+        library(c, "B", &c.dir.join("books"), r#"["book"]"#).await
+    }
+
+    async fn start(c: &Ctx, lib: i32) -> (u16, Value) {
+        let uri = format!("/api/imports/library/{lib}/books");
+        call(c, "POST", &uri, &c.admin, json!({})).await
+    }
+
+    async fn state(c: &Ctx, lib: i32) -> Value {
+        let uri = format!("/api/imports/library/{lib}/books");
+        call(c, "GET", &uri, &c.admin, json!({})).await.1
+    }
+
+    async fn finished(c: &Ctx, lib: i32, secs: u64) -> Value {
+        for _ in 0..secs * 10 {
+            let s = state(c, lib).await;
+            if s["status"] != "running" {
+                return s;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("the import did not finish");
+    }
+
+    async fn rows(c: &Ctx, sql: &'static str) -> Vec<(String, String)> {
+        sqlx::query_as(sql).fetch_all(&c.st.db).await.unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_library_is_classified_imported_and_queued(pool: PgPool) {
+        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
+        let c = ctx_with(pool, Some(p)).await;
+        let l = shelf(&c).await;
+        let books = c.dir.join("books");
+        work(&c, 1);
+        work(&c, 3);
+        touch(&books.join("Loose0002.epub"), b"2");
+        touch(&books.join("Shelf/One0004.epub"), b"4");
+        touch(&books.join("Shelf/Two0005.epub"), b"5");
+        touch(&books.join("Gamma/Gamma0007.epub"), b"7");
+        touch(&books.join("Gamma/Gamma0007.pdf"), b"7");
+        touch(&books.join("Notes/readme.txt"), b"not a book");
+        let other = media(&c, l, "", "book").await;
+        sqlx::query(r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
+               SELECT $1, df."folderId", 'Gamma/Gamma0007.epub', 1, 'epub' FROM library_default_folders df
+               WHERE df."libraryId" = $2"#)
+            .bind(other)
+            .bind(l)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(
+            call(
+                &c,
+                "GET",
+                &format!("/api/imports/library/{l}/books"),
+                &c.admin,
+                json!({})
+            )
+            .await
+            .0,
+            404
+        );
+        let (s, b) = start(&c, l).await;
+        assert_eq!(s, 202, "{b}");
+        let done = finished(&c, l, 30).await;
+        assert_eq!(done["status"], "completed", "{done}");
+        let manual = rows(
+            &c,
+            "SELECT title, status FROM book_import_items WHERE status <> 'matched' ORDER BY title",
+        )
+        .await;
+        assert_eq!(
+            (&done["total"], &done["failed"], &done["skipped"]),
+            (&json!(6), &json!(0), &json!(0)),
+            "{done}"
+        );
+        // an odd title has no hit; a loose file has no author to confirm one
+        assert_eq!(
+            manual,
+            [
+                ("Loose0002".into(), "manual".into()),
+                ("Title0003".into(), "manual".into())
+            ]
+        );
+        let media_of = rows(
+            &c,
+            r#"SELECT f."relativePath", m."folderName" FROM media_files f JOIN media m ON m.id = f."mediaId"
+               WHERE m.type = 'book' ORDER BY f."relativePath""#,
+        )
+        .await;
+        let named: Vec<(&str, &str)> = media_of
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                (
+                    "Author0001/Title0001/Title0001.epub",
+                    "Author0001/Title0001"
+                ),
+                (
+                    "Author0003/Title0003/Title0003.epub",
+                    "Author0003/Title0003"
+                ),
+                ("Gamma/Gamma0007.epub", ""),
+                ("Gamma/Gamma0007.pdf", ""),
+                ("Loose0002.epub", ""),
+                ("Shelf/One0004.epub", ""),
+                ("Shelf/Two0005.epub", ""),
+            ]
+        );
+        let owner: i32 = sqlx::query_scalar(
+            r#"SELECT "mediaId" FROM media_files WHERE "relativePath" = 'Gamma/Gamma0007.epub'"#,
+        )
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(owner, other);
+        let (_, q) = call(
+            &c,
+            "GET",
+            &format!("/api/imports/library/{l}/books/queue"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(q["total"], 2, "{q}");
+        let first = q["items"][0]["mediaId"].as_i64().unwrap();
+        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'book', 'openlibrary', 'OL99W')"#)
+            .bind(first)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let (_, q) = call(
+            &c,
+            "GET",
+            &format!("/api/imports/library/{l}/books/queue"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(q["total"], 1, "{q}");
+        assert_eq!(start(&c, l).await.0, 202);
+        let again = finished(&c, l, 30).await;
+        assert_eq!(
+            (&again["total"], &again["status"]),
+            (&json!(0), &json!("completed")),
+            "{again}"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_second_import_is_refused_and_a_library_without_books_too(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        let movies = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
+        assert_eq!(start(&c, movies).await.0, 400);
+        let user: i32 = sqlx::query_scalar("SELECT id FROM users LIMIT 1")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO book_imports ("libraryId", "userId", total) VALUES ($1, $2, 0)"#,
+        )
+        .bind(l)
+        .bind(user)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let (s, b) = start(&c, l).await;
+        assert_eq!(
+            (s, b["message"].as_str()),
+            (409, Some("errors.already_running"))
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_import_waits_for_a_folder_move(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        work(&c, 1);
+        let moving = c.st.folder_moves.write().await;
+        assert_eq!(start(&c, l).await.0, 202);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 0);
+        assert_eq!(state(&c, l).await["status"], "running");
+        drop(moving);
+        assert_eq!(finished(&c, l, 20).await["status"], "completed");
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_interrupted_import_resumes_without_repeating_a_work(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        for n in 1..=40 {
+            work(&c, n);
+        }
+        let user: i32 = sqlx::query_scalar("SELECT id FROM users LIMIT 1")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let id: i32 = sqlx::query_scalar(
+            r#"INSERT INTO book_imports ("libraryId", "userId") VALUES ($1, $2) RETURNING id"#,
+        )
+        .bind(l)
+        .bind(user)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        let task = tokio::spawn(book_import::run(c.st.clone(), id));
+        let mut seen = 0;
+        while seen < 5 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            seen = count(
+                &c,
+                "SELECT count(*) FROM book_import_items WHERE status <> 'pending'",
+            )
+            .await;
+        }
+        task.abort();
+        let _ = task.await;
+        let s = state(&c, l).await;
+        assert_eq!(
+            (&s["status"], &s["total"]),
+            (&json!("running"), &json!(40)),
+            "{s}"
+        );
+        assert!(s["pending"].as_i64().unwrap() > 0, "{s}");
+        book_import::resume(&c.st).await;
+        let done = finished(&c, l, 60).await;
+        assert_eq!(
+            (&done["status"], &done["pending"], &done["manual"]),
+            (&json!("completed"), &json!(0), &json!(40)),
+            "{done}"
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
+            40
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 40);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn two_thousand_works_stay_under_the_provider_limits(pool: PgPool) {
+        let limits = Limits::new(200.0, 10);
+        let (p, seen) = stubbed(limits).await;
+        let c = ctx_with(pool, Some(p.clone())).await;
+        let l = shelf(&c).await;
+        for n in 1..=2000 {
+            work(&c, n);
+        }
+        assert_eq!(start(&c, l).await.0, 202);
+        let done = finished(&c, l, 900).await;
+        assert_eq!(done["status"], "completed", "{done}");
+        let manual = (1..=2000).filter(|n| n % 3 == 0).count();
+        assert_eq!(
+            (
+                &done["total"],
+                &done["matched"],
+                &done["manual"],
+                &done["failed"]
+            ),
+            (
+                &json!(2000),
+                &json!(2000 - manual),
+                &json!(manual),
+                &json!(0)
+            ),
+            "{done}"
+        );
+        assert!(
+            p.priorities
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|p| *p == Priority::Background)
+        );
+        assert_eq!(p.busy.lock().unwrap().1, 1, "lookups run one at a time");
+        let at = seen.lock().unwrap().clone();
+        let background = p.limits.rate_per_sec * p.limits.background_share;
+        let ceiling = (f64::from(p.limits.burst) + background * 1.0 + 1.0) as usize;
+        let busiest = (0..at.len())
+            .map(|i| {
+                at[i..]
+                    .iter()
+                    .take_while(|t| t.duration_since(at[i]) < Duration::from_secs(1))
+                    .count()
+            })
+            .max()
+            .unwrap_or(0);
+        assert!(
+            busiest <= ceiling,
+            "{busiest} requests in one second, ceiling {ceiling}"
+        );
     }
 }

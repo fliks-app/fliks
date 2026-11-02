@@ -140,7 +140,7 @@ struct Group {
 
 /// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only. Book
 /// files, when the library takes books, are read one level deeper and never through a link.
-fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
+pub(crate) fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
     if depth > if book { BOOK_DEPTH } else { 3 } {
         return;
     }
@@ -195,7 +195,7 @@ fn progress(st: &AppState, key: &str, root: &str, current: usize, total: usize) 
     );
 }
 
-fn subject_titled(title: &str) -> Subj {
+pub(crate) fn subject_titled(title: &str) -> Subj {
     Subj {
         title: title.to_owned(),
         media_id: None,
@@ -333,9 +333,8 @@ async fn scan_under(
     }
 }
 
-/// The works the book files make (`book-ingest.md` rules 2-4 and 10), one orphan group each for the
-/// works that have a file still unlinked. `files` is every book file of the root, linked or not:
-/// a work is anchored by its folder only when it is alone there.
+/// The works the book files make, one orphan group each for the works that have a file still
+/// unlinked (`book-import.md` rules 1-2). `files` is every book file of the root, linked or not.
 async fn book_groups(
     root: &Path,
     folder_id: Option<i32>,
@@ -348,31 +347,11 @@ async fn book_groups(
         .filter_map(|p| Some((fsx::rel_under(root, p)?, *p)))
         .collect();
     let rels: Vec<String> = by_rel.keys().cloned().collect();
-    let works = books::group::group(&rels);
     let mut out = vec![];
-    for (i, w) in works.iter().enumerate() {
-        let all: Vec<&String> = w.versions.iter().flat_map(|v| &v.files).collect();
-        let fresh: Vec<&&String> = all
-            .iter()
-            .filter(|r| !linked.contains_key(by_rel[**r]))
-            .collect();
-        if fresh.is_empty() {
-            continue;
-        }
-        let below = format!("{}/", w.dir);
-        let alone = !works
-            .iter()
-            .enumerate()
-            .any(|(j, o)| j != i && (o.dir == w.dir || o.dir.starts_with(&below)));
-        let mine = all
-            .iter()
-            .filter_map(|r| linked.get(by_rel[*r]))
-            .all(|owner| *owner == w.dir);
-        let anchor = (!w.dir.is_empty() && alone && mine).then(|| w.dir.clone());
-        let guess = fliks_domain::books::filename::parse_path(&w.name_path);
+    for w in books::plan::plan(&rels, |r| linked.get(by_rel[r]).cloned()) {
         let mut entries = vec![];
-        for rel in fresh {
-            let abs = by_rel[*rel];
+        for rel in &w.files {
+            let abs = by_rel[rel];
             entries.push(FileEntry {
                 file_path: abs.to_string_lossy().into_owned(),
                 filename: file_name(abs),
@@ -388,11 +367,9 @@ async fn book_groups(
             folder_id,
             group_key: format!("book:{}", w.name_path),
             media_type: MediaKind::Book,
-            folder_name: anchor.unwrap_or_default(),
-            guess_title: guess
-                .title
-                .unwrap_or_else(|| w.dir.rsplit('/').next().unwrap_or_default().to_owned()),
-            guess_year: guess.year.map(i64::from),
+            folder_name: w.anchor.unwrap_or_default(),
+            guess_title: w.title,
+            guess_year: w.year.map(i64::from),
             nfo: None,
             suggested_provider: provider.to_owned(),
             files: entries,
@@ -426,24 +403,16 @@ fn scanned_json(
     v
 }
 
-/// `POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL on the path).
-#[utoipa::path(post, path = "/api/imports/library/{libraryId}/orphans/scan", responses((status = 201)))]
-pub async fn scan(
-    State(st): State<AppState>,
-    a: Authed,
-    id: Result<PathParams<i32>, AppError>,
-) -> Result<(StatusCode, Json<Value>), AppError> {
-    a.require(Action::Create, Subject::Media)?;
-    let PathParams(id) = id?;
-    if !accessible_library_ids(&st.db, &a).await?.contains(&id) {
-        return Err(AppError::not_found(format!("Library #{id} not found")));
-    }
-    let lib = require_path(&st, id).await?;
-    let linked: HashMap<PathBuf, String> = sqlx::query!(
+/// Every linked book or video file of the library, by absolute path, with its media's folder name.
+pub(crate) async fn linked_owners(
+    st: &AppState,
+    library: i32,
+) -> Result<HashMap<PathBuf, String>, sqlx::Error> {
+    Ok(sqlx::query!(
         r#"SELECT mf."relativePath" AS rel, lf.path AS folder, COALESCE(m."folderName", '') AS "owner!"
            FROM media_files mf JOIN library_folders lf ON lf.id = mf."folderId"
            LEFT JOIN media m ON m.id = mf."mediaId" WHERE lf."libraryId" = $1"#,
-        id
+        library
     )
     .fetch_all(&st.db)
     .await?
@@ -457,7 +426,23 @@ pub async fn scan(
             r.owner,
         )
     })
-    .collect();
+    .collect())
+}
+
+/// `POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL on the path).
+#[utoipa::path(post, path = "/api/imports/library/{libraryId}/orphans/scan", responses((status = 201)))]
+pub async fn scan(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    a.require(Action::Create, Subject::Media)?;
+    let PathParams(id) = id?;
+    if !accessible_library_ids(&st.db, &a).await?.contains(&id) {
+        return Err(AppError::not_found(format!("Library #{id} not found")));
+    }
+    let lib = require_path(&st, id).await?;
+    let linked = linked_owners(&st, id).await?;
     let mut scanned = vec![];
     for f in &lib.folders {
         scanned.push(
@@ -669,6 +654,74 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
             d.library_id
         )));
     }
+    relink_core(st, Some(a), a.user.id, d).await
+}
+
+/// One work of a bulk import: its files linked in place to an unmatched book (`book-import.md` rule 6).
+pub(crate) struct BookWork {
+    pub library_id: i32,
+    pub folder_id: i32,
+    pub folder_name: String,
+    pub title: String,
+    pub year: Option<i32>,
+    pub files: Vec<PathBuf>,
+}
+
+pub(crate) struct Linked {
+    pub media_id: i32,
+    pub linked: i64,
+    pub errors: Vec<String>,
+}
+
+pub(crate) async fn link_book_work(
+    st: &AppState,
+    user: i32,
+    w: BookWork,
+) -> Result<Linked, AppError> {
+    let d = RelinkDto {
+        library_id: w.library_id,
+        media_type: MediaKind::Book,
+        external_id: None,
+        provider: None,
+        title: Some(w.title),
+        year: w.year,
+        quality_profile_id: None,
+        language_profile_id: None,
+        folder_name: w.folder_name,
+        scan_root: None,
+        reorganize: false,
+        transfer: None,
+        folder_id: Some(w.folder_id),
+        files: w
+            .files
+            .into_iter()
+            .map(|p| RelinkFile {
+                path: p.to_string_lossy().into_owned(),
+                season: None,
+                episode: None,
+                end: None,
+            })
+            .collect(),
+        priority: Priority::Background,
+    };
+    let r = relink_core(st, None, user, d).await?;
+    Ok(Linked {
+        media_id: r["mediaId"]
+            .as_i64()
+            .and_then(|m| i32::try_from(m).ok())
+            .unwrap_or_default(),
+        linked: r["linked"].as_i64().unwrap_or(0),
+        errors: serde_json::from_value(r["errors"].clone()).unwrap_or_default(),
+    })
+}
+
+/// `relink_orphans` after the library access check; `a` is only needed to import an identified title.
+async fn relink_core(
+    st: &AppState,
+    a: Option<&Authed>,
+    user: i32,
+    d: RelinkDto,
+) -> Result<Value, AppError> {
     let lib = require_path(st, d.library_id).await?;
     if let Some(f) = d.folder_id {
         crate::libraries::assert_folder_in_library(&st.db, lib.id, f).await?;
@@ -696,11 +749,12 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
     };
     let (media, created, unmatched_key) = match &d.external_id {
         Some(_) => {
+            let a = a.ok_or_else(|| AppError::bad_request("An identified title needs a caller"))?;
             let (m, c) = find_or_import(st, a, &d).await?;
             (m, c, None)
         }
         None => {
-            let (m, c, k) = find_or_create_unmatched(st, &d, &lib, a.user.id).await?;
+            let (m, c, k) = find_or_create_unmatched(st, &d, &lib, user).await?;
             (m, c, Some(k))
         }
     };

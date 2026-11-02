@@ -325,6 +325,13 @@ impl Settle {
             old.abort();
         }
     }
+
+    /// Drops the pending settle of a media whose caller settles it itself.
+    pub fn cancel(&self, media_id: i32) {
+        if let Some(t) = self.timers.lock_clean().remove(&media_id) {
+            t.abort();
+        }
+    }
 }
 
 /// Every file of the media without a scan of its current bytes gets one (a manual rescan).
