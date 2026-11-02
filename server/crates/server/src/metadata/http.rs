@@ -133,7 +133,7 @@ fn code_of(e: &reqwest::Error) -> &'static str {
     "network error"
 }
 
-/// The transport failure as `<code> — <message>` with every source of the chain, URL stripped.
+/// The transport failure as `<code>: <message>` with every source of the chain, URL stripped.
 pub fn transport(e: reqwest::Error) -> Upstream {
     let code = code_of(&e);
     let e = e.without_url();
@@ -144,7 +144,7 @@ pub fn transport(e: reqwest::Error) -> Upstream {
         msg.push_str(&s.to_string());
         src = s.source();
     }
-    Upstream::outage(format!("{code} — {msg}"))
+    Upstream::outage(format!("{code}: {msg}"))
 }
 
 /// `HTTP <status> — <status_message|message|default>` as the controller words it.
@@ -335,7 +335,7 @@ impl Guarded {
             };
             if !allowed {
                 return Err(Upstream::outage(format!(
-                    "{} circuit open — upstream temporarily unreachable",
+                    "{} circuit open: upstream temporarily unreachable",
                     self.name
                 )));
             }
