@@ -7,7 +7,10 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
+import {
+  LibraryFolderChoice,
+  LibrarySummary,
+} from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
@@ -30,10 +33,14 @@ export class MediaDetailLibraryModalComponent {
   readonly selectedProvider = input<'tmdb' | 'tvdb' | null>(null);
   readonly saving = input(false);
   readonly saved = input(false);
-  /** A media with files cannot change library: the server refuses it (409). */
-  readonly libraryLocked = input(false);
+  /** Folders of the selected library; the choice shows when there are several. */
+  readonly folders = input<LibraryFolderChoice[]>([]);
+  /** `null` keeps the current folder (or takes the default one in another library). */
+  readonly selectedFolderId = input<number | null>(null);
+  readonly libraryChanged = input(false);
 
   readonly selectedLibraryIdChange = output<number | null>();
+  readonly selectedFolderIdChange = output<number | null>();
   readonly selectedProviderChange = output<'tmdb' | 'tvdb' | null>();
   readonly save = output<void>();
 

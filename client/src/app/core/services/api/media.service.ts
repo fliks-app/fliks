@@ -512,9 +512,14 @@ export class MediaService {
     );
   }
 
-  /** Move media to a different library (backend resolves an appropriate path inside it). */
+  /** Library without a folder: the server answers with the reason. */
   patchLibrary(id: number, libraryId: number) {
     return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/library`, { libraryId }));
+  }
+
+  /** Detached on the server (202): files, sidecars and library follow; `media.move.completed` ends it. */
+  moveToFolder(id: number, folderId: number) {
+    return firstValueFrom(this.http.post<{ ok: true }>(`/api/media/${id}/move`, { folderId }));
   }
 
   patchProfiles(

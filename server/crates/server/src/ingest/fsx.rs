@@ -364,6 +364,58 @@ pub fn move_file(src: &Path, dest: &Path, replace: bool) -> io::Result<bool> {
     }
 }
 
+/// A copy of `src` at `dest` that leaves `src` alone and never replaces: a hard link, else W2 carrying the
+/// mtime so a rerun recognises it. `Ok(false)` when `dest` exists.
+pub fn place_copy(src: &Path, dest: &Path) -> io::Result<bool> {
+    fs::create_dir_all(dest.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
+    match fs::hard_link(src, dest) {
+        Ok(()) => return Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return Ok(false),
+        Err(_) => {}
+    }
+    let mtime = fs::metadata(src)?.modified()?;
+    let tmp = copy_to_tmp(src, dest)?;
+    let r = fs::File::options()
+        .write(true)
+        .open(&tmp)
+        .and_then(|f| f.set_modified(mtime))
+        .and_then(|()| rename_noreplace(&tmp, dest));
+    if r.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    reap_later(dest);
+    match r {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Whether `a` and `b` sit on one device; `false` when unknown, so a copy is assumed.
+pub fn same_device(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        matches!((fs::metadata(a), fs::metadata(b)), (Ok(x), Ok(y)) if x.dev() == y.dev())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (a, b);
+        false
+    }
+}
+
+/// Removes the empty directories from `dir` up to, never including, `root`.
+pub fn prune_empty(root: &Path, dir: &Path) {
+    let mut d = dir;
+    while d != root && d.starts_with(root) && fs::remove_dir(d).is_ok() {
+        match d.parent() {
+            Some(p) => d = p,
+            None => break,
+        }
+    }
+}
+
 /// W3: temps older than 24 h in `dest`'s directory, detached, regular files only.
 fn reap_later(dest: &Path) {
     let Some(dir) = dest.parent().map(Path::to_path_buf) else {

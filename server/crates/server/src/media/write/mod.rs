@@ -5,6 +5,7 @@ mod companions;
 mod delete;
 mod import;
 mod metadata;
+mod relocate;
 mod tasks;
 mod update;
 
@@ -12,6 +13,7 @@ pub use companions::*;
 pub use delete::*;
 pub use import::*;
 pub use metadata::*;
+pub use relocate::*;
 pub use tasks::*;
 pub use update::*;
 
@@ -43,6 +45,7 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
         .route("/api/media/{id}", put(update).delete(remove))
         .route("/api/media/{id}/files/{fileId}", del(remove_file))
         .route("/api/media/{id}/library", patch(patch_library))
+        .route("/api/media/{id}/move", post(move_media))
         .route("/api/media/{id}/profiles", patch(patch_profiles))
         .route("/api/media/{id}/identify", post(identify))
         .route("/api/media/{id}/refresh", post(refresh))

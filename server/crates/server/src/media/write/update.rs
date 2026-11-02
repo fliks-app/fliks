@@ -538,7 +538,7 @@ async fn move_target(st: &AppState, a: &Authed, library_id: i32) -> Result<(), A
     Ok(())
 }
 
-/// `PATCH /api/media/:id/library` (rule 29): 409 for a media with files (`code: media_has_files`), which a move cannot carry.
+/// `PATCH /api/media/:id/library` (rule 29): a media with files moves them to the library's default folder.
 #[utoipa::path(patch, path = "/api/media/{id}/library", responses((status = 200)))]
 pub async fn patch_library(
     State(st): State<AppState>,
@@ -562,9 +562,14 @@ pub async fn patch_library(
         .as_ref()
         .is_some_and(|c| c.has_files && c.library_id != Some(lib))
     {
-        let body = json!({"statusCode": 409, "error": "Conflict", "code": "media_has_files",
-            "message": "This media has files and cannot be moved to another library"});
-        return Ok((StatusCode::CONFLICT, Json(body)).into_response());
+        let folder = sqlx::query_scalar::<_, i32>(
+            r#"SELECT "folderId" FROM library_default_folders WHERE "libraryId" = $1"#,
+        )
+        .bind(lib)
+        .fetch_one(&st.db)
+        .await?;
+        super::relocate::start(&st, &a, id, folder).await?;
+        return Ok((StatusCode::ACCEPTED, Json(json!({"ok": true}))).into_response());
     }
     let mut tx = st.db.begin().await?;
     sqlx::query!(

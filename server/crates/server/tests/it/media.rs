@@ -177,9 +177,9 @@ async fn stream_info_tracks_carry_their_markers(pool: PgPool) {
     assert!(other["files"][0]["streamInfo"].is_null());
 }
 
-/// A move cannot carry files, so a media that has some answers 409 and stays put.
+/// A media with files starts the move of its files (a failure leaves it put), an empty one changes library at once.
 #[sqlx::test(migrations = false)]
-async fn moving_a_media_with_files_is_a_409(pool: PgPool) {
+async fn moving_a_media_with_files_starts_the_move(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     sqlx::query(r#"INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES (5, 'Empty', 2000, 'movie', 1, 'e')"#)
         .execute(&pool)
@@ -193,12 +193,7 @@ async fn moving_a_media_with_files_is_a_409(pool: PgPool) {
     };
     let (u, b) = to(1, 2);
     let (s, r) = c.send("PATCH", &c.admin, &u, Some(b)).await;
-    assert_eq!((s, r["code"].as_str()), (409, Some("media_has_files")));
-    assert!(
-        r["message"]
-            .as_str()
-            .is_some_and(|m| m.starts_with("This media has files"))
-    );
+    assert_eq!((s, r["ok"].as_bool()), (202, Some(true)));
     let (_, m) = c.get(&c.admin, "/api/media/1").await;
     assert_eq!(m["libraryId"], 1);
     let (u, b) = to(1, 1);
