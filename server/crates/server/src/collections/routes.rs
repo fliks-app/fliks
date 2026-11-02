@@ -33,6 +33,11 @@ pub async fn list(
     let (library, kind, name) = (r.int("libraryId"), r.kind("kind"), r.string("q"));
     let (page, limit) = (r.number("page"), r.number("limit"));
     r.finish()?;
+    if page.is_some_and(|p| p < 1.0) {
+        return Err(AppError::bad_request(vec![
+            "page must not be less than 1".to_owned(),
+        ]));
+    }
     let paging = paging_of(page, limit, 0.0)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
     let scope = aggregates::scope(&ids, library.map(|l| l.to_string()).as_deref());

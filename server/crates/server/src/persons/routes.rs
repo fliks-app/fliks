@@ -90,6 +90,11 @@ pub async fn list(
     let sort = r.one_of("sortBy", &["name", "works"]);
     let (page, limit) = (r.number("page"), r.number("limit"));
     r.finish()?;
+    if page.is_some_and(|p| p < 1.0) {
+        return Err(AppError::bad_request(vec![
+            "page must not be less than 1".to_owned(),
+        ]));
+    }
     let (Some(role), paging) = (role, paging_of(page, limit, 0.0)?) else {
         return Ok(Json(Value::Array(vec![])));
     };

@@ -1,9 +1,11 @@
 -- Parity seed delta "books" (docs/spec/books-api.md), applied on top of base.sql.
 -- Library 3 is readable by `user`, `other` and `manager`; library 4 only by admin. Edition 102 of book 101 sits in
 -- library 4, book 104 is in library 4. Ids start at 101 so base rows keep theirs.
-INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", path) VALUES
- (3, '2026-01-01', '2026-01-01', 'Books', 'book', '#8b5cf6', '["book"]', '/tmp/fliks-parity/media/books'),
- (4, '2026-01-01', '2026-01-01', 'Audiobooks', 'headphones', '#f59e0b', '["book"]', '/tmp/fliks-parity/media/audiobooks');
+INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes") VALUES
+ (3, '2026-01-01', '2026-01-01', 'Books', 'book', '#8b5cf6', '["book"]'),
+ (4, '2026-01-01', '2026-01-01', 'Audiobooks', 'headphones', '#f59e0b', '["book"]');
+INSERT INTO library_folders ("libraryId", path) VALUES
+ (3, '/tmp/fliks-parity/media/books'), (4, '/tmp/fliks-parity/media/audiobooks');
 INSERT INTO library_user_access ("libraryId", "userId") VALUES (3, 2), (3, 4), (3, 5);
 
 INSERT INTO persons (id, "createdAt", "updatedAt", name, "sortName") VALUES
@@ -23,20 +25,20 @@ INSERT INTO book_details ("createdAt", "updatedAt", "mediaId", subtitle, "origin
 INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (101, NULL, 'release', '2001-05-01');
 
 INSERT INTO editions (id, "createdAt", "updatedAt", "mediaId", family, format, language, publisher, "libraryId", "pageCount", "durationSeconds", label) VALUES
- (101, '2026-01-01', '2026-01-01', 101, 'text', 'epub', 'fr', 'Parity Press', NULL, 300, NULL, 'Paper'),
- (102, '2026-01-01', '2026-01-01', 101, 'audio', 'm4b', 'en', NULL, 4, NULL, 3600, 'Hidden audio'),
- (103, '2026-01-01', '2026-01-01', 102, 'audio', 'm4b', 'fr', NULL, NULL, NULL, 150, NULL),
- (104, '2026-01-01', '2026-01-01', 103, 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL, NULL);
+ (101, '2026-01-01', '2026-01-01', 101, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 101), 'text', 'epub', 'fr', 'Parity Press', NULL, 300, NULL, 'Paper'),
+ (102, '2026-01-01', '2026-01-01', 101, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 101), 'audio', 'm4b', 'en', NULL, 4, NULL, 3600, 'Hidden audio'),
+ (103, '2026-01-01', '2026-01-01', 102, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 102), 'audio', 'm4b', 'fr', NULL, NULL, NULL, 150, NULL),
+ (104, '2026-01-01', '2026-01-01', 103, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 103), 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL, NULL);
 INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (101, 101, 'release', '2002-02-02');
 INSERT INTO items (id, "createdAt", "updatedAt", "mediaId", "editionId") VALUES
  (101, '2026-01-01', '2026-01-01', 101, 101), (102, '2026-01-01', '2026-01-01', 101, 102),
  (103, '2026-01-01', '2026-01-01', 102, 103), (104, '2026-01-01', '2026-01-01', 103, 104);
-INSERT INTO media_files (id, "createdAt", "updatedAt", "mediaId", "relativePath", size, quality, "streamInfo") VALUES
- (101, '2026-01-01', '2026-01-01', 101, 'alpha.epub', 1, 'EPUB', '{}'),
- (102, '2026-01-01', '2026-01-01', 101, 'alpha.m4b', 1, 'M4B', '{}'),
- (103, '2026-01-01', '2026-01-01', 102, 'beta-1.m4b', 1, 'M4B', '{"durationSeconds": 100, "chapters": [{"title": "A", "startSeconds": 0, "endSeconds": 40}, {"title": "B", "startSeconds": 40, "endSeconds": 100}]}'),
- (104, '2026-01-01', '2026-01-01', 102, 'beta-2.m4b', 1, 'M4B', '{"durationSeconds": 50, "chapters": [{"title": "C", "startSeconds": 0, "endSeconds": 50}]}'),
- (105, '2026-01-01', '2026-01-01', 103, 'gamma.mp3', 1, 'MP3', '{"durationSeconds": 300}');
+INSERT INTO media_files (id, "createdAt", "updatedAt", "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
+ (101, '2026-01-01', '2026-01-01', 101, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 101), 'alpha.epub', 1, 'EPUB', '{}'),
+ (102, '2026-01-01', '2026-01-01', 101, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 101), 'alpha.m4b', 1, 'M4B', '{}'),
+ (103, '2026-01-01', '2026-01-01', 102, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 102), 'beta-1.m4b', 1, 'M4B', '{"durationSeconds": 100, "chapters": [{"title": "A", "startSeconds": 0, "endSeconds": 40}, {"title": "B", "startSeconds": 40, "endSeconds": 100}]}'),
+ (104, '2026-01-01', '2026-01-01', 102, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 102), 'beta-2.m4b', 1, 'M4B', '{"durationSeconds": 50, "chapters": [{"title": "C", "startSeconds": 0, "endSeconds": 50}]}'),
+ (105, '2026-01-01', '2026-01-01', 103, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 103), 'gamma.mp3', 1, 'MP3', '{"durationSeconds": 300}');
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
  (101, 101, 101, 0, 0), (102, 102, 101, 0, 0), (103, 103, 102, 0, 0), (103, 104, 102, 0, 1), (104, 105, 103, 0, 0);
 UPDATE item_markers SET "createdAt" = '2026-01-01', "updatedAt" = '2026-01-01' WHERE "itemId" >= 101;
