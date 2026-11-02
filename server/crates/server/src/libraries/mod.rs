@@ -11,7 +11,10 @@ use axum::{
     routing::{get, patch, post},
 };
 
-pub use acl::{accessible_library_ids, assert_media_accessible, media_not_found};
+pub use acl::{
+    accessible_library_ids, assert_file_accessible, assert_media_accessible, library_ids_of,
+    media_not_found,
+};
 pub use db::{Folder, paths_visible};
 pub use folders::assert_in_library as assert_folder_in_library;
 pub use path::{disk, sanitize as sanitize_path, warn_overlapping_folders};

@@ -1,10 +1,21 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT mf.\"relativePath\" AS \"relative_path!\", mf.\"streamInfo\" AS stream_info,\n                      mf.\"mediaId\" AS media_id,\n                      (SELECT fi.\"episodeId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = mf.id) AS episode_id,\n                      (SELECT fi.\"itemId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = mf.id) AS item_id,\n                      m.title AS \"title?\", m.\"type\" AS \"media_type?\",\n                      m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n                      m.\"libraryId\" AS library_id, lf.path AS folder_path\n               FROM media_files mf\n               LEFT JOIN media m ON m.id = mf.\"mediaId\"\n               JOIN library_folders lf ON lf.id = mf.\"folderId\"\n               WHERE mf.id = $1",
+  "query": "SELECT mf.id AS \"id!\", mf.\"relativePath\" AS \"relative_path!\", mf.\"streamInfo\" AS stream_info,\n                      mf.\"mediaId\" AS media_id,\n                      (SELECT fi.\"episodeId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = mf.id) AS episode_id,\n                      (SELECT fi.\"itemId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = mf.id) AS item_id,\n                      m.title AS \"title?\", m.\"type\" AS \"media_type?\",\n                      m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n                      m.\"libraryId\" AS library_id, lf.path AS folder_path\n               FROM media_files mf\n               LEFT JOIN media m ON m.id = mf.\"mediaId\"\n               JOIN library_folders lf ON lf.id = mf.\"folderId\"\n               WHERE mf.id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "relative_path!",
         "type_info": "Varchar",
         "origin": {
@@ -15,7 +26,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "stream_info",
         "type_info": "Jsonb",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "media_id",
         "type_info": "Int4",
         "origin": {
@@ -37,19 +48,19 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "episode_id",
         "type_info": "Int4",
         "origin": "Expression"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "item_id",
         "type_info": "Int4",
         "origin": "Expression"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "title?",
         "type_info": "Varchar",
         "origin": {
@@ -60,7 +71,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "media_type?",
         "type_info": "Text",
         "origin": {
@@ -71,7 +82,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "poster_url",
         "type_info": "Varchar",
         "origin": {
@@ -82,7 +93,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "fanart_url",
         "type_info": "Varchar",
         "origin": {
@@ -93,7 +104,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "library_id",
         "type_info": "Int4",
         "origin": {
@@ -104,7 +115,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "folder_path",
         "type_info": "Text",
         "origin": {
@@ -122,6 +133,7 @@
     },
     "nullable": [
       false,
+      false,
       true,
       true,
       null,
@@ -134,5 +146,5 @@
       false
     ]
   },
-  "hash": "9d68aa701d337603cfad66ab5f47f7dc84bd6a4b2f8bb17c3ef9f49fa00f503d"
+  "hash": "10c8fa11b44d49f5cdc37ce235dd135fca7bde69ebc5efb5f159e18eb7db911a"
 }

@@ -64,7 +64,7 @@ pub async fn resolve_file(
     let missing = || AppError::not_found(format!("MediaFile #{id} not found"));
     let row = match i32::try_from(id) {
         Ok(id) => sqlx::query!(
-            r#"SELECT mf."relativePath" AS "relative_path!", mf."streamInfo" AS stream_info,
+            r#"SELECT mf.id AS "id!", mf."relativePath" AS "relative_path!", mf."streamInfo" AS stream_info,
                       mf."mediaId" AS media_id,
                       (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS episode_id,
                       (SELECT fi."itemId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS item_id,
@@ -99,6 +99,8 @@ pub async fn resolve_file(
         if !allowed {
             return Err(missing());
         }
+        let ids = crate::libraries::accessible_library_ids(&st.db, a).await?;
+        crate::libraries::assert_file_accessible(&st.db, row.id, &ids).await?;
     }
     let invalid = || AppError::not_found("Invalid file path");
     let absolute = locate(&row.folder_path, &row.relative_path).ok_or_else(invalid)?;

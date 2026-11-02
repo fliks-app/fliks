@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM media_files WHERE id = $1)\n           AND (NOT EXISTS (SELECT 1 FROM item_parts WHERE \"mediaFileId\" = $1)\n             OR EXISTS (SELECT 1 FROM item_parts ip JOIN items i ON i.id = ip.\"itemId\"\n                  JOIN editions e ON e.id = i.\"editionId\" JOIN media m ON m.id = e.\"mediaId\"\n                  WHERE ip.\"mediaFileId\" = $1 AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2))) AS \"ok!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ok!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eec387962f8b6e89d6e5923f161f1b6199edc4423802f7f04839467f183f0632"
+}
