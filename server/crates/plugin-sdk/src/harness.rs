@@ -222,12 +222,16 @@ fn valid_prefix(p: &str) -> bool {
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
+/// Plugin lines reach the ring directly; sqlx statements from every parallel test would evict them.
 fn log_ring() {
-    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{filter::filter_fn, prelude::*};
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         let _ = tracing_subscriber::registry()
-            .with(fliks_server::system::logs::RingLayer)
+            .with(
+                fliks_server::system::logs::RingLayer
+                    .with_filter(filter_fn(|m| !m.target().starts_with("sqlx"))),
+            )
             .try_init();
     });
 }
