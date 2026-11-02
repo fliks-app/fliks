@@ -24,6 +24,29 @@
       </button>
     </div>
 
+    <div class="flex flex-col gap-2">
+      <span class="label-text text-base">{{ 'settings.libraries.extra_folders' | translate }}</span>
+      @for (path of state.formExtraPaths(); track $index) {
+        <div class="flex flex-wrap items-center gap-3">
+          <input type="text" class="input input-bordered flex-1 min-w-64 font-mono"
+            [ngModel]="path" (ngModelChange)="setExtra($index, $event)"
+            placeholder="/medias/more" [attr.aria-label]="'settings.libraries.path' | translate" />
+          <button type="button" class="btn btn-outline" (click)="browseExtra($index)">
+            {{ 'common.browse' | translate }}
+          </button>
+          <button type="button" class="btn btn-ghost" (click)="removeExtra($index)">
+            {{ 'settings.libraries.folder_remove' | translate }}
+          </button>
+        </div>
+      }
+      <div>
+        <button type="button" class="btn btn-outline btn-sm" (click)="addExtra()">
+          {{ 'settings.libraries.folder_add' | translate }}
+        </button>
+      </div>
+      <span class="text-sm text-base-content/50">{{ 'settings.libraries.extra_folders_hint' | translate }}</span>
+    </div>
+
     @if (!scanned()) {
       <p class="text-sm text-base-content/60">{{ 'settings.libraries.scan_required' | translate }}</p>
     }

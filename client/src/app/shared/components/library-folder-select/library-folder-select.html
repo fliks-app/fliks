@@ -1,0 +1,23 @@
+@if (folders().length > 1) {
+  <label class="form-control w-full">
+    <span class="label-text text-base-content/60">{{ 'settings.libraries.folder' | translate }}</span>
+    <select
+      appTvSelect
+      class="select select-bordered select-sm w-full"
+      [ngModel]="folderId()"
+      (ngModelChange)="folderId.set(+$event)"
+    >
+      @for (f of folders(); track f.id; let first = $first) {
+        <option [ngValue]="f.id">
+          {{ f.name }}
+          @if (f.freeSpace != null && f.freeSpace >= 0) {
+            ({{ 'settings.libraries.folder_free' | translate: { free: formatBytes(f.freeSpace) } }})
+          }
+          @if (first) {
+            · {{ 'settings.libraries.folder_default' | translate }}
+          }
+        </option>
+      }
+    </select>
+  </label>
+}

@@ -8,14 +8,14 @@ import { of } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { BookPreviewComponent } from './book-preview.component';
 import { bookPreviewFixture } from '../../../../core/services/api/books.fixtures';
-import { LibrariesApiService, Library } from '../../../../core/services/api/libraries-api.service';
+import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 
-const lib = (id: number, folders?: { id: number; path: string }[]) =>
-  ({ id, name: `Library ${id}`, mediaTypes: ['book'], folders }) as unknown as Library;
+const lib = (id: number, folders?: { id: number; name: string }[]) =>
+  ({ id, name: `Library ${id}`, mediaTypes: ['book'], folders }) as unknown as LibrarySummary;
 
-function setup(libraries: Library[], canImport = true) {
+function setup(libraries: LibrarySummary[], canImport = true) {
   const navigate = vi.fn();
   TestBed.configureTestingModule({
     providers: [
@@ -24,7 +24,7 @@ function setup(libraries: Library[], canImport = true) {
       provideHttpClientTesting(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: Router, useValue: { navigate } },
-      { provide: LibrariesApiService, useValue: { list: async () => libraries } },
+      { provide: LibrariesApiService, useValue: { listMine: async () => libraries } },
       { provide: AuthService, useValue: { hasPermission: () => canImport } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
     ],
@@ -56,16 +56,16 @@ describe('BookPreviewComponent', () => {
   });
 
   it('shows the folder select only when the library has several folders', async () => {
-    const one = setup([lib(1, [{ id: 5, path: '/a' }])]);
+    const one = setup([lib(1, [{ id: 5, name: 'a' }])]);
     expect((await settle(one.fixture)).querySelectorAll('select').length).toBe(0);
     TestBed.resetTestingModule();
 
-    const many = setup([lib(1, [{ id: 5, path: '/a' }, { id: 6, path: '/b' }])]);
+    const many = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
     expect((await settle(many.fixture)).querySelectorAll('select').length).toBe(1);
   });
 
   it('adds with the chosen library and folder, then opens the book', async () => {
-    const { fixture, http, navigate } = setup([lib(1, [{ id: 5, path: '/a' }, { id: 6, path: '/b' }])]);
+    const { fixture, http, navigate } = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
     await settle(fixture);
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
