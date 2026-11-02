@@ -17,6 +17,7 @@ mod media_servers;
 mod metadata;
 mod migrations;
 mod notifications;
+mod opds;
 mod parity;
 mod party;
 mod playback;

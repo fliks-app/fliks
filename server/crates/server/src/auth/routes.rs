@@ -148,7 +148,7 @@ pub(crate) struct LoginDto {
 
 /// The client address (`auth.md` rule 63): `X-Forwarded-For` entries then the socket peer, walked
 /// from the right past private hops (trusted proxies) to the first public one.
-fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> Option<IpAddr> {
+pub(crate) fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> Option<IpAddr> {
     let hops: Vec<IpAddr> = headers
         .get_all("x-forwarded-for")
         .iter()
