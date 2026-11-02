@@ -17,6 +17,8 @@ use std::{fmt, time::Instant};
 const DEFAULT_RENDER_NODE: &str = "/dev/dri/renderD128";
 /// Largest cover picture read from the engine (`book-ingest.md` rule 14).
 const COVER_MAX_BYTES: usize = 16 << 20;
+/// The engine bounds each probe tool run (up to 120 s, `docs/spec/probe.md`); the request outlasts them.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// A failed engine call; the 503 variants carry the 4.x messages.
 #[derive(Debug)]
@@ -72,7 +74,14 @@ impl std::error::Error for EngineError {}
 
 impl From<reqwest::Error> for EngineError {
     fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e.without_url().to_string())
+        let e = e.without_url();
+        let mut msg = e.to_string();
+        let mut src = std::error::Error::source(&e);
+        while let Some(s) = src {
+            msg = format!("{msg}: {s}");
+            src = s.source();
+        }
+        Self::Transport(msg)
     }
 }
 
@@ -229,7 +238,11 @@ impl Engine {
             mkv_tags,
             moviehash,
         };
-        self.post("POST /v1/probe", "/v1/probe", &body).await
+        let reply = self
+            .need()?
+            .send_within(Method::POST, "/v1/probe", &body, PROBE_TIMEOUT)
+            .await?;
+        expect("POST /v1/probe", &reply)
     }
 
     /// Download size per quality rung of a probed file; `info` absent sends an empty object.
