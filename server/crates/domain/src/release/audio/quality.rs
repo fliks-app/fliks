@@ -102,14 +102,16 @@ fn quality_of(
     let quality = match codec {
         None => None,
         Some("lossless") => by(if depth.unwrap_or(16) >= 24 { 24 } else { 16 }, "lossless"),
-        Some(c) => by(
-            match bitrate.unwrap_or(128) {
-                ..96 => 64,
-                96..192 => 128,
-                _ => 256,
-            },
-            c,
-        ),
+        Some(c) => bitrate.and_then(|b| {
+            by(
+                match b {
+                    ..96 => 64,
+                    96..192 => 128,
+                    _ => 256,
+                },
+                c,
+            )
+        }),
     };
     quality.unwrap_or(&AUDIO_QUALITIES[0])
 }
