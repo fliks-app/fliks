@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mediaFileId\" AS \"file!\", \"startSeconds\" AS start, \"endSeconds\" AS \"end\", title\n           FROM item_markers WHERE \"itemId\" = $1 AND \"mediaFileId\" = ANY($2) AND kind = 'chapter'\n           ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "file!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_markers",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "start",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "item_markers",
+            "name": "startSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "end",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "item_markers",
+            "name": "endSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "item_markers",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "55295edf8260d0fbe57047cdd0a19844a692452a18d987278174d8753cdfe62b"
+}

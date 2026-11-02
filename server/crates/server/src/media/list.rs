@@ -242,7 +242,7 @@ fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], u
             super::watched::predicate(uid, "media")
         ));
         qb.push_bind(uid).push(
-            " AND i.\"mediaId\" = media.id AND ps.completed = false AND ps.\"positionSeconds\" > 0",
+            " AND i.\"mediaId\" = media.id AND ps.completed = false AND (ps.\"positionSeconds\" > 0 OR ps.progression > 0)",
         );
         push_visible(qb, ids);
         qb.push(")");

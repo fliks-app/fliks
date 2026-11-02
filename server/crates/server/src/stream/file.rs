@@ -41,6 +41,22 @@ pub fn extname(path: &str) -> String {
     }
 }
 
+/// MIME type of an audio or text file by extension (with the dot); video carries none.
+pub fn book_format(ext: &str) -> Option<&'static str> {
+    if let Some(audio) = fliks_engine_core::item::audio_mime(ext.trim_start_matches('.')) {
+        return Some(audio);
+    }
+    Some(match ext {
+        ".epub" => "application/epub+zip",
+        ".pdf" => "application/pdf",
+        ".azw3" => "application/vnd.amazon.ebook",
+        ".mobi" => "application/x-mobipocket-ebook",
+        ".fb2" => "application/x-fictionbook+xml",
+        ".cbz" => "application/vnd.comicbook+zip",
+        _ => return None,
+    })
+}
+
 fn content_type(ext: &str) -> &'static str {
     match ext {
         ".mp4" | ".m4v" => "video/mp4",
@@ -51,7 +67,7 @@ fn content_type(ext: &str) -> &'static str {
         ".ts" | ".m2ts" | ".mts" => "video/mp2t",
         ".mpg" | ".mpeg" => "video/mpeg",
         ".ogm" => "video/ogg",
-        _ => "application/octet-stream",
+        _ => book_format(ext).unwrap_or("application/octet-stream"),
     }
 }
 

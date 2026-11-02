@@ -5,7 +5,7 @@ use super::{
 };
 use crate::media::items::{Link, sole_item};
 use chrono::{DateTime, Duration, Utc};
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use sqlx::PgPool;
 
 async fn seed(pool: &PgPool) -> (i32, i32, i32) {
@@ -63,6 +63,10 @@ async fn watch(
         item: sole_item(pool, ids.1).await.unwrap().unwrap(),
         episode: None,
         client_played_at: at,
+        family: Family::Video,
+        last_chapter_start: None,
+        progression: None,
+        locator: None,
     }
 }
 
@@ -162,6 +166,10 @@ async fn finishing_a_range_file_completes_every_episode_it_plays(pool: PgPool) {
         item: ids[0],
         episode: Some(ids[0]),
         client_played_at: None,
+        family: Family::Video,
+        last_chapter_start: None,
+        progression: None,
+        locator: None,
     };
     record_watch(&pool, user, media, &w(100.0)).await.unwrap();
     let done = || async {
@@ -190,4 +198,35 @@ async fn live_beat_still_stamps_now(pool: PgPool) {
     let t0 = Utc::now();
     play(&pool, ids, 50.0, None).await;
     assert!(row(&pool, ids.0, ids.1).await.2 >= t0 - Duration::seconds(1));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_without_progression_keeps_the_stored_one(pool: PgPool) {
+    let ids = seed(&pool).await;
+    let pool = &pool;
+    let at = |p: Option<f64>, l: Option<serde_json::Value>| async move {
+        let w = Watch {
+            progression: p,
+            locator: l,
+            ..watch(pool, ids, 0.0, None).await
+        };
+        record_watch(pool, ids.0, ids.1, &w).await.unwrap();
+        let item = sole_item(pool, ids.1).await.unwrap().unwrap();
+        find_state(pool, ids.0, item).await.unwrap().unwrap()
+    };
+    let r = at(Some(0.3), Some(serde_json::json!({"href": "a"}))).await;
+    assert_eq!(
+        (r.progression, r.locator),
+        (Some(0.3), Some(serde_json::json!({"href": "a"})))
+    );
+    let r = at(None, None).await;
+    assert_eq!(
+        (r.progression, r.locator),
+        (Some(0.3), Some(serde_json::json!({"href": "a"})))
+    );
+    let r = at(Some(0.5), None).await;
+    assert_eq!(
+        (r.progression, r.locator),
+        (Some(0.5), Some(serde_json::json!({"href": "a"})))
+    );
 }

@@ -909,6 +909,110 @@ mod resolve {
         assert_eq!(ask_basic(&w, "r", &again).await, denied(), "revoked");
     }
 
+    /// A book of an audio item (two parts, then a one-file item) and a text item, in the movie's library.
+    async fn book(w: &World) -> (i32, [i32; 4]) {
+        let p = &w.c.pool;
+        let dir = w.c.dir.join("lib/Book");
+        fs::create_dir_all(&dir).unwrap();
+        let names = ["p1.mp3", "p2.mp3", "solo.m4b", "b.epub"];
+        for n in names {
+            fs::write(dir.join(n), b"x").unwrap();
+        }
+        let media: i32 = sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId", "folderName") SELECT 'B', 'book', "libraryId", 'Book' FROM media WHERE id = (SELECT "mediaId" FROM media_files WHERE id = $1) RETURNING id"#)
+            .bind(w.file)
+            .fetch_one(p)
+            .await
+            .unwrap();
+        let mut files = [0; 4];
+        for (i, n) in names.into_iter().enumerate() {
+            let family = if n == "b.epub" { "text" } else { "audio" };
+            let item: i32 = if i == 1 {
+                sqlx::query_scalar(r#"SELECT "itemId" FROM item_parts WHERE "mediaFileId" = $1"#)
+                    .bind(files[0])
+                    .fetch_one(p)
+                    .await
+                    .unwrap()
+            } else {
+                sqlx::query_scalar(r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id) INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id"#)
+                    .bind(media)
+                    .bind(family)
+                    .fetch_one(p)
+                    .await
+                    .unwrap()
+            };
+            files[i] = sqlx::query_scalar(r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "folderId") VALUES ($1, 1, 'x', $2, $3, (SELECT min(id) FROM library_folders)) RETURNING id), q AS (INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) SELECT $4, id, $3, 0, $5 FROM f RETURNING 1) SELECT id FROM f"#)
+                .bind(format!("Book/{n}"))
+                .bind(json!({"durationSeconds": 12.5}))
+                .bind(media)
+                .bind(item)
+                .bind(i32::from(i == 1))
+                .fetch_one(p)
+                .await
+                .unwrap();
+        }
+        (media, files)
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_audio_item_answers_its_parts_and_a_text_file_its_mime(pool: PgPool) {
+        let w = world(pool).await;
+        let (media, f) = book(&w).await;
+        let ask = |file: i32, token: &str, purpose: &str| {
+            resolve(
+                &w,
+                json!({"mediaId": file, "credential": token, "purpose": purpose}),
+            )
+        };
+        let dir = |n: &str| {
+            w.c.dir
+                .join("lib/Book")
+                .join(n)
+                .to_str()
+                .unwrap()
+                .to_owned()
+        };
+        let part = |n: &str| json!({"path": dir(n), "durationS": 12.5, "format": "audio/mpeg"});
+        let owner = w.member.0.to_string();
+        for file in [f[0], f[1]] {
+            for purpose in ["stream", "download"] {
+                let (_, b) = ask(file, &w.member.1, purpose).await;
+                assert_eq!(
+                    b,
+                    json!({"allow": true, "ownerId": owner, "ttlS": 60.0, "parts": [part("p1.mp3"), part("p2.mp3")]}),
+                    "{file} {purpose}"
+                );
+            }
+        }
+        let (_, b) = ask(f[2], &w.member.1, "stream").await;
+        let solo = json!([{"path": dir("solo.m4b"), "durationS": 12.5, "format": "audio/mp4"}]);
+        assert_eq!(b["parts"], solo, "an item of one file still answers parts");
+        assert!(b.get("path").is_none());
+        let (_, b) = ask(f[3], &w.member.1, "download").await;
+        assert_eq!(
+            b,
+            json!({"allow": true, "ownerId": owner, "ttlS": 60.0, "path": dir("b.epub"), "format": "application/epub+zip"})
+        );
+        let (_, b) = ask(w.file, &w.member.1, "stream").await;
+        assert!(
+            b.get("format").is_none() && b.get("parts").is_none(),
+            "video is as before"
+        );
+        sqlx::query(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('Hidden') RETURNING id) UPDATE editions SET "libraryId" = (SELECT id FROM l) WHERE "mediaId" = $1 AND family = 'audio'"#)
+            .bind(media)
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
+        for file in [f[0], f[1], f[2]] {
+            assert_eq!(ask(file, &w.member.1, "stream").await.1, denied(), "{file}");
+            assert_eq!(ask(file, &w.admin.1, "stream").await.1["allow"], true);
+        }
+        assert_eq!(
+            ask(f[3], &w.member.1, "stream").await.1["allow"],
+            true,
+            "the text edition stays"
+        );
+    }
+
     #[sqlx::test(migrations = false)]
     async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
         let w = world(pool).await;

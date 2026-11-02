@@ -28,6 +28,10 @@ pub struct StateRow {
     pub(super) media_id: i32,
     pub(super) media_file_id: Option<i32>,
     pub(super) episode_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) progression: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) locator: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -127,6 +131,25 @@ pub async fn named_item(
     Ok(row.item)
 }
 
+/// `named_item`, or the item `item` names when it belongs to `media` (`item-delivery.md` rule 15).
+pub async fn beat_item(
+    db: impl sqlx::PgExecutor<'_>,
+    media: i32,
+    episode: Option<i32>,
+    item: Option<i32>,
+) -> Result<Option<i32>, AppError> {
+    match item {
+        Some(id) => Ok(sqlx::query_scalar!(
+            r#"SELECT id FROM items WHERE id = $1 AND "mediaId" = $2"#,
+            id,
+            media
+        )
+        .fetch_optional(db)
+        .await?),
+        None => named_item(db, media, episode).await,
+    }
+}
+
 pub async fn find_state(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<StateRow>> {
     sqlx::query_as!(
         StateRow,
@@ -135,7 +158,8 @@ pub async fn find_state(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Optio
                   ps.completed, ps."hiddenFromContinueWatching" AS hidden_from_continue_watching,
                   ps."lastPlayedAt" AS last_played_at, ps."playedAt" AS played_at,
                   ps."userId" AS user_id, i."mediaId" AS media_id, ps."mediaFileId" AS media_file_id,
-                  CASE WHEN i."groupId" IS NOT NULL THEN i.id END AS episode_id
+                  CASE WHEN i."groupId" IS NOT NULL THEN i.id END AS episode_id,
+                  ps.progression, ps.locator AS "locator?: serde_json::Value"
            FROM playback_states ps JOIN items i ON i.id = ps."itemId"
            WHERE ps."userId" = $1 AND ps."itemId" = $2"#,
         user,

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states\n                 (\"userId\", \"itemId\", \"mediaFileId\", \"positionSeconds\",\n                  \"durationSeconds\", completed, \"lastPlayedAt\", \"playedAt\", progression, locator)\n               VALUES ($1, $2, $3, $4, $5, $6, now(), CASE WHEN $7 THEN now() END, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Float8",
+        "Float8",
+        "Bool",
+        "Bool",
+        "Float8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a374b7e67f4d0405e1251df43597cea69fa3e157068a7c7264eb889922f02be"
+}

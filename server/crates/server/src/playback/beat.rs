@@ -29,6 +29,18 @@ use std::{collections::HashMap, sync::Mutex};
 const DEBOUNCE_MS: i64 = 30_000;
 const SEEK_SECONDS: f64 = 30.0;
 const PRUNE_MS: i64 = DEBOUNCE_MS * 10;
+/// Serialised size above which a reader's locator is not stored.
+const LOCATOR_MAX: usize = 8 * 1024;
+
+/// The wire `episodeId` of an item: its id when it is grouped.
+async fn episode_of(db: &sqlx::PgPool, item: i32) -> Result<Option<i32>, AppError> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT id FROM items WHERE id = $1 AND "groupId" IS NOT NULL"#,
+        item
+    )
+    .fetch_optional(db)
+    .await?)
+}
 
 /// Last history write per `user:media:episode`, per process and never persisted (rules 1, 13, 14).
 #[derive(Default)]
@@ -305,9 +317,12 @@ pub async fn heartbeat(
     let episode = int(&body, "episodeId")
         .map(|e| i32::try_from(e).unwrap_or(-1))
         .filter(|e| *e != 0);
+    let named = int(&body, "itemId")
+        .map(|i| i32::try_from(i).unwrap_or(-1))
+        .filter(|i| *i != 0);
     let mut resolved = match bound_file {
         Some(bound) => {
-            let item = super::db::named_item(&st.db, media, episode).await?;
+            let item = super::db::beat_item(&st.db, media, episode, named).await?;
             check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
             Some(item)
         }
@@ -324,7 +339,7 @@ pub async fn heartbeat(
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
         let item = match resolved {
             Some(item) => item,
-            None => super::db::named_item(&st.db, media, episode).await?,
+            None => super::db::beat_item(&st.db, media, episode, named).await?,
         };
         resolved = Some(item);
         let before = st.presence.peek(sid);
@@ -345,18 +360,29 @@ pub async fn heartbeat(
         }
     }
     let history_user = attributed.unwrap_or(user);
-    let key = format!("{history_user}:{media}:{}", episode.unwrap_or(0));
+    let key = match named {
+        Some(item) => format!("{history_user}:{media}:i{item}"),
+        None => format!("{history_user}:{media}:{}", episode.unwrap_or(0)),
+    };
     let (pos, dur) = (
         num(&body, "positionSeconds").unwrap_or(0.0),
         num(&body, "durationSeconds").unwrap_or(0.0),
     );
+    let progression = num(&body, "progression")
+        .filter(|p| p.is_finite())
+        .map(|p| p.clamp(0.0, 1.0));
+    let locator = body
+        .get("locator")
+        .filter(|l| l.is_object() && l.to_string().len() <= LOCATOR_MAX)
+        .cloned();
+    let text_done = progression.is_some_and(|p| p >= fliks_domain::media::finish::TEXT_SHARE);
     let client_played_at = int(&body, "playedAt")
         .and_then(DateTime::from_timestamp_millis)
         .map(|t| t.min(Utc::now()));
     if client_played_at.is_none()
         && !st
             .debounce
-            .flush(&key, now_ms() as i64, pos, dur, state_changed)
+            .flush(&key, now_ms() as i64, pos, dur, state_changed || text_done)
     {
         return Ok(reply(lost, None));
     }
@@ -370,11 +396,16 @@ pub async fn heartbeat(
     };
     let item = match resolved {
         Some(item) => item,
-        None => super::db::named_item(&st.db, media, episode).await?,
+        None => super::db::beat_item(&st.db, media, episode, named).await?,
     };
     let Some(item) = item else {
         return Ok(reply(lost, Some(None)));
     };
+    let episode = match named {
+        Some(_) => episode_of(&st.db, item).await?,
+        None => episode,
+    };
+    let (family, last_chapter_start) = watched::finish_context(&st.db, item, file).await?;
     let watch = Watch {
         position: pos,
         duration: dur,
@@ -382,6 +413,10 @@ pub async fn heartbeat(
         item,
         episode,
         client_played_at,
+        family,
+        last_chapter_start,
+        progression,
+        locator,
     };
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     Ok(reply(lost, Some(saved)))

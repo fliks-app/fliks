@@ -157,6 +157,7 @@ FROM media m LEFT JOIN book_details bd ON bd."mediaId" = m.id WHERE m.id = $1"#,
     let progress = sqlx::query!(
         r#"SELECT e.id AS "edition!", i.id AS "item!", ps.completed AS "completed!",
   CASE WHEN ps.completed THEN 1.0::float8
+       WHEN ps.progression IS NOT NULL THEN ps.progression
        WHEN ps."durationSeconds" > 0 THEN LEAST(1.0, ps."positionSeconds" / ps."durationSeconds")
        ELSE 0.0::float8 END AS "progression!",
   iso_ms(ps."lastPlayedAt") AS "last_played!"

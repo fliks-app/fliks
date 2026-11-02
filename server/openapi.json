@@ -922,6 +922,20 @@
         }
       }
     },
+    "/api/items/{itemId}/playback-info": {
+      "post": {
+        "tags": [
+          "crate::stream"
+        ],
+        "summary": "An audio item has no subtitles, pre-roll, EDL or scan: `item-delivery.md` rule 8.",
+        "operationId": "item_playback_info",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/libraries": {
       "get": {
         "tags": [

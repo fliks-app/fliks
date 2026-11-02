@@ -65,6 +65,40 @@ pub async fn chapters(db: &PgPool, item: i32, file: i32) -> sqlx::Result<Vec<Cha
     })
 }
 
+/// The chapters of an item's parts on its timeline: each part's chapters shifted by its offset.
+pub async fn item_chapters(
+    db: &PgPool,
+    item: i32,
+    spans: &[(i32, f64)],
+) -> sqlx::Result<Vec<Chapter>> {
+    let files: Vec<i32> = spans.iter().map(|(f, _)| *f).collect();
+    let rows = sqlx::query!(
+        r#"SELECT "mediaFileId" AS "file!", "startSeconds" AS start, "endSeconds" AS "end", title
+           FROM item_markers WHERE "itemId" = $1 AND "mediaFileId" = ANY($2) AND kind = 'chapter'
+           ORDER BY id"#,
+        item,
+        &files
+    )
+    .fetch_all(db)
+    .await?;
+    let mut chapters: Vec<Chapter> = rows
+        .into_iter()
+        .map(|r| {
+            let at = spans
+                .iter()
+                .find(|(f, _)| *f == r.file)
+                .map_or(0.0, |(_, o)| *o);
+            Chapter {
+                start_seconds: at + r.start,
+                end_seconds: at + r.end,
+                title: r.title,
+            }
+        })
+        .collect();
+    chapters.sort_by(|a, b| a.start_seconds.total_cmp(&b.start_seconds));
+    Ok(chapters)
+}
+
 /// The saved position worth resuming: more than 10 s in and not finished.
 pub async fn resume_position(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<f64>> {
     Ok(find_state(db, user, item)

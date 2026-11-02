@@ -3,7 +3,7 @@
 use super::{
     burn_in, db, edl,
     file::{ResolvedFile, resolve_file},
-    hardware, preroll, scan,
+    hardware, item, preroll, scan,
 };
 use crate::{
     engine::{EngineError, enc},
@@ -24,7 +24,7 @@ use axum::{
 use fliks_domain::{edl::shift_ranges, track_markers};
 use fliks_engine_core::{
     api::{
-        Chapter, ClientInfo, DecideMedia, DecideRequest, DecideSelection, DeviceProfile,
+        Chapter, ClientInfo, DecideMedia, DecideRequest, DecideSelection, DeviceProfile, ItemPart,
         JobPriority, OpenSessionRequest, OpenSessionResponse,
     },
     jsnum,
@@ -42,6 +42,7 @@ pub struct Params {
     pub download: bool,
     pub replaces: Option<String>,
     pub pre_roll_first: bool,
+    pub version: Option<i32>,
 }
 
 /// JS `parseInt(v, 10)`: the leading integer, `None` for NaN.
@@ -99,6 +100,9 @@ pub(super) fn parse_query(pairs: &[(String, String)]) -> Result<Params, AppError
             .filter(|v| !v.is_empty())
             .map(str::to_owned),
         pre_roll_first: first("preRollFirst") == Some("1"),
+        version: first("version")
+            .and_then(parse_int)
+            .and_then(|v| i32::try_from(v).ok()),
     })
 }
 
@@ -166,7 +170,7 @@ pub async fn playback_info(
     let out = run(
         &st,
         &a,
-        id,
+        Target::File(id),
         device,
         q,
         header("x-fliks-sse-connection"),
@@ -176,18 +180,119 @@ pub async fn playback_info(
     Ok((StatusCode::CREATED, Json(out)))
 }
 
+/// An audio item has no subtitles, pre-roll, EDL or scan: `item-delivery.md` rule 8.
+#[utoipa::path(post, path = "/api/items/{itemId}/playback-info", responses((status = 201)))]
+pub async fn item_playback_info(
+    State(st): State<AppState>,
+    StreamAuthed(a): StreamAuthed,
+    PathParams(id): PathParams<i64>,
+    Query(pairs): Query<Vec<(String, String)>>,
+    headers: HeaderMap,
+    ValidJson(body): ValidJson<Value>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let device = device_profile(body)?;
+    let q = parse_query(&pairs)?;
+    let header = |n: &str| {
+        headers
+            .get(n)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
+    let target = Target::Item(id, q.version);
+    let q = Params {
+        burn_in_subtitle_id: None,
+        pre_roll_first: false,
+        ..q
+    };
+    let out = run(
+        &st,
+        &a,
+        target,
+        device,
+        q,
+        header("x-fliks-sse-connection"),
+        header("user-agent"),
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(out)))
+}
+
+enum Target {
+    File(i64),
+    Item(i64, Option<i32>),
+}
+
+/// What an item adds to the open request of its first part.
+struct ItemOpen {
+    item: i32,
+    version: i32,
+    parts: Vec<ItemPart>,
+    source_version: String,
+    duration: f64,
+    /// `(file, offset)` of each part.
+    spans: Vec<(i32, f64)>,
+}
+
+async fn open_item(
+    st: &AppState,
+    a: &crate::http::auth::Authed,
+    id: i64,
+    version: Option<i32>,
+) -> Result<(ResolvedFile, ItemOpen), AppError> {
+    let it = item::resolve(st, a, id, version).await?;
+    let mut stamps = Vec::new();
+    for p in &it.parts {
+        stamps.push(scan::version_of(&p.absolute).await.unwrap_or_default());
+    }
+    let open = ItemOpen {
+        item: it.item,
+        version: it.version,
+        parts: it
+            .parts
+            .iter()
+            .map(|p| ItemPart {
+                path: p.absolute.to_string_lossy().into_owned(),
+                info: p.info.clone().unwrap_or_default(),
+                start_s: None,
+                end_s: None,
+            })
+            .collect(),
+        source_version: stamps.join("|"),
+        duration: it.duration(),
+        spans: it
+            .parts
+            .iter()
+            .map(|p| p.id)
+            .zip(it.offsets.iter().copied())
+            .collect(),
+    };
+    let mut first = it
+        .parts
+        .into_iter()
+        .next()
+        .ok_or_else(|| AppError::not_found(format!("Item #{id} has no file")))?;
+    first.item_id = Some(it.item);
+    Ok((first, open))
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run(
     st: &AppState,
     a: &crate::http::auth::Authed,
-    id: i64,
+    target: Target,
     device: DeviceProfile,
     q: Params,
     sse_connection: Option<String>,
     user_agent: Option<String>,
 ) -> Result<Value, AppError> {
     check_engine(st)?;
-    let mut file = resolve_file(st, Some(a), id).await?;
+    let (mut file, item) = match target {
+        Target::File(id) => (resolve_file(st, Some(a), id).await?, None),
+        Target::Item(id, version) => {
+            let (file, item) = open_item(st, a, id, version).await?;
+            (file, Some(item))
+        }
+    };
     let (position, early_pre_roll) = tokio::join!(start_position(st, a, &q, &file), async {
         match q.pre_roll_first {
             true => Some(ask_pre_roll(st, a, &file).await),
@@ -209,13 +314,18 @@ async fn run(
         },
     };
     let mut info = file.info.take();
-    let (settings, held) = tokio::join!(
-        crate::engine::load_streaming(&st.db),
-        scan::lookup(st, file.id, &file.absolute, info.as_mut()),
-    );
+    let (settings, held) = tokio::join!(crate::engine::load_streaming(&st.db), async {
+        match &item {
+            Some(it) => scan::Held {
+                scan: None,
+                version: Some(it.source_version.clone()),
+            },
+            None => scan::lookup(st, file.id, &file.absolute, info.as_mut()).await,
+        }
+    },);
     hardware::apply(st, &settings?, false);
     file.info = info;
-    let renditions = if device.supports_hls_subtitles == Some(true) {
+    let renditions = if item.is_none() && device.supports_hls_subtitles == Some(true) {
         Some(burn_in::renditions(st, &file).await)
     } else {
         None
@@ -247,7 +357,7 @@ async fn run(
                 path: file.absolute.to_string_lossy().into_owned(),
                 ext: file.ext.clone(),
                 content_type: file.content_type.to_owned(),
-                parts: vec![],
+                parts: item.as_ref().map_or_else(Vec::new, |it| it.parts.clone()),
             },
             info: file.info.clone().unwrap_or_default(),
             scan: held.scan,
@@ -289,7 +399,7 @@ async fn run(
             }
             Ok::<_, EngineError>(open)
         },
-        side_reads(st, a, &file, fps, early_pre_roll)
+        side_reads(st, a, &file, fps, early_pre_roll, item.as_ref())
     );
     let open = match open {
         Ok(o) => o,
@@ -309,10 +419,17 @@ async fn run(
         (&client, &tags),
         position,
     );
-    rescan_hint(st, &open, &file, held.version);
-    Ok(assemble(
-        &open, &file, position, markers, chapters, pre_roll, edl,
-    ))
+    if item.is_none() {
+        rescan_hint(st, &open, &file, held.version);
+    }
+    let mut out = assemble(&open, &file, position, markers, chapters, pre_roll, edl);
+    if let (Some(it), Some(o)) = (&item, out.as_object_mut()) {
+        o.insert("itemId".into(), it.item.into());
+        o.insert("mediaFileId".into(), file.id.into());
+        o.insert("version".into(), it.version.into());
+        o.insert("durationSeconds".into(), it.duration.into());
+    }
+    Ok(out)
 }
 
 fn check_engine(st: &AppState) -> Result<(), AppError> {
@@ -417,6 +534,7 @@ async fn side_reads(
     file: &ResolvedFile,
     fps: Option<f64>,
     asked: Option<Option<Vec<preroll::Item>>>,
+    parts: Option<&ItemOpen>,
 ) -> (
     Option<db::Markers>,
     Vec<Chapter>,
@@ -436,19 +554,26 @@ async fn side_reads(
             let Some(item) = file.item_id else {
                 return Vec::new();
             };
+            if let Some(it) = parts {
+                return db::item_chapters(&st.db, item, &it.spans)
+                    .await
+                    .map_err(|e| tracing::warn!("chapters not read for item #{item}: {e}"))
+                    .unwrap_or_default();
+            }
             db::chapters(&st.db, item, file.id)
                 .await
                 .map_err(|e| tracing::warn!("chapters not read for item #{item}: {e}"))
                 .unwrap_or_default()
         },
         async {
-            match asked {
-                Some(known) => known,
-                None => ask_pre_roll(st, a, file).await,
+            match (asked, parts) {
+                (_, Some(_)) => None,
+                (Some(known), None) => known,
+                (None, None) => ask_pre_roll(st, a, file).await,
             }
         },
         async {
-            if a.user.edl_enabled {
+            if a.user.edl_enabled && parts.is_none() {
                 edl::read(st, &file.absolute, fps).await
             } else {
                 None

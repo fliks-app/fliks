@@ -6,6 +6,7 @@ mod edl;
 mod file;
 mod hardware;
 mod info;
+mod item;
 mod media_jobs;
 mod preroll;
 mod qoe;
@@ -15,8 +16,9 @@ pub mod sprite;
 mod system;
 
 pub(crate) use edl::find as edl_sidecar;
-pub use file::{ResolvedFile, extname, resolve_file};
-pub use info::__path_playback_info;
+pub use file::{ResolvedFile, book_format, extname, resolve_file};
+pub use info::{__path_item_playback_info, __path_playback_info};
+pub(crate) use item::audio_parts_of_file;
 pub(crate) use media_jobs::{scan_file, sprite_file};
 pub use routes::{
     __path_delete_session, __path_edl, __path_effective_settings, __path_gpus, __path_hw_accel,
@@ -67,6 +69,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/stream/{mediaFileId}/playback-info",
             post(info::playback_info),
+        )
+        .route(
+            "/api/items/{itemId}/playback-info",
+            post(info::item_playback_info),
         )
         .route(
             "/api/stream/info/qualities/{mediaFileId}",

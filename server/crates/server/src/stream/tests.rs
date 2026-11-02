@@ -1112,3 +1112,350 @@ async fn a_file_is_hidden_when_any_linking_edition_is_hidden(pool: PgPool) {
     let err = crate::libraries::assert_file_accessible(&c.pool, c.file, &libs).await;
     assert!(err.is_err());
 }
+
+struct Book {
+    media: i32,
+    audio: i32,
+    text: i32,
+    files: [i32; 2],
+    epub: i32,
+}
+
+fn audio_info(seconds: f64, chapter: &str) -> Value {
+    json!({
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2", "formatStartSeconds": 0, "durationSeconds": seconds,
+        "video": [], "audio": [{"streamIndex": 0, "codec": "aac", "channels": 2, "language": "und"}],
+        "subtitles": [],
+        "chapters": [{"startSeconds": 0, "endSeconds": seconds, "title": chapter}],
+    })
+}
+
+/// A book with an audio item of two parts (10 s and 20 s) and a text item of one file.
+async fn audiobook(c: &Ctx) -> Book {
+    for name in ["p1.m4a", "p2.m4a", "b.epub"] {
+        fs::write(c.dir.join(name), b"x").unwrap();
+    }
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, "type", "libraryId")
+           SELECT 'B', 'book', "libraryId" FROM media WHERE id = $1 RETURNING id"#,
+    )
+    .bind(c.media)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let mut item_of = [0; 2];
+    for (i, family) in ["audio", "text"].into_iter().enumerate() {
+        item_of[i] = sqlx::query_scalar(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id)
+               INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id"#,
+        )
+        .bind(media)
+        .bind(family)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    }
+    let mut files = [0; 3];
+    for (i, (name, info)) in [
+        ("p1.m4a", audio_info(10.0, "A")),
+        ("p2.m4a", audio_info(20.0, "B")),
+        ("b.epub", json!({})),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        files[i] = sqlx::query_scalar(
+            r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "folderId")
+               VALUES ($1, 1, 'x', $2, $3, (SELECT min(id) FROM library_folders)) RETURNING id"#,
+        )
+        .bind(name)
+        .bind(info)
+        .bind(media)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    }
+    for (item, file, position) in [
+        (item_of[0], files[0], 0),
+        (item_of[0], files[1], 1),
+        (item_of[1], files[2], 0),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position)
+               VALUES ($1, $2, $3, 0, $4)"#,
+        )
+        .bind(item)
+        .bind(file)
+        .bind(media)
+        .bind(position)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    }
+    Book {
+        media,
+        audio: item_of[0],
+        text: item_of[1],
+        files: [files[0], files[1]],
+        epub: files[2],
+    }
+}
+
+async fn item_info(c: &Ctx, token: &str, item: i32, query: &str) -> (u16, Value) {
+    let uri = format!("/api/items/{item}/playback-info{query}");
+    call(c, "POST", &uri, token, Some(device())).await
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_audio_item_opens_one_session_over_all_its_parts(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    let (status, body) = item_info(&c, &c.token, b.audio, "?startAt=5&burnInSubtitleId=3").await;
+    assert_eq!(status, 201, "{body}");
+    let req = &c.fake.seen("POST", "/v1/sessions")[0].body;
+    let media = &req["decide"]["media"];
+    assert_eq!(media["mediaFileId"], b.files[0]);
+    let parts = media["parts"].as_array().unwrap();
+    assert_eq!(parts.len(), 2);
+    assert!(parts[0]["path"].as_str().unwrap().ends_with("p1.m4a"));
+    assert!(parts[1]["path"].as_str().unwrap().ends_with("p2.m4a"));
+    assert_eq!(parts[1]["info"]["durationSeconds"], 20.0);
+    assert!(media["path"].as_str().unwrap().ends_with("p1.m4a"));
+    assert_eq!(req["startAtS"], 5.0);
+    assert!(req["sourceVersion"].as_str().unwrap().contains('|'));
+    assert!(req.get("burnIn").is_none());
+    assert_eq!(
+        (
+            body["itemId"].as_i64(),
+            body["mediaFileId"].as_i64(),
+            body["version"].as_i64()
+        ),
+        (Some(b.audio.into()), Some(b.files[0].into()), Some(0))
+    );
+    assert_eq!(body["durationSeconds"], 30.0);
+    let chapters = body["chapters"].as_array().unwrap();
+    let span = |i: usize| {
+        (
+            chapters[i]["startSeconds"].as_f64(),
+            chapters[i]["endSeconds"].as_f64(),
+        )
+    };
+    assert_eq!(
+        (chapters.len(), span(0), span(1)),
+        (2, (Some(0.0), Some(10.0)), (Some(10.0), Some(30.0)))
+    );
+    let file: Option<i32> = sqlx::query_scalar(
+        r#"SELECT "mediaFileId" FROM playback_states WHERE "userId" = $1 AND "itemId" = $2"#,
+    )
+    .bind(c.user)
+    .bind(b.audio)
+    .fetch_optional(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        file,
+        Some(b.files[0]),
+        "the state of the item names the delivery file"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_item_route_refuses_what_is_not_a_visible_audio_item(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    let t = viewer(&c).await;
+    let movie: i32 = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = $1"#)
+        .bind(c.media)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let msg = |b: &Value| b["message"].as_str().map(str::to_owned);
+    let (s, body) = item_info(&c, &t, b.text, "").await;
+    assert_eq!(
+        (s, msg(&body)),
+        (400, Some(format!("Item #{} is not an audio item", b.text)))
+    );
+    let (s, body) = item_info(&c, &t, movie, "").await;
+    assert_eq!(
+        (s, msg(&body)),
+        (400, Some(format!("Item #{movie} is not an audio item")))
+    );
+    let missing = format!("Item #{} not found", b.audio + 1000);
+    let (s, body) = item_info(&c, &t, b.audio + 1000, "").await;
+    assert_eq!((s, msg(&body)), (404, Some(missing)));
+    let (s, body) = item_info(&c, &c.token, b.audio, "?version=7").await;
+    assert_eq!(
+        (s, msg(&body)),
+        (404, Some(format!("Item #{} has no version 7", b.audio)))
+    );
+    sqlx::query(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('Hidden') RETURNING id) UPDATE editions SET "libraryId" = (SELECT id FROM l) WHERE "mediaId" = $1"#)
+        .bind(b.media)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, body) = item_info(&c, &t, b.audio, "").await;
+    assert_eq!(
+        (s, msg(&body)),
+        (404, Some(format!("Item #{} not found", b.audio)))
+    );
+    assert!(c.fake.seen("POST", "/v1/sessions").is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_item_version_is_the_requested_then_the_saved_then_the_highest(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    std::fs::write(c.dir.join("solo.m4a"), b"x").unwrap();
+    let solo: i32 = sqlx::query_scalar(
+        r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "folderId")
+                      VALUES ('solo.m4a', 1, 'x', $2, $1, (SELECT min(id) FROM library_folders)) RETURNING id),
+                p AS (INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position)
+                      SELECT $3, id, $1, 1, 0 FROM f RETURNING 1)
+           SELECT id FROM f"#,
+    )
+    .bind(b.media)
+    .bind(audio_info(30.0, "All"))
+    .bind(b.audio)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let delivered = |body: &Value| body["mediaFileId"].as_i64();
+    let (s, body) = item_info(&c, &c.token, b.audio, "").await;
+    assert_eq!((s, delivered(&body)), (201, Some(solo.into())), "highest");
+    let (_, body) = item_info(&c, &c.token, b.audio, "?version=0").await;
+    assert_eq!(delivered(&body), Some(b.files[0].into()), "requested");
+    sqlx::query(
+        r#"UPDATE playback_states SET "mediaFileId" = $3 WHERE "userId" = $1 AND "itemId" = $2"#,
+    )
+    .bind(c.user)
+    .bind(b.audio)
+    .bind(b.files[1])
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (_, body) = item_info(&c, &c.token, b.audio, "").await;
+    assert_eq!(
+        delivered(&body),
+        Some(b.files[0].into()),
+        "saved: the version of the state"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_with_two_editions_is_named_by_its_item_on_the_playback_routes(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    let state = format!("/api/playback/media/{}/state", b.media);
+    let beat = |item: Value, body: Value| {
+        let mut o = body.as_object().unwrap().clone();
+        o.insert("itemId".into(), item);
+        Value::Object(o)
+    };
+    let (s, body) = call(
+        &c,
+        "PUT",
+        &state,
+        &c.token,
+        Some(json!({"mediaFileId": b.epub, "progression": 0.4})),
+    )
+    .await;
+    assert_eq!((s, body["message"].as_str()), (409, Some("ambiguous_item")));
+    let text_beat = json!({"mediaFileId": b.epub, "progression": 0.4, "locator": {"href": "c1.xhtml", "locations": {"progression": 0.5}}});
+    let (s, body) = call(
+        &c,
+        "PUT",
+        &state,
+        &c.token,
+        Some(beat(b.text.into(), text_beat)),
+    )
+    .await;
+    assert_eq!(s, 200, "{body}");
+    assert_eq!(
+        (
+            body["state"]["progression"].as_f64(),
+            body["state"]["completed"].as_bool()
+        ),
+        (Some(0.4), Some(false))
+    );
+    assert_eq!(body["state"]["locator"]["href"], "c1.xhtml");
+    let (_, body) = call(
+        &c,
+        "GET",
+        &format!("{state}?itemId={}", b.text),
+        &c.token,
+        None,
+    )
+    .await;
+    assert_eq!(body["progression"], 0.4);
+    let (_, body) = call(
+        &c,
+        "GET",
+        &format!("{state}?itemId={}", b.audio),
+        &c.token,
+        None,
+    )
+    .await;
+    assert_eq!(
+        body,
+        Value::Null,
+        "the audio edition has no state of its own yet"
+    );
+    let other = beat(json!(b.audio + 1000), json!({"mediaFileId": b.epub}));
+    let (s, body) = call(&c, "PUT", &state, &c.token, Some(other)).await;
+    assert_eq!(
+        (s, body["state"].clone()),
+        (200, Value::Null),
+        "an item of another media names none"
+    );
+    let done = beat(
+        b.text.into(),
+        json!({"mediaFileId": b.epub, "progression": 0.995}),
+    );
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(done)).await;
+    assert_eq!(
+        body["state"]["completed"], true,
+        "the last page finishes a text item"
+    );
+    let (s, _) = call(
+        &c,
+        "DELETE",
+        &format!("{state}?itemId={}", b.text),
+        &c.token,
+        None,
+    )
+    .await;
+    assert_eq!(s, 200);
+    let left: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM playback_states"#)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_audio_item_finishes_at_98_percent_or_in_its_last_chapter(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    let state = format!("/api/playback/media/{}/state", b.media);
+    let beat = |position: f64, file: i32| json!({"itemId": b.audio, "mediaFileId": file, "positionSeconds": position, "durationSeconds": 30.0});
+    let done = |body: &Value| body["state"]["completed"].as_bool();
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(5.0, b.files[0]))).await;
+    assert_eq!(done(&body), Some(false));
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(10.0, b.files[0]))).await;
+    assert_eq!(
+        done(&body),
+        Some(true),
+        "10 s is the start of the second chapter"
+    );
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(2.0, b.files[0]))).await;
+    assert_eq!(done(&body), Some(false), "a rewind reopens it");
+    sqlx::query(r#"DELETE FROM item_markers WHERE "itemId" = $1"#)
+        .bind(b.audio)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(25.0, b.files[0]))).await;
+    assert_eq!(done(&body), Some(false), "no chapters, 83 %");
+    let (_, body) = call(&c, "PUT", &state, &c.token, Some(beat(29.6, b.files[0]))).await;
+    assert_eq!(done(&body), Some(true), "98 %");
+}

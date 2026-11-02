@@ -19,6 +19,7 @@ use fliks_domain::acl::{Action, Permissions, Subject};
 use fliks_engine_core::{
     api::{
         ResolveCredentialSource, ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse,
+        ResolvedPart,
     },
     jsnum,
 };
@@ -375,6 +376,30 @@ async fn locate(
     let file = resolve_file(st, user, perms, id).await?;
     let file = file.to_string_lossy().into_owned();
     match req.purpose {
+        ResolvePurpose::Stream | ResolvePurpose::Download => {
+            let parts = crate::stream::audio_parts_of_file(&st.db, id as i32).await?;
+            if parts.is_empty() {
+                let format = crate::stream::book_format(&crate::stream::extname(&file));
+                return Ok(found(Some(file), format));
+            }
+            let mut out = Vec::with_capacity(parts.len());
+            for p in parts {
+                let path = resolve_file(st, user, perms, p.id as u32).await?;
+                let path = path.to_string_lossy().into_owned();
+                out.push(ResolvedPart {
+                    format: crate::stream::book_format(&crate::stream::extname(&path))
+                        .map(str::to_owned),
+                    path,
+                    duration_s: p.duration,
+                    start_s: None,
+                    end_s: None,
+                });
+            }
+            Ok(ResolveResponse {
+                parts: out,
+                ..found(None, None)
+            })
+        }
         ResolvePurpose::Sprite => {
             let sprite = crate::paths::cache_dir()
                 .join("thumbnails")
