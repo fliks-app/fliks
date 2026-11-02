@@ -12,6 +12,7 @@ Item delivery: [`spec/item-delivery.md`](spec/item-delivery.md) (audio and text 
 
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash).
 Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
+KOReader sync: [`spec/kosync.md`](spec/kosync.md) (kosync server: routes, wire, auth by device token, document hash, shared progression).
 
 Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item parts: what a media is made of).
 

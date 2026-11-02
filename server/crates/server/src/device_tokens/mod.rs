@@ -89,6 +89,17 @@ pub async fn lookup(db: &PgPool, secret: &str, source: Source) -> Result<Option<
     .await
 }
 
+/// The owner of the `kosync` row whose token has the MD5 `key` (`kosync.md` rule 3); a hit stamps `lastUsedAt`.
+pub async fn kosync_owner(db: &PgPool, key: &str) -> Result<Option<i32>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"UPDATE device_tokens SET "lastUsedAt" = now()
+           WHERE "hash" = $1 AND "kind" = 'kosync' RETURNING "userId""#,
+    )
+    .bind(hash(key))
+    .fetch_optional(db)
+    .await
+}
+
 /// Whether some kind opens the data plane through `source`.
 pub fn accepts(source: Source) -> bool {
     Kind::ALL.iter().any(|k| k.sources().contains(&source))
