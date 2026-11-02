@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.type AS \"kind!\", m.\"posterUrl\" AS poster_url,\n  m.\"fanartUrl\" AS fanart_url, m.status::text AS \"status!\", m.year,\n  dates.by_kind AS \"dates!: Value\",\n  EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m\nLEFT JOIN LATERAL (SELECT jsonb_object_agg(kind, to_char(date, 'YYYY-MM-DD')) AS by_kind\n                   FROM media_release_dates WHERE \"mediaId\" = m.id) dates ON true\nWHERE m.type = ANY($6)\n  AND EXISTS (SELECT 1 FROM media_release_dates w WHERE w.\"mediaId\" = m.id\n              AND w.date BETWEEN $1::text::date AND $2::text::date)\n  AND ($3::bool IS NOT TRUE OR m.monitored = true) AND ($4::int IS NULL OR m.\"addedById\" = $4)\n  AND m.\"libraryId\" = ANY($5)\nORDER BY m.id",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.type AS \"kind!\", m.\"posterUrl\" AS poster_url,\n  m.\"fanartUrl\" AS fanart_url, m.status::text AS \"status!\", m.year,\n  dates.by_kind AS \"dates!: Value\",\n  EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m\nLEFT JOIN LATERAL (SELECT jsonb_object_agg(kind, to_char(date, 'YYYY-MM-DD')) AS by_kind\n                   FROM media_release_dates WHERE \"mediaId\" = m.id AND \"editionId\" IS NULL) dates ON true\nWHERE m.type = ANY($6)\n  AND EXISTS (SELECT 1 FROM media_release_dates w WHERE w.\"mediaId\" = m.id AND w.\"editionId\" IS NULL\n              AND w.date BETWEEN $1::text::date AND $2::text::date)\n  AND ($3::bool IS NOT TRUE OR m.monitored = true) AND ($4::int IS NULL OR m.\"addedById\" = $4)\n  AND m.\"libraryId\" = ANY($5)\nORDER BY m.id",
   "describe": {
     "columns": [
       {
@@ -110,5 +110,5 @@
       null
     ]
   },
-  "hash": "b7462f6f4c2e5b786cd36ae7422637012a1baf83f99810eab10231579f6eab52"
+  "hash": "7ec24a3ddc0b042bc8010c0a759f76b41079864576f88839b1dcdc05fbdff103"
 }

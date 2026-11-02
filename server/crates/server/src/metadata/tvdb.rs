@@ -446,8 +446,8 @@ impl MetadataProvider for Tvdb {
         ExternalProvider::Tvdb
     }
 
-    fn supports(&self, _kind: MediaKind) -> bool {
-        true
+    fn supports(&self, kind: MediaKind) -> bool {
+        kind.is_video()
     }
 
     fn has_persons(&self) -> bool {

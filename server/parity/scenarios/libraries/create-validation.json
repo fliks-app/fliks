@@ -49,7 +49,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "each value in mediaTypes must be one of the following values: movie, series"
+            "each value in mediaTypes must be one of the following values: movie, series, book"
           ],
           "statusCode": 400
         },

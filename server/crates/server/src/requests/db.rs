@@ -246,6 +246,19 @@ pub async fn library_exists(db: &PgPool, id: i32) -> sqlx::Result<bool> {
     .await
 }
 
+/// The name of library `id` when its `mediaTypes` lacks `kind`.
+pub async fn library_refusing(
+    db: &PgPool,
+    id: i32,
+    kind: MediaKind,
+) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar(r#"SELECT name FROM libraries WHERE id = $1 AND NOT "mediaTypes" ? $2"#)
+        .bind(id)
+        .bind(kind.as_str())
+        .fetch_optional(db)
+        .await
+}
+
 /// Serialises the duplicate check and the insert of one title's ADD requests until the transaction ends.
 pub async fn lock_title(tx: &mut PgConnection, t: &TitleKey) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
@@ -733,7 +746,7 @@ LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_dat
              max(date) FILTER (WHERE kind = 'digital') AS digital_date,
              max(date) FILTER (WHERE kind = 'physical') AS physical_date,
              max(date) FILTER (WHERE kind = 'release') AS release_date
-           FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
+           FROM media_release_dates WHERE "mediaId" = m.id AND "editionId" IS NULL) dates ON true
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_release_dates (\"mediaId\", kind, date)\n           SELECT m.id, t.kind, t.date::timestamptz::date FROM media m, UNNEST($2::text[], $3::text[]) AS t(kind, date)\n           WHERE m.id = $1\n           ON CONFLICT ON CONSTRAINT \"UQ_media_release_dates\" DO UPDATE SET date = EXCLUDED.date\n           WHERE media_release_dates.date IS DISTINCT FROM EXCLUDED.date",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "36682968792c11b11eb8b499dffc2c2b0d998f4c2abb4f49e146c31c0d537c20"
+}

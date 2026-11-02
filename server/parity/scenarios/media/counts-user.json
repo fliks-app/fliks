@@ -6,6 +6,7 @@
       "as": "user",
       "expect": {
         "body": {
+          "books": 0,
           "movies": 41,
           "series": 8
         },

@@ -582,7 +582,7 @@ impl Tmdb {
         let external = match source {
             ExternalProvider::Imdb => "imdb_id",
             ExternalProvider::Tvdb => "tvdb_id",
-            ExternalProvider::Tmdb => return Ok(None),
+            _ => return Ok(None),
         };
         let d = self
             .get(
@@ -684,8 +684,8 @@ impl MetadataProvider for Tmdb {
         ExternalProvider::Tmdb
     }
 
-    fn supports(&self, _kind: MediaKind) -> bool {
-        true
+    fn supports(&self, kind: MediaKind) -> bool {
+        kind.is_video()
     }
 
     fn has_persons(&self) -> bool {

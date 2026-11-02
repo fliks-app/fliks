@@ -14,6 +14,7 @@
       "expect": {
         "body": {
           "avatar": null,
+          "bookQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "changed@parity.test",

@@ -1,4 +1,5 @@
 //! TMDB / TVDB clients and `/api/metadata/*` (`docs/spec/metadata.md`); other domains call `Metadata` in process.
+pub mod books;
 mod credits;
 mod http;
 mod language;
@@ -16,7 +17,7 @@ mod types;
 pub use http::{Guarded, Observed, Upstream};
 pub use language::{LanguageCache, Override};
 pub use orchestrator::{Key, prune_snapshots};
-pub use provider::{MetadataProvider, Search};
+pub use provider::{EditionRef, MetadataProvider, Search};
 pub use routes::*;
 pub use types::{Credits, MetaError, PersonDetails};
 

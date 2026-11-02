@@ -6,6 +6,7 @@
       "as": "readonly",
       "expect": {
         "body": {
+          "books": 0,
           "movies": 40,
           "series": 0
         },

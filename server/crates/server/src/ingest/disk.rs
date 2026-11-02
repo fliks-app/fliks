@@ -496,7 +496,7 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
 fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppError> {
     if name.is_empty() {
         match media_type {
-            MediaKind::Movie => return Ok(String::new()),
+            MediaKind::Movie | MediaKind::Book => return Ok(String::new()),
             MediaKind::Series => {}
         }
     }

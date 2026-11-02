@@ -90,6 +90,9 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         "",
     );
     let media_type = c.kind("mediaType", false);
+    if media_type.is_some_and(|m| !m.is_video()) {
+        c.err("mediaType", "must be movie or series");
+    }
     let kind = c.one_of("kind", &KINDS, true);
     // `media_external_ids` and `requests` hold nine digits at most
     let tmdb_id = match o.get("tmdbId") {
@@ -293,8 +296,8 @@ pub fn title_state(q: &[(String, String)]) -> Res<(i32, MediaKind)> {
             AppError::bad_request("Validation failed (numeric string is expected)")
         })?)?;
     match one("mediaType").and_then(MediaKind::parse) {
-        Some(m) => Ok((tmdb, m)),
-        None => Err(AppError::bad_request(vec![format!(
+        Some(m) if m.is_video() => Ok((tmdb, m)),
+        _ => Err(AppError::bad_request(vec![format!(
             "mediaType {}",
             MediaKind::one_of_message()
         )])),
@@ -435,7 +438,7 @@ mod tests {
         assert_eq!(
             msgs(create_request(json!({}))),
             json!([
-                "mediaType must be one of the following values: movie, series",
+                "mediaType must be one of the following values: movie, series, book",
                 "tmdbId must not be less than 1",
                 "tmdbId must be an integer number",
                 "title must be a string"

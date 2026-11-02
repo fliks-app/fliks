@@ -184,6 +184,8 @@ Rust unit tests: cookie attribute matrix (rule 47: secure x origin, `X-Forwarded
 
 Parity scenarios: 60 files in `server/parity/scenarios/auth/`. Cookie assertions use `expect.headers` for `Set-Cookie` (`ignore` timestamps and tokens). The 30 s grace and replay-after-grace cannot be aged by the runner (no SQL step): the Rust unit tests above cover them.
 
+The payload of a user carries `bookQuotaLimit` (`books.md` rule 19).
+
 ## Open questions
 
 None.

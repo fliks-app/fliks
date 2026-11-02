@@ -102,6 +102,7 @@ pub async fn tracking(db: &PgPool, id: i32) -> Result<Option<Value>, sqlx::Error
             ));
         }
         MediaKind::Series => {}
+        MediaKind::Book => return Ok(None),
     }
     let mut by_episode: HashMap<i32, Vec<&str>> = HashMap::new();
     for f in &files {

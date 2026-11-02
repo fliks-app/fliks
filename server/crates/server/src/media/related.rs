@@ -50,7 +50,7 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
     };
     let library = match crate::db::kind(&src.kind)? {
         MediaKind::Movie => src.library_id,
-        MediaKind::Series => None,
+        MediaKind::Series | MediaKind::Book => None,
     };
     let Some(library) = library else {
         return Ok(vec![]);
@@ -178,7 +178,7 @@ pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError>
        m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
 FROM media m
 JOIN collection_entries ce ON ce."mediaId" = m.id AND ce."itemId" IS NULL
-LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d.kind = 'release') dates ON true
+LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d."editionId" IS NULL AND d.kind = 'release') dates ON true
 WHERE m."libraryId" = $1 AND ce."collectionId" = $2
 ORDER BY ce.position ASC NULLS LAST, dates.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
         library,

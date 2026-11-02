@@ -91,6 +91,7 @@
       "as": "admin",
       "expect": {
         "body": {
+          "books": 0,
           "movies": 20,
           "series": 9
         },

@@ -88,6 +88,8 @@ Seed delta (deterministic SQL, no external calls): ~12 persons (provider `tmdb` 
 
 Scenarios (`server/parity/scenarios/persons/`, 25 files, `as` in `admin|user|readonly|anon`): `search-prefix` (`q=cla` ranked, `LIMIT 50`), `search-multi-word`, `search-empty-lists-all` (order by name), `search-blank-spaces`, `search-none`, `search-accents`, `search-apostrophe`, `search-unauth` (401), `search-syntax-chars`, `detail-fresh` (no HTTP, mock hit counter 0), `detail-refresh-tmdb` (stale: biography/avatar updated), `detail-refresh-null-fields`, `detail-refresh-provider-fail` (mock 500: stale row served, `metadataRefreshedAt` unchanged), `detail-refresh-404-fallback` (TMDB 404, TVDB answers, `provider` pinned to `tvdb` on a following read), `detail-avatar-null` (image 404: avatarUrl unchanged), `detail-tvdb`, `detail-notfound` (404 body), `detail-bad-id` (`abc`, `007`, `1e1` → 400), `detail-unauth`, `detail-acl` (`as readonly`: restricted library credits omitted, `path` omitted), `credits-owned` (mediaId linked), `credits-404-fallback`, `credits-type-collision`, `credits-upstream-fail` (503), `credits-unauth`. Image file assertions (`persons/<id>.jpg` bytes equal the mock's, `persons/<id>-thumb.jpg` width 45, `persons/<id>.src.json`) are in the runner's `files` check for the refresh scenarios.
 
+`persons."sortName"` and the authors and narrators lists and works routes: `books.md` rule 14 and `books-api.md`.
+
 ## Open questions
 
 None.

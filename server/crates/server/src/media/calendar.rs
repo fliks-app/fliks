@@ -64,9 +64,9 @@ pub async fn calendar(
   EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
 FROM media m
 LEFT JOIN LATERAL (SELECT jsonb_object_agg(kind, to_char(date, 'YYYY-MM-DD')) AS by_kind
-                   FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
+                   FROM media_release_dates WHERE "mediaId" = m.id AND "editionId" IS NULL) dates ON true
 WHERE m.type = ANY($6)
-  AND EXISTS (SELECT 1 FROM media_release_dates w WHERE w."mediaId" = m.id
+  AND EXISTS (SELECT 1 FROM media_release_dates w WHERE w."mediaId" = m.id AND w."editionId" IS NULL
               AND w.date BETWEEN $1::text::date AND $2::text::date)
   AND ($3::bool IS NOT TRUE OR m.monitored = true) AND ($4::int IS NULL OR m."addedById" = $4)
   AND m."libraryId" = ANY($5)

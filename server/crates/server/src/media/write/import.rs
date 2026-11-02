@@ -238,6 +238,7 @@ async fn folder_format(db: &sqlx::PgPool, media_type: MediaKind) -> Result<Strin
     let default = match media_type {
         MediaKind::Movie => "{Original Title} ({Release Year})",
         MediaKind::Series => "{Series Title}",
+        MediaKind::Book => "",
     };
     let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
         .fetch_optional(db)
@@ -268,6 +269,7 @@ fn folder_name(format: &str, media_type: MediaKind, d: &Details) -> String {
                 tmdb_id,
             },
         ),
+        MediaKind::Book => String::new(),
     }
 }
 
@@ -287,6 +289,7 @@ pub fn map_status(media_type: MediaKind, status: &str) -> &'static str {
             "announced" => "announced",
             _ => "tba",
         },
+        MediaKind::Book => "released",
     }
 }
 
@@ -384,8 +387,14 @@ struct Common {
 }
 
 fn common(b: &Body) -> Result<Common, AppError> {
+    let media_type = b.required_kind("type")?;
+    if !media_type.is_video() {
+        return Err(AppError::bad_request(format!(
+            "tmdb does not support {media_type}"
+        )));
+    }
     Ok(Common {
-        media_type: b.required_kind("type")?,
+        media_type,
         quality: b.id("qualityProfileId")?.flatten(),
         language: b.id("languageProfileId")?.flatten(),
         library: b.id("libraryId")?.flatten(),

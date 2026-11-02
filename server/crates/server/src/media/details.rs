@@ -12,19 +12,19 @@ pub fn dates_join(alias: &str) -> String {
         format!("max(date) FILTER (WHERE kind = '{k}') AS {k}_date")
     });
     format!(
-        r#"LEFT JOIN LATERAL (SELECT {} FROM media_release_dates WHERE "mediaId" = {alias}.id) dates ON true"#,
+        r#"LEFT JOIN LATERAL (SELECT {} FROM media_release_dates WHERE "mediaId" = {alias}.id AND "editionId" IS NULL) dates ON true"#,
         cols.join(", ")
     )
 }
 
 /// The `voteCount` of media `alias`, read from the details table of its kind; NULL when unknown.
 pub fn vote_count(alias: &str) -> String {
-    let tables = MediaKind::ALL.map(|k| match k {
-        MediaKind::Movie => "movie_details",
-        MediaKind::Series => "series_details",
+    let tables = MediaKind::ALL.into_iter().filter_map(|k| match k {
+        MediaKind::Movie => Some("movie_details"),
+        MediaKind::Series => Some("series_details"),
+        MediaKind::Book => None,
     });
     let reads: Vec<String> = tables
-        .iter()
         .map(|t| format!(r#"(SELECT d."voteCount" FROM {t} d WHERE d."mediaId" = {alias}.id)"#))
         .collect();
     format!("COALESCE({})", reads.join(", "))
@@ -48,7 +48,7 @@ pub async fn set_release_dates(
         r#"INSERT INTO media_release_dates ("mediaId", kind, date)
            SELECT m.id, t.kind, t.date::timestamptz::date FROM media m, UNNEST($2::text[], $3::text[]) AS t(kind, date)
            WHERE m.id = $1
-           ON CONFLICT ("mediaId", kind) DO UPDATE SET date = EXCLUDED.date
+           ON CONFLICT ON CONSTRAINT "UQ_media_release_dates" DO UPDATE SET date = EXCLUDED.date
            WHERE media_release_dates.date IS DISTINCT FROM EXCLUDED.date"#,
         media,
         &given as &[&str],
@@ -65,7 +65,7 @@ pub async fn set_release_dates(
         .collect();
     if !keep_on_null && !cleared.is_empty() {
         changed |= sqlx::query!(
-            r#"DELETE FROM media_release_dates WHERE "mediaId" = $1 AND kind = ANY($2)"#,
+            r#"DELETE FROM media_release_dates WHERE "mediaId" = $1 AND "editionId" IS NULL AND kind = ANY($2)"#,
             media,
             &cleared as &[&str]
         )
@@ -180,6 +180,17 @@ pub async fn write_details(
                 flags[1],
                 flags[2],
                 flags[3]
+            )
+            .execute(&mut *c)
+            .await?;
+        }
+        MediaKind::Book => {
+            sqlx::query!(
+                r#"INSERT INTO book_details ("mediaId", "originalLanguage") VALUES ($1, $2)
+                   ON CONFLICT ("mediaId") DO UPDATE SET
+                     "originalLanguage" = COALESCE(EXCLUDED."originalLanguage", book_details."originalLanguage")"#,
+                media_id,
+                language
             )
             .execute(&mut *c)
             .await?;

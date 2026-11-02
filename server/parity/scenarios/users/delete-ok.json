@@ -20,6 +20,7 @@
         "body": [
           {
             "avatar": null,
+            "bookQuotaLimit": 0,
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
             "email": "admin@parity.test",
@@ -56,6 +57,7 @@
           },
           {
             "avatar": null,
+            "bookQuotaLimit": 0,
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
             "email": "manager@parity.test",
@@ -97,6 +99,7 @@
           },
           {
             "avatar": null,
+            "bookQuotaLimit": 0,
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
             "email": "readonly@parity.test",
@@ -137,6 +140,7 @@
           },
           {
             "avatar": null,
+            "bookQuotaLimit": 0,
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
             "email": "user@parity.test",

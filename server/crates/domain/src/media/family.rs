@@ -50,9 +50,10 @@ mod tests {
     }
 
     #[test]
-    fn every_kind_is_wished_in_video() {
-        for k in MediaKind::ALL {
+    fn video_kinds_are_wished_in_video_and_a_book_in_text_and_audio() {
+        for k in [MediaKind::Movie, MediaKind::Series] {
             assert_eq!(k.families(), [Family::Video]);
         }
+        assert_eq!(MediaKind::Book.families(), [Family::Text, Family::Audio]);
     }
 }

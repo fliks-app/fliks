@@ -321,6 +321,12 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
         assert_exist(st, None, None, Some(l)).await?;
+        if let Some(name) = db::library_refusing(&st.db, l, dto.media_type).await? {
+            return Err(AppError::bad_request(format!(
+                "Library \"{name}\" does not accept {}",
+                dto.media_type
+            )));
+        }
     }
     let library_id = match dto.library_id {
         Some(l) => l,

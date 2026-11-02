@@ -151,7 +151,7 @@ pub async fn items(
     let paths = paths_visible(&a.perms);
     let rows = sqlx::query!(
         r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
-                  (to_jsonb(m) - 'searchVector') || jsonb_build_object(
+                  (to_jsonb(m) - 'searchVector' - 'sortCreator') || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
@@ -188,7 +188,7 @@ pub async fn items(
                         max(date) FILTER (WHERE kind = 'digital') AS digital_date,
                         max(date) FILTER (WHERE kind = 'physical') AS physical_date,
                         max(date) FILTER (WHERE kind = 'release') AS release_date
-                      FROM media_release_dates WHERE "mediaId" = m.id) dates ON true
+                      FROM media_release_dates WHERE "mediaId" = m.id AND "editionId" IS NULL) dates ON true
            LEFT JOIN wants w ON w."mediaId" = m.id AND w.family = 'video'
            LEFT JOIN quality_profiles q ON q.id = w."qualityProfileId"
            LEFT JOIN language_profiles lp ON lp.id = m."languageProfileId"

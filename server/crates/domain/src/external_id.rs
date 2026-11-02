@@ -1,6 +1,8 @@
 //! The id namespaces an entity is known by outside Fliks, as stored in `media_external_ids.provider`.
 use std::fmt;
 
+use crate::{books::isbn, js::rx};
+
 /// The largest id of a numeric provider: nine digits, as `media_external_ids` checks.
 pub const MAX_NUMERIC_ID: i32 = 999_999_999;
 
@@ -9,16 +11,45 @@ pub enum ExternalProvider {
     Tmdb,
     Tvdb,
     Imdb,
+    OpenLibrary,
+    GoogleBooks,
+    Bnf,
+    Audible,
+    Audnexus,
+    Isbn,
+    Asin,
+    /// Provenance of a value read from a file; never stored as an id.
+    File,
 }
 
 impl ExternalProvider {
-    pub const ALL: [Self; 3] = [Self::Tmdb, Self::Tvdb, Self::Imdb];
+    pub const ALL: [Self; 11] = [
+        Self::Tmdb,
+        Self::Tvdb,
+        Self::Imdb,
+        Self::OpenLibrary,
+        Self::GoogleBooks,
+        Self::Bnf,
+        Self::Audible,
+        Self::Audnexus,
+        Self::Isbn,
+        Self::Asin,
+        Self::File,
+    ];
 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Tmdb => "tmdb",
             Self::Tvdb => "tvdb",
             Self::Imdb => "imdb",
+            Self::OpenLibrary => "openlibrary",
+            Self::GoogleBooks => "googlebooks",
+            Self::Bnf => "bnf",
+            Self::Audible => "audible",
+            Self::Audnexus => "audnexus",
+            Self::Isbn => "isbn",
+            Self::Asin => "asin",
+            Self::File => "file",
         }
     }
 
@@ -28,6 +59,14 @@ impl ExternalProvider {
             Self::Tmdb => "TMDB",
             Self::Tvdb => "TVDB",
             Self::Imdb => "IMDb",
+            Self::OpenLibrary => "Open Library",
+            Self::GoogleBooks => "Google Books",
+            Self::Bnf => "BnF",
+            Self::Audible => "Audible",
+            Self::Audnexus => "Audnexus",
+            Self::Isbn => "ISBN",
+            Self::Asin => "ASIN",
+            Self::File => "file",
         }
     }
 
@@ -37,29 +76,30 @@ impl ExternalProvider {
 
     /// Whether the provider's ids are positive integers (`media_external_ids` checks it).
     pub const fn is_numeric(self) -> bool {
-        match self {
-            Self::Tmdb | Self::Tvdb => true,
-            Self::Imdb => false,
-        }
+        matches!(self, Self::Tmdb | Self::Tvdb)
     }
 
-    /// Whether one id names at most one media of a kind: TMDB does, TVDB and IMDb do not (TMDB
-    /// splits a TVDB show into several, and a title can be catalogued twice).
+    /// Whether one id names at most one media of a kind: TMDB and OpenLibrary do, the others do not
+    /// (TMDB splits a TVDB show into several, and a title can be catalogued twice).
     pub const fn is_unique(self) -> bool {
-        match self {
-            Self::Tmdb => true,
-            Self::Tvdb | Self::Imdb => false,
-        }
+        matches!(self, Self::Tmdb | Self::OpenLibrary)
     }
 
     /// `value` as stored for this provider, or `None` when it is not an id of it.
     pub fn normalize(self, value: &str) -> Option<String> {
-        let ok = if self.is_numeric() {
-            (1..=9).contains(&value.len())
-                && !value.starts_with('0')
-                && value.bytes().all(|b| b.is_ascii_digit())
-        } else {
-            !value.is_empty()
+        let ok = match self {
+            Self::Tmdb | Self::Tvdb => {
+                (1..=9).contains(&value.len())
+                    && !value.starts_with('0')
+                    && value.bytes().all(|b| b.is_ascii_digit())
+            }
+            Self::Imdb => !value.is_empty(),
+            Self::Isbn => return isbn::parse(value).map(|i| i.isbn13),
+            Self::Asin => rx!(r"^[0-9A-Z]{10}$").is_match(value),
+            Self::OpenLibrary => rx!(r"^OL[1-9][0-9]*[WMA]$").is_match(value),
+            Self::Bnf => rx!(r"^cb[0-9a-z]+$").is_match(value),
+            Self::GoogleBooks => rx!(r"^[A-Za-z0-9_-]{1,32}$").is_match(value),
+            Self::Audible | Self::Audnexus | Self::File => false,
         };
         ok.then(|| value.to_owned())
     }
@@ -85,9 +125,41 @@ mod tests {
     }
 
     #[test]
-    fn only_tmdb_is_unique() {
+    fn only_tmdb_and_openlibrary_are_unique() {
         let unique: Vec<_> = P::ALL.into_iter().filter(|p| p.is_unique()).collect();
-        assert_eq!(unique, [P::Tmdb]);
+        assert_eq!(unique, [P::Tmdb, P::OpenLibrary]);
+    }
+
+    #[test]
+    fn book_ids_are_normalized_per_namespace() {
+        assert_eq!(
+            P::Isbn.normalize("0-306-40615-2").as_deref(),
+            Some("9780306406157")
+        );
+        assert_eq!(P::Isbn.normalize("9780306406158"), None);
+        assert_eq!(
+            P::Asin.normalize("B002V0QK4C").as_deref(),
+            Some("B002V0QK4C")
+        );
+        for bad in ["b002v0qk4c", "B002V0QK4", "B002V0QK4CC"] {
+            assert_eq!(P::Asin.normalize(bad), None, "{bad}");
+        }
+        for ok in ["OL45883W", "OL7353617M", "OL26320A"] {
+            assert_eq!(P::OpenLibrary.normalize(ok).as_deref(), Some(ok));
+        }
+        for bad in ["OL0W", "OL12", "ol12W", "OL12X"] {
+            assert_eq!(P::OpenLibrary.normalize(bad), None, "{bad}");
+        }
+        assert_eq!(
+            P::Bnf.normalize("cb123456789").as_deref(),
+            Some("cb123456789")
+        );
+        assert_eq!(P::Bnf.normalize("CB1"), None);
+        assert_eq!(P::GoogleBooks.normalize("a-Z_9").as_deref(), Some("a-Z_9"));
+        assert_eq!(P::GoogleBooks.normalize(&"a".repeat(33)), None);
+        for p in [P::Audible, P::Audnexus, P::File] {
+            assert_eq!(p.normalize("B002V0QK4C"), None, "{p}");
+        }
     }
 
     #[test]

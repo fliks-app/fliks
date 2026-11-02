@@ -34,7 +34,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "items.0.type must be one of the following values: movie, series",
+            "items.0.type must be one of the following values: movie, series, book",
             "items.0.folderName must be a string",
             "items.0.files must contain at least 1 elements",
             "items.0.files must be an array"

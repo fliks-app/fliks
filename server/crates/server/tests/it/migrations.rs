@@ -2054,3 +2054,196 @@ async fn m1789000190_names_groups_and_items_in_the_remaining_tables(pool: PgPool
         .unwrap();
     assert_eq!(sub, None, "a subtitle outlives its item");
 }
+
+async fn rejected(pool: &PgPool, queries: &[&str]) {
+    for q in queries {
+        assert!(
+            sqlx::raw_sql(sqlx::AssertSqlSafe(*q))
+                .execute(pool)
+                .await
+                .is_err(),
+            "{q}"
+        );
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000200_adds_the_book_kind_and_its_edition_facts(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_200).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'm', 'movie');
+          INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'video');
+          INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (1, 'release', '2020-01-01')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_200).await;
+
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (2, 'b', 'book'), (3, 'c', 'book');
+          INSERT INTO persons (id, name) VALUES (1, 'p');
+          INSERT INTO collections (id, name) VALUES (1, 'c');
+          INSERT INTO book_details ("mediaId", subtitle, "originalLanguage", subjects)
+            VALUES (2, 's', 'fr', '["Fantasy"]');
+          INSERT INTO editions (id, "mediaId", family, language, format, "pageCount", "durationSeconds")
+            VALUES (10, 2, 'text', 'fr', 'epub', 320, NULL), (11, 2, 'audio', 'fr', 'm4b', NULL, 3600);
+          INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value)
+            VALUES (10, 2, 'isbn', '9782999000018'), (10, 2, 'isbn', '9782999000025'),
+                   (11, 2, 'isbn', '9782999000018'), (11, 2, 'asin', 'B002V0QK4C');
+          INSERT INTO edition_field_sources ("editionId", field, provider) VALUES (10, 'title', 'bnf');
+          INSERT INTO media_release_dates ("mediaId", "editionId", kind, date)
+            VALUES (2, 10, 'release', '2019-05-01'), (2, 11, 'release', '2020-05-01'), (2, NULL, 'release', '2019-05-01');
+          INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (2, 'book', 'openlibrary', 'OL45883W');
+          INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'openlibrary', 'OL26320A');
+          INSERT INTO collection_external_ids ("collectionId", provider, value) VALUES (1, 'asin', 'B002V0QK4C')"#,
+    )
+    .await;
+
+    let json: serde_json::Value = sqlx::query_scalar("SELECT media_details_json(2)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(json["originalLanguage"], "fr");
+    assert!(json["budget"].is_null() && json["keywords"].is_null());
+
+    rejected(
+        &pool,
+        &[
+            r#"INSERT INTO media (id, title, type) VALUES (9, 'x', 'comic')"#,
+            r#"INSERT INTO book_details ("mediaId") VALUES (1)"#,
+            r#"INSERT INTO book_details ("mediaId") VALUES (2)"#,
+            r#"INSERT INTO editions ("mediaId", family) VALUES (2, 'image')"#,
+            r#"INSERT INTO editions ("mediaId", family, format) VALUES (2, 'text', 'EPUB')"#,
+            r#"INSERT INTO editions ("mediaId", family, "pageCount") VALUES (2, 'text', 0)"#,
+            r#"INSERT INTO editions ("mediaId", family, "durationSeconds") VALUES (2, 'audio', 0)"#,
+            r#"INSERT INTO editions ("mediaId", family, "libraryId") VALUES (2, 'text', 99)"#,
+            r#"INSERT INTO edition_external_ids VALUES (10, 2, 'isbn', '9782999000018')"#,
+            r#"INSERT INTO edition_external_ids VALUES (10, 2, 'isbn', '123')"#,
+            r#"INSERT INTO edition_external_ids VALUES (10, 2, 'openlibrary', 'OL1W')"#,
+            r#"INSERT INTO edition_external_ids VALUES (10, 3, 'asin', 'B002V0QK4D')"#,
+            r#"INSERT INTO edition_external_ids VALUES (10, 2, 'tmdb', '603')"#,
+            r#"INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (2, 10, 'release', '2021-01-01')"#,
+            r#"INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (2, 'release', '2021-01-01')"#,
+            r#"INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (3, 10, 'release', '2021-01-01')"#,
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (3, 'book', 'openlibrary', 'OL45883W')"#,
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (3, 'book', 'openlibrary', 'OL12M')"#,
+            r#"INSERT INTO person_external_ids VALUES (1, 'bnf', '12')"#,
+            r#"INSERT INTO collection_external_ids VALUES (1, 'bnf', 'x1')"#,
+        ],
+    )
+    .await;
+
+    let work_level: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM media_release_dates WHERE "mediaId" = 1 AND "editionId" IS NULL"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(work_level, 1, "an existing date is a work-level date");
+
+    sql(&pool, "DELETE FROM editions WHERE id = 10").await;
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT COUNT(*) FROM edition_external_ids WHERE "editionId" = 10)
+              + (SELECT COUNT(*) FROM edition_field_sources WHERE "editionId" = 10)
+              + (SELECT COUNT(*) FROM media_release_dates WHERE "editionId" = 10)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "edition rows go with their edition");
+}
+
+async fn sort_creator(pool: &PgPool, media: i32) -> Option<String> {
+    sqlx::query_scalar(r#"SELECT "sortCreator" FROM media WHERE id = $1"#)
+        .bind(media)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn bumped(pool: &PgPool) -> i64 {
+    sqlx::query_scalar(r#"SELECT COUNT(*) FROM media WHERE "updatedAt" > '2020-01-02'"#)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000200_keeps_the_sort_creator_of_a_book_current(pool: PgPool) {
+    apply(&pool, |_| true).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type, "updatedAt")
+            VALUES (1, 'b', 'book', '2020-01-01'), (2, 'm', 'movie', '2020-01-01');
+          INSERT INTO persons (id, name, "sortName")
+            VALUES (1, 'Ursula Le Guin', 'Le Guin, Ursula'), (2, 'Zed Writer', NULL), (3, 'An Actor', NULL);
+          INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (1, 2, 'author', 1)"#,
+    )
+    .await;
+    assert_eq!(sort_creator(&pool, 1).await.as_deref(), Some("Zed Writer"));
+    sql(
+        &pool,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (1, 1, 'author', 0)"#,
+    )
+    .await;
+    assert_eq!(
+        sort_creator(&pool, 1).await.as_deref(),
+        Some("Le Guin, Ursula")
+    );
+    sql(
+        &pool,
+        r#"UPDATE persons SET "sortName" = 'Guin, Ursula Le' WHERE id = 1"#,
+    )
+    .await;
+    assert_eq!(
+        sort_creator(&pool, 1).await.as_deref(),
+        Some("Guin, Ursula Le")
+    );
+    sql(&pool, r#"DELETE FROM media_credits WHERE "personId" = 1"#).await;
+    sql(&pool, r#"UPDATE persons SET name = 'Zed' WHERE id = 2"#).await;
+    assert_eq!(sort_creator(&pool, 1).await.as_deref(), Some("Zed"));
+    sql(
+        &pool,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role, job, department)
+            VALUES (1, 3, 'crew', 'j', 'd');
+          INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (2, 3, 'author', 0)"#,
+    )
+    .await;
+    assert_eq!(
+        sort_creator(&pool, 1).await.as_deref(),
+        Some("Zed"),
+        "only authors count"
+    );
+    sql(&pool, r#"DELETE FROM media_credits WHERE "personId" = 2"#).await;
+    assert_eq!(sort_creator(&pool, 1).await, None);
+    sql(
+        &pool,
+        r#"INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (1, 3, 'author', 0)"#,
+    )
+    .await;
+    assert_eq!(sort_creator(&pool, 1).await.as_deref(), Some("An Actor"));
+    sql(
+        &pool,
+        r#"UPDATE media_credits SET role = 'crew', job = 'j', department = 'd'
+            WHERE "mediaId" = 1 AND "personId" = 3 AND role = 'author'"#,
+    )
+    .await;
+    assert_eq!(
+        sort_creator(&pool, 1).await,
+        None,
+        "an author turned crew leaves the sort key"
+    );
+    let gated: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_trigger WHERE tgrelid = 'media_credits'::regclass
+           AND tgname LIKE 'sort_creator_%' AND tgqual IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(gated, 3, "each trigger is gated on the author role");
+
+    assert_eq!(bumped(&pool).await, 0, "a sort key change leaves updatedAt");
+    sql(&pool, r#"UPDATE media SET title = 'b2' WHERE id = 1"#).await;
+    assert_eq!(bumped(&pool).await, 1, "any other change does");
+}
