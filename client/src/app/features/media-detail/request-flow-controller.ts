@@ -100,7 +100,7 @@ export class RequestFlowController {
    *  deletion request scoped to the whole title (movie or series). */
   async requestDeletion() {
     const m = this.host.media();
-    if (!m || m.tmdbId == null) return;
+    if (!m || m.tmdbId == null || m.type === 'book') return;
     if (
       !(await this.deps.confirmation.confirm({
         title: this.deps.translate.instant('media_detail.request_deletion_title'),
@@ -139,7 +139,7 @@ export class RequestFlowController {
 
   private openModal(extra: { preselectedSeasons?: number[] }) {
     const m = this.host.media();
-    if (!m || m.tmdbId == null) return;
+    if (!m || m.tmdbId == null || m.type === 'book') return;
     const state = this.titleState();
     this.host.requestModal()?.open({
       title: m.title,

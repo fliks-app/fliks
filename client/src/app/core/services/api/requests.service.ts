@@ -24,8 +24,11 @@ export type FliksRequestStatus =
  *  is already imported. Omitting `kind` on create defaults to an add request. */
 export type RequestKind = 'add' | 'delete';
 
+/** The kinds TMDB names: requested by `tmdbId`. */
+export type VideoMediaType = Exclude<MediaType, 'book'>;
+
 export interface CreateVideoRequestBody {
-  mediaType: Exclude<MediaType, 'book'>;
+  mediaType: VideoMediaType;
   tmdbId: number;
   title: string;
   kind?: RequestKind;

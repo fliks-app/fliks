@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
-import { RequestsService } from '../../../../core/services/api/requests.service';
+import { RequestsService, VideoMediaType } from '../../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
@@ -63,7 +63,7 @@ export class RequestModalComponent {
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly title = signal('');
-  readonly mediaType = signal<MediaType>('movie');
+  readonly mediaType = signal<VideoMediaType>('movie');
   readonly tmdbId = signal(0);
   readonly qualityProfileId = signal<number | null>(null);
   readonly languageProfileId = signal<number | null>(null);
@@ -118,7 +118,7 @@ export class RequestModalComponent {
 
   open(params: {
     title: string;
-    mediaType: MediaType;
+    mediaType: VideoMediaType;
     tmdbId: number;
     alreadyRequestedSeasons?: number[];
     /** Pre-ticks these seasons on open (still editable), filtered against `alreadyRequestedSeasons`. */
