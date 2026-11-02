@@ -16,6 +16,7 @@ pub mod install;
 pub mod jobs;
 pub mod logs;
 pub mod manifest;
+pub mod namespaces;
 pub mod outbound;
 pub mod packages;
 pub mod provider;

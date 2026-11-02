@@ -432,6 +432,7 @@ impl Plugins {
         let Some(pkg) = packages::find(&self.db, id).await? else {
             if delete_data && fliks_domain::plugins::legal_plugin_id(id) {
                 super::db::deprovision(&self.db, id).await?;
+                super::namespaces::delete_data(&self.db, id).await?;
                 let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
             }
             return Ok(());
@@ -456,6 +457,7 @@ impl Plugins {
         if pkg.is_process() {
             if delete_data {
                 super::db::deprovision(&self.db, id).await?;
+                super::namespaces::delete_data(&self.db, id).await?;
             } else {
                 super::db::orphan(&self.db, id, pkg.verified_by_key_id.as_deref()).await?;
             }
