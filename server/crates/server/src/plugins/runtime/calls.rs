@@ -82,6 +82,7 @@ impl PluginRt {
                 queue_wait: d.pre_roll,
                 inclusive: true,
                 soft: false,
+                background: false,
             }
         } else {
             Budget {
@@ -89,6 +90,7 @@ impl PluginRt {
                 queue_wait: d.queue_wait,
                 inclusive: false,
                 soft: false,
+                background: false,
             }
         };
         self.http
@@ -161,6 +163,11 @@ impl PluginRt {
             .map_err(CallError::Guest)
     }
 
+    /// Bumped by each settings change.
+    pub fn config_gen(&self) -> u64 {
+        self.cfg_gen.load(Ordering::SeqCst)
+    }
+
     /// Every live instance sees `config-changed` before its next call.
     pub fn config_changed(&self, keys: Vec<String>) {
         *self.cfg_keys.lock_clean() = keys;
@@ -170,5 +177,38 @@ impl PluginRt {
     /// `residentSetSizeBytes`: linear memory in use, `None` with no instance up.
     pub fn memory(&self) -> Option<u64> {
         (self.live_instances() > 0).then(|| self.sh.mem_total.load(Ordering::Relaxed) as u64)
+    }
+
+    /// Waits at most `wait` for a starting plugin to turn `ready`; the other states fail at once.
+    pub async fn wait_ready(&self, wait: Duration) -> Result<(), CallError> {
+        let mut w = self.watch();
+        let started = |s: State| matches!(s, State::Starting | State::Handshaking);
+        if started(*w.borrow_and_update()) {
+            let _ = tokio::time::timeout(wait, w.wait_for(|s| !started(*s))).await;
+        }
+        match self.state() {
+            State::Ready => Ok(()),
+            s => Err(CallError::Unavailable(s.as_str().into())),
+        }
+    }
+
+    /// One export of the `metadata-provider` interface on the provider lane (rules 49-51).
+    pub async fn provider_call<R: Send + 'static>(
+        self: &Arc<Self>,
+        budget: Budget,
+        wait: Duration,
+        p: Priority,
+        f: impl for<'a> FnOnce(&'a mut Inst) -> BoxFuture<'a, wasmtime::Result<R>> + Send + 'static,
+    ) -> Result<R, CallError> {
+        let lane = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| CallError::Unavailable("not a provider".into()))?;
+        self.wait_ready(wait).await?;
+        let run = call_fn(move |i| {
+            i.store.data_mut().set_priority(p);
+            f(i)
+        });
+        lane.call(self, budget, run).await
     }
 }

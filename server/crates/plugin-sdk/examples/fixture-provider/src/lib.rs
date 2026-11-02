@@ -2,7 +2,7 @@
 
 use fliks_plugin_sdk::{ExternalId, HttpRequest, HttpResponse, Plugin, host, json_response};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    Lang, MetadataProvider, ProviderError, SearchQuery, UpstreamError, export_provider,
 };
 use serde_json::json;
 
@@ -21,13 +21,68 @@ impl Plugin for Fixture {
 
 impl MetadataProvider for Fixture {
     fn search(q: SearchQuery, _lang: Lang) -> Result<String, ProviderError> {
+        if q.query == "scalars" {
+            return Ok("[1]".into());
+        }
         Ok(json!([{ "title": q.query, "ids": { "org.example.anime:aid": "1" } }]).to_string())
     }
     fn fetch_work(_kind: String, id: ExternalId, lang: Lang) -> Result<String, ProviderError> {
         match id.value.as_str() {
             "1" => Ok(json!({ "title": "Sample", "language": lang.locale }).to_string()),
+            "not-json" => Ok("{".into()),
+            "array" => Ok("[]".into()),
+            "huge" => {
+                let mut s = String::with_capacity((16 << 20) + 16);
+                s.push_str(r#"{"title":""#);
+                s.extend(std::iter::repeat_n('x', 16 << 20));
+                s.push_str(r#""}"#);
+                Ok(s)
+            }
+            "unauthorized" => Err(ProviderError::Unauthorized),
+            "slow" => {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                Ok(json!({ "title": "slow" }).to_string())
+            }
+            "slow-unauthorized" => {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                Err(ProviderError::Unauthorized)
+            }
+            "unsupported" => Err(ProviderError::Unsupported),
+            "limited" => Err(ProviderError::RateLimited(Some(7))),
+            "upstream" => Err(ProviderError::Upstream(UpstreamError {
+                status: Some(503),
+                message: "maintenance".into(),
+            })),
+            "trap" => panic!("fixture trap"),
             _ => Err(ProviderError::NotFound),
         }
+    }
+    fn fetch_children(
+        _kind: String,
+        _id: ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
+        Ok(json!([{ "seasonNumber": 1, "episodes": [] }]).to_string())
+    }
+    fn find_by(
+        source: ExternalId,
+        _lang: Lang,
+    ) -> Result<Option<(ExternalId, String)>, ProviderError> {
+        Ok(matches!(source.value.as_str(), "tt1" | "tt3").then(|| {
+            let provider = if source.value == "tt1" {
+                "tmdb"
+            } else {
+                "other"
+            }
+            .to_owned();
+            (
+                ExternalId {
+                    provider,
+                    value: "1".into(),
+                },
+                "series".into(),
+            )
+        }))
     }
 }
 

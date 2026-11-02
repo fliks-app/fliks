@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::future::{Future, poll_fn};
 use std::net::{IpAddr, SocketAddr};
 use std::pin::{Pin, pin};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, ready};
 use std::time::{Duration, Instant, SystemTime};
@@ -35,6 +35,8 @@ pub struct Outbound {
     pub gate: Option<Arc<Gate>>,
     /// The export in progress in this Store (rule 58).
     pub priority: Priority,
+    /// When the export in progress is interrupted.
+    pub deadline: Instant,
     pub over: Arc<Override>,
 }
 
@@ -55,6 +57,7 @@ impl WasiHttpHooks for Outbound {
         let permits = self.permits.clone();
         let gate = self.gate.clone();
         let priority = self.priority;
+        let left = self.deadline.saturating_duration_since(Instant::now());
         let internal = self.internal | self.over.rewrite(request.uri_mut());
         Box::new(async move {
             // The call's deadline aborts a guest still queued here, like any other host wait.
@@ -97,7 +100,7 @@ impl WasiHttpHooks for Outbound {
                 }
             };
             let replayable = || rec.lock_clean().replayable();
-            match gate.run(priority, attempt, replayable).await {
+            match gate.run(priority, left, attempt, replayable).await {
                 Done::Reply(r) => {
                     let (res, io): Attempt = r.inner;
                     Ok((res, io))
@@ -111,6 +114,8 @@ impl WasiHttpHooks for Outbound {
 
 /// An interactive request never waits longer than this, token waits and pauses together.
 const INTERACTIVE_BUDGET_MS: u64 = 5_000;
+/// Consecutive failures that open the breaker.
+const BREAKER_FAILURES: u32 = 3;
 const BACKGROUND_RETRIES: u32 = 3;
 const INTERACTIVE_RETRIES: u32 = 1;
 const SLOW_CALL_MS: u64 = 1_000;
@@ -202,6 +207,8 @@ pub struct Gate {
     breaker: Mutex<Breaker>,
     clock: Arc<dyn Clock>,
     slow_logged: AtomicBool,
+    /// Malformed records in a row (rule 14).
+    malformed: AtomicU32,
     /// `requestTimeoutMs`: connection and response headers of each attempt.
     pub timeout: Duration,
 }
@@ -211,11 +218,12 @@ impl Gate {
         Self {
             id: id.into(),
             limiter: Mutex::new(Limiter::new(limits)),
-            breaker: Mutex::new(Breaker::new(3, 30_000)),
+            breaker: Mutex::new(Breaker::new(BREAKER_FAILURES, 30_000)),
             clock: Arc::new(SystemClock {
                 started: Instant::now(),
             }),
             slow_logged: AtomicBool::new(false),
+            malformed: AtomicU32::new(0),
             timeout,
         }
     }
@@ -224,11 +232,11 @@ impl Gate {
     pub fn from_block(id: &str, block: &Value) -> Option<Self> {
         let l = block.get("limits")?;
         let rate = l.get("ratePerSec")?.as_f64()?;
-        let mut limits = Limits::new(rate, l.get("burst")?.as_u64()? as u32);
+        let mut limits = Limits::new(rate, u32::try_from(l.get("burst")?.as_u64()?).ok()?);
         limits.daily_quota = l
             .get("dailyQuota")
             .and_then(Value::as_u64)
-            .map(|q| q as u32);
+            .and_then(|q| u32::try_from(q).ok());
         if let Some(s) = l.get("backgroundShare").and_then(Value::as_f64) {
             limits.background_share = s;
         }
@@ -274,6 +282,19 @@ impl Gate {
         self.limiter.lock_clean().pause_until(now, until);
     }
 
+    /// A record that parsed (`true`) or not: the failure of its export, which the 2xx of the request
+    /// already cleared, so a run of `BREAKER_FAILURES` opens the breaker.
+    pub fn record_checked(&self, valid: bool) {
+        if valid {
+            self.malformed.store(0, Ordering::Relaxed);
+        } else if self.malformed.fetch_add(1, Ordering::Relaxed) + 1 >= BREAKER_FAILURES {
+            self.malformed.store(0, Ordering::Relaxed);
+            for _ in 0..BREAKER_FAILURES {
+                self.record(Outcome::Transient);
+            }
+        }
+    }
+
     fn refusal(&self, status: u16, retry_after_secs: Option<u64>, reason: &str) -> Refusal {
         Refusal {
             status,
@@ -296,8 +317,8 @@ impl Gate {
         }
     }
 
-    /// A token, waited for and counted against the quota; an interactive call gives up past its budget.
-    async fn admit(&self, p: Priority, waited: &mut u64) -> Result<(), Refusal> {
+    /// A token, waited for and counted against the quota; a call gives up past `budget_ms` of waiting.
+    async fn admit(&self, p: Priority, budget_ms: u64, waited: &mut u64) -> Result<(), Refusal> {
         loop {
             let taken = self
                 .limiter
@@ -308,7 +329,7 @@ impl Gate {
                 Err(Wait::QuotaSpent) => return Err(self.refusal(429, None, "daily quota spent")),
                 Err(Wait::Wait(wait)) => wait,
             };
-            if p == Priority::Interactive && *waited + wait > INTERACTIVE_BUDGET_MS {
+            if *waited + wait > budget_ms {
                 return Err(self.refusal(
                     429,
                     Some(wait.div_ceil(1000)),
@@ -338,16 +359,23 @@ impl Gate {
     }
 
     /// Runs `attempt` through the breaker and the limiter, replaying a 429 or 503 while
-    /// `replayable()` holds and the counts and the interactive budget allow.
+    /// `replayable()` holds and the counts and the wait budget allow: 5 s interactive, never more
+    /// than `left` of the export's deadline.
     pub async fn run<R, E, Fut>(
         &self,
         p: Priority,
+        left: Duration,
         mut attempt: impl FnMut() -> Fut,
         replayable: impl Fn() -> bool,
     ) -> Done<R, E>
     where
         Fut: Future<Output = Result<Reply<R>, E>>,
     {
+        let left = u64::try_from(left.as_millis()).unwrap_or(u64::MAX);
+        let budget = match p {
+            Priority::Interactive => left.min(INTERACTIVE_BUDGET_MS),
+            Priority::Background => left,
+        };
         let (mut waited, mut retries) = (0, 0);
         // The throttle answer a replay follows: what the caller gets if the replay cannot go.
         let mut last: Option<Reply<R>> = None;
@@ -359,7 +387,7 @@ impl Gate {
                     "circuit open, upstream temporarily unreachable",
                 ));
             }
-            if let Err(refused) = self.admit(p, &mut waited).await {
+            if let Err(refused) = self.admit(p, budget, &mut waited).await {
                 return match last {
                     Some(r) => {
                         self.record(Outcome::of_status(r.status));
@@ -386,7 +414,7 @@ impl Gate {
                 let fits = match p {
                     Priority::Background => retries < BACKGROUND_RETRIES,
                     Priority::Interactive => {
-                        retries < INTERACTIVE_RETRIES && waited + pause <= INTERACTIVE_BUDGET_MS
+                        retries < INTERACTIVE_RETRIES && waited + pause <= budget
                     }
                 };
                 if fits && replayable() {
@@ -774,7 +802,7 @@ mod tests {
                 })
             }
         };
-        g.run(p, attempt, || replay).await
+        g.run(p, Duration::MAX, attempt, || replay).await
     }
 
     fn status(d: &Done<(), ()>) -> u16 {
@@ -868,6 +896,68 @@ mod tests {
         let h = AtomicU32::new(0);
         let d = call(&g, Interactive, &[(429, Some(0)); 9], &h, true).await;
         assert_eq!((status(&d), hits(&h)), (429, 2));
+    }
+
+    #[tokio::test]
+    async fn a_pause_past_the_export_deadline_is_answered_in_place_and_trips_nothing() {
+        let (g, clock) = gate(fast());
+        let h = AtomicU32::new(0);
+        let go = |left: u64| {
+            g.run(
+                Background,
+                Duration::from_secs(left),
+                || {
+                    h.fetch_add(1, Ordering::Relaxed);
+                    async {
+                        Ok::<_, ()>(Reply {
+                            status: 200,
+                            retry_after_ms: None,
+                            inner: (),
+                        })
+                    }
+                },
+                || true,
+            )
+        };
+        g.pause_secs(300);
+        for _ in 0..4 {
+            let d = go(120).await;
+            assert!(matches!(&d, Done::Refused(r) if r.status == 429));
+        }
+        assert_eq!((hits(&h), failures(&g)), (0, 0));
+        assert!(sleeps(&clock).is_empty());
+        // a pause that fits the time left is waited out
+        let (g2, clock2) = gate(fast());
+        g2.pause_secs(60);
+        let d = g2
+            .run(
+                Background,
+                Duration::from_secs(120),
+                || async {
+                    Ok::<_, ()>(Reply {
+                        status: 200,
+                        retry_after_ms: None,
+                        inner: (),
+                    })
+                },
+                || true,
+            )
+            .await;
+        assert_eq!(status(&d), 200);
+        assert_eq!(sleeps(&clock2), [60_000]);
+    }
+
+    #[test]
+    fn three_malformed_records_in_a_row_open_the_breaker() {
+        let (g, clock) = gate(fast());
+        g.record_checked(false);
+        g.record_checked(false);
+        g.record_checked(true);
+        g.record_checked(false);
+        g.record_checked(false);
+        assert_eq!(failures(&g), 0);
+        g.record_checked(false);
+        assert!(!g.breaker.lock().unwrap().allow(clock.now_ms()));
     }
 
     #[tokio::test]
@@ -1089,6 +1179,7 @@ mod tests {
             permits: Arc::new(Semaphore::new(4)),
             gate,
             priority: Background,
+            deadline: Instant::now() + Duration::from_secs(600),
             over: Arc::new(Override::default()),
         }
     }
