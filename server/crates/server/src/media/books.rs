@@ -235,6 +235,14 @@ WHERE s.provider = 'audnexus' AND s.resource = 'chapters' AND s.kind = $2 AND s.
     Ok(body.as_ref().map(audnexus).unwrap_or_default())
 }
 
+fn whole_ms(v: &Value) -> Option<u64> {
+    v.as_u64().or_else(|| {
+        v.as_f64()
+            .filter(|f| f.fract() == 0.0 && *f >= 0.0)
+            .map(|f| f as u64)
+    })
+}
+
 /// The `audnexus::Chapters` snapshot as `BookChapter[]`; an entry without a usable range is skipped.
 fn audnexus(body: &Value) -> Vec<Value> {
     body["chapters"]
@@ -242,7 +250,7 @@ fn audnexus(body: &Value) -> Vec<Value> {
         .into_iter()
         .flatten()
         .filter_map(|c| {
-            let (start, len) = (c["startMs"].as_u64()?, c["lengthMs"].as_u64()?);
+            let (start, len) = (whole_ms(&c["startMs"])?, whole_ms(&c["lengthMs"])?);
             Some(json!({
                 "title": c["title"].as_str(),
                 "startSeconds": start as f64 / 1000.0,

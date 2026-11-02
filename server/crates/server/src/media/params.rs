@@ -289,6 +289,11 @@ pub(crate) fn paging_of(
     default_limit: f64,
 ) -> Result<Option<(i64, i64)>, AppError> {
     let (page, limit) = (page.unwrap_or(1.0), limit.unwrap_or(default_limit));
+    if page < 1.0 {
+        return Err(AppError::bad_request(vec![
+            "page must not be less than 1".to_owned(),
+        ]));
+    }
     if limit <= 0.0 {
         return Ok(None);
     }

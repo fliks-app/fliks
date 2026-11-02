@@ -297,7 +297,7 @@ mod tests {
 
     async fn kinds(db: &PgPool, media: i32) -> Vec<String> {
         sqlx::query_scalar(
-            r#"SELECT kind FROM media_release_dates WHERE "mediaId" = $1 ORDER BY kind"#,
+            r#"SELECT kind FROM media_release_dates WHERE "mediaId" = $1 AND "editionId" IS NULL ORDER BY kind"#,
         )
         .bind(media)
         .fetch_all(db)

@@ -8,6 +8,21 @@ use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
 
+/// SQL array of the files of `media`'s editions hidden from the readable libraries bound between the two parts (`books.md` rule 22).
+pub(super) const HIDDEN_HEAD: &str = r#"ARRAY(SELECT hp."mediaFileId"
+  FROM items hi JOIN editions he ON he.id = hi."editionId" JOIN item_parts hp ON hp."itemId" = hi.id
+  WHERE media.type = 'book' AND hi."mediaId" = media.id
+    AND NOT COALESCE(he."libraryId", media."libraryId") = ANY("#;
+pub(super) const HIDDEN_TAIL: &str = "))";
+
+#[derive(sqlx::FromRow)]
+struct Row {
+    id: i32,
+    lib_path: Option<String>,
+    folder_name: Option<String>,
+    json: sqlx::types::Json<Value>,
+}
+
 /// `MLI` for `ids`, in that order; `sizeOnDisk` and `episodeStats` included, `watched`/`progressPercent` not.
 pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Value>, sqlx::Error> {
     items_view(db, ids, see_paths, false, None).await
@@ -22,8 +37,8 @@ pub async fn items_view(
     grid: bool,
     acl: Option<&[i32]>,
 ) -> Result<Vec<Value>, sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"SELECT media.id AS "id!", df.path AS lib_path, media."folderName" AS folder_name,
+    let sql = format!(
+        r#"SELECT media.id AS id, df.path AS lib_path, media."folderName" AS folder_name,
   (jsonb_build_object(
     'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
     'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
@@ -66,10 +81,10 @@ pub async fn items_view(
         AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g."mediaId" = media.id AND NOT g.id = ANY(hid.ids)))), '[]'::jsonb),
     'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids)), 0))
   || CASE WHEN $2 THEN jsonb_build_object('fileCount',
-       (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids))) ELSE '{}'::jsonb END
+       (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids))) ELSE '{{}}'::jsonb END
   || CASE WHEN media.type = ANY($6) AND st.total > 0 THEN
        jsonb_build_object('episodeStats', jsonb_build_object('totalEpisodes', st.total, 'downloadedEpisodes', st.downloaded))
-     ELSE '{}'::jsonb END) AS "json!: Value"
+     ELSE '{{}}'::jsonb END) AS json
 FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
 LEFT JOIN library_default_folders df ON df."libraryId" = media."libraryId"
@@ -80,10 +95,7 @@ LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '
   FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
   JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
   WHERE e."mediaId" = media.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
-LEFT JOIN LATERAL (SELECT COALESCE(array_agg(hp."mediaFileId"), ARRAY[]::int[]) AS ids
-  FROM items hi JOIN editions he ON he.id = hi."editionId" JOIN item_parts hp ON hp."itemId" = hi.id
-  WHERE $7::int[] IS NOT NULL AND media.type = 'book' AND hi."mediaId" = media.id
-    AND NOT COALESCE(he."libraryId", media."libraryId") = ANY($7)) hid ON true
+LEFT JOIN LATERAL (SELECT {HIDDEN_HEAD}$7{HIDDEN_TAIL} AS ids) hid ON true
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb
@@ -98,23 +110,24 @@ LEFT JOIN LATERAL (
          COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded
   FROM item_groups s JOIN items e ON e."groupId" = s.id
   WHERE s."mediaId" = media.id AND s."number" > 0) st ON media.type = ANY($6)
-WHERE media.id = ANY($1)"#,
-        ids,
-        grid,
-        external_ids::TMDB,
-        external_ids::TVDB,
-        external_ids::IMDB,
-        &MediaKind::seasonal_names() as &[&str],
-        acl
-    )
-    .fetch_all(db)
-    .await?;
+WHERE media.id = ANY($1)"#
+    );
+    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+        .bind(ids)
+        .bind(grid)
+        .bind(external_ids::TMDB)
+        .bind(external_ids::TVDB)
+        .bind(external_ids::IMDB)
+        .bind(MediaKind::seasonal_names().to_vec())
+        .bind(acl)
+        .fetch_all(db)
+        .await?;
     let mut by_id: HashMap<i32, _> = rows.into_iter().map(|r| (r.id, r)).collect();
     Ok(ids
         .iter()
         .filter_map(|id| by_id.remove(id))
         .map(|r| {
-            let mut v = r.json;
+            let mut v = r.json.0;
             let Some(obj) = v.as_object_mut() else {
                 return v;
             };

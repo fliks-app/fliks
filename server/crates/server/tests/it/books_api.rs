@@ -22,7 +22,8 @@ async fn ctx(pool: PgPool) -> Ctx {
         r#"
         INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read"]', false), (2, 'None', '[]', false);
         INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'plain', false, 1), (3, 'noperm', false, 2);
-        INSERT INTO libraries (id, name, path) VALUES (1, 'L1', '/b/one'), (2, 'L2', '/b/two');
+        INSERT INTO libraries (id, name) VALUES (1, 'L1'), (2, 'L2');
+        INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/one'), (2, '/b/two');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3);
         INSERT INTO persons (id, name, "sortName") VALUES (1, 'Una Writer', 'Writer, Una'), (2, 'Vic Voice', NULL), (3, 'Aaron Zed', NULL);
         INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES
@@ -37,12 +38,12 @@ async fn ctx(pool: PgPool) -> Ctx {
           (4, 12, 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL, NULL);
         INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (10, 1, 'release', '2002-02-02');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 10, 2), (3, 11, 3), (4, 12, 4);
-        INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "streamInfo") VALUES
-          (1, 10, 'a.epub', 1, 'EPUB', '{}'), (2, 10, 'a.m4b', 1, 'M4B', '{}'),
-          (3, 11, 'b1.m4b', 1, 'M4B', '{"durationSeconds": 100, "chapters": [
+        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
+          (1, 10, 1, 'a.epub', 1, 'EPUB', '{}'), (2, 10, 1, 'a.m4b', 1, 'M4B', '{}'),
+          (3, 11, 1, 'b1.m4b', 1, 'M4B', '{"durationSeconds": 100, "chapters": [
             {"title": "A", "startSeconds": 0, "endSeconds": 40}, {"title": "B", "startSeconds": 40, "endSeconds": 100}]}'),
-          (4, 11, 'b2.m4b', 1, 'M4B', '{"durationSeconds": 50, "chapters": [{"title": "C", "startSeconds": 0, "endSeconds": 50}]}'),
-          (5, 12, 'c.mp3', 1, 'MP3', '{"durationSeconds": 300}');
+          (4, 11, 1, 'b2.m4b', 1, 'M4B', '{"durationSeconds": 50, "chapters": [{"title": "C", "startSeconds": 0, "endSeconds": 50}]}'),
+          (5, 12, 1, 'c.mp3', 1, 'MP3', '{"durationSeconds": 300}');
         INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
           (1, 1, 10, 0, 0), (2, 2, 10, 0, 0), (3, 3, 11, 0, 0), (3, 4, 11, 0, 1), (4, 5, 12, 0, 0);
         INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES
@@ -516,5 +517,35 @@ async fn the_routes_need_media_read(pool: PgPool) {
         "/api/media/10/editions/1/chapters",
     ] {
         assert_eq!(c.get(&c.noperm, uri).await.0, 403, "{uri}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn file_filters_and_sorts_ignore_hidden_editions_files(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES (17, 'Only hidden', 2011, 'book', 1, 'o');
+        INSERT INTO editions (id, "mediaId", family, format, language, "libraryId") VALUES (5, 17, 'audio', 'm4b', 'en', 2);
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (5, 17, 5);
+        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES (6, 17, 1, 'o.m4b', 1, 'M4B', '{}');
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (5, 6, 17, 0, 0);
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let q = |f: &str| format!("/api/media?type=book&sortBy=title&{f}");
+    assert!(c.ids(&c.plain, &q("missing=true")).await.contains(&17));
+    assert!(!c.ids(&c.plain, &q("missing=false")).await.contains(&17));
+    assert!(!c.ids(&c.admin, &q("missing=true")).await.contains(&17));
+    assert!(c.ids(&c.admin, &q("missing=false")).await.contains(&17));
+    for (tok, shown) in [(&c.plain, false), (&c.admin, true)] {
+        let (s, v) = c
+            .get(tok, "/api/media/recently-added?mode=file&limit=50")
+            .await;
+        assert_eq!(s, 200, "{v}");
+        let has = v.as_array().unwrap().iter().any(|m| m["id"] == 17);
+        assert_eq!(has, shown);
     }
 }

@@ -129,15 +129,21 @@ fn push_scope(
     match p.missing {
         Some(true) => {
             qb.push(
-                " AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id) OR ",
+                " AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id AND ",
             );
+            push_not_hidden(qb, ids, "f");
+            qb.push(") OR ");
             qb.push(MISSING_EPISODE)
                 .push_bind(today)
                 .push(MISSING_EPISODE_TAIL)
                 .push(")");
         }
         Some(false) => {
-            qb.push(" AND (EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id) AND NOT ");
+            qb.push(
+                " AND (EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id AND ",
+            );
+            push_not_hidden(qb, ids, "f");
+            qb.push(") AND NOT ");
             qb.push(MISSING_EPISODE)
                 .push_bind(today)
                 .push(MISSING_EPISODE_TAIL)
@@ -180,6 +186,17 @@ fn push_scope(
     if let Some(map) = cutoff {
         push_cutoff(qb, map);
     }
+}
+
+/// `NOT <file>.id` among the hidden editions' files of `media`, for the readable libraries `ids`.
+fn push_not_hidden(qb: &mut QueryBuilder<Postgres>, ids: &[i32], file: &str) {
+    qb.push(format!(
+        " NOT {file}.id = ANY({}",
+        super::hydrate::HIDDEN_HEAD
+    ))
+    .push_bind(ids.to_vec())
+    .push(super::hydrate::HIDDEN_TAIL)
+    .push(")");
 }
 
 /// ` AND` an edition `e` readable through its own library, else the work's (`books.md` rule 22).
@@ -424,7 +441,9 @@ pub async fn recently_added(
     }
     let mut qb = QueryBuilder::new("SELECT media.id FROM media");
     if p.mode != "media" {
-        qb.push(" LEFT JOIN (SELECT mf.\"mediaId\" AS \"mediaId\", MAX(mf.\"createdAt\") AS added FROM media_files mf GROUP BY mf.\"mediaId\") lf ON lf.\"mediaId\" = media.id");
+        qb.push(" LEFT JOIN LATERAL (SELECT MAX(mf.\"createdAt\") AS added FROM media_files mf WHERE mf.\"mediaId\" = media.id AND");
+        push_not_hidden(&mut qb, ids, "mf");
+        qb.push(") lf ON true");
     }
     qb.push(" WHERE media.\"libraryId\" = ANY(")
         .push_bind(ids.to_vec())
