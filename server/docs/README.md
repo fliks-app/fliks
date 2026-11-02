@@ -15,6 +15,7 @@ OPDS: [`spec/opds.md`](spec/opds.md) (OPDS 1.2 catalogue on device tokens: route
 
 Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
 KOReader sync: [`spec/kosync.md`](spec/kosync.md) (kosync server: routes, wire, auth by device token, document hash, shared progression).
+Send to device: [`spec/email-devices.md`](spec/email-devices.md) (admin SMTP settings, e-mail devices, mailing a book edition file, limits).
 
 Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item parts: what a media is made of).
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE book_sends SET status = 'failed', error = 'interrupted'\n           WHERE status IN ('queued', 'sending')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "558df0cd19f3c50359c8811dcb526c5f3382563835f8e66af9b396f9c50c61db"
+}

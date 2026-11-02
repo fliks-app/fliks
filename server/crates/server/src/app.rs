@@ -123,6 +123,13 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::device_tokens::create,
         crate::device_tokens::renew,
         crate::device_tokens::remove,
+        crate::email::list,
+        crate::email::create,
+        crate::email::update,
+        crate::email::remove,
+        crate::email::send,
+        crate::email::recent,
+        crate::email::test_send,
         playback::recommendations,
         playback::dismiss,
         playback::dismissed_count,
@@ -439,6 +446,7 @@ fn api() -> Router<AppState> {
         .merge(events::router())
         .merge(remote::router())
         .merge(crate::device_tokens::router())
+        .merge(crate::email::router())
         .merge(crate::kosync::router())
         .merge(crate::party::router())
         .merge(playback::router())
