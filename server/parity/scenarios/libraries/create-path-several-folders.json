@@ -1,0 +1,49 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-create-path-several-folders",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/s1"
+      },
+      "expect": {
+        "body": {
+          "disk": {
+            "accessible": true
+          },
+          "id": 3,
+          "mediaCount": 0,
+          "path": "/tmp/fliks-parity/libs/s1",
+          "position": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries/2/folders"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/s2"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Path cannot be set on a library with several folders: use /libraries/2/folders",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/2"
+    }
+  ],
+  "strictMessage": true
+}

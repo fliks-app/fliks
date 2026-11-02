@@ -19,6 +19,7 @@
           "defaultLanguageProfileId": null,
           "defaultQualityProfileId": null,
           "disk": null,
+          "folders": [],
           "icon": null,
           "id": 3,
           "label": null,
@@ -51,6 +52,17 @@
           "disk": {
             "accessible": true
           },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 3,
+              "mediaCount": 0,
+              "path": "/tmp/fliks-parity/libs/set",
+              "position": 0
+            }
+          ],
           "icon": null,
           "id": 3,
           "label": null,

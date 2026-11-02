@@ -130,6 +130,7 @@ pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteErr
     .await?;
     let want = NewWant {
         quality_profile_id: m.quality_profile_id,
+        ..Default::default()
     };
     items::create_shell(&mut tx, id, m.media_type, want).await?;
     let ids = Ids {

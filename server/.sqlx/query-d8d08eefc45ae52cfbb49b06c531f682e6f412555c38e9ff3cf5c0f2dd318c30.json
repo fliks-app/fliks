@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"mediaId\" AS media_id\n        FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e\n          WHERE e.\"mediaId\" = $1 AND e.kind = r.\"mediaType\" AND e.provider = r.provider\n          AND e.value = r.\"externalId\")\n        ORDER BY id",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id\n        FROM requests WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -127,6 +127,17 @@
       },
       {
         "ordinal": 12,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "folderId"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
         "name": "media_id",
         "type_info": "Int4",
         "origin": {
@@ -139,8 +150,7 @@
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "TextArray"
+        "Int4"
       ]
     },
     "nullable": [
@@ -156,8 +166,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "c3d888ec97e12549a088364410eb36ed36c8dc41a4bc92d91e52fb85b8f7c758"
+  "hash": "d8d08eefc45ae52cfbb49b06c531f682e6f412555c38e9ff3cf5c0f2dd318c30"
 }

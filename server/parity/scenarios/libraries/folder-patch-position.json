@@ -1,0 +1,134 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-patch-position",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/p1"
+      },
+      "expect": {
+        "body": {
+          "disk": {
+            "accessible": true
+          },
+          "id": 3,
+          "mediaCount": 0,
+          "path": "/tmp/fliks-parity/libs/p1",
+          "position": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries/2/folders"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/p2"
+      },
+      "expect": {
+        "body": {
+          "disk": {
+            "accessible": true
+          },
+          "id": 4,
+          "mediaCount": 0,
+          "path": "/tmp/fliks-parity/libs/p2",
+          "position": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries/2/folders"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "position": 0
+      },
+      "expect": {
+        "body": {
+          "disk": {
+            "accessible": true
+          },
+          "id": 4,
+          "mediaCount": 0,
+          "path": "/tmp/fliks-parity/libs/p2",
+          "position": 0
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/2/folders/4"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "color": "#10b981",
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 4,
+              "mediaCount": 0,
+              "path": "/tmp/fliks-parity/libs/p2",
+              "position": 0
+            },
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 2,
+              "mediaCount": 3,
+              "path": "/tmp/fliks-parity/media/series",
+              "position": 1
+            },
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 3,
+              "mediaCount": 0,
+              "path": "/tmp/fliks-parity/libs/p1",
+              "position": 2
+            }
+          ],
+          "icon": "tv",
+          "id": 2,
+          "label": null,
+          "mediaTypes": [
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Series",
+          "path": "/tmp/fliks-parity/libs/p2",
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/2"
+    }
+  ],
+  "strictMessage": true
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT seg AS \"seg!\" FROM (SELECT split_part(\"relativePath\", '/', 1) AS seg, min(id) AS first\n        FROM media_files WHERE \"folderId\" = $1 GROUP BY 1) t ORDER BY first LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seg!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0d18001b72a374c6ac0641b21eaecb608905a0c9baf067700e3cd0a5abdc014d"
+}

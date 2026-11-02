@@ -19,12 +19,9 @@ use fliks_domain::{
 use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf};
 
-/// Rule 70: the folder a media delete may remove, `Err` with the reason it is kept.
-pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<PathBuf>, String> {
-    let (Some(lib), Some(folder)) = (
-        m.folder.as_ref().map(|f| f.path.as_str()),
-        m.folder_name.as_deref(),
-    ) else {
+/// Rule 70 for the folder rooted at `lib`: the media directory a delete may remove, `Err` with the reason it is kept.
+async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<PathBuf>, String> {
+    let Some(folder) = m.folder_name.as_deref() else {
         return Ok(None);
     };
     if folder.is_empty() || lib.is_empty() {
@@ -40,16 +37,17 @@ pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<P
             return Ok(None);
         }
     };
-    let roots: Vec<PathBuf> = sqlx::query_scalar!(r#"SELECT path FROM library_folders"#)
+    let all = sqlx::query!(r#"SELECT id, path FROM library_folders"#)
         .fetch_all(&st.db)
         .await
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(PathBuf::from)
-        .collect();
+        .map_err(|e| e.to_string())?;
+    let roots: Vec<PathBuf> = all.iter().map(|f| PathBuf::from(&f.path)).collect();
     let others: Vec<PathBuf> = sqlx::query!(
-        r#"SELECT df.path AS "lib!", m."folderName" AS "folder!" FROM media m
-           JOIN library_default_folders df ON df."libraryId" = m."libraryId"
+        r#"SELECT lf.path AS "lib!", m."folderName" AS "folder!" FROM media m
+           JOIN (SELECT "mediaId", "folderId" FROM media_files
+                 WHERE "mediaId" IS NOT NULL
+                 UNION SELECT "mediaId", "folderId" FROM media_target_folders) x ON x."mediaId" = m.id
+           JOIN library_folders lf ON lf.id = x."folderId"
            WHERE m.id <> $1 AND m."folderName" <> ''"#,
         m.id
     )
@@ -62,21 +60,54 @@ pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<P
     fsx::removable_media_dir(&root, folder, &roots, &others)
 }
 
+/// Rule 70 once per folder holding one of the media's files (`file_folders`) plus its target folder (libraries rule 55).
+pub async fn media_dirs_to_remove(
+    st: &AppState,
+    m: &MediaRow,
+    file_folders: &[i32],
+) -> Vec<Result<PathBuf, String>> {
+    let mut ids = file_folders.to_vec();
+    ids.extend(m.folder.as_ref().map(|f| f.id));
+    let rows = match sqlx::query!(
+        r#"SELECT path FROM library_folders WHERE id = ANY($1) ORDER BY id"#,
+        &ids
+    )
+    .fetch_all(&st.db)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => return vec![Err(e.to_string())],
+    };
+    let mut out = vec![];
+    for r in rows {
+        match media_dir_in(st, m, &r.path).await {
+            Ok(dir) => out.extend(dir.map(Ok)),
+            Err(why) => out.push(Err(why)),
+        }
+    }
+    out
+}
+
 /// `remove(id)` (rules 67-69): hook and row delete in one transaction; the caller holds the lock.
+/// Also answers the folders that held its files, unreadable once the rows are gone.
 pub async fn remove_media(
     st: &AppState,
     _guard: &tokio::sync::OwnedMutexGuard<()>,
     id: i32,
-) -> Result<MediaRow, AppError> {
+) -> Result<(MediaRow, Vec<i32>), AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    let files = sqlx::query_scalar!(
-        r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+    let rows = sqlx::query!(
+        r#"SELECT id, "folderId" AS folder_id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
         id
     )
     .fetch_all(&st.db)
     .await?;
+    let files: Vec<i32> = rows.iter().map(|r| r.id).collect();
+    let mut folders: Vec<i32> = rows.iter().map(|r| r.folder_id).collect();
+    folders.sort_unstable();
+    folders.dedup();
     crate::party::end_playing(st, id).await?;
     let mut tx = st.db.begin().await?;
     crate::requests::Lifecycle::of(st)
@@ -96,31 +127,31 @@ pub async fn remove_media(
         media_type: media.media_type,
     });
     crate::media_servers::dispatch_detached(st, "media.deleted");
-    Ok(media)
+    Ok((media, folders))
 }
 
-/// `remove_media` plus the folder it judged contained (`None` when kept); the caller holds the lock.
+/// `remove_media` plus the folders it judged contained; the caller holds the lock.
 pub async fn remove_media_with_dir(
     st: &AppState,
     guard: &tokio::sync::OwnedMutexGuard<()>,
     id: i32,
-) -> Result<(MediaRow, Option<PathBuf>), AppError> {
-    let media = remove_media(st, guard, id).await?;
-    let dir = match media_dir_to_remove(st, &media).await {
-        Ok(dir) => dir,
-        Err(why) => {
-            tracing::warn!(
+) -> Result<(MediaRow, Vec<PathBuf>), AppError> {
+    let (media, folders) = remove_media(st, guard, id).await?;
+    let mut dirs = vec![];
+    for dir in media_dirs_to_remove(st, &media, &folders).await {
+        match dir {
+            Ok(d) => dirs.push(d),
+            Err(why) => tracing::warn!(
                 "Media #{} \"{}\": folder kept ({why})",
                 media.id,
                 media.title
-            );
-            None
+            ),
         }
-    };
-    Ok((media, dir))
+    }
+    Ok((media, dirs))
 }
 
-/// Removes a folder `media_dir_to_remove` judged contained.
+/// Removes a folder `media_dirs_to_remove` judged contained.
 pub async fn remove_media_folder(dir: PathBuf) -> Result<(), String> {
     tokio::task::spawn_blocking(move || fsx::remove_media_dir(&dir))
         .await
@@ -147,35 +178,36 @@ pub async fn remove(
 ) -> Result<Json<Value>, AppError> {
     let id = gate(&st, &a, Action::Delete, id).await?;
     let guard = st.ingest.media.lock(id).await;
-    let media = remove_media(&st, &guard, id).await?;
+    let (media, folders) = remove_media(&st, &guard, id).await?;
     let user = a.user.id;
     let st2 = st.clone();
     tokio::spawn(async move {
         let _guard = guard;
         let m = &media;
-        match media_dir_to_remove(&st2, m).await {
-            Ok(None) => {}
-            Ok(Some(d)) => match tokio::task::spawn_blocking({
-                let d = d.clone();
-                move || fsx::remove_media_dir(&d)
-            })
-            .await
-            {
-                Ok(Ok(())) => tracing::info!("Deleted media folder on disk: {}", d.display()),
-                Ok(Err(e)) => {
-                    tracing::error!(
-                        "Media file deletion failed — id={} title=\"{}\" path=\"{}\" error={e}",
-                        m.id,
-                        m.title,
-                        d.display()
-                    );
+        for dir in media_dirs_to_remove(&st2, m, &folders).await {
+            match dir {
+                Ok(d) => match tokio::task::spawn_blocking({
+                    let d = d.clone();
+                    move || fsx::remove_media_dir(&d)
+                })
+                .await
+                {
+                    Ok(Ok(())) => tracing::info!("Deleted media folder on disk: {}", d.display()),
+                    Ok(Err(e)) => {
+                        tracing::error!(
+                            "Media file deletion failed: id={} title=\"{}\" path=\"{}\" error={e}",
+                            m.id,
+                            m.title,
+                            d.display()
+                        );
+                        delete_failed(&st2, user, m);
+                    }
+                    Err(e) => tracing::error!("media folder removal task: {e}"),
+                },
+                Err(why) => {
+                    tracing::warn!("Media #{} \"{}\": folder kept ({why})", m.id, m.title);
                     delete_failed(&st2, user, m);
                 }
-                Err(e) => tracing::error!("media folder removal task: {e}"),
-            },
-            Err(why) => {
-                tracing::warn!("Media #{} \"{}\": folder kept ({why})", m.id, m.title);
-                delete_failed(&st2, user, m);
             }
         }
     });
@@ -291,6 +323,27 @@ pub async fn remove_file(
     .await?;
     drop(guard);
     Ok(StatusCode::OK)
+}
+
+/// Deletes the rows of a media's files in one folder and keeps the media (libraries rule 52); the caller holds the lock.
+pub async fn unlink_folder_files(
+    st: &AppState,
+    _guard: &tokio::sync::OwnedMutexGuard<()>,
+    media: i32,
+    folder: i32,
+) -> Result<(), AppError> {
+    let files = sqlx::query_scalar!(
+        r#"DELETE FROM media_files WHERE "mediaId" = $1 AND "folderId" = $2 RETURNING id"#,
+        media,
+        folder
+    )
+    .fetch_all(&st.db)
+    .await?;
+    for f in files {
+        drop_thumbnails(st, f);
+    }
+    crate::media_servers::dispatch_detached(st, "file.deleted");
+    Ok(())
 }
 
 /// `DELETE /api/libraries/:id` (rules 75-76): every media row, never a file; not transactional.

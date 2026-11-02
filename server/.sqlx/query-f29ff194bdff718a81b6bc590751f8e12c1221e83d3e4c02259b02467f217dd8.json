@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE wants SET \"folderId\" = (SELECT df.\"folderId\" FROM media m\n             JOIN library_default_folders df ON df.\"libraryId\" = m.\"libraryId\" WHERE m.id = $1)\n           WHERE \"mediaId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f29ff194bdff718a81b6bc590751f8e12c1221e83d3e4c02259b02467f217dd8"
+}

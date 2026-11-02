@@ -106,7 +106,7 @@ pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::
                   m."folderName" AS folder_name, m."libraryId" AS library_id, l.name AS "library_name?",
                   df."folderId" AS "folder_id?", df.path AS "folder_path?", l."mediaTypes" AS "library_types?"
            FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
-           LEFT JOIN library_default_folders df ON df."libraryId" = m."libraryId"
+           LEFT JOIN media_target_folders df ON df."mediaId" = m.id
            LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,
              max(value) FILTER (WHERE provider = $3)::int AS tvdb,
              max(value) FILTER (WHERE provider = $4) AS imdb

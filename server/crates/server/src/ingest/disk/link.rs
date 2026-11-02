@@ -120,6 +120,7 @@ async fn relink_in_place(
     slot: &mut bool,
 ) -> Result<i64, AppError> {
     let mut linked = 0i64;
+    let _moves = st.folder_moves.read().await;
     let mut current = load_media(&st.db, media.id)
         .await?
         .unwrap_or_else(|| media.clone());
@@ -139,6 +140,9 @@ async fn relink_in_place(
         )
         .execute(&st.db)
         .await?;
+        if current.library_id.is_none() {
+            crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
+        }
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
     if current.library_id.is_none() {
@@ -149,6 +153,7 @@ async fn relink_in_place(
         )
         .execute(&st.db)
         .await?;
+        crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
     for f in &d.files {
@@ -257,6 +262,7 @@ pub(super) async fn confirm_import(
                 )
                 .execute(&st.db)
                 .await?;
+                crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
             }
         }
         let r = library::ingest(
@@ -344,10 +350,12 @@ pub(super) async fn find_or_import(
     }
     let provider = d.provider.clone().filter(|p| p == "tmdb" || p == "tvdb");
     let imported = async {
-        let target = mw::resolve_target(st, a, d.media_type, Some(d.library_id)).await?;
+        let target =
+            mw::resolve_target(st, a, d.media_type, Some(d.library_id), d.folder_id).await?;
         let imp = mw::Import {
             media_type: d.media_type,
             library_id: target.id,
+            folder_id: target.folder_id,
             quality_profile_id: mw::resolve_profile(
                 &st.db,
                 false,
@@ -593,6 +601,7 @@ pub(super) async fn find_or_create_unmatched(
                     year,
                     media_type: d.media_type,
                     library_id: d.library_id,
+                    folder_id: d.folder_id,
                     folder_name: folder,
                     quality_profile_id: d.quality_profile_id,
                     language_profile_id: d.language_profile_id,

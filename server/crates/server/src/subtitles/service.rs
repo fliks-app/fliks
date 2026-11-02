@@ -179,7 +179,7 @@ pub async fn resolve_file(
     file_id: i32,
     episode_id: Option<i32>,
 ) -> Result<(MediaCtx, FileRow), AppError> {
-    let media = files::load_media(&st.db, media_id)
+    let media = files::load_media_of(&st.db, media_id, Some(file_id))
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media_id))?;
     if media

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT f.id, f.\"relativePath\" AS rel, f.size, f.\"mtimeMs\" AS mtime_ms,\n                  f.\"probeVersion\" AS probe_version, f.\"streamInfo\" AS info,\n                  (SELECT fi.\"episodeId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = f.id) AS episode_id\n           FROM media_files f\n           WHERE f.\"mediaId\" = $1 ORDER BY f.id",
+  "query": "SELECT f.id, f.\"folderId\" AS folder_id, f.\"relativePath\" AS rel, f.size, f.\"mtimeMs\" AS mtime_ms,\n                  f.\"probeVersion\" AS probe_version, f.\"streamInfo\" AS info,\n                  (SELECT fi.\"episodeId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = f.id) AS episode_id\n           FROM media_files f\n           WHERE f.\"mediaId\" = $1 ORDER BY f.id",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "folderId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "rel",
         "type_info": "Varchar",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "size",
         "type_info": "Int8",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "mtime_ms",
         "type_info": "Int8",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "probe_version",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "info",
         "type_info": "Jsonb",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "episode_id",
         "type_info": "Int4",
         "origin": "Expression"
@@ -85,11 +96,12 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
       null
     ]
   },
-  "hash": "086a5a5bb6a3151ae44129972ec7ca65c338f19973e5d006d0792daa697488fc"
+  "hash": "0111576c7a92c44217249e0ab05974b1b6440eb99470ea923f3edc524030ef1d"
 }

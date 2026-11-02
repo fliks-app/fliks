@@ -1,0 +1,63 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-patch-unknown",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "position": 0
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Folder #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1/folders/999"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "position": 0
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Folder #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/2/folders/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "position": -1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "position must not be less than 0"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1/folders/1"
+    }
+  ],
+  "strictMessage": true
+}

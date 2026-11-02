@@ -40,6 +40,7 @@ const PROBE_VERSION: i32 = 2;
 
 struct Row {
     id: i32,
+    folder_id: i32,
     rel: String,
     size: i64,
     mtime_ms: Option<i64>,
@@ -121,12 +122,35 @@ fn walk(
     }
 }
 
-/// `rescanFiles` (rules 38-48); the caller holds the media's lock.
+/// The folders a rescan visits: those holding the media's files plus its target, by id.
+async fn rescan_folders(
+    st: &AppState,
+    media: &MediaRow,
+    rows: &[Row],
+) -> Result<Vec<crate::libraries::Folder>, AppError> {
+    let mut ids: Vec<i32> = rows.iter().map(|r| r.folder_id).collect();
+    ids.extend(media.folder.iter().map(|f| f.id));
+    Ok(sqlx::query!(
+        r#"SELECT id, path FROM library_folders WHERE id = ANY($1) ORDER BY id"#,
+        &ids
+    )
+    .fetch_all(&st.db)
+    .await?
+    .into_iter()
+    .map(|f| crate::libraries::Folder {
+        id: f.id,
+        path: f.path,
+    })
+    .collect())
+}
+
+/// `rescanFiles` (rules 38-48): one pass per folder (libraries rule 55); the caller holds the media's lock.
 pub async fn rescan_files(
     st: &AppState,
     _guard: &OwnedMutexGuard<()>,
     media_id: i32,
 ) -> Result<Counts, AppError> {
+    let _moves = st.folder_moves.read().await;
     let media = load_media(&st.db, media_id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media_id))?;
@@ -135,9 +159,9 @@ pub async fn rescan_files(
             "Media #{media_id} has no root path configured"
         )));
     }
-    let rows = sqlx::query_as!(
+    let all = sqlx::query_as!(
         Row,
-        r#"SELECT f.id, f."relativePath" AS rel, f.size, f."mtimeMs" AS mtime_ms,
+        r#"SELECT f.id, f."folderId" AS folder_id, f."relativePath" AS rel, f.size, f."mtimeMs" AS mtime_ms,
                   f."probeVersion" AS probe_version, f."streamInfo" AS info,
                   (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) AS episode_id
            FROM media_files f
@@ -146,56 +170,95 @@ pub async fn rescan_files(
     )
     .fetch_all(&st.db)
     .await?;
-    let m = media.clone();
-    let found = tokio::task::spawn_blocking(move || media_dir(&m))
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    let (root, dir) = match found {
-        Ok(d) => d,
-        Err(_) if rows.is_empty() => return Ok(Counts::default()),
-        Err(e) => return Err(e),
-    };
-    tracing::info!(
-        "Rescan: started media #{media_id} \"{}\" root=\"{}\"",
-        media.title,
-        dir.display()
-    );
-    let base = root.path().to_path_buf();
-    let linked: HashSet<String> = rows.iter().map(|r| norm(&r.rel)).collect();
-    let w = walk_media(&media, &dir, &base, &rows, &linked).await?;
-    let disk: Vec<(String, PathBuf)> = w
-        .files
-        .into_iter()
-        .filter_map(|p| Some((fsx::rel_under(&base, &p)?, p)))
-        .collect();
-    let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
+    let folders = rescan_folders(st, &media, &all).await?;
+    let mut by_folder: HashMap<i32, Vec<Row>> = HashMap::new();
+    for r in all {
+        by_folder.entry(r.folder_id).or_default().push(r);
+    }
     let mut c = Counts::default();
     let mut slots_created = false;
     let mut touched: Vec<(i32, Option<i32>)> = vec![];
     let mut slots = Slots::default();
     if media.has_seasons() {
         slots = Slots::load(&st.db, media_id).await?;
-        let wanted = wanted_numbers(&base, &rows, &on_disk, &disk, &linked);
-        slots_created = slots.ensure(&st.db, media_id, &wanted).await?;
     }
-
-    if w.complete {
-        remove_missing(st, media_id, &rows, &on_disk, &mut c).await?;
-    } else {
-        tracing::warn!("Rescan[media #{media_id}]: a directory could not be read, no row removed");
+    let (mut complete, mut ran, mut visited, mut skipped) = (true, false, false, None);
+    let mut applied = Ok(());
+    for folder in folders {
+        let rows = by_folder.remove(&folder.id).unwrap_or_default();
+        let m = MediaRow {
+            folder: Some(folder),
+            ..media.clone()
+        };
+        let probe_m = m.clone();
+        let found = tokio::task::spawn_blocking(move || media_dir(&probe_m))
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        let (root, dir) = match found {
+            Ok(d) => d,
+            Err(e) => {
+                if !rows.is_empty() {
+                    tracing::warn!(
+                        "Rescan[media #{media_id}]: folder skipped, rows kept: {}",
+                        e.text()
+                    );
+                    skipped.get_or_insert(e);
+                }
+                continue;
+            }
+        };
+        ran |= !rows.is_empty();
+        visited = true;
+        tracing::info!(
+            "Rescan: started media #{media_id} \"{}\" root=\"{}\"",
+            media.title,
+            dir.display()
+        );
+        let base = root.path().to_path_buf();
+        let linked: HashSet<String> = rows.iter().map(|r| norm(&r.rel)).collect();
+        let w = walk_media(&m, &dir, &base, &rows, &linked).await?;
+        let disk: Vec<(String, PathBuf)> = w
+            .files
+            .into_iter()
+            .filter_map(|p| Some((fsx::rel_under(&base, &p)?, p)))
+            .collect();
+        let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
+        if media.has_seasons() {
+            let wanted = wanted_numbers(&base, &rows, &on_disk, &disk, &linked);
+            slots_created |= slots.ensure(&st.db, media_id, &wanted).await?;
+        }
+        if w.complete {
+            remove_missing(st, media_id, &rows, &on_disk, &mut c).await?;
+        } else {
+            complete = false;
+            tracing::warn!(
+                "Rescan[media #{media_id}]: a directory could not be read, no row removed"
+            );
+        }
+        let kept: Vec<&Row> = rows
+            .iter()
+            .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
+            .collect();
+        applied = async {
+            refresh_existing(st, &m, &base, &kept, &slots, &mut c, &mut touched).await?;
+            add_new(st, &m, &disk, &linked, &slots, &mut c, &mut touched).await
+        }
+        .await;
+        if applied.is_err() {
+            break;
+        }
     }
-    let kept: Vec<&Row> = rows
-        .iter()
-        .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
-        .collect();
-    let applied = async {
-        refresh_existing(st, &media, &base, &kept, &slots, &mut c, &mut touched).await?;
-        add_new(st, &media, &disk, &linked, &slots, &mut c, &mut touched).await
+    if let Some(e) = skipped
+        && !ran
+    {
+        return Err(e);
     }
-    .await;
+    if !visited {
+        return Ok(c);
+    }
     // A stamped row must get its embedded detection even when a later step failed.
     // An interrupted walk proves nothing about the sidecars on disk.
-    reconcile_subtitles(st, media_id, &mut c, &touched, w.complete).await;
+    reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
     applied?;
     tracing::info!(
         "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
@@ -886,21 +949,47 @@ pub async fn link_in_place(
     nums: Option<EpisodeNumbers>,
 ) -> Result<Result<Linked, String>, AppError> {
     let outside = || Ok(Err("file outside the media folder".to_owned()));
-    let Some(folder) = media.folder.as_ref() else {
+    // The target folder first, then the library's others: the file's folder is the one containing it.
+    let mut candidates: Vec<crate::libraries::Folder> = media.folder.iter().cloned().collect();
+    if let Some(library) = media.library_id {
+        let others = sqlx::query!(
+            r#"SELECT id, path FROM library_folders WHERE "libraryId" = $1 AND id IS DISTINCT FROM $2
+               ORDER BY position, id"#,
+            library,
+            media.folder.as_ref().map(|f| f.id)
+        )
+        .fetch_all(&st.db)
+        .await?;
+        candidates.extend(others.into_iter().map(|f| crate::libraries::Folder {
+            id: f.id,
+            path: f.path,
+        }));
+    }
+    let mut roots = vec![];
+    for folder in candidates {
+        if let Ok(root) = fsx::Root::open(&folder.path)
+            && let Ok(dir) = root.media_dir(media.folder_name.as_deref())
+        {
+            roots.push((folder, root, dir));
+        }
+    }
+    if roots.is_empty() {
         return outside();
-    };
-    let Ok(root) = fsx::Root::open(&folder.path) else {
-        return outside();
-    };
-    let Ok(dir) = root.media_dir(media.folder_name.as_deref()) else {
-        return outside();
-    };
+    }
     let Ok((real, meta)) = fsx::regular_source(abs) else {
         return Ok(Err("not a regular file".into()));
     };
-    let real_dir = dunce::canonicalize(&dir).unwrap_or(dir.clone());
-    let Some(inner) = fsx::rel_under(&real_dir, &real).filter(|_| root.contains(&real, false))
-    else {
+    let mut hit = None;
+    for (folder, root, dir) in roots {
+        let real_dir = dunce::canonicalize(&dir).unwrap_or(dir.clone());
+        if let Some(inner) =
+            fsx::rel_under(&real_dir, &real).filter(|_| root.contains(&real, false))
+        {
+            hit = Some((folder, inner));
+            break;
+        }
+    }
+    let Some((folder, inner)) = hit else {
         return outside();
     };
     let named = media.folder_name.as_deref().filter(|f| !f.is_empty());

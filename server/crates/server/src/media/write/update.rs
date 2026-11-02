@@ -558,18 +558,26 @@ pub async fn patch_library(
     )
     .fetch_optional(&st.db)
     .await?;
-    if current.is_some_and(|c| c.has_files && c.library_id != Some(lib)) {
+    if current
+        .as_ref()
+        .is_some_and(|c| c.has_files && c.library_id != Some(lib))
+    {
         let body = json!({"statusCode": 409, "error": "Conflict", "code": "media_has_files",
             "message": "This media has files and cannot be moved to another library"});
         return Ok((StatusCode::CONFLICT, Json(body)).into_response());
     }
+    let mut tx = st.db.begin().await?;
     sqlx::query!(
         r#"UPDATE media SET "libraryId" = $1 WHERE id = $2"#,
         lib,
         id
     )
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    if current.is_none_or(|c| c.library_id != Some(lib)) {
+        items::point_wants_at_default_folder(&mut *tx, id).await?;
+    }
+    tx.commit().await?;
     Ok(Json(detail_or_404(&st, &a, id).await?).into_response())
 }
 

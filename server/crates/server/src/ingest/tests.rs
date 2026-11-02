@@ -1051,3 +1051,57 @@ fn file_names_are_single_components() {
     let n = file_component(&long, ".mkv").unwrap();
     assert!(n.len() <= 255 && n.ends_with(".mkv"));
 }
+
+async fn second_folder(c: &Ctx, lib: i32, path: &Path) -> i32 {
+    fs::create_dir_all(path).unwrap();
+    sqlx::query_scalar(r#"INSERT INTO library_folders ("libraryId", path, position) VALUES ($1, $2, 1) RETURNING id"#)
+        .bind(lib)
+        .bind(path.to_string_lossy().as_ref())
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn rescan_visits_every_folder_and_skips_an_offline_one(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (d1, d2) = (c.dir.join("m1"), c.dir.join("m2"));
+    let l = library(&c, "M", &d1, r#"["movie"]"#).await;
+    let f2 = second_folder(&c, l, &d2).await;
+    touch(&d1.join("A/A.mkv"), b"a");
+    touch(&d2.join("A/Old.mkv"), b"o");
+    let a = media(&c, l, "A", "movie").await;
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId") VALUES ($1, 'A/Old.mkv', 1, 'x', $2)"#)
+        .bind(a)
+        .bind(f2)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+    // the new file lands in the target folder, the row of the second folder is kept
+    let first = rescan(&c, a).await.unwrap();
+    assert_eq!((first.added, first.removed), (1, 0));
+    let rows = |c: &Ctx| {
+        let db = c.st.db.clone();
+        async move {
+            sqlx::query_as::<_, (String, i32)>(
+                r#"SELECT "relativePath", "folderId" FROM media_files ORDER BY id"#,
+            )
+            .fetch_all(&db)
+            .await
+            .unwrap()
+        }
+    };
+    assert_eq!(
+        rows(&c).await,
+        [("A/Old.mkv".to_owned(), f2), ("A/A.mkv".to_owned(), 1)]
+    );
+    // an offline folder is skipped and loses no row
+    fs::remove_dir_all(&d2).unwrap();
+    let second = rescan(&c, a).await.unwrap();
+    assert_eq!((second.added, second.removed), (0, 0));
+    assert_eq!(rows(&c).await.len(), 2);
+    // every folder holding rows offline: the refusal of rule 39
+    fs::remove_dir_all(&d1).unwrap();
+    assert_eq!(rescan(&c, a).await.unwrap_err().status(), 400);
+    assert_eq!(rows(&c).await.len(), 2);
+}

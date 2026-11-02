@@ -116,7 +116,7 @@ pub async fn assert_import_target(
     library_id: Option<i32>,
 ) -> Result<(), PortError> {
     let all = all_library_ids(&st.db).await.map_err(|e| port(e.into()))?;
-    resolve_target_in(st, &all, media_type, library_id)
+    resolve_target_in(st, &all, media_type, library_id, None)
         .await
         .map(drop)
         .map_err(port)
@@ -142,7 +142,7 @@ pub async fn import_from_tmdb(
         spec.title.media_type,
         tmdb_id,
         (spec.quality_profile_id, spec.language_profile_id),
-        spec.library_id,
+        (spec.library_id, spec.folder_id),
         added_by,
         seasons,
     )
@@ -154,12 +154,12 @@ pub async fn import_from_tmdb(
 /// `Removed` until its folder is deleted.
 pub async fn remove_media(st: &AppState, media_id: i32) -> Result<Removed, PortError> {
     let lock = st.ingest.media.lock(media_id).await;
-    let (media, dir) = remove_media_with_dir(st, &lock, media_id)
+    let (media, dirs) = remove_media_with_dir(st, &lock, media_id)
         .await
         .map_err(port)?;
     Ok(Removed {
         title: media.title,
-        disk_path: dir.map(|d| d.to_string_lossy().into_owned()),
+        disk_paths: dirs,
         lock,
     })
 }

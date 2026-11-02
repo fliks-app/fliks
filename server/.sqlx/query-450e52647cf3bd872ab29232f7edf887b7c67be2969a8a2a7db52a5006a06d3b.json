@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT \"mediaId\" AS \"id!\" FROM media_files\n        WHERE \"mediaId\" = ANY($1) AND \"folderId\" <> $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mediaId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "450e52647cf3bd872ab29232f7edf887b7c67be2969a8a2a7db52a5006a06d3b"
+}

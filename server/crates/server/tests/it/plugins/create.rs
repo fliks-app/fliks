@@ -209,7 +209,7 @@ async fn concurrent_creates_of_one_title_make_one_media() {
     let mut rx = st.hub.subscribe();
     let calls = (0..5).map(|_| {
         let st = st.clone();
-        tokio::spawn(async move { resolve_or_create(&st, "movie", &tmdb("603"), None).await })
+        tokio::spawn(async move { resolve_or_create(&st, "movie", &tmdb("603"), None, None).await })
     });
     let ids: Vec<u32> = futures_util::future::join_all(calls)
         .await
@@ -247,11 +247,18 @@ async fn concurrent_creates_of_one_title_make_one_media() {
         serde_json::to_value(&imported[0].0).unwrap(),
         json!([{"provider": "tmdb", "value": "603"}])
     );
-    let again = resolve_or_create(&st, "movie", &tmdb("603"), None).await;
+    let again = resolve_or_create(&st, "movie", &tmdb("603"), None, None).await;
     assert_eq!(again.unwrap(), ids[0], "a later call finds it");
     assert_eq!(media_count(&s.pool).await, 1);
-    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(99)).await;
+    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(99), None).await;
     assert_eq!(e.unwrap_err().code, "ERR_NOT_FOUND", "unknown library");
+    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(1), Some(999)).await;
+    assert_eq!(
+        e.unwrap_err().code,
+        "ERR_VALIDATION",
+        "a folder of no library"
+    );
+    assert_eq!(media_count(&s.pool).await, 1);
     s.finish().await;
 }
 
@@ -290,7 +297,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
         app.oneshot(req).await.unwrap().status().as_u16()
     };
     let ids = tmdb("603");
-    let plugin = resolve_or_create(&st, "movie", &ids, None);
+    let plugin = resolve_or_create(&st, "movie", &ids, None, None);
     let (status, created) = tokio::join!(request, plugin);
     assert_eq!(status, 201);
     let id = created.unwrap();

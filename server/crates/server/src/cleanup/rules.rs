@@ -115,11 +115,11 @@ impl Scope {
 
 const EP_FILE: &str = r#"EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = ep.id)"#;
 
-/// `disk_libs` are the libraries under `diskFreeBelowPercent`; `unmonitor` skips already unmonitored media.
+/// `disk_folders` are the folders under `diskFreeBelowPercent`; `unmonitor` skips already unmonitored media.
 pub fn compile(
     c: &Value,
     level: &str,
-    disk_libs: &[i32],
+    disk_folders: &[i32],
     unmonitor: bool,
 ) -> QueryBuilder<Postgres> {
     let sc = Scope::of(level);
@@ -284,9 +284,12 @@ pub fn compile(
         ));
     }
     if int(c, "diskFreeBelowPercent").is_some() {
-        q.push(r#" AND media."libraryId" = ANY("#)
-            .push_bind(disk_libs.to_vec())
-            .push(")");
+        q.push(r#" AND (EXISTS (SELECT 1 FROM media_files df WHERE df."mediaId" = media.id AND df."folderId" = ANY("#)
+            .push_bind(disk_folders.to_vec())
+            .push(r#")) OR (NOT EXISTS (SELECT 1 FROM media_files df WHERE df."mediaId" = media.id)
+            AND EXISTS (SELECT 1 FROM media_target_folders t WHERE t."mediaId" = media.id AND t."folderId" = ANY("#)
+            .push_bind(disk_folders.to_vec())
+            .push(")))) ");
     }
     q.push(match level {
         "season" => " ORDER BY media.id, s.id",
@@ -296,15 +299,14 @@ pub fn compile(
     q
 }
 
-/// Libraries whose free space is under `percent`; an unreadable or pathless library never qualifies.
-async fn low_disk_libraries(db: &PgPool, percent: i64) -> sqlx::Result<Vec<i32>> {
-    let libs: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT "libraryId", path FROM library_default_folders ORDER BY "libraryId""#,
-    )
-    .fetch_all(db)
-    .await?;
+/// Folders whose free space is under `percent`; an unreadable one never qualifies.
+async fn low_disk_folders(db: &PgPool, percent: i64) -> sqlx::Result<Vec<i32>> {
+    let folders: Vec<(i32, String)> =
+        sqlx::query_as(r#"SELECT id, path FROM library_folders ORDER BY id"#)
+            .fetch_all(db)
+            .await?;
     let mut out = vec![];
-    for (id, path) in libs {
+    for (id, path) in folders {
         let d = libraries::disk(&path).await;
         if d.accessible && d.total_space > 0 && d.free_space * 100 < percent * d.total_space {
             out.push(id);
@@ -321,7 +323,7 @@ pub async fn matched(
     action: &str,
 ) -> sqlx::Result<Vec<Match>> {
     let disk = match int(criteria, "diskFreeBelowPercent") {
-        Some(p) => low_disk_libraries(db, p).await?,
+        Some(p) => low_disk_folders(db, p).await?,
         None => vec![],
     };
     let mut out = vec![];

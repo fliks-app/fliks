@@ -1,0 +1,88 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-delete",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/d1"
+      },
+      "expect": {
+        "body": {
+          "disk": {
+            "accessible": true
+          },
+          "id": 3,
+          "mediaCount": 0,
+          "path": "/tmp/fliks-parity/libs/d1",
+          "position": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries/2/folders"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "removedMedia": 0,
+          "unlinkedMedia": 0
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/libraries/2/folders/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "color": "#10b981",
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 2,
+              "mediaCount": 3,
+              "path": "/tmp/fliks-parity/media/series",
+              "position": 0
+            }
+          ],
+          "icon": "tv",
+          "id": 2,
+          "label": null,
+          "mediaTypes": [
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Series",
+          "path": "/tmp/fliks-parity/media/series",
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/2"
+    }
+  ],
+  "strictMessage": true
+}

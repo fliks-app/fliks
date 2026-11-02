@@ -192,7 +192,10 @@ async fn run(
     remove_hi: bool,
 ) {
     let media_id = source.media_id.unwrap_or(0);
-    let media = files::load_media(&st.db, media_id).await.ok().flatten();
+    let media = files::load_media_of(&st.db, media_id, source.media_file_id)
+        .await
+        .ok()
+        .flatten();
     let outcome = try_run(
         st,
         placeholder,

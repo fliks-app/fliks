@@ -1,0 +1,67 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-delete-remove-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "removedMedia": 3,
+          "unlinkedMedia": 0
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/libraries/2/folders/2?removeMedia=true"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "color": "#10b981",
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": null,
+          "folders": [],
+          "icon": "tv",
+          "id": 2,
+          "label": null,
+          "mediaTypes": [
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Series",
+          "path": null,
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "1": 17
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/counts-by-library"
+    }
+  ],
+  "strictMessage": true
+}

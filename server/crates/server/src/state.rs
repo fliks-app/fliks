@@ -20,6 +20,8 @@ pub struct AppState {
     pub debounce: Arc<Debounce>,
     pub stream: Arc<stream::Shared>,
     pub ingest: Arc<crate::ingest::Shared>,
+    /// Read by ingest, relink and link; written by a folder path change or delete (libraries rule 59).
+    pub folder_moves: Arc<tokio::sync::RwLock<()>>,
     pub busy: crate::busy::Busy,
     pub metadata: Arc<Metadata>,
     pub images: Arc<ImageStore>,
@@ -56,6 +58,7 @@ impl AppState {
             debounce: Arc::default(),
             stream: Arc::default(),
             ingest: Arc::default(),
+            folder_moves: Arc::default(),
             busy: crate::busy::Busy::default(),
             metadata: Arc::new(Metadata::new(db.clone(), &cfg.metadata)),
             images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),

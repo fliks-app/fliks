@@ -16,6 +16,12 @@
             "color": "#3b82f6",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
+            "folders": [
+              {
+                "id": 1,
+                "name": "movies"
+              }
+            ],
             "icon": "film",
             "id": 1,
             "mediaTypes": [
@@ -27,6 +33,12 @@
             "color": "#10b981",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
+            "folders": [
+              {
+                "id": 2,
+                "name": "series"
+              }
+            ],
             "icon": "tv",
             "id": 2,
             "mediaTypes": [
@@ -48,6 +60,12 @@
             "color": "#3b82f6",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
+            "folders": [
+              {
+                "id": 1,
+                "name": "movies"
+              }
+            ],
             "icon": "film",
             "id": 1,
             "mediaTypes": [
@@ -59,6 +77,12 @@
             "color": "#10b981",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
+            "folders": [
+              {
+                "id": 2,
+                "name": "series"
+              }
+            ],
             "icon": "tv",
             "id": 2,
             "mediaTypes": [
@@ -80,6 +104,12 @@
             "color": "#3b82f6",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
+            "folders": [
+              {
+                "id": 1,
+                "name": "movies"
+              }
+            ],
             "icon": "film",
             "id": 1,
             "mediaTypes": [

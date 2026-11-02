@@ -2,7 +2,7 @@
 
 Engine contract: `[engine:docs/spec/subtitle-jobs.md]`, `[engine:PROTOCOL.md]`.
 
-Companion of `subtitles.md` (routes, search, score, scheduler; cited "subtitles rule N"). Path model: `L` = the folder root of the media's folder (`ingest.md` rule 1), `M` = `Media.path` (`L` joined with `folderName`, or `L` for a root-level movie), `Mc` = `realpath(M)`; a video's and a sidecar's stored `relativePath` are relative to `L`, so every `join(M, relativePath)` and `resolveSubtitleAbsolutePath(M, relativePath)` below reads `L` as its base while the confinement stays `within(M, ...)`; `within(M, p)` is the containment predicate of `ingest.md` rule 5 applied to `M` (deepest existing ancestor resolved with `realpath`, must have `Mc` as ancestor). Every write below is exercised only on generated media under `/tmp/fliks-parity/`; no test, parity run or agent points a write at real media.
+Companion of `subtitles.md` (routes, search, score, scheduler; cited "subtitles rule N"). Path model: `L` = the folder root of the file's folder (`ingest.md` rule 1; for a sidecar, rule 40), `M` = `Media.path` (`L` joined with `folderName`, or `L` for a root-level movie), `Mc` = `realpath(M)`; a video's and a sidecar's stored `relativePath` are relative to `L`, so every `join(M, relativePath)` and `resolveSubtitleAbsolutePath(M, relativePath)` below reads `L` as its base while the confinement stays `within(M, ...)`; `within(M, p)` is the containment predicate of `ingest.md` rule 5 applied to `M` (deepest existing ancestor resolved with `realpath`, must have `Mc` as ancestor). Every write below is exercised only on generated media under `/tmp/fliks-parity/`; no test, parity run or agent points a write at real media.
 
 This spec has no HTTP routes of its own: the routes that reach these rules are in `subtitles.md` (`upload`, `download`, `auto`, `post-process`, `sync`, `ocr`, `delete`). Writes of this module (inventory, every site that touches the disk):
 
@@ -81,6 +81,7 @@ This spec has no HTTP routes of its own: the routes that reach these rules are i
 
 38. `reconcileSubtitleFilesAfterRescan` skips a media whose folder cannot be resolved (no root, folder missing or a symlink leaving the library) and a rescan whose walk did not complete: nothing is deleted.
 39. `adjustTimes` rounds a fractional `offsetMs` to whole milliseconds before shifting, so a timestamp never prints fractional milliseconds.
+40. The folder of a sidecar: `L`, `M` and `Mc` of every read or write on a sidecar are those of the folder of its media file (`subtitle_files."mediaFileId"`); a sidecar with `"mediaFileId" IS NULL`, and every operation with no file in hand, uses the media's target folder (`libraries.md` rules 44 and 56). `discoverExternalSubtitles` and `reconcileSubtitleFilesAfterRescan` run once per folder holding files of the media, plus the target folder: a candidate is matched only against the files of its own folder, and a row is checked against the folder of its file (or the target folder when it has none). A carried sidecar (rule 18) moves only when both files share a folder; otherwise the old row is kept as is.
 
 ## SQL
 
