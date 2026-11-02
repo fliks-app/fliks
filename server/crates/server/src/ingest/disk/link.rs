@@ -1,6 +1,11 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
-use fliks_domain::{external_id::ExternalProvider, media::family::Family};
+use crate::ingest::books;
+use fliks_domain::{
+    external_id::ExternalProvider,
+    media::family::Family,
+    naming::{BookNameTokens, apply_book_format},
+};
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -156,6 +161,38 @@ async fn relink_in_place(
         crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
+    if current.media_type == MediaKind::Book {
+        let mut placed = vec![];
+        for f in &d.files {
+            let abs = PathBuf::from(resolve(&f.path, "/"));
+            match crate::ingest::rescan::locate_in_place(st, &current, &abs).await? {
+                Err(e) => errors.push(format!("{}: {e}", file_name(&abs))),
+                Ok(l) => placed.push(books::Placed {
+                    folder_id: l.folder.id,
+                    rel: l.rel,
+                    abs: l.real,
+                }),
+            }
+        }
+        if !placed.is_empty() {
+            match books::register(st, media.id, &placed).await {
+                Ok(done) => {
+                    linked += done.len() as i64;
+                    if let Some(first) = done.first() {
+                        st.hub.emit_domain(DomainEvent::MediaFilesImported {
+                            media_id: i64::from(media.id),
+                            family: first.family,
+                            season_number: None,
+                            episode_number: None,
+                            source: ImportSource::Disk,
+                        });
+                    }
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+        return Ok(linked);
+    }
     for f in &d.files {
         let abs = PathBuf::from(resolve(&f.path, "/"));
         let nums = caller_nums(f.season, f.episode, f.end);
@@ -217,6 +254,7 @@ pub(super) async fn confirm_import(
     uniquify: bool,
 ) -> Result<(i64, i64, Vec<String>), AppError> {
     let (mut imported, mut present, mut errors) = (0i64, 0i64, vec![]);
+    let mut book_files: Vec<library::File> = vec![];
     let formats = naming_formats(&st.db).await?;
     for (path, episode_id, quality) in entries {
         let name = file_name(Path::new(&path));
@@ -229,8 +267,15 @@ pub(super) async fn confirm_import(
                 errors.push(format!("{name}: source file not found"));
                 continue;
             }
-            Ok(m) if !m.is_file() || !is_video(&name) => {
-                errors.push(format!("{name}: not a video file"));
+            Ok(m) if !m.is_file() || !books::owns(media.media_type, &name) => {
+                errors.push(format!(
+                    "{name}: not a {} file",
+                    if media.media_type == MediaKind::Book {
+                        "book"
+                    } else {
+                        "video"
+                    }
+                ));
                 continue;
             }
             Ok(_) => {}
@@ -265,37 +310,70 @@ pub(super) async fn confirm_import(
                 crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
             }
         }
-        let r = library::ingest(
-            st,
-            guard,
-            library::Request {
-                media_id,
-                files: vec![library::File {
-                    path: PathBuf::from(&path),
-                    episode_id,
-                }],
-                transfer: method,
-                fallback_quality: Some(quality.to_owned()),
-                release_name: None,
-                force: false,
-                uniquify_on_collision: uniquify,
-                replace_existing: false,
-            },
-        )
-        .await;
-        match r {
-            Ok(o) => {
-                imported += o.imported.len() as i64;
-                present += o.already_present.len() as i64;
-                errors.extend(o.errors);
-                if !o.imported.is_empty() {
-                    crate::media_servers::dispatch_detached(st, "library.rescan");
-                }
-            }
-            Err(e) => errors.push(format!("{name}: {e}")),
+        let file = library::File {
+            path: PathBuf::from(&path),
+            episode_id,
+        };
+        // A book's files are ingested together: the parts of one audiobook are one version.
+        if media.media_type == MediaKind::Book {
+            book_files.push(file);
+            continue;
         }
+        let r = ingest_files(st, guard, media_id, vec![file], method, quality, uniquify).await;
+        tally(st, &name, r, &mut imported, &mut present, &mut errors);
+    }
+    if !book_files.is_empty() {
+        let r = ingest_files(st, guard, media_id, book_files, method, "", uniquify).await;
+        tally(st, "books", r, &mut imported, &mut present, &mut errors);
     }
     Ok((imported, present, errors))
+}
+
+async fn ingest_files(
+    st: &AppState,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    media_id: i32,
+    files: Vec<library::File>,
+    method: Method,
+    quality: &str,
+    uniquify: bool,
+) -> Result<library::Outcome, String> {
+    library::ingest(
+        st,
+        guard,
+        library::Request {
+            media_id,
+            files,
+            transfer: method,
+            fallback_quality: Some(quality.to_owned()),
+            release_name: None,
+            force: false,
+            uniquify_on_collision: uniquify,
+            replace_existing: false,
+        },
+    )
+    .await
+}
+
+fn tally(
+    st: &AppState,
+    name: &str,
+    r: Result<library::Outcome, String>,
+    imported: &mut i64,
+    present: &mut i64,
+    errors: &mut Vec<String>,
+) {
+    match r {
+        Ok(o) => {
+            *imported += o.imported.len() as i64;
+            *present += o.already_present.len() as i64;
+            errors.extend(o.errors);
+            if !o.imported.is_empty() {
+                crate::media_servers::dispatch_detached(st, "library.rescan");
+            }
+        }
+        Err(e) => errors.push(format!("{name}: {e}")),
+    }
 }
 
 pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
@@ -310,7 +388,8 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
                 tmdb_id,
             },
         ),
-        MediaKind::Movie | MediaKind::Book => naming::apply_movie_folder_format(
+        MediaKind::Book => book_folder(f, &m.title, year),
+        MediaKind::Movie => naming::apply_movie_folder_format(
             &f.movie_folder,
             &MovieFolder {
                 title: m.title.clone(),
@@ -320,6 +399,17 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
             },
         ),
     }
+}
+
+fn book_folder(f: &naming::NamingFormats, title: &str, year: Option<i64>) -> String {
+    apply_book_format(
+        &f.book_folder,
+        &BookNameTokens {
+            title: title.to_owned(),
+            year,
+            ..Default::default()
+        },
+    )
 }
 
 /// `findOrImportIdentified` (rule 78: a numeric id).
@@ -464,7 +554,8 @@ async fn target_folder(
                     tmdb_id: None,
                 },
             ),
-            MediaKind::Movie | MediaKind::Book => naming::apply_movie_folder_format(
+            MediaKind::Book => book_folder(&f, title, year.map(i64::from)),
+            MediaKind::Movie => naming::apply_movie_folder_format(
                 &f.movie_folder,
                 &MovieFolder {
                     title: title.to_owned(),
@@ -555,7 +646,15 @@ pub(super) async fn find_or_create_unmatched(
         .map(str::trim)
         .filter(|t| !t.is_empty())
         .map(str::to_owned)
-        .or_else(|| Some(extract_media_title(&file_name(&sample)).title).filter(|t| !t.is_empty()))
+        .or_else(|| {
+            match d.media_type {
+                MediaKind::Book => {
+                    fliks_domain::books::filename::parse_path(&sample.to_string_lossy()).title
+                }
+                _ => Some(extract_media_title(&file_name(&sample)).title),
+            }
+            .filter(|t| !t.is_empty())
+        })
         .unwrap_or_else(|| d.folder_name.clone());
     let transfer_nfo = if d.transfer.is_some() {
         read_nfo().await

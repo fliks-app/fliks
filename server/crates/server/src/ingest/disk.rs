@@ -1,6 +1,6 @@
 //! Disk import routes (`ingest.md` rules 60-93): orphan scan, preview, relink and its batch.
 use super::{
-    MediaRow, fsx, is_video,
+    MediaRow, books, fsx, is_video,
     library::{self, caller_nums, file_name},
     load_media, naming_formats,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
@@ -138,8 +138,9 @@ struct Group {
     files: Vec<FileEntry>,
 }
 
-/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only.
-fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only (and
+/// book files when the library takes books).
+fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
     if depth > 3 {
         return;
     }
@@ -155,15 +156,15 @@ fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
             if !(depth > 0 && is_bonus_dir(&name)) {
                 subdirs.push(e.path());
             }
-        } else if is_video(&name)
-            && !is_sample_file(&name)
+        } else if ((is_video(&name) && !is_sample_file(&name))
+            || (book && books::is_book_file(&name)))
             && fs::metadata(e.path()).is_ok_and(|m| m.is_file())
         {
             out.push(e.path());
         }
     }
     for s in subdirs {
-        collect(&s, depth + 1, out);
+        collect(&s, depth + 1, book, out);
     }
 }
 
@@ -215,15 +216,19 @@ async fn scan_under(
 ) -> Scanned {
     let key = format!("OrphanScan:{root}");
     let r = PathBuf::from(root);
+    let book = types.contains(&MediaKind::Book);
     let all = tokio::task::spawn_blocking(move || {
         let mut out = vec![];
-        collect(&r, 0, &mut out);
+        collect(&r, 0, book, &mut out);
         out
     })
     .await
     .unwrap_or_default();
     let unlinked: Vec<&PathBuf> = all.iter().filter(|p| !linked.contains(*p)).collect();
     let total = unlinked.len() + 1;
+    let (book_files, unlinked): (Vec<&PathBuf>, Vec<&PathBuf>) = unlinked
+        .into_iter()
+        .partition(|p| books::is_book_file(&file_name(p)));
     progress(st, &key, root, 0, total);
     let root_p = Path::new(root);
     let mut groups: Vec<Group> = vec![];
@@ -305,6 +310,8 @@ async fn scan_under(
             .and_then(|n| n.year)
             .or(ex.year.map(i64::from));
     }
+    orphan_count += book_files.len();
+    groups.extend(book_groups(root_p, folder_id, provider, &book_files).await);
     progress(st, &key, root, total, total);
     st.hub.activity().remove(&key);
     Scanned {
@@ -312,6 +319,55 @@ async fn scan_under(
         scanned_files: all.len(),
         orphan_count,
     }
+}
+
+/// The works the book files make (`book-ingest.md` rules 2-4 and 10), one orphan group each.
+async fn book_groups(
+    root: &Path,
+    folder_id: Option<i32>,
+    provider: &str,
+    files: &[&PathBuf],
+) -> Vec<Group> {
+    let by_rel: HashMap<String, &PathBuf> = files
+        .iter()
+        .filter_map(|p| Some((fsx::rel_under(root, p)?, *p)))
+        .collect();
+    let rels: Vec<String> = by_rel.keys().cloned().collect();
+    let works = books::group::group(&rels);
+    let mut out = vec![];
+    for w in &works {
+        let alone = works.iter().filter(|o| o.dir == w.dir).count() == 1;
+        let top = (!w.dir.is_empty() && !w.dir.contains('/') && alone).then(|| w.dir.clone());
+        let guess = fliks_domain::books::filename::parse_path(&w.name_path);
+        let mut entries = vec![];
+        for rel in w.versions.iter().flat_map(|v| &v.files) {
+            let abs = by_rel[rel];
+            entries.push(FileEntry {
+                file_path: abs.to_string_lossy().into_owned(),
+                filename: file_name(abs),
+                size: tokio::fs::metadata(abs).await.map_or(0, |m| m.len()),
+                quality_name: "",
+                quality_id: 0,
+                season_number: None,
+                episode_number: None,
+                episode_end: None,
+            });
+        }
+        out.push(Group {
+            folder_id,
+            group_key: format!("book:{}", w.name_path),
+            media_type: MediaKind::Book,
+            folder_name: top.unwrap_or_default(),
+            guess_title: guess
+                .title
+                .unwrap_or_else(|| w.dir.rsplit('/').next().unwrap_or_default().to_owned()),
+            guess_year: guess.year.map(i64::from),
+            nfo: None,
+            suggested_provider: provider.to_owned(),
+            files: entries,
+        });
+    }
+    out
 }
 
 fn scanned_json(

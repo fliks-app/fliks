@@ -115,6 +115,13 @@ impl Client {
             .await
     }
 
+    /// A binary answer (an image): the status and the body.
+    pub async fn get_bytes(&self, path: &str) -> reqwest::Result<(StatusCode, Vec<u8>)> {
+        let res = self.request(Method::GET, path).send().await?;
+        let status = res.status();
+        Ok((status, res.bytes().await?.to_vec()))
+    }
+
     pub async fn delete(
         &self,
         path: &str,

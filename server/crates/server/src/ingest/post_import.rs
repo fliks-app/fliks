@@ -5,7 +5,8 @@ use crate::{
     events::{Num, SseEvent, Subject},
     state::AppState,
 };
-use fliks_engine_core::api::{JobPriority, MediaInfo};
+use fliks_domain::media::kind::MediaKind;
+use fliks_engine_core::api::{JobKind, JobPriority, JobRequest, MediaFamily, MediaInfo, MediaRef};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Mutex,
@@ -131,19 +132,23 @@ impl Queue {
                 None,
                 Some(QUEUE_PARENT.into()),
             );
+            let book = subject
+                .as_ref()
+                .is_some_and(|s| s.media_type == Some(MediaKind::Book));
             progress(st, done, total, subject);
             if let Err(e) = enrich(st, id).await {
                 tracing::warn!("Post-import enrich of file #{id} failed: {e}");
             }
             // Whatever the probe returned: the embedded tracks and the search still run.
-            if let Ok(Some((Some(media), episode))) =
-                sqlx::query_as::<_, (Option<i32>, Option<i32>)>(
-                    r#"SELECT f."mediaId", fi."episodeId" FROM media_files f
+            if !book
+                && let Ok(Some((Some(media), episode))) =
+                    sqlx::query_as::<_, (Option<i32>, Option<i32>)>(
+                        r#"SELECT f."mediaId", fi."episodeId" FROM media_files f
                        LEFT JOIN media_file_items fi ON fi."mediaFileId" = f.id WHERE f.id = $1"#,
-                )
-                .bind(id)
-                .fetch_optional(&st.db)
-                .await
+                    )
+                    .bind(id)
+                    .fetch_optional(&st.db)
+                    .await
             {
                 crate::subtitles::scheduler::on_media_file_imported(st, media, id, episode).await;
             }
@@ -222,6 +227,9 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     let Some((path, info)) = file_path(st, id).await.map_err(|e| e.to_string())? else {
         return Err("no contained path".into());
     };
+    if let Some((family, _)) = super::books::classify(&super::library::file_name(&path)) {
+        return enrich_book(st, id, &path, family, info).await;
+    }
     let probed = super::probe(
         st,
         &path,
@@ -249,6 +257,51 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
     crate::stream::spawn_scan(st, id, path, info);
+    Ok(())
+}
+
+/// A book file keeps the tags and cover its probe stored (`book-ingest.md` rules 14-15): only the
+/// `Cover` job runs, and only where the engine says it applies to the family.
+async fn enrich_book(
+    st: &AppState,
+    id: i32,
+    path: &std::path::Path,
+    family: fliks_domain::media::family::Family,
+    info: Option<MediaInfo>,
+) -> Result<(), String> {
+    let Some(info) = info.filter(|i| i.cover.is_some()) else {
+        return Ok(());
+    };
+    let engine_family = match family {
+        fliks_domain::media::family::Family::Audio => MediaFamily::Audio,
+        _ => return Ok(()),
+    };
+    if !st.engine.job_applies("Cover", engine_family).await {
+        return Ok(());
+    }
+    let req = JobRequest {
+        kind: JobKind::Cover { info },
+        media: MediaRef {
+            media_file_id: id as u32,
+            path: path.to_string_lossy().into_owned(),
+        },
+        priority: Some(JobPriority::Low),
+        force: false,
+    };
+    st.engine
+        .run_job(&req, None)
+        .await
+        .map_err(|e| e.to_string())?;
+    let media = sqlx::query_scalar!(r#"SELECT "mediaId" FROM media_files WHERE id = $1"#, id)
+        .fetch_optional(&st.db)
+        .await
+        .map_err(|e| e.to_string())?
+        .flatten();
+    if let (Some(media), Some(bytes)) =
+        (media, st.engine.cover(id).await.map_err(|e| e.to_string())?)
+    {
+        super::books::store_cover(st, media, &bytes).await;
+    }
     Ok(())
 }
 
@@ -292,6 +345,16 @@ pub async fn scan_sources(st: &AppState, media_id: i32) {
 
 async fn settled(st: &AppState, media_id: i32) {
     let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
+    let book = sqlx::query_scalar!(r#"SELECT type FROM media WHERE id = $1"#, media_id)
+        .fetch_optional(&st.db)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|t| t == MediaKind::Book.as_str());
+    if book {
+        super::books::settled(st, media_id).await;
+        return;
+    }
     // One batch at a time, so a season pack does not queue every media's jobs at once.
     let _turn = st.ingest.settle.turn.lock().await;
     if super::setting_on(&st.db, "sprites_auto_generate_on_import")

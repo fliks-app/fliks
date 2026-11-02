@@ -1,5 +1,6 @@
 //! Library writes (`docs/spec/ingest.md`): file transfer, library ingest, the post-import queue,
 //! rescan and the disk import routes.
+pub mod books;
 pub mod disk;
 pub mod fsx;
 pub mod library;

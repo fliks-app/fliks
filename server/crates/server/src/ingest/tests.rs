@@ -1105,3 +1105,318 @@ async fn rescan_visits_every_folder_and_skips_an_offline_one(pool: PgPool) {
     assert_eq!(rescan(&c, a).await.unwrap_err().status(), 400);
     assert_eq!(rows(&c).await.len(), 2);
 }
+
+mod book_ingest {
+    use super::*;
+    use crate::ingest::{
+        books::{self, Placed},
+        library::{self, File, Request},
+        transfer::Method,
+    };
+    use std::io::Write;
+    use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
+
+    fn epub(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut png = vec![];
+        image::RgbImage::new(2, 2)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let mut w = ZipWriter::new(fs::File::create(path).unwrap());
+        let o = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let opf = r#"<package><metadata xmlns:dc="x"><dc:title>Mirelune</dc:title>
+            <dc:creator>Olympe Faucheval</dc:creator><dc:language>fre</dc:language>
+            <dc:publisher>Editions Invention</dc:publisher><meta name="cover" content="c"/></metadata>
+            <manifest><item id="c" href="c.png" media-type="image/png"/></manifest></package>"#;
+        for (n, b) in [
+            (
+                "META-INF/container.xml",
+                br#"<container><rootfiles><rootfile full-path="o.opf"/></rootfiles></container>"#
+                    .as_slice(),
+            ),
+            ("o.opf", opf.as_bytes()),
+            ("c.png", png.as_slice()),
+        ] {
+            w.start_file(n, o).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.finish().unwrap();
+    }
+
+    fn audio_probe() -> Value {
+        json!({"ok": true, "info": {"video": [], "audio": [{"streamIndex": 0, "codec": "mp3", "language": "und"}],
+            "subtitles": [], "durationSeconds": 60.0,
+            "chapters": [{"startSeconds": 0.0, "endSeconds": 60.0, "title": "One"}],
+            "tags": {"album": "Orfaline", "artist": "Olympe Faucheval", "language": "fra"}}})
+    }
+
+    async fn book(c: &Ctx, folder: &str) -> i32 {
+        let l = library(c, "B", &c.dir.join("books"), r#"["book"]"#).await;
+        media(c, l, folder, "book").await
+    }
+
+    fn placed(c: &Ctx, rels: &[&str]) -> Vec<Placed> {
+        rels.iter()
+            .map(|r| Placed {
+                folder_id: 1,
+                rel: (*r).to_owned(),
+                abs: c.dir.join("books").join(r),
+            })
+            .collect()
+    }
+
+    async fn parts(c: &Ctx, media: i32) -> Vec<(String, i32, i32)> {
+        sqlx::query_as(
+            r#"SELECT f."relativePath", p.version, p.position FROM item_parts p
+               JOIN media_files f ON f.id = p."mediaFileId" WHERE p."mediaId" = $1
+               ORDER BY p.version, p.position"#,
+        )
+        .bind(media)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_epub_becomes_an_edition_with_its_hash_and_cover(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = book(&c, "Mirelune").await;
+        epub(&c.dir.join("books/Mirelune/Mirelune.epub"));
+        let done = books::register(&c.st, m, &placed(&c, &["Mirelune/Mirelune.epub"]))
+            .await
+            .unwrap();
+        assert_eq!(done.len(), 1);
+        let e: (String, Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+            r#"SELECT family, format, language, publisher FROM editions WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            e,
+            (
+                "text".into(),
+                Some("epub".into()),
+                Some("fr".into()),
+                Some("Editions Invention".into())
+            )
+        );
+        assert_eq!(
+            parts(&c, m).await,
+            [("Mirelune/Mirelune.epub".to_owned(), 0, 0)]
+        );
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM media_file_hashes WHERE length(hash) = 32"
+            )
+            .await,
+            1
+        );
+        let poster: Option<String> =
+            sqlx::query_scalar(r#"SELECT "posterUrl" FROM media WHERE id = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert!(poster.is_some());
+        books::register(&c.st, m, &placed(&c, &["Mirelune/Mirelune.epub"]))
+            .await
+            .unwrap();
+        books::identify_media(&c.st, m).await.unwrap();
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM edition_external_ids").await,
+            0
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn audio_parts_are_one_version_and_a_rescan_keeps_it(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        for r in ["CD1/02.mp3", "CD1/01.mp3", "CD2/01.mp3"] {
+            touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
+        }
+        books::register(
+            &c.st,
+            m,
+            &placed(
+                &c,
+                &[
+                    "Orfaline/CD1/02.mp3",
+                    "Orfaline/CD1/01.mp3",
+                    "Orfaline/CD2/01.mp3",
+                ],
+            ),
+        )
+        .await
+        .unwrap();
+        let expect = |rels: &[&str]| -> Vec<(String, i32, i32)> {
+            rels.iter()
+                .enumerate()
+                .map(|(i, r)| ((*r).to_owned(), 0, i as i32))
+                .collect()
+        };
+        assert_eq!(
+            parts(&c, m).await,
+            expect(&[
+                "Orfaline/CD1/01.mp3",
+                "Orfaline/CD1/02.mp3",
+                "Orfaline/CD2/01.mp3"
+            ])
+        );
+        let (format, duration): (Option<String>, Option<i32>) = sqlx::query_as(
+            r#"SELECT format, "durationSeconds" FROM editions WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!((format.as_deref(), duration), (Some("mp3"), Some(180)));
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM item_markers WHERE kind = 'chapter'"
+            )
+            .await,
+            3
+        );
+        touch(&c.dir.join("books/Orfaline/CD2/02.mp3"), b"new");
+        let counts = rescan(&c, m).await.unwrap();
+        assert_eq!((counts.added, counts.removed), (1, 0));
+        assert_eq!(
+            parts(&c, m).await,
+            expect(&[
+                "Orfaline/CD1/01.mp3",
+                "Orfaline/CD1/02.mp3",
+                "Orfaline/CD2/01.mp3",
+                "Orfaline/CD2/02.mp3"
+            ])
+        );
+        touch(&c.dir.join("books/Orfaline/cover.jpg"), b"j");
+        touch(&c.dir.join("books/Orfaline/clip.mkv"), b"v");
+        assert_eq!(rescan(&c, m).await.unwrap().added, 0);
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 4);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_ebook_and_an_audiobook_are_two_editions_of_one_work(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Mirelune").await;
+        epub(&c.dir.join("books/Mirelune/Mirelune.epub"));
+        touch(&c.dir.join("books/Mirelune/Mirelune.m4b"), b"a");
+        books::register(
+            &c.st,
+            m,
+            &placed(&c, &["Mirelune/Mirelune.epub", "Mirelune/Mirelune.m4b"]),
+        )
+        .await
+        .unwrap();
+        let eds: Vec<(String, Option<String>)> = sqlx::query_as(
+            r#"SELECT family, format FROM editions WHERE "mediaId" = $1 ORDER BY id"#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            eds,
+            [
+                ("text".to_owned(), Some("epub".to_owned())),
+                ("audio".to_owned(), Some("m4b".to_owned()))
+            ]
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM items WHERE \"groupId\" IS NULL").await,
+            2
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_transfer_keeps_every_part_and_names_them_by_position(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        let inbox = c.dir.join("inbox/Orfaline");
+        for r in ["02.mp3", "01.mp3"] {
+            touch(&inbox.join(r), r.as_bytes());
+        }
+        let guard = c.st.ingest.media.lock(m).await;
+        let out = library::ingest(
+            &c.st,
+            &guard,
+            Request {
+                media_id: m,
+                files: ["02.mp3", "01.mp3"]
+                    .iter()
+                    .map(|r| File {
+                        path: inbox.join(r),
+                        episode_id: None,
+                    })
+                    .collect(),
+                transfer: Method::Copy,
+                fallback_quality: None,
+                release_name: None,
+                force: false,
+                uniquify_on_collision: false,
+                replace_existing: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!((out.imported.len(), out.errors.len()), (2, 0));
+        assert_eq!(
+            parts(&c, m).await,
+            [
+                ("Orfaline/Orfaline - 01.mp3".to_owned(), 0, 0),
+                ("Orfaline/Orfaline - 02.mp3".to_owned(), 0, 1)
+            ]
+        );
+        assert!(inbox.join("01.mp3").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_orphan_scan_groups_book_files_into_works(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("shelf");
+        let l = library(&c, "B", &lib, r#"["book"]"#).await;
+        for r in [
+            "Brumevent/01.mp3",
+            "Brumevent/02.mp3",
+            "Aldric Vexmoor - Le Phare des Brumes.epub",
+            "notes.txt",
+        ] {
+            touch(&lib.join(r), b"x");
+        }
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        let groups = b["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), 2);
+        let audio = groups
+            .iter()
+            .find(|g| g["folderName"] == "Brumevent")
+            .unwrap();
+        assert_eq!(
+            (
+                audio["mediaType"].as_str(),
+                audio["files"].as_array().unwrap().len()
+            ),
+            (Some("book"), 2)
+        );
+        let text = groups.iter().find(|g| g["folderName"] == "").unwrap();
+        assert_eq!(text["guessTitle"], "Le Phare des Brumes");
+        assert_eq!(b["orphanCount"], 3);
+    }
+}
