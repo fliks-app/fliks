@@ -25,12 +25,26 @@
     @if (posters().length) {
       <app-poster-mosaic [posters]="posters()" [gridFrom]="2" />
     } @else if (_img() && !imgFailed()) {
+      @if (squareCover()) {
+        <img
+          [cachedSrc]="_img()! | resolveUrl:'thumb'"
+          alt=""
+          aria-hidden="true"
+          class="absolute inset-0 w-full h-full object-cover blur-xl scale-125 opacity-70 select-none"
+          draggable="false"
+          loading="lazy"
+          decoding="async"
+        />
+      }
       <!-- Concentric with the figure's clip (which loses the border width when highlighted); bound because the view transition snapshots this img out of that clip. -->
       <img
         #cardImg
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
         [alt]="_title()"
-        class="w-full h-full object-cover select-none"
+        class="w-full h-full select-none"
+        [class.object-cover]="!squareCover()"
+        [class.object-contain]="squareCover()"
+        [class.relative]="squareCover()"
         style="-webkit-user-drag: none; user-drag: none;"
         draggable="false"
         [appSpoiler]="spoiler()"
@@ -57,11 +71,26 @@
     <div #cardOverlay data-card-overlay class="absolute inset-0 z-10 pointer-events-none">
 
     <!-- Rating badge (bottom-left, portrait only) -->
-    @if (_rating() > 0 && aspect() === 'portrait') {
+    @if (_rating() > 0 && aspect() === 'portrait' && !bookInfo()) {
       <div class="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 bg-black/60 rounded-md px-1.5 py-0.5">
         <svg lucideStar class="h-3 w-3 text-yellow-400 fill-yellow-400"></svg>
         <span class="text-[11px] text-white font-semibold tabular-nums">{{ _rating() | number:'1.1-1' }}</span>
       </div>
+    }
+
+    <!-- Bottom-left (books): the formats the work has, the last played one highlighted -->
+    @if (bookInfo(); as b) {
+      @if (b.formats.length) {
+        <div class="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-white">
+          @for (f of b.formats; track f) {
+            @if (f === 'audio') {
+              <span [class.text-primary]="b.lastFamily === f"><svg lucideHeadphones class="h-3.5 w-3.5" [attr.aria-label]="'books_library.format_audio' | translate"></svg></span>
+            } @else {
+              <span [class.text-primary]="b.lastFamily === f"><svg lucideBookOpen class="h-3.5 w-3.5" [attr.aria-label]="'books_library.format_text' | translate"></svg></span>
+            }
+          }
+        </div>
+      }
     }
 
     <!-- Bottom-left: on-device glyph, or a ring while the download is in flight (landscape; portrait keeps the rating there) -->
@@ -82,7 +111,7 @@
     }
 
     <!-- Top-left: missing-files indicator (auto), media type, status badge, episode number -->
-    @if (_resolvedStatus() === 'missing' || statusBadge() || topLeftBadge() || typeBadge()) {
+    @if (_resolvedStatus() === 'missing' || statusBadge() || _topLeftBadge() || typeBadge()) {
       <div class="absolute top-2 left-2 z-10 flex items-center gap-1">
         @if (typeBadge()) {
           <span class="badge badge-sm badge-soft" [ngClass]="typeBadge()!.class">{{
@@ -99,8 +128,8 @@
         }
         @if (statusBadge()) {
           <span class="badge badge-sm" [ngClass]="statusBadge()!.class">{{ statusBadge()!.text }}</span>
-        } @else if (topLeftBadge()) {
-          <span class="badge badge-sm badge-neutral font-mono">{{ topLeftBadge() }}</span>
+        } @else if (_topLeftBadge()) {
+          <span class="badge badge-sm badge-neutral font-mono">{{ _topLeftBadge() }}</span>
         }
       </div>
     }

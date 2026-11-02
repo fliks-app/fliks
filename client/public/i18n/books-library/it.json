@@ -1,1 +1,27 @@
-{}
+{
+  "books_library": {
+    "tab_books": "Libri",
+    "tab_series": "Serie",
+    "tab_authors": "Autori",
+    "type_book": "Libro",
+    "format_text": "Ebook",
+    "format_audio": "Audiolibro",
+    "filter_format": "Formato",
+    "filter_language": "Lingua",
+    "filter_author": "Autore",
+    "filter_narrator": "Narratore",
+    "filter_in_progress": "In corso",
+    "filter_any": "Tutti",
+    "sort_author": "Autore",
+    "sort_series": "Serie",
+    "sort_published": "Data di pubblicazione",
+    "sort_progress": "Avanzamento",
+    "series_empty": "Nessuna serie in questa libreria",
+    "authors_empty": "Nessun autore in questa libreria",
+    "series_progress": "{{count}} di {{max}}",
+    "books_count_one": "{{count}} libro",
+    "books_count_other": "{{count}} libri",
+    "legend_with_file": "Con file:",
+    "authors_all": "Tutti gli autori"
+  }
+}

@@ -17,6 +17,8 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
+import type { BookListInfo } from '../../../core/services/api/books.models';
+import { bookListInfoFixture } from '../../../core/services/api/books.fixtures';
 
 /**
  * Characterisation test for the card's contextual actions menu. Captures the
@@ -800,5 +802,53 @@ describe('MediaCardComponent: selectOnly', () => {
     expect(clicks).toBe(1);
     expect(navigate).not.toHaveBeenCalled();
     expect(h.playableMedia.play).not.toHaveBeenCalled();
+  });
+});
+
+describe('MediaCardComponent: book card', () => {
+  const host = (h: Harness) => h.fixture.nativeElement as HTMLElement;
+  const bookMedia = (book: BookListInfo) =>
+    makeMedia({ type: 'book', title: 'Book One', posterUrl: '/cover.jpg', releaseDate: '2020-01-01', book } as Partial<Media>);
+
+  it('shows the authors, the #N badge and the format icons, with the last played one highlighted', async () => {
+    const h = await createFixture(FULL_MEMBER, { media: bookMedia(bookListInfoFixture) });
+    expect(host(h).textContent).toContain('Author One');
+    expect(host(h).querySelector('.badge-neutral')?.textContent?.trim()).toBe('#1');
+    expect(host(h).querySelector('svg[lucideBookOpen]')).not.toBeNull();
+    expect(host(h).querySelector('svg[lucideHeadphones]')?.parentElement?.classList.contains('text-primary')).toBe(true);
+    expect(host(h).querySelector('svg[lucideBookOpen]')?.parentElement?.classList.contains('text-primary')).toBe(false);
+  });
+
+  it('draws no missing or unreleased badge from the video status rules', async () => {
+    const h = await createFixture(FULL_MEMBER, { media: bookMedia(bookListInfoFixture) });
+    expect(host(h).querySelector('svg[lucideCircleX]')).toBeNull();
+    expect(host(h).querySelector('.badge-warning, .badge-error, .badge-info')).toBeNull();
+  });
+
+  it('puts a square audio cover on a blurred fill, and keeps a text cover cropped', async () => {
+    const audio = await createFixture(FULL_MEMBER, { media: bookMedia(bookListInfoFixture) });
+    expect(host(audio).querySelector('img.blur-xl')).not.toBeNull();
+    expect(host(audio).querySelector('img.object-contain')).not.toBeNull();
+    const text = await createFixture(FULL_MEMBER, {
+      media: bookMedia({ ...bookListInfoFixture, formats: ['text'], lastFamily: 'text' }),
+    });
+    expect(host(text).querySelector('img.blur-xl')).toBeNull();
+    expect(host(text).querySelector('img.object-cover')).not.toBeNull();
+  });
+
+  it('has no Identify action', async () => {
+    const movie = await createFixture(ADMIN, { media: makeMedia() });
+    const h = await createFixture(ADMIN, { media: bookMedia(bookListInfoFixture) });
+    const all = (x: Harness) => actions(x).flatMap((a) => [a.labelKey, ...(a.children ?? []).map((c: { labelKey: string }) => c.labelKey)]);
+    expect(all(movie)).toContain('media_detail.identify');
+    expect(all(h)).not.toContain('media_detail.identify');
+    expect(labels(h)).toContain('media_card.action_open');
+  });
+
+  it('badges a book in a mixed library', async () => {
+    const h = await createFixture(FULL_MEMBER, { media: bookMedia(bookListInfoFixture), mediaTypeBadge: 'book' });
+    TestBed.inject(DisplaySettingsService).save({ mediaTypeBadge: 'needed' });
+    h.fixture.detectChanges();
+    expect(host(h).querySelector('.badge-accent')?.textContent).toContain('books_library.type_book');
   });
 });
