@@ -94,6 +94,7 @@ export class OrphanScanPanelComponent {
   protected readonly groupLabelKeys: Record<MediaType, string> = {
     movie: 'settings.libraries.scan_group_movie',
     series: 'settings.libraries.scan_group_series',
+    book: 'kinds.book',
   };
   readonly scanning = signal(false);
   readonly scanError = signal('');

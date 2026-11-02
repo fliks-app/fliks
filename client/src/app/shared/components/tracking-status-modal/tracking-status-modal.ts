@@ -21,6 +21,7 @@ import type { MediaType } from '../../../core/enums/media-type.enum';
 export type TrackingScope =
   | { kind: 'movie' }
   | { kind: 'series' }
+  | { kind: 'book' }
   | { kind: 'season'; seasonNumber: number }
   | { kind: 'episode'; episodeId: number };
 
@@ -43,6 +44,7 @@ export class TrackingStatusModalComponent {
   protected readonly singleTitleLabelKeys: Record<MediaType, string | null> = {
     movie: 'tracking.this_movie',
     series: null,
+    book: null,
   };
   private readonly media = inject(MediaService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');

@@ -41,6 +41,7 @@ export class LibraryMediaComponent implements OnInit {
   protected readonly typeLabelKeys: Record<MediaType, string> = {
     movie: 'settings.libraries.media_type_movie',
     series: 'settings.libraries.media_type_series',
+    book: 'kinds.book',
   };
   private readonly mediaService = inject(MediaService);
   private readonly folderPicker = inject(FolderPickerService);

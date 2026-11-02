@@ -25,6 +25,12 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     requestLabelKey: 'requests.type_series',
     hasSeasons: true,
   },
+  book: {
+    segment: 'books',
+    providerSegment: 'book',
+    requestLabelKey: 'kinds.book',
+    hasSeasons: false,
+  },
 };
 
 export const MEDIA_KINDS = Object.keys(KIND_REGISTRY) as MediaType[];

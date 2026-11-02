@@ -23,6 +23,7 @@ export class UserRequestsComponent implements OnInit {
   protected readonly badgeClasses: Record<MediaType, string> = {
     movie: 'badge-info',
     series: 'badge-accent',
+    book: 'badge-warning',
   };
   private readonly requestsApi = inject(RequestsService);
   private readonly state = inject(UserDetailState);
