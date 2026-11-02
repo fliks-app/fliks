@@ -1,0 +1,17 @@
+{
+  "book_requests": {
+    "request": "Anfragen",
+    "request_success": "Anfrage gesendet",
+    "already_requested": "Bereits angefragt:"
+  },
+  "settings": {
+    "users": {
+      "quotas": "Anfragekontingente",
+      "quotas_hint": "Erlaubte Anfragen pro Zeitraum, gezählt solange sie ausstehen oder genehmigt sind. 0 bedeutet unbegrenzt.",
+      "quota_period_days": "Zeitraum (Tage)"
+    },
+    "auto_approval": {
+      "media_type_book": "Buch"
+    }
+  }
+}

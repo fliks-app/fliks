@@ -27,7 +27,7 @@
             </select>
           </label>
         }
-        @if (qualityProfiles().length) {
+        @if (qualityProfiles().length && editRow.mediaType !== 'book') {
           <label class="form-control w-full">
             <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>
             <select
@@ -43,7 +43,7 @@
             </select>
           </label>
         }
-        @if (languageProfiles().length) {
+        @if (languageProfiles().length && editRow.mediaType !== 'book') {
           <label class="form-control w-full">
             <span class="label-text">{{ 'discover.language_profile' | translate }}</span>
             <select

@@ -180,6 +180,10 @@
                   </p>
                 }
 
+                @if (row.wants?.length) {
+                  <app-request-wants [wants]="row.wants!" />
+                }
+
                 @if (auth.hasPermission('requests.manage')) {
                   <p class="text-sm text-base-content/70">
                     <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
@@ -202,7 +206,7 @@
                   <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
                   {{ row.createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
                 </p>
-                @if (row.kind !== 'delete') {
+                @if (row.kind !== 'delete' && row.mediaType !== 'book') {
                   <p>
                     <span class="text-base-content/50">{{ 'requests.quality_profile_label' | translate }}</span>
                     {{ qualityProfileDisplay(row.qualityProfileId) }}

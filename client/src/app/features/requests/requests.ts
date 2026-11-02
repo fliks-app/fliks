@@ -20,6 +20,7 @@ import {
   FliksRequestRow,
   FliksRequestStatus,
   RequestKind,
+  requestAddLink,
 } from '../../core/services/api/requests.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import {
@@ -29,6 +30,7 @@ import {
 import { ToastService } from '../../core/services/toast.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
 import { RequestPosterComponent } from './request-poster';
+import { RequestWantsComponent } from './request-wants/request-wants';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
@@ -53,6 +55,7 @@ import { KIND_REGISTRY } from '../../core/media-kinds';
     TranslatePipe,
     RouterLink,
     RequestPosterComponent,
+    RequestWantsComponent,
     RequestDeclineModalComponent,
     RequestViewDeclineModalComponent,
     RequestEditModalComponent,
@@ -339,7 +342,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (libraryId) {
       return ['/' + KIND_REGISTRY[row.mediaType].segment, libraryId];
     }
-    return ['/add', KIND_REGISTRY[row.mediaType].providerSegment, row.tmdbId];
+    return requestAddLink(row);
   }
 
 

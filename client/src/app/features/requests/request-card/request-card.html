@@ -42,6 +42,10 @@
       </p>
     }
 
+    @if (request().wants?.length) {
+      <app-request-wants [wants]="request().wants!" />
+    }
+
     @if (canManage()) {
       <p class="text-sm text-base-content/70 m-0">
         <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
@@ -54,7 +58,7 @@
         <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
         {{ request().createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
       </p>
-      @if (request().kind !== 'delete') {
+      @if (request().kind !== 'delete' && request().mediaType !== 'book') {
         <p class="m-0">
           <span class="text-base-content/50">{{ 'requests.quality_profile_label' | translate }}</span>
           {{ qualityProfileName() }}

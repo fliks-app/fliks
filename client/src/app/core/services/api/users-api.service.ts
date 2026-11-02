@@ -14,6 +14,11 @@ export interface UserRow {
   createdAt: string;
   lastLogin: string | null;
   libraryIds: number[];
+  /** Requests allowed per `quotaPeriodDays`, by kind; 0 is unlimited. */
+  movieQuotaLimit?: number;
+  seriesQuotaLimit?: number;
+  bookQuotaLimit?: number;
+  quotaPeriodDays?: number;
 }
 
 export interface CreateUserBody {
@@ -33,6 +38,10 @@ export interface UpdateUserBody {
   enabled?: boolean;
   requirePasswordChange?: boolean;
   libraryIds?: number[];
+  movieQuotaLimit?: number;
+  seriesQuotaLimit?: number;
+  bookQuotaLimit?: number;
+  quotaPeriodDays?: number;
   /** Self-editable: preferred library display order (library ids). */
   libraryOrder?: number[];
   /** Self-editable: library ids hidden from the home page and sidebar. */

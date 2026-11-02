@@ -1,0 +1,17 @@
+{
+  "book_requests": {
+    "request": "Request",
+    "request_success": "Request sent",
+    "already_requested": "Already requested:"
+  },
+  "settings": {
+    "users": {
+      "quotas": "Request quotas",
+      "quotas_hint": "Requests allowed per period, counted while pending or approved. 0 means unlimited.",
+      "quota_period_days": "Period (days)"
+    },
+    "auto_approval": {
+      "media_type_book": "Book"
+    }
+  }
+}

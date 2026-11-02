@@ -3,6 +3,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
+import { KIND_REGISTRY } from '../../media-kinds';
+import type { WantSpec } from './wants-api.service';
 
 export interface RequestUser {
   id: number;
@@ -22,8 +24,8 @@ export type FliksRequestStatus =
  *  is already imported. Omitting `kind` on create defaults to an add request. */
 export type RequestKind = 'add' | 'delete';
 
-export interface CreateRequestBody {
-  mediaType: MediaType;
+export interface CreateVideoRequestBody {
+  mediaType: Exclude<MediaType, 'book'>;
   tmdbId: number;
   title: string;
   kind?: RequestKind;
@@ -34,6 +36,18 @@ export interface CreateRequestBody {
   folderId?: number;
   seasons?: number[];
 }
+
+/** A book is the Open Library work it is, asked per edition (format and language). */
+export interface CreateBookRequestBody {
+  mediaType: 'book';
+  externalId: string;
+  title: string;
+  wants: WantSpec[];
+  libraryId?: number;
+  folderId?: number;
+}
+
+export type CreateRequestBody = CreateVideoRequestBody | CreateBookRequestBody;
 
 export interface UpdateRequestBody {
   qualityProfileId?: number;
@@ -60,7 +74,12 @@ export interface FliksRequestRow {
   userId: number;
   user: RequestUser;
   mediaType: MediaType;
-  tmdbId: number;
+  /** `null` for a book, which is named by `externalId`. */
+  tmdbId: number | null;
+  /** Books only: the Open Library work and the editions asked for. */
+  provider?: string;
+  externalId?: string;
+  wants?: WantSpec[];
   title: string;
   status: FliksRequestStatus;
   /** Discriminates an add request from a deletion request. A delete request's
@@ -98,6 +117,8 @@ export interface TitleRequestState {
   profilesLocked: boolean;
   lockedQualityProfileId: number | null;
   lockedLanguageProfileId: number | null;
+  /** Books only: the editions of the active requests. */
+  requestedWants?: WantSpec[];
 }
 
 export interface ListRequestsParams {
@@ -110,6 +131,12 @@ export interface ListRequestsParams {
   mediaType?: MediaType;
   page?: number;
   limit?: number;
+}
+
+/** The add page of a request's title, for a request whose media is not in the library yet. */
+export function requestAddLink(r: FliksRequestRow): (string | number)[] {
+  const base = ['/add', KIND_REGISTRY[r.mediaType].providerSegment];
+  return r.mediaType === 'book' ? [...base, r.provider ?? '', r.externalId ?? ''] : [...base, r.tmdbId ?? ''];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -144,6 +171,13 @@ export class RequestsService {
     const params = new HttpParams()
       .set('tmdbId', String(tmdbId))
       .set('mediaType', mediaType);
+    return firstValueFrom(
+      this.http.get<TitleRequestState>('/api/requests/title-state', { params }),
+    );
+  }
+
+  getBookTitleState(externalId: string) {
+    const params = new HttpParams().set('mediaType', 'book').set('externalId', externalId);
     return firstValueFrom(
       this.http.get<TitleRequestState>('/api/requests/title-state', { params }),
     );

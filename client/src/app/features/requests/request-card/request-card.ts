@@ -9,8 +9,9 @@ import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideTrash2 } from '@lucide/angular';
 import { RequestPosterComponent } from '../request-poster';
+import { RequestWantsComponent } from '../request-wants/request-wants';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
-import { FliksRequestRow } from '../../../core/services/api/requests.service';
+import { FliksRequestRow, requestAddLink } from '../../../core/services/api/requests.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { clearPosterStamps } from '../../../shared/utils/view-transition';
 import { KIND_REGISTRY } from '../../../core/media-kinds';
@@ -24,6 +25,7 @@ import { KIND_REGISTRY } from '../../../core/media-kinds';
     RouterLink,
     TranslatePipe,
     RequestPosterComponent,
+    RequestWantsComponent,
     RequestStatusBadgeComponent,
     LucideTrash2,
   ],
@@ -80,7 +82,7 @@ export class RequestCardComponent {
     if (id) {
       return ['/' + KIND_REGISTRY[r.mediaType].segment, id];
     }
-    return ['/add', KIND_REGISTRY[r.mediaType].providerSegment, r.tmdbId];
+    return requestAddLink(r);
   });
 
 }

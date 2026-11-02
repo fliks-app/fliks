@@ -25,7 +25,7 @@ const detailsCache = new Map<
 export class RequestPosterComponent implements OnInit {
   private readonly metadata = inject(MetadataService);
 
-  readonly tmdbId = input.required<number>();
+  readonly tmdbId = input.required<number | null>();
   readonly mediaType = input.required<MediaType>();
   readonly titleText = input<string>('');
   /** `poster` shows the portrait with a placeholder fallback; `backdrop` shows landscape fanart with no fallback, silent when empty. */
@@ -51,11 +51,16 @@ export class RequestPosterComponent implements OnInit {
       this.loaded.set(true);
       return;
     }
-    const key = `${this.mediaType()}:${this.tmdbId()}`;
+    const tmdbId = this.tmdbId();
+    if (tmdbId == null) {
+      this.loaded.set(true);
+      return;
+    }
+    const key = `${this.mediaType()}:${tmdbId}`;
     let promise = detailsCache.get(key);
     if (!promise) {
       promise = this.metadata
-        .detailsByKind(this.mediaType(), this.tmdbId())
+        .detailsByKind(this.mediaType(), tmdbId)
         .then((d) => ({ posterUrl: d.posterUrl, fanartUrl: d.fanartUrl }))
         .catch(() => ({ posterUrl: null, fanartUrl: null }));
       detailsCache.set(key, promise);
