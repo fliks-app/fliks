@@ -31,6 +31,7 @@ struct Ctx {
     admin: String,
     a: String,
     b: String,
+    c: String,
     _dir: Dir,
 }
 
@@ -55,11 +56,11 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     }
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"
-        INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read"]', false);
-        INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'a', false, 1), (3, 'b', false, 1);
+        INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read","books.email"]', false), (2, 'Plain', '["media.read"]', false);
+        INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'a', false, 1), (3, 'b', false, 1), (4, 'c', false, 2);
         INSERT INTO libraries (id, name) VALUES (1, 'L1'), (2, 'L2');
         INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '{one}'), (2, 2, '{two}');
-        INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3);
+        INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3), (1, 4);
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
           (10, 'Alpha', 'book', 1, 'a'), (11, 'Beta', 'book', 1, 'b'), (12, 'Gamma', 'book', 2, 'c'),
           (13, 'Delta', 'book', 1, 'd'), (14, 'Echo', 'book', 1, 'e'), (15, 'Big', 'book', 1, 'f');
@@ -83,6 +84,7 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         admin: st.jwt.sign_access(1, "admin").unwrap().token,
         a: st.jwt.sign_access(2, "a").unwrap().token,
         b: st.jwt.sign_access(3, "b").unwrap().token,
+        c: st.jwt.sign_access(4, "c").unwrap().token,
         app: email::router().merge(settings::router()).with_state(st),
         pool,
         _dir: dir,
@@ -205,7 +207,7 @@ impl Ctx {
                 "POST",
                 "/api/email-devices",
                 token,
-                Some(json!({"name": name, "kind": "kindle", "address": "me@kindle.example"})),
+                Some(json!({"name": name, "kind": "kindle", "address": "me@kindle.com"})),
             )
             .await;
         assert_eq!(s, 201, "{d}");
@@ -283,9 +285,9 @@ async fn devices_are_validated_owned_and_capped(pool: PgPool) {
     let c = ctx(pool, "devices").await;
     let id = c.device(&c.a, "Kindle").await;
     for address in [
-        "Name <me@kindle.example>",
-        "me@kindle.example\r\nBcc: x@y.example",
-        "me@kindle.example, x@y.example",
+        "Name <me@kindle.com>",
+        "me@kindle.com\r\nBcc: x@y.example",
+        "me@kindle.com, x@y.example",
         "nope",
     ] {
         let (s, _) = c
@@ -293,15 +295,15 @@ async fn devices_are_validated_owned_and_capped(pool: PgPool) {
                 "POST",
                 "/api/email-devices",
                 &c.a,
-                Some(json!({"name": "X", "kind": "kobo", "address": address})),
+                Some(json!({"name": "X", "kind": "kindle", "address": address})),
             )
             .await;
         assert_eq!(s, 400, "{address:?}");
     }
     for bad in [
-        json!({"name": "Y", "kind": "tv", "address": "a@b.example"}),
-        json!({"name": "Y", "kind": "kobo", "address": "a@b.example", "formats": ["exe"]}),
-        json!({"name": "Y", "kind": "kobo", "address": "a@b.example", "formats": []}),
+        json!({"name": "Y", "kind": "tv", "address": "a@kindle.com"}),
+        json!({"name": "Y", "kind": "kindle", "address": "a@kindle.com", "formats": ["exe"]}),
+        json!({"name": "Y", "kind": "kindle", "address": "a@kindle.com", "formats": []}),
     ] {
         assert_eq!(
             c.call("POST", "/api/email-devices", &c.a, Some(bad))
@@ -315,7 +317,7 @@ async fn devices_are_validated_owned_and_capped(pool: PgPool) {
             "POST",
             "/api/email-devices",
             &c.a,
-            Some(json!({"name": "Kindle", "kind": "kobo", "address": "a@b.example"})),
+            Some(json!({"name": "Kindle", "kind": "kindle", "address": "a@kindle.com"})),
         )
         .await;
     assert_eq!(
@@ -327,7 +329,7 @@ async fn devices_are_validated_owned_and_capped(pool: PgPool) {
     assert_eq!(list["devices"][0]["formats"], json!(["epub", "pdf"]));
     let (_, other) = c.call("GET", "/api/email-devices", &c.b, None).await;
     assert_eq!(other["devices"], json!([]));
-    let body = json!({"name": "Mine", "kind": "kobo", "address": "a@b.example"});
+    let body = json!({"name": "Mine", "kind": "kindle", "address": "a@kindle.com"});
     assert_eq!(
         c.call(
             "PUT",
@@ -357,7 +359,7 @@ async fn devices_are_validated_owned_and_capped(pool: PgPool) {
             "POST",
             "/api/email-devices",
             &c.a,
-            Some(json!({"name": "Z", "kind": "kobo", "address": "a@b.example"})),
+            Some(json!({"name": "Z", "kind": "kindle", "address": "a@kindle.com"})),
         )
         .await;
     assert_eq!(
@@ -387,7 +389,7 @@ async fn a_book_is_mailed_with_its_file_and_logged(pool: PgPool) {
     let mail = mails.lock().unwrap().remove(0);
     let (head, _) = mail.split_once("\r\n\r\n").unwrap();
     assert!(
-        head.contains("To: me@kindle.example") && head.contains("From: Fliks <books@example.com>"),
+        head.contains("To: me@kindle.com") && head.contains("From: Fliks <books@example.com>"),
         "{head}"
     );
     assert!(!head.to_lowercase().contains("bcc:"));
@@ -406,7 +408,7 @@ async fn a_book_is_mailed_with_its_file_and_logged(pool: PgPool) {
         (Some("Kindle"), Some("a.epub"), Some("sent"))
     );
     assert!(
-        !log.to_string().contains("kindle.example"),
+        !log.to_string().contains("kindle.com"),
         "the address is not logged"
     );
     let (_, other) = c.call("GET", "/api/book-sends", &c.b, None).await;
@@ -439,18 +441,18 @@ async fn only_readable_files_in_an_accepted_format_under_the_limit_go_out(pool: 
         (413, Some("send_to_device.error_too_big"))
     );
     assert_eq!(c.send(&c.b, dev, 1).await.0, 404, "another user's device");
-    let kobo = c
+    let reader = c
         .call(
             "POST",
             "/api/email-devices",
             &c.a,
-            Some(json!({"name": "Kobo", "kind": "kobo", "address": "k@kobo.example"})),
+            Some(json!({"name": "Reader", "kind": "pocketbook", "address": "k@pbsync.com", "formats": ["epub"]})),
         )
         .await
         .1["id"]
         .as_i64()
         .unwrap();
-    let (s, b) = c.send(&c.a, kobo, 4).await;
+    let (s, b) = c.send(&c.a, reader, 4).await;
     assert_eq!(
         (s, b["message"].as_str()),
         (400, Some("send_to_device.error_format"))
@@ -556,4 +558,77 @@ async fn the_admin_test_reports_the_outcome(pool: PgPool) {
         (200, json!(false)),
         "no credentials over a clear connection"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_device_needs_the_permission_and_the_kind_domain(pool: PgPool) {
+    let c = ctx(pool, "perm").await;
+    let body = |kind: &str, address: &str| Some(json!({"name": "D", "kind": kind, "address": address}));
+    let (s, _) = c.call("POST", "/api/email-devices", &c.c, body("kindle", "me@kindle.com")).await;
+    assert_eq!(s, 403, "no books.email");
+    let (_, list) = c.call("GET", "/api/email-devices", &c.c, None).await;
+    assert_eq!(list["canSend"], false);
+    for (kind, address) in [("kindle", "me@example.com"), ("kindle", "me@evilkindle.com"), ("pocketbook", "me@kindle.com")] {
+        let (s, _) = c.call("POST", "/api/email-devices", &c.a, body(kind, address)).await;
+        assert_eq!(s, 400, "{kind} {address}");
+    }
+    for (kind, address) in [("kindle", "me@Free.Kindle.com"), ("pocketbook", "me@pbsync.com")] {
+        let (s, _) = c.call("POST", "/api/email-devices", &c.a, body(kind, address)).await;
+        assert_eq!(s, 201, "{kind} {address}");
+        let (_, d) = c.call("GET", "/api/email-devices", &c.a, None).await;
+        c.call("DELETE", &format!("/api/email-devices/{}", d["devices"][0]["id"]), &c.a, None).await;
+    }
+    let (s, b) = c.call("POST", "/api/email-devices", &c.a, body("other", "me@example.com")).await;
+    assert_eq!((s, b["message"].as_str()), (403, Some("email_devices.error_kind_forbidden")));
+    assert_eq!(c.call("POST", "/api/email-devices", &c.admin, body("other", "me@example.com")).await.0, 201);
+    let (port, _) = smtp("250 queued").await;
+    c.configure(port).await;
+    let dev = c.device(&c.a, "Kindle").await;
+    sqlx::query("UPDATE roles SET permissions = '[\"media.read\"]' WHERE id = 1").execute(&c.pool).await.unwrap();
+    assert_eq!(c.send(&c.a, dev, 1).await.0, 403, "a role that lost the permission cannot send");
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_requests_cannot_pass_a_cap(pool: PgPool) {
+    let c = ctx(pool, "race").await;
+    for n in 0..7 {
+        c.device(&c.a, &format!("D{n}")).await;
+    }
+    let creates = (0..6).map(|n| {
+        c.call("POST", "/api/email-devices", &c.a, Some(json!({"name": format!("N{n}"), "kind": "kindle", "address": "me@kindle.com"})))
+    });
+    let made = futures_util::future::join_all(creates).await.iter().filter(|r| r.0 == 201).count();
+    assert_eq!(made, 3, "10 devices at most");
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM email_devices WHERE \"userId\" = 2").fetch_one(&c.pool).await.unwrap();
+    assert_eq!(n, 10);
+    let (port, _) = smtp("250 queued").await;
+    c.configure(port).await;
+    let dev = c.device(&c.b, "Kindle").await;
+    sqlx::query(
+        r#"INSERT INTO book_sends ("userId", "deviceName", "fileName", bytes, status)
+           SELECT 3, 'Kindle', 'x.epub', 1, 'sent' FROM generate_series(1, 18)"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let sends = (0..5).map(|_| c.send(&c.b, dev, 1));
+    let statuses: Vec<u16> = futures_util::future::join_all(sends).await.iter().map(|r| r.0).collect();
+    assert_eq!(statuses.iter().filter(|s| **s == 202).count(), 2, "20 an hour at most: {statuses:?}");
+    assert_eq!(statuses.iter().filter(|s| **s == 429).count(), 3);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_stuck_send_stops_counting_as_unfinished_after_15_minutes(pool: PgPool) {
+    let c = ctx(pool, "stuck").await;
+    let (port, _) = smtp("250 queued").await;
+    c.configure(port).await;
+    let dev = c.device(&c.a, "Kindle").await;
+    sqlx::query(
+        r#"INSERT INTO book_sends ("userId", "deviceName", "fileName", bytes, status, "updatedAt")
+           SELECT 2, 'Kindle', 'x.epub', 1, 'sending', now() - interval '1 hour' FROM generate_series(1, 3)"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.send(&c.a, dev, 1).await.0, 202);
 }

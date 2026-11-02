@@ -1,7 +1,8 @@
 //! The admin's SMTP settings (`app_settings`, `docs/spec/email-devices.md` rules 1-4).
 use lettre::{
-    AsyncSmtpTransport, Tokio1Executor, message::Mailbox,
-    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport, Tokio1Executor,
+    message::Mailbox,
+    transport::smtp::{authentication::Credentials, extension::ClientId},
 };
 use sqlx::PgPool;
 use std::time::Duration;
@@ -15,8 +16,8 @@ pub const KEYS: [&str; 7] = [
     "smtp_from",
     "smtp_max_attachment_mb",
 ];
-const DEFAULT_MAX_MB: u64 = 50;
-const MAX_MB: u64 = 200;
+/// Amazon's own limit; also what bounds the memory of a mail (about 2.4 times the file).
+const MAX_MB: u64 = 50;
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,7 +46,7 @@ impl Security {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Smtp {
     pub host: String,
     pub port: u16,
@@ -83,7 +84,7 @@ pub async fn load(db: &PgPool) -> sqlx::Result<Option<Smtp>> {
     let max_mb = get("smtp_max_attachment_mb")
         .and_then(|v| v.parse().ok())
         .filter(|n| (1..=MAX_MB).contains(n))
-        .unwrap_or(DEFAULT_MAX_MB);
+        .unwrap_or(MAX_MB);
     Ok(Some(Smtp {
         host: host.to_owned(),
         port: get("smtp_port")
@@ -91,13 +92,35 @@ pub async fn load(db: &PgPool) -> sqlx::Result<Option<Smtp>> {
             .unwrap_or_else(|| security.default_port()),
         security,
         username: get("smtp_username").map(String::from),
-        password: get("smtp_password").map(String::from),
+        password: rows
+            .iter()
+            .find(|r| r.key == "smtp_password")
+            .and_then(|r| r.value.clone())
+            .filter(|v| !v.is_empty()),
         from,
         max_bytes: max_mb * 1024 * 1024,
     }))
 }
 
+impl std::fmt::Debug for Smtp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Smtp")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("security", &self.security)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("from", &self.from)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Smtp {
+    /// Connect and I/O bound of one mail: a fixed part plus the time to push `bytes` at 256 KiB/s.
+    pub fn budget(bytes: usize) -> Duration {
+        Duration::from_secs(60 + (bytes / (256 * 1024)) as u64)
+    }
+
     /// Certificates are always verified. Credentials never travel in clear text: `none` refuses them.
     pub fn transport(&self) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {
         let creds = match (&self.username, &self.password) {
@@ -116,6 +139,7 @@ impl Smtp {
         }
         .map_err(|e| e.to_string())?
         .port(self.port)
+        .hello_name(ClientId::Domain(self.from.email.domain().to_owned()))
         .timeout(Some(TIMEOUT));
         Ok(match creds {
             Some(c) => builder.credentials(c),
@@ -175,7 +199,8 @@ mod tests {
         assert!(validate("smtp_host", "smtp.example.com").is_ok());
         assert!(validate("smtp_host", "smtp example.com").is_err());
         assert!(validate("smtp_max_attachment_mb", "0").is_err());
-        assert!(validate("smtp_max_attachment_mb", "200").is_ok());
+        assert!(validate("smtp_max_attachment_mb", "50").is_ok());
+        assert!(validate("smtp_max_attachment_mb", "51").is_err());
         assert!(validate("smtp_port", "").is_ok(), "blank unsets");
         assert!(validate("other", "anything").is_ok());
     }

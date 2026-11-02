@@ -2,6 +2,7 @@
 //! reaches a header (`docs/spec/email-devices.md` rule 14).
 use lettre::{
     Address, Message,
+    address::Envelope,
     message::{Attachment, Mailbox, MultiPart, SinglePart, header::ContentType},
 };
 
@@ -19,11 +20,25 @@ pub fn clean(s: &str, max: usize) -> String {
         .collect()
 }
 
+const NAME_MAX: usize = 150;
+
 /// The name a reader shows: no path, quote or backslash, and never empty.
 pub fn attachment_name(file: &str) -> String {
     let base = file.rsplit(['/', '\\']).next().unwrap_or(file);
-    let name = clean(&base.replace('"', "_"), 150);
-    if name.is_empty() { "book".into() } else { name }
+    let name = clean(&base.replace('"', "_"), usize::MAX);
+    if name.is_empty() {
+        return "book".into();
+    }
+    if name.chars().count() <= NAME_MAX {
+        return name;
+    }
+    // The extension tells the reader what the file is, so only the stem is cut.
+    let (stem, ext) = match name.rfind('.') {
+        Some(i) if name.len() - i <= 10 => name.split_at(i),
+        _ => (name.as_str(), ""),
+    };
+    let keep = NAME_MAX - ext.chars().count();
+    format!("{}{ext}", stem.chars().take(keep).collect::<String>())
 }
 
 pub fn parse_address(s: &str) -> Option<Address> {
@@ -32,7 +47,19 @@ pub fn parse_address(s: &str) -> Option<Address> {
         .then(|| s.parse().ok())?
 }
 
-pub fn book(
+/// The envelope and the wire bytes, so the message and the file behind it are freed before the send.
+pub fn book_raw(
+    from: &Mailbox,
+    to: Address,
+    file_name: &str,
+    mime: &str,
+    data: Vec<u8>,
+) -> Result<(Envelope, Vec<u8>), String> {
+    let m = book(from, to, file_name, mime, data)?;
+    Ok((m.envelope().clone(), m.formatted()))
+}
+
+fn book(
     from: &Mailbox,
     to: Address,
     file_name: &str,
@@ -75,6 +102,13 @@ mod tests {
         );
         assert_eq!(attachment_name("dir/book.epub"), "book.epub");
         assert_eq!(attachment_name("\r\n"), "book");
+        let long = format!("{}.epub", "x".repeat(300));
+        let cut = attachment_name(&long);
+        assert!(
+            cut.ends_with("x.epub") && cut.chars().count() == NAME_MAX,
+            "{cut}"
+        );
+        assert_eq!(attachment_name(&"y".repeat(300)).chars().count(), NAME_MAX);
         assert!(parse_address("a@b.example\r\nBcc: c@d.example").is_none());
         assert!(parse_address("Name <a@b.example>").is_none());
         assert!(parse_address("a@b.example").is_some());
@@ -84,7 +118,7 @@ mod tests {
     fn the_mail_has_one_recipient_and_the_attachment() {
         let from: Mailbox = "Fliks <f@example.com>".parse().unwrap();
         let to = parse_address("me@kindle.example").unwrap();
-        let m = book(
+        let (_, raw) = book_raw(
             &from,
             to,
             "x/y\r\nBcc: z@example.com.epub",
@@ -92,7 +126,7 @@ mod tests {
             b"PK".to_vec(),
         )
         .unwrap();
-        let raw = String::from_utf8(m.formatted()).unwrap();
+        let raw = String::from_utf8(raw).unwrap();
         let (head, _) = raw.split_once("\r\n\r\n").unwrap();
         assert!(!head.to_lowercase().contains("\r\nbcc:"), "{head}");
         assert_eq!(head.matches("To: ").count(), 1);

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) FILTER (WHERE \"createdAt\" > now() - interval '1 hour') AS \"hour!\",\n                  count(*) FILTER (WHERE status IN ('queued', 'sending')) AS \"flying!\"\n           FROM book_sends WHERE \"userId\" = $1",
+  "query": "SELECT count(*) FILTER (WHERE \"createdAt\" > now() - interval '1 hour') AS \"hour!\",\n                  count(*) FILTER (WHERE status IN ('queued', 'sending')\n                                   AND \"updatedAt\" > now() - interval '15 minutes') AS \"flying!\"\n           FROM book_sends WHERE \"userId\" = $1",
   "describe": {
     "columns": [
       {
@@ -26,5 +26,5 @@
       null
     ]
   },
-  "hash": "33eb77ef3681bab46388c1960b7bb374c9435acf5177e490551bb00c14b69449"
+  "hash": "2a741a249fd38d65ee8275cb3b1e8360957e7eb13954a3bc5cbf039f1671f0a5"
 }

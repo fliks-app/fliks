@@ -28,7 +28,8 @@
               "roles.manage",
               "parties.create",
               "parties.read_public",
-              "parties.manage"
+              "parties.manage",
+              "books.email"
             ],
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },

@@ -9,7 +9,7 @@ CREATE TABLE "email_devices" (
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "UQ_email_devices_userId_name" UNIQUE ("userId", "name"),
-  CONSTRAINT "CK_email_devices_kind" CHECK ("kind" IN ('kindle', 'kobo', 'pocketbook', 'other')),
+  CONSTRAINT "CK_email_devices_kind" CHECK ("kind" IN ('kindle', 'pocketbook', 'other')),
   CONSTRAINT "CK_email_devices_formats" CHECK (cardinality("formats") > 0)
 );
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON "email_devices" FOR EACH ROW EXECUTE FUNCTION set_updated_at();

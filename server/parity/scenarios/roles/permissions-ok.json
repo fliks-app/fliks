@@ -20,7 +20,8 @@
           "roles.manage",
           "parties.create",
           "parties.manage",
-          "parties.read_public"
+          "parties.read_public",
+          "books.email"
         ],
         "status": 200
       },

@@ -277,6 +277,19 @@
         }
       }
     },
+    "/api/book-sends": {
+      "get": {
+        "tags": [
+          "crate::email"
+        ],
+        "operationId": "recent",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/books/{itemId}/pub/{path}": {
       "get": {
         "tags": [
@@ -706,6 +719,81 @@
         "operationId": "renew",
         "responses": {
           "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/email-devices": {
+      "get": {
+        "tags": [
+          "crate::email"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::email"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/email-devices/{id}": {
+      "put": {
+        "tags": [
+          "crate::email"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::email"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/email-devices/{id}/send": {
+      "post": {
+        "tags": [
+          "crate::email"
+        ],
+        "operationId": "send",
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/email/test": {
+      "post": {
+        "tags": [
+          "crate::email"
+        ],
+        "summary": "The admin's test: unlike a user's send, the answer carries the server's own error text.",
+        "operationId": "test_send",
+        "responses": {
+          "200": {
             "description": ""
           }
         }

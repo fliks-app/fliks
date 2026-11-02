@@ -2,7 +2,7 @@ use super::{config, message::parse_address};
 use crate::{
     http::{
         AppError,
-        auth::SessionAuthed,
+        auth::{Authed, SessionAuthed},
         json::iso_ms,
         validate::{PathParams, ValidJson},
     },
@@ -10,21 +10,32 @@ use crate::{
 };
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
+use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Serialize};
 
 const MAX_PER_USER: i64 = 10;
 const MAX_NAME: usize = 80;
-const KINDS: [&str; 4] = ["kindle", "kobo", "pocketbook", "other"];
+const KINDS: [&str; 3] = ["kindle", "pocketbook", "other"];
 /// The text formats a book can be mailed in.
 pub const FORMATS: [&str; 6] = ["epub", "pdf", "mobi", "azw3", "fb2", "cbz"];
 const UNKNOWN: &str = "email_devices.error_unknown";
 
-fn default_formats(kind: &str) -> Vec<String> {
-    let f: &[&str] = match kind {
-        "kobo" => &["epub"],
-        _ => &["epub", "pdf"],
-    };
-    f.iter().map(|s| (*s).to_owned()).collect()
+fn default_formats() -> Vec<String> {
+    vec!["epub".to_owned(), "pdf".to_owned()]
+}
+
+/// Kindle and PocketBook mail only through their own domains; `other` is any address.
+fn domain_ok(kind: &str, address: &str) -> bool {
+    let domain = address
+        .rsplit('@')
+        .next()
+        .unwrap_or_default()
+        .to_lowercase();
+    match kind {
+        "kindle" => domain == "kindle.com" || domain == "free.kindle.com",
+        "pocketbook" => domain == "pbsync.com",
+        _ => true,
+    }
 }
 
 #[derive(Serialize)]
@@ -43,6 +54,7 @@ pub struct EmailDevice {
 #[serde(rename_all = "camelCase")]
 pub struct Devices {
     enabled: bool,
+    can_send: bool,
     max_bytes: Option<u64>,
     devices: Vec<EmailDevice>,
 }
@@ -63,7 +75,8 @@ struct Valid {
     formats: Vec<String>,
 }
 
-fn validate(dto: DeviceDto) -> Result<Valid, AppError> {
+fn validate(dto: DeviceDto, a: &Authed) -> Result<Valid, AppError> {
+    a.require(Action::Create, Subject::EmailDevice)?;
     let name = dto.name.trim().to_owned();
     let mut errs = vec![];
     if name.is_empty() || name.chars().any(char::is_control) {
@@ -83,8 +96,14 @@ fn validate(dto: DeviceDto) -> Result<Valid, AppError> {
     if address.is_none() {
         errs.push("address must be an e-mail address".to_owned());
     }
+    if dto.kind == "other" && !a.perms.can(Action::Manage, &Subject::Settings) {
+        return Err(AppError::forbidden("email_devices.error_kind_forbidden"));
+    }
+    if address.as_deref().is_some_and(|a| !domain_ok(&dto.kind, a)) {
+        errs.push("email_devices.error_domain".to_owned());
+    }
     let formats = match dto.formats {
-        None => default_formats(&dto.kind),
+        None => default_formats(),
         Some(f) => f,
     };
     let mut sorted = formats.clone();
@@ -126,6 +145,7 @@ pub async fn list(
     .await?;
     Ok(Json(Devices {
         enabled: smtp.is_some(),
+        can_send: a.perms.can(Action::Create, &Subject::EmailDevice),
         max_bytes: smtp.map(|s| s.max_bytes),
         devices,
     }))
@@ -137,7 +157,7 @@ pub async fn create(
     SessionAuthed(a): SessionAuthed,
     ValidJson(dto): ValidJson<DeviceDto>,
 ) -> Result<(StatusCode, Json<EmailDevice>), AppError> {
-    let v = validate(dto)?;
+    let v = validate(dto, &a)?;
     let mut tx = st.db.begin().await?;
     // The user row serialises two creations, so the cap holds.
     sqlx::query_scalar!(
@@ -181,7 +201,7 @@ pub async fn update(
     PathParams(id): PathParams<i32>,
     ValidJson(dto): ValidJson<DeviceDto>,
 ) -> Result<Json<EmailDevice>, AppError> {
-    let v = validate(dto)?;
+    let v = validate(dto, &a)?;
     sqlx::query_as!(
         EmailDevice,
         r#"UPDATE email_devices SET name = $3, kind = $4, address = $5, formats = $6

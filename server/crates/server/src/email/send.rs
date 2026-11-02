@@ -65,27 +65,26 @@ pub async fn send(
     PathParams(id): PathParams<i32>,
     ValidJson(dto): ValidJson<SendDto>,
 ) -> Result<(StatusCode, Json<BookSend>), AppError> {
+    a.require(Action::Create, Subject::EmailDevice)?;
     let smtp = config::load(&st.db)
         .await?
         .ok_or_else(|| AppError::bad_request("send_to_device.error_not_configured"))?;
-    let device = sqlx::query!(
-        r#"SELECT name, address, formats FROM email_devices WHERE id = $1 AND "userId" = $2"#,
-        id,
-        a.user.id
-    )
-    .fetch_optional(&st.db)
-    .await?
-    .ok_or_else(|| AppError::not_found("email_devices.error_unknown"))?;
     // The same file ACL as a download: a hidden file answers like a missing one.
     let file = resolve_file(&st, Some(&a), i64::from(dto.file_id)).await?;
     let ext = file.ext.trim_start_matches('.');
-    if !FORMATS.contains(&ext) || !device.formats.iter().any(|f| f == ext) {
+    if !FORMATS.contains(&ext) {
         return Err(AppError::bad_request("send_to_device.error_format"));
     }
     if file.size > smtp.max_bytes {
         return Err(AppError::payload_too_large("send_to_device.error_too_big"));
     }
-    let name = message::attachment_name(&file.absolute.to_string_lossy());
+    let relative = sqlx::query_scalar!(
+        r#"SELECT "relativePath" FROM media_files WHERE id = $1"#,
+        file.id
+    )
+    .fetch_one(&st.db)
+    .await?;
+    let name = message::attachment_name(&relative);
     let mut tx = st.db.begin().await?;
     // The user row serialises two requests, so the limits hold.
     sqlx::query_scalar!(
@@ -94,9 +93,22 @@ pub async fn send(
     )
     .fetch_one(&mut *tx)
     .await?;
+    let device = sqlx::query!(
+        r#"SELECT name, address, formats FROM email_devices WHERE id = $1 AND "userId" = $2"#,
+        id,
+        a.user.id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| AppError::not_found("email_devices.error_unknown"))?;
+    if !device.formats.iter().any(|f| f == ext) {
+        return Err(AppError::bad_request("send_to_device.error_format"));
+    }
+    // A job that died without a trace stops counting as unfinished after the age bound.
     let counts = sqlx::query!(
         r#"SELECT count(*) FILTER (WHERE "createdAt" > now() - interval '1 hour') AS "hour!",
-                  count(*) FILTER (WHERE status IN ('queued', 'sending')) AS "flying!"
+                  count(*) FILTER (WHERE status IN ('queued', 'sending')
+                                   AND "updatedAt" > now() - interval '15 minutes') AS "flying!"
            FROM book_sends WHERE "userId" = $1"#,
         a.user.id
     )
@@ -209,18 +221,22 @@ async fn deliver(st: &AppState, job: Job) -> Result<(), Failure> {
     if data.len() as u64 > smtp.max_bytes {
         return Err(fail("too_big", "file grew past the limit"));
     }
+    let budget = Smtp::budget(data.len());
     let to = message::parse_address(&job.to).ok_or_else(|| fail("internal", "stored address"))?;
-    let mail = message::book(&smtp.from, to, &job.name, job.mime, data)
-        .map_err(|e| fail("internal", e))?;
-    transmit(&smtp, mail).await
-}
-
-async fn transmit(smtp: &Smtp, mail: lettre::Message) -> Result<(), Failure> {
+    let from = smtp.from.clone();
+    // Encoding the attachment is CPU work, so it stays off the async workers.
+    let (envelope, raw) = tokio::task::spawn_blocking(move || {
+        message::book_raw(&from, to, &job.name, job.mime, data)
+    })
+    .await
+    .map_err(|e| fail("internal", e))?
+    .map_err(|e| fail("internal", e))?;
     let transport = smtp.transport().map_err(|e| fail("not_configured", e))?;
-    match transport.send(mail).await {
-        Ok(_) => Ok(()),
-        Err(e) if e.is_permanent() || e.is_transient() => Err(fail("rejected", e)),
-        Err(e) => Err(fail("connection", e)),
+    match tokio::time::timeout(budget, transport.send_raw(&envelope, &raw)).await {
+        Err(_) => Err(fail("timeout", "smtp i/o timed out")),
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) if e.is_permanent() || e.is_transient() => Err(fail("rejected", e)),
+        Ok(Err(e)) => Err(fail("connection", e)),
     }
 }
 
