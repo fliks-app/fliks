@@ -277,6 +277,19 @@
         }
       }
     },
+    "/api/books/{itemId}/pub/{path}": {
+      "get": {
+        "tags": [
+          "crate::books"
+        ],
+        "operationId": "resource",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/cleanup/candidates": {
       "get": {
         "tags": [

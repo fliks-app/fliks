@@ -12,16 +12,47 @@ pub struct Epub {
     pub cover: Option<Vec<u8>>,
 }
 
-/// An entry read through a cap, whatever size the archive declares; `None` when over it.
+pub enum EntryError {
+    Missing,
+    TooLarge,
+}
+
+/// An entry read through a cap, whatever size the archive declares.
+pub fn read_entry<R: Read + std::io::Seek>(
+    zip: &mut ZipArchive<R>,
+    name: &str,
+    cap: u64,
+) -> Result<Vec<u8>, EntryError> {
+    let mut f = zip.by_name(name).map_err(|_| EntryError::Missing)?;
+    let mut buf = vec![];
+    f.by_ref()
+        .take(cap + 1)
+        .read_to_end(&mut buf)
+        .map_err(|_| EntryError::Missing)?;
+    if buf.len() as u64 > cap {
+        return Err(EntryError::TooLarge);
+    }
+    Ok(buf)
+}
+
 fn entry<R: Read + std::io::Seek>(
     zip: &mut ZipArchive<R>,
     name: &str,
     cap: u64,
 ) -> Option<Vec<u8>> {
-    let mut f = zip.by_name(name).ok()?;
-    let mut buf = vec![];
-    f.by_ref().take(cap + 1).read_to_end(&mut buf).ok()?;
-    (buf.len() as u64 <= cap).then_some(buf)
+    read_entry(zip, name, cap).ok()
+}
+
+/// The package path: `container.xml`'s rootfile, else the first `.opf` of the archive.
+pub fn rootfile<R: Read + std::io::Seek>(zip: &mut ZipArchive<R>) -> Option<String> {
+    entry(zip, "META-INF/container.xml", OPF_CAP)
+        .and_then(|c| opf::container_rootfile(&c))
+        .or_else(|| {
+            zip.file_names()
+                .filter_map(Result::ok)
+                .find(|n| n.to_lowercase().ends_with(".opf"))
+                .map(|n| n.into_owned())
+        })
 }
 
 fn image(bytes: &[u8]) -> bool {
@@ -33,14 +64,7 @@ fn image(bytes: &[u8]) -> bool {
 
 pub fn read_epub_from<R: Read + std::io::Seek>(r: R) -> Option<Epub> {
     let mut zip = ZipArchive::new(r).ok()?;
-    let rootfile = entry(&mut zip, "META-INF/container.xml", OPF_CAP)
-        .and_then(|c| opf::container_rootfile(&c))
-        .or_else(|| {
-            zip.file_names()
-                .filter_map(Result::ok)
-                .find(|n| n.to_lowercase().ends_with(".opf"))
-                .map(|n| n.into_owned())
-        })?;
+    let rootfile = rootfile(&mut zip)?;
     let meta = opf::parse(&entry(&mut zip, &rootfile, OPF_CAP)?);
     let cover = meta
         .cover_href

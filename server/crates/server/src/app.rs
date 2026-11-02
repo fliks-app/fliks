@@ -140,6 +140,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         playback::toggle_watched,
         playback::toggle_series_watched,
         playback::toggle_season_watched,
+        crate::books::resource,
         crate::stream::playback_info,
         crate::stream::qualities,
         crate::stream::hw_accel,
@@ -422,6 +423,7 @@ fn api() -> Router<AppState> {
         .merge(playback::router())
         .merge(qoe::router())
         .merge(crate::stream::router())
+        .merge(crate::books::router())
         .merge(libraries::router())
         .merge(images::router())
         .merge(media::router())

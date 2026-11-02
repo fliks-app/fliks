@@ -75,7 +75,7 @@ pub struct OpfMetadata {
 }
 
 /// XML bytes as text: a BOM or the declared encoding decides; undeclared bytes that are not UTF-8 are windows-1252.
-fn decode_xml(bytes: &[u8]) -> String {
+pub(super) fn decode_xml(bytes: &[u8]) -> String {
     if let Some((enc, _)) = encoding_rs::Encoding::for_bom(bytes) {
         return enc.decode_with_bom_removal(bytes).0.into_owned();
     }
@@ -121,35 +121,35 @@ fn decode_entities(raw: &str) -> String {
         .into_owned()
 }
 
-enum Node {
+pub(super) enum Node {
     Text(String),
     El(El),
 }
 
 /// A parsed element: lowercase local name, attributes by local name, text and child elements in order.
 #[derive(Default)]
-struct El {
-    name: String,
-    attrs: Vec<(String, String)>,
-    nodes: Vec<Node>,
+pub(super) struct El {
+    pub(super) name: String,
+    pub(super) attrs: Vec<(String, String)>,
+    pub(super) nodes: Vec<Node>,
 }
 
 impl El {
-    fn attr(&self, name: &str) -> Option<&str> {
+    pub(super) fn attr(&self, name: &str) -> Option<&str> {
         self.attrs
             .iter()
             .find(|(k, _)| k == name)
             .map(|(_, v)| v.as_str())
     }
 
-    fn elems(&self) -> impl Iterator<Item = &El> {
+    pub(super) fn elems(&self) -> impl Iterator<Item = &El> {
         self.nodes.iter().filter_map(|n| match n {
             Node::El(e) => Some(e),
             Node::Text(_) => None,
         })
     }
 
-    fn find(&self, name: &str) -> Option<&El> {
+    pub(super) fn find(&self, name: &str) -> Option<&El> {
         if self.name == name {
             return Some(self);
         }
@@ -175,12 +175,12 @@ impl El {
         out
     }
 
-    fn text(&self) -> String {
+    pub(super) fn text(&self) -> String {
         collapse(&self.raw_text())
     }
 }
 
-fn collapse(s: &str) -> String {
+pub(super) fn collapse(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -213,7 +213,7 @@ fn close(stack: &mut Vec<El>) {
 }
 
 /// The document as a tree. A malformed tail ends the read and keeps what was read.
-fn parse_tree(xml: &str) -> El {
+pub(super) fn parse_tree(xml: &str) -> El {
     let mut reader = Reader::from_str(xml);
     let cfg = reader.config_mut();
     cfg.check_end_names = false;
@@ -287,7 +287,7 @@ pub fn container_rootfile(bytes: &[u8]) -> Option<String> {
         .or_else(|| files.iter().find_map(path))
 }
 
-fn collect<'a>(el: &'a El, name: &str, out: &mut Vec<&'a El>) {
+pub(super) fn collect<'a>(el: &'a El, name: &str, out: &mut Vec<&'a El>) {
     if el.name == name {
         out.push(el);
     }

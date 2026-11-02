@@ -3,6 +3,7 @@ mod auth;
 mod auth_routes;
 mod backup_restore;
 mod books_api;
+mod books_reader;
 mod burn_in;
 mod cleanup_bulk;
 mod device_tokens;
