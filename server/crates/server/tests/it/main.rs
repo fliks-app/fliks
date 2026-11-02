@@ -11,6 +11,7 @@ mod events_ticket;
 mod heartbeat;
 mod importers;
 mod items;
+mod kosync;
 mod libraries;
 mod media;
 mod media_servers;
