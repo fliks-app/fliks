@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO quality_definitions (family, \"qualityId\", title, \"minSize\", \"preferredSize\", \"maxSize\")\n            SELECT $1, * FROM unnest($2::int4[], $3::text[], $4::float8[], $5::float8[], $6::float8[])\n            WHERE NOT EXISTS (SELECT 1 FROM quality_definitions WHERE family = $1)\n            ON CONFLICT (family, \"qualityId\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4Array",
+        "TextArray",
+        "Float8Array",
+        "Float8Array",
+        "Float8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "32b9b86f06cfb8c8b6d4842b4fedd275ee214ec6a8e38c6a2f3f399ffb8d8df2"
+}

@@ -19,6 +19,7 @@ use axum::{
 use fliks_domain::{
     acl::{Action, Subject},
     language::APP_LANGUAGES,
+    media::family::Family,
     profiles::default_sizes,
     release::scoring::{self, CustomFormatMatch},
 };
@@ -272,7 +273,7 @@ pub async fn definitions_reset(
     db::seed_quality_definitions(&st.db).await?;
     let mut rows = db::definition_list(&st.db).await?;
     for r in &mut rows {
-        let s = default_sizes(i64::from(r.quality_id));
+        let s = default_sizes(Family::Video, i64::from(r.quality_id));
         (r.min_size, r.preferred_size, r.max_size) = (s.min, s.preferred, s.max);
     }
     Ok(created(rows))

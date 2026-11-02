@@ -295,30 +295,33 @@ pub async fn format_delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
     Ok(r.is_some())
 }
 
-/// Idempotent under concurrent first calls: the guard and the conflict clause both skip.
+/// Idempotent under concurrent first calls: the guard and the conflict clause both skip. One family at a time.
 pub async fn seed_quality_definitions(db: &PgPool) -> sqlx::Result<()> {
-    let (mut ids, mut titles, mut min, mut preferred, mut max) =
-        (vec![], vec![], vec![], vec![], vec![]);
-    for (id, title, s) in seed_rows(Family::Video) {
-        ids.push(id);
-        titles.push(title.to_owned());
-        min.push(s.min);
-        preferred.push(s.preferred);
-        max.push(s.max);
+    for family in Family::ALL {
+        let (mut ids, mut titles, mut min, mut preferred, mut max) =
+            (vec![], vec![], vec![], vec![], vec![]);
+        for (id, title, s) in seed_rows(family) {
+            ids.push(id);
+            titles.push(title.to_owned());
+            min.push(s.min);
+            preferred.push(s.preferred);
+            max.push(s.max);
+        }
+        sqlx::query!(
+            r#"INSERT INTO quality_definitions (family, "qualityId", title, "minSize", "preferredSize", "maxSize")
+            SELECT $1, * FROM unnest($2::int4[], $3::text[], $4::float8[], $5::float8[], $6::float8[])
+            WHERE NOT EXISTS (SELECT 1 FROM quality_definitions WHERE family = $1)
+            ON CONFLICT (family, "qualityId") DO NOTHING"#,
+            family.as_str(),
+            &ids,
+            &titles,
+            &min,
+            &preferred,
+            &max
+        )
+        .execute(db)
+        .await?;
     }
-    sqlx::query!(
-        r#"INSERT INTO quality_definitions ("qualityId", title, "minSize", "preferredSize", "maxSize")
-        SELECT * FROM unnest($1::int4[], $2::text[], $3::float8[], $4::float8[], $5::float8[])
-        WHERE NOT EXISTS (SELECT 1 FROM quality_definitions WHERE family = 'video')
-        ON CONFLICT (family, "qualityId") DO NOTHING"#,
-        &ids,
-        &titles,
-        &min,
-        &preferred,
-        &max
-    )
-    .execute(db)
-    .await?;
     Ok(())
 }
 
