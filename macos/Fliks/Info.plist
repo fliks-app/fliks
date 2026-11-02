@@ -17,10 +17,10 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>5.2.1</string> <!-- x-release-please-version -->
+	<string>6.0.0</string> <!-- x-release-please-version -->
 
 	<key>CFBundleVersion</key>
-	<string>5.2.1</string> <!-- x-release-please-version -->
+	<string>6.0.0</string> <!-- x-release-please-version -->
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>CFBundleIconFile</key>
