@@ -407,6 +407,13 @@ mod probe {
         let err = e.probe("rel.mkv", false, false, false).await.unwrap_err();
         assert_eq!(err.to_string(), "POST /v1/probe -> 400");
     }
+
+    #[tokio::test]
+    async fn a_transport_error_keeps_its_cause() {
+        let e = reqwest::get("http://127.0.0.1:1/").await.unwrap_err();
+        let msg = EngineError::from(e).to_string();
+        assert!(msg.starts_with("error sending request: "), "{msg}");
+    }
 }
 
 mod host_callback {

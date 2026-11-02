@@ -155,6 +155,18 @@ impl Client {
         self.finish(self.request(method, path).json(body)).await
     }
 
+    /// `send` with its own deadline, for a call the engine may legitimately take long to answer.
+    pub async fn send_within<B: Serialize + ?Sized>(
+        &self,
+        method: Method,
+        path: &str,
+        body: &B,
+        timeout: Duration,
+    ) -> reqwest::Result<Reply> {
+        self.finish(self.request(method, path).json(body).timeout(timeout))
+            .await
+    }
+
     /// The raw `GET /v1/events` response: no timeout, the caller owns its lifetime.
     pub async fn events(&self) -> reqwest::Result<reqwest::Response> {
         self.events
