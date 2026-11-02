@@ -233,7 +233,7 @@ async fn unknown_hidden_and_non_text_documents_are_accepted_but_not_kept(pool: P
     for doc in [H_HIDDEN, H_AUDIO, "Book Title.epub", &unknown, &upper] {
         let (s, b) = c.put(&key, doc, json!("x"), 0.5).await;
         assert_eq!((s, b["document"].as_str()), (202, Some(doc)), "{doc}");
-        let uri = format!("/kosync/syncs/progress/{doc}");
+        let uri = format!("/kosync/syncs/progress/{}", doc.replace(' ', "%20"));
         let (s, b) = c.call("GET", &uri, Some(&key), None).await;
         assert_eq!((s, b), (200, json!({})), "{doc}");
     }
