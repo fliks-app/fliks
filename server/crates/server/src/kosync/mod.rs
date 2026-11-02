@@ -59,22 +59,22 @@ fn md5_hex(k: &str) -> bool {
 }
 
 /// `Err` is the response to send: 401, or the 500 of a failed query.
-async fn authenticate(st: &AppState, headers: &HeaderMap) -> Result<Caller, Response> {
+async fn authenticate(st: &AppState, headers: &HeaderMap) -> Result<Caller, Box<Response>> {
     let key = headers
         .get("x-auth-key")
         .and_then(|v| v.to_str().ok())
         .filter(|k| md5_hex(k))
         .map(str::to_ascii_lowercase)
-        .ok_or_else(unauthorized)?;
-    let fail = |e: sqlx::Error| AppError::from(e).into_response();
+        .ok_or_else(|| Box::new(unauthorized()))?;
+    let fail = |e: sqlx::Error| Box::new(AppError::from(e).into_response());
     let owner = device_tokens::kosync_owner(&st.db, &key)
         .await
         .map_err(fail)?
-        .ok_or_else(unauthorized)?;
+        .ok_or_else(|| Box::new(unauthorized()))?;
     let (user, role) = load_enabled(&st.db, owner)
         .await
         .map_err(fail)?
-        .ok_or_else(unauthorized)?;
+        .ok_or_else(|| Box::new(unauthorized()))?;
     let perms = Permissions::from(
         role.as_ref().map_or(&[][..], |r| &r.permissions),
         user.is_admin,
@@ -106,13 +106,16 @@ async fn auth(
             st.login_throttle.clear(ip, THROTTLE_KEY);
             Json(json!({"authorized": "OK"})).into_response()
         }
-        Err(r) => r,
+        Err(r) => *r,
     }
 }
 
 async fn create() -> Response {
     message(StatusCode::PAYMENT_REQUIRED, "Registration is disabled")
 }
+
+/// `progress`, `percentage`, `device`, `deviceId`, `syncedAt` of a stored row.
+type Stored = (String, f64, String, Option<String>, DateTime<Utc>);
 
 /// A text file a document names, with the item it is the part of.
 struct Resolved {
@@ -191,7 +194,7 @@ async fn put_progress(
 ) -> Result<Response, AppError> {
     let caller = match authenticate(&st, &headers).await {
         Ok(c) => c,
-        Err(r) => return Ok(r),
+        Err(r) => return Ok(*r),
     };
     let Some(u) = parse(&body) else {
         return Ok(message(StatusCode::BAD_REQUEST, "Invalid request"));
@@ -258,13 +261,13 @@ async fn get_progress(
 ) -> Result<Response, AppError> {
     let caller = match authenticate(&st, &headers).await {
         Ok(c) => c,
-        Err(r) => return Ok(r),
+        Err(r) => return Ok(*r),
     };
     let empty = || Json(json!({})).into_response();
     if resolve(&st, &document, &caller.libraries).await?.is_none() {
         return Ok(empty());
     }
-    let row: Option<(String, f64, String, Option<String>, DateTime<Utc>)> = sqlx::query_as(
+    let row: Option<Stored> = sqlx::query_as(
         r#"SELECT "progress", "percentage", "device", "deviceId", "syncedAt"
            FROM kosync_progress WHERE "userId" = $1 AND "document" = $2"#,
     )
