@@ -31,7 +31,6 @@ pub struct AppState {
     pub livetv: Arc<crate::livetv::Shared>,
     pub plugins: Arc<crate::plugins::Plugins>,
     pub login_throttle: Arc<crate::auth::LoginThrottle>,
-    pub device_throttle: Arc<crate::auth::LoginThrottle>,
     pub sse_tickets: Arc<crate::events::Tickets>,
 }
 
@@ -69,7 +68,6 @@ impl AppState {
             livetv: Arc::default(),
             plugins,
             login_throttle: Arc::default(),
-            device_throttle: Arc::default(),
             sse_tickets: Arc::default(),
             cfg: Arc::new(cfg),
             db,

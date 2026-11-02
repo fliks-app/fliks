@@ -159,7 +159,6 @@ pub async fn renew(
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(unknown)?;
-    crate::users::revoke_in_background(&st, a.user.id);
     Ok((StatusCode::CREATED, Json(Issued { row, token })))
 }
 
@@ -180,6 +179,5 @@ pub async fn remove(
     if gone == 0 {
         return Err(AppError::not_found(UNKNOWN));
     }
-    crate::users::revoke_in_background(&st, a.user.id);
     Ok(StatusCode::NO_CONTENT)
 }

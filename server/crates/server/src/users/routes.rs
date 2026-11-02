@@ -53,7 +53,7 @@ async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppErro
 }
 
 /// Engine revoke is fire-and-forget (rule 26).
-pub fn revoke_in_background(st: &AppState, id: i32) {
+fn revoke_in_background(st: &AppState, id: i32) {
     let engine = st.engine.clone();
     tokio::spawn(async move { engine.revoke_owner(id).await });
 }

@@ -303,27 +303,21 @@ async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>,
         .map(|(user, role)| Caller::of(user, role, live, file)))
 }
 
-/// The owner of a device token (`device-tokens.md` rules 7-13), its failures throttled by identifier.
+/// The owner of a device token (`device-tokens.md` rules 7-12).
 async fn device_user(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>, AppError> {
     let Some(source) = req.credential_source.filter(|s| device_tokens::accepts(*s)) else {
         return Ok(None);
     };
-    let (key, secret) = match source {
-        ResolveCredentialSource::Basic => basic(&req.credential).unzip(),
-        _ => (Some(String::new()), token_of(&req.credential)),
+    let secret = match source {
+        ResolveCredentialSource::Basic => basic(&req.credential).map(|(_, password)| password),
+        _ => token_of(&req.credential),
     };
-    let (Some(key), Some(secret)) = (key, secret) else {
+    let Some(secret) = secret.filter(|s| device_tokens::well_formed(s)) else {
         return Ok(None);
     };
-    let key = key.to_lowercase();
-    if !device_tokens::well_formed(&secret) || st.device_throttle.blocked(None, &key) {
-        return Ok(None);
-    }
     let Some(owner) = device_tokens::lookup(&st.db, &secret, source).await? else {
-        st.device_throttle.attempt(None, &key);
         return Ok(None);
     };
-    st.device_throttle.clear(None, &key);
     Ok(load_enabled(&st.db, owner)
         .await?
         .map(|(user, role)| Caller {

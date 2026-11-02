@@ -1,6 +1,6 @@
 # Spec: device tokens
 
-Scope: the credentials a device that cannot do a host login (an e-reader, an OPDS or sync app) presents: their table, routes, hashing, scope, rate limit, and how `POST /engine/resolve` accepts them (`engine-glue.md` section F). The OPDS catalogue (plan 4.3) and kosync (4.4) read these rows and are specified with their own routes; the Kobo kind arrives with phase 6. The engine side is `PROTOCOL.md` "Device credentials" (`device-credentials` feature, `credentialSource`).
+Scope: the credentials a device that cannot do a host login (an e-reader, an OPDS or sync app) presents: their table, routes, hashing, scope, and how `POST /engine/resolve` accepts them (`engine-glue.md` section F). The OPDS catalogue (plan 4.3) and kosync (4.4) read these rows and are specified with their own routes; the Kobo kind arrives with phase 6. The engine side is `PROTOCOL.md` "Device credentials" (`device-credentials` feature, `credentialSource`).
 
 ## Data
 
@@ -17,12 +17,12 @@ Every route requires a session credential (`remote.md` rule on `SessionAuthed`):
 |---|---|---|---|---|
 | `GET /api/device-tokens` | none | `DeviceToken[]`, oldest first | 401, 403 | none |
 | `POST /api/device-tokens` | `{ name: string, 1..80 characters after trim, kind: 'opds' \| 'kosync' }`, unknown keys 400 | 201, `DeviceToken` + `token` | 400 validation, 400 `device_tokens.error_too_many` | INSERT |
-| `POST /api/device-tokens/:id/renew` | none | 201, `DeviceToken` + `token` | 404 `device_tokens.error_unknown` | UPDATE `hash`, clears `lastUsedAt`; `revokeOwner` (rule 5) |
-| `DELETE /api/device-tokens/:id` | none | 204 | 404 `device_tokens.error_unknown` | DELETE; `revokeOwner` (rule 5) |
+| `POST /api/device-tokens/:id/renew` | none | 201, `DeviceToken` + `token` | 404 `device_tokens.error_unknown` | UPDATE `hash`, clears `lastUsedAt` |
+| `DELETE /api/device-tokens/:id` | none | 204 | 404 `device_tokens.error_unknown` | DELETE |
 
 `DeviceToken { id, name, kind, createdAt, lastUsedAt: ISO-8601 with ms | null }`; the hash is never serialised.
 
-5. Revoking or renewing calls `engine.revoke_owner(userId)` (`engine-glue.md` rule 29) so the engine drops the cached answers of that owner, device credentials included. The plaintext is not kept, so `POST /v1/revoke { credential }` cannot be used; the answers' short TTL (rule 8) bounds a miss.
+5. Revoking or renewing takes effect in the database at once. The engine caches answers per credential and the plaintext is not kept, so `POST /v1/revoke { credential }` cannot be used, and `revokeOwner` would end the owner's playback sessions: the 30 s `ttlS` of an allow (rule 8) is the documented bound of a revocation.
 6. A token of a disabled user, or of a deleted one (cascade), resolves to nothing.
 
 ## Resolving
@@ -32,8 +32,5 @@ Every route requires a session credential (`remote.md` rule on `SessionAuthed`):
 9. Scope by kind, each kind naming the credential sources it accepts: `opds` accepts `basic` only; `kosync` accepts none (its tokens never open the data plane). A source outside the kind's list is a denial, so a token that travelled in a URL (`query`, `path`) or in a cookie never opens an `opds` row; `kobo` will list `path` and `query`. A device token resolves the file purposes `stream`, `download`, `sprite` and `subtitle`; `live` is a denial (it names no owner).
 10. The answer then goes through the same checks as a user's: the library ACL (`check_library`) and the edition rule (`libraries::HIDDEN_FILES_FROM` through `assert_file_accessible`, `engine-glue.md` rule 41), on every answer, with the token's owner as the caller. A token never reads more than its owner does.
 11. A hit sets `lastUsedAt = now()`.
-12. A secret that is not shaped like a token (`fkd_` + 64 hex), an unreadable Basic value or an identifier over 255 bytes is a denial with no lookup and no count.
-
-## Rate limit
-
-13. Failed lookups are throttled like the login (`auth.md` rule 39: 5 within 15 minutes, `10 000` keys, same eviction), in its own in-process map. The engine sends no client address, so the key is the lower-cased Basic identifier, with an empty network. Only a well-shaped token that matches no row is a failure. A blocked key is a denial with no lookup (the engine caches it for its `ttlS`); a hit clears the key. Routes that see the client (OPDS, kosync `/users/auth`) key on its network like the login.
+12. A secret that is not shaped like a token (`fkd_` + 64 hex), an unreadable Basic value or an identifier over 255 bytes is a denial with no lookup.
+13. There is no failure throttle on the resolver: the engine sends no client address, so a key could only be the client-chosen Basic identifier, which would let anyone lock a reader out; the 256-bit token is the protection. Routes that see the client (OPDS, kosync `/users/auth`) throttle on its network like the login (`auth.md` rule 39).

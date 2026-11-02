@@ -910,43 +910,6 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn failed_device_tokens_are_throttled_per_identifier(pool: PgPool) {
-        let w = world(pool).await;
-        let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
-        let shaped = |n: usize| format!("fkd_{n:064x}");
-        for n in 0..4 {
-            assert_eq!(ask_basic(&w, "Reader", &shaped(n)).await, denied());
-        }
-        assert_eq!(
-            ask_basic(&w, "reader", &token).await["allow"],
-            true,
-            "a hit clears the key"
-        );
-        for n in 4..9 {
-            assert_eq!(ask_basic(&w, "reader", &shaped(n)).await, denied());
-        }
-        assert_eq!(
-            ask_basic(&w, "READER", &token).await,
-            denied(),
-            "blocked: the valid token too"
-        );
-        assert_eq!(
-            ask_basic(&w, "other", &token).await["allow"],
-            true,
-            "another identifier is free"
-        );
-        for n in 0..20 {
-            ask_basic(&w, "noise", "not-a-token-shape").await;
-            ask_basic(&w, "noise", &format!("fkd_{n}")).await;
-        }
-        assert_eq!(
-            ask_basic(&w, "noise", &token).await["allow"],
-            true,
-            "malformed values are not counted"
-        );
-    }
-
-    #[sqlx::test(migrations = false)]
     async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
         let w = world(pool).await;
         let live =
