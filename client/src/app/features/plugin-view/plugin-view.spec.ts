@@ -122,6 +122,31 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
+  it('never stores a `fliks:` secret default as the override', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'settings' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          id: 'settings',
+          labelKey: 'x',
+          fields: [{ key: 'apiKey', type: 'text', labelKey: 'y', secret: true, default: 'fliks:apiKey' }],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/settings', method: 'GET' }).flush({});
+    await settle(fixture);
+
+    expect(fixture.componentInstance.formValue()['apiKey']).toBe('');
+    void fixture.componentInstance.saveForm();
+    const req = http.expectOne({ url: '/api/settings', method: 'PUT' });
+    expect(req.request.body).toEqual({ data: {} });
+    req.flush({ ok: true });
+    await settle(fixture);
+    http.verify();
+  });
+
   it('loads a `status` item from settings but never writes it back on save', async () => {
     const { fixture, http } = createComponent(
       { pluginId: 'fliks.a', view: 'settings' },

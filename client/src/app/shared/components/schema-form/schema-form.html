@@ -23,7 +23,7 @@
               <button type="button" class="link link-hover font-medium" (click)="setValue(field, '')">
                 {{ 'common.secret_keep' | translate }}
               </button>
-            } @else {
+            } @else if (!fieldValue(field)) {
               {{ 'common.secret_default' | translate }}
             }
           </p>
@@ -46,7 +46,7 @@
             </button>
           }
         }
-        @if (field.secret && field.required && !field.hasDefault && !isSecretStored(field)) {
+        @if (field.secret && field.requiredByProvider && !field.hasDefault && !isSecretStored(field)) {
           <p class="text-warning text-xs">{{ 'common.secret_required' | translate }}</p>
         }
         @for (err of fieldErrors(field); track err.key) {

@@ -257,6 +257,7 @@ impl Plugins {
                 .filter_map(|v| v.as_str().map(str::to_owned))
                 .collect()
         };
+        defaults::warn_unresolved(id.as_str(), m, pkg.verified_by_key_id.is_some());
         let sh = Arc::new(Shared {
             id: id.as_str().into(),
             env: host.env.clone(),

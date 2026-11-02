@@ -40,6 +40,9 @@ fn lookup<'a>(
     field: &Value,
 ) -> Option<&'a str> {
     let name = field["default"].as_str()?.strip_prefix("fliks:")?;
+    if field["secret"] != true {
+        return None;
+    }
     let first = manifest["provider"]["namespaces"][0]["name"].as_str()?;
     if !official {
         return None;
@@ -65,9 +68,20 @@ pub fn for_plugin(manifest: &Value, official: bool) -> Vec<(String, String)> {
     resolved(DEFAULTS, manifest, official)
 }
 
-/// Whether the field key has a default for this plugin (`hasDefault` of `GET /plugins/ui`).
-pub fn has_default(manifest: &Value, official: bool, key: &str) -> bool {
-    for_plugin(manifest, official).iter().any(|(k, _)| k == key)
+/// Rule 36: warn for each `fliks:` field that resolves to nothing.
+pub fn warn_unresolved(plugin_id: &str, manifest: &Value, official: bool) {
+    for f in fields(manifest) {
+        let unresolved = f["default"]
+            .as_str()
+            .is_some_and(|d| d.starts_with("fliks:"))
+            && lookup(DEFAULTS, manifest, official, f).is_none();
+        if unresolved {
+            tracing::warn!(
+                "plugin \"{plugin_id}\": field \"{}\" has no Fliks default",
+                f["key"].as_str().unwrap_or_default()
+            );
+        }
+    }
 }
 
 /// Rule 35: a stored non-empty value wins, the default fills the rest.
@@ -92,8 +106,9 @@ mod tests {
         json!({
             "provider": {"namespaces": [{"name": ns}]},
             "ui": {"configPages": [{"id": "p", "fields": [
-                {"kind": "group", "fields": [{"key": "apiKey", "default": "fliks:apiKey"}]},
-                {"key": "other", "default": "fliks:other"}
+                {"kind": "group", "fields": [{"key": "apiKey", "secret": true, "default": "fliks:apiKey"}]},
+                {"key": "other", "secret": true, "default": "fliks:other"},
+                {"key": "plain", "default": "fliks:apiKey"}
             ]}]}
         })
     }
@@ -112,7 +127,6 @@ mod tests {
         let mut m = manifest("org.example.x:id");
         m["provider"]["namespaces"] = json!([{"name": "tmdb"}]);
         assert!(resolved(T, &m, false).is_empty());
-        assert!(!has_default(&m, false, "apiKey"));
     }
 
     #[test]

@@ -6,6 +6,11 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 import { ToastService } from '../../../core/services/toast.service';
 
 const KINDS = ['movie', 'series', 'book', 'comic', 'album'] as const;
+const DEFAULT_ORDER: Record<string, string[]> = {
+  movie: ['tmdb', 'tvdb'],
+  series: ['tmdb', 'tvdb'],
+  book: ['openlibrary', 'bnf', 'googlebooks', 'audible', 'audnexus'],
+};
 const orderKey = (kind: string) => `metadata.provider_order.${kind}`;
 
 interface Row {
@@ -54,13 +59,18 @@ export class MetadataSettingsComponent implements OnInit {
     }
   }
 
+  private order(kind: string): string[] {
+    const stored = this.stored()[kind];
+    return stored?.length ? stored : (DEFAULT_ORDER[kind] ?? []);
+  }
+
   /** Stored order first, then the providers it does not name. */
   rows(kind: string): Row[] {
     const all: Row[] = this.providers()
       .filter((p) => p.kinds.includes(kind))
       .flatMap((p) => p.namespaces.map((namespace) => ({ namespace, pluginId: p.pluginId, name: p.name })));
     const rank = (r: Row) => {
-      const i = (this.stored()[kind] ?? []).indexOf(r.namespace);
+      const i = this.order(kind).indexOf(r.namespace);
       return i < 0 ? Number.MAX_SAFE_INTEGER : i;
     };
     return all
@@ -74,9 +84,14 @@ export class MetadataSettingsComponent implements OnInit {
     const j = index + by;
     if (j < 0 || j >= names.length) return;
     [names[index], names[j]] = [names[j], names[index]];
+    // Slots of namespaces whose plugin is not installed keep their place.
+    const shown = new Set(names);
+    const base = [...this.order(kind), ...names.filter((n) => !this.order(kind).includes(n))];
+    const next = [...names];
+    const merged = base.map((n) => (shown.has(n) ? next.shift()! : n));
     try {
-      await this.settings.set(orderKey(kind), JSON.stringify(names));
-      this.stored.update((s) => ({ ...s, [kind]: names }));
+      await this.settings.set(orderKey(kind), JSON.stringify(merged));
+      this.stored.update((s) => ({ ...s, [kind]: merged }));
     } catch {
       this.toast.error(this.translate.instant('settings.metadata.save_error'));
     }

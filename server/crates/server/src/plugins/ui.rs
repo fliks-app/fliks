@@ -72,22 +72,36 @@ fn without_collisions(plugins: Vec<Registered>) -> Vec<Registered> {
         .collect()
 }
 
-/// Rule 39: every field of a page carries `hasDefault`, never the value.
+/// Rule 39: every field carries `hasDefault`; a `fliks:` default is dropped, never sent.
 fn mark_defaults(page: &mut Value, p: &Registered) {
     let keys: Vec<String> = super::defaults::for_plugin(&p.manifest, p.signature == "official")
         .into_iter()
         .map(|(k, _)| k)
         .collect();
-    fn walk(items: &mut Value, keys: &[String]) {
+    let requires: Vec<String> = p.manifest["provider"]["requires"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    fn walk(items: &mut Value, keys: &[String], requires: &[String]) {
         for i in items.as_array_mut().into_iter().flatten() {
             if i["kind"] == "group" {
-                walk(&mut i["fields"], keys);
+                walk(&mut i["fields"], keys, requires);
             } else if let Some(k) = i["key"].as_str() {
-                i["hasDefault"] = json!(keys.iter().any(|d| d == k));
+                let (has, req) = (keys.iter().any(|d| d == k), requires.iter().any(|d| d == k));
+                if i["default"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("fliks:"))
+                {
+                    i.as_object_mut().map(|o| o.remove("default"));
+                }
+                i["hasDefault"] = json!(has);
+                i["requiredByProvider"] = json!(req);
             }
         }
     }
-    walk(&mut page["fields"], &keys);
+    walk(&mut page["fields"], &keys, &requires);
 }
 
 impl Plugins {
@@ -209,11 +223,13 @@ mod tests {
             signature: signature.into(),
             archive: Default::default(),
         };
-        let page = json!({"fields": [{"key": "apiKey", "default": "fliks:apiKey"}]});
+        let page =
+            json!({"fields": [{"key": "apiKey", "secret": true, "default": "fliks:apiKey"}]});
         for sig in ["official", "unsigned"] {
             let mut p = page.clone();
             mark_defaults(&mut p, &reg(sig));
             assert!(p["fields"][0]["hasDefault"].is_boolean());
+            assert!(p["fields"][0].get("default").is_none());
             assert!(!p.to_string().contains("FLIKS_DEFAULT"));
         }
     }

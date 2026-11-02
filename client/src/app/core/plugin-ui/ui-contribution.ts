@@ -86,6 +86,8 @@ export interface FieldDef {
   secret?: boolean;
   /** Read response only: Fliks supplies a value for this field when none is stored. */
   hasDefault?: boolean;
+  /** Read response only: the provider is unavailable without a value for this key. */
+  requiredByProvider?: boolean;
   /** A `string[]` only for `multiselect`, which is the set a new row starts from. */
   default?: string | number | boolean | string[];
   /** Required for `multiselect`. For that type the value is a `string[]` of the declared

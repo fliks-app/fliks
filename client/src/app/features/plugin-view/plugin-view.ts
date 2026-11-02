@@ -79,6 +79,7 @@ function typedSetting(field: FieldDef, raw: string | null | undefined): string |
     const n = Number(source);
     return Number.isFinite(n) ? n : '';
   }
+  if (field.secret) return raw ?? '';
   return raw ?? (field.default != null ? String(field.default) : '');
 }
 
@@ -254,7 +255,7 @@ export class PluginViewComponent implements OnDestroy {
         // A blank secret keeps the stored value; `null` is the value bag's erase marker.
         if (secretKeys.has(k)) {
           if (v === null) patch[prefix + k] = null;
-          else if (String(v) !== '' || !this.formSecretsSet().includes(k)) patch[prefix + k] = String(v);
+          else if (String(v) !== '') patch[prefix + k] = String(v);
         } else patch[prefix + k] = v === null ? '' : String(v);
       }
       await this.settingsApi.setBulk(patch);
