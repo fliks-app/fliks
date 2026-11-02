@@ -141,8 +141,8 @@ async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -
 }
 
 /// Rule 12a.
-async fn assert_no_active_duplicate(st: &AppState, dto: &CreateRequest) -> Res<()> {
-    let existing = db::active_adds(&st.db, &dto.key()).await?;
+async fn assert_no_active_duplicate(tx: &mut PgConnection, dto: &CreateRequest) -> Res<()> {
+    let existing = db::active_adds(&mut *tx, &dto.key()).await?;
     if existing.is_empty() {
         return Ok(());
     }
@@ -356,11 +356,16 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         return create_delete(st, a, &dto).await;
     }
     let mut tx = st.db.begin().await?;
-    db::lock_user_quota(&mut tx, a.user.id).await?;
+    sqlx::query("SET LOCAL lock_timeout = '10s'")
+        .execute(&mut *tx)
+        .await?;
+    if a.user.quotas.limit(dto.media_type) != 0 {
+        db::lock_user_quota(&mut tx, a.user.id).await?;
+    }
     check_quota(&mut tx, a, dto.media_type).await?;
     let key = dto.key();
     db::lock_title(&mut tx, &key).await?;
-    assert_no_active_duplicate(st, &dto).await?;
+    assert_no_active_duplicate(&mut tx, &dto).await?;
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
         assert_exist(st, None, None, Some(l)).await?;

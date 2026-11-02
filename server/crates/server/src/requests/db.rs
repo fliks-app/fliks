@@ -116,7 +116,7 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
 }
 
 /// Active ADD rows of a title, oldest first (the guard, `title-state` and the series profile lock).
-pub async fn active_adds(db: &PgPool, t: &TitleKey) -> sqlx::Result<Vec<Req>> {
+pub async fn active_adds(db: impl PgExecutor<'_>, t: &TitleKey) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
         RawReq,
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",

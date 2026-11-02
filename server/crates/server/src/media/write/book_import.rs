@@ -29,7 +29,7 @@ use crate::{
 use axum::{Json, http::StatusCode};
 use fliks_domain::{
     media::kind::MediaKind,
-    media::wants::{WantSpec, parse_wants},
+    media::wants::{MAX_WANTS, WantSpec, parse_wants},
     metadata::limiter::Priority,
     naming::{self, BookNameTokens, validate_folder_path},
 };
@@ -284,17 +284,12 @@ pub async fn import_book_for_request(
     (library, folder): (Option<i32>, Option<i32>),
     added_by: Option<i32>,
 ) -> Result<i32, AppError> {
-    if let Some(id) = external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await? {
-        let mut tx = st.db.begin().await?;
-        wants::add(&mut tx, id, wants)
-            .await
-            .map_err(|e| wants::write_error(e, id))?;
-        tx.commit().await?;
+    if let Some(id) = add_to_existing(st, work, wants).await? {
         return Ok(id);
     }
     let all = super::all_library_ids(&st.db).await?;
     let target = super::resolve_target_in(st, &all, MediaKind::Book, library, folder).await?;
-    create_book(
+    let created = create_book(
         st,
         &NewBook {
             target: &target,
@@ -306,5 +301,38 @@ pub async fn import_book_for_request(
             discovered: false,
         },
     )
-    .await
+    .await;
+    match created {
+        // lost a race with another import of the work: it is there now
+        Err(e) if e.status() == StatusCode::CONFLICT => {
+            add_to_existing(st, work, wants).await?.ok_or(e)
+        }
+        r => r,
+    }
+}
+
+/// Adds `wants` to the work when it is already in the library; the union stays within `MAX_WANTS`.
+async fn add_to_existing(
+    st: &AppState,
+    work: &str,
+    wants: &[WantSpec],
+) -> Result<Option<i32>, AppError> {
+    let Some(id) = external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await? else {
+        return Ok(None);
+    };
+    let mut tx = st.db.begin().await?;
+    wants::add(&mut tx, id, wants)
+        .await
+        .map_err(|e| wants::write_error(e, id))?;
+    let n: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM wants WHERE "mediaId" = $1"#)
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if n > MAX_WANTS as i64 {
+        return Err(AppError::bad_request(format!(
+            "the book would hold more than {MAX_WANTS} wants"
+        )));
+    }
+    tx.commit().await?;
+    Ok(Some(id))
 }

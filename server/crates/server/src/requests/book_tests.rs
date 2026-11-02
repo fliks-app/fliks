@@ -6,6 +6,7 @@ use crate::{
     state::AppState,
 };
 use axum::{Router, body::Body, http::Request};
+use fliks_domain::media::{family::Family, wants::WantSpec};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -301,6 +302,56 @@ async fn auto_approval_reads_the_book_kind_and_fails_closed_on_tmdb_facts(pool: 
         .request(&c.user, "OL4W", json!([want("text", None)]))
         .await;
     assert_eq!(r["status"], "pending", "the rule names another user");
+    rule(json!({"mediaType": "book", "maxSeasons": 1, "userIds": [2]})).await;
+    let (_, r) = c
+        .request(&c.user, "OL5W", json!([want("text", None)]))
+        .await;
+    assert_eq!(r["status"], "approved", "maxSeasons is ignored for a book");
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_approvals_of_one_work_keep_every_edition_wished(pool: PgPool) {
+    let c = ctx(pool).await;
+    let import = |w: WantSpec| {
+        let st = c.st.clone();
+        tokio::spawn(async move {
+            crate::media::write::import_book_for_request(
+                &st,
+                "OL6W",
+                &[w],
+                (Some(1), None),
+                Some(2),
+            )
+            .await
+            .map_err(|e| e.status())
+        })
+    };
+    let spec = |family, language: &str| WantSpec {
+        family,
+        language: Some(language.into()),
+        quality_profile_id: None,
+    };
+    let (a, b) = (
+        import(spec(Family::Text, "fr")),
+        import(spec(Family::Audio, "en")),
+    );
+    let (a, b) = (a.await.unwrap().unwrap(), b.await.unwrap().unwrap());
+    assert_eq!(a, b);
+    assert_eq!(
+        c.wants(a).await,
+        [
+            ("audio".into(), Some("en".into())),
+            ("text".into(), Some("fr".into()))
+        ]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_delete_request_takes_no_wants(pool: PgPool) {
+    let c = ctx(pool).await;
+    let body = json!({"mediaType": "book", "kind": "delete", "externalId": "OL2W", "title": "t",
+                      "wants": [want("text", None)]});
+    assert_eq!(c.call(&c.user, "POST", "/api/requests", body).await.0, 400);
 }
 
 #[sqlx::test(migrations = false)]

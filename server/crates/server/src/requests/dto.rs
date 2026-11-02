@@ -107,9 +107,6 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     let book = o.get("mediaType").and_then(Value::as_str) == Some(MediaKind::Book.as_str());
     let mut c = Check::new(&o, if book { &BOOK_KEYS } else { &VIDEO_KEYS }, "");
     let media_type = c.kind("mediaType", false);
-    if !book && media_type.is_some_and(|m| !m.is_video()) {
-        c.err("mediaType", "must be movie or series");
-    }
     let kind = c.one_of("kind", &KINDS, true);
     let delete = kind.as_deref() == Some("delete");
     let key = match media_type {
@@ -122,6 +119,9 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     };
     if !o.get("title").is_some_and(Value::is_string) {
         c.err("title", "must be a string");
+    }
+    if book && delete && o.contains_key("wants") {
+        c.errs.push("property wants should not exist".into());
     }
     let wants = match o.get("wants") {
         Some(w) if book && !delete => match parse_wants(w, MediaKind::Book) {
