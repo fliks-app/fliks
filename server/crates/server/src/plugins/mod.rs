@@ -340,6 +340,9 @@ impl Plugins {
         self.stop_rt(id).await;
         self.drop_crons(id);
         self.counts.forget(id);
+        if let Some(app) = self.app() {
+            app.images.forget_hosts(id);
+        }
         self.registry.withdraw(id, true);
     }
 

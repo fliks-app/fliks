@@ -75,12 +75,31 @@ fn in_v6(ip: Ipv6Addr, net: u128, bits: u32) -> bool {
     u128::from(ip) & mask == net & mask
 }
 
-fn classify_v6(ip: Ipv6Addr) -> Class {
+/// The IPv4 address an IPv6 one carries: `::ffff:0:0/96`, `64:ff9b::/96`, the deprecated
+/// IPv4-compatible `::/96`, and `64:ff9b:1::/48` (RFC 8215, address bits per RFC 6052).
+fn embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     let bits = u128::from(ip);
-    // ::ffff:0:0/96, 64:ff9b::/96 and the deprecated IPv4-compatible ::/96 carry an IPv4 address.
     let compatible = bits >> 32 == 0 && bits > 1;
     if compatible || in_v6(ip, 0xffff << 32, 96) || in_v6(ip, 0x0064_ff9b << 96, 96) {
-        return classify_v4(Ipv4Addr::from(bits as u32));
+        return Some(Ipv4Addr::from(bits as u32));
+    }
+    let o = ip.octets();
+    in_v6(ip, 0x0064_ff9b_0001 << 80, 48).then(|| Ipv4Addr::new(o[6], o[7], o[9], o[10]))
+}
+
+/// Loopback or a cloud metadata service (`100.100.100.200`, `fd00:ec2::254`), embedded IPv4 included.
+pub fn is_loopback_or_metadata(ip: IpAddr) -> bool {
+    const AWS_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
+    let ip = match ip {
+        IpAddr::V6(v6) => embedded_v4(v6).map_or(ip, IpAddr::V4),
+        v4 => v4,
+    };
+    ip.is_loopback() || ip == IpAddr::from([100, 100, 100, 200]) || ip == IpAddr::V6(AWS_V6)
+}
+
+fn classify_v6(ip: Ipv6Addr) -> Class {
+    if let Some(v4) = embedded_v4(ip) {
+        return classify_v4(v4);
     }
     const REFUSED: [(u128, u32); 6] = [
         (0, 128),
@@ -135,9 +154,37 @@ mod tests {
             ("::7f00:1", Class::Private),
             ("::808:808", Class::Public),
             ("2002:0808:0808::1", Class::Refused),
+            ("64:ff9b:1:7f00:0:100::", Class::Private),
+            ("64:ff9b:1:808:8:800::", Class::Public),
         ];
         for (ip, want) in cases {
             assert_eq!(classify(ip.parse().unwrap()), want, "{ip}");
         }
+    }
+}
+
+#[cfg(test)]
+mod never_tests {
+    use super::*;
+
+    #[test]
+    fn loopback_and_metadata_through_embedding() {
+        for ip in [
+            "127.0.0.1",
+            "::1",
+            "::ffff:127.0.0.1",
+            "64:ff9b::7f00:1",
+            "64:ff9b::6464:64c8",
+            "::7f00:1",
+            "64:ff9b:1:7f00:0:100::",
+            "100.100.100.200",
+            "fd00:ec2::254",
+        ] {
+            assert!(is_loopback_or_metadata(ip.parse().unwrap()), "{ip}");
+        }
+        assert!(!is_loopback_or_metadata("10.0.0.1".parse().unwrap()));
+        assert!(!is_loopback_or_metadata(
+            "64:ff9b::808:808".parse().unwrap()
+        ));
     }
 }

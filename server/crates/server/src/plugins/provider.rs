@@ -630,8 +630,7 @@ impl Plugins {
         if let Some(app) = self.app() {
             match PluginProvider::new(rt.clone(), &app.metadata) {
                 Some(provider) => {
-                    app.images
-                        .allow_hosts(provider.key.as_str(), provider.image_hosts().to_vec());
+                    app.images.allow_hosts(id, provider.image_hosts().to_vec());
                     app.metadata.add_plugin(Arc::new(provider));
                 }
                 None => {

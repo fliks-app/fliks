@@ -15,7 +15,6 @@ use std::{
     collections::HashMap,
     future::Future,
     io::Cursor,
-    net::{IpAddr, Ipv6Addr},
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
     time::Duration,
@@ -78,13 +77,6 @@ fn widths(t: &Target) -> (Option<u32>, Option<u32>) {
 
 fn is_png(t: &Target) -> bool {
     t.kind == Kind::Livetv || (t.kind == Kind::Media && t.variant == Some(Variant::Logo))
-}
-
-/// Never dialled, whatever the caller: loopback and the cloud metadata services.
-fn never(ip: IpAddr) -> bool {
-    const AWS_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
-    let ip = ip.to_canonical();
-    ip.is_loopback() || ip == IpAddr::from([100, 100, 100, 200]) || ip == IpAddr::V6(AWS_V6)
 }
 
 /// The URL for logs: no userinfo, no query string (`image-store.md` rule 23).
@@ -217,6 +209,11 @@ impl ImageStore {
         self
     }
 
+    /// Forgets the hosts of an unregistered plugin.
+    pub fn forget_hosts(&self, plugin: &str) {
+        self.plugin_hosts.write_clean().remove(plugin);
+    }
+
     /// The hosts `plugin`'s manifest declares as its image CDNs; replaces its earlier list.
     pub fn allow_hosts(&self, plugin: &str, hosts: Vec<String>) {
         self.plugin_hosts
@@ -237,22 +234,11 @@ impl ImageStore {
     }
 
     fn build(root: Option<PathBuf>, tmdb_image_base: &str) -> Self {
-        let mut trusted: Vec<(String, u16)> = reqwest::Url::parse(tmdb_image_base)
+        let trusted: Vec<(String, u16)> = reqwest::Url::parse(tmdb_image_base)
             .ok()
             .and_then(|u| Some((u.host_str()?.to_owned(), u.port_or_known_default()?)))
             .into_iter()
             .collect();
-        // The loopback fixtures of a `parity` run: `host:port,...`.
-        #[cfg(feature = "parity")]
-        trusted.extend(
-            std::env::var("FLIKS_PARITY_TRUSTED_IMAGE_HOSTS")
-                .unwrap_or_default()
-                .split(',')
-                .filter_map(|a| {
-                    let (h, p) = a.trim().rsplit_once(':')?;
-                    Some((h.to_owned(), p.parse().ok()?))
-                }),
-        );
         Self {
             root,
             tmdb_prefix: format!("{}/", tmdb_image_base.trim_end_matches('/')),
@@ -287,7 +273,7 @@ impl ImageStore {
             .trim_end_matches(']')
             .to_owned();
         let port = url.port_or_known_default().unwrap_or(80);
-        let b = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
+        let b = guard::client_builder().redirect(reqwest::redirect::Policy::none());
         if self.trusted.contains(&(host.clone(), port)) {
             return Ok(b.build().expect("reqwest client"));
         }
@@ -297,7 +283,10 @@ impl ImageStore {
         let addrs = guard::vet(&*self.dns, &host, port, live)
             .await
             .map_err(|e| format!("address refused: {e:?}"))?;
-        if addrs.iter().any(|a| never(a.ip())) {
+        if addrs
+            .iter()
+            .any(|a| fliks_domain::net::is_loopback_or_metadata(a.ip()))
+        {
             return Err("address refused: loopback or metadata".into());
         }
         #[cfg(any(test, feature = "parity"))]
@@ -615,7 +604,7 @@ mod tests {
 
     /// Names resolve as told; every dial goes to the mock.
     struct Dns {
-        names: HashMap<String, IpAddr>,
+        names: HashMap<String, std::net::IpAddr>,
         mock: std::net::SocketAddr,
         tls: guard::SystemNet,
     }
@@ -1130,6 +1119,8 @@ mod tests {
             "http://127.0.0.1:9/x.png",
             "http://[::1]:9/x.png",
             "http://[::ffff:7f00:1]:9/x.png",
+            "http://[64:ff9b::7f00:1]:9/x.png",
+            "http://[64:ff9b::6464:64c8]/x.png",
             "http://169.254.169.254/x.png",
             "http://100.100.100.200/x.png",
             "http://[fd00:ec2::254]/x.png",
@@ -1164,6 +1155,12 @@ mod tests {
         );
         s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
         assert!(s.download(&cdn, false).await.is_ok());
+        s.forget_hosts("org.example");
+        assert_eq!(
+            s.download(&cdn, false).await.unwrap_err(),
+            "host not allowed"
+        );
+        s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
         let lan = format!("http://lan.test:{port}/f/poster.jpg");
         assert_eq!(
             s.download(&lan, false).await.unwrap_err(),
