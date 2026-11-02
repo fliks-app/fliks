@@ -62,7 +62,7 @@ pub async fn attach_with(
     };
     let work = work_id(&m.work).ok_or_else(|| Upstream::new(None, "not a work id"))?;
     if !st.metadata.available(ANCHOR) {
-        return Err(Upstream::new(None, "the work provider is unavailable").into());
+        return Err(Upstream::outage("the work provider is unavailable").into());
     }
     let lang = st.metadata.lang.resolve(Some(&ctx.over)).await?;
     let Value::Object(work_record) = st

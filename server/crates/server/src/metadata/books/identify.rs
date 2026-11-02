@@ -40,7 +40,7 @@ pub async fn identify(
     p: Priority,
 ) -> Result<Option<BookMatch>, MetaError> {
     if !st.metadata.available(ANCHOR) {
-        return Err(Upstream::new(None, "the work provider is unavailable").into());
+        return Err(Upstream::outage("the work provider is unavailable").into());
     }
     let lang = st
         .metadata

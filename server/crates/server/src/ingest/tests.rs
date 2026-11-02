@@ -1781,6 +1781,8 @@ mod book_import {
         busy: Mutex<(u32, u32)>,
         /// Searches that fail 503 before the first answer.
         down: Mutex<u32>,
+        /// Searches rejected 400 before the first answer.
+        rejects: Mutex<u32>,
         /// Dropped by the first search: deletes every book media, as a user would mid-import.
         wipe: Mutex<Option<PgPool>>,
     }
@@ -1836,6 +1838,13 @@ mod book_import {
                     if *down > 0 {
                         *down -= 1;
                         return Err(Upstream::new(Some(503), "provider down"));
+                    }
+                }
+                {
+                    let mut rejects = self.rejects.lock().unwrap();
+                    if *rejects > 0 {
+                        *rejects -= 1;
+                        return Err(Upstream::new(Some(400), "bad query"));
                     }
                 }
                 let wipe = self.wipe.lock().unwrap().take();
@@ -1943,6 +1952,7 @@ mod book_import {
             priorities: Mutex::default(),
             busy: Mutex::default(),
             down: Mutex::default(),
+            rejects: Mutex::default(),
             wipe: Mutex::default(),
         };
         (Arc::new(p), seen)
@@ -2258,6 +2268,34 @@ mod book_import {
             (&json!("completed"), &json!(1), &json!(0)),
             "{done}"
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_permanent_provider_error_fails_its_item_and_not_the_next(pool: PgPool) {
+        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
+        *p.rejects.lock().unwrap() = 1;
+        let c = ctx_with(pool, Some(p)).await;
+        let l = shelf(&c).await;
+        work(&c, 1);
+        work(&c, 2);
+        assert_eq!(start(&c, l).await.0, 202);
+        let done = finished(&c, l, 20).await;
+        assert_eq!(
+            (
+                &done["status"],
+                &done["failed"],
+                &done["matched"],
+                &done["pending"]
+            ),
+            (&json!("completed"), &json!(1), &json!(1), &json!(0)),
+            "{done}"
+        );
+        let cause: String =
+            sqlx::query_scalar("SELECT error FROM book_import_items WHERE status = 'failed'")
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert!(cause.contains("bad query"), "{cause}");
     }
 
     #[sqlx::test(migrations = false)]

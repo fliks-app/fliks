@@ -496,11 +496,11 @@ async fn import_item(st: &AppState, job: &Job, item: &Item) -> Done {
     let media = linked.media_id;
     st.ingest.settle.cancel(media);
     if let Err(e) = books::identify_media(st, media).await {
-        tracing::warn!("Book import: identification of book #{media}: {e}");
+        tracing::warn!("Book import: identification of book #{media}: {}", e.cause);
         return Done {
-            status: "pending",
+            status: if e.retry { "pending" } else { "failed" },
             media: Some(media),
-            error: Some(e),
+            error: Some(e.cause),
         };
     }
     let matched = sqlx::query_scalar(

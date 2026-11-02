@@ -11,7 +11,10 @@ use crate::{
     books::koreader,
     images::paths::{Target, Variant},
     libraries::Folder,
-    metadata::books::{identify, link},
+    metadata::{
+        MetaError,
+        books::{identify, link},
+    },
     state::AppState,
 };
 use fliks_domain::{
@@ -578,8 +581,33 @@ struct Candidate {
     rel: Option<String>,
 }
 
+/// Why `identify_media` failed; `retry` is set when a later call can succeed (provider outage).
+pub struct IdentifyError {
+    pub retry: bool,
+    pub cause: String,
+}
+
+impl IdentifyError {
+    fn of(edition: i32, what: &str, e: MetaError) -> Self {
+        match e {
+            MetaError::Upstream(u) => Self {
+                retry: u.is_outage(),
+                cause: format!("{what} of edition #{edition}: {u}"),
+            },
+            MetaError::Db(e) => Self::permanent(format!("{what} of edition #{edition}: {e}")),
+        }
+    }
+
+    fn permanent(cause: String) -> Self {
+        Self {
+            retry: false,
+            cause,
+        }
+    }
+}
+
 /// Rule 16: identifies the editions of a book that have no id yet and attaches the match.
-pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
+pub async fn identify_media(st: &AppState, media: i32) -> Result<(), IdentifyError> {
     let rows = sqlx::query!(
         r#"SELECT e.id, e.family,
              (SELECT p."mediaFileId" FROM item_parts p JOIN items i ON i.id = p."itemId"
@@ -594,7 +622,7 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
     )
     .fetch_all(&st.db)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| IdentifyError::permanent(e.to_string()))?;
     let candidates = rows.into_iter().filter_map(|r| {
         Some(Candidate {
             edition: r.id,
@@ -607,13 +635,16 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
         let (Some(file), Some(rel)) = (c.file, c.rel) else {
             continue;
         };
-        let Some((path, info)) = file_path(st, file).await.map_err(|e| e.to_string())? else {
+        let Some((path, info)) = file_path(st, file)
+            .await
+            .map_err(|e| IdentifyError::permanent(e.to_string()))?
+        else {
             continue;
         };
         let (hints, record) = hints_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
         let found = match identify::identify(st, &hints, Priority::Background).await {
             Ok(m) => m,
-            Err(e) => return Err(format!("identify of edition #{}: {e:?}", c.edition)),
+            Err(e) => return Err(IdentifyError::of(c.edition, "identify", e)),
         };
         let m = match found {
             Some(m) => m,
@@ -634,7 +665,7 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
             Priority::Background,
         )
         .await
-        .map_err(|e| format!("attach of edition #{}: {e:?}", c.edition))?;
+        .map_err(|e| IdentifyError::of(c.edition, "attach", e))?;
     }
     Ok(())
 }
@@ -668,7 +699,9 @@ async fn hints_of(
 /// Settles a book once its post-import work is done (`post_import::settled`).
 pub async fn settled(st: &AppState, media: i32) {
     if let Err(e) = identify_media(st, media).await {
-        tracing::warn!("Post-import[book #{media}]: {e}, retrying");
-        st.ingest.settle.schedule(st, media);
+        tracing::warn!("Post-import[book #{media}]: {}", e.cause);
+        if e.retry {
+            st.ingest.settle.schedule(st, media);
+        }
     }
 }
