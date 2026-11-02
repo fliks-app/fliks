@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"collectionId\" FROM collection_external_ids WHERE provider = $1 AND value = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "collectionId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "collection_external_ids",
+            "name": "collectionId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0b0cda52639212504755fa87e2ae0641d8b6000814414cac27efd3ab8d81ae9f"
+}

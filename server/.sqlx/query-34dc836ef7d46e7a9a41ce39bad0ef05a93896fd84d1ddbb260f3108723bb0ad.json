@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edition_external_ids\n           WHERE \"editionId\" = $1 AND provider = $2 AND ($3::text IS NULL OR value = $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "34dc836ef7d46e7a9a41ce39bad0ef05a93896fd84d1ddbb260f3108723bb0ad"
+}

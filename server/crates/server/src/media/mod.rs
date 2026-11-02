@@ -2,6 +2,7 @@
 pub(crate) mod aggregates;
 mod calendar;
 pub mod details;
+pub mod editions;
 pub mod external_ids;
 pub mod field_sources;
 pub mod hydrate;

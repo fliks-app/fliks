@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE editions SET language = COALESCE($2, language), format = COALESCE($3, format),\n             publisher = COALESCE($4, publisher), \"durationSeconds\" = COALESCE($5, \"durationSeconds\"),\n             \"pageCount\" = COALESCE($6, \"pageCount\"), title = CASE WHEN $7 THEN $8 ELSE title END\n           WHERE id = $1 AND (language IS DISTINCT FROM COALESCE($2, language)\n             OR format IS DISTINCT FROM COALESCE($3, format)\n             OR publisher IS DISTINCT FROM COALESCE($4, publisher)\n             OR \"durationSeconds\" IS DISTINCT FROM COALESCE($5, \"durationSeconds\")\n             OR \"pageCount\" IS DISTINCT FROM COALESCE($6, \"pageCount\")\n             OR ($7 AND title IS DISTINCT FROM $8))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dab56005904f9f60a2e8346173687a93131855480e6e1093c2e7553445a4f6db"
+}

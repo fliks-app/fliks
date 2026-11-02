@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edition_field_sources WHERE \"editionId\" = $1 AND NOT locked",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3923b25cdac7fe3e207ed97ad52b8a58dc04d16a89e80c9fb8173b31f0e3358"
+}

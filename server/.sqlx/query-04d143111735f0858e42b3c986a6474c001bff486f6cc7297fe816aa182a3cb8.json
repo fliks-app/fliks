@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO collection_external_ids (\"collectionId\", provider, value) VALUES ($1, $2, $3)\n               ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04d143111735f0858e42b3c986a6474c001bff486f6cc7297fe816aa182a3cb8"
+}

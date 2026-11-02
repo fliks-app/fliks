@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT field FROM edition_field_sources WHERE \"editionId\" = $1 AND locked",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "field",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edition_field_sources",
+            "name": "field"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d02b44ec96bd543af59f5adc50bfa7ebd373648c3ca2aa8d732ae78856895260"
+}

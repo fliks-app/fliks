@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_credits (\"mediaId\", \"editionId\", \"personId\", role, position)\n           SELECT $1, $2, t.p, $3, t.o FROM UNNEST($4::int[], $5::int[]) AS t(p, o)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d64141511754f981304eda05fe164dbe4f53335c56e0a59deddc9a36ab769ce4"
+}

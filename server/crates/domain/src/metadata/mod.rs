@@ -1,4 +1,5 @@
 //! Metadata provider logic shared by the TMDB and TVDB clients (`docs/spec/metadata.md`).
+pub mod book_match;
 pub mod breaker;
 pub mod discover;
 pub mod field;

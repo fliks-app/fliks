@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"personId\" FROM person_external_ids WHERE provider = $1 AND value = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "personId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "person_external_ids",
+            "name": "personId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "52e86f1ba4a422135f26d45c2fa280dbc347fe4e2addb7cd99b322114d6e1173"
+}

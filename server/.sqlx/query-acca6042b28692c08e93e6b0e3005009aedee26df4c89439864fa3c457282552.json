@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO book_details (\"mediaId\", subtitle, subjects) VALUES ($1, $2, $3)\n           ON CONFLICT (\"mediaId\") DO UPDATE SET\n             subtitle = COALESCE(EXCLUDED.subtitle, book_details.subtitle),\n             subjects = COALESCE(EXCLUDED.subjects, book_details.subjects)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acca6042b28692c08e93e6b0e3005009aedee26df4c89439864fa3c457282552"
+}
