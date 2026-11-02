@@ -265,7 +265,8 @@
     "roles.manage": "Manage roles",
     "parties.create": "Create a party",
     "parties.manage": "Manage parties",
-    "parties.read_public": "See public parties"
+    "parties.read_public": "See public parties",
+    "books.email": "Mail books to e-readers"
   },
   "account": {
     "title": "My account",
@@ -284,7 +285,8 @@
       "recommendations": "Recommendations",
       "privacy": "Privacy",
       "spoilers": "Spoilers",
-      "devices": "Devices"
+      "devices": "Devices",
+      "email_devices": "E-mail devices"
     },
     "recommendations": {
       "reset_title": "Reset dismissed recommendations",
@@ -2015,7 +2017,8 @@
       "plugins": "Plugins",
       "subtitles_activity": "Subtitle activity",
       "cleanup": "Cleanup",
-      "metadata": "Metadata"
+      "metadata": "Metadata",
+      "email": "Outgoing mail"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -2621,7 +2624,8 @@
       "group_other": "Other",
       "included_in": "Included in \"{{name}}\"",
       "includes": "Includes: {{names}}",
-      "permission_unavailable": "no longer declared"
+      "permission_unavailable": "no longer declared",
+      "group_books": "Books"
     },
     "auto_approval": {
       "title": "Auto-approval rules",
@@ -3089,6 +3093,30 @@
         "comic": "Comics",
         "album": "Albums"
       }
+    },
+    "email": {
+      "title": "Outgoing mail",
+      "subtitle": "The SMTP account the server uses to send books to e-readers.",
+      "host": "Host",
+      "port": "Port",
+      "security": "Security",
+      "security_starttls": "STARTTLS (required)",
+      "security_tls": "TLS (implicit)",
+      "security_none": "None (plain text)",
+      "security_hint": "Certificates are always checked. Without TLS the server refuses to send a username.",
+      "from": "Sender",
+      "username": "Username",
+      "password": "Password",
+      "password_stored": "A password is set. Leave blank to keep it.",
+      "password_unset": "No password set",
+      "max_mb": "Size limit (MB)",
+      "save": "Save",
+      "saved": "Saved",
+      "load_error": "Could not load the settings.",
+      "test_title": "Send a test message",
+      "test_hint": "Mails a short message to the address below.",
+      "test_to": "Send to",
+      "test_send": "Send test"
     }
   },
   "roles": {
@@ -3962,5 +3990,54 @@
     "zoom_out": "Zoom out",
     "zoom_in": "Zoom in",
     "fixed_unsupported": "Fixed-layout books are not supported yet."
+  },
+  "email_devices": {
+    "title": "E-mail devices",
+    "intro": "Mail a book to your e-reader. Each device is an address: a Kindle address, a PocketBook one, or any address that accepts attachments.",
+    "not_configured": "The administrator has not set up outgoing mail yet, so books cannot be sent.",
+    "add": "Add a device",
+    "amazon_hint": "For a Kindle, add the sender address of this server to your approved senders in your Amazon account first.",
+    "name": "Name",
+    "name_placeholder": "Living room Kindle",
+    "kind": "Type",
+    "kind_kindle": "Kindle",
+    "kind_pocketbook": "PocketBook",
+    "kind_other": "Other",
+    "address": "Address",
+    "address_placeholder": "name@kindle.com",
+    "create": "Add",
+    "col_name": "Name",
+    "col_address": "Address",
+    "col_formats": "Formats",
+    "remove": "Remove",
+    "remove_title": "Remove this device?",
+    "remove_message": "Books can no longer be sent to it.",
+    "removed": "Device removed",
+    "empty": "No device yet.",
+    "recent": "Recent mailings",
+    "status_queued": "Queued",
+    "status_sending": "Sending",
+    "status_sent": "Sent",
+    "status_failed": "Failed",
+    "error_rejected": "The mail server refused the message.",
+    "error_connection": "The mail server could not be reached.",
+    "error_not_configured": "Outgoing mail is not set up.",
+    "error_file_unreadable": "The file could not be read.",
+    "error_too_big": "The file is larger than the limit.",
+    "error_internal": "Something went wrong on the server.",
+    "error_interrupted": "Interrupted by a server restart.",
+    "error_unknown": "That device no longer exists.",
+    "error_too_many": "You have reached the limit of devices.",
+    "error_name_taken": "You already have a device with that name.",
+    "error_domain": "That address does not match this device type.",
+    "error_kind_forbidden": "Only administrators can add other addresses.",
+    "no_permission": "Your role cannot send books by e-mail.",
+    "error_timeout": "The mail server took too long."
+  },
+  "send_to_device": {
+    "error_not_configured": "Outgoing mail is not set up.",
+    "error_format": "This device does not accept that format.",
+    "error_too_big": "This file is larger than the mail size limit.",
+    "error_rate_limited": "Too many books sent recently, try again later."
   }
 }

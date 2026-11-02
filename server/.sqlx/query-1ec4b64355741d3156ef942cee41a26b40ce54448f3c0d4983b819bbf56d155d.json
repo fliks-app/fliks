@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, kind, address, formats, \"createdAt\" AS created_at\n           FROM email_devices WHERE \"userId\" = $1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "email_devices",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_devices",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_devices",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_devices",
+            "name": "address"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "formats",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "email_devices",
+            "name": "formats"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "email_devices",
+            "name": "createdAt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1ec4b64355741d3156ef942cee41a26b40ce54448f3c0d4983b819bbf56d155d"
+}

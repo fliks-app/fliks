@@ -78,7 +78,8 @@
               "roles.manage",
               "parties.create",
               "parties.read_public",
-              "parties.manage"
+              "parties.manage",
+              "books.email"
             ]
           },
           {

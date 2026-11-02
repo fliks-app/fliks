@@ -9,6 +9,7 @@ pub mod collections;
 pub mod config;
 pub mod db;
 pub mod device_tokens;
+pub mod email;
 pub mod engine;
 pub mod events;
 pub mod fs;
@@ -90,6 +91,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     system::backup::before_migration(&cfg, &pool).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;
+    email::sweep(&pool).await?;
     subtitles::sweep(&pool).await?;
     roles::seed(&pool).await?;
     profiles::seed_quality_definitions(&pool).await?;

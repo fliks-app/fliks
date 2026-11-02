@@ -46,6 +46,7 @@ describe('BookWorkComponent', () => {
     fixture.componentRef.setInput('media', bookMedia(book));
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
+    http.match('/api/email-devices').forEach((r) => r.flush({ enabled: false, canSend: false, maxBytes: null, devices: [] }));
     return { fixture, http, el: fixture.nativeElement as HTMLElement };
   }
 

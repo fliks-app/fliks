@@ -27,6 +27,7 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.general', href: '/admin/settings/general' },
     { label: 'settings.nav.libraries', href: '/admin/settings/libraries' },
     { label: 'settings.nav.naming', href: '/admin/settings/naming' },
+    { label: 'settings.nav.email', href: '/admin/settings/email' },
   ] },
   { label: 'admin.section_media', links: [
     { label: 'settings.nav.quality_profiles', href: '/admin/settings/quality-profiles' },

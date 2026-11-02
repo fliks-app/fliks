@@ -1,0 +1,117 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO book_sends (\"userId\", \"deviceId\", \"deviceName\", \"fileId\", \"fileName\", bytes)\n           VALUES ($1, $2, $3, $4, $5, $6)\n           RETURNING id, \"deviceName\" AS device_name, \"fileName\" AS file_name, bytes, status, error,\n                     \"createdAt\" AS created_at, \"updatedAt\" AS updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "device_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "deviceName"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "file_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "fileName"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "book_sends",
+            "name": "updatedAt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Int4",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "773c6596e9dd7bbeaab63a5ce7537c7a8b9fe64647b7ac631a837b3a498994f1"
+}

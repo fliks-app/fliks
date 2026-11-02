@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 pub struct ResolvedFile {
     pub id: i32,
+    pub relative_path: String,
     pub absolute: PathBuf,
     pub size: u64,
     /// Lower-cased with the dot (`.mkv`).
@@ -136,6 +137,7 @@ pub async fn resolve_file(
     });
     Ok(ResolvedFile {
         id: id as i32,
+        relative_path: row.relative_path.clone(),
         absolute: real,
         size: meta.len(),
         content_type: content_type(&ext),

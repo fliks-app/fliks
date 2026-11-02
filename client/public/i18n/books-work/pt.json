@@ -41,6 +41,8 @@
     "save": "Guardar",
     "level_work": "Obra",
     "level_edition": "Edição",
-    "sources_hint": "Ligar um identificador atualiza os metadados a partir dessa fonte."
+    "sources_hint": "Ligar um identificador atualiza os metadados a partir dessa fonte.",
+    "send_to": "Enviar para…",
+    "send_queued": "A enviar para {{name}}"
   }
 }

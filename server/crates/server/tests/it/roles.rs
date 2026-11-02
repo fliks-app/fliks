@@ -380,8 +380,8 @@ async fn permissions_are_validated(pool: PgPool) {
         .execute(&pool).await.unwrap();
     let (s, b) = call(&c, "GET", "/api/roles/permissions", Some(&c.admin), None).await;
     assert_eq!(s, 200);
-    assert_eq!(b.as_array().unwrap().len(), 16);
-    assert_eq!(b[15], "read:plugin:fliks.a:queue");
+    assert_eq!(b.as_array().unwrap().len(), 17);
+    assert_eq!(b[16], "read:plugin:fliks.a:queue");
     assert_eq!(
         call(
             &c,

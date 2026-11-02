@@ -46,6 +46,7 @@ subtle = "2"
 tower = { version = "0.5", features = ["util"] }
 percent-encoding = "2"
 quick-xml = "0.42"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 md-5 = "0.11"
 croner = "4.0.1"
 miniz_oxide = "0.9"

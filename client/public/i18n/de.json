@@ -265,7 +265,8 @@
     "roles.manage": "Rollen verwalten",
     "parties.create": "Sitzung erstellen",
     "parties.manage": "Sitzungen verwalten",
-    "parties.read_public": "Öffentliche Sitzungen sehen"
+    "parties.read_public": "Öffentliche Sitzungen sehen",
+    "books.email": "Bücher per E-Mail an E-Reader senden"
   },
   "account": {
     "title": "Mein Konto",
@@ -284,7 +285,8 @@
       "recommendations": "Empfehlungen",
       "privacy": "Datenschutz",
       "spoilers": "Spoiler",
-      "devices": "Geräte"
+      "devices": "Geräte",
+      "email_devices": "E-Mail-Geräte"
     },
     "recommendations": {
       "reset_title": "Ausgeblendete Empfehlungen zurücksetzen",
@@ -2015,7 +2017,8 @@
       "engine": "Remote-Engine",
       "plugins": "Plugins",
       "subtitles_activity": "Untertitel-Aktivität",
-      "cleanup": "Bereinigung"
+      "cleanup": "Bereinigung",
+      "email": "E-Mail-Versand"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -2621,7 +2624,8 @@
       "group_other": "Sonstige",
       "included_in": "Enthalten in „{{name}}“",
       "includes": "Enthält: {{names}}",
-      "permission_unavailable": "nicht mehr deklariert"
+      "permission_unavailable": "nicht mehr deklariert",
+      "group_books": "Bücher"
     },
     "auto_approval": {
       "title": "Automatische Genehmigungsregeln",
@@ -3089,6 +3093,30 @@
       "bulk_done": "{{done}} erledigt.",
       "bulk_partial": "{{done}} erledigt, {{failed}} fehlgeschlagen.",
       "c_excludeLibraryIds": "Ausgeschlossene Bibliotheken"
+    },
+    "email": {
+      "title": "E-Mail-Versand",
+      "subtitle": "Das SMTP-Konto, mit dem der Server Bücher an E-Reader sendet.",
+      "host": "Host",
+      "port": "Port",
+      "security": "Sicherheit",
+      "security_starttls": "STARTTLS (erforderlich)",
+      "security_tls": "TLS (implizit)",
+      "security_none": "Keine (Klartext)",
+      "security_hint": "Zertifikate werden immer geprüft. Ohne TLS sendet der Server keinen Benutzernamen.",
+      "from": "Absender",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "password_stored": "Ein Passwort ist gesetzt. Leer lassen, um es zu behalten.",
+      "password_unset": "Kein Passwort gesetzt",
+      "max_mb": "Größenlimit (MB)",
+      "save": "Speichern",
+      "saved": "Gespeichert",
+      "load_error": "Die Einstellungen konnten nicht geladen werden.",
+      "test_title": "Testnachricht senden",
+      "test_hint": "Sendet eine kurze Nachricht an die Adresse unten.",
+      "test_to": "Empfänger",
+      "test_send": "Test senden"
     }
   },
   "roles": {
@@ -3962,5 +3990,54 @@
     "zoom_out": "Verkleinern",
     "zoom_in": "Vergrößern",
     "fixed_unsupported": "Bücher mit festem Layout werden noch nicht unterstützt."
+  },
+  "email_devices": {
+    "title": "E-Mail-Geräte",
+    "intro": "Schicke ein Buch per E-Mail an deinen E-Reader. Jedes Gerät ist eine Adresse: die eines Kindle, eines PocketBook oder jede Adresse, die Anhänge annimmt.",
+    "not_configured": "Der Administrator hat den E-Mail-Versand noch nicht eingerichtet, Bücher können daher nicht gesendet werden.",
+    "add": "Gerät hinzufügen",
+    "amazon_hint": "Für einen Kindle trage zuerst die Absenderadresse dieses Servers in deinem Amazon-Konto unter den genehmigten Absendern ein.",
+    "name": "Name",
+    "name_placeholder": "Kindle im Wohnzimmer",
+    "kind": "Typ",
+    "kind_kindle": "Kindle",
+    "kind_pocketbook": "PocketBook",
+    "kind_other": "Andere",
+    "address": "Adresse",
+    "address_placeholder": "name@kindle.com",
+    "create": "Hinzufügen",
+    "col_name": "Name",
+    "col_address": "Adresse",
+    "col_formats": "Formate",
+    "remove": "Entfernen",
+    "remove_title": "Dieses Gerät entfernen?",
+    "remove_message": "Es können keine Bücher mehr dorthin gesendet werden.",
+    "removed": "Gerät entfernt",
+    "empty": "Noch kein Gerät.",
+    "recent": "Letzte Sendungen",
+    "status_queued": "In Warteschlange",
+    "status_sending": "Wird gesendet",
+    "status_sent": "Gesendet",
+    "status_failed": "Fehlgeschlagen",
+    "error_rejected": "Der Mailserver hat die Nachricht abgelehnt.",
+    "error_connection": "Der Mailserver ist nicht erreichbar.",
+    "error_not_configured": "Der E-Mail-Versand ist nicht eingerichtet.",
+    "error_file_unreadable": "Die Datei konnte nicht gelesen werden.",
+    "error_too_big": "Die Datei ist größer als das Limit.",
+    "error_internal": "Auf dem Server ist ein Fehler aufgetreten.",
+    "error_interrupted": "Durch einen Serverneustart unterbrochen.",
+    "error_unknown": "Dieses Gerät existiert nicht mehr.",
+    "error_too_many": "Du hast das Limit an Geräten erreicht.",
+    "error_name_taken": "Du hast bereits ein Gerät mit diesem Namen.",
+    "error_domain": "Diese Adresse passt nicht zu diesem Gerätetyp.",
+    "error_kind_forbidden": "Nur Administratoren können andere Adressen hinzufügen.",
+    "no_permission": "Deine Rolle darf keine Bücher per E-Mail senden.",
+    "error_timeout": "Der Mailserver hat zu lange gebraucht."
+  },
+  "send_to_device": {
+    "error_not_configured": "Der E-Mail-Versand ist nicht eingerichtet.",
+    "error_format": "Dieses Gerät akzeptiert dieses Format nicht.",
+    "error_too_big": "Diese Datei ist größer als das Größenlimit für den Versand.",
+    "error_rate_limited": "Zu viele Bücher in letzter Zeit gesendet, versuche es später erneut."
   }
 }

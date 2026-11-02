@@ -1,0 +1,113 @@
+<div class="max-w-2xl flex flex-col gap-6">
+  <div>
+    <h1 class="text-xl font-bold mb-1">{{ 'email_devices.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60">{{ 'email_devices.intro' | translate }}</p>
+  </div>
+
+  @if (!enabled()) {
+    <div class="alert alert-warning">{{ 'email_devices.not_configured' | translate }}</div>
+  }
+
+  @if (!canSend()) {
+    <div class="alert alert-info">{{ 'email_devices.no_permission' | translate }}</div>
+  } @else {
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <h2 class="card-title text-base">{{ 'email_devices.add' | translate }}</h2>
+      <p class="text-sm text-base-content/60">{{ 'email_devices.amazon_hint' | translate }}</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <app-input-field
+          [value]="name()"
+          (valueChange)="name.set($event)"
+          [label]="'email_devices.name' | translate"
+          [placeholder]="'email_devices.name_placeholder' | translate"
+          size="sm"
+        />
+        <app-select-field
+          [value]="kind()"
+          (valueChange)="kind.set($event)"
+          [label]="'email_devices.kind' | translate"
+          size="sm"
+        >
+          @for (k of kinds; track k) {
+            <option [value]="k">{{ 'email_devices.kind_' + k | translate }}</option>
+          }
+        </app-select-field>
+        <app-input-field
+          class="sm:col-span-2"
+          [value]="address()"
+          (valueChange)="address.set($event)"
+          [label]="'email_devices.address' | translate"
+          [placeholder]="'email_devices.address_placeholder' | translate"
+          type="email"
+          size="sm"
+        />
+      </div>
+      <div class="card-actions justify-end">
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="busy() || !name().trim() || !address().trim()"
+          (click)="create()"
+        >
+          @if (busy()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'email_devices.create' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+  }
+
+  @if (devices().length) {
+    <div class="overflow-x-auto scroll-ring-safe">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{{ 'email_devices.col_name' | translate }}</th>
+            <th>{{ 'email_devices.col_address' | translate }}</th>
+            <th>{{ 'email_devices.col_formats' | translate }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (d of devices(); track d.id) {
+            <tr>
+              <td class="truncate max-w-48">{{ d.name }}</td>
+              <td class="truncate max-w-56 text-base-content/60">{{ d.address }}</td>
+              <td class="uppercase text-base-content/60">{{ d.formats.join(', ') }}</td>
+              <td class="text-right whitespace-nowrap">
+                <button type="button" class="btn btn-ghost btn-sm text-error" (click)="remove(d)">
+                  {{ 'email_devices.remove' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="text-base-content/50">{{ 'email_devices.empty' | translate }}</p>
+  }
+
+  @if (sends().length) {
+    <div class="flex flex-col gap-2">
+      <h2 class="font-semibold">{{ 'email_devices.recent' | translate }}</h2>
+      <ul class="flex flex-col gap-1 text-sm">
+        @for (s of sends(); track s.id) {
+          <li class="flex gap-2 items-center">
+            <span class="badge badge-sm" [class.badge-success]="s.status === 'sent'" [class.badge-error]="s.status === 'failed'">
+              {{ 'email_devices.status_' + s.status | translate }}
+            </span>
+            <span class="truncate flex-1">{{ s.fileName }} &rarr; {{ s.deviceName }}</span>
+            @if (s.error) {
+              <span class="text-error">{{ 'email_devices.error_' + s.error | translate }}</span>
+            }
+            <span class="text-base-content/50 whitespace-nowrap">{{ s.createdAt | date: 'short' }}</span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</div>

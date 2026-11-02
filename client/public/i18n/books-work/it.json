@@ -41,6 +41,8 @@
     "save": "Salva",
     "level_work": "Opera",
     "level_edition": "Edizione",
-    "sources_hint": "Collegare un identificativo aggiorna i metadati da quella fonte."
+    "sources_hint": "Collegare un identificativo aggiorna i metadati da quella fonte.",
+    "send_to": "Invia a…",
+    "send_queued": "Invio a {{name}}"
   }
 }

@@ -2,14 +2,14 @@ import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
-import { LucideUser, LucideLock, LucideSparkles, LucideUsers, LucideEyeOff, LucideTabletSmartphone } from '@lucide/angular';
+import { LucideUser, LucideLock, LucideSparkles, LucideUsers, LucideEyeOff, LucideTabletSmartphone, LucideMail } from '@lucide/angular';
 
 @Component({
   selector: 'app-account-shell',
   imports: [
     RouterLink, RouterLinkActive, TranslatePipe,
     SettingsDrawerComponent,
-    LucideUser, LucideLock, LucideSparkles, LucideUsers, LucideEyeOff, LucideTabletSmartphone,
+    LucideUser, LucideLock, LucideSparkles, LucideUsers, LucideEyeOff, LucideTabletSmartphone, LucideMail,
   ],
   templateUrl: './account-shell.html',
 })

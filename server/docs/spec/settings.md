@@ -41,7 +41,7 @@ Change notification
 
 Secrets (settings part)
 16. `GET /api/settings` is the flat key/value object with secret keys removed plus one top-level `"secretsSet": [<full keys holding a non-empty value>]` (omitted when none). `GET /api/settings/:key` on a secret key is `{key, value: null, secretSet: bool}`. `PUT` on a secret key keeps the stored value when `value` is blank or absent and clears it on `null`; a plain key keeps rule 5 (absent and `null` clear). The `PUT /:key` response carries `value: null` for a secret key. A write that keeps a secret still notifies its key (rule 8).
-17. Secret keys (no field schema, so a fixed list plus plugin forms): `engine_token`, `seerr_api_key`, `radarr_api_key`, `sonarr_api_key`, every `subtitle_translation_*_api_key`, and every `plugin.<id>.<key>` whose plugin form field is declared `secret: true` (read from `plugin_packages.manifest`). The imports endpoints fall back to the stored key when the body omits it.
+17. Secret keys (no field schema, so a fixed list plus plugin forms): `engine_token`, `seerr_api_key`, `radarr_api_key`, `sonarr_api_key`, `smtp_password`, every `subtitle_translation_*_api_key`, and every `plugin.<id>.<key>` whose plugin form field is declared `secret: true` (read from `plugin_packages.manifest`). The imports endpoints fall back to the stored key when the body omits it.
 18. Server-side consumers (services, plugin host `config.get`, backup export) read clear values; redaction applies to the HTTP response of the settings routes only.
 
 Filesystem browse (`/api/fs/browse`)

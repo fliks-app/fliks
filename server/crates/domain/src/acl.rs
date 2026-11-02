@@ -48,6 +48,7 @@ pub enum Subject {
     LiveTvChannel,
     Role,
     Party,
+    EmailDevice,
     Settings,
     All,
     /// `plugin:<id>:<name>`, stored whole.
@@ -72,6 +73,7 @@ impl FromStr for Subject {
             "LiveTvChannel" => Self::LiveTvChannel,
             "Role" => Self::Role,
             "Party" => Self::Party,
+            "EmailDevice" => Self::EmailDevice,
             "Settings" => Self::Settings,
             "all" => Self::All,
             _ if is_plugin_subject(s) => Self::Plugin(s.to_owned()),
@@ -186,6 +188,9 @@ impl Permissions {
         }
         if has("roles.manage") {
             grant(Manage, S::Role);
+        }
+        if has("books.email") {
+            grant(Create, S::EmailDevice);
         }
         if has("parties.create") {
             grant(Create, S::Party);

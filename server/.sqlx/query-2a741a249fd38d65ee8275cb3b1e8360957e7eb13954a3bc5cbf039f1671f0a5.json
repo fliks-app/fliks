@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FILTER (WHERE \"createdAt\" > now() - interval '1 hour') AS \"hour!\",\n                  count(*) FILTER (WHERE status IN ('queued', 'sending')\n                                   AND \"updatedAt\" > now() - interval '15 minutes') AS \"flying!\"\n           FROM book_sends WHERE \"userId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hour!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "flying!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "2a741a249fd38d65ee8275cb3b1e8360957e7eb13954a3bc5cbf039f1671f0a5"
+}

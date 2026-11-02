@@ -45,6 +45,7 @@ impl Secrets {
             || key == "seerr_api_key"
             || key == "radarr_api_key"
             || key == "sonarr_api_key"
+            || key == "smtp_password"
             || (key.starts_with("subtitle_translation_") && key.ends_with("_api_key"))
             || self.0.contains(key)
     }

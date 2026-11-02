@@ -7,6 +7,7 @@ mod books_reader;
 mod burn_in;
 mod cleanup_bulk;
 mod device_tokens;
+mod email_devices;
 mod events_ticket;
 mod heartbeat;
 mod importers;
