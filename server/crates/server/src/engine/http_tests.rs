@@ -717,6 +717,235 @@ mod resolve {
         }
     }
 
+    async fn device_token(w: &World, user: i32, kind: crate::device_tokens::Kind) -> String {
+        let (token, hash) = crate::device_tokens::issue(kind);
+        sqlx::query(
+            r#"INSERT INTO device_tokens ("userId", name, kind, hash) VALUES ($1, 'r', $2::text::device_token_kind, $3)"#,
+        )
+        .bind(user)
+        .bind(kind.as_str())
+        .bind(hash)
+        .execute(&w.c.pool)
+        .await
+        .unwrap();
+        token
+    }
+
+    fn basic(identifier: &str, password: &str) -> String {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        format!(
+            "Basic {}",
+            STANDARD.encode(format!("{identifier}:{password}"))
+        )
+    }
+
+    async fn ask_basic(w: &World, id: &str, token: &str) -> Value {
+        ask_device(w, &basic(id, token), Some("basic"), "stream").await
+    }
+
+    async fn ask_device(w: &World, credential: &str, source: Option<&str>, purpose: &str) -> Value {
+        let mut body = json!({"mediaId": w.file, "credential": credential, "purpose": purpose, "streamIndex": 1});
+        if let Some(s) = source {
+            body["credentialSource"] = json!(s);
+        }
+        resolve(w, body).await.1
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_device_token_reads_files_through_basic_with_a_short_ttl(pool: PgPool) {
+        let w = world(pool).await;
+        let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
+        for purpose in ["stream", "download", "sprite", "subtitle"] {
+            let b = ask_device(&w, &basic("anything", &token), Some("basic"), purpose).await;
+            assert_eq!(b["allow"], true, "{purpose}");
+            assert_eq!(b["ownerId"], w.member.0.to_string(), "{purpose}");
+            assert_eq!(b["ttlS"], 30.0, "{purpose}");
+        }
+        let b = ask_device(&w, &basic("", &token), Some("basic"), "stream").await;
+        assert_eq!(b["path"], path_of(&w, "a.mkv"));
+        let last: Option<chrono::DateTime<chrono::Utc>> =
+            sqlx::query_scalar(r#"SELECT "lastUsedAt" FROM device_tokens"#)
+                .fetch_one(&w.c.pool)
+                .await
+                .unwrap();
+        assert!(last.is_some());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_device_token_opens_only_what_its_kind_and_source_allow(pool: PgPool) {
+        let w = world(pool).await;
+        let opds = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
+        let kosync = device_token(&w, w.member.0, crate::device_tokens::Kind::Kosync).await;
+        for (name, credential, source) in [
+            ("no source", basic("x", &opds), None),
+            ("in the query", opds.clone(), Some("query")),
+            ("in the path", opds.clone(), Some("path")),
+            ("as a bearer", format!("Bearer {opds}"), Some("bearer")),
+            (
+                "as a cookie",
+                format!("fliks_access={opds}"),
+                Some("cookie"),
+            ),
+            ("kosync token", basic("x", &kosync), Some("basic")),
+            (
+                "kosync key",
+                basic("x", &crate::device_tokens::hash(&kosync)),
+                Some("basic"),
+            ),
+            ("a password", basic("x", "hunter2"), Some("basic")),
+            ("no password", "Basic eA==".to_owned(), Some("basic")),
+            ("garbage", "Basic !!!".to_owned(), Some("basic")),
+        ] {
+            assert_eq!(
+                ask_device(&w, &credential, source, "stream").await,
+                denied(),
+                "{name}"
+            );
+        }
+        let live = resolve(
+            &w,
+            json!({"mediaId": "sid", "credential": basic("x", &opds), "credentialSource": "basic", "purpose": "live"}),
+        )
+        .await
+        .1;
+        assert_eq!(live, denied(), "live is out of scope");
+        let jwt = w.member.1.clone();
+        assert_eq!(
+            ask_device(&w, &format!("Bearer {jwt}"), Some("basic"), "stream").await,
+            denied(),
+            "a basic credential is never a JWT"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_device_token_never_reads_more_than_its_owner(pool: PgPool) {
+        let w = world(pool).await;
+        let p = &w.c.pool;
+        let kind = crate::device_tokens::Kind::Opds;
+        let member = device_token(&w, w.member.0, kind).await;
+        let outsider = device_token(&w, w.outsider.0, kind).await;
+        let admin = device_token(&w, w.admin.0, kind).await;
+        assert_eq!(ask_basic(&w, "r", &member).await["allow"], true);
+        assert_eq!(
+            ask_basic(&w, "r", &outsider).await,
+            json!({"allow": false, "ttlS": 60.0})
+        );
+        assert_eq!(ask_basic(&w, "r", &admin).await["allow"], true);
+
+        let media: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM media_files WHERE id = $1"#)
+            .bind(w.file)
+            .fetch_one(p)
+            .await
+            .unwrap();
+        let mut conn = p.acquire().await.unwrap();
+        crate::media::items::create_shell(
+            &mut conn,
+            media,
+            fliks_domain::media::kind::MediaKind::Movie,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        drop(conn);
+        let link = crate::media::items::Link {
+            file: w.file,
+            owner: None,
+            last: None,
+        };
+        crate::media::items::attach(p, media, &[link])
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO libraries (name) VALUES ('Hidden')"#)
+            .execute(p)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"UPDATE editions SET "libraryId" = (SELECT id FROM libraries WHERE name = 'Hidden') WHERE "mediaId" = $1"#,
+        )
+        .bind(media)
+        .execute(p)
+        .await
+        .unwrap();
+        for purpose in ["stream", "download", "sprite", "subtitle"] {
+            let b = ask_device(&w, &basic("r", &member), Some("basic"), purpose).await;
+            assert_eq!(
+                b,
+                json!({"allow": false, "ttlS": 60.0}),
+                "{purpose}: the edition rule"
+            );
+        }
+        assert_eq!(ask_basic(&w, "r", &admin).await["allow"], true);
+
+        sqlx::query(r#"UPDATE users SET enabled = false WHERE id = $1"#)
+            .bind(w.admin.0)
+            .execute(p)
+            .await
+            .unwrap();
+        assert_eq!(
+            ask_basic(&w, "r", &admin).await,
+            denied(),
+            "a disabled owner"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_revoked_or_renewed_device_token_stops_resolving(pool: PgPool) {
+        let w = world(pool).await;
+        let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
+        assert_eq!(ask_basic(&w, "r", &token).await["allow"], true);
+        let (_, hash) = crate::device_tokens::issue(crate::device_tokens::Kind::Opds);
+        sqlx::query(r#"UPDATE device_tokens SET hash = $1"#)
+            .bind(hash)
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
+        assert_eq!(ask_basic(&w, "r", &token).await, denied(), "renewed");
+        let again = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
+        assert_eq!(ask_basic(&w, "r", &again).await["allow"], true);
+        sqlx::query("DELETE FROM device_tokens")
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
+        assert_eq!(ask_basic(&w, "r", &again).await, denied(), "revoked");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn failed_device_tokens_are_throttled_per_identifier(pool: PgPool) {
+        let w = world(pool).await;
+        let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
+        let shaped = |n: usize| format!("fkd_{n:064x}");
+        for n in 0..4 {
+            assert_eq!(ask_basic(&w, "Reader", &shaped(n)).await, denied());
+        }
+        assert_eq!(
+            ask_basic(&w, "reader", &token).await["allow"],
+            true,
+            "a hit clears the key"
+        );
+        for n in 4..9 {
+            assert_eq!(ask_basic(&w, "reader", &shaped(n)).await, denied());
+        }
+        assert_eq!(
+            ask_basic(&w, "READER", &token).await,
+            denied(),
+            "blocked: the valid token too"
+        );
+        assert_eq!(
+            ask_basic(&w, "other", &token).await["allow"],
+            true,
+            "another identifier is free"
+        );
+        for n in 0..20 {
+            ask_basic(&w, "noise", "not-a-token-shape").await;
+            ask_basic(&w, "noise", &format!("fkd_{n}")).await;
+        }
+        assert_eq!(
+            ask_basic(&w, "noise", &token).await["allow"],
+            true,
+            "malformed values are not counted"
+        );
+    }
+
     #[sqlx::test(migrations = false)]
     async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
         let w = world(pool).await;

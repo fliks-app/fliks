@@ -613,6 +613,56 @@
         }
       }
     },
+    "/api/device-tokens": {
+      "get": {
+        "tags": [
+          "crate::device_tokens"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::device_tokens"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/device-tokens/{id}": {
+      "delete": {
+        "tags": [
+          "crate::device_tokens"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/device-tokens/{id}/renew": {
+      "post": {
+        "tags": [
+          "crate::device_tokens"
+        ],
+        "operationId": "renew",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/engine/remote": {
       "get": {
         "tags": [

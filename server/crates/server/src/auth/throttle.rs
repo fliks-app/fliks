@@ -60,6 +60,13 @@ impl LoginThrottle {
         true
     }
 
+    /// Whether the counter of a key is at the limit, without counting.
+    pub fn blocked(&self, ip: Option<IpAddr>, username: &str) -> bool {
+        let m = self.fails.lock_clean();
+        m.get(&key(ip, username))
+            .is_some_and(|(n, since)| *n >= MAX_FAILS && since.elapsed() < WINDOW)
+    }
+
     pub fn clear(&self, ip: Option<IpAddr>, username: &str) {
         self.fails.lock_clean().remove(&key(ip, username));
     }
@@ -84,6 +91,21 @@ mod tests {
         assert!(t.attempt(ip("1.1.1.1"), "alice"));
         t.clear(ip("1.1.1.1"), "bob");
         assert!(t.attempt(ip("1.1.1.1"), "bob"));
+    }
+
+    #[test]
+    fn blocked_reads_the_counter_without_counting() {
+        let t = LoginThrottle::default();
+        for _ in 0..MAX_FAILS * 2 {
+            assert!(!t.blocked(ip("1.1.1.1"), "bob"));
+        }
+        for _ in 0..MAX_FAILS {
+            t.attempt(ip("1.1.1.1"), "Bob");
+        }
+        assert!(t.blocked(ip("1.1.1.1"), "bob"));
+        assert!(!t.blocked(ip("1.1.1.1"), "alice"));
+        t.clear(ip("1.1.1.1"), "bob");
+        assert!(!t.blocked(ip("1.1.1.1"), "bob"));
     }
 
     #[test]

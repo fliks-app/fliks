@@ -283,7 +283,8 @@
       "password": "Mot de passe",
       "recommendations": "Recommandations",
       "privacy": "Confidentialité",
-      "spoilers": "Divulgâchage"
+      "spoilers": "Divulgâchage",
+      "devices": "Appareils"
     },
     "recommendations": {
       "reset_title": "Réinitialiser les recommandations masquées",
@@ -294,6 +295,38 @@
       "confirm_body": "{{n}} recommandation(s) masquée(s) redeviendront éligibles. Continuer ?",
       "reset_success": "{{n}} recommandation(s) restaurée(s)."
     }
+  },
+  "device_tokens": {
+    "title": "Appareils",
+    "intro": "Donnez à une liseuse ou à une application de lecture son propre jeton d'accès. Un jeton lit vos bibliothèques et rien d'autre, et vous pouvez le révoquer à tout moment.",
+    "empty": "Aucun appareil pour l'instant.",
+    "add": "Ajouter un appareil",
+    "name": "Nom",
+    "name_placeholder": "Liseuse du salon",
+    "kind": "Type",
+    "kind_opds": "Catalogue (OPDS)",
+    "kind_kosync": "Synchronisation de la progression (KOReader)",
+    "create": "Créer",
+    "col_name": "Nom",
+    "col_kind": "Type",
+    "col_last_used": "Dernière utilisation",
+    "never_used": "Jamais",
+    "renew": "Renouveler",
+    "revoke": "Révoquer",
+    "created_title": "Copiez ce jeton maintenant",
+    "created_hint": "Il n'est affiché qu'une seule fois. Collez-le comme mot de passe dans l'appareil ; le nom d'utilisateur peut être n'importe lequel.",
+    "token_label": "Jeton de {{name}}",
+    "copy": "Copier",
+    "copied": "Copié",
+    "dismiss": "Terminé",
+    "renew_title": "Renouveler ce jeton ?",
+    "renew_message": "Le jeton actuel cesse de fonctionner immédiatement. L'appareil a besoin du nouveau.",
+    "revoke_title": "Révoquer ce jeton ?",
+    "revoke_message": "L'appareil perd son accès immédiatement.",
+    "renewed": "Jeton renouvelé",
+    "revoked": "Jeton révoqué",
+    "error_unknown": "Cet appareil n'existe plus.",
+    "error_too_many": "Vous avez atteint la limite d'appareils. Révoquez-en un d'abord."
   },
   "spoilers": {
     "title": "Protection anti-divulgâchage",

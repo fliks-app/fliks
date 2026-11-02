@@ -1,0 +1,143 @@
+//! Device tokens (`docs/spec/device-tokens.md`): credentials of readers and sync apps, stored as a hash.
+mod routes;
+
+use fliks_engine_core::api::ResolveCredentialSource as Source;
+use md5::{Digest as _, Md5};
+use sha2::Sha256;
+use sqlx::PgPool;
+
+pub use routes::*;
+
+const PREFIX: &str = "fkd_";
+const TOKEN_LEN: usize = PREFIX.len() + 64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Opds,
+    Kosync,
+}
+
+impl Kind {
+    pub const ALL: [Self; 2] = [Self::Opds, Self::Kosync];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Opds => "opds",
+            Self::Kosync => "kosync",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.as_str() == s)
+    }
+
+    /// The credential sources that open the engine data plane with this kind.
+    fn sources(self) -> &'static [Source] {
+        match self {
+            Self::Opds => &[Source::Basic],
+            Self::Kosync => &[],
+        }
+    }
+
+    /// What is hashed: a kosync client sends MD5(password), the password being the token.
+    fn secret(self, token: &str) -> String {
+        match self {
+            Self::Kosync => hex(&Md5::digest(token)),
+            Self::Opds => token.to_owned(),
+        }
+    }
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+pub fn hash(secret: &str) -> String {
+    hex(&Sha256::digest(secret))
+}
+
+/// A new token for `kind` and the hash to store.
+pub fn issue(kind: Kind) -> (String, String) {
+    let token = format!("{PREFIX}{}", crate::config::random_hex(32));
+    let stored = hash(&kind.secret(&token));
+    (token, stored)
+}
+
+/// `fkd_` + 64 lowercase hex: anything else cannot be a token, so it costs no lookup.
+pub fn well_formed(s: &str) -> bool {
+    s.len() == TOKEN_LEN
+        && s.strip_prefix(PREFIX).is_some_and(|h| {
+            h.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+}
+
+/// The owner of the token `secret` when its kind opens the data plane through `source`; a hit stamps `lastUsedAt`.
+pub async fn lookup(db: &PgPool, secret: &str, source: Source) -> Result<Option<i32>, sqlx::Error> {
+    let kinds: Vec<&str> = Kind::ALL
+        .into_iter()
+        .filter(|k| k.sources().contains(&source))
+        .map(Kind::as_str)
+        .collect();
+    sqlx::query_scalar!(
+        r#"UPDATE device_tokens SET "lastUsedAt" = now()
+           WHERE "hash" = $1 AND "kind"::text = ANY($2) RETURNING "userId""#,
+        hash(secret),
+        &kinds as &[&str]
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// Whether some kind opens the data plane through `source`.
+pub fn accepts(source: Source) -> bool {
+    Kind::ALL.iter().any(|k| k.sources().contains(&source))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_hash_is_stored_and_kosync_hashes_the_md5_of_the_token() {
+        let (token, stored) = issue(Kind::Opds);
+        assert!(well_formed(&token));
+        assert_eq!(stored.len(), 64);
+        assert!(!stored.contains(&token));
+        assert_eq!(stored, hash(&token));
+        let (token, stored) = issue(Kind::Kosync);
+        let md5 = hex(&Md5::digest(&token));
+        assert_eq!(stored, hash(&md5));
+        assert_ne!(stored, hash(&token));
+        assert!(!well_formed(&md5), "the x-auth-key is no token");
+    }
+
+    #[test]
+    fn tokens_are_random_and_shaped() {
+        assert_ne!(issue(Kind::Opds).0, issue(Kind::Opds).0);
+        let good = format!("{PREFIX}{}", "a".repeat(64));
+        assert!(well_formed(&good));
+        for bad in [
+            "",
+            "fkd_",
+            &good[..TOKEN_LEN - 1],
+            &format!("{good}0"),
+            &good.to_uppercase(),
+            &format!("{PREFIX}{}", "g".repeat(64)),
+            &format!("xxx_{}", "a".repeat(64)),
+        ] {
+            assert!(!well_formed(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn only_opds_opens_the_data_plane_and_only_through_basic() {
+        assert!(accepts(Source::Basic));
+        for s in [Source::Cookie, Source::Bearer, Source::Query, Source::Path] {
+            assert!(!accepts(s), "{s:?}");
+        }
+        assert!(Kind::Kosync.sources().is_empty());
+        assert_eq!(Kind::parse("opds"), Some(Kind::Opds));
+        assert_eq!(Kind::parse("kobo"), None);
+    }
+}

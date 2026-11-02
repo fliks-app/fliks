@@ -283,7 +283,8 @@
       "password": "Password",
       "recommendations": "Consigli",
       "privacy": "Privacy",
-      "spoilers": "Spoiler"
+      "spoilers": "Spoiler",
+      "devices": "Dispositivi"
     },
     "recommendations": {
       "reset_title": "Reimposta i consigli nascosti",
@@ -294,6 +295,38 @@
       "confirm_body": "{{n}} consiglio/i nascosto/i tornerà/anno idoneo/i. Continuare?",
       "reset_success": "{{n}} consiglio/i ripristinato/i."
     }
+  },
+  "device_tokens": {
+    "title": "Dispositivi",
+    "intro": "Dai a un e-reader o a un'app di lettura il suo token di accesso. Un token legge le tue librerie e nient'altro, e puoi revocarlo in qualsiasi momento.",
+    "empty": "Nessun dispositivo per ora.",
+    "add": "Aggiungi un dispositivo",
+    "name": "Nome",
+    "name_placeholder": "E-reader del soggiorno",
+    "kind": "Tipo",
+    "kind_opds": "Catalogo (OPDS)",
+    "kind_kosync": "Sincronizzazione dei progressi di lettura (KOReader)",
+    "create": "Crea",
+    "col_name": "Nome",
+    "col_kind": "Tipo",
+    "col_last_used": "Ultimo utilizzo",
+    "never_used": "Mai",
+    "renew": "Rinnova",
+    "revoke": "Revoca",
+    "created_title": "Copia questo token adesso",
+    "created_hint": "Viene mostrato una sola volta. Incollalo come password nel dispositivo; il nome utente può essere qualsiasi.",
+    "token_label": "Token di {{name}}",
+    "copy": "Copia",
+    "copied": "Copiato",
+    "dismiss": "Fatto",
+    "renew_title": "Rinnovare questo token?",
+    "renew_message": "Il token attuale smette di funzionare subito. Il dispositivo ha bisogno del nuovo.",
+    "revoke_title": "Revocare questo token?",
+    "revoke_message": "Il dispositivo perde subito l'accesso.",
+    "renewed": "Token rinnovato",
+    "revoked": "Token revocato",
+    "error_unknown": "Questo dispositivo non esiste più.",
+    "error_too_many": "Hai raggiunto il limite di dispositivi. Revocane uno prima."
   },
   "spoilers": {
     "title": "Protezione dagli spoiler",

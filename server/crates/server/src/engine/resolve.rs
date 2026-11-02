@@ -1,9 +1,10 @@
 //! `POST /engine/resolve` (`engine-glue.md` section F): the engine asks whether a credential may read
 //! a media file, and where it is; `live` asks the live TV sessions.
 use crate::{
+    device_tokens,
     http::{
         AppError,
-        auth::{UserRow, load_enabled},
+        auth::{RoleRow, UserRow, load_enabled},
         cookies::{ACCESS_COOKIE, cookie_value},
         validate::ValidJson,
     },
@@ -27,6 +28,8 @@ use std::path::{Component, Path, PathBuf};
 use subtle::ConstantTimeEq;
 
 const TTL_S: f64 = 60.0;
+/// A device token answers for less, so a revocation is felt sooner (`device-tokens.md` rule 8).
+const DEVICE_TTL_S: f64 = 30.0;
 const PURPOSES: &str = "stream, download, sprite, subtitle, live";
 const SOURCES: &str = "cookie, bearer, query, path, basic";
 const KEYS: [&str; 6] = [
@@ -103,9 +106,21 @@ pub async fn resolve(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Json<ResolveResponse>, AppError> {
     let request = parse(&body).map_err(AppError::bad_request)?;
-    let Some((user, perms, raw, bound, file)) = user_for(&st, &request.credential).await? else {
+    let Some(caller) = user_for(&st, &request).await? else {
         return Ok(Json(deny()));
     };
+    let Caller {
+        user,
+        perms,
+        raw,
+        live: bound,
+        file,
+        device,
+    } = caller;
+    // A device token reads files only: a live viewer names no file and no owner of its own.
+    if device && request.purpose == ResolvePurpose::Live {
+        return Ok(Json(deny()));
+    }
     // A live token opens its own viewer's data plane only; a bare denial ends nobody's viewer.
     if bound.is_some_and(|b| request.media_id != ResolveMediaId::Live(b)) {
         return Ok(Json(deny()));
@@ -118,7 +133,11 @@ pub async fn resolve(
         Ok(found) => Ok(Json(ResolveResponse {
             allow: true,
             owner_id: Some(user.id.to_string()),
-            ttl_s: Some(found.ttl_s.unwrap_or(TTL_S)),
+            ttl_s: Some(
+                found
+                    .ttl_s
+                    .unwrap_or(if device { DEVICE_TTL_S } else { TTL_S }),
+            ),
             ..found
         })),
         Err(Fail::Denied) => Ok(Json(denied_for(&request, user.id))),
@@ -238,26 +257,18 @@ fn token_of(credential: &str) -> Option<String> {
     (!token.is_empty()).then_some(token)
 }
 
-/// Same rules as `Authed` (signature, expiry, user still enabled) except that a `scope` claim is accepted:
-/// players carry stream tokens in their URLs.
-async fn user_for(
-    st: &AppState,
-    credential: &str,
-) -> Result<
-    Option<(
-        UserRow,
-        Permissions,
-        Vec<String>,
-        Option<String>,
-        Option<u32>,
-    )>,
-    AppError,
-> {
-    let Some(claims) = token_of(credential).and_then(|t| st.jwt.verify(&t)) else {
-        return Ok(None);
-    };
-    let (live, file) = (claims.live, claims.mf);
-    Ok(load_enabled(&st.db, claims.sub).await?.map(|(user, role)| {
+/// Who a resolve acts for: the user, what the credential is bound to, and whether it is a device token.
+struct Caller {
+    user: UserRow,
+    perms: Permissions,
+    raw: Vec<String>,
+    live: Option<String>,
+    file: Option<u32>,
+    device: bool,
+}
+
+impl Caller {
+    fn of(user: UserRow, role: Option<RoleRow>, live: Option<String>, file: Option<u32>) -> Self {
         let granted = role.map(|r| r.permissions).unwrap_or_default();
         let perms = Permissions::from(&granted, user.is_admin);
         // `User.permissions`: an admin holds `manage:all` whatever the role says.
@@ -266,8 +277,72 @@ async fn user_for(
         } else {
             granted
         };
-        (user, perms, raw, live, file)
-    }))
+        Self {
+            user,
+            perms,
+            raw,
+            live,
+            file,
+            device: false,
+        }
+    }
+}
+
+/// Same rules as `Authed` (signature, expiry, user still enabled) except that a `scope` claim is accepted:
+/// players carry stream tokens in their URLs. A credential no JWT resolves may be a device token.
+async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>, AppError> {
+    let claims = (req.credential_source != Some(ResolveCredentialSource::Basic))
+        .then(|| token_of(&req.credential).and_then(|t| st.jwt.verify(&t)))
+        .flatten();
+    let Some(claims) = claims else {
+        return device_user(st, req).await;
+    };
+    let (live, file) = (claims.live, claims.mf);
+    Ok(load_enabled(&st.db, claims.sub)
+        .await?
+        .map(|(user, role)| Caller::of(user, role, live, file)))
+}
+
+/// The owner of a device token (`device-tokens.md` rules 7-13), its failures throttled by identifier.
+async fn device_user(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>, AppError> {
+    let Some(source) = req.credential_source.filter(|s| device_tokens::accepts(*s)) else {
+        return Ok(None);
+    };
+    let (key, secret) = match source {
+        ResolveCredentialSource::Basic => basic(&req.credential).unzip(),
+        _ => (Some(String::new()), token_of(&req.credential)),
+    };
+    let (Some(key), Some(secret)) = (key, secret) else {
+        return Ok(None);
+    };
+    let key = key.to_lowercase();
+    if !device_tokens::well_formed(&secret) || st.device_throttle.blocked(None, &key) {
+        return Ok(None);
+    }
+    let Some(owner) = device_tokens::lookup(&st.db, &secret, source).await? else {
+        st.device_throttle.attempt(None, &key);
+        return Ok(None);
+    };
+    st.device_throttle.clear(None, &key);
+    Ok(load_enabled(&st.db, owner)
+        .await?
+        .map(|(user, role)| Caller {
+            device: true,
+            ..Caller::of(user, role, None, None)
+        }))
+}
+
+/// `Basic <base64(identifier:password)>` as `(identifier, password)`; the identifier is free, at most 255 bytes.
+fn basic(credential: &str) -> Option<(String, String)> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let mut words = credential.split_whitespace();
+    let (scheme, encoded) = (words.next()?, words.next()?);
+    if !scheme.eq_ignore_ascii_case("basic") || words.next().is_some() {
+        return None;
+    }
+    let text = String::from_utf8(STANDARD.decode(encoded).ok()?).ok()?;
+    let (id, password) = text.split_once(':')?;
+    (id.len() <= 255).then(|| (id.to_owned(), password.to_owned()))
 }
 
 async fn locate(
@@ -504,6 +579,29 @@ mod tests {
             ("", None),
         ] {
             assert_eq!(token_of(c).as_deref(), want, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn basic_credentials_carry_a_free_identifier_and_the_password_after_the_first_colon() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        let enc = |t: &str| format!("Basic {}", STANDARD.encode(t));
+        let want = |id: &str, pw: &str| Some((id.to_owned(), pw.to_owned()));
+        assert_eq!(basic(&enc("reader:s3:cret")), want("reader", "s3:cret"));
+        assert_eq!(basic(&enc(":pw")), want("", "pw"));
+        assert_eq!(
+            basic(&format!("basic  {}", STANDARD.encode("a:b"))),
+            want("a", "b")
+        );
+        for bad in [
+            "Basic".to_owned(),
+            "Basic !!!".to_owned(),
+            "Bearer abc".to_owned(),
+            enc("no-colon"),
+            enc(&format!("{}:pw", "x".repeat(256))),
+            format!("{} extra", enc("a:b")),
+        ] {
+            assert_eq!(basic(&bad), None, "{bad:?}");
         }
     }
 
