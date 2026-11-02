@@ -21,7 +21,7 @@ none. Callers:
 
 1. Public API (`fliks_domain::naming`, pure; fixture JSON uses camelCase field names):
    ```rust
-   pub struct NamingFormats { pub movie: String, pub movie_folder: String, pub series: String, pub series_folder: String, pub season_folder: String }
+   pub struct NamingFormats { pub movie: String, pub movie_folder: String, pub series: String, pub series_folder: String, pub season_folder: String, pub book: String, pub book_folder: String }
    pub fn default_formats() -> NamingFormats;
    pub enum Scope { File, Folder, GroupFolder }                              // Scope::ALL
    pub const fn setting_key(kind: MediaKind, scope: Scope) -> Option<&'static str>;
@@ -31,14 +31,15 @@ none. Callers:
    pub fn apply_movie_folder_format(format: &str, d: &MovieFolder) -> String; // {title, originalTitle?, year?, tmdbId?}
    pub fn apply_series_folder_format(format: &str, d: &SeriesFolder) -> String; // {seriesTitle, originalTitle?, year?, tmdbId?}
    pub fn apply_season_folder_format(format: &str, season: i64) -> String;
+   pub fn apply_book_format(format: &str, d: &BookNameTokens) -> String;      // {title, author?, series?, seriesPosition?, year?, narrator?, language?, format?}
    pub fn extract_release_group(source_title: &str) -> String;
    pub fn parse_episode_numbers(source_title: &str, file_path: Option<&str>) -> Option<EpisodeNumbers>;  // {season, episode, episodeEnd?}
    pub fn is_special_file(path_or_name: &str) -> bool;
    pub fn match_special_by_title<T: HasTitle>(filename: &str, specials: &[T]) -> Option<usize>;
    ```
    and in `crates/server/src/naming.rs`: `pub async fn load_formats(pool: &PgPool) -> sqlx::Result<NamingFormats>` (rule 3). `episodeEnd` is absent (not null) when there is no range end.
-2. Defaults (`default_formats()`): `movie` = `{Movie Title} ({Release Year}) {Quality Full}`; `movieFolder` = `{Movie Title} ({Release Year})`; `series` = `{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}`; `seriesFolder` = `{Series Title}`; `seasonFolder` = `Season {season:00}`.
-3. `load_formats`: one query `SELECT key, value FROM app_settings WHERE key = ANY($1)` over the keys `setting_key` gives for every `(kind, scope)` of `MediaKind::ALL` × `Scope::ALL` (the five keys of the table below); each field = the stored value, else the default when the row is absent OR its value is `NULL` (`??`); an empty string is a value and is kept (a format `''` renders `''`, so a movie file becomes `<ext>` only; callers guard). Read on demand on every call, no cache (a setting edited through `PUT /api/settings` applies to the next import; `settings.md` lists the keys as "read on demand").
+2. Defaults (`default_formats()`): `movie` = `{Movie Title} ({Release Year}) {Quality Full}`; `movieFolder` = `{Movie Title} ({Release Year})`; `series` = `{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}`; `seriesFolder` = `{Series Title}`; `seasonFolder` = `Season {season:00}`; `book` = `{Title} ({Year})`; `bookFolder` = `{Title}`.
+3. `load_formats`: one query `SELECT key, value FROM app_settings WHERE key = ANY($1)` over the keys `setting_key` gives for every `(kind, scope)` of `MediaKind::ALL` × `Scope::ALL` (the seven keys of the table below); each field = the stored value, else the default when the row is absent OR its value is `NULL` (`??`); an empty string is a value and is kept (a format `''` renders `''`, so a movie file becomes `<ext>` only; callers guard). Read on demand on every call, no cache (a setting edited through `PUT /api/settings` applies to the next import; `settings.md` lists the keys as "read on demand").
 
 ### B. Formatting
 
@@ -49,6 +50,8 @@ none. Callers:
 8. Pinned by the spec (each is a vector): year null drops the empty parentheses; empty quality trims the trailing space; empty episode title leaves ` - ` before the quality; a colon in a title is deleted (`Nova Skyline: Requiem` -> `Nova Skyline Requiem`); a slash is deleted and the double space it leaves is collapsed (`Nova / Skyline` -> `Nova Skyline`); a trailing dot stays; `undefined` after a token is stripped.
 9. Values are substituted LITERALLY: a replacement pattern in a title (`$$`, `$&`, `` $` ``, `$'`, `$1`) is never interpreted, so `Money $$$` is named `Money $$$` and `A $& B` is unchanged (a title never embeds the token). Visible only for titles containing `$`, new imports only (existing folders keep their names). The `naming` vectors exclude `$` from generated values; a Rust unit test pins it.
 10. (With `ingest.md` rule 3 and `importers.md` rule 36.) `apply_movie_folder_format` / `apply_series_folder_format` return the sanitized string as is and never map `.`, `..` or an empty result to `''`: `''` makes `Media.path` fall back to the bare library root (`ingest.md` rule 3), so a series or a movie named `''` would own the whole library folder (rescan, delete). Every `folderName` writer (TMDB import, importers, relink, `createUnmatched`, the `confirmImport` pin, Radarr/Sonarr path mapping) passes the result through the one `fliks_domain::naming` folder-name validator (`ingest.md` rule 3), which REJECTS a name that is empty, `.`, `..` or contains a separator or NUL (400 on a route, an `errors` entry in a batch); a title such as `..` or `???` therefore cannot be imported. The only empty name accepted is the explicit root-level movie of the relink and `createUnmatched` paths (the client sends `''` for a root-level group). The season folder needs no rule: `.` already joins to the show folder and `..` is refused by the ingest confinement (file skipped with an error). FILE formats always get an extension appended.
+
+24. Book formats (`apply_book_format`; file and folder formats share one token set, the caller adds the extension and joins). Tokens, replaced in this order: `{Author}`, `{SeriesPosition}`, `{Series}`, `{Title}`, `{Year}`, `{Narrator}`, `{Language}`, `{Format}`. Values: `author`, `series`, `narrator`, `language` (ISO code) and `format` (the file extension without dot) are `?? ''`; `{SeriesPosition}` is the number as decimal text (`3`, `1.5`), empty when absent; `{Year}` follows rule 5; `title` `?? ''`. A format never receives a series folder: with a series, `{Series}` and `{SeriesPosition}` are tokens of the one component. Mechanics, `sanitize`, literal substitution and folder-name validation are rules 4, 7, 9 and 10 (the caller passes a folder result through the validator). Defaults leave out `{Author}`: an unknown author would leave a dangling ` - `. Vectors: `applyBookFormat`.
 
 ### C. Parsing
 
@@ -71,7 +74,7 @@ none. Callers:
 
 ## SQL
 
-One read: `SELECT key, value FROM app_settings WHERE key = ANY($1)` with the five keys; `value` is nullable text. No write.
+One read: `SELECT key, value FROM app_settings WHERE key = ANY($1)` with the seven keys; `value` is nullable text. No write.
 
 ## Events
 
@@ -79,7 +82,7 @@ none.
 
 ## Settings keys
 
-A format is keyed by `(kind, scope)`, `scope` being `file`, `folder` (the title's folder) or `group_folder` (the folder of one group of items, a season). `setting_key(kind, scope)` derives the key; a pair with no key (a movie has no group) is `None`.
+A format is keyed by `(kind, scope)`, `scope` being `file`, `folder` (the title's folder) or `group_folder` (the folder of one group of items, a season). `setting_key(kind, scope)` derives the key; a pair with no key (a movie or a book has no group) is `None`.
 
 | Key | `(kind, scope)` | Default (when absent or NULL) | Parsing |
 |---|---|---|---|
@@ -88,6 +91,8 @@ A format is keyed by `(kind, scope)`, `scope` being `file`, `folder` (the title'
 | `naming_series_format` | series, file | `{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}` | raw text |
 | `naming_series_folder_format` | series, folder | `{Series Title}` | raw text |
 | `naming_season_folder_format` | series, group_folder | `Season {season:00}` | raw text |
+| `naming_book_format` | book, file | `{Title} ({Year})` | raw text |
+| `naming_book_folder_format` | book, folder | `{Title}` (media-write fallback identical) | raw text |
 
 Written by `PUT /api/settings` (`settings.md`), not validated (a format with no token, or an empty one, is accepted); read on demand by rule 3.
 
@@ -97,7 +102,7 @@ none.
 
 ## Vectors/parity
 
-Set `naming` (fixtures `server/fixtures/naming/cases.json`, replay `crates/domain/tests/naming.rs`). Case `fn` tags and outputs: `getFormats` (`rows` -> the five-field object), `applyMovieFormat`, `applySeriesFormat`, `applyMovieFolderFormat`, `applySeriesFolderFormat`, `applySeasonFolderFormat` (`{format, data}` -> string), `extractReleaseGroup` (`title` -> string), `parseEpisodeNumbers` (`{title, filePath?}` -> object or null), `isSpecialFile` (`path` -> bool), `matchSpecialByTitle` (`{filename, specials}` -> the index of the returned element, or null). No `$` in generated values (rule 9).
+Set `naming` (fixtures `server/fixtures/naming/cases.json`, replay `crates/domain/tests/naming.rs`). Case `fn` tags and outputs: `getFormats` (`rows` -> the seven-field object), `applyMovieFormat`, `applySeriesFormat`, `applyMovieFolderFormat`, `applySeriesFolderFormat`, `applySeasonFolderFormat`, `applyBookFormat` (`{format, data}` -> string), `extractReleaseGroup` (`title` -> string), `parseEpisodeNumbers` (`{title, filePath?}` -> object or null), `isSpecialFile` (`path` -> bool), `matchSpecialByTitle` (`{filename, specials}` -> the index of the returned element, or null). No `$` in generated values (rule 9).
 
 Generated (seed `0x4a31`): format strings from the token vocabularies of rule 4 (valid tokens, wrong-case tokens, unknown `{Foo}`, a lone `{`, repeated tokens, empty string) mixed with literal text containing every character of rule 7 step 3, `(`, `)`, `[`, `]`, double spaces, `undefined`, accents, CJK; data values: empty, null/absent, `0`, `2023`, 3-digit and negative season/episode, titles containing tokens (`{Release Year}`), controls, trailing dots; 900 `apply*` cases. `getFormats`: all 32 present/absent combinations of the five keys with stored values `''`, `null`, text, 60 cases. `extractReleaseGroup` 120. `parseEpisodeNumbers` 700: every pattern of rule 13 x separators (`.`, `_`, space, `-`) x years (`.2023.` before and after) x special markers (`OVA 02`, `SP01`, `Special 3`, `NCED 1`, `Specials/`, `Season 00`, `12.5`, `S01E00`, `1x00`) x `filePath` present/absent. `isSpecialFile` 200, `matchSpecialByTitle` 150 (accents, case, punctuation, equal positions with different lengths, titles under 4 characters, empty and absent titles). The divergence characters of `release.md` rule 7 appear in every family.
 

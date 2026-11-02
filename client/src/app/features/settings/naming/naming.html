@@ -144,6 +144,72 @@
         </div>
       </div>
 
+      <!-- Book naming -->
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-base">{{ 'settings.naming.books' | translate }}</h2>
+
+          <label class="form-control w-full">
+            <div class="label">
+              <span class="label-text">{{ 'settings.naming.book_folder_format' | translate }}</span>
+            </div>
+            <input
+              type="text"
+              class="input input-bordered input-sm w-full font-mono"
+              [ngModel]="bookFolderFormat()"
+              (ngModelChange)="bookFolderFormat.set($event)"
+            />
+          </label>
+
+          <div>
+            <p class="text-sm text-base-content/60 mb-2">{{ 'settings.naming.tokens' | translate }}</p>
+            <div class="flex flex-wrap gap-1">
+              @for (token of bookTokens; track token) {
+                <button
+                  type="button"
+                  class="badge badge-ghost badge-sm font-mono cursor-pointer hover:badge-primary"
+                  (click)="insertToken('bookFolder', token)"
+                >{{ token }}</button>
+              }
+            </div>
+          </div>
+
+          <div class="divider my-0"></div>
+
+          <label class="form-control w-full">
+            <div class="label">
+              <span class="label-text">{{ 'settings.naming.book_format' | translate }}</span>
+            </div>
+            <input
+              type="text"
+              class="input input-bordered input-sm w-full font-mono"
+              [ngModel]="bookFormat()"
+              (ngModelChange)="bookFormat.set($event)"
+            />
+          </label>
+
+          <div>
+            <p class="text-sm text-base-content/60 mb-2">{{ 'settings.naming.tokens' | translate }}</p>
+            <div class="flex flex-wrap gap-1">
+              @for (token of bookTokens; track token) {
+                <button
+                  type="button"
+                  class="badge badge-ghost badge-sm font-mono cursor-pointer hover:badge-primary"
+                  (click)="insertToken('book', token)"
+                >{{ token }}</button>
+              }
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <p class="text-sm text-base-content/50">{{ 'settings.naming.preview' | translate }}</p>
+            <div class="bg-base-200/50 rounded p-3 text-sm font-mono text-base-content/80">
+              <span class="text-base-content/40">/root/</span>{{ bookFolderPreview() || '…' }}/{{ bookPreview() || '…' }}<span class="text-base-content/30">.epub</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       @if (error()) {
         <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
       }
