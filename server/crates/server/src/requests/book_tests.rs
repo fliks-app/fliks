@@ -103,7 +103,7 @@ fn want(family: &str, language: Option<&str>) -> Value {
 async fn a_book_is_requested_per_edition(pool: PgPool) {
     let c = ctx(pool).await;
     let (s, r) = c
-        .request(&c.user, "ol2w", json!([want("text", Some("fr"))]))
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
         .await;
     assert_eq!(
         (s, &r["status"], &r["tmdbId"]),
@@ -166,7 +166,15 @@ async fn concurrent_requests_cannot_pass_the_quota_together(pool: PgPool) {
                 .header("authorization", format!("Bearer {tok}"))
                 .body(Body::from(body.to_string()))
                 .unwrap();
-            app.oneshot(req).await.unwrap().status().as_u16()
+            let res = app.oneshot(req).await.unwrap();
+            let status = res.status().as_u16();
+            if status == 500 {
+                eprintln!(
+                    "{:?}",
+                    axum::body::to_bytes(res.into_body(), usize::MAX).await
+                );
+            }
+            status
         })
     });
     let mut codes = vec![];

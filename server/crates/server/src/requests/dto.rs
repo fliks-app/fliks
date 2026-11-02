@@ -622,7 +622,7 @@ mod tests {
             super::super::TitleKey::tmdb(MediaKind::Movie, 9)
         );
         assert_eq!(
-            title_state(&q(&[("externalId", "ol9w"), ("mediaType", "book")]))
+            title_state(&q(&[("externalId", "OL9W"), ("mediaType", "book")]))
                 .unwrap()
                 .external_id,
             "OL9W"

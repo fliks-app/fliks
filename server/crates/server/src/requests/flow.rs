@@ -7,6 +7,7 @@ use super::{
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed},
+    ingest::KeyedLocks,
     libraries::{accessible_library_ids, paths_visible},
     media::hydrate,
     profiles,
@@ -20,9 +21,11 @@ use fliks_domain::{
 };
 use serde_json::{Map, Value, json};
 use sqlx::PgConnection;
-use std::time::Duration;
+use std::{sync::LazyLock, time::Duration};
 
 pub type Res<T> = Result<T, AppError>;
+
+static QUOTA_TURNS: LazyLock<KeyedLocks<i32>> = LazyLock::new(KeyedLocks::default);
 
 const ART_WAIT: Duration = Duration::from_secs(5);
 
@@ -355,11 +358,17 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     if dto.delete {
         return create_delete(st, a, &dto).await;
     }
+    let limited = a.user.quotas.limit(dto.media_type) != 0;
+    // waiters queue here without a connection, so the lock holder can always get the ones it needs
+    let _turn = match limited {
+        true => Some(QUOTA_TURNS.lock(a.user.id).await),
+        false => None,
+    };
     let mut tx = st.db.begin().await?;
     sqlx::query("SET LOCAL lock_timeout = '10s'")
         .execute(&mut *tx)
         .await?;
-    if a.user.quotas.limit(dto.media_type) != 0 {
+    if limited {
         db::lock_user_quota(&mut tx, a.user.id).await?;
     }
     check_quota(&mut tx, a, dto.media_type).await?;
