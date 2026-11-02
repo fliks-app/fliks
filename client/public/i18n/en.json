@@ -1784,7 +1784,12 @@
     "secret_clear": "Clear stored value",
     "secret_keep": "Keep it",
     "secret_will_clear": "The stored value will be removed on save.",
-    "label_colon": "{{label}}:"
+    "label_colon": "{{label}}:",
+    "secret_custom": "Custom key.",
+    "secret_reset": "Reset to default",
+    "secret_will_reset": "The default key will be used after saving.",
+    "secret_default": "Fliks default key.",
+    "secret_required": "Key required."
   },
   "connectivity": {
     "server_unreachable": "Server unreachable"
@@ -1970,7 +1975,8 @@
       "engine": "Remote engine",
       "plugins": "Plugins",
       "subtitles_activity": "Subtitle activity",
-      "cleanup": "Cleanup"
+      "cleanup": "Cleanup",
+      "metadata": "Metadata"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -3000,6 +3006,28 @@
       "bulk_done": "{{done}} done.",
       "bulk_partial": "{{done}} done, {{failed}} failed.",
       "c_excludeLibraryIds": "Excluded libraries"
+    },
+    "metadata": {
+      "title": "Metadata",
+      "subtitle": "Providers, their namespaces and the order they are asked in.",
+      "providers": "Providers",
+      "col_provider": "Provider",
+      "col_kinds": "Kinds",
+      "col_namespaces": "Namespaces",
+      "configure": "Configure",
+      "empty": "No metadata provider installed.",
+      "order": "Order per kind",
+      "move_up": "Move up",
+      "move_down": "Move down",
+      "load_error": "Could not load the metadata settings.",
+      "save_error": "Could not save the order.",
+      "kind": {
+        "movie": "Movies",
+        "series": "Series",
+        "book": "Books",
+        "comic": "Comics",
+        "album": "Albums"
+      }
     }
   },
   "roles": {

@@ -1783,6 +1783,11 @@
     "retry": "Tentar novamente",
     "secret_clear": "Apagar o valor guardado",
     "secret_keep": "Manter",
+    "secret_custom": "Chave personalizada.",
+    "secret_reset": "Repor a predefinida",
+    "secret_will_reset": "A chave predefinida será usada após guardar.",
+    "secret_default": "Chave predefinida do Fliks.",
+    "secret_required": "Chave obrigatória.",
     "secret_will_clear": "O valor guardado será removido ao guardar.",
     "label_colon": "{{label}}:"
   },
@@ -1964,6 +1969,7 @@
       "auto_approval": "Aprovação auto",
       "server": "Servidor",
       "subtitle_providers": "Fornecedores de legendas",
+      "metadata": "Metadados",
       "subtitles": "Legendas",
       "schedulers": "Tarefas agendadas",
       "streaming": "Streaming",
@@ -2597,6 +2603,28 @@
       "any_genre": "Todos os géneros",
       "max_seasons_hint": "Um pedido da série completa conta o número total de temporadas da série.",
       "year_hint": "Ano de estreia, ou da primeira emissão para uma série."
+    },
+    "metadata": {
+      "title": "Metadados",
+      "subtitle": "Os fornecedores, os seus espaços de nomes e a ordem em que são consultados.",
+      "providers": "Fornecedores",
+      "col_provider": "Fornecedor",
+      "col_kinds": "Tipos",
+      "col_namespaces": "Espaços de nomes",
+      "configure": "Configurar",
+      "empty": "Nenhum fornecedor de metadados instalado.",
+      "order": "Ordem por tipo",
+      "move_up": "Subir",
+      "move_down": "Descer",
+      "load_error": "Não foi possível carregar as definições de metadados.",
+      "save_error": "Não foi possível guardar a ordem.",
+      "kind": {
+        "movie": "Filmes",
+        "series": "Séries",
+        "book": "Livros",
+        "comic": "BD",
+        "album": "Álbuns"
+      }
     },
     "subtitle_providers": {
       "title": "Fornecedores de legendas",

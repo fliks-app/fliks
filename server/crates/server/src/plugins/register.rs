@@ -257,6 +257,7 @@ impl Plugins {
                 .filter_map(|v| v.as_str().map(str::to_owned))
                 .collect()
         };
+        defaults::warn_unresolved(id.as_str(), m, pkg.verified_by_key_id.is_some());
         let sh = Arc::new(Shared {
             id: id.as_str().into(),
             env: host.env.clone(),
@@ -264,6 +265,7 @@ impl Plugins {
             scopes: strs("scopes"),
             ingest_roots: strs("ingestRoots"),
             provider: m.get("provider").is_some(),
+            defaults: defaults::for_plugin(m, pkg.verified_by_key_id.is_some()),
             era: AtomicU64::new(0),
             stopped: Notify::new(),
             mem_total: Default::default(),

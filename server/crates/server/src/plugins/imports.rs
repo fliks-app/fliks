@@ -44,6 +44,7 @@ pub async fn installed_ids(core: &PgPool) -> sqlx::Result<Vec<String>> {
 pub async fn config_for(
     core: &PgPool,
     id: &str,
+    defaults: &[(String, String)],
     keys: Option<&[String]>,
 ) -> sqlx::Result<Vec<(String, String)>> {
     let ids = installed_ids(core).await?;
@@ -54,14 +55,16 @@ pub async fn config_for(
     .bind(&prefix)
     .fetch_all(core)
     .await?;
-    Ok(rows
+    let mut stored: Vec<(String, String)> = rows
         .into_iter()
         .filter(|(k, _)| {
             fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
         })
         .filter_map(|(k, v)| Some((k[prefix.len()..].to_owned(), v?)))
-        .filter(|(k, _)| keys.is_none_or(|ks| ks.contains(k)))
-        .collect())
+        .collect();
+    super::defaults::overlay(&mut stored, defaults);
+    stored.retain(|(k, _)| keys.is_none_or(|ks| ks.contains(k)));
+    Ok(stored)
 }
 
 /// Re-reads the registration and checks every scope of the method (rule 30).
@@ -447,13 +450,14 @@ impl host::Host for Ctx {
     ) -> Result<Vec<(String, String)>, HostError> {
         let core = self.sh.env.core.clone();
         let id = self.sh.id.clone();
+        let defaults = self.sh.defaults.clone();
         let need: &[&str] = if self.sh.provider {
             &[]
         } else {
             &["config:rw"]
         };
         call!(self, "config.get", scopes = need, HOST_CALL, async {
-            config_for(&core, &id, keys.as_deref())
+            config_for(&core, &id, &defaults, keys.as_deref())
                 .await
                 .map_err(db_err)
         })

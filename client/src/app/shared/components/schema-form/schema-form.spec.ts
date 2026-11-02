@@ -154,6 +154,23 @@ describe('SchemaFormComponent — secret fields never re-send an unchanged value
   });
 });
 
+describe('SchemaFormComponent: a secret with a Fliks default', () => {
+  const field: FieldDef = { key: 'apiKey', type: 'text', labelKey: 'x.key', secret: true, hasDefault: true };
+
+  it('says the default is in use and offers no reset while nothing is stored', () => {
+    const fixture = createComponent([field], {});
+    expect(fixture.nativeElement.textContent).toContain('common.secret_default');
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
+
+  it('offers a reset once a custom key is stored, writing null', () => {
+    const fixture = createComponent([field], {}, ['apiKey']);
+    expect(fixture.nativeElement.textContent).toContain('common.secret_custom');
+    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    expect(fixture.componentInstance.value()['apiKey']).toBeNull();
+  });
+});
+
 describe('SchemaFormComponent — non-secret fields round-trip exactly what is typed', () => {
   it('writes an empty non-secret text field as "", not omitted', () => {
     const field: FieldDef = { key: 'name', type: 'text', labelKey: 'x.name' };

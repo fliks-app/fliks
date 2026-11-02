@@ -1783,6 +1783,11 @@
     "retry": "Erneut versuchen",
     "secret_clear": "Gespeicherten Wert löschen",
     "secret_keep": "Beibehalten",
+    "secret_custom": "Eigener Schlüssel.",
+    "secret_reset": "Auf Standard zurücksetzen",
+    "secret_will_reset": "Nach dem Speichern wird der Standardschlüssel verwendet.",
+    "secret_default": "Fliks-Standardschlüssel.",
+    "secret_required": "Schlüssel erforderlich.",
     "secret_will_clear": "Der gespeicherte Wert wird beim Speichern entfernt.",
     "label_colon": "{{label}}:"
   },
@@ -1964,6 +1969,7 @@
       "auto_approval": "Auto-Genehmigung",
       "server": "Server",
       "subtitle_providers": "Untertitel-Anbieter",
+      "metadata": "Metadaten",
       "subtitles": "Untertitel",
       "schedulers": "Geplante Aufgaben",
       "streaming": "Streaming",
@@ -2597,6 +2603,28 @@
       "any_genre": "Alle Genres",
       "max_seasons_hint": "Eine Anfrage für die ganze Serie zählt die Gesamtzahl ihrer Staffeln.",
       "year_hint": "Erscheinungsjahr, bei Serien das Jahr der Erstausstrahlung."
+    },
+    "metadata": {
+      "title": "Metadaten",
+      "subtitle": "Anbieter, ihre Namensräume und die Reihenfolge der Abfrage.",
+      "providers": "Anbieter",
+      "col_provider": "Anbieter",
+      "col_kinds": "Arten",
+      "col_namespaces": "Namensräume",
+      "configure": "Konfigurieren",
+      "empty": "Kein Metadatenanbieter installiert.",
+      "order": "Reihenfolge pro Art",
+      "move_up": "Nach oben",
+      "move_down": "Nach unten",
+      "load_error": "Die Metadaten-Einstellungen konnten nicht geladen werden.",
+      "save_error": "Die Reihenfolge konnte nicht gespeichert werden.",
+      "kind": {
+        "movie": "Filme",
+        "series": "Serien",
+        "book": "Bücher",
+        "comic": "Comics",
+        "album": "Alben"
+      }
     },
     "subtitle_providers": {
       "title": "Untertitel-Anbieter",

@@ -11,4 +11,6 @@ export interface PluginUiEntry {
   i18n?: Record<string, Record<string, string>>;
   /** From `ui.releasePicker` — absent on a plugin that doesn't contribute one. */
   releasePicker?: ReleasePickerRoutes;
+  /** Present on a metadata provider plugin. */
+  provider?: { namespaces: string[]; kinds: string[] };
 }

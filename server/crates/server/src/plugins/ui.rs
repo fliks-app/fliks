@@ -72,6 +72,38 @@ fn without_collisions(plugins: Vec<Registered>) -> Vec<Registered> {
         .collect()
 }
 
+/// Rule 39: every field carries `hasDefault`; a `fliks:` default is dropped, never sent.
+fn mark_defaults(page: &mut Value, p: &Registered) {
+    let keys: Vec<String> = super::defaults::for_plugin(&p.manifest, p.signature == "official")
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    let requires: Vec<String> = p.manifest["provider"]["requires"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    fn walk(items: &mut Value, keys: &[String], requires: &[String]) {
+        for i in items.as_array_mut().into_iter().flatten() {
+            if i["kind"] == "group" {
+                walk(&mut i["fields"], keys, requires);
+            } else if let Some(k) = i["key"].as_str() {
+                let (has, req) = (keys.iter().any(|d| d == k), requires.iter().any(|d| d == k));
+                if i["default"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("fliks:"))
+                {
+                    i.as_object_mut().map(|o| o.remove("default"));
+                }
+                i["hasDefault"] = json!(has);
+                i["requiredByProvider"] = json!(req);
+            }
+        }
+    }
+    walk(&mut page["fields"], &keys, &requires);
+}
+
 impl Plugins {
     fn may_read(&self, id: &str, page: &Value, perms: &Permissions) -> bool {
         let kind = page["kind"].as_str();
@@ -111,6 +143,10 @@ impl Plugins {
                         ok
                     })
                     .cloned()
+                    .map(|mut page| {
+                        mark_defaults(&mut page, &p);
+                        page
+                    })
                     .collect();
                 let contributions: Vec<Value> = ui["contributions"]
                     .as_array()
@@ -131,6 +167,22 @@ impl Plugins {
                     "i18n".into(),
                     p.manifest.get("i18n").cloned().unwrap_or(json!({})),
                 );
+                if let Some(block) = p.manifest.get("provider") {
+                    let names: Vec<_> = block["namespaces"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|n| n["name"].clone())
+                        .collect();
+                    let kinds: Vec<_> = block["kinds"]
+                        .as_object()
+                        .map(|o| o.keys().collect())
+                        .unwrap_or_default();
+                    e.insert(
+                        "provider".into(),
+                        json!({"namespaces": names, "kinds": kinds}),
+                    );
+                }
                 if let Some(rp) = self.registry.release_picker_for(id) {
                     e.insert("releasePicker".into(), picker_entry(rp));
                 }
@@ -159,5 +211,26 @@ mod tests {
             movie_only.as_object().unwrap().keys().collect::<Vec<_>>(),
             ["byKind"]
         );
+    }
+
+    #[test]
+    fn marking_adds_a_flag_and_no_value() {
+        let manifest = json!({"provider": {"namespaces": [{"name": "tmdb"}]}});
+        let reg = |signature: &str| Registered {
+            plugin_id: "fliks.tmdb".into(),
+            version: "1".into(),
+            manifest: manifest.clone(),
+            signature: signature.into(),
+            archive: Default::default(),
+        };
+        let page =
+            json!({"fields": [{"key": "apiKey", "secret": true, "default": "fliks:apiKey"}]});
+        for sig in ["official", "unsigned"] {
+            let mut p = page.clone();
+            mark_defaults(&mut p, &reg(sig));
+            assert!(p["fields"][0]["hasDefault"].is_boolean());
+            assert!(p["fields"][0].get("default").is_none());
+            assert!(!p.to_string().contains("FLIKS_DEFAULT"));
+        }
     }
 }

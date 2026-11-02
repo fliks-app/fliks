@@ -1783,6 +1783,11 @@
     "retry": "Réessayer",
     "secret_clear": "Effacer la valeur enregistrée",
     "secret_keep": "La conserver",
+    "secret_custom": "Clé personnalisée.",
+    "secret_reset": "Réinitialiser",
+    "secret_will_reset": "La clé par défaut sera utilisée après l'enregistrement.",
+    "secret_default": "Clé Fliks par défaut.",
+    "secret_required": "Clé requise.",
     "secret_will_clear": "La valeur enregistrée sera supprimée à l'enregistrement.",
     "label_colon": "{{label}} :"
   },
@@ -1964,6 +1969,7 @@
       "auto_approval": "Approbation auto",
       "server": "Serveur",
       "subtitle_providers": "Fournisseurs de sous-titres",
+      "metadata": "Métadonnées",
       "subtitles": "Sous-titres",
       "schedulers": "Tâches planifiées",
       "streaming": "Streaming",
@@ -2597,6 +2603,28 @@
       "any_genre": "Tous les genres",
       "max_seasons_hint": "Une demande de série entière compte le nombre total de saisons de la série.",
       "year_hint": "Année de sortie, ou de première diffusion pour une série."
+    },
+    "metadata": {
+      "title": "Métadonnées",
+      "subtitle": "Les fournisseurs, leurs espaces de noms et l'ordre dans lequel ils sont interrogés.",
+      "providers": "Fournisseurs",
+      "col_provider": "Fournisseur",
+      "col_kinds": "Types",
+      "col_namespaces": "Espaces de noms",
+      "configure": "Configurer",
+      "empty": "Aucun fournisseur de métadonnées installé.",
+      "order": "Ordre par type",
+      "move_up": "Monter",
+      "move_down": "Descendre",
+      "load_error": "Impossible de charger les réglages de métadonnées.",
+      "save_error": "Impossible d'enregistrer l'ordre.",
+      "kind": {
+        "movie": "Films",
+        "series": "Séries",
+        "book": "Livres",
+        "comic": "BD",
+        "album": "Albums"
+      }
     },
     "subtitle_providers": {
       "title": "Fournisseurs de sous-titres",

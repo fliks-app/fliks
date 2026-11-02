@@ -493,6 +493,7 @@ export const routes: Routes = [
           },
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
+          { path: 'metadata', loadComponent: () => import('./features/settings/metadata/metadata').then((m) => m.MetadataSettingsComponent) },
           { path: 'cleanup', loadComponent: () => import('./features/settings/cleanup/cleanup').then((m) => m.CleanupSettingsComponent) },
           { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },
           { path: 'engine', loadComponent: () => import('./features/settings/engine/engine').then((m) => m.EngineSettingsComponent) },

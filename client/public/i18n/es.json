@@ -1783,6 +1783,11 @@
     "retry": "Reintentar",
     "secret_clear": "Borrar el valor guardado",
     "secret_keep": "Conservarlo",
+    "secret_custom": "Clave personalizada.",
+    "secret_reset": "Restablecer a la predeterminada",
+    "secret_will_reset": "Se usará la clave predeterminada tras guardar.",
+    "secret_default": "Clave predeterminada de Fliks.",
+    "secret_required": "Clave obligatoria.",
     "secret_will_clear": "El valor guardado se eliminará al guardar.",
     "label_colon": "{{label}}:"
   },
@@ -1964,6 +1969,7 @@
       "auto_approval": "Aprobación auto",
       "server": "Servidor",
       "subtitle_providers": "Proveedores de subtítulos",
+      "metadata": "Metadatos",
       "subtitles": "Subtítulos",
       "schedulers": "Tareas programadas",
       "streaming": "Streaming",
@@ -2597,6 +2603,28 @@
       "any_genre": "Cualquier género",
       "max_seasons_hint": "Una solicitud de la serie completa cuenta el total de temporadas de la serie.",
       "year_hint": "Año de estreno, o de primera emisión para una serie."
+    },
+    "metadata": {
+      "title": "Metadatos",
+      "subtitle": "Los proveedores, sus espacios de nombres y el orden en que se consultan.",
+      "providers": "Proveedores",
+      "col_provider": "Proveedor",
+      "col_kinds": "Tipos",
+      "col_namespaces": "Espacios de nombres",
+      "configure": "Configurar",
+      "empty": "Ningún proveedor de metadatos instalado.",
+      "order": "Orden por tipo",
+      "move_up": "Subir",
+      "move_down": "Bajar",
+      "load_error": "No se pudieron cargar los ajustes de metadatos.",
+      "save_error": "No se pudo guardar el orden.",
+      "kind": {
+        "movie": "Películas",
+        "series": "Series",
+        "book": "Libros",
+        "comic": "Cómics",
+        "album": "Álbumes"
+      }
     },
     "subtitle_providers": {
       "title": "Proveedores de subtítulos",
