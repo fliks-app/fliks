@@ -17,10 +17,7 @@ use fliks_domain::{
     media::path::media_path,
 };
 use serde_json::{Value, json};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-};
+use std::{collections::HashMap, path::PathBuf};
 
 /// Rule 70 for the folder rooted at `lib`: the media directory a delete may remove, `Err` with the reason it is kept.
 async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<PathBuf>, String> {
