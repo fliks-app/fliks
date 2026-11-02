@@ -597,7 +597,7 @@ impl MetadataProvider for PluginProvider {
 /// Re-reads whether every key of `requires` resolves non-empty.
 pub async fn refresh_availability(rt: Arc<PluginRt>) {
     let sh = &rt.sh;
-    let cfg = super::imports::config_for(&sh.env.core, &sh.id, None)
+    let cfg = super::imports::config_for(&sh.env.core, &sh.id, &sh.defaults, None)
         .await
         .unwrap_or_default();
     let ok = rt.manifest["provider"]["requires"]
