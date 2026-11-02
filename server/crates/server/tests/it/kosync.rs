@@ -232,7 +232,7 @@ async fn unknown_hidden_and_non_text_documents_are_accepted_but_not_kept(pool: P
     let unknown = "f".repeat(32);
     for doc in [H_HIDDEN, H_AUDIO, "Book Title.epub", &unknown, &upper] {
         let (s, b) = c.put(&key, doc, json!("x"), 0.5).await;
-        assert_eq!((s, b["document"].as_str()), (202, Some(doc)), "{doc}");
+        assert_eq!((s, b["document"].as_str()), (200, Some(doc)), "{doc}");
         let uri = format!("/kosync/syncs/progress/{}", doc.replace(' ', "%20"));
         let (s, b) = c.call("GET", &uri, Some(&key), None).await;
         assert_eq!((s, b), (200, json!({})), "{doc}");
@@ -259,7 +259,6 @@ async fn a_malformed_body_is_400(pool: PgPool) {
     for body in [
         json!({}),
         json!({"document": H_TEXT, "progress": "p", "percentage": "0.5", "device": "d"}),
-        json!({"document": H_TEXT, "progress": "p", "percentage": 0.5}),
         json!({"document": H_TEXT, "progress": "x".repeat(5000), "percentage": 0.5, "device": "d"}),
     ] {
         let (s, b) = c
@@ -267,6 +266,45 @@ async fn a_malformed_body_is_400(pool: PgPool) {
             .await;
         assert_eq!((s, b), (400, json!({"message": "Invalid request"})));
     }
+}
+
+#[sqlx::test(migrations = false)]
+async fn labels_are_never_refused_and_a_hidden_first_copy_is_skipped(pool: PgPool) {
+    let (c, key, _) = ctx(pool).await;
+    let body = json!({"document": H_TEXT, "progress": "p", "percentage": 0.5, "device": "  "});
+    let put = c
+        .call("PUT", "/kosync/syncs/progress", Some(&key), Some(body))
+        .await;
+    assert_eq!(put.0, 200);
+    let device: String = sqlx::query_scalar("SELECT device FROM kosync_progress")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(device, "unknown");
+    // The lowest-id copy sits in an unreadable library, the next one is readable.
+    let dup = "33333333333333333333333333333333";
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (20, 'D1', 'book', 2, 'd1'), (21, 'D2', 'book', 1, 'd2');
+        INSERT INTO editions (id, "mediaId", family, format) VALUES (20, 20, 'text', 'epub'), (21, 21, 'text', 'epub');
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (20, 20, 20), (21, 21, 21);
+        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
+          (20, 20, 2, 'd1.epub', 1, 'EPUB', '{}'), (21, 21, 1, 'd2.epub', 1, 'EPUB', '{}');
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (20, 20, 20, 0, 0), (21, 21, 21, 0, 0);
+        INSERT INTO media_file_hashes ("mediaFileId", kind, hash) VALUES (20, 'koreader', '33333333333333333333333333333333'), (21, 'koreader', '33333333333333333333333333333333');
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.put(&key, dup, json!("q"), 0.2).await.0, 200);
+    let file: i32 =
+        sqlx::query_scalar(r#"SELECT "mediaFileId" FROM kosync_progress WHERE document = $1"#)
+            .bind(dup)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(file, 21);
 }
 
 #[sqlx::test(migrations = false)]

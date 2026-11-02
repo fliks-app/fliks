@@ -7,8 +7,7 @@ use crate::{
         auth::load_enabled,
         validate::{PathParams, ValidJson},
     },
-    ingest::KeyedLocks,
-    libraries,
+    libraries::{self, HIDDEN_FILES_FROM},
     playback::{Watch, finish_context, record_watch},
     state::AppState,
 };
@@ -22,15 +21,12 @@ use axum::{
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Permissions, Subject};
 use serde_json::{Value, json};
-use std::{net::SocketAddr, sync::LazyLock};
+use std::net::SocketAddr;
 
 const MAX_PROGRESS: usize = 4096;
 const MAX_FIELD: usize = 255;
 /// A key no username can equal, so a client cannot vary it to dodge the limiter.
 const THROTTLE_KEY: &str = "\0kosync";
-
-/// One writer per user: the state row is read then written, and KOReader can send two beats at once.
-static WRITES: LazyLock<KeyedLocks<i32>> = LazyLock::new(KeyedLocks::default);
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -133,7 +129,7 @@ async fn resolve(
     if !md5_hex(document) || document.bytes().any(|b| b.is_ascii_uppercase()) {
         return Ok(None);
     }
-    let row: Option<(i32, i32, i32)> = sqlx::query_as(
+    let row: Option<(i32, i32, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT h."mediaFileId", i.id, i."mediaId"
            FROM media_file_hashes h
            JOIN item_parts ip ON ip."mediaFileId" = h."mediaFileId"
@@ -142,19 +138,14 @@ async fn resolve(
            JOIN media m ON m.id = i."mediaId"
            WHERE h.kind = 'koreader' AND h.hash = $1 AND e.family = 'text'
              AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-           ORDER BY h."mediaFileId" LIMIT 1"#,
-    )
+             AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = h."mediaFileId")
+           ORDER BY h."mediaFileId", i.id LIMIT 1"#
+    )))
     .bind(document)
     .bind(libraries)
     .fetch_optional(&st.db)
     .await?;
-    let Some((file, item, media)) = row else {
-        return Ok(None);
-    };
-    Ok(libraries::assert_file_accessible(&st.db, file, libraries)
-        .await
-        .is_ok()
-        .then_some(Resolved { file, item, media }))
+    Ok(row.map(|(file, item, media)| Resolved { file, item, media }))
 }
 
 /// The fields of a `PUT` body that pass spec rule 11.
@@ -172,18 +163,17 @@ fn parse(body: &Value) -> Option<Update> {
         Value::Number(n) => n.to_string(),
         _ => return None,
     };
-    let device = body.get("device")?.as_str()?.trim();
-    let device_id = match body.get("device_id") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) if s.len() <= MAX_FIELD => Some(s.clone()),
-        _ => return None,
+    let label = |k: &str| {
+        let s = body.get(k).and_then(Value::as_str).map(str::trim);
+        s.filter(|s| !s.is_empty())
+            .map(|s| s.chars().take(MAX_FIELD).collect::<String>())
     };
     Some(Update {
         document: body.get("document")?.as_str()?.to_owned(),
         percentage: body.get("percentage")?.as_f64().filter(|p| p.is_finite())?,
-        device: (!device.is_empty() && device.len() <= MAX_FIELD).then(|| device.to_owned())?,
+        device: label("device").unwrap_or_else(|| "unknown".into()),
         progress: (progress.len() <= MAX_PROGRESS).then_some(progress)?,
-        device_id,
+        device_id: label("device_id"),
     })
 }
 
@@ -200,17 +190,11 @@ async fn put_progress(
         return Ok(message(StatusCode::BAD_REQUEST, "Invalid request"));
     };
     let now = Utc::now();
-    let reply = |status| {
-        (
-            status,
-            Json(json!({"document": u.document, "timestamp": now.timestamp()})),
-        )
-            .into_response()
-    };
+    let reply =
+        || Json(json!({"document": u.document, "timestamp": now.timestamp()})).into_response();
     let Some(r) = resolve(&st, &u.document, &caller.libraries).await? else {
-        return Ok(reply(StatusCode::ACCEPTED));
+        return Ok(reply());
     };
-    let _one = WRITES.lock(caller.user).await;
     sqlx::query(
         r#"INSERT INTO kosync_progress
              ("userId", "document", "mediaFileId", "progress", "percentage", "device", "deviceId", "syncedAt")
@@ -242,16 +226,10 @@ async fn put_progress(
         last_chapter_start,
         progression: Some(u.percentage.clamp(0.0, 1.0)),
         locator: None,
+        clear_locator: true,
     };
     record_watch(&st.db, caller.user, r.media, &watch).await?;
-    sqlx::query(
-        r#"UPDATE playback_states SET locator = NULL WHERE "userId" = $1 AND "itemId" = $2"#,
-    )
-    .bind(caller.user)
-    .bind(r.item)
-    .execute(&st.db)
-    .await?;
-    Ok(reply(StatusCode::OK))
+    Ok(reply())
 }
 
 async fn get_progress(
@@ -308,8 +286,6 @@ mod tests {
         );
         for (k, v) in [
             ("percentage", json!("0.2")),
-            ("device", json!("  ")),
-            ("device_id", json!(3)),
             ("progress", json!(["x"])),
             ("progress", json!("x".repeat(MAX_PROGRESS + 1))),
         ] {

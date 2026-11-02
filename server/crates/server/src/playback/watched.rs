@@ -276,6 +276,8 @@ pub struct Watch {
     pub last_chapter_start: Option<f64>,
     pub progression: Option<f64>,
     pub locator: Option<Value>,
+    /// Stores a NULL locator: the position came from a source that cannot express one.
+    pub clear_locator: bool,
 }
 
 /// The video rule: also the zone in which every beat of any family is written.
@@ -319,52 +321,42 @@ SELECT CASE WHEN count(*) >= 2 THEN max(s) END::float8 AS last FROM ch"#,
     Ok((family, last))
 }
 
-/// Writes an offline replay stamped with the time it was played.
-async fn write_replay(
+/// Upserts the state row at `at`: a concurrent first write of one `(user, item)` updates instead of failing.
+async fn write_state(
     db: &PgPool,
-    existing: Option<&super::db::StateRow>,
     user: i32,
     w: &Watch,
     at: DateTime<Utc>,
     completed: bool,
+    watched: bool,
 ) -> sqlx::Result<()> {
-    let watched = w.position >= 5.0;
-    match existing {
-        Some(e) => sqlx::query(
-            r#"UPDATE playback_states
-               SET "positionSeconds" = $2,
-                   "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
-                   completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = $5,
-                   "playedAt" = CASE WHEN $6 THEN $5 ELSE "playedAt" END, "mediaFileId" = $7,
-                   progression = COALESCE($8, progression), locator = COALESCE($9, locator)
-               WHERE id = $1"#,
-        )
-        .bind(e.id)
-        .bind(w.position)
-        .bind(w.duration)
-        .bind(completed)
-        .bind(at)
-        .bind(watched)
-        .bind(w.file)
-        .bind(w.progression)
-        .bind(&w.locator),
-        None => sqlx::query(
-            r#"INSERT INTO playback_states
-                 ("userId", "itemId", "mediaFileId", "positionSeconds",
-                  "durationSeconds", completed, "lastPlayedAt", "playedAt", progression, locator)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $8 THEN $7 END, $9, $10)"#,
-        )
-        .bind(user)
-        .bind(w.item)
-        .bind(w.file)
-        .bind(w.position)
-        .bind(w.duration)
-        .bind(completed)
-        .bind(at)
-        .bind(watched)
-        .bind(w.progression)
-        .bind(&w.locator),
-    }
+    sqlx::query(
+        r#"INSERT INTO playback_states
+             ("userId", "itemId", "mediaFileId", "positionSeconds", "durationSeconds", completed,
+              "lastPlayedAt", "playedAt", progression, locator)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $8 THEN $7 END, $9,
+                   CASE WHEN $11 THEN NULL ELSE $10 END)
+           ON CONFLICT ("userId", "itemId") DO UPDATE SET
+             "positionSeconds" = EXCLUDED."positionSeconds",
+             "durationSeconds" = CASE WHEN $5::float8 > 0 THEN $5 ELSE playback_states."durationSeconds" END,
+             completed = EXCLUDED.completed, "hiddenFromContinueWatching" = false,
+             "lastPlayedAt" = EXCLUDED."lastPlayedAt",
+             "playedAt" = CASE WHEN $8 THEN $7 ELSE playback_states."playedAt" END,
+             "mediaFileId" = EXCLUDED."mediaFileId",
+             progression = COALESCE($9, playback_states.progression),
+             locator = CASE WHEN $11 THEN NULL ELSE COALESCE($10, playback_states.locator) END"#,
+    )
+    .bind(user)
+    .bind(w.item)
+    .bind(w.file)
+    .bind(w.position)
+    .bind(w.duration)
+    .bind(completed)
+    .bind(at)
+    .bind(watched)
+    .bind(w.progression)
+    .bind(&w.locator)
+    .bind(w.clear_locator)
     .execute(db)
     .await
     .map(drop)
@@ -421,48 +413,9 @@ pub async fn record_watch(
     let saved = if stale {
         Ok(())
     } else if let Some(at) = replay {
-        write_replay(db, existing.as_ref(), user, w, at, completed).await
+        write_state(db, user, w, at, completed, w.position >= 5.0).await
     } else {
-        match &existing {
-            Some(e) => sqlx::query!(
-                r#"UPDATE playback_states
-               SET "positionSeconds" = $2,
-                   "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
-                   completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = now(),
-                   "playedAt" = CASE WHEN $5 THEN now() ELSE "playedAt" END, "mediaFileId" = $6,
-                   progression = COALESCE($7, progression), locator = COALESCE($8, locator)
-               WHERE id = $1"#,
-                e.id,
-                w.position,
-                w.duration,
-                completed,
-                watched,
-                w.file,
-                w.progression,
-                w.locator
-            )
-            .execute(db)
-            .await
-            .map(drop),
-            None => sqlx::query!(
-                r#"INSERT INTO playback_states
-                 ("userId", "itemId", "mediaFileId", "positionSeconds",
-                  "durationSeconds", completed, "lastPlayedAt", "playedAt", progression, locator)
-               VALUES ($1, $2, $3, $4, $5, $6, now(), CASE WHEN $7 THEN now() END, $8, $9)"#,
-                user,
-                w.item,
-                w.file,
-                w.position,
-                w.duration,
-                completed,
-                watched,
-                w.progression,
-                w.locator
-            )
-            .execute(db)
-            .await
-            .map(drop),
-        }
+        write_state(db, user, w, Utc::now(), completed, watched).await
     };
     match saved {
         Ok(()) => {}
