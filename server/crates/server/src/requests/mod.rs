@@ -92,7 +92,7 @@ pub struct ImportSpec {
 /// lock that stays held until that folder is gone.
 pub struct Removed {
     pub title: String,
-    pub disk_path: Option<String>,
+    pub disk_paths: Vec<std::path::PathBuf>,
     pub lock: tokio::sync::OwnedMutexGuard<()>,
 }
 

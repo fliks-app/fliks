@@ -535,3 +535,199 @@ async fn folder_of_another_library_is_refused_on_a_request(pool: PgPool) {
         .unwrap();
     assert_eq!(stored, f["id"].as_i64().map(|i| i as i32));
 }
+
+async fn folder_pair(c: &Ctx) -> (i32, i32) {
+    call(c, "POST", "/api/libraries", &c.admin, json!({"name": "A"})).await;
+    let mut ids = vec![];
+    for n in ["f1", "f2"] {
+        let body = json!({"path": dir(c, n)});
+        let (_, f) = call(c, "POST", "/api/libraries/1/folders", &c.admin, body).await;
+        ids.push(f["id"].as_i64().unwrap() as i32);
+    }
+    (ids[0], ids[1])
+}
+
+async fn media_with_files(pool: &PgPool, title: &str, folders: &[i32]) -> i32 {
+    let id: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ($1, 'movie', 1, $1) RETURNING id"#,
+    )
+    .bind(title)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let mut c = pool.acquire().await.unwrap();
+    let kind = fliks_domain::media::kind::MediaKind::Movie;
+    fliks_server::media::items::create_shell(&mut c, id, kind, Default::default())
+        .await
+        .unwrap();
+    for (i, f) in folders.iter().enumerate() {
+        sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId") VALUES ($1, $2, 1, 'x', $3)"#)
+            .bind(id)
+            .bind(format!("{title}/{i}.mkv"))
+            .bind(f)
+            .execute(&mut *c)
+            .await
+            .unwrap();
+    }
+    id
+}
+
+fn spawn_call(
+    c: &Ctx,
+    method: &'static str,
+    uri: String,
+    body: Value,
+) -> tokio::task::JoinHandle<(u16, Value)> {
+    let (app, tok) = (c.app.clone(), c.admin.clone());
+    tokio::spawn(async move {
+        let req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("authorization", format!("Bearer {tok}"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let status = res.status().as_u16();
+        let b = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&b).unwrap_or(Value::Null))
+    })
+}
+
+#[sqlx::test(migrations = false)]
+async fn folder_delete_removes_only_the_media_that_live_in_it(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    media_with_files(&pool, "Only", &[f1]).await;
+    let both = media_with_files(&pool, "Both", &[f1, f2]).await;
+    let url = format!("/api/libraries/1/folders/{f1}?removeMedia=true");
+    let (s, b) = call(&c, "DELETE", &url, &c.admin, json!(null)).await;
+    assert_eq!(
+        (s, b),
+        (200, json!({"removedMedia": 1, "unlinkedMedia": 1}))
+    );
+    let left: Vec<(i32, i32)> = sqlx::query_as(r#"SELECT "mediaId", "folderId" FROM media_files"#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, vec![(both, f2)]);
+    let media: Vec<i32> = sqlx::query_scalar("SELECT id FROM media ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(media, vec![both]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn folder_delete_waits_for_media_locks_without_a_connection_and_takes_late_media(
+    pool: PgPool,
+) {
+    let c = ctx(pool.clone()).await;
+    let (f1, _) = folder_pair(&c).await;
+    let first = media_with_files(&pool, "First", &[f1]).await;
+    let held = c.st.ingest.media.lock(first).await;
+    let url = format!("/api/libraries/1/folders/{f1}?removeMedia=true");
+    let del = spawn_call(&c, "DELETE", url, json!(null));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!del.is_finished());
+    assert_eq!(
+        pool.size() as usize - pool.num_idle(),
+        0,
+        "a connection is held while waiting"
+    );
+    // an ingest landing in the folder meanwhile is taken too, never a 409 after the first is gone
+    let late = media_with_files(&pool, "Late", &[f1]).await;
+    drop(held);
+    let (s, body) = del.await.unwrap();
+    assert_eq!(
+        (s, body),
+        (200, json!({"removedMedia": 2, "unlinkedMedia": 0}))
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM media WHERE id = ANY($1)")
+        .bind(vec![first, late])
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn folder_relocation_and_ingest_exclude_each_other(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, _) = folder_pair(&c).await;
+    let reading = c.st.folder_moves.read().await;
+    let url = format!("/api/libraries/1/folders/{f1}");
+    let patch = spawn_call(&c, "PATCH", url, json!({"path": dir(&c, "elsewhere")}));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!patch.is_finished(), "a path change ran under an ingest");
+    drop(reading);
+    assert_eq!(patch.await.unwrap().0, 200);
+
+    let writing = c.st.folder_moves.write().await;
+    let guard = c.st.ingest.media.lock(999).await;
+    let st = c.st.clone();
+    let ingest = tokio::spawn(async move {
+        let req = fliks_server::ingest::library::Request {
+            media_id: 999,
+            files: vec![],
+            transfer: fliks_server::ingest::transfer::Method::Copy,
+            fallback_quality: None,
+            release_name: None,
+            force: false,
+            uniquify_on_collision: false,
+            replace_existing: false,
+        };
+        fliks_server::ingest::library::ingest(&st, &guard, req)
+            .await
+            .is_err()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!ingest.is_finished(), "an ingest ran under a relocation");
+    drop(writing);
+    assert!(ingest.await.unwrap());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_media_keeps_the_folder_its_wants_were_created_with(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Kept", &[]).await;
+    let want = || async {
+        sqlx::query_scalar::<_, Option<i32>>(r#"SELECT "folderId" FROM wants WHERE "mediaId" = $1"#)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(want().await, Some(f1));
+    // a new default folder moves no existing media
+    let url = format!("/api/libraries/1/folders/{f2}");
+    call(&c, "PATCH", &url, &c.admin, json!({"position": 0})).await;
+    assert_eq!(want().await, Some(f1));
+    // another library: its default folder
+    call(&c, "POST", "/api/libraries", &c.admin, json!({"name": "B"})).await;
+    let body = json!({"path": dir(&c, "g")});
+    let (_, g) = call(&c, "POST", "/api/libraries/2/folders", &c.admin, body).await;
+    let url = format!("/api/media/{id}/library");
+    let (s, _) = call(&c, "PATCH", &url, &c.admin, json!({"libraryId": 2})).await;
+    assert_eq!(s, 200);
+    assert_eq!(want().await.map(i64::from), g["id"].as_i64());
+}
+
+#[sqlx::test(migrations = false)]
+async fn removing_a_media_clears_its_directory_in_every_folder(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Multi", &[f1, f2]).await;
+    for f in ["f1", "f2"] {
+        std::fs::create_dir_all(c.tmp.join(f).join("Multi")).unwrap();
+    }
+    let guard = c.st.ingest.media.lock(id).await;
+    let (_, mut dirs) = fliks_server::media::write::remove_media_with_dir(&c.st, &guard, id)
+        .await
+        .unwrap();
+    dirs.sort();
+    assert_eq!(dirs, vec![c.tmp.join("f1/Multi"), c.tmp.join("f2/Multi")]);
+}

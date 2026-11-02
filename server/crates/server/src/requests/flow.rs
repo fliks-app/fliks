@@ -333,7 +333,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         None => resolve_sole_library(st, a, dto.media_type).await?,
     };
     if let Some(f) = dto.folder_id {
-        crate::libraries::assert_folder_in_library(&st.db, library_id, f).await?;
+        crate::libraries::assert_folder_in_library(&mut *tx, library_id, f).await?;
     }
     if dto.media_type.has_seasons()
         && let Some((q, l)) = existing_series_profiles(st, &key).await?
@@ -652,16 +652,19 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
     if let Some(m) = media {
         match services::remove_media(st, m.id).await {
             Ok(removed) => {
-                if let Some(path) = removed.disk_path {
+                if !removed.disk_paths.is_empty() {
                     tokio::spawn(async move {
                         let _lock = removed.lock;
-                        if let Err(e) =
-                            crate::media::write::remove_media_folder(path.clone().into()).await
-                        {
-                            tracing::error!(
-                                "Media file deletion failed after delete request #{id} — title=\"{}\" path=\"{path}\" error={e}",
-                                removed.title
-                            );
+                        for path in removed.disk_paths {
+                            if let Err(e) =
+                                crate::media::write::remove_media_folder(path.clone()).await
+                            {
+                                tracing::error!(
+                                    "Media file deletion failed after delete request #{id} — title=\"{}\" path=\"{}\" error={e}",
+                                    removed.title,
+                                    path.display()
+                                );
+                            }
                         }
                     });
                 }

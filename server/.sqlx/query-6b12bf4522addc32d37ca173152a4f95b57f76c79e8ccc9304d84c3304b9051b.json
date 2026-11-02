@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO wants (\"mediaId\", family, \"qualityProfileId\", \"folderId\")\n               VALUES ($1, $2, $3, COALESCE($4, (SELECT df.\"folderId\" FROM media m\n                 JOIN library_default_folders df ON df.\"libraryId\" = m.\"libraryId\" WHERE m.id = $1)))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6b12bf4522addc32d37ca173152a4f95b57f76c79e8ccc9304d84c3304b9051b"
+}

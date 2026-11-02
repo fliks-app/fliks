@@ -173,6 +173,9 @@ pub async fn import_title(
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{}\"", d.title)))?
         .to_owned();
     let mut tx = st.db.begin().await?;
+    if let Some(f) = imp.folder_id {
+        crate::libraries::assert_folder_in_library(&mut *tx, imp.library_id, f).await?;
+    }
     let (id, free) = insert_media(&mut tx, &imp, &found, &folder)
         .await
         .map_err(|e| {
@@ -639,6 +642,9 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         false,
     )
     .await?;
+    if let Some(f) = u.folder_id {
+        crate::libraries::assert_folder_in_library(&mut *tx, u.library_id, f).await?;
+    }
     let want = NewWant {
         quality_profile_id: q,
         folder_id: u.folder_id,

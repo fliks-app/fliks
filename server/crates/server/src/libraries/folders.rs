@@ -17,9 +17,10 @@ use axum::{
 };
 use fliks_domain::acl::{Action, Subject};
 use serde::Deserialize;
+use serde_json::{Value, json};
 use sqlx::{PgConnection, PgPool};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Component, Path},
 };
 
@@ -106,14 +107,23 @@ fn lost_race(e: sqlx::Error) -> AppError {
     }
 }
 
-/// A folder id that is not one of the library's is 400 (rule 54).
+/// Like [`lost_race`], and a library deleted since the check is a 404 (rule 50).
+fn insert_failed(e: sqlx::Error, library: i32) -> AppError {
+    if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23503") {
+        not_found(library)
+    } else {
+        lost_race(e)
+    }
+}
+
+/// A folder id that is not one of the library's is 400 (rule 54); the key lock holds off a concurrent delete.
 pub async fn assert_in_library(
     db: impl sqlx::PgExecutor<'_>,
     library_id: i32,
     folder_id: i32,
 ) -> Result<(), AppError> {
     let ok = sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM library_folders WHERE id = $1 AND "libraryId" = $2) AS "ok!""#,
+        r#"SELECT EXISTS (SELECT 1 FROM library_folders WHERE id = $1 AND "libraryId" = $2 FOR KEY SHARE) AS "ok!""#,
         folder_id,
         library_id
     )
@@ -221,7 +231,7 @@ pub async fn add(
     )
     .fetch_one(&mut *tx)
     .await
-    .map_err(lost_race)?;
+    .map_err(|e| insert_failed(e, id))?;
     touch(&mut tx, id).await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, out(&st.db, id, folder).await?).into_response())
@@ -277,6 +287,10 @@ pub async fn patch(
             "position must not be less than 0",
         ]));
     }
+    let _moves = match dto.path {
+        Some(_) => Some(st.folder_moves.write().await),
+        None => None,
+    };
     let mut tx = st.db.begin().await?;
     lock(&mut tx).await?;
     library_exists(&mut tx, library).await?;
@@ -308,39 +322,77 @@ pub async fn patch(
     out(&st.db, library, folder).await
 }
 
+/// The media with files in `folder`, ascending.
+async fn media_in(db: &PgPool, folder: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar!(
+        r#"SELECT DISTINCT "mediaId" AS "id!" FROM media_files
+        WHERE "folderId" = $1 AND "mediaId" IS NOT NULL ORDER BY 1"#,
+        folder
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Whether the media of `ids` have files in another folder than `folder`.
+async fn elsewhere(db: &PgPool, folder: i32, ids: &[i32]) -> sqlx::Result<HashSet<i32>> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT DISTINCT "mediaId" AS "id!" FROM media_files
+        WHERE "mediaId" = ANY($1) AND "folderId" <> $2"#,
+        ids,
+        folder
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .collect())
+}
+
 #[utoipa::path(delete, path = "/api/libraries/{id}/folders/{folderId}", responses((status = 200)))]
 pub async fn remove(
     State(st): State<AppState>,
     a: Authed,
     ids: Result<PathParams<(i32, i32)>, AppError>,
     Query(q): Query<HashMap<String, String>>,
-) -> Result<StatusCode, AppError> {
+) -> Result<Json<Value>, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     let PathParams((library, folder)) = ids?;
-    let mut tx = st.db.begin().await?;
-    lock(&mut tx).await?;
-    library_exists(&mut tx, library).await?;
-    folder_of(&mut tx, library, folder).await?;
-    let media = sqlx::query_scalar!(
-        r#"SELECT DISTINCT "mediaId" AS "id!" FROM media_files
-        WHERE "folderId" = $1 AND "mediaId" IS NOT NULL ORDER BY 1"#,
-        folder
-    )
-    .fetch_all(&mut *tx)
-    .await?;
-    if !media.is_empty() {
-        tracing::warn!(
-            "Folder #{folder} of library #{library} holds files of {} media",
-            media.len()
-        );
-        if q.get("removeMedia").map(String::as_str) != Some("true") {
+    let with_media = q.get("removeMedia").map(String::as_str) == Some("true");
+    // Media locks, then the write lock, before any connection is held (rule 52, 59).
+    let (guards, _moves, media) = loop {
+        let mut c = st.db.acquire().await?;
+        library_exists(&mut c, library).await?;
+        folder_of(&mut c, library, folder).await?;
+        drop(c);
+        let media = media_in(&st.db, folder).await?;
+        if !media.is_empty() && !with_media {
+            tracing::warn!(
+                "Folder #{folder} of library #{library} holds files of {} media",
+                media.len()
+            );
             return Err(AppError::conflict(IN_USE));
         }
+        let mut guards = Vec::with_capacity(media.len());
         for m in &media {
-            let guard = st.ingest.media.lock(*m).await;
-            crate::media::write::remove_media(&st, &guard, *m).await?;
+            guards.push(st.ingest.media.lock(*m).await);
+        }
+        let moves = st.folder_moves.write().await;
+        if media_in(&st.db, folder).await? == media {
+            break (guards, moves, media);
+        }
+    };
+    let elsewhere = elsewhere(&st.db, folder, &media).await?;
+    let (mut removed, mut unlinked) = (0, 0);
+    for (m, guard) in media.iter().zip(&guards) {
+        if elsewhere.contains(m) {
+            crate::media::write::unlink_folder_files(&st, guard, *m, folder).await?;
+            unlinked += 1;
+        } else {
+            crate::media::write::remove_media(&st, guard, *m).await?;
+            removed += 1;
         }
     }
+    let mut tx = st.db.begin().await?;
+    lock(&mut tx).await?;
     sqlx::query!("DELETE FROM library_folders WHERE id = $1", folder)
         .execute(&mut *tx)
         .await
@@ -355,7 +407,9 @@ pub async fn remove(
     renumber(&mut tx, &rest).await?;
     touch(&mut tx, library).await?;
     tx.commit().await?;
-    Ok(StatusCode::OK)
+    Ok(Json(
+        json!({"removedMedia": removed, "unlinkedMedia": unlinked}),
+    ))
 }
 
 #[cfg(test)]

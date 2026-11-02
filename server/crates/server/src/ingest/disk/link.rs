@@ -120,6 +120,7 @@ async fn relink_in_place(
     slot: &mut bool,
 ) -> Result<i64, AppError> {
     let mut linked = 0i64;
+    let _moves = st.folder_moves.read().await;
     let mut current = load_media(&st.db, media.id)
         .await?
         .unwrap_or_else(|| media.clone());
@@ -149,6 +150,7 @@ async fn relink_in_place(
         )
         .execute(&st.db)
         .await?;
+        crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
     for f in &d.files {
@@ -257,6 +259,7 @@ pub(super) async fn confirm_import(
                 )
                 .execute(&st.db)
                 .await?;
+                crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
             }
         }
         let r = library::ingest(
