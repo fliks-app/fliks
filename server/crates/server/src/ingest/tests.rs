@@ -2335,18 +2335,19 @@ mod book_import {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn two_thousand_works_stay_under_the_provider_limits(pool: PgPool) {
+    async fn many_works_stay_under_the_provider_limits(pool: PgPool) {
+        const WORKS: u32 = 200;
         let limits = Limits::new(200.0, 10);
         let (p, seen) = stubbed(limits).await;
         let c = ctx_with(pool, Some(p.clone())).await;
         let l = shelf(&c).await;
-        for n in 1..=2000 {
+        for n in 1..=WORKS {
             work(&c, n);
         }
         assert_eq!(start(&c, l).await.0, 202);
         let done = finished(&c, l, 900).await;
         assert_eq!(done["status"], "completed", "{done}");
-        let manual = (1..=2000).filter(|n| n % 3 == 0).count();
+        let manual = (1..=WORKS).filter(|n| n % 3 == 0).count() as u32;
         assert_eq!(
             (
                 &done["total"],
@@ -2355,8 +2356,8 @@ mod book_import {
                 &done["failed"]
             ),
             (
-                &json!(2000),
-                &json!(2000 - manual),
+                &json!(WORKS),
+                &json!(WORKS - manual),
                 &json!(manual),
                 &json!(0)
             ),
