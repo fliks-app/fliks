@@ -25,10 +25,10 @@ INSERT INTO book_details ("createdAt", "updatedAt", "mediaId", subtitle, "origin
 INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (101, NULL, 'release', '2001-05-01');
 
 INSERT INTO editions (id, "createdAt", "updatedAt", "mediaId", family, format, language, publisher, "libraryId", "pageCount", "durationSeconds", label) VALUES
- (101, '2026-01-01', '2026-01-01', 101, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 101), 'text', 'epub', 'fr', 'Parity Press', NULL, 300, NULL, 'Paper'),
- (102, '2026-01-01', '2026-01-01', 101, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 101), 'audio', 'm4b', 'en', NULL, 4, NULL, 3600, 'Hidden audio'),
- (103, '2026-01-01', '2026-01-01', 102, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 102), 'audio', 'm4b', 'fr', NULL, NULL, NULL, 150, NULL),
- (104, '2026-01-01', '2026-01-01', 103, (SELECT f.id FROM library_folders f JOIN media m ON m."libraryId" = f."libraryId" WHERE m.id = 103), 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL, NULL);
+ (101, '2026-01-01', '2026-01-01', 101, 'text', 'epub', 'fr', 'Parity Press', NULL, 300, NULL, 'Paper'),
+ (102, '2026-01-01', '2026-01-01', 101, 'audio', 'm4b', 'en', NULL, 4, NULL, 3600, 'Hidden audio'),
+ (103, '2026-01-01', '2026-01-01', 102, 'audio', 'm4b', 'fr', NULL, NULL, NULL, 150, NULL),
+ (104, '2026-01-01', '2026-01-01', 103, 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL, NULL);
 INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (101, 101, 'release', '2002-02-02');
 INSERT INTO items (id, "createdAt", "updatedAt", "mediaId", "editionId") VALUES
  (101, '2026-01-01', '2026-01-01', 101, 101), (102, '2026-01-01', '2026-01-01', 101, 102),
