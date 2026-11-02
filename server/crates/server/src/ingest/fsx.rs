@@ -518,7 +518,8 @@ impl Removal {
             Some(files) if fs::symlink_metadata(&self.dir).is_ok_and(|m| m.is_dir()) => {
                 remove_owned(&self.dir, files)
             }
-            _ => remove_media_dir(&self.dir),
+            Some(_) => Ok(()),
+            None => remove_media_dir(&self.dir),
         }
     }
 }
