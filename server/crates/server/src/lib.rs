@@ -8,6 +8,7 @@ pub mod cleanup;
 pub mod collections;
 pub mod config;
 pub mod db;
+pub mod device_tokens;
 pub mod engine;
 pub mod events;
 pub mod fs;

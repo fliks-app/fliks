@@ -283,7 +283,8 @@
       "password": "Contraseña",
       "recommendations": "Recomendaciones",
       "privacy": "Privacidad",
-      "spoilers": "Spoilers"
+      "spoilers": "Spoilers",
+      "devices": "Dispositivos"
     },
     "recommendations": {
       "reset_title": "Restablecer las recomendaciones ocultas",
@@ -294,6 +295,38 @@
       "confirm_body": "{{n}} recomendación(es) oculta(s) volverán a ser elegibles. ¿Continuar?",
       "reset_success": "{{n}} recomendación(es) restaurada(s)."
     }
+  },
+  "device_tokens": {
+    "title": "Dispositivos",
+    "intro": "Da a un lector electrónico o a una aplicación de lectura su propio token de acceso. Un token lee tus bibliotecas y nada más, y puedes revocarlo cuando quieras.",
+    "empty": "Aún no hay dispositivos.",
+    "add": "Añadir un dispositivo",
+    "name": "Nombre",
+    "name_placeholder": "Lector del salón",
+    "kind": "Tipo",
+    "kind_opds": "Catálogo (OPDS)",
+    "kind_kosync": "Sincronización del progreso de lectura (KOReader)",
+    "create": "Crear",
+    "col_name": "Nombre",
+    "col_kind": "Tipo",
+    "col_last_used": "Último uso",
+    "never_used": "Nunca",
+    "renew": "Renovar",
+    "revoke": "Revocar",
+    "created_title": "Copia este token ahora",
+    "created_hint": "Solo se muestra una vez. Pégalo como contraseña en el dispositivo; el nombre de usuario puede ser cualquiera.",
+    "token_label": "Token de {{name}}",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "dismiss": "Hecho",
+    "renew_title": "¿Renovar este token?",
+    "renew_message": "El token actual deja de funcionar de inmediato. El dispositivo necesita el nuevo.",
+    "revoke_title": "¿Revocar este token?",
+    "revoke_message": "El dispositivo pierde su acceso de inmediato.",
+    "renewed": "Token renovado",
+    "revoked": "Token revocado",
+    "error_unknown": "Ese dispositivo ya no existe.",
+    "error_too_many": "Has alcanzado el límite de dispositivos. Revoca uno primero."
   },
   "spoilers": {
     "title": "Protección contra spoilers",

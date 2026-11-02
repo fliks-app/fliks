@@ -283,7 +283,8 @@
       "password": "Passwort",
       "recommendations": "Empfehlungen",
       "privacy": "Datenschutz",
-      "spoilers": "Spoiler"
+      "spoilers": "Spoiler",
+      "devices": "Geräte"
     },
     "recommendations": {
       "reset_title": "Ausgeblendete Empfehlungen zurücksetzen",
@@ -294,6 +295,38 @@
       "confirm_body": "{{n}} ausgeblendete Empfehlung(en) werden wieder berücksichtigt. Fortfahren?",
       "reset_success": "{{n}} Empfehlung(en) wiederhergestellt."
     }
+  },
+  "device_tokens": {
+    "title": "Geräte",
+    "intro": "Geben Sie einem E-Reader oder einer Lese-App ein eigenes Zugriffstoken. Ein Token liest Ihre Bibliotheken und sonst nichts, und Sie können es jederzeit widerrufen.",
+    "empty": "Noch kein Gerät.",
+    "add": "Gerät hinzufügen",
+    "name": "Name",
+    "name_placeholder": "E-Reader im Wohnzimmer",
+    "kind": "Typ",
+    "kind_opds": "Katalog (OPDS)",
+    "kind_kosync": "Abgleich des Lesefortschritts (KOReader)",
+    "create": "Erstellen",
+    "col_name": "Name",
+    "col_kind": "Typ",
+    "col_last_used": "Zuletzt verwendet",
+    "never_used": "Nie",
+    "renew": "Erneuern",
+    "revoke": "Widerrufen",
+    "created_title": "Kopieren Sie dieses Token jetzt",
+    "created_hint": "Es wird nur einmal angezeigt. Fügen Sie es im Gerät als Passwort ein; der Benutzername ist beliebig.",
+    "token_label": "Token für {{name}}",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "dismiss": "Fertig",
+    "renew_title": "Dieses Token erneuern?",
+    "renew_message": "Das aktuelle Token funktioniert sofort nicht mehr. Das Gerät braucht das neue.",
+    "revoke_title": "Dieses Token widerrufen?",
+    "revoke_message": "Das Gerät verliert sofort seinen Zugriff.",
+    "renewed": "Token erneuert",
+    "revoked": "Token widerrufen",
+    "error_unknown": "Dieses Gerät existiert nicht mehr.",
+    "error_too_many": "Sie haben die Höchstzahl an Geräten erreicht. Widerrufen Sie zuerst eines."
   },
   "spoilers": {
     "title": "Spoilerschutz",

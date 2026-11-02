@@ -9,6 +9,8 @@ Watch party: [`spec/watch-party.md`](spec/watch-party.md) (routes, state machine
 Books: [`spec/books.md`](spec/books.md) (the `book` kind, editions and their facts, ids, series, sort keys), [`spec/books-api.md`](spec/books-api.md) (routes and wire shapes), [`spec/book-metadata.md`](spec/book-metadata.md) (trait semantics, record mapping, identify and attach seams), [`spec/book-ingest.md`](spec/book-ingest.md) (ingest seams), [`spec/book-import.md`](spec/book-import.md) (bulk import job, manual queue).
 
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash).
+Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
+
 Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item parts: what a media is made of).
 
 Media details: [`spec/media-details.md`](spec/media-details.md) (release dates, the calendar and the counters).

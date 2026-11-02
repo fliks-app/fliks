@@ -283,7 +283,8 @@
       "password": "Password",
       "recommendations": "Recommendations",
       "privacy": "Privacy",
-      "spoilers": "Spoilers"
+      "spoilers": "Spoilers",
+      "devices": "Devices"
     },
     "recommendations": {
       "reset_title": "Reset dismissed recommendations",
@@ -294,6 +295,38 @@
       "confirm_body": "{{n}} dismissed recommendation(s) will become eligible again. Continue?",
       "reset_success": "{{n}} recommendation(s) restored."
     }
+  },
+  "device_tokens": {
+    "title": "Devices",
+    "intro": "Give an e-reader or a reading app its own access token. A token reads your libraries and nothing else, and you can revoke it at any time.",
+    "empty": "No device yet.",
+    "add": "Add a device",
+    "name": "Name",
+    "name_placeholder": "Living room e-reader",
+    "kind": "Type",
+    "kind_opds": "Catalogue (OPDS)",
+    "kind_kosync": "Reading progress sync (KOReader)",
+    "create": "Create",
+    "col_name": "Name",
+    "col_kind": "Type",
+    "col_last_used": "Last used",
+    "never_used": "Never",
+    "renew": "Renew",
+    "revoke": "Revoke",
+    "created_title": "Copy this token now",
+    "created_hint": "It is shown only once. Paste it as the password in the device; the username can be anything.",
+    "token_label": "Token for {{name}}",
+    "copy": "Copy",
+    "copied": "Copied",
+    "dismiss": "Done",
+    "renew_title": "Renew this token?",
+    "renew_message": "The current token stops working at once. The device needs the new one.",
+    "revoke_title": "Revoke this token?",
+    "revoke_message": "The device loses its access at once.",
+    "renewed": "Token renewed",
+    "revoked": "Token revoked",
+    "error_unknown": "That device no longer exists.",
+    "error_too_many": "You have reached the limit of devices. Revoke one first."
   },
   "spoilers": {
     "title": "Spoiler protection",

@@ -1,0 +1,107 @@
+<div class="max-w-2xl flex flex-col gap-6">
+  <div>
+    <h1 class="text-xl font-bold mb-1">{{ 'device_tokens.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60">{{ 'device_tokens.intro' | translate }}</p>
+  </div>
+
+  @if (issued(); as t) {
+    <div class="alert alert-warning items-start">
+      <div class="flex-1 min-w-0 flex flex-col gap-2">
+        <p class="font-medium">{{ 'device_tokens.created_title' | translate }}</p>
+        <p class="text-sm">{{ 'device_tokens.created_hint' | translate }}</p>
+        <div class="flex gap-2 items-center">
+          <input
+            class="input input-bordered input-sm flex-1 min-w-0 font-mono"
+            readonly
+            [value]="t.token"
+            [attr.aria-label]="'device_tokens.token_label' | translate: { name: t.name }"
+          />
+          <button type="button" class="btn btn-sm shrink-0" (click)="copy(t.token)">
+            {{ 'device_tokens.copy' | translate }}
+          </button>
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="issued.set(null)">
+        {{ 'device_tokens.dismiss' | translate }}
+      </button>
+    </div>
+  }
+
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <h2 class="card-title text-base">{{ 'device_tokens.add' | translate }}</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <app-input-field
+          [value]="name()"
+          (valueChange)="name.set($event)"
+          [label]="'device_tokens.name' | translate"
+          [placeholder]="'device_tokens.name_placeholder' | translate"
+          size="sm"
+        />
+        <app-select-field
+          [value]="kind()"
+          (valueChange)="kind.set($event)"
+          [label]="'device_tokens.kind' | translate"
+          size="sm"
+        >
+          @for (k of kinds; track k) {
+            <option [value]="k">{{ 'device_tokens.kind_' + k | translate }}</option>
+          }
+        </app-select-field>
+      </div>
+      <div class="card-actions justify-end">
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="busy() || !name().trim()"
+          (click)="create()"
+        >
+          @if (busy()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'device_tokens.create' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (devices().length) {
+    <div class="overflow-x-auto scroll-ring-safe">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{{ 'device_tokens.col_name' | translate }}</th>
+            <th>{{ 'device_tokens.col_kind' | translate }}</th>
+            <th>{{ 'device_tokens.col_last_used' | translate }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (d of devices(); track d.id) {
+            <tr>
+              <td class="truncate max-w-48">{{ d.name }}</td>
+              <td class="text-base-content/60">{{ 'device_tokens.kind_' + d.kind | translate }}</td>
+              <td class="whitespace-nowrap text-base-content/60">
+                @if (d.lastUsedAt) {
+                  {{ d.lastUsedAt | date: 'short' }}
+                } @else {
+                  {{ 'device_tokens.never_used' | translate }}
+                }
+              </td>
+              <td class="text-right whitespace-nowrap">
+                <button type="button" class="btn btn-ghost btn-sm" (click)="renew(d)">
+                  {{ 'device_tokens.renew' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm text-error" (click)="revoke(d)">
+                  {{ 'device_tokens.revoke' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="text-base-content/50">{{ 'device_tokens.empty' | translate }}</p>
+  }
+</div>

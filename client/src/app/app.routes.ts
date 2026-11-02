@@ -345,6 +345,13 @@ export const routes: Routes = [
             (m) => m.AccountSpoilersComponent,
           ),
       },
+      {
+        path: 'devices',
+        loadComponent: () =>
+          import('./features/account/devices').then(
+            (m) => m.AccountDevicesComponent,
+          ),
+      },
     ],
   },
   // App settings — own layout with sidebar

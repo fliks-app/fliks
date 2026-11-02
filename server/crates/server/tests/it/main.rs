@@ -5,6 +5,7 @@ mod backup_restore;
 mod books_api;
 mod burn_in;
 mod cleanup_bulk;
+mod device_tokens;
 mod events_ticket;
 mod heartbeat;
 mod importers;
