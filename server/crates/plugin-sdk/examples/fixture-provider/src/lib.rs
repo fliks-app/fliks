@@ -57,7 +57,11 @@ impl MetadataProvider for Fixture {
             _ => Err(ProviderError::NotFound),
         }
     }
-    fn fetch_children(_kind: String, _id: ExternalId, _lang: Lang) -> Result<String, ProviderError> {
+    fn fetch_children(
+        _kind: String,
+        _id: ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         Ok(json!([{ "seasonNumber": 1, "episodes": [] }]).to_string())
     }
     fn find_by(
@@ -65,8 +69,19 @@ impl MetadataProvider for Fixture {
         _lang: Lang,
     ) -> Result<Option<(ExternalId, String)>, ProviderError> {
         Ok(matches!(source.value.as_str(), "tt1" | "tt3").then(|| {
-            let provider = if source.value == "tt1" { "tmdb" } else { "other" }.to_owned();
-            (ExternalId { provider, value: "1".into() }, "series".into())
+            let provider = if source.value == "tt1" {
+                "tmdb"
+            } else {
+                "other"
+            }
+            .to_owned();
+            (
+                ExternalId {
+                    provider,
+                    value: "1".into(),
+                },
+                "series".into(),
+            )
         }))
     }
 }
