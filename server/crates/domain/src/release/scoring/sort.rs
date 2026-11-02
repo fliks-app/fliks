@@ -15,6 +15,10 @@ pub trait Sortable {
     fn size_deviation(&self) -> Option<f64>;
     fn is_full_season(&self) -> bool;
     fn seasons(&self) -> Option<Span>;
+    /// Only text releases set it; a retail one wins a tie on rank and score.
+    fn retail(&self) -> bool {
+        false
+    }
 }
 
 /// log2 gap that counts as a real swarm difference; smaller gaps fall through.
@@ -72,6 +76,10 @@ fn compare<T: Sortable>(a: &T, b: &T, prefer_full_season: bool) -> f64 {
     }
     if a.custom_format_score() != b.custom_format_score() {
         return (b.custom_format_score() - a.custom_format_score()) as f64;
+    }
+    let step = flag_first(a.retail(), b.retail());
+    if step != 0.0 {
+        return step;
     }
     let step = flag_first(a.freeleech(), b.freeleech());
     if step != 0.0 {

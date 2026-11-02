@@ -483,22 +483,38 @@ async fn seed_is_idempotent_under_concurrency(pool: PgPool) {
         profiles::seed_quality_definitions(&pool)
     );
     assert!(a.is_ok() && b.is_ok() && c.is_ok());
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM quality_definitions")
-        .fetch_one(&pool)
+    let counts = || async {
+        sqlx::query_as::<_, (String, i64)>(
+            "SELECT family, count(*) FROM quality_definitions GROUP BY family ORDER BY family",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let seeded = [
+        ("audio".to_owned(), 15),
+        ("text".to_owned(), 5),
+        ("video".to_owned(), 24),
+    ];
+    assert_eq!(counts().await, seeded);
+    // a non-empty family is left alone, an empty one is seeded again
+    sqlx::query(r#"DELETE FROM quality_definitions WHERE family = 'video' AND "qualityId" > 1"#)
+        .execute(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 24);
-    // a non-empty table is left alone
-    sqlx::query(r#"DELETE FROM quality_definitions WHERE "qualityId" > 1"#)
+    sqlx::query("DELETE FROM quality_definitions WHERE family = 'text'")
         .execute(&pool)
         .await
         .unwrap();
     profiles::seed_quality_definitions(&pool).await.unwrap();
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM quality_definitions")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(n, 1);
+    assert_eq!(
+        counts().await,
+        [
+            ("audio".to_owned(), 15),
+            ("text".to_owned(), 5),
+            ("video".to_owned(), 1)
+        ]
+    );
 }
 
 #[sqlx::test(migrations = false)]
