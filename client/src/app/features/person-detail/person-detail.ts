@@ -14,12 +14,13 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { LucideChevronLeft } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
+import { PersonBooksComponent } from './person-books';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 @Component({
   selector: 'app-person-detail',
   imports: [
-    CachedSrcDirective,TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
+    CachedSrcDirective, PersonBooksComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
   templateUrl: './person-detail.html',
 })
 export class PersonDetailComponent implements OnInit {
@@ -29,10 +30,14 @@ export class PersonDetailComponent implements OnInit {
 
   readonly detail = signal<PersonDetail | null>(null);
   readonly loading = signal(true);
+  readonly id = Number(this.route.snapshot.paramMap.get('id'));
+  /** `?role=author|narrator` opens the book view of the person. */
+  readonly bookRole = (['author', 'narrator'] as const).find(
+    (r) => r === this.route.snapshot.queryParamMap.get('role'),
+  );
 
   ngOnInit() {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
-    this.load(id);
+    this.load(this.id);
   }
 
   goBack() {

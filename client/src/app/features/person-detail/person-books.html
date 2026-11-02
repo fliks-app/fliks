@@ -1,0 +1,66 @@
+@if (loading()) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  @let w = works();
+  @if (w && (w.series.length > 0 || w.standalone.length > 0)) {
+    @for (s of w.series; track s.collection.id) {
+      <div>
+        <h2 class="text-lg font-semibold mb-3">
+          <a class="link link-hover" [routerLink]="['/collections', s.collection.id]">{{ s.collection.name }}</a>
+        </h2>
+        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+          @for (e of s.works; track e.media.id) {
+            <app-media-card
+              [imageUrl]="e.media.posterUrl"
+              [title]="e.media.title"
+              [topLeftBadge]="e.positionLabel ? '#' + e.positionLabel : undefined"
+              [status]="e.media.watched ? 'watched' : null"
+              [progressPercent]="e.media.progressPercent"
+              [link]="link(e.media)"
+            />
+          }
+        </div>
+      </div>
+    }
+    @if (w.standalone.length > 0) {
+      <div>
+        <h2 class="text-lg font-semibold mb-3">{{ 'books_people.standalone' | translate }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+          @for (m of w.standalone; track m.id) {
+            <app-media-card
+              [imageUrl]="m.posterUrl"
+              [title]="m.title"
+              [subtitle]="m.year?.toString()"
+              [status]="m.watched ? 'watched' : null"
+              [progressPercent]="m.progressPercent"
+              [link]="link(m)"
+            />
+          }
+        </div>
+      </div>
+    }
+  } @else {
+    <p class="text-base-content/50 text-center py-6">{{ 'books_people.no_works' | translate }}</p>
+  }
+
+  @if (missing().length > 0) {
+    <div>
+      <h2 class="text-lg font-semibold mb-3">{{ 'books_people.bibliography' | translate }}</h2>
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 sm:gap-4">
+        @for (c of missing(); track c.provider + c.externalId) {
+          <app-media-card
+            [imageUrl]="c.coverUrl"
+            [title]="c.title"
+            [subtitle]="'books_people.add' | translate"
+            [grayscale]="true"
+            [dimmed]="true"
+            [hideStatusBar]="true"
+            [link]="['/add/book', c.provider, c.externalId]"
+          />
+        }
+      </div>
+    </div>
+  }
+}

@@ -52,16 +52,19 @@
       </div>
     </div>
 
-    <!-- Tabs -->
-    <div role="tablist" class="tabs tabs-bordered">
-      <a role="tab" class="tab" routerLink="./" routerLinkActive="tab-active" [routerLinkActiveOptions]="{ exact: true }">
-        {{ 'person_detail.local_credits' | translate }}
-      </a>
-      <a role="tab" class="tab" routerLink="./filmography" routerLinkActive="tab-active">
-        {{ 'person_detail.all_credits' | translate }}
-      </a>
-    </div>
+    @if (bookRole; as role) {
+      <app-person-books [personId]="id" [role]="role" />
+    } @else {
+      <div role="tablist" class="tabs tabs-bordered">
+        <a role="tab" class="tab" routerLink="./" routerLinkActive="tab-active" [routerLinkActiveOptions]="{ exact: true }">
+          {{ 'person_detail.local_credits' | translate }}
+        </a>
+        <a role="tab" class="tab" routerLink="./filmography" routerLinkActive="tab-active">
+          {{ 'person_detail.all_credits' | translate }}
+        </a>
+      </div>
 
-    <router-outlet />
+      <router-outlet />
+    }
   </div>
 }

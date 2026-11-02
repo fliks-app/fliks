@@ -1,1 +1,21 @@
-{}
+{
+  "books_people": {
+    "series_title": "Reihe",
+    "next_up": "Als Nächstes",
+    "continue": "Weiter",
+    "missing_position": "Band {{position}} fehlt",
+    "no_entries": "Keine Einträge",
+    "authors": "Autoren",
+    "narrators": "Sprecher",
+    "works": "Werke",
+    "series": "Reihen",
+    "standalone": "Weitere Werke",
+    "in_library": "In der Bibliothek",
+    "bibliography": "Weitere Werke dieses Autors",
+    "add": "Hinzufügen",
+    "no_works": "Keine Werke in der Bibliothek",
+    "back": "Zurück",
+    "work_count": "{{count}} Werke",
+    "empty": "Keine Personen"
+  }
+}

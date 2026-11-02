@@ -1,1 +1,21 @@
-{}
+{
+  "books_people": {
+    "series_title": "Série",
+    "next_up": "À suivre",
+    "continue": "Continuer",
+    "missing_position": "Tome {{position}} manquant",
+    "no_entries": "Aucune entrée",
+    "authors": "Auteurs",
+    "narrators": "Narrateurs",
+    "works": "Œuvres",
+    "series": "Séries",
+    "standalone": "Autres œuvres",
+    "in_library": "Dans la bibliothèque",
+    "bibliography": "Autres œuvres de cet auteur",
+    "add": "Ajouter",
+    "no_works": "Aucune œuvre dans la bibliothèque",
+    "back": "Retour",
+    "work_count": "{{count}} œuvres",
+    "empty": "Aucune personne"
+  }
+}
