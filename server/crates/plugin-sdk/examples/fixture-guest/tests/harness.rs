@@ -437,5 +437,5 @@ fn package_is_deterministic_and_verifies() {
     );
     let mut wasm = std::fs::read(c.wasm_path()).unwrap();
     wasm.truncate(8);
-    assert!(build::check_world(&wasm).is_err());
+    assert!(build::check_world(&wasm, false).is_err());
 }

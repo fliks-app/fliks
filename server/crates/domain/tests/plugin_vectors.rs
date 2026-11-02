@@ -74,3 +74,32 @@ fn address_class() {
         json!({"internal": internal && !stricter.contains(&ip)})
     });
 }
+
+#[test]
+fn provider_namespace() {
+    use fliks_domain::external_id::ExternalProvider;
+    use fliks_domain::plugins::provider::{Class, IdRule, check_namespaces, classify};
+    replay("provider-namespace", 97, |i| {
+        let s = |k: &str| i[k].as_str().unwrap_or_default();
+        match s("kind") {
+            "classify" => match classify(s("name")) {
+                None => json!({"class": null}),
+                Some(Class::Core(name)) => json!({"class": "core", "name": name}),
+                Some(Class::Plugin { plugin_id, name }) => {
+                    json!({"class": "plugin", "pluginId": plugin_id, "name": name})
+                }
+            },
+            "ownership" => {
+                let block = json!({"namespaces": i["namespaces"]});
+                let core = |n: &str| ExternalProvider::parse(n).is_some();
+                match check_namespaces(s("pluginId"), &block, i["official"] == true, core) {
+                    Ok(()) => json!({"ok": true}),
+                    Err(reason) => json!({"reason": reason}),
+                }
+            }
+            _ => {
+                json!({"id": IdRule::new(s("idPattern"), s("case")).and_then(|r| r.normalize(s("value")))})
+            }
+        }
+    });
+}

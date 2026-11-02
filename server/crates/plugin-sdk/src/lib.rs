@@ -57,7 +57,9 @@ pub mod scheduled;
 pub mod time;
 
 pub use bindings::fliks::plugin::host;
-pub use bindings::fliks::plugin::types::{HealthReport, HttpRequest, HttpResponse, ManifestCheck};
+pub use bindings::fliks::plugin::types::{
+    ExternalId, HealthReport, HttpRequest, HttpResponse, ManifestCheck,
+};
 pub use serde_json;
 
 /// One method per guest export; `hello` belongs to the SDK (`export!`).
@@ -103,44 +105,53 @@ pub fn manifest_check(template: &str, version: &str) -> Result<ManifestCheck, St
     })
 }
 
+/// The guest methods both export macros implement; `hello` answers from the template.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __guest_fns {
+    ($t:ty) => {
+        fn hello(
+            _core: String,
+            _config: Vec<(String, String)>,
+        ) -> Result<$crate::ManifestCheck, String> {
+            $crate::manifest_check(
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/plugin.template.json")),
+                env!("CARGO_PKG_VERSION"),
+            )
+        }
+        fn health() -> $crate::HealthReport {
+            <$t as $crate::Plugin>::health()
+        }
+        fn start() -> Result<(), String> {
+            <$t as $crate::Plugin>::start()
+        }
+        fn job(name: String, id: String, args: Option<String>) -> Result<(), String> {
+            <$t as $crate::Plugin>::job(name, id, args)
+        }
+        fn scheduled(key: String, payload: String, attempt: u32) -> Result<(), String> {
+            <$t as $crate::Plugin>::scheduled(key, payload, attempt)
+        }
+        fn http(req: $crate::HttpRequest) -> Result<$crate::HttpResponse, String> {
+            <$t as $crate::Plugin>::http(req)
+        }
+        fn event(name: String, payload: String) {
+            <$t as $crate::Plugin>::event(name, payload)
+        }
+        fn config_changed(keys: Vec<String>) {
+            <$t as $crate::Plugin>::config_changed(keys)
+        }
+        fn shutdown() {
+            <$t as $crate::Plugin>::shutdown()
+        }
+    };
+}
+
 #[macro_export]
 macro_rules! export {
     ($t:ty) => {
         struct __FliksGuest;
         impl $crate::bindings::exports::fliks::plugin::guest::Guest for __FliksGuest {
-            fn hello(
-                _core: String,
-                _config: Vec<(String, String)>,
-            ) -> Result<$crate::ManifestCheck, String> {
-                $crate::manifest_check(
-                    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/plugin.template.json")),
-                    env!("CARGO_PKG_VERSION"),
-                )
-            }
-            fn health() -> $crate::HealthReport {
-                <$t as $crate::Plugin>::health()
-            }
-            fn start() -> Result<(), String> {
-                <$t as $crate::Plugin>::start()
-            }
-            fn job(name: String, id: String, args: Option<String>) -> Result<(), String> {
-                <$t as $crate::Plugin>::job(name, id, args)
-            }
-            fn scheduled(key: String, payload: String, attempt: u32) -> Result<(), String> {
-                <$t as $crate::Plugin>::scheduled(key, payload, attempt)
-            }
-            fn http(req: $crate::HttpRequest) -> Result<$crate::HttpResponse, String> {
-                <$t as $crate::Plugin>::http(req)
-            }
-            fn event(name: String, payload: String) {
-                <$t as $crate::Plugin>::event(name, payload)
-            }
-            fn config_changed(keys: Vec<String>) {
-                <$t as $crate::Plugin>::config_changed(keys)
-            }
-            fn shutdown() {
-                <$t as $crate::Plugin>::shutdown()
-            }
+            $crate::__guest_fns!($t);
         }
         // Native builds (unit tests, clippy) cannot link the component export names.
         #[cfg(target_arch = "wasm32")]

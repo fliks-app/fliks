@@ -7,9 +7,9 @@ The identity a media has in an outside system: a TMDB id, an IMDb id, later an O
 `media_external_ids("mediaId" integer, kind text, provider text, value text)`.
 
 1. `PRIMARY KEY ("mediaId", provider)`: a media has at most one id per provider. `FOREIGN KEY ("mediaId", kind) REFERENCES media (id, type) ON DELETE CASCADE ON UPDATE CASCADE` (backed by `UNIQUE (id, type)` on `media`): the rows go with their media, `kind` always equals `media.type`, and a `type` change moves the rows with it (`PUT /api/media/:id`, media-write rule 26; a clash on the unique index of rule 4 is the `409` of rule 11).
-2. `provider` is the id namespace, a text under a `CHECK` like `media.type` (a Postgres enum cannot gain a value inside the migration transaction). The set is `tmdb`, `tvdb`, `imdb`; the registry is `fliks_domain::external_id::ExternalProvider` (`ALL`, `as_str`, `parse`, `label`, `is_numeric`, `is_unique`). A provider is added by a registry variant and a migration that widens the `CHECK`. The set widens with the books (`books.md` rules 11 and 12): `openlibrary` for works, and `isbn`, `asin`, `openlibrary`, `googlebooks`, `bnf` for editions in `edition_external_ids`; `ExternalProvider` also names `audible`, `audnexus` and `file` as provenance only.
+2. `provider` is the id namespace, a text under a `CHECK` of form (a Postgres enum cannot gain a value inside the migration transaction). Two classes of namespace exist (`provider-plugins.md` rules 19-24): the core's bare names, the set of `fliks_domain::external_id::ExternalProvider` (`tmdb`, `tvdb`, `imdb`, and the book namespaces; `ALL`, `as_str`, `parse`, `label`, `is_numeric`, `is_unique`), added by a registry variant, and plugin namespaces `<pluginId>:<name>` declared by a provider plugin's manifest. The `CHECK` checks the form only (`^[a-z][a-z0-9]{1,31}$` or `<plugin id>:<name>`, at most 84 bytes); that a bare name is the core's is checked in Rust on every write. `fliks_domain::external_id::Namespace` is `Core(ExternalProvider)` or `Plugin(PluginNamespace)`. The book namespaces (`books.md` rules 11 and 12) are `openlibrary` for works, and `isbn`, `asin`, `openlibrary`, `googlebooks`, `bnf` for editions in `edition_external_ids`; `ExternalProvider` also names `audible`, `audnexus` and `file` as provenance only.
 3. `value` is the id as text. The numeric providers (`tmdb`, `tvdb`, listed in the `CHECK`) hold canonical positive integers of at most 9 digits, so a numeric read cannot fail; any other provider holds free text until its own `CHECK` arm says otherwise.
-4. `kind` is the media kind (`media.type`): TMDB numbers its movies and its shows separately, so `tmdb 1396` can name a movie and a series. A partial unique index `(kind, provider, value) WHERE provider = 'tmdb'` keeps what `UQ_media_type_tmdbId` kept: one media per kind and TMDB id. `tvdb` and `imdb` are not unique (TMDB splits one TVDB show into several, and a title can be catalogued twice). A plain index on `(provider, value)` serves the lookups. `UQ_media_external_ids_anchor` replaces it and also covers `openlibrary` (one work per OpenLibrary id, `books.md` rule 11).
+4. `kind` is the media kind (`media.type`): TMDB numbers its movies and its shows separately, so `tmdb 1396` can name a movie and a series. A partial unique index `(kind, provider, value) WHERE provider = 'tmdb'` keeps what `UQ_media_type_tmdbId` kept: one media per kind and TMDB id. `tvdb` and `imdb` are not unique (TMDB splits one TVDB show into several, and a title can be catalogued twice). A plugin namespace is never unique (`provider-plugins.md` rule 25). A plain index on `(provider, value)` serves the lookups. `UQ_media_external_ids_anchor` replaces it and also covers `openlibrary` (one work per OpenLibrary id, `books.md` rule 11).
 
 ## Reads
 
@@ -37,6 +37,10 @@ The identity a media has in an outside system: a TMDB id, an IMDb id, later an O
 ## Not in scope
 
 A collection's TMDB id (not the title's) lives in `collection_external_ids` (`media-details.md`). Where it looks a media up by `tmdbId` it goes through rule 6's lookup.
+
+## Plugin namespaces
+
+A plugin namespace's ids are normalised by the manifest's `idPattern` before any write (`provider-plugins.md` rule 28). A provider plugin that is not `official` cannot link a media to a unique core namespace (`provider-plugins.md` rule 26). Uninstalling a plugin keeps its ids; `deleteData` removes them (`provider-plugins.md` rules 27, 29). Rule 6's lookup returns the lowest media id for a plugin namespace as for any non-unique one.
 
 ## Persons
 

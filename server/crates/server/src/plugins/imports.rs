@@ -110,11 +110,14 @@ impl Ctx {
 
 /// Runs a host method with its binding check on `$scope`s, deadline and counters.
 macro_rules! call {
-    ($self:ident, $method:literal, [$($scope:literal),*], $deadline:expr, $body:expr) => {{
+    ($self:ident, $method:literal, [$($scope:literal),*], $deadline:expr, $body:expr) => {
+        call!($self, $method, scopes = &[$($scope),*], $deadline, $body)
+    };
+    ($self:ident, $method:literal, scopes = $need:expr, $deadline:expr, $body:expr) => {{
         let started = Instant::now();
         let sh = $self.sh.clone();
         let r = async {
-            bound(&sh, $method, &[$($scope),*]).await?;
+            bound(&sh, $method, $need).await?;
             match tokio::time::timeout($deadline, $body).await {
                 Ok(r) => r,
                 Err(_) => Err(host_err(
@@ -389,13 +392,36 @@ impl host::Host for Ctx {
         })
     }
 
+    async fn provider_set_limits(
+        &mut self,
+        _rate_per_sec: f64,
+        _burst: u32,
+        _daily_quota: Option<u32>,
+    ) -> Result<(), HostError> {
+        Err(host_err(
+            "ERR_NO_METHOD",
+            "host method \"provider.setLimits\" is not served",
+        ))
+    }
+    async fn provider_quota_spent(&mut self) -> Result<(), HostError> {
+        Err(host_err(
+            "ERR_NO_METHOD",
+            "host method \"provider.quotaSpent\" is not served",
+        ))
+    }
+
     async fn config_get(
         &mut self,
         keys: Option<Vec<String>>,
     ) -> Result<Vec<(String, String)>, HostError> {
         let core = self.sh.env.core.clone();
         let id = self.sh.id.clone();
-        call!(self, "config.get", ["config:rw"], HOST_CALL, async {
+        let need: &[&str] = if self.sh.provider {
+            &[]
+        } else {
+            &["config:rw"]
+        };
+        call!(self, "config.get", scopes = need, HOST_CALL, async {
             config_for(&core, &id, keys.as_deref())
                 .await
                 .map_err(db_err)

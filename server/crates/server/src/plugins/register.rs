@@ -1,5 +1,7 @@
 //! Registering a package with the host: checks, database provisioning, settling and activation.
 use super::*;
+use fliks_domain::external_id::ExternalProvider;
+use fliks_domain::plugins::provider;
 
 impl Plugins {
     pub(super) fn reverify(&self, pkg: &Package) -> Result<(), Fail> {
@@ -177,6 +179,13 @@ impl Plugins {
             });
         }
         self.registry.install_declarations(id, m, &declared);
+        if let Some(block) = m.get("provider") {
+            let official = pkg.verified_by_key_id.is_some();
+            provider::check_namespaces(id, block, official, |n| {
+                ExternalProvider::parse(n).is_some()
+            })
+            .map_err(|reason| fail(reason, "a namespace of the provider block is refused"))?;
+        }
         if manifest::requests_network(m) && !pkg.network_internal {
             return Err(fail(
                 "network-not-granted",
@@ -203,6 +212,17 @@ impl Plugins {
                     fail("spawn-failed", m)
                 }
             })?;
+        let exported = loaded
+            .component
+            .component_type()
+            .exports(&host.env.engine)
+            .any(|(name, _)| name == provider::EXPORT);
+        if exported != m.get("provider").is_some() {
+            return Err(fail(
+                "invalid-component",
+                "the metadata-provider export and the manifest's provider block must come together",
+            ));
+        }
         packages::upsert_registration(&self.db, id, m)
             .await
             .map_err(|e| db_fail("db-provision-failed", e))?;
@@ -243,6 +263,7 @@ impl Plugins {
             db: pool,
             scopes: strs("scopes"),
             ingest_roots: strs("ingestRoots"),
+            provider: m.get("provider").is_some(),
             era: AtomicU64::new(0),
             stopped: Notify::new(),
             mem_total: Default::default(),
