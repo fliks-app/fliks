@@ -444,6 +444,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
         let mut c = db.acquire().await.unwrap();
         let want = crate::media::items::NewWant {
             quality_profile_id: Some(1),
+            ..Default::default()
         };
         crate::media::items::create_shell(&mut c, 1, MediaKind::Series, want)
             .await

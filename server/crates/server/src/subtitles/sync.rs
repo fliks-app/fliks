@@ -186,7 +186,7 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
         .bind(id)
         .execute(&st.db)
         .await?;
-    let media = files::load_media(&st.db, row.media_id.unwrap_or(0)).await?;
+    let media = files::load_media_of(&st.db, row.media_id.unwrap_or(0), row.media_file_id).await?;
     let ep = match row.episode_id {
         Some(e) => episode_of(st, e).await,
         None => None,
@@ -413,7 +413,7 @@ async fn load(st: &AppState, id: i32) -> Result<(Row, FileRow, MediaCtx), String
         .map_err(sql)?
         .ok_or(format!("MediaFile #{fid} not found"))?;
     let mid = row.media_id.unwrap_or(0);
-    let media = files::load_media(&st.db, mid)
+    let media = files::load_media_of(&st.db, mid, Some(fid))
         .await
         .map_err(sql)?
         .ok_or(format!("Media #{mid} not found or has no root path"))?;

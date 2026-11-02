@@ -45,9 +45,28 @@ pub struct Summary {
     pub media_types: Json<Vec<String>>,
     pub default_quality_profile_id: Option<i32>,
     pub default_language_profile_id: Option<i32>,
+    pub folders: Vec<FolderChoice>,
 }
 
+/// A folder a user may pick for new files: no path, only its last segment (rule 49).
 #[derive(Serialize)]
+pub struct FolderChoice {
+    pub id: i32,
+    pub name: String,
+}
+
+/// A library folder with its disk and the number of media living in it (rule 48).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderOut {
+    pub id: i32,
+    pub path: String,
+    pub position: i32,
+    pub disk: Disk,
+    pub media_count: i64,
+}
+
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Disk {
     pub free_space: i64,
@@ -63,6 +82,7 @@ pub struct Detailed {
     pub library: Library,
     pub user_ids: Vec<i32>,
     pub disk: Option<Disk>,
+    pub folders: Vec<FolderOut>,
 }
 
 /// Absolute server paths only for callers who can manage libraries.
@@ -76,6 +96,7 @@ impl Detailed {
         if !paths && let Some(o) = v.as_object_mut() {
             o.remove("path");
             o.remove("disk");
+            o.remove("folders");
         }
         v
     }
@@ -108,8 +129,7 @@ pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Library>> {
 }
 
 pub async fn summaries(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Summary>> {
-    sqlx::query_as!(
-        Summary,
+    let rows = sqlx::query!(
         r#"SELECT id, name, icon, color, "mediaTypes" AS "media_types: Json<Vec<String>>",
         "defaultQualityProfileId" AS default_quality_profile_id,
         "defaultLanguageProfileId" AS default_language_profile_id
@@ -117,7 +137,86 @@ pub async fn summaries(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Summary>> {
         ids
     )
     .fetch_all(db)
-    .await
+    .await?;
+    let mut folders = folder_rows(db, ids).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| Summary {
+            folders: folders
+                .remove(&r.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| FolderChoice {
+                    id: f.id,
+                    name: super::folders::name_of(&f.path),
+                })
+                .collect(),
+            id: r.id,
+            name: r.name,
+            icon: r.icon,
+            color: r.color,
+            media_types: r.media_types,
+            default_quality_profile_id: r.default_quality_profile_id,
+            default_language_profile_id: r.default_language_profile_id,
+        })
+        .collect())
+}
+
+pub struct FolderRow {
+    pub id: i32,
+    pub path: String,
+    pub position: i32,
+}
+
+/// The folders of each library, `position` then `id`.
+pub async fn folder_rows(
+    db: &PgPool,
+    libraries: &[i32],
+) -> sqlx::Result<HashMap<i32, Vec<FolderRow>>> {
+    let rows = sqlx::query!(
+        r#"SELECT id, "libraryId" AS library_id, path, position FROM library_folders
+        WHERE "libraryId" = ANY($1) ORDER BY "libraryId", position, id"#,
+        libraries
+    )
+    .fetch_all(db)
+    .await?;
+    let mut by_library: HashMap<i32, Vec<FolderRow>> = HashMap::new();
+    for r in rows {
+        by_library.entry(r.library_id).or_default().push(FolderRow {
+            id: r.id,
+            path: r.path,
+            position: r.position,
+        });
+    }
+    Ok(by_library)
+}
+
+/// Folders with their disk and media count (rule 48).
+pub async fn folders_out(db: &PgPool, rows: Vec<FolderRow>) -> sqlx::Result<Vec<FolderOut>> {
+    let ids: Vec<i32> = rows.iter().map(|f| f.id).collect();
+    let counts: HashMap<i32, i64> = sqlx::query!(
+        r#"SELECT "folderId" AS folder_id, count(DISTINCT "mediaId") AS "n!" FROM media_files
+        WHERE "folderId" = ANY($1) GROUP BY "folderId""#,
+        &ids
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|r| (r.folder_id, r.n))
+    .collect();
+    let disks =
+        futures_util::future::join_all(rows.iter().map(|f| super::path::disk(&f.path))).await;
+    Ok(rows
+        .into_iter()
+        .zip(disks)
+        .map(|(f, disk)| FolderOut {
+            media_count: counts.get(&f.id).copied().unwrap_or(0),
+            id: f.id,
+            path: f.path,
+            position: f.position,
+            disk,
+        })
+        .collect())
 }
 
 /// `library_user_access.userId` per library, in insertion order.
@@ -139,21 +238,24 @@ pub async fn user_ids(db: &PgPool, libraries: &[i32]) -> sqlx::Result<HashMap<i3
 pub async fn detail(db: &PgPool, libraries: Vec<Library>) -> sqlx::Result<Vec<Detailed>> {
     let ids: Vec<i32> = libraries.iter().map(|l| l.id).collect();
     let mut users = user_ids(db, &ids).await?;
-    let disks = futures_util::future::join_all(
-        libraries
-            .iter()
-            .map(|l| async { Some(super::path::disk(l.path.as_deref()?).await) }),
-    )
-    .await;
-    Ok(libraries
+    let mut folders = folder_rows(db, &ids).await?;
+    let rows = libraries.into_iter().map(|library| {
+        let mine = folders.remove(&library.id).unwrap_or_default();
+        let user_ids = users.remove(&library.id).unwrap_or_default();
+        async move {
+            let folders = folders_out(db, mine).await?;
+            Ok(Detailed {
+                user_ids,
+                disk: folders.first().map(|f| f.disk.clone()),
+                library,
+                folders,
+            })
+        }
+    });
+    futures_util::future::join_all(rows)
+        .await
         .into_iter()
-        .zip(disks)
-        .map(|(library, disk)| Detailed {
-            user_ids: users.remove(&library.id).unwrap_or_default(),
-            library,
-            disk,
-        })
-        .collect())
+        .collect()
 }
 
 /// Maps the constraint failures 4.x answered 500 for (rule 38).

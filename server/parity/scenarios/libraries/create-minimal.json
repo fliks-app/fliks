@@ -21,6 +21,7 @@
           "defaultLanguageProfileId": null,
           "defaultQualityProfileId": null,
           "disk": null,
+          "folders": [],
           "icon": null,
           "id": 3,
           "label": null,

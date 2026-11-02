@@ -48,8 +48,11 @@ pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<P
         .map(PathBuf::from)
         .collect();
     let others: Vec<PathBuf> = sqlx::query!(
-        r#"SELECT df.path AS "lib!", m."folderName" AS "folder!" FROM media m
-           JOIN library_default_folders df ON df."libraryId" = m."libraryId"
+        r#"SELECT lf.path AS "lib!", m."folderName" AS "folder!" FROM media m
+           JOIN (SELECT "mediaId", "folderId" FROM media_files WHERE "mediaId" IS NOT NULL
+                 UNION SELECT "mediaId", "folderId" FROM media_target_folders WHERE "folderId" IS NOT NULL) x
+             ON x."mediaId" = m.id
+           JOIN library_folders lf ON lf.id = x."folderId"
            WHERE m.id <> $1 AND m."folderName" <> ''"#,
         m.id
     )

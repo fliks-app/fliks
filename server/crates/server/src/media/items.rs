@@ -103,10 +103,11 @@ pub async fn cover_ranges(c: &mut PgConnection, media: i32) -> sqlx::Result<()> 
     tx.commit().await
 }
 
-/// What a new media is wished with: the quality profile of each of its wants.
+/// What a new media is wished with: the quality profile and the target folder of each of its wants.
 #[derive(Clone, Copy, Default)]
 pub struct NewWant {
     pub quality_profile_id: Option<i32>,
+    pub folder_id: Option<i32>,
 }
 
 /// Gives a new media one want per family of its kind and, but for a book, its `video` edition and, without seasons, its sole item.
@@ -118,10 +119,11 @@ pub async fn create_shell(
 ) -> sqlx::Result<()> {
     for family in kind.families() {
         sqlx::query!(
-            r#"INSERT INTO wants ("mediaId", family, "qualityProfileId") VALUES ($1, $2, $3)"#,
+            r#"INSERT INTO wants ("mediaId", family, "qualityProfileId", "folderId") VALUES ($1, $2, $3, $4)"#,
             media,
             family.as_str(),
-            want.quality_profile_id
+            want.quality_profile_id,
+            want.folder_id
         )
         .execute(&mut *c)
         .await?;

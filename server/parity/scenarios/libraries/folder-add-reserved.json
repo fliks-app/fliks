@@ -1,0 +1,29 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-add-reserved",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.folder_reserved",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries/1/folders"
+    }
+  ],
+  "strictMessage": true
+}

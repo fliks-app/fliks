@@ -37,6 +37,17 @@
             "disk": {
               "accessible": true
             },
+            "folders": [
+              {
+                "disk": {
+                  "accessible": true
+                },
+                "id": 1,
+                "mediaCount": 17,
+                "path": "/tmp/fliks-parity/media/movies",
+                "position": 0
+              }
+            ],
             "icon": "film",
             "id": 1,
             "label": null,
@@ -62,6 +73,17 @@
             "disk": {
               "accessible": true
             },
+            "folders": [
+              {
+                "disk": {
+                  "accessible": true
+                },
+                "id": 2,
+                "mediaCount": 3,
+                "path": "/tmp/fliks-parity/media/series",
+                "position": 0
+              }
+            ],
             "icon": "tv",
             "id": 2,
             "label": null,

@@ -31,6 +31,7 @@ use std::path::PathBuf;
 
 pub struct Target {
     pub id: i32,
+    pub folder_id: Option<i32>,
     pub default_quality: Option<i32>,
     pub default_language: Option<i32>,
 }
@@ -41,9 +42,10 @@ pub async fn resolve_target(
     a: &Authed,
     media_type: MediaKind,
     library_id: Option<i32>,
+    folder_id: Option<i32>,
 ) -> Result<Target, AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
-    resolve_target_in(st, &libs, media_type, library_id).await
+    resolve_target_in(st, &libs, media_type, library_id, folder_id).await
 }
 
 /// `resolveImportTarget` among `libs` (every library for a request approval, which has no caller ACL).
@@ -52,6 +54,7 @@ pub async fn resolve_target_in(
     libs: &[i32],
     media_type: MediaKind,
     library_id: Option<i32>,
+    folder_id: Option<i32>,
 ) -> Result<Target, AppError> {
     let rows = sqlx::query!(
         r#"SELECT l.id, l.name, df.path AS "path?", l."mediaTypes" AS types,
@@ -103,8 +106,12 @@ pub async fn resolve_target_in(
             lib.name
         )));
     }
+    if let Some(f) = folder_id {
+        crate::libraries::assert_folder_in_library(&st.db, lib.id, f).await?;
+    }
     Ok(Target {
         id: lib.id,
+        folder_id,
         default_quality: lib.dq,
         default_language: lib.dl,
     })
@@ -132,6 +139,7 @@ async fn duplicate(
 pub struct Import {
     pub media_type: MediaKind,
     pub library_id: i32,
+    pub folder_id: Option<i32>,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub added_by: Option<i32>,
@@ -359,6 +367,7 @@ async fn insert_media(
     set_tmdb_collection(tx, id, d.tmdb_collection()).await?;
     let want = NewWant {
         quality_profile_id: imp.quality_profile_id,
+        folder_id: imp.folder_id,
     };
     items::create_shell(tx, id, imp.media_type, want).await?;
     let ids = Ids {
@@ -371,20 +380,22 @@ async fn insert_media(
     Ok((id, free))
 }
 
-const TMDB_FIELDS: [&str; 5] = [
+const TMDB_FIELDS: [&str; 6] = [
     "type",
     "tmdbId",
     "qualityProfileId",
     "languageProfileId",
     "libraryId",
+    "folderId",
 ];
-const MEDIA_FIELDS: [&str; 7] = [
+const MEDIA_FIELDS: [&str; 8] = [
     "type",
     "externalId",
     "provider",
     "qualityProfileId",
     "languageProfileId",
     "libraryId",
+    "folderId",
     "monitoredSeasons",
 ];
 struct Common {
@@ -392,6 +403,7 @@ struct Common {
     quality: Option<i32>,
     language: Option<i32>,
     library: Option<i32>,
+    folder: Option<i32>,
 }
 
 fn common(b: &Body) -> Result<Common, AppError> {
@@ -406,6 +418,7 @@ fn common(b: &Body) -> Result<Common, AppError> {
         quality: b.id("qualityProfileId")?.flatten(),
         language: b.id("languageProfileId")?.flatten(),
         library: b.id("libraryId")?.flatten(),
+        folder: b.id("folderId")?.flatten(),
     })
 }
 
@@ -415,10 +428,11 @@ async fn prepare(
     c: &Common,
     seasons: Option<Vec<i32>>,
 ) -> Result<Import, AppError> {
-    let target = resolve_target(st, a, c.media_type, c.library).await?;
+    let target = resolve_target(st, a, c.media_type, c.library, c.folder).await?;
     Ok(Import {
         media_type: c.media_type,
         library_id: target.id,
+        folder_id: target.folder_id,
         quality_profile_id: resolve_profile(&st.db, false, c.quality, target.default_quality)
             .await?,
         language_profile_id: resolve_profile(&st.db, true, c.language, target.default_language)
@@ -440,7 +454,7 @@ pub async fn import_for_request(
     media_type: MediaKind,
     tmdb_id: i32,
     profiles: (Option<i32>, Option<i32>),
-    library_id: Option<i32>,
+    (library_id, folder_id): (Option<i32>, Option<i32>),
     added_by: Option<i32>,
     seasons: Option<Vec<i32>>,
 ) -> Result<i32, AppError> {
@@ -449,10 +463,11 @@ pub async fn import_for_request(
     }
     duplicate(st, media_type, false, tmdb_id).await?;
     let all = all_library_ids(&st.db).await?;
-    let target = resolve_target_in(st, &all, media_type, library_id).await?;
+    let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
     let imp = Import {
         media_type,
         library_id: target.id,
+        folder_id: target.folder_id,
         quality_profile_id: resolve_profile(&st.db, false, profiles.0, target.default_quality)
             .await?,
         language_profile_id: resolve_profile(&st.db, true, profiles.1, target.default_language)
@@ -551,6 +566,7 @@ pub struct Unmatched {
     pub year: Option<i32>,
     pub media_type: MediaKind,
     pub library_id: i32,
+    pub folder_id: Option<i32>,
     pub folder_name: String,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
@@ -625,6 +641,7 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     .await?;
     let want = NewWant {
         quality_profile_id: q,
+        folder_id: u.folder_id,
     };
     items::create_shell(&mut tx, id, u.media_type, want).await?;
     tx.commit().await?;

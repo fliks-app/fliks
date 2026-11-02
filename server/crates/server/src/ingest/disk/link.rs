@@ -344,10 +344,12 @@ pub(super) async fn find_or_import(
     }
     let provider = d.provider.clone().filter(|p| p == "tmdb" || p == "tvdb");
     let imported = async {
-        let target = mw::resolve_target(st, a, d.media_type, Some(d.library_id)).await?;
+        let target =
+            mw::resolve_target(st, a, d.media_type, Some(d.library_id), d.folder_id).await?;
         let imp = mw::Import {
             media_type: d.media_type,
             library_id: target.id,
+            folder_id: target.folder_id,
             quality_profile_id: mw::resolve_profile(
                 &st.db,
                 false,
@@ -593,6 +595,7 @@ pub(super) async fn find_or_create_unmatched(
                     year,
                     media_type: d.media_type,
                     library_id: d.library_id,
+                    folder_id: d.folder_id,
                     folder_name: folder,
                     quality_profile_id: d.quality_profile_id,
                     language_profile_id: d.language_profile_id,

@@ -30,7 +30,9 @@ async fn detect(
     episode_id: Option<i32>,
 ) -> Result<Vec<i32>, String> {
     let sql = |e: sqlx::Error| e.to_string();
-    let media = files::load_media(&st.db, media_id).await.map_err(sql)?;
+    let media = files::load_media_of(&st.db, media_id, Some(file_id))
+        .await
+        .map_err(sql)?;
     let file = files::file_by_id(&st.db, file_id).await.map_err(sql)?;
     let (Some(media), Some(file)) = (media, file) else {
         return Ok(vec![]);

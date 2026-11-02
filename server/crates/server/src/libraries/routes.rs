@@ -114,12 +114,12 @@ fn profile(id: Option<i32>) -> Option<i32> {
 }
 
 /// Body parsing after the policy check, as 4.x runs guards before validation.
-async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppError> {
+pub(super) async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppError> {
     let ValidJson(dto) = ValidJson::<T>::from_request(req, &()).await?;
     Ok(dto)
 }
 
-fn id_of(PathParams(raw): PathParams<String>) -> Result<i32, AppError> {
+pub(super) fn id_of(PathParams(raw): PathParams<String>) -> Result<i32, AppError> {
     int_param(&raw)
 }
 

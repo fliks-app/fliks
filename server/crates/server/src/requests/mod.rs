@@ -84,6 +84,7 @@ pub struct ImportSpec {
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
+    pub folder_id: Option<i32>,
     pub seasons: Option<Vec<i64>>,
 }
 

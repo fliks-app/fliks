@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT path FROM library_folders WHERE \"libraryId\" <> $1",
+  "query": "SELECT id FROM library_folders WHERE \"libraryId\" = $1 ORDER BY position, id",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "path",
-        "type_info": "Text",
+        "name": "id",
+        "type_info": "Int4",
         "origin": {
           "Table": {
             "table": "library_folders",
-            "name": "path"
+            "name": "id"
           }
         }
       }
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "908374908834ca64b1b914c6b6f3445a0b20283530d5c2629a35fd93fdaaa123"
+  "hash": "c34ca1b3efd347a1e28e7505393dcfc6ae9bf49558cc595342a4d09fb44b65af"
 }

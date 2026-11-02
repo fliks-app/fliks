@@ -14,6 +14,7 @@ pub async fn resolve_or_create(
     kind: &str,
     ids: &[t::ExternalId],
     library_id: Option<u32>,
+    folder_id: Option<u32>,
 ) -> Result<u32, HostError> {
     let kind = MediaKind::parse(kind)
         .filter(|k| k.families().contains(&Family::Video))
@@ -35,6 +36,10 @@ pub async fn resolve_or_create(
         .map(i32::try_from)
         .transpose()
         .map_err(|_| host_err("ERR_VALIDATION", "libraryId is out of range"))?;
+    let folder = folder_id
+        .map(i32::try_from)
+        .transpose()
+        .map_err(|_| host_err("ERR_VALIDATION", "folderId is out of range"))?;
     let mut tx = st.db.begin().await.map_err(db_err)?;
     sqlx::query("SET LOCAL lock_timeout = 30000")
         .execute(&mut *tx)
@@ -46,7 +51,7 @@ pub async fn resolve_or_create(
     let found = external_ids::find_numeric(&mut *tx, kind, TMDB, tmdb).await;
     let id = match found.map_err(db_err)? {
         Some(id) => id,
-        None => create(st, kind, tmdb, library).await?,
+        None => create(st, kind, tmdb, (library, folder)).await?,
     };
     tx.commit().await.map_err(db_err)?;
     Ok(id as u32)
@@ -64,12 +69,12 @@ async fn create(
     st: &AppState,
     kind: MediaKind,
     tmdb: i32,
-    library: Option<i32>,
+    (library, folder): (Option<i32>, Option<i32>),
 ) -> Result<i32, HostError> {
     if !st.metadata.available(TMDB) {
         return Err(host_err("unsupported-provider", "TMDB is not configured"));
     }
-    match import_for_request(st, kind, tmdb, (None, None), library, None, None).await {
+    match import_for_request(st, kind, tmdb, (None, None), (library, folder), None, None).await {
         Ok(id) => Ok(id),
         // Held by an import that does not take the title lock: the media exists now.
         Err(e) if e.status() == 409 => external_ids::find_numeric(&st.db, kind, TMDB, tmdb)

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT \"mediaId\" AS \"id!\" FROM media_files\n        WHERE \"folderId\" = $1 AND \"mediaId\" IS NOT NULL ORDER BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mediaId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "5edd70b20072351a733af246b5f33ae60d8cfbb806cf3a2ce39d950e6a249168"
+}

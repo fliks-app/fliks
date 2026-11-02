@@ -21,12 +21,13 @@ pub struct RelinkDto {
     pub(super) scan_root: Option<String>,
     pub(super) reorganize: bool,
     pub(super) transfer: Option<Method>,
+    pub(super) folder_id: Option<i32>,
     pub(super) files: Vec<RelinkFile>,
     /// Background for a batch item; the single relink route makes it interactive.
     pub(super) priority: Priority,
 }
 
-pub(super) const RELINK_FIELDS: [&str; 13] = [
+pub(super) const RELINK_FIELDS: [&str; 14] = [
     "libraryId",
     "type",
     "externalId",
@@ -39,6 +40,7 @@ pub(super) const RELINK_FIELDS: [&str; 13] = [
     "scanRoot",
     "reorganize",
     "transfer",
+    "folderId",
     "files",
 ];
 
@@ -111,7 +113,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
                     "filePath",
                     "must be a string",
                 )?);
-                if !path.starts_with('/') {
+                if !std::path::Path::new(&path).is_absolute() {
                     return Err(AppError::bad_request(vec![format!(
                         "{prefix}files.{i}.filePath must be an absolute path"
                     )]));
@@ -148,6 +150,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
         scan_root: b.str("scanRoot")?.flatten(),
         reorganize: b.bool("reorganize")?.flatten().unwrap_or(false),
         transfer,
+        folder_id: b.id("folderId")?.flatten(),
         files,
         priority: Priority::Background,
     })

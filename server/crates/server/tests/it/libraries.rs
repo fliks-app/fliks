@@ -318,3 +318,220 @@ async fn acl_helpers(pool: PgPool) {
             .is_err()
     );
 }
+
+fn dir(c: &Ctx, name: &str) -> String {
+    let p = c.tmp.join(name);
+    std::fs::create_dir_all(&p).unwrap();
+    p.to_string_lossy().into_owned()
+}
+
+#[sqlx::test(migrations = false)]
+async fn folder_routes_enforce_overlap_reserved_and_order(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    for n in ["A", "B"] {
+        let b = json!({ "name": n });
+        assert_eq!(call(&c, "POST", "/api/libraries", &c.admin, b).await.0, 201);
+    }
+    let add = |lib: i32, path: String| {
+        let c = &c;
+        async move {
+            call(
+                c,
+                "POST",
+                &format!("/api/libraries/{lib}/folders"),
+                &c.admin,
+                json!({"path": path}),
+            )
+            .await
+        }
+    };
+    let (s, f1) = add(1, dir(&c, "m/films")).await;
+    assert_eq!(
+        (s, f1["position"].clone(), f1["mediaCount"].clone()),
+        (201, json!(0), json!(0))
+    );
+    assert_eq!(f1["disk"]["accessible"], json!(true));
+    let (s, f2) = add(1, dir(&c, "m/anime")).await;
+    assert_eq!((s, f2["position"].clone()), (201, json!(1)));
+    // the same directory, one inside the other, either way, in this library or another
+    for (lib, p) in [
+        (1, c.tmp.join("m/films")),
+        (2, c.tmp.join("m/films")),
+        (1, c.tmp.join("m/films/sub")),
+        (2, c.tmp.join("m")),
+    ] {
+        let (s, b) = add(lib, p.to_string_lossy().into_owned()).await;
+        assert_eq!(
+            (s, b["message"].clone()),
+            (409, json!("errors.folder_overlap")),
+            "{p:?}"
+        );
+    }
+    let (s, b) = add(1, "/".into()).await;
+    assert_eq!(
+        (s, b["message"].clone()),
+        (400, json!("errors.folder_reserved"))
+    );
+    let data = fliks_server::paths::data_dir()
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(add(1, data).await.0, 400);
+    assert_eq!(add(1, "relative/dir".into()).await.0, 400);
+    assert_eq!(add(1, "  ".into()).await.0, 400);
+    assert_eq!(add(99, dir(&c, "x")).await.0, 404);
+    assert!(!c.tmp.join("m/films/sub").exists());
+
+    // `path` of the library is the first folder; with several folders it is refused
+    let (_, lib) = call(&c, "GET", "/api/libraries/1", &c.admin, json!(null)).await;
+    assert_eq!(lib["path"], f1["path"]);
+    assert_eq!(lib["folders"].as_array().unwrap().len(), 2);
+    let body = json!({"path": dir(&c, "z")});
+    assert_eq!(
+        call(&c, "PATCH", "/api/libraries/1", &c.admin, body)
+            .await
+            .0,
+        400
+    );
+
+    // /mine lists the choices without a path
+    let (_, mine) = call(&c, "GET", "/api/libraries/mine", &c.admin, json!(null)).await;
+    assert_eq!(
+        mine[0]["folders"],
+        json!([{"id": f1["id"], "name": "films"}, {"id": f2["id"], "name": "anime"}])
+    );
+
+    // position is the target index and renumbers
+    let url = |f: &Value| format!("/api/libraries/1/folders/{}", f["id"]);
+    let (s, moved) = call(&c, "PATCH", &url(&f2), &c.admin, json!({"position": 0})).await;
+    assert_eq!((s, moved["position"].clone()), (200, json!(0)));
+    let (_, lib) = call(&c, "GET", "/api/libraries/1", &c.admin, json!(null)).await;
+    assert_eq!(lib["path"], f2["path"]);
+    assert_eq!(lib["folders"][1]["position"], json!(1));
+    assert_eq!(
+        call(&c, "PATCH", &url(&f2), &c.admin, json!({"position": -1}))
+            .await
+            .0,
+        400
+    );
+    assert_eq!(
+        call(
+            &c,
+            "PATCH",
+            "/api/libraries/1/folders/999",
+            &c.admin,
+            json!({})
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        call(
+            &c,
+            "PATCH",
+            "/api/libraries/2/folders/1",
+            &c.admin,
+            json!({})
+        )
+        .await
+        .0,
+        404
+    );
+
+    // a folder holding a file cannot be relocated to a tree without it, nor deleted
+    sqlx::query(r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ('T', 'movie', 1, 'T (2020)')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId") VALUES (1, 'T (2020)/t.mkv', 1, 'x', $1)"#)
+        .bind(f1["id"].as_i64().unwrap() as i32)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let elsewhere = c.tmp.join("moved").to_string_lossy().into_owned();
+    let body = json!({"path": elsewhere});
+    let (s, b) = call(&c, "PATCH", &url(&f1), &c.admin, body.clone()).await;
+    assert_eq!(
+        (s, b["message"].clone()),
+        (409, json!("errors.folder_relocation_mismatch"))
+    );
+    std::fs::create_dir_all(c.tmp.join("moved/T (2020)")).unwrap();
+    let (s, b) = call(&c, "PATCH", &url(&f1), &c.admin, body).await;
+    assert_eq!(
+        (s, b["path"].clone(), b["mediaCount"].clone()),
+        (200, json!(elsewhere), json!(1))
+    );
+    let (s, b) = call(&c, "DELETE", &url(&f1), &c.admin, json!(null)).await;
+    assert_eq!(
+        (s, b["message"].clone()),
+        (409, json!("errors.folder_in_use"))
+    );
+    let forced = format!("{}?removeMedia=true", url(&f1));
+    assert_eq!(
+        call(&c, "DELETE", &forced, &c.admin, json!(null)).await.0,
+        200
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM media")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+    let (_, lib) = call(&c, "GET", "/api/libraries/1", &c.admin, json!(null)).await;
+    assert_eq!(lib["folders"].as_array().unwrap().len(), 1);
+    assert_eq!(lib["folders"][0]["position"], json!(0));
+    assert_eq!(
+        call(&c, "DELETE", &url(&f2), &c.admin, json!(null)).await.0,
+        200
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_adds_of_one_path_make_one_folder(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    for n in ["A", "B"] {
+        call(&c, "POST", "/api/libraries", &c.admin, json!({ "name": n })).await;
+    }
+    let path = c.tmp.join("race").to_string_lossy().into_owned();
+    let (a, b) = tokio::join!(
+        call(
+            &c,
+            "POST",
+            "/api/libraries/1/folders",
+            &c.admin,
+            json!({"path": path})
+        ),
+        call(
+            &c,
+            "POST",
+            "/api/libraries/2/folders",
+            &c.admin,
+            json!({"path": path})
+        ),
+    );
+    let mut got = [a.0, b.0];
+    got.sort_unstable();
+    assert_eq!(got, [201, 409]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn folder_of_another_library_is_refused_on_a_request(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    for n in ["A", "B"] {
+        call(&c, "POST", "/api/libraries", &c.admin, json!({ "name": n })).await;
+    }
+    let body = json!({"path": dir(&c, "b")});
+    let (_, f) = call(&c, "POST", "/api/libraries/2/folders", &c.admin, body).await;
+    let req = |library: i32| json!({"mediaType": "movie", "tmdbId": 603, "title": "T", "libraryId": library, "folderId": f["id"]});
+    let (s, b) = call(&c, "POST", "/api/requests", &c.admin, req(1)).await;
+    assert_eq!(
+        (s, b["message"].clone()),
+        (400, json!("errors.folder_not_in_library"))
+    );
+    let (s, _) = call(&c, "POST", "/api/requests", &c.admin, req(2)).await;
+    assert_eq!(s, 201);
+    let stored: Option<i32> = sqlx::query_scalar(r#"SELECT "folderId" FROM requests"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored, f["id"].as_i64().map(|i| i as i32));
+}

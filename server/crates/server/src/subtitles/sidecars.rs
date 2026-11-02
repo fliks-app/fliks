@@ -1,7 +1,7 @@
 //! Sidecar rows against the disk: discovery, rescan reconcile, carry-over and deletes
 //! (`subtitle-files.md` rules 13, 14, 18-20). Every path is confined to the media directory.
 use super::{
-    files::{self, Dirs, MediaCtx},
+    files::{self, Dirs, FileRow, MediaCtx},
     model::{self, New, Row},
 };
 use crate::{http::AppError, ingest::fsx, state::AppState};
@@ -19,15 +19,32 @@ fn norm(p: &str) -> String {
     p.replace('\\', "/")
 }
 
-async fn dirs_of(st: &AppState, media_id: i32) -> Option<(MediaCtx, Dirs)> {
-    let media = files::load_media(&st.db, media_id).await.ok().flatten()?;
-    let dirs = media.dirs("no root").ok()?;
-    Some((media, dirs))
+/// The files' folder roots plus the target one, each once, in file order.
+fn roots_of(media: &MediaCtx, mfiles: &[FileRow]) -> Vec<String> {
+    let mut roots: Vec<String> = vec![];
+    for r in mfiles
+        .iter()
+        .map(|f| f.folder_path.clone())
+        .chain(media.folder_path.clone())
+    {
+        if !roots.contains(&r) {
+            roots.push(r);
+        }
+    }
+    roots
+}
+
+/// The root a sidecar row lives in: its file's folder, else the media's target folder (rule 40).
+fn root_of(row: &Row, media: &MediaCtx, mfiles: &[FileRow]) -> Option<String> {
+    row.media_file_id
+        .and_then(|f| mfiles.iter().find(|m| m.id == f))
+        .map(|f| f.folder_path.clone())
+        .or_else(|| media.folder_path.clone())
 }
 
 /// Inserts a row per sidecar next to the videos that no row lists yet; returns how many.
 pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
-    let Some((media, dirs)) = dirs_of(st, media_id).await else {
+    let Some(media) = files::load_media(&st.db, media_id).await.ok().flatten() else {
         return 0;
     };
     let Ok(mfiles) = files::files_of_media(&st.db, media_id).await else {
@@ -36,14 +53,35 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
     if mfiles.is_empty() {
         return 0;
     }
-    let mut known: HashSet<String> = model::of_media(&st.db, media_id)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|r| r.file_path.map(|p| norm(&p)))
-        .collect();
+    let rows = model::of_media(&st.db, media_id).await.unwrap_or_default();
+    let mut found = 0;
+    for root in roots_of(&media, &mfiles) {
+        let m = media.in_folder(&root);
+        let Ok(dirs) = m.dirs("no root") else {
+            continue;
+        };
+        let here: Vec<&FileRow> = mfiles.iter().filter(|f| f.folder_path == root).collect();
+        let known: HashSet<String> = rows
+            .iter()
+            .filter(|r| root_of(r, &media, &mfiles).as_deref() == Some(root.as_str()))
+            .filter_map(|r| r.file_path.as_deref().map(norm))
+            .collect();
+        found += discover_in(st, &m, &dirs, &here, known).await;
+    }
+    found
+}
+
+/// `discover_external` for the files of one folder root.
+async fn discover_in(
+    st: &AppState,
+    media: &MediaCtx,
+    dirs: &Dirs,
+    mfiles: &[&FileRow],
+    mut known: HashSet<String>,
+) -> usize {
+    let media_id = media.id;
     let mut scan_dirs: Vec<PathBuf> = vec![dirs.m.clone()];
-    for f in &mfiles {
+    for f in mfiles {
         if let Some(p) = fsx::safe_rel(&f.relative_path)
             .and_then(|r| dirs.l.join(r).parent().map(Path::to_path_buf))
             && !scan_dirs.contains(&p)
@@ -152,16 +190,30 @@ fn is_external(r: &Row) -> bool {
 
 /// Drops rows whose sidecar is gone and collapses rows listing the same file; never touches a file.
 pub async fn reconcile_after_rescan(st: &AppState, media_id: i32) -> (usize, usize) {
-    let Some((_, dirs)) = dirs_of(st, media_id).await else {
+    let Some(media) = files::load_media(&st.db, media_id).await.ok().flatten() else {
         return (0, 0);
     };
+    let mfiles = files::files_of_media(&st.db, media_id)
+        .await
+        .unwrap_or_default();
+    let mut dirs: HashMap<String, Option<Dirs>> = HashMap::new();
+    for root in roots_of(&media, &mfiles) {
+        let d = media.in_folder(&root).dirs("no root").ok();
+        dirs.insert(root, d);
+    }
+    if dirs.values().all(Option::is_none) {
+        return (0, 0);
+    }
     let (mut missing, mut dupes) = (0, 0);
     let rows = model::of_media(&st.db, media_id).await.unwrap_or_default();
     for r in rows.iter().filter(|r| is_external(r)) {
+        let Some(d) = root_of(r, &media, &mfiles).and_then(|root| dirs.get(&root)?.as_ref()) else {
+            continue;
+        };
         let stored = r.file_path.as_deref().unwrap_or_default();
         // Gone: no path, an unresolvable or non-regular one, or NotFound; any other error keeps the row.
         let gone = stored.trim().is_empty()
-            || match dirs.resolve(stored) {
+            || match d.resolve(stored) {
                 None => true,
                 Some(abs) => match tokio::fs::symlink_metadata(abs).await {
                     Ok(m) => !m.is_file(),
@@ -173,10 +225,13 @@ pub async fn reconcile_after_rescan(st: &AppState, media_id: i32) -> (usize, usi
         }
     }
     let rows = model::of_media(&st.db, media_id).await.unwrap_or_default();
-    let mut groups: HashMap<String, Vec<&Row>> = HashMap::new();
+    let mut groups: HashMap<(Option<String>, String), Vec<&Row>> = HashMap::new();
     for r in rows.iter().filter(|r| is_external(r)) {
         if let Some(p) = r.file_path.as_deref().filter(|p| !p.trim().is_empty()) {
-            groups.entry(norm(p)).or_default().push(r);
+            groups
+                .entry((root_of(r, &media, &mfiles), norm(p)))
+                .or_default()
+                .push(r);
         }
     }
     for mut g in groups.into_values().filter(|g| g.len() > 1) {
@@ -205,13 +260,16 @@ async fn remove_row(st: &AppState, id: i32) -> bool {
 
 /// Moves the sidecars of a superseded video onto its replacement; returns the moved row ids.
 pub async fn carry_over(st: &AppState, media_id: i32, from_file: i32, to_file: i32) -> Vec<i32> {
-    let Some((_, dirs)) = dirs_of(st, media_id).await else {
-        return vec![];
-    };
     let Ok(Some(from)) = files::file_by_id(&st.db, from_file).await else {
         return vec![];
     };
     let Ok(Some(to)) = files::file_by_id(&st.db, to_file).await else {
+        return vec![];
+    };
+    if from.folder_path != to.folder_path {
+        return vec![];
+    }
+    let Some(dirs) = dir_of_file(st, media_id, from_file).await else {
         return vec![];
     };
     let base = |rel: &str| -> (String, String) {
@@ -266,15 +324,35 @@ pub async fn carry_over(st: &AppState, media_id: i32, from_file: i32, to_file: i
     moved
 }
 
+async fn dir_of_file(st: &AppState, media_id: i32, file: i32) -> Option<Dirs> {
+    files::load_media_of(&st.db, media_id, Some(file))
+        .await
+        .ok()
+        .flatten()?
+        .dirs("no root")
+        .ok()
+}
+
 /// Unlinks the sidecars of a video about to be deleted, except files another video's row lists.
 pub async fn delete_files_on_disk(st: &AppState, media_id: i32, file_id: i32) {
-    let Some((_, dirs)) = dirs_of(st, media_id).await else {
+    let Some(media) = files::load_media_of(&st.db, media_id, Some(file_id))
+        .await
+        .ok()
+        .flatten()
+    else {
         return;
     };
+    let Ok(dirs) = media.dirs("no root") else {
+        return;
+    };
+    let mfiles = files::files_of_media(&st.db, media_id)
+        .await
+        .unwrap_or_default();
     let rows = model::of_media(&st.db, media_id).await.unwrap_or_default();
+    let here = media.folder_path.clone();
     let keep: HashSet<String> = rows
         .iter()
-        .filter(|r| r.media_file_id != Some(file_id))
+        .filter(|r| r.media_file_id != Some(file_id) && root_of(r, &media, &mfiles) == here)
         .filter_map(|r| r.file_path.as_deref().map(norm))
         .collect();
     for r in rows
@@ -299,13 +377,23 @@ pub async fn unlink_unless_shared(st: &AppState, row: &Row) -> Result<(), AppErr
     let (Some(stored), Some(media_id)) = (row.file_path.as_deref(), row.media_id) else {
         return Ok(());
     };
-    let Some((_, dirs)) = dirs_of(st, media_id).await else {
+    let Some(media) = files::load_media_of(&st.db, media_id, row.media_file_id)
+        .await
+        .ok()
+        .flatten()
+    else {
         return Ok(());
     };
-    let shared = model::of_media(&st.db, media_id)
-        .await?
-        .iter()
-        .any(|o| o.id != row.id && o.file_path.as_deref().map(norm) == Some(norm(stored)));
+    let Ok(dirs) = media.dirs("no root") else {
+        return Ok(());
+    };
+    let mfiles = files::files_of_media(&st.db, media_id).await?;
+    let here = media.folder_path.clone();
+    let shared = model::of_media(&st.db, media_id).await?.iter().any(|o| {
+        o.id != row.id
+            && o.file_path.as_deref().map(norm) == Some(norm(stored))
+            && root_of(o, &media, &mfiles) == here
+    });
     if !shared && let Err(e) = dirs.unlink(stored) {
         tracing::warn!("Could not delete subtitle {stored}: {e}");
     }

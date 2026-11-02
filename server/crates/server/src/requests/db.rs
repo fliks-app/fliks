@@ -27,6 +27,7 @@ pub struct Req {
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
+    pub folder_id: Option<i32>,
     pub media_id: Option<i32>,
 }
 
@@ -44,6 +45,7 @@ struct RawReq {
     quality_profile_id: Option<i32>,
     language_profile_id: Option<i32>,
     library_id: Option<i32>,
+    folder_id: Option<i32>,
     media_id: Option<i32>,
 }
 
@@ -66,6 +68,7 @@ impl TryFrom<RawReq> for Req {
             quality_profile_id: r.quality_profile_id,
             language_profile_id: r.language_profile_id,
             library_id: r.library_id,
+            folder_id: r.folder_id,
             media_id: r.media_id,
         })
     }
@@ -95,7 +98,7 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
         FROM requests WHERE id = $1"#,
         id
     )
@@ -112,7 +115,7 @@ pub async fn active_adds(db: &PgPool, t: &TitleKey) -> sqlx::Result<Vec<Req>> {
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
         FROM requests
         WHERE "mediaType" = $1 AND provider = $2 AND "externalId" = $3 AND kind = 'add'
         AND status::text = ANY($4) ORDER BY "createdAt" ASC, id ASC"#,
@@ -282,6 +285,7 @@ pub struct New<'a> {
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
+    pub folder_id: Option<i32>,
     pub media_id: Option<i32>,
     pub poster_url: Option<&'a str>,
     pub fanart_url: Option<&'a str>,
@@ -290,9 +294,9 @@ pub struct New<'a> {
 pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, seasons, status,
-        "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "mediaId", "posterUrl", "fanartUrl")
+        "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl")
         VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,
-        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15) RETURNING id"#,
+        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id"#,
         n.user_id,
         n.kind,
         n.title_key.media_type.as_str(),
@@ -305,6 +309,7 @@ pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
         n.quality_profile_id,
         n.language_profile_id,
         n.library_id,
+        n.folder_id,
         n.media_id,
         n.poster_url,
         n.fanart_url
@@ -342,7 +347,8 @@ pub async fn patch(
         r#"UPDATE requests SET
         "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
         "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END,
-        "libraryId" = CASE WHEN $6 THEN $7 ELSE "libraryId" END WHERE id = $1 AND status = 'pending'"#,
+        "libraryId" = CASE WHEN $6 THEN $7 ELSE "libraryId" END,
+        "folderId" = CASE WHEN $6 THEN NULL ELSE "folderId" END WHERE id = $1 AND status = 'pending'"#,
         id,
         quality.is_some(),
         quality.flatten(),
@@ -436,7 +442,7 @@ pub async fn in_flight_for_media(db: &PgPool, media_id: i32) -> sqlx::Result<Vec
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
         FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e
           WHERE e."mediaId" = $1 AND e.kind = r."mediaType" AND e.provider = r.provider
           AND e.value = r."externalId")
@@ -463,7 +469,7 @@ pub async fn linked(
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
         FROM requests WHERE "mediaId" = $1 AND ($2::text IS NULL OR kind::text = $2)
         AND status::text = ANY($3) ORDER BY id"#,
         media_id,
