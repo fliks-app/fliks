@@ -1,1 +1,19 @@
-{}
+{
+  "books_search": {
+    "filter_books": "Livres",
+    "hint": "Cherchez des livres, des auteurs et des séries.",
+    "section_books": "Livres",
+    "section_authors": "Auteurs",
+    "section_series": "Séries",
+    "work_count_one": "{{count}} œuvre",
+    "work_count_other": "{{count}} œuvres",
+    "preview_error": "Impossible de charger ce livre.",
+    "unofficial": "Certains détails viennent de sources non officielles.",
+    "open_in_library": "Ouvrir dans votre bibliothèque",
+    "folder": "Dossier",
+    "editions": "Éditions",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "narrated_by": "Narré par {{names}}"
+  }
+}

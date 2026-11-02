@@ -13,9 +13,11 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
+import { BooksApiService } from '../../core/services/api/books-api.service';
+import type { BookSearchResult, CollectionSummary, PersonListItem } from '../../core/services/api/books.models';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import {
   MetadataService,
@@ -46,13 +48,14 @@ import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-search',
-  imports: [DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
+  imports: [DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
 export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly metadata = inject(MetadataService);
+  private readonly booksApi = inject(BooksApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   /** Opted out of the social layer → the people tab is hidden. */
@@ -134,6 +137,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private async applyFiltersNow(): Promise<void> {
     if (this.state.tab() !== 'videos') return;
     const ct = this.state.contentType();
+    if (ct === 'book') return;
     if (this.state.hasQuery()) {
       const q = this.state.query().trim();
       if (this.filterSig(q, ct) !== this.lastLocalSig) await this.runLocalSearch(q, ct);
@@ -151,6 +155,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.runLocalSearch('', ct);
     }
   }
+
+  readonly bookAuthors = signal<PersonListItem[]>([]);
+  readonly bookSeries = signal<CollectionSummary[]>([]);
+  readonly bookExternal = signal<BookSearchResult[]>([]);
+  readonly bookLoading = signal(false);
 
   readonly requestedTmdbIds = signal<Map<string, FliksRequestStatus>>(new Map());
 
@@ -250,6 +259,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.externalResults.set([]);
       this.state.localLoading.set(false);
       this.state.externalLoading.set(false);
+      this.clearBookResults();
       // An engaged filter keeps browsing (discover / local) with no text query.
       if (this.filterDebounce) clearTimeout(this.filterDebounce);
       void this.applyFiltersNow();
@@ -283,6 +293,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const on = this.state.externalEnabled();
     if (!on) {
       this.state.externalResults.set([]);
+      this.bookExternal.set([]);
       this.state.externalLoading.set(false);
     }
     if (this.state.query().trim()) {
@@ -315,6 +326,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ct: 'all' | MediaType,
     external: boolean,
   ): Promise<void> {
+    if (ct === 'book') return;
     this.state.discoveryLoading.set(true);
     try {
 
@@ -519,7 +531,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Load the discover genre list for the active content type when missing, so
    *  the filter panel's genre chips render during a text search. Fails soft. */
   private async ensureDiscoverGenres(): Promise<void> {
-    if (this.state.tab() !== 'videos') return;
+    if (this.state.tab() !== 'videos' || this.state.contentType() === 'book') return;
     const type = kindOfListFilter(this.state.contentType());
     if (type === this.lastGenreType && this.state.discoverGenres().length) return;
     this.lastGenreType = type;
@@ -589,8 +601,38 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!q) return;
 
     const ct = this.state.contentType();
+    if (ct === 'book') return this.runBookSearch(q);
     await this.runLocalSearch(q, ct);
     if (this.state.externalEnabled()) await this.runExternalSearch(q, ct);
+  }
+
+  private clearBookResults() {
+    this.bookAuthors.set([]);
+    this.bookSeries.set([]);
+    this.bookExternal.set([]);
+    this.bookLoading.set(false);
+  }
+
+  /** Library works, authors and series, plus the book providers when external search is on; each source fails soft. */
+  private async runBookSearch(q: string) {
+    const fresh = () => this.state.query().trim() === q && this.state.contentType() === 'book';
+    const external = this.state.externalEnabled();
+    this.bookLoading.set(true);
+    const [authors, series, rows] = await Promise.all([
+      this.booksApi.persons({ role: 'author', q, limit: 12 }).catch(() => []),
+      this.booksApi.collections({ kind: 'book', q, limit: 12 }).catch(() => []),
+      external ? this.booksApi.search({ q }).catch(() => []) : Promise.resolve([]),
+      this.runLocalSearch(q, 'book'),
+    ]);
+    if (!fresh()) return;
+    this.bookAuthors.set(authors);
+    this.bookSeries.set(series);
+    this.bookExternal.set(rows);
+    this.bookLoading.set(false);
+  }
+
+  bookLink(row: BookSearchResult): string[] {
+    return row.mediaId ? mediaDetailLink('book', row.mediaId) : ['/add/book', row.provider, row.externalId];
   }
 
   /** Local library query with the discover panel filters pushed to the backend

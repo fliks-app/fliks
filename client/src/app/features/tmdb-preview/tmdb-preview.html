@@ -46,7 +46,9 @@
   }
 </ng-template>
 
-@if (error() && !media()) {
+@if (type() === 'book') {
+  <app-book-preview [provider]="provider()" [externalId]="externalId()" />
+} @else if (error() && !media()) {
   <div role="alert" class="alert alert-error">{{ error() }}</div>
 } @else {
 <div appTvSection appDefaultFocus="[data-preview-actions]">
