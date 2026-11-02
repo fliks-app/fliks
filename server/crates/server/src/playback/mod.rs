@@ -8,6 +8,8 @@ mod routes;
 mod tests;
 mod watched;
 
+pub use watched::{Watch, finish_context, record_watch};
+
 pub use beat::{__path_heartbeat, Debounce, heartbeat};
 pub use db::{beat_item, find_state, history as user_history, item_of, named_item};
 pub use recommend::{recommendations as user_recommendations, top_genres};

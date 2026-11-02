@@ -67,6 +67,7 @@ async fn watch(
         last_chapter_start: None,
         progression: None,
         locator: None,
+        clear_locator: false,
     }
 }
 
@@ -170,6 +171,7 @@ async fn finishing_a_range_file_completes_every_episode_it_plays(pool: PgPool) {
         last_chapter_start: None,
         progression: None,
         locator: None,
+        clear_locator: false,
     };
     record_watch(&pool, user, media, &w(100.0)).await.unwrap();
     let done = || async {

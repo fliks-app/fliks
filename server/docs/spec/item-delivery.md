@@ -61,6 +61,8 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
 
 25. `1789000000400_playback-progression.sql` adds `progression` and `locator` and the `CHECK`. It backfills nothing and drops nothing. `parity/seed/build.sh` needs no change beyond the migration list.
 
+26. The state row of a beat or replay is one upsert on `("userId", "itemId")`: two first writes at once (two devices, or the web reader and kosync) both succeed, the later one updating the row. `Watch.clear_locator` makes the same statement store a NULL `locator` (`kosync.md` rule 14).
+
 ## Not done
 
 - Continue-watching rows, resume info and `GET media/:id` for a text item (they read `positionSeconds`); the mixed Continue row of plan 3.3.

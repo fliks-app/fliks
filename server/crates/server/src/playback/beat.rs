@@ -456,6 +456,7 @@ pub async fn heartbeat(
         last_chapter_start,
         progression,
         locator,
+        clear_locator: false,
     };
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     Ok(reply(lost, Some(saved)))
