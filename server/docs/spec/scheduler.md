@@ -34,7 +34,7 @@ Scope: the `commands` table and its audit wrapper (`run_audited`), the cron runn
 ### C. Boot sweep and cron runner
 
 7. Boot: `UPDATE commands SET status='failed', "endedOn"=now() WHERE status IN ('running','queued')`; when rows were touched, warn `Marked <n> stale command(s) as failed on startup`. It runs after migrations and before the cron runner starts, so no row of this boot is swept.
-8. Cron runner: one in-process task per scheduled job (Jobs/timers), expressions in 5-field form exactly as in rule 10 (`croner`; a seconds field is accepted for plugin crons), evaluated in the server time zone (rule 9). A tick fires the job through rule 4 (`trigger='scheduled'`). No catch-up: a job whose time passed while the server was down is not run. A tick whose job is still queued or running in this process is skipped with a warn. Shutdown stops the timers and does not wait for a running job; its row is swept at the next boot (rule 7). On a DST-change day every valid local fire time fires (`0 04 * * *` in `Europe/Paris` fires on 2026-03-29) and `nextRun` shows it.
+8. Cron runner: one in-process task per scheduled job (Jobs/timers), expressions in 5-field form exactly as in rule 10 (`croner`; a seconds field is accepted for plugin crons), evaluated in the server time zone (rule 9). With env `FLIKS_DISABLE_CRON=1` (exactly `1`) no timer ever fires (core, subtitle, plugin and request timers alike); manual triggers and `nextRun` are unchanged, and the parity target sets it so the clock never changes a scenario. A tick fires the job through rule 4 (`trigger='scheduled'`). No catch-up: a job whose time passed while the server was down is not run. A tick whose job is still queued or running in this process is skipped with a warn. Shutdown stops the timers and does not wait for a running job; its row is swept at the next boot (rule 7). On a DST-change day every valid local fire time fires (`0 04 * * *` in `Europe/Paris` fires on 2026-03-29) and `nextRun` shows it.
 9. Server time zone: the process zone, resolved from `TZ` as an IANA name with `chrono-tz`, else `/etc/localtime`, else UTC; `nextRun` and the cron runner use the same zone object.
 
 ### D. `GET /commands/schedulers`
@@ -100,7 +100,7 @@ Emitted (all broadcast, `events-hub.md` rows 3, 15, 16, 14): `command.started {n
 
 ## Settings keys
 
-None in the `settings` table (the only settings-gated tick is the subtitle one). Environment (`config.md`): `TMDB_API_KEY` (trimmed, blank = not configured), `METADATA_STALE_AFTER_MONTHS` (`max(1, parseInt(raw,10) or 3)`), `TZ`, `DB_*` (backup, `system.md`).
+None in the `settings` table (the only settings-gated tick is the subtitle one). Environment (`config.md`): `FLIKS_DISABLE_CRON`, `TMDB_API_KEY` (trimmed, blank = not configured), `METADATA_STALE_AFTER_MONTHS` (`max(1, parseInt(raw,10) or 3)`), `TZ`, `DB_*` (backup, `system.md`).
 
 ## Jobs/timers
 
