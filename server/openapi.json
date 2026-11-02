@@ -2861,6 +2861,123 @@
         }
       }
     },
+    "/api/opds": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "root",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/authors": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "authors",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/authors/{id}": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "author",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/libraries/{id}": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "library",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/opensearch.xml": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "opensearch_description",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/recent": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "recent",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/search": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "search",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/series": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "series_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/opds/series/{id}": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "series_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties": {
       "get": {
         "tags": [

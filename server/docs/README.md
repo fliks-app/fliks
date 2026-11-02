@@ -11,6 +11,8 @@ Books: [`spec/books.md`](spec/books.md) (the `book` kind, editions and their fac
 Item delivery: [`spec/item-delivery.md`](spec/item-delivery.md) (audio and text items: item resolve and playback-info, resolver parts, `itemId` on playback routes, progression, finished rules).
 
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash).
+OPDS: [`spec/opds.md`](spec/opds.md) (OPDS 1.2 catalogue on device tokens: routes, ACL, throttle, feed shapes).
+
 Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
 
 Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item parts: what a media is made of).
