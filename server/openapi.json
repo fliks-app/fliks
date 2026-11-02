@@ -716,6 +716,46 @@
         }
       }
     },
+    "/api/imports/library/{libraryId}/books": {
+      "get": {
+        "tags": [
+          "jobs::book_import"
+        ],
+        "summary": "`GET /api/imports/library/:libraryId/books` (rule 9).",
+        "operationId": "latest",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs::book_import"
+        ],
+        "summary": "`POST /api/imports/library/:libraryId/books` (rule 4).",
+        "operationId": "start",
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/library/{libraryId}/books/queue": {
+      "get": {
+        "tags": [
+          "jobs::book_import"
+        ],
+        "summary": "`GET /api/imports/library/:libraryId/books/queue` (rule 11).",
+        "operationId": "queue",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/imports/library/{libraryId}/orphans/scan": {
       "post": {
         "tags": [

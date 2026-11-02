@@ -122,6 +122,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     stream::spawn(&state);
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
+    jobs::book_import::resume(&state).await;
     party::boot(&state).await?;
     party::spawn(&state);
     requests::spawn(&state);

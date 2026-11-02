@@ -57,6 +57,7 @@ impl Clock for SystemClock {
 pub struct Upstream {
     pub status: Option<u16>,
     reason: String,
+    outage: bool,
 }
 
 impl Upstream {
@@ -64,7 +65,21 @@ impl Upstream {
         Self {
             status,
             reason: reason.into(),
+            outage: false,
         }
+    }
+
+    /// No answer to expect soon and no status: a transport failure, an open circuit, a provider off.
+    pub fn outage(reason: impl Into<String>) -> Self {
+        Self {
+            outage: true,
+            ..Self::new(None, reason)
+        }
+    }
+
+    /// Retrying later can succeed: the provider is unreachable, throttled or failing on its side.
+    pub fn is_outage(&self) -> bool {
+        self.outage || matches!(self.status, Some(429 | 500..=599))
     }
 
     pub fn reason(&self) -> &str {
@@ -118,7 +133,7 @@ fn code_of(e: &reqwest::Error) -> &'static str {
     "network error"
 }
 
-/// The transport failure as `<code> — <message>` with every source of the chain, URL stripped.
+/// The transport failure as `<code>: <message>` with every source of the chain, URL stripped.
 pub fn transport(e: reqwest::Error) -> Upstream {
     let code = code_of(&e);
     let e = e.without_url();
@@ -129,7 +144,7 @@ pub fn transport(e: reqwest::Error) -> Upstream {
         msg.push_str(&s.to_string());
         src = s.source();
     }
-    Upstream::new(None, format!("{code} — {msg}"))
+    Upstream::outage(format!("{code}: {msg}"))
 }
 
 /// `HTTP <status> — <status_message|message|default>` as the controller words it.
@@ -319,13 +334,10 @@ impl Guarded {
                 b.allow(self.now())
             };
             if !allowed {
-                return Err(Upstream::new(
-                    None,
-                    format!(
-                        "{} circuit open — upstream temporarily unreachable",
-                        self.name
-                    ),
-                ));
+                return Err(Upstream::outage(format!(
+                    "{} circuit open: upstream temporarily unreachable",
+                    self.name
+                )));
             }
             if let Err(refused) = self.admit(p, &mut waited).await {
                 return Err(match last {

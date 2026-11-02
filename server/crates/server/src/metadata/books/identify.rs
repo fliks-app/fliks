@@ -2,7 +2,7 @@
 use super::{ANCHOR, merge, people, text, work_id};
 use crate::{
     media::external_ids::edition_id,
-    metadata::{MetaError, Override, Search},
+    metadata::{MetaError, Override, Search, Upstream},
     state::AppState,
 };
 use fliks_domain::{
@@ -40,7 +40,7 @@ pub async fn identify(
     p: Priority,
 ) -> Result<Option<BookMatch>, MetaError> {
     if !st.metadata.available(ANCHOR) {
-        return Ok(None);
+        return Err(Upstream::outage("the work provider is unavailable").into());
     }
     let lang = st
         .metadata
