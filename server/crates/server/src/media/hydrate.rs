@@ -1,5 +1,6 @@
 //! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust.
 use super::external_ids;
+use crate::libraries::HIDDEN_FILES_FROM;
 use fliks_domain::{
     media::{kind::MediaKind, path::media_path},
     track_markers,
@@ -7,13 +8,6 @@ use fliks_domain::{
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
-
-/// SQL array of the files of `media`'s editions hidden from the readable libraries bound between the two parts (`books.md` rule 22).
-pub(super) const HIDDEN_HEAD: &str = r#"ARRAY(SELECT hp."mediaFileId"
-  FROM items hi JOIN editions he ON he.id = hi."editionId" JOIN item_parts hp ON hp."itemId" = hi.id
-  WHERE media.type = 'book' AND hi."mediaId" = media.id
-    AND NOT COALESCE(he."libraryId", media."libraryId") = ANY("#;
-pub(super) const HIDDEN_TAIL: &str = "))";
 
 #[derive(sqlx::FromRow)]
 struct Row {
@@ -96,7 +90,7 @@ LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '
   FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
   JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
   WHERE e."mediaId" = media.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
-LEFT JOIN LATERAL (SELECT {HIDDEN_HEAD}$7{HIDDEN_TAIL} AS ids) hid ON true
+LEFT JOIN LATERAL (SELECT ARRAY(SELECT hp."mediaFileId" {HIDDEN_FILES_FROM}$7) AND hm.id = media.id AND media.type = 'book') AS ids) hid ON true
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb

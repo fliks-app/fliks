@@ -212,6 +212,8 @@ async fn ids_gate(
         return Err(AppError::bad_request("path is required"));
     }
     gate(st, a, action, Ok(PathParams(id))).await?;
+    let libs = crate::libraries::accessible_library_ids(&st.db, a).await?;
+    crate::libraries::assert_file_accessible(&st.db, file, &libs).await?;
     Ok((id, file))
 }
 

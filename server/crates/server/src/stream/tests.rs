@@ -978,9 +978,7 @@ async fn replaces_reaches_the_engine(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = false)]
-async fn a_file_whose_edition_sits_in_a_hidden_library_is_a_404_everywhere(pool: PgPool) {
-    let c = ctx(pool, true).await;
+async fn viewer(c: &Ctx) -> String {
     sqlx::query(r#"INSERT INTO roles (id, name, permissions) VALUES (60, 'Viewer', '["media.read","subtitles.manage"]')"#)
         .execute(&c.pool)
         .await
@@ -997,7 +995,21 @@ async fn a_file_whose_edition_sits_in_a_hidden_library_is_a_404_everywhere(pool:
         .execute(&c.pool)
         .await
         .unwrap();
-    let t = c.st.jwt.sign_access(viewer, "viewer").unwrap().token;
+    c.st.jwt.sign_access(viewer, "viewer").unwrap().token
+}
+
+async fn hide_edition(c: &Ctx) {
+    sqlx::query(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('Hidden') RETURNING id) UPDATE editions SET "libraryId" = (SELECT id FROM l) WHERE "mediaId" = $1"#)
+        .bind(c.media)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_whose_edition_sits_in_a_hidden_library_is_a_404_everywhere(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let t = viewer(&c).await;
     let (f, m) = (c.file, c.media);
     let sub = json!({"mediaFileId": f});
     let routes = [
@@ -1025,6 +1037,12 @@ async fn a_file_whose_edition_sits_in_a_hidden_library_is_a_404_everywhere(pool:
             Some(json!({"mediaFileId": f, "searchResult": {
                 "providerFileId": "x", "language": "en", "providerType": "opensubtitles"}})),
         ),
+        ("GET", format!("/api/media/{m}/files/{f}/companions"), None),
+        (
+            "GET",
+            format!("/api/media/{m}/files/{f}/companions/download?path=a.srt"),
+            None,
+        ),
     ];
     let hidden = format!("MediaFile #{f} not found");
     for (method, uri, body) in &routes {
@@ -1048,4 +1066,49 @@ async fn a_file_whose_edition_sits_in_a_hidden_library_is_a_404_everywhere(pool:
             "{method} {uri} after"
         );
     }
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_hidden_files_subtitles_are_not_listed_and_look_missing(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let t = viewer(&c).await;
+    let (f, m) = (c.file, c.media);
+    let sub: i32 = sqlx::query_scalar(r#"INSERT INTO subtitle_files (language, "providerType", "filePath", "mediaId", "mediaFileId") VALUES ('fr', 'disk', 'a.srt', $1, $2) RETURNING id"#)
+        .bind(m)
+        .bind(f)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let list = format!("/api/media/{m}/subtitles");
+    let (_, b) = call(&c, "GET", &list, &t, None).await;
+    assert_eq!(b.as_array().unwrap().len(), 1);
+    hide_edition(&c).await;
+    let (s, b) = call(&c, "GET", &list, &t, None).await;
+    assert_eq!((s, b.as_array().map(Vec::len)), (200, Some(0)));
+    let missing = format!("Subtitle #{sub} not found");
+    let (s, b) = call(&c, "DELETE", &format!("{list}/{sub}"), &t, None).await;
+    assert_eq!((s, b["message"].as_str()), (404, Some(missing.as_str())));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_is_hidden_when_any_linking_edition_is_hidden(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let libs: Vec<i32> = sqlx::query_scalar("SELECT id FROM libraries")
+        .fetch_all(&c.pool)
+        .await
+        .unwrap();
+    crate::libraries::assert_file_accessible(&c.pool, c.file, &libs)
+        .await
+        .unwrap();
+    sqlx::query(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('Hidden') RETURNING id),
+        e AS (INSERT INTO editions ("mediaId", family, "libraryId") SELECT $1, 'video', id FROM l RETURNING id),
+        i AS (INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id)
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) SELECT id, $2, $1, 1, 1 FROM i"#)
+        .bind(c.media)
+        .bind(c.file)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let err = crate::libraries::assert_file_accessible(&c.pool, c.file, &libs).await;
+    assert!(err.is_err());
 }

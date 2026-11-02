@@ -43,7 +43,7 @@ pub struct ResumeInfo {
     episode_number: Option<i32>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ContinueItem {
     id: i32,
@@ -156,18 +156,41 @@ pub async fn delete_state(db: &PgPool, user: i32, item: i32) -> sqlx::Result<()>
     .map(drop)
 }
 
-pub async fn resume_info(db: &PgPool, user: i32, media: i32) -> sqlx::Result<Option<ResumeInfo>> {
-    let row = sqlx::query!(
+#[derive(sqlx::FromRow)]
+struct ResumeRow {
+    media_file_id: Option<i32>,
+    episode_id: Option<i32>,
+    position_seconds: f64,
+    duration_seconds: Option<f64>,
+    season_number: Option<i32>,
+    episode_number: Option<i32>,
+}
+
+/// The `item_parts` of `p` not linked by a hidden edition of the readable libraries bound at `$n`.
+fn visible_part(n: u8) -> String {
+    format!(
+        r#"AND NOT EXISTS (SELECT 1 {}${n}) AND hp."mediaFileId" = p."mediaFileId")"#,
+        crate::libraries::HIDDEN_FILES_FROM
+    )
+}
+
+pub async fn resume_info(
+    db: &PgPool,
+    user: i32,
+    media: i32,
+    libs: &[i32],
+) -> sqlx::Result<Option<ResumeInfo>> {
+    let row = sqlx::query_as::<_, ResumeRow>(sqlx::AssertSqlSafe(format!(
         r#"SELECT
-             f.id AS "media_file_id?",
+             f.id AS media_file_id,
              CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS episode_id,
              ps."positionSeconds" AS position_seconds, ps."durationSeconds" AS duration_seconds,
-             s."number" AS "season_number?", e."number" AS "episode_number?"
+             s."number" AS season_number, e."number" AS episode_number
            FROM playback_states ps
            JOIN items e ON e.id = ps."itemId"
            LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN LATERAL (
-             SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
+             SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id {}
              ORDER BY (p."mediaFileId" = ps."mediaFileId") DESC NULLS LAST,
                       (p."version" = ps."version") DESC NULLS LAST, p."version" DESC, p."position"
              LIMIT 1) f ON true
@@ -177,9 +200,11 @@ pub async fn resume_info(db: &PgPool, user: i32, media: i32) -> sqlx::Result<Opt
              AND ps."positionSeconds" > 0
            ORDER BY ps."lastPlayedAt" DESC
            LIMIT 1"#,
-        user,
-        media
-    )
+        visible_part(3)
+    )))
+    .bind(user)
+    .bind(media)
+    .bind(libs)
     .fetch_optional(db)
     .await?;
     Ok(row.map(|r| ResumeInfo {
@@ -240,8 +265,7 @@ pub async fn continue_watching(
     if libs.is_empty() {
         return Ok(vec![]);
     }
-    let mut items = sqlx::query_as!(
-        ContinueItem,
+    let mut items = sqlx::query_as::<_, ContinueItem>(sqlx::AssertSqlSafe(
         r#"WITH st AS (
              SELECT ps.id, ps."itemId", ps."mediaFileId", ps."version", ps."positionSeconds",
                     ps."durationSeconds", ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
@@ -298,13 +322,13 @@ pub async fn continue_watching(
              LEFT JOIN playback_states ps ON ps."userId" = $1 AND ps."itemId" = ni."itemId"
              WHERE ni."itemId" IS NOT NULL AND COALESCE(NOT ps.completed, true)
            )
-           SELECT x.id AS "id!", x."mediaId" AS "media_id!", x.file AS media_file_id,
-                  x."episodeId" AS episode_id, x.pos AS "position_seconds!",
-                  x.dur AS duration_seconds, x."lastPlayedAt" AS "last_played_at!",
+           SELECT x.id AS id, x."mediaId" AS media_id, x.file AS media_file_id,
+                  x."episodeId" AS episode_id, x.pos AS position_seconds,
+                  x.dur AS duration_seconds, x."lastPlayedAt" AS last_played_at,
                   x.title AS media_title, x.poster AS poster_url, x.fanart AS fanart_url,
-                  x.kind AS "media_type!", x.still AS still_url, x.label AS episode_label,
+                  x.kind AS media_type, x.still AS still_url, x.label AS episode_label,
                   CASE WHEN COALESCE(x.dur, 0) > 0 THEN ROUND((x.pos / x.dur) * 100)
-                       ELSE 0 END AS "progress_percent!"
+                       ELSE 0 END AS progress_percent
            FROM (
              SELECT c.id, c."mediaId", f.id AS file, c.pos, c.dur, c."lastPlayedAt",
                     CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
@@ -320,18 +344,19 @@ pub async fn continue_watching(
              JOIN items e ON e.id = c."itemId"
              LEFT JOIN item_groups s ON s.id = e."groupId"
              LEFT JOIN LATERAL (
-               SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
+               SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id @VISIBLE@
                ORDER BY (p."mediaFileId" = c."mediaFileId") DESC NULLS LAST,
                         (p."version" = c."version") DESC NULLS LAST, p."version" DESC, p."position"
                LIMIT 1) f ON true
              WHERE f.id IS NOT NULL
            ) x
            ORDER BY date_trunc('milliseconds', x."lastPlayedAt") DESC, x.kind, x."mediaId"
-           LIMIT $3"#,
-        user,
-        libs,
-        CONTINUE_MAX as i64
-    )
+           LIMIT $3"#
+            .replace("@VISIBLE@", &visible_part(2)),
+    ))
+    .bind(user)
+    .bind(libs)
+    .bind(CONTINUE_MAX as i64)
     .fetch_all(db)
     .await?;
     for i in &mut items {

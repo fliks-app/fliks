@@ -57,7 +57,9 @@ pub async fn gate_subtitle(st: &AppState, a: &Authed, media: i32, sub: i32) -> R
         return Err(AppError::not_found(format!("Subtitle #{sub} not found")));
     };
     match file {
-        Some(f) => gate_file(st, a, f).await,
+        Some(f) => gate_file(st, a, f)
+            .await
+            .map_err(|_| AppError::not_found(format!("Subtitle #{sub} not found"))),
         None => Ok(()),
     }
 }
@@ -83,7 +85,8 @@ pub async fn list(State(st): State<AppState>, a: Authed, id: One) -> Res<Json<Ve
     policy(&a, Action::Read)?;
     let PathParams(id) = id?;
     gate_media(&st, &a, id).await?;
-    let rows = model::of_media(&st.db, id).await?;
+    let ids = accessible_library_ids(&st.db, &a).await?;
+    let rows = model::of_media_visible(&st.db, id, &ids).await?;
     Ok(Json(
         rows.iter()
             .map(|r| {

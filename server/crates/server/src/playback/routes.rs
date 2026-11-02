@@ -251,10 +251,13 @@ pub async fn resume_info(
     a: Authed,
     PathParams(media): PathParams<i32>,
 ) -> Result<Response, AppError> {
-    Ok(match db::resume_info(&st.db, a.user.id, media).await? {
-        Some(info) => Json(info).into_response(),
-        None => empty(),
-    })
+    let libs = crate::libraries::accessible_library_ids(&st.db, &a).await?;
+    Ok(
+        match db::resume_info(&st.db, a.user.id, media, &libs).await? {
+            Some(info) => Json(info).into_response(),
+            None => empty(),
+        },
+    )
 }
 
 #[utoipa::path(get, path = "/api/playback/media/{mediaId}/state", responses((status = 200)))]

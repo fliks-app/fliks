@@ -191,12 +191,11 @@ fn push_scope(
 /// `NOT <file>.id` among the hidden editions' files of `media`, for the readable libraries `ids`.
 fn push_not_hidden(qb: &mut QueryBuilder<Postgres>, ids: &[i32], file: &str) {
     qb.push(format!(
-        " NOT {file}.id = ANY({}",
-        super::hydrate::HIDDEN_HEAD
+        " NOT {file}.id = ANY(ARRAY(SELECT hp.\"mediaFileId\" {}",
+        crate::libraries::HIDDEN_FILES_FROM
     ))
     .push_bind(ids.to_vec())
-    .push(super::hydrate::HIDDEN_TAIL)
-    .push(")");
+    .push(") AND hm.id = media.id AND media.type = 'book'))");
 }
 
 /// ` AND` an edition `e` readable through its own library, else the work's (`books.md` rule 22).

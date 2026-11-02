@@ -25,18 +25,21 @@ pub async fn library_ids_of(db: &PgPool, user: i32, all: bool) -> Result<Vec<i32
     .await
 }
 
-/// 404 `MediaFile #<id> not found` for a missing file, or one whose every edition lives in a library
-/// outside `ids` (an edition without `libraryId` follows its media, as in the book read routes).
+/// The editions linking a file that sit in a library outside the readable ids bound after it (`books.md` rule 22).
+/// Callers add `) AND hp."mediaFileId" ...`; one rule for hydrate, the lists and `assert_file_accessible`.
+pub const HIDDEN_FILES_FROM: &str = r#"FROM item_parts hp JOIN items hi ON hi.id = hp."itemId"
+  JOIN editions he ON he.id = hi."editionId" JOIN media hm ON hm.id = he."mediaId"
+  WHERE NOT COALESCE(he."libraryId", hm."libraryId") = ANY("#;
+
+/// 404 `MediaFile #<id> not found` for a missing file, or one linked by an edition outside `ids`
+/// (an edition without `libraryId` follows its media, as in the book read routes).
 pub async fn assert_file_accessible(db: &PgPool, file: i32, ids: &[i32]) -> Result<(), AppError> {
-    let ok = sqlx::query_scalar!(
+    let ok: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"SELECT EXISTS (SELECT 1 FROM media_files WHERE id = $1)
-           AND (NOT EXISTS (SELECT 1 FROM item_parts WHERE "mediaFileId" = $1)
-             OR EXISTS (SELECT 1 FROM item_parts ip JOIN items i ON i.id = ip."itemId"
-                  JOIN editions e ON e.id = i."editionId" JOIN media m ON m.id = e."mediaId"
-                  WHERE ip."mediaFileId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2))) AS "ok!""#,
-        file,
-        ids
-    )
+           AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = $1)"#
+    )))
+    .bind(file)
+    .bind(ids)
     .fetch_one(db)
     .await?;
     ok.then_some(())
