@@ -49,6 +49,11 @@ pub fn next_after(cron: &Cron, tz: Tz, after: DateTime<Utc>) -> Option<DateTime<
 /// Longest sleep before the wall clock is read again, so a suspended host does not oversleep a tick.
 const RECHECK: Duration = Duration::from_secs(30);
 
+/// `FLIKS_DISABLE_CRON=1` (exactly `1`) starts no timer; manual triggers still work.
+fn disabled() -> bool {
+    std::env::var("FLIKS_DISABLE_CRON").as_deref() == Ok("1")
+}
+
 /// One timer: `fire` runs at every match of `expr` and must return at once. No catch-up of missed ticks.
 pub fn spawn<C, F>(
     expr: impl Into<String>,
@@ -62,6 +67,9 @@ where
 {
     let expr: String = expr.into();
     tokio::spawn(async move {
+        if disabled() {
+            return;
+        }
         let Ok(cron) = parse(&expr) else {
             tracing::error!("invalid cron expression \"{expr}\"");
             return;
