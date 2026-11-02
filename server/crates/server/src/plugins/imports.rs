@@ -1,12 +1,14 @@
 //! Host imports (`plugins.md` rules 30-35, 43, 55): bound to the calling instance's plugin.
 use super::db::UNAVAILABLE;
 use super::logs::Level;
+use super::outbound::Gate;
 use super::runtime::fliks::plugin::{db, host, log, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
 use crate::state::AppState;
 use sqlx::PgPool;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub fn host_err(code: &str, message: impl Into<String>) -> HostError {
@@ -94,6 +96,19 @@ impl Ctx {
             .get()
             .cloned()
             .ok_or_else(|| host_err("ERR", "core services are not attached"))
+    }
+
+    /// The outbound limiter, or `ERR_DENIED` for a plugin with no `provider` block.
+    fn provider_gate(&self, method: &str) -> Result<Arc<Gate>, HostError> {
+        self.sh.gate.clone().ok_or_else(|| {
+            host_err(
+                "ERR_DENIED",
+                format!(
+                    "plugin \"{}\" has no provider block, required for \"{method}\"",
+                    self.sh.id
+                ),
+            )
+        })
     }
 
     fn track<T>(&mut self, started: Instant, r: Result<T, HostError>) -> Result<T, HostError> {
@@ -394,20 +409,36 @@ impl host::Host for Ctx {
 
     async fn provider_set_limits(
         &mut self,
-        _rate_per_sec: f64,
-        _burst: u32,
-        _daily_quota: Option<u32>,
+        rate_per_sec: f64,
+        burst: u32,
+        daily_quota: Option<u32>,
     ) -> Result<(), HostError> {
-        Err(host_err(
-            "ERR_NO_METHOD",
-            "host method \"provider.setLimits\" is not served",
-        ))
+        let gate = self.provider_gate("provider.setLimits");
+        call!(self, "provider.setLimits", scopes = &[], HOST_CALL, async {
+            let gate = gate?;
+            let rate_ok = rate_per_sec > 0.0 && rate_per_sec <= 1000.0;
+            if !rate_ok || !(1..=1000).contains(&burst) || daily_quota == Some(0) {
+                return Err(host_err(
+                    "ERR_VALIDATION",
+                    "limits need ratePerSec in (0, 1000], burst 1 to 1000 and dailyQuota of at least 1",
+                ));
+            }
+            gate.set_limits(rate_per_sec, burst, daily_quota);
+            Ok(())
+        })
     }
     async fn provider_quota_spent(&mut self) -> Result<(), HostError> {
-        Err(host_err(
-            "ERR_NO_METHOD",
-            "host method \"provider.quotaSpent\" is not served",
-        ))
+        let gate = self.provider_gate("provider.quotaSpent");
+        call!(
+            self,
+            "provider.quotaSpent",
+            scopes = &[],
+            HOST_CALL,
+            async {
+                gate?.quota_spent();
+                Ok(())
+            }
+        )
     }
 
     async fn config_get(

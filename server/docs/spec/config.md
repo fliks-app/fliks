@@ -97,5 +97,6 @@ The stream-lifetime cache TTL and max bytes are fixed constants, not env.
 | `FLIKS_CAST_DIR` | `public` relative to cwd (`.trim`, empty = unset); the public assets directory (`emoji/`), not a cast receiver |
 | `FLIKS_TMDB_API_URL` | `https://api.themoviedb.org/3`; test seam (`metadata.md` rule 35, `.trim`, empty = unset) |
 | `FLIKS_SUBTITLE_PROVIDERS_URL` | none; test-only seam, compiled only with the `parity` cargo feature (release builds do not enable it, the shipped binary ignores the variable; production provider bases are constants, `subtitle-providers.md` rule 46): the OpenSubtitles and Subdl bases move under `<url>/opensubtitles/api/v1`, `<url>/subdl/api/v1/subtitles` and `<url>` (`.trim`, empty = unset) |
+| `FLIKS_PLUGIN_UPSTREAM_OVERRIDE` | none; test-only seam, compiled only with the `parity` cargo feature (`provider-plugins.md` rule 59): `<host>=<url>,...` redirects a guest's outbound requests for `<host>` to `<url>` (an `http` or `https` base, its path prefixed), the target exempt from the private address class; read once at the first plugin registration, logged at warn; a malformed pair is skipped with a warn |
 | `FLIKS_TVDB_API_URL` | `https://api4.thetvdb.com/v4`; test seam |
 | `FLIKS_TMDB_IMAGE_URL` | `https://image.tmdb.org/t/p`; test seam, also the host the image store rewrites to `original` |

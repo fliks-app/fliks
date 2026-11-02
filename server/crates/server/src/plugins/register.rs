@@ -269,6 +269,10 @@ impl Plugins {
             mem_total: Default::default(),
             stats: Default::default(),
             outbound: Arc::new(tokio::sync::Semaphore::new(outbound::MAX_IN_FLIGHT)),
+            gate: m
+                .get("provider")
+                .and_then(|b| outbound::Gate::from_block(id, b))
+                .map(Arc::new),
         });
         let rt = PluginRt::new(sh, m.clone(), &loaded.component, pkg.network_internal)
             .map_err(|e| fail("invalid-component", e.to_string()))?;

@@ -5,6 +5,7 @@ use super::outbound::Outbound;
 use crate::events::uuid_v4;
 use crate::net::guard::Net;
 use crate::sync::MutexExt;
+use fliks_domain::metadata::limiter::Priority;
 use futures_util::future::BoxFuture;
 use serde_json::Value as Json;
 use sqlx::PgPool;
@@ -95,6 +96,7 @@ pub struct HostConfig {
     pub http_max: usize,
     pub http_queue: usize,
     pub task_max: usize,
+    pub upstream_override: Arc<super::outbound::Override>,
     /// The image the compile child runs (`/proc/self/exe` in production).
     pub compiler: PathBuf,
     pub compile_kill: Duration,
@@ -127,6 +129,7 @@ impl HostConfig {
             http_max: 4,
             http_queue: 32,
             task_max: 2,
+            upstream_override: Arc::new(super::outbound::Override::from_env()),
             compiler: super::compile::own_image(),
             compile_kill: Duration::from_secs(600),
             #[cfg(feature = "parity")]
@@ -228,6 +231,8 @@ pub struct Shared {
     pub stats: CallStats,
     /// In-flight guest outbound requests of this plugin, across its instances.
     pub outbound: Arc<tokio::sync::Semaphore>,
+    /// The outbound limiter of a plugin with a `provider` block.
+    pub gate: Option<Arc<super::outbound::Gate>>,
 }
 
 pub struct Ctx {
@@ -242,6 +247,13 @@ pub struct Ctx {
     mem_max: usize,
     /// Set by a `db` call that failed `unavailable` during the current export.
     pub db_unavailable: bool,
+}
+
+impl Ctx {
+    /// The priority of the export about to run in this Store (`provider-plugins.md` rule 58).
+    pub fn set_priority(&mut self, p: Priority) {
+        self.out.priority = p;
+    }
 }
 
 impl WasiView for Ctx {
@@ -559,6 +571,9 @@ impl PluginRt {
                 internal: self.internal,
                 net: env.cfg.net.clone(),
                 permits: self.sh.outbound.clone(),
+                gate: self.sh.gate.clone(),
+                priority: Priority::Background,
+                over: env.cfg.upstream_override.clone(),
             },
             sh: self.sh.clone(),
             deadline: Instant::now() + env.cfg.deadlines.hello,
