@@ -919,10 +919,6 @@ async fn login_all(http: &Client, target: &str, db: &str) -> HashMap<String, Str
 async fn parity() {
     let target = env("PARITY_TARGET", "http://127.0.0.1:4849");
     let record = env("PARITY_RECORD", "") == "1";
-    assert!(
-        !record || media_root() == DEFAULT_ROOT,
-        "recording needs the default root"
-    );
     let filter = env("PARITY_FILTER", "");
     let http = Client::new();
     let (db, base_tpl) = (
@@ -988,7 +984,8 @@ async fn parity() {
         let steps = sc["steps"].clone();
         let errs = run(&ctx, &mut sc, rec).await;
         if rec && sc["steps"] != steps {
-            fs::write(f, serde_json::to_string_pretty(&sc).unwrap() + "\n").unwrap();
+            let text = serde_json::to_string_pretty(&sc).unwrap() + "\n";
+            fs::write(f, text.replace(&media_root(), DEFAULT_ROOT)).unwrap();
         }
         if errs.is_empty() {
             ok += 1;

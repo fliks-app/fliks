@@ -40,6 +40,8 @@ cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture 2>&
 PARITY_RECORD=1 cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture   # fills only the steps without `expect`
 ```
 
+Recording through the one command: `PARITY_RECORD=1 PARITY_MODES=up0 parity/run-all.sh <group>`. The run root is rewritten back to `/tmp/fliks-parity` when a scenario is saved.
+
 Target (`fliks-server` alone on :4849, a scratch database reset as in the template step above):
 
 ```bash
