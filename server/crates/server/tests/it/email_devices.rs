@@ -563,29 +563,81 @@ async fn the_admin_test_reports_the_outcome(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn a_device_needs_the_permission_and_the_kind_domain(pool: PgPool) {
     let c = ctx(pool, "perm").await;
-    let body = |kind: &str, address: &str| Some(json!({"name": "D", "kind": kind, "address": address}));
-    let (s, _) = c.call("POST", "/api/email-devices", &c.c, body("kindle", "me@kindle.com")).await;
+    let body =
+        |kind: &str, address: &str| Some(json!({"name": "D", "kind": kind, "address": address}));
+    let (s, _) = c
+        .call(
+            "POST",
+            "/api/email-devices",
+            &c.c,
+            body("kindle", "me@kindle.com"),
+        )
+        .await;
     assert_eq!(s, 403, "no books.email");
     let (_, list) = c.call("GET", "/api/email-devices", &c.c, None).await;
     assert_eq!(list["canSend"], false);
-    for (kind, address) in [("kindle", "me@example.com"), ("kindle", "me@evilkindle.com"), ("pocketbook", "me@kindle.com")] {
-        let (s, _) = c.call("POST", "/api/email-devices", &c.a, body(kind, address)).await;
+    for (kind, address) in [
+        ("kindle", "me@example.com"),
+        ("kindle", "me@evilkindle.com"),
+        ("pocketbook", "me@kindle.com"),
+    ] {
+        let (s, _) = c
+            .call("POST", "/api/email-devices", &c.a, body(kind, address))
+            .await;
         assert_eq!(s, 400, "{kind} {address}");
     }
-    for (kind, address) in [("kindle", "me@Free.Kindle.com"), ("pocketbook", "me@pbsync.com")] {
-        let (s, _) = c.call("POST", "/api/email-devices", &c.a, body(kind, address)).await;
+    for (kind, address) in [
+        ("kindle", "me@Free.Kindle.com"),
+        ("pocketbook", "me@pbsync.com"),
+    ] {
+        let (s, _) = c
+            .call("POST", "/api/email-devices", &c.a, body(kind, address))
+            .await;
         assert_eq!(s, 201, "{kind} {address}");
         let (_, d) = c.call("GET", "/api/email-devices", &c.a, None).await;
-        c.call("DELETE", &format!("/api/email-devices/{}", d["devices"][0]["id"]), &c.a, None).await;
+        c.call(
+            "DELETE",
+            &format!("/api/email-devices/{}", d["devices"][0]["id"]),
+            &c.a,
+            None,
+        )
+        .await;
     }
-    let (s, b) = c.call("POST", "/api/email-devices", &c.a, body("other", "me@example.com")).await;
-    assert_eq!((s, b["message"].as_str()), (403, Some("email_devices.error_kind_forbidden")));
-    assert_eq!(c.call("POST", "/api/email-devices", &c.admin, body("other", "me@example.com")).await.0, 201);
+    let (s, b) = c
+        .call(
+            "POST",
+            "/api/email-devices",
+            &c.a,
+            body("other", "me@example.com"),
+        )
+        .await;
+    assert_eq!(
+        (s, b["message"].as_str()),
+        (403, Some("email_devices.error_kind_forbidden"))
+    );
+    assert_eq!(
+        c.call(
+            "POST",
+            "/api/email-devices",
+            &c.admin,
+            body("other", "me@example.com")
+        )
+        .await
+        .0,
+        201
+    );
     let (port, _) = smtp("250 queued").await;
     c.configure(port).await;
     let dev = c.device(&c.a, "Kindle").await;
-    sqlx::query("UPDATE roles SET permissions = '[\"media.read\"]' WHERE id = 1").execute(&c.pool).await.unwrap();
-    assert_eq!(c.send(&c.a, dev, 1).await.0, 403, "a role that lost the permission cannot send");
+    sqlx::query("UPDATE roles SET permissions = '[\"media.read\"]' WHERE id = 1")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        c.send(&c.a, dev, 1).await.0,
+        403,
+        "a role that lost the permission cannot send"
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -595,11 +647,23 @@ async fn concurrent_requests_cannot_pass_a_cap(pool: PgPool) {
         c.device(&c.a, &format!("D{n}")).await;
     }
     let creates = (0..6).map(|n| {
-        c.call("POST", "/api/email-devices", &c.a, Some(json!({"name": format!("N{n}"), "kind": "kindle", "address": "me@kindle.com"})))
+        c.call(
+            "POST",
+            "/api/email-devices",
+            &c.a,
+            Some(json!({"name": format!("N{n}"), "kind": "kindle", "address": "me@kindle.com"})),
+        )
     });
-    let made = futures_util::future::join_all(creates).await.iter().filter(|r| r.0 == 201).count();
+    let made = futures_util::future::join_all(creates)
+        .await
+        .iter()
+        .filter(|r| r.0 == 201)
+        .count();
     assert_eq!(made, 3, "10 devices at most");
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM email_devices WHERE \"userId\" = 2").fetch_one(&c.pool).await.unwrap();
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM email_devices WHERE \"userId\" = 2")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
     assert_eq!(n, 10);
     let (port, _) = smtp("250 queued").await;
     c.configure(port).await;
@@ -612,8 +676,16 @@ async fn concurrent_requests_cannot_pass_a_cap(pool: PgPool) {
     .await
     .unwrap();
     let sends = (0..5).map(|_| c.send(&c.b, dev, 1));
-    let statuses: Vec<u16> = futures_util::future::join_all(sends).await.iter().map(|r| r.0).collect();
-    assert_eq!(statuses.iter().filter(|s| **s == 202).count(), 2, "20 an hour at most: {statuses:?}");
+    let statuses: Vec<u16> = futures_util::future::join_all(sends)
+        .await
+        .iter()
+        .map(|r| r.0)
+        .collect();
+    assert_eq!(
+        statuses.iter().filter(|s| **s == 202).count(),
+        2,
+        "20 an hour at most: {statuses:?}"
+    );
     assert_eq!(statuses.iter().filter(|s| **s == 429).count(), 3);
 }
 
