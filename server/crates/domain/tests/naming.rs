@@ -23,7 +23,7 @@ fn data<T: for<'de> Deserialize<'de>>(i: &Value) -> T {
 
 #[test]
 fn naming_reproduces_expected() {
-    replay("naming", 2321, |i| {
+    replay("naming", 2330, |i| {
         let s = |k: &str| i[k].as_str().unwrap();
         match s("fn") {
             "getFormats" => {
@@ -42,6 +42,7 @@ fn naming_reproduces_expected() {
             }
             "applyMovieFormat" => json!(apply_movie_format(s("format"), &data(i))),
             "applySeriesFormat" => json!(apply_series_format(s("format"), &data(i))),
+            "applyBookFormat" => json!(apply_book_format(s("format"), &data(i))),
             "applyMovieFolderFormat" => json!(apply_movie_folder_format(s("format"), &data(i))),
             "applySeriesFolderFormat" => json!(apply_series_folder_format(s("format"), &data(i))),
             "applySeasonFolderFormat" => {
@@ -120,8 +121,8 @@ fn setting_keys_are_derived_from_kind_and_scope() {
             Some("naming_series_format"),
             Some("naming_series_folder_format"),
             Some("naming_season_folder_format"),
-            None,
-            None,
+            Some("naming_book_format"),
+            Some("naming_book_folder_format"),
             None,
         ]
     );

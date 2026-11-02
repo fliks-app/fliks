@@ -59,6 +59,21 @@ function applySeasonFolderFormat(format: string): string {
     .trim();
 }
 
+function applyBookFormat(format: string): string {
+  return format
+    .replace(/\{Author\}/g, 'A. Writer')
+    .replace(/\{SeriesPosition\}/g, '3')
+    .replace(/\{Series\}/g, 'Orbit Cycle')
+    .replace(/\{Title\}/g, 'Nova Skyline')
+    .replace(/\{Year\}/g, '2021')
+    .replace(/\{Narrator\}/g, 'N. Voice')
+    .replace(/\{Language\}/g, 'fr')
+    .replace(/\{Format\}/g, 'epub')
+    .replace(/\(\s*\)|\[\s*\]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 @Component({
   selector: 'app-naming-settings',
   imports: [FormsModule, TranslatePipe],
@@ -78,16 +93,26 @@ export class NamingSettingsComponent implements OnInit {
   readonly seasonFolderFormat = signal('Season {season:00}');
   readonly seriesFormat = signal('{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}');
 
+  readonly bookFormat = signal('{Title} ({Year})');
+  readonly bookFolderFormat = signal('{Title}');
+
   readonly moviePreview = computed(() => applyMovieFormat(this.movieFormat()));
   readonly seriesFolderPreview = computed(() => applySeriesFolderFormat(this.seriesFolderFormat()));
   readonly seasonFolderPreview = computed(() => applySeasonFolderFormat(this.seasonFolderFormat()));
   readonly seriesPreview = computed(() => applySeriesFormat(this.seriesFormat()));
+  readonly bookPreview = computed(() => applyBookFormat(this.bookFormat()));
+  readonly bookFolderPreview = computed(() => applyBookFormat(this.bookFolderFormat()));
   readonly seriesFullPreview = computed(() => {
     const folder = this.seriesFolderPreview();
     const season = this.seasonFolderPreview();
     const file = this.seriesPreview();
     return `${folder}/${season}/${file}`;
   });
+
+  readonly bookTokens = [
+    '{Author}', '{Series}', '{SeriesPosition}', '{Title}', '{Year}',
+    '{Narrator}', '{Language}', '{Format}',
+  ];
 
   readonly movieTokens = [
     '{Movie Title}', '{Release Year}', '{Quality Full}', '{Quality Title}',
@@ -116,6 +141,8 @@ export class NamingSettingsComponent implements OnInit {
       if (map['naming_series_folder_format']) this.seriesFolderFormat.set(map['naming_series_folder_format']);
       if (map['naming_season_folder_format']) this.seasonFolderFormat.set(map['naming_season_folder_format']);
       if (map['naming_series_format']) this.seriesFormat.set(map['naming_series_format']);
+      if (map['naming_book_format']) this.bookFormat.set(map['naming_book_format']);
+      if (map['naming_book_folder_format']) this.bookFolderFormat.set(map['naming_book_folder_format']);
     } catch {
       this.error.set(this.translate.instant('settings.naming.load_error'));
     } finally {
@@ -123,12 +150,14 @@ export class NamingSettingsComponent implements OnInit {
     }
   }
 
-  insertToken(field: 'movie' | 'series' | 'seriesFolder' | 'seasonFolder', token: string) {
+  insertToken(field: 'movie' | 'series' | 'seriesFolder' | 'seasonFolder' | 'book' | 'bookFolder', token: string) {
     switch (field) {
       case 'movie': this.movieFormat.update((f) => f + token); break;
       case 'seriesFolder': this.seriesFolderFormat.update((f) => f + token); break;
       case 'seasonFolder': this.seasonFolderFormat.update((f) => f + token); break;
       case 'series': this.seriesFormat.update((f) => f + token); break;
+      case 'book': this.bookFormat.update((f) => f + token); break;
+      case 'bookFolder': this.bookFolderFormat.update((f) => f + token); break;
     }
   }
 
@@ -141,6 +170,8 @@ export class NamingSettingsComponent implements OnInit {
         naming_series_folder_format: this.seriesFolderFormat(),
         naming_season_folder_format: this.seasonFolderFormat(),
         naming_series_format: this.seriesFormat(),
+        naming_book_format: this.bookFormat(),
+        naming_book_folder_format: this.bookFolderFormat(),
       });
       this.toast.success(this.translate.instant('settings.naming.saved'));
     } catch {

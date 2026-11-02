@@ -13,6 +13,8 @@ pub struct NamingFormats {
     pub series: String,
     pub series_folder: String,
     pub season_folder: String,
+    pub book: String,
+    pub book_folder: String,
 }
 
 /// What a format names: a file, the title's folder, or the folder of one group of items.
@@ -36,7 +38,9 @@ pub const fn setting_key(kind: MediaKind, scope: Scope) -> Option<&'static str> 
         (MediaKind::Series, Scope::Folder) => Some("naming_series_folder_format"),
         (MediaKind::Series, Scope::GroupFolder) => Some("naming_season_folder_format"),
         (MediaKind::Movie, Scope::GroupFolder) => None,
-        (MediaKind::Book, _) => None,
+        (MediaKind::Book, Scope::File) => Some("naming_book_format"),
+        (MediaKind::Book, Scope::Folder) => Some("naming_book_folder_format"),
+        (MediaKind::Book, Scope::GroupFolder) => None,
     }
 }
 
@@ -48,6 +52,8 @@ pub fn default_formats() -> NamingFormats {
             .into(),
         series_folder: "{Series Title}".into(),
         season_folder: "Season {season:00}".into(),
+        book: "{Title} ({Year})".into(),
+        book_folder: "{Title}".into(),
     }
 }
 
@@ -68,6 +74,8 @@ pub fn formats_from_rows(rows: &[(String, Option<String>)]) -> NamingFormats {
         series: get(MediaKind::Series, Scope::File, d.series),
         series_folder: get(MediaKind::Series, Scope::Folder, d.series_folder),
         season_folder: get(MediaKind::Series, Scope::GroupFolder, d.season_folder),
+        book: get(MediaKind::Book, Scope::File, d.book),
+        book_folder: get(MediaKind::Book, Scope::Folder, d.book_folder),
     }
 }
 
@@ -113,6 +121,17 @@ data!(SeriesFolder {
     original_title: Option<String>,
     year: Option<i64>,
     tmdb_id: Option<i64>,
+});
+
+data!(BookNameTokens {
+    #[serde(deserialize_with = "nullable")] title: String,
+    author: Option<String>,
+    series: Option<String>,
+    series_position: Option<f64>,
+    year: Option<i64>,
+    narrator: Option<String>,
+    language: Option<String>,
+    format: Option<String>,
 });
 
 /// Successive literal replacements in order: a value that carries a later token is expanded by it.
@@ -219,6 +238,27 @@ pub fn apply_season_folder_format(format: &str, season: i64) -> String {
         &[
             ("{season:00}", pad2(season)),
             ("{season}", season.to_string()),
+        ],
+    )
+}
+
+/// File and folder formats of a book share one token set; the caller adds the extension.
+pub fn apply_book_format(format: &str, d: &BookNameTokens) -> String {
+    let text = |o: &Option<String>| o.clone().unwrap_or_default();
+    fill(
+        format,
+        &[
+            ("{Author}", text(&d.author)),
+            (
+                "{SeriesPosition}",
+                d.series_position.map_or(String::new(), |p| p.to_string()),
+            ),
+            ("{Series}", text(&d.series)),
+            ("{Title}", d.title.clone()),
+            ("{Year}", opt_num(d.year)),
+            ("{Narrator}", text(&d.narrator)),
+            ("{Language}", text(&d.language)),
+            ("{Format}", text(&d.format)),
         ],
     )
 }

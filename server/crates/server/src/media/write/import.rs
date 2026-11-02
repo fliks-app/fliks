@@ -238,7 +238,7 @@ async fn folder_format(db: &sqlx::PgPool, media_type: MediaKind) -> Result<Strin
     let default = match media_type {
         MediaKind::Movie => "{Original Title} ({Release Year})",
         MediaKind::Series => "{Series Title}",
-        MediaKind::Book => "",
+        MediaKind::Book => "{Title}",
     };
     let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
         .fetch_optional(db)
@@ -269,7 +269,14 @@ fn folder_name(format: &str, media_type: MediaKind, d: &Details) -> String {
                 tmdb_id,
             },
         ),
-        MediaKind::Book => String::new(),
+        MediaKind::Book => naming::apply_book_format(
+            format,
+            &naming::BookNameTokens {
+                title: d.title.clone(),
+                year,
+                ..Default::default()
+            },
+        ),
     }
 }
 
