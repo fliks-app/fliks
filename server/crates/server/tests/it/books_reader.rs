@@ -54,13 +54,14 @@ fn opf(extra_manifest: &str, direction: &str, layout: &str) -> Vec<u8> {
     .into_bytes()
 }
 
-const NAV: &str = r#"<html xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol>
+const NAV: &str = r#"<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol>
   <li><a href="ch1.xhtml">Chapter One</a><ol><li><a href="ch1.xhtml#s1">Section</a></li></ol></li>
   <li><a href="ch2.xhtml">Chapter Two</a></li><li><a href="https://evil.example/">Away</a></li>
   <li><a href="missing.xhtml">Gone</a></li></ol></nav></body></html>"#;
 
 fn book(extra: &[(&str, Vec<u8>)], extra_manifest: &str, direction: &str, layout: &str) -> Vec<u8> {
-    let plain = "<html><head/><body><p>text</p></body></html>";
+    let plain =
+        r#"<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><p>text</p></body></html>"#;
     let mut entries: Vec<(&str, Vec<u8>)> = vec![
         ("mimetype", b"application/epub+zip".to_vec()),
         ("META-INF/container.xml", CONTAINER.into()),
@@ -336,7 +337,7 @@ async fn resources_are_sanitised_and_hardened(pool: PgPool) {
     }
     assert!(t.contains("Aldric &amp; Mirelune") && t.contains(r#"href="ch2.xhtml""#));
     assert!(
-        t.contains("<head><meta http-equiv=\"Content-Security-Policy\""),
+        t.contains("<head><meta xmlns=\"http://www.w3.org/1999/xhtml\" http-equiv=\"Content-Security-Policy\""),
         "{t}"
     );
 
@@ -398,7 +399,7 @@ async fn only_manifest_resources_are_served(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn oversize_and_malformed_resources_are_refused(pool: PgPool) {
     let huge_xhtml = format!(
-        "<html><head/><body>{}</body></html>",
+        r#"<html xmlns="http://www.w3.org/1999/xhtml"><head/><body>{}</body></html>"#,
         " ".repeat(9 * 1024 * 1024)
     );
     let extra = [
@@ -460,4 +461,68 @@ async fn a_hidden_edition_answers_like_a_missing_item(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(anon.status().as_u16(), 401);
+}
+
+#[sqlx::test(migrations = false)]
+async fn media_type_tricks_and_wrong_roots_are_refused(pool: PgPool) {
+    let xhtml = r#"<html xmlns="http://www.w3.org/1999/xhtml"><head/><body/></html>"#;
+    let extra = [
+        ("OEBPS/a.mp3", b"id3".to_vec()),
+        ("OEBPS/v.mp4", b"mp4".to_vec()),
+        ("OEBPS/f.woff", b"wOFF".to_vec()),
+        ("OEBPS/noroot.xhtml", b"<html><body/></html>".to_vec()),
+        (
+            "OEBPS/svgroot.xhtml",
+            br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#.to_vec(),
+        ),
+        ("OEBPS/fake.svg", xhtml.as_bytes().to_vec()),
+        ("OEBPS/fake.xml", xhtml.as_bytes().to_vec()),
+        (
+            "OEBPS/page.svg",
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>"#.to_vec(),
+        ),
+    ];
+    let manifest = r#"<item id="a" href="a.mp3" media-type="audio/x,text/javascript"/>
+        <item id="v" href="v.mp4" media-type="video/x,application/xhtml+xml"/>
+        <item id="a2" href="a.mp3" media-type="audio/mpeg ,text/javascript"/>
+        <item id="f" href="f.woff" media-type="font/woff"/>
+        <item id="nr" href="noroot.xhtml" media-type="application/xhtml+xml"/>
+        <item id="sr" href="svgroot.xhtml" media-type="application/xhtml+xml"/>
+        <item id="fs" href="fake.svg" media-type="image/svg+xml"/>
+        <item id="fx" href="fake.xml" media-type="application/xml"/>
+        <item id="ps" href="page.svg" media-type="image/svg+xml"/>"#;
+    let c = ctx(pool, "roots", &extra, manifest).await;
+    let m = c.pub_(6, "manifest.json").await.json();
+    let listed: Vec<String> = ["readingOrder", "resources"]
+        .iter()
+        .flat_map(|k| m[k].as_array().unwrap())
+        .map(|l| l["href"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(
+        !listed
+            .iter()
+            .any(|h| h.ends_with("a.mp3") || h.ends_with("v.mp4")),
+        "{listed:?}"
+    );
+    assert!(listed.iter().any(|h| h.ends_with("f.woff")));
+    for p in ["OEBPS/a.mp3", "OEBPS/v.mp4"] {
+        assert_eq!(c.pub_(6, p).await.status, 404, "{p}");
+    }
+    let font = c.pub_(6, "OEBPS/f.woff").await;
+    assert_eq!(
+        (font.status, font.header("content-type")),
+        (200, "font/woff")
+    );
+    for p in ["noroot.xhtml", "svgroot.xhtml", "fake.svg", "fake.xml"] {
+        assert_eq!(c.pub_(6, &format!("OEBPS/{p}")).await.status, 422, "{p}");
+    }
+    assert_eq!(c.pub_(6, "OEBPS/page.svg").await.status, 200);
+    // the CSP meta carries its own namespace
+    let t = c.pub_(6, "OEBPS/ch2.xhtml").await.text();
+    assert!(
+        t.contains(
+            r#"<meta xmlns="http://www.w3.org/1999/xhtml" http-equiv="Content-Security-Policy""#
+        ),
+        "{t}"
+    );
 }

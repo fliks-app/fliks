@@ -1,11 +1,13 @@
 //! The Readium manifest and positions of an EPUB (`docs/spec/books-reader.md` rules 5-10), pure over
 //! the parsed package.
+use super::sanitize::Kind;
 use fliks_domain::books::{
     opf::{self, OpfMetadata, Role},
     package::{Package, TocEntry},
 };
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 
 const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'-')
@@ -17,66 +19,70 @@ pub const MAX_POSITIONS: usize = 100_000;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Class {
-    Xhtml,
-    Svg,
-    Xml,
+    Markup(Kind),
     Plain,
 }
 
-/// A manifest item the reader may fetch: its archive entry and its normalised media type.
+/// A manifest item the reader may fetch: its archive entry and its canonical media type.
 pub struct Resource {
-    pub id: String,
     pub path: String,
-    pub media_type: String,
+    pub media_type: &'static str,
     pub class: Class,
 }
 
 impl Resource {
     pub fn content_type(&self) -> String {
         match self.class {
-            Class::Xhtml => "application/xhtml+xml; charset=utf-8".into(),
-            Class::Plain => self.media_type.clone(),
-            _ => format!("{}; charset=utf-8", self.media_type),
+            Class::Plain => self.media_type.into(),
+            Class::Markup(_) => format!("{}; charset=utf-8", self.media_type),
         }
     }
 }
 
-/// `None` for a type the reader never serves (rule 12), JavaScript included.
-fn classify(media_type: &str) -> Option<(Class, String)> {
+const PLAIN: &[&str] = &[
+    "text/css",
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/avif",
+    "font/otf",
+    "font/ttf",
+    "font/sfnt",
+    "font/woff",
+    "font/woff2",
+    "application/font-woff",
+    "application/font-woff2",
+    "application/vnd.ms-opentype",
+    "application/x-font-ttf",
+    "application/x-font-opentype",
+    "application/font-sfnt",
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/aac",
+    "audio/ogg",
+    "audio/opus",
+    "audio/webm",
+    "audio/wav",
+    "video/mp4",
+    "video/webm",
+    "video/ogg",
+];
+
+/// `None` for a type off the exact allowlist (rule 12), JavaScript and `a/b,c/d` tricks included; the
+/// answer is the allowlisted string itself, never the manifest's.
+fn classify(media_type: &str) -> Option<(Class, &'static str)> {
     let t = media_type.split(';').next()?.trim().to_lowercase();
-    let class = match t.as_str() {
-        "application/xhtml+xml" | "text/html" => Class::Xhtml,
-        "image/svg+xml" => Class::Svg,
-        "application/x-dtbncx+xml" | "application/xml" | "text/xml" | "application/smil+xml" => {
-            Class::Xml
-        }
-        "text/css"
-        | "image/jpeg"
-        | "image/png"
-        | "image/gif"
-        | "image/webp"
-        | "image/avif"
-        | "application/font-woff"
-        | "application/vnd.ms-opentype"
-        | "application/x-font-ttf"
-        | "application/x-font-opentype"
-        | "application/font-sfnt" => Class::Plain,
-        _ if ["font/", "audio/", "video/"]
-            .iter()
-            .any(|p| t.starts_with(p)) =>
-        {
-            Class::Plain
-        }
-        _ => return None,
-    };
-    Some((
-        class,
-        if class == Class::Xhtml {
-            "application/xhtml+xml".into()
-        } else {
-            t
-        },
-    ))
+    let markup = |k, c| Some((Class::Markup(k), c));
+    match t.as_str() {
+        "application/xhtml+xml" | "text/html" => markup(Kind::Xhtml, "application/xhtml+xml"),
+        "image/svg+xml" => markup(Kind::Svg, "image/svg+xml"),
+        "application/x-dtbncx+xml" => markup(Kind::Xml, "application/x-dtbncx+xml"),
+        "application/xml" => markup(Kind::Xml, "application/xml"),
+        "text/xml" => markup(Kind::Xml, "text/xml"),
+        "application/smil+xml" => markup(Kind::Xml, "application/smil+xml"),
+        _ => PLAIN.iter().find(|p| **p == t).map(|p| (Class::Plain, *p)),
+    }
 }
 
 fn has_scheme(href: &str) -> bool {
@@ -87,22 +93,51 @@ fn has_scheme(href: &str) -> bool {
             .is_some_and(|s| s.contains(':'))
 }
 
-pub fn resources(opf_path: &str, pkg: &Package, exists: impl Fn(&str) -> bool) -> Vec<Resource> {
-    let mut seen = std::collections::HashSet::new();
-    pkg.items
-        .iter()
-        .filter(|i| !has_scheme(&i.href))
-        .filter_map(|i| {
-            let (class, media_type) = classify(&i.media_type)?;
-            let path = opf::resolve_href(opf_path, &i.href);
-            (exists(&path) && seen.insert(path.clone())).then(|| Resource {
-                id: i.id.clone(),
-                path,
-                media_type,
-                class,
-            })
-        })
-        .collect()
+/// The servable items of a package, indexed by id and by archive path (the first of a duplicate wins).
+pub struct Resources {
+    list: Vec<Resource>,
+    by_id: HashMap<String, usize>,
+    by_path: HashMap<String, usize>,
+}
+
+impl Resources {
+    pub fn by_path(&self, path: &str) -> Option<&Resource> {
+        self.by_path.get(path).map(|i| &self.list[*i])
+    }
+
+    fn by_id(&self, id: &str) -> Option<&Resource> {
+        self.by_id.get(id).map(|i| &self.list[*i])
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Resource> {
+        self.list.iter()
+    }
+}
+
+pub fn resources(opf_path: &str, pkg: &Package, exists: impl Fn(&str) -> bool) -> Resources {
+    let mut out = Resources {
+        list: vec![],
+        by_id: HashMap::new(),
+        by_path: HashMap::new(),
+    };
+    for i in pkg.items.iter().filter(|i| !has_scheme(&i.href)) {
+        let Some((class, media_type)) = classify(&i.media_type) else {
+            continue;
+        };
+        let path = opf::resolve_href(opf_path, &i.href);
+        if !exists(&path) || out.by_path.contains_key(&path) {
+            continue;
+        }
+        let n = out.list.len();
+        out.by_path.insert(path.clone(), n);
+        out.by_id.entry(i.id.clone()).or_insert(n);
+        out.list.push(Resource {
+            path,
+            media_type,
+            class,
+        });
+    }
+    out
 }
 
 pub fn href(path: &str) -> String {
@@ -112,11 +147,13 @@ pub fn href(path: &str) -> String {
         .join("/")
 }
 
-fn reading_order<'a>(pkg: &Package, res: &'a [Resource]) -> Vec<&'a Resource> {
+/// The linear spine items that are XHTML: the reader cannot be given a CSP meta for any other markup.
+fn reading_order<'a>(pkg: &Package, res: &'a Resources) -> Vec<&'a Resource> {
     pkg.spine
         .iter()
         .filter(|s| s.linear)
-        .filter_map(|s| res.iter().find(|r| r.id == s.idref))
+        .filter_map(|s| res.by_id(&s.idref))
+        .filter(|r| r.class == Class::Markup(Kind::Xhtml))
         .collect()
 }
 
@@ -128,7 +165,7 @@ pub struct TocNode {
     children: Vec<TocNode>,
 }
 
-pub fn resolve_toc(entries: &[TocEntry], doc: &str, res: &[Resource]) -> Vec<TocNode> {
+pub fn resolve_toc(entries: &[TocEntry], doc: &str, res: &Resources) -> Vec<TocNode> {
     entries
         .iter()
         .flat_map(|e| {
@@ -139,7 +176,7 @@ pub fn resolve_toc(entries: &[TocEntry], doc: &str, res: &[Resource]) -> Vec<Toc
                 opf::resolve_href(doc, target)
             };
             let children = resolve_toc(&e.children, doc, res);
-            if has_scheme(target) || !res.iter().any(|r| r.path == path) {
+            if has_scheme(target) || res.by_path(&path).is_none() {
                 return children;
             }
             let href = if frag.is_empty() {
@@ -170,12 +207,12 @@ fn toc_json(nodes: &[TocNode]) -> Vec<Value> {
         .collect()
 }
 
-fn title_of<'a>(nodes: &'a [TocNode], path: &str) -> Option<&'a str> {
-    nodes.iter().find_map(|n| {
-        (n.path == path)
-            .then_some(n.title.as_str())
-            .or_else(|| title_of(&n.children, path))
-    })
+/// The title of each target path, the first in document order winning.
+fn titles<'a>(nodes: &'a [TocNode], out: &mut HashMap<&'a str, &'a str>) {
+    for n in nodes {
+        out.entry(n.path.as_str()).or_insert(n.title.as_str());
+        titles(&n.children, out);
+    }
 }
 
 pub fn base(item: i32) -> String {
@@ -186,24 +223,27 @@ pub fn manifest(
     item: i32,
     meta: &OpfMetadata,
     pkg: &Package,
-    res: &[Resource],
+    res: &Resources,
     toc: &[TocNode],
 ) -> Value {
     let order = reading_order(pkg, res);
+    let mut titled = HashMap::new();
+    titles(toc, &mut titled);
     let link = |r: &Resource| json!({ "href": href(&r.path), "type": r.media_type });
     let reading: Vec<Value> = order
         .iter()
         .map(|r| {
             let mut l = link(r);
-            if let Some(t) = title_of(toc, &r.path) {
-                l["title"] = t.into();
+            if let Some(t) = titled.get(r.path.as_str()) {
+                l["title"] = (*t).into();
             }
             l
         })
         .collect();
+    let ordered: HashSet<&str> = order.iter().map(|r| r.path.as_str()).collect();
     let resources: Vec<Value> = res
         .iter()
-        .filter(|r| !order.iter().any(|o| o.path == r.path))
+        .filter(|r| !ordered.contains(r.path.as_str()))
         .map(link)
         .collect();
     let identifier = meta
@@ -255,7 +295,7 @@ pub fn manifest(
 }
 
 /// `size` is the declared size of an archive entry, already capped by the caller.
-pub fn positions(pkg: &Package, res: &[Resource], mut size: impl FnMut(&str) -> u64) -> Value {
+pub fn positions(pkg: &Package, res: &Resources, mut size: impl FnMut(&str) -> u64) -> Value {
     let order = reading_order(pkg, res);
     let counts: Vec<u64> = order
         .iter()

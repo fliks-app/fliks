@@ -76,15 +76,44 @@ fn attributes(e: &BytesStart) -> Result<(String, bool), Error> {
     Ok((out, http_equiv))
 }
 
-#[derive(PartialEq)]
-enum Head {
-    Before,
-    AfterHtml,
-    Done,
+const XHTML_NS: &str = "http://www.w3.org/1999/xhtml";
+const SVG_NS: &str = "http://www.w3.org/2000/svg";
+
+/// What the manifest declares a markup resource to be; the root element must agree (rule 14).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Kind {
+    Xhtml,
+    Svg,
+    Xml,
 }
 
-/// `meta_csp`: XHTML, which gets the CSP meta in its `head`; SVG and other XML only get the rewrite.
-pub fn sanitize(input: &[u8], meta_csp: bool, cap: usize) -> Result<Vec<u8>, Error> {
+fn root_ok(kind: Kind, qname: &str, e: &BytesStart) -> bool {
+    let (prefix, name) = qname.split_once(':').unwrap_or(("", qname));
+    let key = if prefix.is_empty() {
+        "xmlns".to_owned()
+    } else {
+        format!("xmlns:{prefix}")
+    };
+    let ns = e
+        .attributes()
+        .flatten()
+        .find(|a| a.key.as_ref() == key)
+        .and_then(|a| unescape(&a.value).ok().map(|v| v.into_owned()));
+    match kind {
+        Kind::Xhtml => name == "html" && ns.as_deref() == Some(XHTML_NS),
+        Kind::Svg => name == "svg" && ns.as_deref() == Some(SVG_NS),
+        Kind::Xml => !name.eq_ignore_ascii_case("html") && !name.eq_ignore_ascii_case("svg"),
+    }
+}
+
+fn meta() -> String {
+    format!(
+        "<meta xmlns=\"{XHTML_NS}\" http-equiv=\"Content-Security-Policy\" content=\"{META_CSP}\"/>"
+    )
+}
+
+/// `Xhtml` also gets the CSP meta in its `head`; the other kinds only get the rewrite.
+pub fn sanitize(input: &[u8], kind: Kind, cap: usize) -> Result<Vec<u8>, Error> {
     if input.len() > cap {
         return Err(Error::TooLarge);
     }
@@ -93,11 +122,7 @@ pub fn sanitize(input: &[u8], meta_csp: bool, cap: usize) -> Result<Vec<u8>, Err
     let mut reader = Reader::from_str(text);
     let mut out = br#"<?xml version="1.0" encoding="UTF-8"?>"#.to_vec();
     let (mut skip, mut depth) = (0usize, 0usize);
-    let mut head = if meta_csp { Head::Before } else { Head::Done };
-    let mut prefix = String::new();
-    let meta = |p: &str| {
-        format!("<{p}meta http-equiv=\"Content-Security-Policy\" content=\"{META_CSP}\"/>")
-    };
+    let (mut root_seen, mut after_html) = (false, false);
     loop {
         if out.len() > cap {
             return Err(Error::TooLarge);
@@ -119,6 +144,10 @@ pub fn sanitize(input: &[u8], meta_csp: bool, cap: usize) -> Result<Vec<u8>, Err
                 if !valid_name(&qname) {
                     return Err(Error::Malformed);
                 }
+                let is_root = !std::mem::replace(&mut root_seen, true);
+                if is_root && !root_ok(kind, &qname, e) {
+                    return Err(Error::Malformed);
+                }
                 let name = local(&qname);
                 let (attrs, http_equiv) = attributes(e)?;
                 if DROPPED.contains(&name.as_str()) || (name == "meta" && http_equiv) {
@@ -127,22 +156,20 @@ pub fn sanitize(input: &[u8], meta_csp: bool, cap: usize) -> Result<Vec<u8>, Err
                     }
                     continue;
                 }
-                let p = qname.rfind(':').map_or("", |i| &qname[..=i]);
-                if head == Head::AfterHtml && name != "head" {
-                    out.extend(format!("<{p}head>{}</{p}head>", meta(p)).bytes());
-                    head = Head::Done;
+                if after_html && name != "head" {
+                    out.extend(format!("<head xmlns=\"{XHTML_NS}\">{}</head>", meta()).bytes());
+                    after_html = false;
                 }
-                let at_root = depth == 0;
                 out.extend(format!("<{qname}{attrs}").bytes());
-                if head == Head::AfterHtml {
+                if after_html {
                     out.push(b'>');
-                    out.extend(meta(p).bytes());
+                    out.extend(meta().bytes());
                     if empty {
                         out.extend(format!("</{qname}>").bytes());
                     } else {
                         depth += 1;
                     }
-                    head = Head::Done;
+                    after_html = false;
                     continue;
                 }
                 if empty {
@@ -153,16 +180,13 @@ pub fn sanitize(input: &[u8], meta_csp: bool, cap: usize) -> Result<Vec<u8>, Err
                     if depth > MAX_DEPTH {
                         return Err(Error::Malformed);
                     }
-                    if head == Head::Before && at_root && name == "html" {
-                        head = Head::AfterHtml;
-                        prefix = p.to_owned();
-                    }
+                    after_html = is_root && kind == Kind::Xhtml;
                 }
             }
             Event::End(e) => {
-                if head == Head::AfterHtml {
-                    out.extend(format!("<{prefix}head>{}</{prefix}head>", meta(&prefix)).bytes());
-                    head = Head::Done;
+                if after_html {
+                    out.extend(format!("<head xmlns=\"{XHTML_NS}\">{}</head>", meta()).bytes());
+                    after_html = false;
                 }
                 out.extend(b"</");
                 out.extend(e.name().as_ref().as_bytes());
@@ -170,11 +194,7 @@ pub fn sanitize(input: &[u8], meta_csp: bool, cap: usize) -> Result<Vec<u8>, Err
                 depth = depth.saturating_sub(1);
             }
             Event::Text(t) => out.extend(t.as_bytes()),
-            Event::CData(c) => {
-                out.extend(b"<![CDATA[");
-                out.extend(c.as_bytes());
-                out.extend(b"]]>");
-            }
+            Event::CData(c) => out.extend(escape(&*c).as_bytes()),
             Event::GeneralRef(r) => {
                 out.push(b'&');
                 out.extend(r.as_bytes());
@@ -209,8 +229,14 @@ mod tests {
 <a href="javascript:x()">1</a><a href=" Java&#09;Script:x()">2</a><a href="&#106;avascript:x()">3</a><a href="vbscript:x">4</a>
 <a href="ch2.xhtml#s">ok</a><form action="/x"><input/></form><a xlink:href="javascript:x()">5</a></body></html>"#;
 
+    const NS: &str = r#"xmlns="http://www.w3.org/1999/xhtml""#;
+
     fn out(src: &str) -> String {
-        String::from_utf8(sanitize(src.as_bytes(), true, CAP).unwrap()).unwrap()
+        String::from_utf8(sanitize(src.as_bytes(), Kind::Xhtml, CAP).unwrap()).unwrap()
+    }
+
+    fn xml(src: &[u8]) -> Result<Vec<u8>, Error> {
+        sanitize(src, Kind::Xml, CAP)
     }
 
     #[test]
@@ -256,7 +282,9 @@ mod tests {
         let o = out(XHTML);
         let head = o.split("<head>").nth(1).unwrap();
         assert!(
-            head.starts_with("<meta http-equiv=\"Content-Security-Policy\""),
+            head.starts_with(&format!(
+                "<meta {NS} http-equiv=\"Content-Security-Policy\""
+            )),
             "{o}"
         );
         assert_eq!(o.matches("Content-Security-Policy").count(), 1);
@@ -264,27 +292,36 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_or_empty_head_is_created_and_a_prefix_kept() {
-        for src in [
-            "<html><body><p>x</p></body></html>",
-            "<html><head/><body/></html>",
-            "<html></html>",
+    fn a_missing_or_empty_head_is_created_and_the_meta_is_never_prefixed() {
+        for (src, head) in [
+            (
+                format!("<html {NS}><body><p>x</p></body></html>"),
+                format!("<head {NS}><meta {NS} http-equiv"),
+            ),
+            (
+                format!("<html {NS}></html>"),
+                format!("<head {NS}><meta {NS} http-equiv"),
+            ),
+            (
+                format!("<html {NS}><head/><body/></html>"),
+                format!("<head><meta {NS} http-equiv"),
+            ),
         ] {
-            let o = out(src);
-            assert_eq!(o.matches("<head><meta http-equiv").count(), 1, "{o}");
+            let o = out(&src);
+            assert_eq!(o.matches(&head).count(), 1, "{o}");
             assert_eq!(o.matches("Content-Security-Policy").count(), 1, "{o}");
         }
         let o =
             out(r#"<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head/><h:body/></h:html>"#);
-        assert!(o.contains("<h:head><h:meta http-equiv"), "{o}");
+        assert!(o.contains(&format!("<h:head><meta {NS} http-equiv")), "{o}");
         assert!(o.contains("</h:head>"), "{o}");
     }
 
     #[test]
     fn prefixed_dangerous_elements_are_dropped() {
-        let o = out(
-            r#"<html xmlns:x="http://www.w3.org/1999/xhtml"><head/><body><x:script>a()</x:script><x:iframe/><p>k</p></body></html>"#,
-        );
+        let o = out(&format!(
+            r#"<html {NS} xmlns:x="http://www.w3.org/1999/xhtml"><head/><body><x:script>a()</x:script><x:iframe/><p>k</p></body></html>"#
+        ));
         let body = o.replace(META_CSP, "");
         assert!(
             !body.contains("script") && !body.contains("iframe") && o.contains("<p>k</p>"),
@@ -293,9 +330,49 @@ mod tests {
     }
 
     #[test]
+    fn cdata_is_re_emitted_as_escaped_text() {
+        let o = out(&format!(
+            "<html {NS}><head/><body><p><![CDATA[<script>x()</script> & ]]></p></body></html>"
+        ));
+        assert!(
+            o.contains("<p>&lt;script&gt;x()&lt;/script&gt; &amp; </p>"),
+            "{o}"
+        );
+        assert!(!o.contains("CDATA") && !o.contains("<script"), "{o}");
+    }
+
+    #[test]
+    fn the_root_must_match_the_declared_kind() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
+        let html = format!("<html {NS}><head/></html>");
+        for (kind, src) in [
+            (Kind::Xhtml, "<html><head/></html>".to_owned()),
+            (
+                Kind::Xhtml,
+                r#"<html xmlns="http://www.w3.org/2000/svg"/>"#.into(),
+            ),
+            (Kind::Xhtml, r#"<h:html><head/></h:html>"#.into()),
+            (Kind::Xhtml, svg.into()),
+            (Kind::Xhtml, format!("<body {NS}/>")),
+            (Kind::Svg, html.clone()),
+            (Kind::Svg, "<svg/>".into()),
+            (Kind::Xml, html),
+            (Kind::Xml, svg.into()),
+        ] {
+            assert_eq!(
+                sanitize(src.as_bytes(), kind, CAP),
+                Err(Error::Malformed),
+                "{kind:?} {src}"
+            );
+        }
+        assert!(sanitize(svg.as_bytes(), Kind::Svg, CAP).is_ok());
+        assert!(xml(b"<ncx><navMap/></ncx>").is_ok());
+    }
+
+    #[test]
     fn svg_and_xml_are_cleaned_without_a_meta() {
         let o = String::from_utf8(
-            sanitize(br#"<svg xmlns="http://www.w3.org/2000/svg" onload="x()"><script>x()</script><a href="javascript:x()"><rect/></a></svg>"#, false, CAP).unwrap(),
+            sanitize(br#"<svg xmlns="http://www.w3.org/2000/svg" onload="x()"><script>x()</script><a href="javascript:x()"><rect/></a></svg>"#, Kind::Svg, CAP).unwrap(),
         )
         .unwrap();
         assert!(
@@ -307,9 +384,13 @@ mod tests {
 
     #[test]
     fn doctype_with_an_internal_subset_is_dropped() {
-        let o = out(r#"<!DOCTYPE html [<!ENTITY a "b">]><html><head/><body/></html>"#);
+        let o = out(&format!(
+            r#"<!DOCTYPE html [<!ENTITY a "b">]><html {NS}><head/><body/></html>"#
+        ));
         assert!(!o.contains("DOCTYPE") && !o.contains("ENTITY"), "{o}");
-        let o = out(r#"<!DOCTYPE html><html><head/><body/></html>"#);
+        let o = out(&format!(
+            r#"<!DOCTYPE html><html {NS}><head/><body/></html>"#
+        ));
         assert!(o.contains("<!DOCTYPE html>"));
     }
 
@@ -325,17 +406,17 @@ mod tests {
             b"<a\"b/>",
             b"<a on\"x=''/>",
         ] {
-            assert_eq!(sanitize(bad, true, CAP), Err(Error::Malformed), "{bad:?}");
+            assert_eq!(xml(bad), Err(Error::Malformed), "{bad:?}");
         }
-        assert_eq!(sanitize(b"<a><script>", true, CAP), Err(Error::Malformed));
+        assert_eq!(xml(b"<a><script>"), Err(Error::Malformed));
     }
 
     #[test]
     fn output_and_input_are_capped() {
-        assert_eq!(sanitize(&[b' '; 11], true, 10), Err(Error::TooLarge));
-        let doc = format!("<html><head/><body>{}</body></html>", "x".repeat(100));
+        assert_eq!(sanitize(&[b' '; 11], Kind::Xml, 10), Err(Error::TooLarge));
+        let doc = format!("<html {NS}><head/><body>{}</body></html>", "x".repeat(100));
         assert_eq!(
-            sanitize(doc.as_bytes(), true, doc.len() + 5),
+            sanitize(doc.as_bytes(), Kind::Xhtml, doc.len() + 5),
             Err(Error::TooLarge)
         );
     }
@@ -343,13 +424,12 @@ mod tests {
     #[test]
     fn nesting_is_capped() {
         let deep = format!("{}{}", "<a>".repeat(600), "</a>".repeat(600));
-        assert_eq!(sanitize(deep.as_bytes(), false, CAP), Err(Error::Malformed));
+        assert_eq!(xml(deep.as_bytes()), Err(Error::Malformed));
     }
 
     #[test]
     fn a_utf8_bom_is_dropped() {
-        let o = String::from_utf8(sanitize(b"\xEF\xBB\xBF<p>\xC3\xA9</p>", false, CAP).unwrap())
-            .unwrap();
+        let o = String::from_utf8(xml(b"\xEF\xBB\xBF<p>\xC3\xA9</p>").unwrap()).unwrap();
         assert!(o.ends_with("<p>\u{e9}</p>") && !o.contains('\u{feff}'));
     }
 }
