@@ -1,18 +1,23 @@
 //! Download, resize and cache artwork (`docs/spec/image-store.md`); the write side of `GET /api/images/*`.
 use super::paths::{Kind, Size, Target, Variant};
 use crate::ingest::KeyedLocks;
+use crate::net::guard::{self, Net};
+use crate::sync::RwLockExt;
 use crate::{atomic_file::write_atomic, paths::data_dir};
 use image::{
     ColorType, DynamicImage, ImageDecoder, ImageEncoder, ImageFormat, ImageReader,
     codecs::jpeg::JpegEncoder, codecs::png::PngEncoder, imageops::FilterType,
 };
+use reqwest::StatusCode;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use std::{
+    collections::HashMap,
     future::Future,
     io::Cursor,
+    net::{IpAddr, Ipv6Addr},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 use tokio::sync::Semaphore;
@@ -20,6 +25,16 @@ use tokio::sync::Semaphore;
 const MAX_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15);
 const NETWORK_SLOTS: usize = 3;
+const MAX_REDIRECTS: usize = 3;
+/// Image CDNs of the built-in providers; a name matches itself and its subdomains.
+const BUILT_IN_HOSTS: &[&str] = &[
+    "image.tmdb.org",
+    "artworks.thetvdb.com",
+    "covers.openlibrary.org",
+    "archive.org",
+    "books.google.com",
+    "m.media-amazon.com",
+];
 const JPEG_QUALITY: u8 = 90;
 /// Largest source decoded: 160 MB as RGBA, far above any artwork.
 const MAX_PIXELS: u64 = 40_000_000;
@@ -29,7 +44,11 @@ pub struct ImageStore {
     root: Option<PathBuf>,
     /// `<image base>/`: the prefix of the TMDB URLs whose size segment is rewritten.
     tmdb_prefix: String,
-    http: reqwest::Client,
+    /// Authorities dialled as given: the configured image base, which is admin-set (`image-store.md` rule 26).
+    trusted: Vec<(String, u16)>,
+    /// `imageHosts` per provider plugin key (`provider-plugins.md` rule 32).
+    plugin_hosts: RwLock<HashMap<String, Vec<String>>>,
+    dns: Arc<dyn Net>,
     net: Semaphore,
     cpu: Semaphore,
     keys: KeyedLocks<String>,
@@ -59,6 +78,13 @@ fn widths(t: &Target) -> (Option<u32>, Option<u32>) {
 
 fn is_png(t: &Target) -> bool {
     t.kind == Kind::Livetv || (t.kind == Kind::Media && t.variant == Some(Variant::Logo))
+}
+
+/// Never dialled, whatever the caller: loopback and the cloud metadata services.
+fn never(ip: IpAddr) -> bool {
+    const AWS_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
+    let ip = ip.to_canonical();
+    ip.is_loopback() || ip == IpAddr::from([100, 100, 100, 200]) || ip == IpAddr::V6(AWS_V6)
 }
 
 /// The URL for logs: no userinfo, no query string (`image-store.md` rule 23).
@@ -185,15 +211,54 @@ impl ImageStore {
         self.root.as_deref().unwrap_or_else(|| data_dir())
     }
 
+    /// Replaces the resolver and dialler, for a test or `parity` run that stubs the network.
+    pub fn with_net(mut self, net: Arc<dyn Net>) -> Self {
+        self.dns = net;
+        self
+    }
+
+    /// The hosts `plugin`'s manifest declares as its image CDNs; replaces its earlier list.
+    pub fn allow_hosts(&self, plugin: &str, hosts: Vec<String>) {
+        self.plugin_hosts
+            .write_clean()
+            .insert(plugin.to_owned(), hosts);
+    }
+
+    fn listed(&self, host: &str) -> bool {
+        BUILT_IN_HOSTS
+            .iter()
+            .any(|h| host == *h || host.strip_suffix(h).is_some_and(|p| p.ends_with('.')))
+            || self
+                .plugin_hosts
+                .read_clean()
+                .values()
+                .flatten()
+                .any(|h| h == host)
+    }
+
     fn build(root: Option<PathBuf>, tmdb_image_base: &str) -> Self {
+        let mut trusted: Vec<(String, u16)> = reqwest::Url::parse(tmdb_image_base)
+            .ok()
+            .and_then(|u| Some((u.host_str()?.to_owned(), u.port_or_known_default()?)))
+            .into_iter()
+            .collect();
+        // The loopback fixtures of a `parity` run: `host:port,...`.
+        #[cfg(feature = "parity")]
+        trusted.extend(
+            std::env::var("FLIKS_PARITY_TRUSTED_IMAGE_HOSTS")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|a| {
+                    let (h, p) = a.trim().rsplit_once(':')?;
+                    Some((h.to_owned(), p.parse().ok()?))
+                }),
+        );
         Self {
             root,
             tmdb_prefix: format!("{}/", tmdb_image_base.trim_end_matches('/')),
-            http: reqwest::Client::builder()
-                .timeout(DOWNLOAD_TIMEOUT)
-                .redirect(reqwest::redirect::Policy::limited(21))
-                .build()
-                .expect("reqwest client"),
+            trusted,
+            plugin_hosts: RwLock::default(),
+            dns: guard::system(),
             net: Semaphore::new(NETWORK_SLOTS),
             cpu: Semaphore::new(1),
             keys: KeyedLocks::default(),
@@ -212,17 +277,70 @@ impl ImageStore {
         url.to_owned()
     }
 
-    async fn download(&self, url: &str) -> Result<Vec<u8>, String> {
-        let parsed = reqwest::Url::parse(url).map_err(|_| "invalid url".to_owned())?;
-        if !matches!(parsed.scheme(), "http" | "https") {
-            return Err("unsupported scheme".into());
+    /// A client for one hop: the host is listed (a Live TV logo is not held to a list), every address
+    /// of its one lookup is vetted, and the connection is pinned to them.
+    async fn client(&self, url: &reqwest::Url, live: bool) -> Result<reqwest::Client, String> {
+        let host = url
+            .host_str()
+            .unwrap_or_default()
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_owned();
+        let port = url.port_or_known_default().unwrap_or(80);
+        let b = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
+        if self.trusted.contains(&(host.clone(), port)) {
+            return Ok(b.build().expect("reqwest client"));
         }
-        let mut resp = self
-            .http
-            .get(parsed)
-            .send()
+        if !live && !self.listed(&host) {
+            return Err("host not allowed".into());
+        }
+        let addrs = guard::vet(&*self.dns, &host, port, live)
             .await
-            .map_err(|e| e.without_url().to_string())?;
+            .map_err(|e| format!("address refused: {e:?}"))?;
+        if addrs.iter().any(|a| never(a.ip())) {
+            return Err("address refused: loopback or metadata".into());
+        }
+        #[cfg(any(test, feature = "parity"))]
+        let addrs: Vec<_> = addrs.into_iter().map(|a| self.dns.route(a)).collect();
+        Ok(b.resolve_to_addrs(&host, &addrs)
+            .build()
+            .expect("reqwest client"))
+    }
+
+    async fn download(&self, url: &str, live: bool) -> Result<Vec<u8>, String> {
+        let first = reqwest::Url::parse(url).map_err(|_| "invalid url".to_owned())?;
+        tokio::time::timeout(DOWNLOAD_TIMEOUT, self.fetch(first, live))
+            .await
+            .map_err(|_| "timeout".to_owned())?
+    }
+
+    async fn fetch(&self, mut url: reqwest::Url, live: bool) -> Result<Vec<u8>, String> {
+        let mut hop = 0;
+        let mut resp = loop {
+            if !matches!(url.scheme(), "http" | "https") {
+                return Err("unsupported scheme".into());
+            }
+            let resp = self
+                .client(&url, live)
+                .await?
+                .get(url.clone())
+                .send()
+                .await
+                .map_err(|e| e.without_url().to_string())?;
+            if !resp.status().is_redirection() || resp.status() == StatusCode::NOT_MODIFIED {
+                break resp;
+            }
+            hop += 1;
+            if hop > MAX_REDIRECTS {
+                return Err("too many redirects".into());
+            }
+            url = resp
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|l| l.to_str().ok())
+                .and_then(|l| url.join(l).ok())
+                .ok_or("redirect without a location")?;
+        };
         if !resp.status().is_success() {
             return Err(format!("HTTP {}", resp.status().as_u16()));
         }
@@ -354,7 +472,12 @@ impl ImageStore {
         let shown = redacted(url);
         self.serialized(
             t,
-            self.run(t, url, self.download(&self.fetch_url(url)), &shown),
+            self.run(
+                t,
+                url,
+                self.download(&self.fetch_url(url), t.kind == Kind::Livetv),
+                &shown,
+            ),
         )
         .await
     }
@@ -436,6 +559,14 @@ mod tests {
         let app = Router::new()
             .route("/hop/{n}", get(hop))
             .route("/big.jpg", get(big))
+            .route(
+                "/to-meta",
+                get(|| async { Redirect::temporary("http://169.254.169.254/x.jpg") }),
+            )
+            .route(
+                "/to-other",
+                get(|| async { Redirect::temporary("http://other.test/f/poster.jpg") }),
+            )
             .fallback(get(serve_file))
             .with_state(m.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -482,6 +613,41 @@ mod tests {
         (w, h, f)
     }
 
+    /// Names resolve as told; every dial goes to the mock.
+    struct Dns {
+        names: HashMap<String, IpAddr>,
+        mock: std::net::SocketAddr,
+        tls: guard::SystemNet,
+    }
+
+    impl Net for Dns {
+        fn lookup(
+            &self,
+            host: &str,
+            port: u16,
+        ) -> futures_util::future::BoxFuture<'static, std::io::Result<Vec<std::net::SocketAddr>>>
+        {
+            let r = match self.names.get(host) {
+                Some(ip) => Ok(vec![(*ip, port).into()]),
+                None => Err(std::io::ErrorKind::NotFound.into()),
+            };
+            Box::pin(async move { r })
+        }
+        fn connect(
+            &self,
+            _: std::net::SocketAddr,
+        ) -> futures_util::future::BoxFuture<'static, std::io::Result<tokio::net::TcpStream>>
+        {
+            Box::pin(tokio::net::TcpStream::connect(self.mock))
+        }
+        fn tls(&self) -> Arc<tokio_rustls::rustls::ClientConfig> {
+            self.tls.tls()
+        }
+        fn route(&self, _: std::net::SocketAddr) -> std::net::SocketAddr {
+            self.mock
+        }
+    }
+
     struct Fx {
         store: ImageStore,
         root: PathBuf,
@@ -502,6 +668,24 @@ mod tests {
     }
 
     impl Fx {
+        /// A store on the same root whose resolver answers `names`.
+        fn with_names(&self, names: &[(&str, &str)]) -> ImageStore {
+            let dns = Dns {
+                names: names
+                    .iter()
+                    .map(|(n, ip)| ((*n).to_owned(), ip.parse().unwrap()))
+                    .collect(),
+                mock: self.base.trim_start_matches("http://").parse().unwrap(),
+                tls: guard::SystemNet::new(),
+            };
+            ImageStore::with_root(self.root.clone(), &format!("{}/t/p", self.base))
+                .with_net(Arc::new(dns))
+        }
+
+        fn port(&self) -> &str {
+            self.base.rsplit(':').next().unwrap()
+        }
+
         fn serve(&self, name: &str, bytes: Vec<u8>) -> String {
             self.mock.files.lock_clean().insert(name.into(), bytes);
             format!("{}/f/{name}", self.base)
@@ -858,27 +1042,16 @@ mod tests {
         f.serve("poster.jpg", jpeg(300, 450));
         assert!(
             f.store
-                .download_and_store(&format!("{}/hop/5", f.base), &t)
-                .await
-                .is_some()
-        );
-        assert!(
-            f.store
-                .download_and_store(
-                    &format!("{}/hop/20", f.base),
-                    &Target::media(2, Variant::Poster)
-                )
+                .download_and_store(&format!("{}/hop/2", f.base), &t)
                 .await
                 .is_some()
         );
         assert_eq!(
             f.store
-                .download_and_store(
-                    &format!("{}/hop/21", f.base),
-                    &Target::media(3, Variant::Poster)
-                )
-                .await,
-            None
+                .download(&format!("{}/hop/3", f.base), false)
+                .await
+                .unwrap_err(),
+            "too many redirects"
         );
         assert!(
             f.store
@@ -943,5 +1116,92 @@ mod tests {
             "https://host/x/y.png"
         );
         assert_eq!(redacted("not a url"), "<invalid url>");
+    }
+
+    #[tokio::test]
+    async fn no_caller_reaches_loopback_link_local_or_metadata_addresses() {
+        let f = fx().await;
+        let s = f.with_names(&[
+            ("lo.test", "127.0.0.1"),
+            ("meta.test", "169.254.169.254"),
+            ("alibaba.test", "100.100.100.200"),
+        ]);
+        let urls = [
+            "http://127.0.0.1:9/x.png",
+            "http://[::1]:9/x.png",
+            "http://[::ffff:7f00:1]:9/x.png",
+            "http://169.254.169.254/x.png",
+            "http://100.100.100.200/x.png",
+            "http://[fd00:ec2::254]/x.png",
+            "http://0.0.0.0:9/x.png",
+            "http://224.0.0.1:9/x.png",
+            "http://lo.test/x.png",
+            "http://meta.test/x.png",
+            "http://alibaba.test/x.png",
+            &format!("{}/to-meta", f.base),
+        ];
+        for url in urls {
+            // a live TV logo is the most permissive caller
+            let err = s.download(url, true).await.unwrap_err();
+            assert!(err.starts_with("address refused"), "{url}: {err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn artwork_comes_from_listed_hosts_at_public_addresses() {
+        let f = fx().await;
+        f.serve("poster.jpg", jpeg(300, 450));
+        let s = f.with_names(&[
+            ("cdn.test", "93.184.216.34"),
+            ("other.test", "93.184.216.35"),
+            ("lan.test", "192.168.1.50"),
+        ]);
+        let port = f.port();
+        let cdn = format!("http://cdn.test:{port}/f/poster.jpg");
+        assert_eq!(
+            s.download(&cdn, false).await.unwrap_err(),
+            "host not allowed"
+        );
+        s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
+        assert!(s.download(&cdn, false).await.is_ok());
+        let lan = format!("http://lan.test:{port}/f/poster.jpg");
+        assert_eq!(
+            s.download(&lan, false).await.unwrap_err(),
+            "address refused: Address(\"private\")"
+        );
+        // a redirect keeps to the list
+        let hop = format!("http://cdn.test:{port}/to-other");
+        assert_eq!(
+            s.download(&hop, false).await.unwrap_err(),
+            "host not allowed"
+        );
+        for host in [
+            "covers.openlibrary.org",
+            "ia800.us.archive.org",
+            "image.tmdb.org",
+        ] {
+            assert!(s.listed(host), "{host}");
+        }
+        for host in ["notarchive.org", "evil.org", "image.tmdb.org.evil.org"] {
+            assert!(!s.listed(host), "{host}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_live_tv_logo_may_sit_on_a_lan_host() {
+        let f = fx().await;
+        f.serve("logo.png", png_rgba(64, 64));
+        let s = f.with_names(&[("tuner.lan", "192.168.1.50")]);
+        let url = format!("http://tuner.lan:{}/f/logo.png", f.port());
+        assert!(
+            s.download_and_store(&url, &Target::livetv(1))
+                .await
+                .is_some()
+        );
+        assert!(
+            s.download_and_store(&url, &Target::media(1, Variant::Logo))
+                .await
+                .is_none()
+        );
     }
 }

@@ -33,6 +33,7 @@ struct Block {
     find_by: Vec<String>,
     edition: Vec<String>,
     chapters: Vec<String>,
+    image_hosts: Vec<String>,
     limits: Limits,
     /// `snapshotTtlSecs`: a resource it does not name is zero.
     ttl: HashMap<String, Option<Duration>>,
@@ -64,6 +65,7 @@ impl Block {
             find_by: strs(&b["findBy"]),
             edition: strs(&b["editionNamespaces"]),
             chapters: strs(&b["chapterNamespaces"]),
+            image_hosts: strs(&b["imageHosts"]),
             limits: Limits {
                 rate_per_sec: l["ratePerSec"].as_f64().unwrap_or(1.0),
                 burst: l["burst"]
@@ -160,6 +162,11 @@ impl PluginProvider {
             block,
             shadow: md.configured_builtin(key),
         })
+    }
+
+    /// `provider.imageHosts`: where the core may download this provider's images from.
+    pub fn image_hosts(&self) -> &[String] {
+        &self.block.image_hosts
     }
 
     fn declares(&self, kind: Option<MediaKind>, cap: &str) -> bool {
@@ -622,7 +629,11 @@ impl Plugins {
         }
         if let Some(app) = self.app() {
             match PluginProvider::new(rt.clone(), &app.metadata) {
-                Some(provider) => app.metadata.add_plugin(Arc::new(provider)),
+                Some(provider) => {
+                    app.images
+                        .allow_hosts(provider.key.as_str(), provider.image_hosts().to_vec());
+                    app.metadata.add_plugin(Arc::new(provider));
+                }
                 None => {
                     tracing::info!("provider \"{id}\" has no core first namespace: not registered")
                 }

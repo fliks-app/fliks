@@ -153,7 +153,8 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
   # provider hosts are the stub in every mode, so a keyless run never leaves loopback
   penv+=(FLIKS_TMDB_API_URL=http://127.0.0.1:$P_PROV/tmdb/3 FLIKS_TVDB_API_URL=http://127.0.0.1:$P_PROV/tvdb/v4
-    FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV)
+    FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV
+    FLIKS_PARITY_TRUSTED_IMAGE_HOSTS=127.0.0.1:$P_LIVETV)
   [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
   start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
