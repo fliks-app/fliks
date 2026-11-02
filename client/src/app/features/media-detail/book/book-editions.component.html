@@ -9,6 +9,7 @@
         <th>{{ 'books_work.col_length' | translate }}</th>
         <th>{{ 'books_work.col_narrators' | translate }}</th>
         <th>{{ 'books_work.col_file' | translate }}</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -34,6 +35,23 @@
           </td>
           <td>{{ e.narrators.map((n) => n.name).join(', ') }}</td>
           <td>{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</td>
+          <td>
+            @if (targets(e); as list) {
+              @if (list.length) {
+                <select
+                  class="select select-xs"
+                  data-testid="send-to"
+                  [attr.aria-label]="'books_work.send_to' | translate"
+                  (change)="send(e, $any($event.target).value); $any($event.target).value = ''"
+                >
+                  <option value="" selected disabled>{{ 'books_work.send_to' | translate }}</option>
+                  @for (d of list; track d.id) {
+                    <option [value]="d.id">{{ d.name }}</option>
+                  }
+                </select>
+              }
+            }
+          </td>
         </tr>
       }
     </tbody>

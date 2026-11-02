@@ -41,6 +41,8 @@
     "save": "Save",
     "level_work": "Work",
     "level_edition": "Edition",
-    "sources_hint": "Linking an identifier refreshes the metadata from that source."
+    "sources_hint": "Linking an identifier refreshes the metadata from that source.",
+    "send_to": "Send to…",
+    "send_queued": "Sending to {{name}}"
   }
 }

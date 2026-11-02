@@ -265,7 +265,8 @@
     "roles.manage": "Gestire i ruoli",
     "parties.create": "Creare una sessione",
     "parties.manage": "Gestire le sessioni",
-    "parties.read_public": "Vedere le sessioni pubbliche"
+    "parties.read_public": "Vedere le sessioni pubbliche",
+    "books.email": "Inviare libri via e-mail agli e-reader"
   },
   "account": {
     "title": "Il mio account",
@@ -284,7 +285,8 @@
       "recommendations": "Consigli",
       "privacy": "Privacy",
       "spoilers": "Spoiler",
-      "devices": "Dispositivi"
+      "devices": "Dispositivi",
+      "email_devices": "Dispositivi e-mail"
     },
     "recommendations": {
       "reset_title": "Reimposta i consigli nascosti",
@@ -2015,7 +2017,8 @@
       "engine": "Motore remoto",
       "plugins": "Plugins",
       "subtitles_activity": "Attività sottotitoli",
-      "cleanup": "Pulizia"
+      "cleanup": "Pulizia",
+      "email": "Posta in uscita"
     },
     "engine": {
       "title": "Motore di streaming remoto",
@@ -2621,7 +2624,8 @@
       "group_other": "Altro",
       "included_in": "Incluso in «{{name}}»",
       "includes": "Include: {{names}}",
-      "permission_unavailable": "non più dichiarato"
+      "permission_unavailable": "non più dichiarato",
+      "group_books": "Libri"
     },
     "auto_approval": {
       "title": "Regole di approvazione automatica",
@@ -3089,6 +3093,30 @@
       "bulk_done": "{{done}} completati.",
       "bulk_partial": "{{done}} completati, {{failed}} non riusciti.",
       "c_excludeLibraryIds": "Raccolte escluse"
+    },
+    "email": {
+      "title": "Posta in uscita",
+      "subtitle": "L'account SMTP che il server usa per inviare libri agli e-reader.",
+      "host": "Host",
+      "port": "Porta",
+      "security": "Sicurezza",
+      "security_starttls": "STARTTLS (obbligatorio)",
+      "security_tls": "TLS (implicito)",
+      "security_none": "Nessuna (testo in chiaro)",
+      "security_hint": "I certificati sono sempre verificati. Senza TLS il server rifiuta di inviare un nome utente.",
+      "from": "Mittente",
+      "username": "Utente",
+      "password": "Password",
+      "password_stored": "È impostata una password. Lascia vuoto per mantenerla.",
+      "password_unset": "Nessuna password",
+      "max_mb": "Dimensione massima (MB)",
+      "save": "Salva",
+      "saved": "Salvato",
+      "load_error": "Impossibile caricare le impostazioni.",
+      "test_title": "Invia un messaggio di prova",
+      "test_hint": "Invia un breve messaggio all'indirizzo qui sotto.",
+      "test_to": "Destinatario",
+      "test_send": "Invia prova"
     }
   },
   "roles": {
@@ -3962,5 +3990,54 @@
     "zoom_out": "Riduci",
     "zoom_in": "Ingrandisci",
     "fixed_unsupported": "I libri a layout fisso non sono ancora supportati."
+  },
+  "email_devices": {
+    "title": "Dispositivi e-mail",
+    "intro": "Invia un libro via e-mail al tuo e-reader. Ogni dispositivo è un indirizzo: quello di un Kindle, di un PocketBook o qualsiasi indirizzo che accetti allegati.",
+    "not_configured": "L'amministratore non ha ancora configurato la posta in uscita, quindi non è possibile inviare libri.",
+    "add": "Aggiungi un dispositivo",
+    "amazon_hint": "Per un Kindle, aggiungi prima l'indirizzo mittente di questo server ai mittenti approvati nel tuo account Amazon.",
+    "name": "Nome",
+    "name_placeholder": "Kindle del salotto",
+    "kind": "Tipo",
+    "kind_kindle": "Kindle",
+    "kind_pocketbook": "PocketBook",
+    "kind_other": "Altro",
+    "address": "Indirizzo",
+    "address_placeholder": "nome@kindle.com",
+    "create": "Aggiungi",
+    "col_name": "Nome",
+    "col_address": "Indirizzo",
+    "col_formats": "Formati",
+    "remove": "Rimuovi",
+    "remove_title": "Rimuovere questo dispositivo?",
+    "remove_message": "Non potrà più ricevere libri.",
+    "removed": "Dispositivo rimosso",
+    "empty": "Nessun dispositivo.",
+    "recent": "Invii recenti",
+    "status_queued": "In coda",
+    "status_sending": "Invio",
+    "status_sent": "Inviato",
+    "status_failed": "Non riuscito",
+    "error_rejected": "Il server di posta ha rifiutato il messaggio.",
+    "error_connection": "Impossibile raggiungere il server di posta.",
+    "error_not_configured": "La posta in uscita non è configurata.",
+    "error_file_unreadable": "Impossibile leggere il file.",
+    "error_too_big": "Il file supera il limite.",
+    "error_internal": "Si è verificato un errore sul server.",
+    "error_interrupted": "Interrotto da un riavvio del server.",
+    "error_unknown": "Questo dispositivo non esiste più.",
+    "error_too_many": "Hai raggiunto il limite di dispositivi.",
+    "error_name_taken": "Hai già un dispositivo con questo nome.",
+    "error_domain": "Questo indirizzo non corrisponde a questo tipo di dispositivo.",
+    "error_kind_forbidden": "Solo gli amministratori possono aggiungere altri indirizzi.",
+    "no_permission": "Il tuo ruolo non può inviare libri via e-mail.",
+    "error_timeout": "Il server di posta ha impiegato troppo tempo."
+  },
+  "send_to_device": {
+    "error_not_configured": "La posta in uscita non è configurata.",
+    "error_format": "Questo dispositivo non accetta questo formato.",
+    "error_too_big": "Questo file supera la dimensione massima di invio.",
+    "error_rate_limited": "Troppi libri inviati di recente, riprova più tardi."
   }
 }

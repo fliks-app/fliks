@@ -1,0 +1,53 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="max-w-2xl flex flex-col gap-6">
+    <div>
+      <h1 class="text-xl font-bold mb-1">{{ 'settings.email.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60">{{ 'settings.email.subtitle' | translate }}</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <app-input-field [value]="host()" (valueChange)="host.set($event)" [label]="'settings.email.host' | translate" placeholder="smtp.example.com" size="sm" />
+      <app-input-field [value]="port()" (valueChange)="port.set($event)" [label]="'settings.email.port' | translate" placeholder="587" size="sm" />
+      <app-select-field [value]="security()" (valueChange)="security.set($event)" [label]="'settings.email.security' | translate" size="sm">
+        <option value="starttls">{{ 'settings.email.security_starttls' | translate }}</option>
+        <option value="tls">{{ 'settings.email.security_tls' | translate }}</option>
+        <option value="none">{{ 'settings.email.security_none' | translate }}</option>
+      </app-select-field>
+      <app-input-field [value]="from()" (valueChange)="from.set($event)" [label]="'settings.email.from' | translate" placeholder="Fliks &lt;books@example.com&gt;" size="sm" />
+      <app-input-field [value]="username()" (valueChange)="username.set($event)" [label]="'settings.email.username' | translate" size="sm" />
+      <app-input-field
+        type="password"
+        [value]="password()"
+        (valueChange)="password.set($event)"
+        [label]="'settings.email.password' | translate"
+        [placeholder]="(passwordStored() ? 'settings.email.password_stored' : 'settings.email.password_unset') | translate"
+        size="sm"
+      />
+      <app-input-field [value]="maxMb()" (valueChange)="maxMb.set($event)" [label]="'settings.email.max_mb' | translate" size="sm" />
+    </div>
+    <p class="text-sm text-base-content/60">{{ 'settings.email.security_hint' | translate }}</p>
+    <div>
+      <button type="button" class="btn btn-primary btn-sm" [disabled]="busy()" (click)="save()">
+        {{ 'settings.email.save' | translate }}
+      </button>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-3">
+        <h2 class="card-title text-base">{{ 'settings.email.test_title' | translate }}</h2>
+        <p class="text-sm text-base-content/60">{{ 'settings.email.test_hint' | translate }}</p>
+        <app-input-field type="email" [value]="testTo()" (valueChange)="testTo.set($event)" [label]="'settings.email.test_to' | translate" size="sm" />
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-sm" [disabled]="busy() || !testTo().trim()" (click)="test()">
+            {{ 'settings.email.test_send' | translate }}
+          </button>
+        </div>
+        @if (testResult(); as r) {
+          <div class="alert" [class.alert-success]="r.ok" [class.alert-error]="!r.ok">{{ r.message }}</div>
+        }
+      </div>
+    </div>
+  </div>
+}

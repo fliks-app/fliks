@@ -363,6 +363,13 @@ export const routes: Routes = [
             (m) => m.AccountDevicesComponent,
           ),
       },
+      {
+        path: 'email-devices',
+        loadComponent: () =>
+          import('./features/account/email-devices').then(
+            (m) => m.AccountEmailDevicesComponent,
+          ),
+      },
     ],
   },
   // App settings — own layout with sidebar
@@ -511,6 +518,7 @@ export const routes: Routes = [
           },
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
+          { path: 'email', loadComponent: () => import('./features/settings/email/email').then((m) => m.EmailSettingsComponent) },
           { path: 'metadata', loadComponent: () => import('./features/settings/metadata/metadata').then((m) => m.MetadataSettingsComponent) },
           { path: 'cleanup', loadComponent: () => import('./features/settings/cleanup/cleanup').then((m) => m.CleanupSettingsComponent) },
           { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },

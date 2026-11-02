@@ -10,6 +10,7 @@ export const PERMISSION_GROUPS: readonly { id: string; permissions: readonly str
   { id: 'requests', permissions: ['requests.create', 'requests.manage'] },
   { id: 'subtitles', permissions: ['subtitles.manage'] },
   { id: 'parties', permissions: ['parties.create', 'parties.manage', 'parties.read_public'] },
+  { id: 'books', permissions: ['books.email'] },
   { id: 'admin', permissions: ['settings.access', 'users.manage', 'roles.manage'] },
 ];
 
