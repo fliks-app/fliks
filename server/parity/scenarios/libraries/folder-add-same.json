@@ -1,0 +1,29 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-add-same",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/media/movies"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.folder_overlap",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/libraries/1/folders"
+    }
+  ],
+  "strictMessage": true
+}

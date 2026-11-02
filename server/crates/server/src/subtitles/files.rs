@@ -38,22 +38,42 @@ pub struct MediaCtx {
     pub overview: Option<String>,
 }
 
-fn media_sql() -> String {
+/// `folder` is the SQL of the root the media is read against (rule 40).
+fn media_sql(folder: &str) -> String {
     format!(
         r#"SELECT m.id, m.title, m."type" AS kind, m.year, ids.imdb AS imdb_id, ids.tmdb AS tmdb_id,
-  m."folderName" AS folder_name, df.path AS folder_path, m."libraryId" AS library_id,
+  m."folderName" AS folder_name, {folder} AS folder_path, m."libraryId" AS library_id,
   m."languageProfileId" AS language_profile_id, m.monitored, m.genres, m.overview
-  FROM media m LEFT JOIN library_default_folders df ON df."libraryId" = m."libraryId" {}"#,
+  FROM media m LEFT JOIN media_target_folders df ON df."mediaId" = m.id {}"#,
         crate::media::external_ids::ids_join("m")
     )
 }
 
+/// The media against its target folder.
 pub async fn load_media(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<MediaCtx>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{} WHERE m.id = $1",
-        media_sql()
+        media_sql("df.path")
     )))
     .bind(id)
+    .fetch_optional(db)
+    .await
+}
+
+/// The media against the folder of `file`, else its target folder (rule 40).
+pub async fn load_media_of(
+    db: impl PgExecutor<'_>,
+    id: i32,
+    file: Option<i32>,
+) -> sqlx::Result<Option<MediaCtx>> {
+    let folder = r#"COALESCE((SELECT lf.path FROM media_files f JOIN library_folders lf ON lf.id = f."folderId"
+      WHERE f.id = $2 AND f."mediaId" = m.id), df.path)"#;
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{} WHERE m.id = $1",
+        media_sql(folder)
+    )))
+    .bind(id)
+    .bind(file)
     .fetch_optional(db)
     .await
 }
@@ -65,7 +85,7 @@ pub async fn media_batch(
 ) -> sqlx::Result<Vec<MediaCtx>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{} WHERE m.monitored = true AND m.id > $1 ORDER BY m.id ASC LIMIT $2",
-        media_sql()
+        media_sql("df.path")
     )))
     .bind(after)
     .bind(limit)
@@ -79,12 +99,15 @@ pub struct FileRow {
     pub media_id: Option<i32>,
     pub episode_id: Option<i32>,
     pub relative_path: String,
+    /// The root `relative_path` is relative to.
+    pub folder_path: String,
     pub stream_info: Option<Value>,
     pub osdb_hash: Option<String>,
     pub osdb_bytesize: Option<i64>,
 }
 
 pub const FILE_COLS: &str = r#"id, "mediaId" AS media_id, "relativePath" AS relative_path,
+  (SELECT lf.path FROM library_folders lf WHERE lf.id = media_files."folderId") AS folder_path,
   (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = media_files.id) AS episode_id,
   "streamInfo" AS stream_info, "osdbHash" AS osdb_hash, "osdbBytesize" AS osdb_bytesize"#;
 
@@ -114,6 +137,14 @@ pub struct Dirs {
 }
 
 impl MediaCtx {
+    /// The same media read against another folder root (rule 40).
+    pub fn in_folder(&self, path: &str) -> MediaCtx {
+        MediaCtx {
+            folder_path: Some(path.to_owned()),
+            ..self.clone()
+        }
+    }
+
     pub fn dirs(&self, no_root: &str) -> Result<Dirs, AppError> {
         let lib = self
             .folder_path

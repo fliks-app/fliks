@@ -1,10 +1,21 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT path FROM library_folders",
+  "query": "SELECT id, path FROM library_folders",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "path",
         "type_info": "Text",
         "origin": {
@@ -19,8 +30,9 @@
       "Left": []
     },
     "nullable": [
+      false,
       false
     ]
   },
-  "hash": "c453fc9299d0fc2af11e2ae42a7b35635b00793c67a4852e406bd0334ce9c754"
+  "hash": "de4d3ffededb8ebe601f1e836de1369c71bb221396c6e13188e48d0fe1a0b19f"
 }

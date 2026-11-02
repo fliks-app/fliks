@@ -58,6 +58,7 @@ struct Lib {
     id: i32,
     name: String,
     path: String,
+    folders: Vec<crate::libraries::Folder>,
     types: Vec<MediaKind>,
     provider: Option<String>,
     dq: Option<i32>,
@@ -81,10 +82,23 @@ async fn require_path(st: &AppState, id: i32) -> Result<Lib, AppError> {
             "Library #{id} has no root path configured"
         )));
     };
+    let folders = sqlx::query!(
+        r#"SELECT id, path FROM library_folders WHERE "libraryId" = $1 ORDER BY position, id"#,
+        id
+    )
+    .fetch_all(&st.db)
+    .await?
+    .into_iter()
+    .map(|f| crate::libraries::Folder {
+        id: f.id,
+        path: f.path,
+    })
+    .collect();
     Ok(Lib {
         id: r.id,
         name: r.name,
         path,
+        folders,
         types: serde_json::from_value::<Vec<String>>(r.types)
             .unwrap_or_default()
             .iter()
@@ -112,6 +126,8 @@ struct FileEntry {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Group {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    folder_id: Option<i32>,
     group_key: String,
     media_type: MediaKind,
     folder_name: String,
@@ -181,14 +197,22 @@ fn subject_titled(title: &str) -> Subj {
     }
 }
 
-/// `scanOrphansUnder` (rules 62-66): reads only.
+/// What one folder walk found.
+struct Scanned {
+    groups: Vec<Group>,
+    scanned_files: usize,
+    orphan_count: usize,
+}
+
+/// `scanOrphansUnder` (rules 62-66): reads only; `folder_id` tags the groups of a library folder.
 async fn scan_under(
     st: &AppState,
     root: &str,
+    folder_id: Option<i32>,
     types: &[MediaKind],
     provider: &str,
     linked: &HashSet<PathBuf>,
-) -> Value {
+) -> Scanned {
     let key = format!("OrphanScan:{root}");
     let r = PathBuf::from(root);
     let all = tokio::task::spawn_blocking(move || {
@@ -253,6 +277,7 @@ async fn scan_under(
             None => {
                 group_at.insert(key.clone(), groups.len());
                 groups.push(Group {
+                    folder_id,
                     group_key: key,
                     media_type,
                     folder_name: folder.clone(),
@@ -282,12 +307,36 @@ async fn scan_under(
     }
     progress(st, &key, root, total, total);
     st.hub.activity().remove(&key);
-    json!({
+    Scanned {
+        groups,
+        scanned_files: all.len(),
+        orphan_count,
+    }
+}
+
+fn scanned_json(
+    root: &str,
+    folders: Option<&[crate::libraries::Folder]>,
+    s: Vec<Scanned>,
+) -> Value {
+    let scanned_files: usize = s.iter().map(|f| f.scanned_files).sum();
+    let orphan_count: usize = s.iter().map(|f| f.orphan_count).sum();
+    let groups: Vec<Group> = s.into_iter().flat_map(|f| f.groups).collect();
+    let mut v = json!({
         "libraryPath": root,
         "groups": groups,
-        "scannedFiles": all.len(),
+        "scannedFiles": scanned_files,
         "orphanCount": orphan_count,
-    })
+    });
+    if let (Some(f), Some(o)) = (folders, v.as_object_mut()) {
+        o.insert(
+            "folders".into(),
+            f.iter()
+                .map(|f| json!({"id": f.id, "path": f.path}))
+                .collect(),
+        );
+    }
+    v
 }
 
 /// `POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL on the path).
@@ -318,19 +367,26 @@ pub async fn scan(
         ))
     })
     .collect();
-    let root = resolve(&lib.path, "/");
-    let mut v = scan_under(
-        &st,
-        &root,
-        &lib.types,
-        lib.provider.as_deref().unwrap_or("tmdb"),
-        &linked,
-    )
-    .await;
+    let mut scanned = vec![];
+    for f in &lib.folders {
+        scanned.push(
+            scan_under(
+                &st,
+                &resolve(&f.path, "/"),
+                Some(f.id),
+                &lib.types,
+                lib.provider.as_deref().unwrap_or("tmdb"),
+                &linked,
+            )
+            .await,
+        );
+    }
+    let mut v = scanned_json(&resolve(&lib.path, "/"), Some(&lib.folders), scanned);
     if !paths_visible(&a.perms)
         && let Some(o) = v.as_object_mut()
     {
         o.remove("libraryPath");
+        o.remove("folders");
     }
     Ok((StatusCode::CREATED, Json(v)))
 }
@@ -364,7 +420,7 @@ pub async fn preview(
         .flatten()
         .unwrap_or_else(|| "tmdb".into());
     let clean = crate::libraries::sanitize_path(&path);
-    if !clean.starts_with('/') {
+    if !Path::new(&clean).is_absolute() {
         return Err(AppError::bad_request("Path must be absolute"));
     }
     let root = resolve(&clean, "/");
@@ -375,9 +431,10 @@ pub async fn preview(
         }
         Ok(_) => {}
     }
+    let scanned = scan_under(&st, &root, None, &types, &provider, &HashSet::new()).await;
     Ok((
         StatusCode::CREATED,
-        Json(scan_under(&st, &root, &types, &provider, &HashSet::new()).await),
+        Json(scanned_json(&root, None, vec![scanned])),
     ))
 }
 
@@ -519,6 +576,9 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
         )));
     }
     let lib = require_path(st, d.library_id).await?;
+    if let Some(f) = d.folder_id {
+        crate::libraries::assert_folder_in_library(&st.db, lib.id, f).await?;
+    }
     if !lib.types.contains(&d.media_type) {
         return Err(AppError::bad_request(format!(
             "Library \"{}\" does not accept {}",

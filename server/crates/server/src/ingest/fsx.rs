@@ -55,16 +55,16 @@ pub fn locate(folder: &str, rel: &str) -> Option<PathBuf> {
     abs.starts_with(&root).then_some(abs)
 }
 
+fn fold(p: PathBuf) -> PathBuf {
+    if cfg!(any(windows, target_os = "macos")) {
+        PathBuf::from(p.to_string_lossy().to_lowercase())
+    } else {
+        p
+    }
+}
+
 /// Whether two paths name one directory: same realpath (case-folded on Windows and macOS) or same inode.
 pub fn same_dir(a: &Path, b: &Path) -> bool {
-    let fold = |p: PathBuf| {
-        let s = p.to_string_lossy().into_owned();
-        if cfg!(any(windows, target_os = "macos")) {
-            s.to_lowercase()
-        } else {
-            s
-        }
-    };
     if let (Some(x), Some(y)) = (resolve_existing(a), resolve_existing(b))
         && fold(x) == fold(y)
     {
@@ -78,6 +78,18 @@ pub fn same_dir(a: &Path, b: &Path) -> bool {
         }
     }
     false
+}
+
+/// Whether two paths name one directory or one lies inside the other.
+pub fn dirs_overlap(a: &Path, b: &Path) -> bool {
+    if same_dir(a, b) {
+        return true;
+    }
+    let (Some(x), Some(y)) = (resolve_existing(a), resolve_existing(b)) else {
+        return false;
+    };
+    let (x, y) = (fold(x), fold(y));
+    x.starts_with(&y) || y.starts_with(&x)
 }
 
 /// Realpath of the deepest existing ancestor joined with the rest; `None` for a relative path or a
@@ -501,6 +513,8 @@ mod tests {
             assert!(same_dir(&real.join("new"), &d.join("link/new")));
         }
         assert!(!same_dir(&real, &d.join("other")));
+        assert!(dirs_overlap(&d, &real.join("deeper")) && dirs_overlap(&real.join("deeper"), &d));
+        assert!(!dirs_overlap(&real, &d.join("real2")));
         fs::remove_dir_all(&d).unwrap();
     }
 

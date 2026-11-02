@@ -304,7 +304,7 @@ async fn try_ocr_first(st: &AppState, existing: &[Row], item: &LanguageItem) -> 
 
 /// The manual "search missing" of one file; ignores `subtitle_auto_search`.
 pub async fn search_missing_for_media(st: &AppState, media_id: i32, file_id: i32) -> Vec<String> {
-    let Ok(Some(media)) = files::load_media(&st.db, media_id).await else {
+    let Ok(Some(media)) = files::load_media_of(&st.db, media_id, Some(file_id)).await else {
         return vec![];
     };
     let Ok(Some(file)) = files::file_by_id(&st.db, file_id).await else {
@@ -329,7 +329,7 @@ pub async fn on_media_file_imported(
     if setting(st, "subtitle_auto_search").await.as_deref() == Some("false") {
         return;
     }
-    let Ok(Some(media)) = files::load_media(&st.db, media_id).await else {
+    let Ok(Some(media)) = files::load_media_of(&st.db, media_id, Some(file_id)).await else {
         return;
     };
     let Ok(Some(file)) = files::file_by_id(&st.db, file_id).await else {

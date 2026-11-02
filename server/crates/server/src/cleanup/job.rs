@@ -243,11 +243,17 @@ async fn remove_whole(
     action: &str,
     lock: OwnedMutexGuard<()>,
 ) -> Result<(), String> {
-    let (media, dir) = remove_media_with_dir(st, &lock, id)
+    let (media, dirs) = remove_media_with_dir(st, &lock, id)
         .await
         .map_err(|e| e.text())?;
-    if let Some(dir) = dir {
-        remove_media_folder(dir).await?;
+    let mut failed = None;
+    for dir in dirs {
+        if let Err(e) = remove_media_folder(dir).await {
+            failed.get_or_insert(e);
+        }
+    }
+    if let Some(e) = failed {
+        return Err(e);
     }
     drop(lock);
     notify(

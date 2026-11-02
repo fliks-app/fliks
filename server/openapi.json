@@ -929,6 +929,43 @@
         }
       }
     },
+    "/api/libraries/{id}/folders": {
+      "post": {
+        "tags": [
+          "libraries::folders"
+        ],
+        "operationId": "add",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/libraries/{id}/folders/{folderId}": {
+      "delete": {
+        "tags": [
+          "libraries::folders"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "libraries::folders"
+        ],
+        "operationId": "patch",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/likes": {
       "get": {
         "tags": [

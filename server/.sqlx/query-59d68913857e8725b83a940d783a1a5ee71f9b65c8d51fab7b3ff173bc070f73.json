@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"relativePath\" AS rel, \"streamInfo\" AS info FROM media_files WHERE \"mediaId\" = $1 ORDER BY id",
+  "query": "SELECT f.id, f.\"relativePath\" AS rel, lf.path AS folder, f.\"streamInfo\" AS info\n           FROM media_files f JOIN library_folders lf ON lf.id = f.\"folderId\" WHERE f.\"mediaId\" = $1 ORDER BY f.id",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "folder",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "info",
         "type_info": "Jsonb",
         "origin": {
@@ -45,8 +56,9 @@
     "nullable": [
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "d6df749dc5db25cfa35a07665c4044bc14b111250c6f0c879ca373a6e7bd5f68"
+  "hash": "59d68913857e8725b83a940d783a1a5ee71f9b65c8d51fab7b3ff173bc070f73"
 }

@@ -142,16 +142,23 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>,
             .fetch_one(&st.db)
             .await?;
     let libs: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT l.name, df.path FROM libraries l
-           JOIN library_default_folders df ON df."libraryId" = l.id ORDER BY l.name ASC, l.id ASC"#,
+        r#"SELECT l.name, lf.path FROM libraries l
+           JOIN library_folders lf ON lf."libraryId" = l.id ORDER BY l.name ASC, l.id ASC, lf.position, lf.id"#,
     )
     .fetch_all(&st.db)
     .await?;
     let mut disk_space = vec![];
+    let mut previous: Option<String> = None;
     for (name, path) in libs {
         let d = libraries::disk(&path).await;
+        let label = if previous.as_deref() == Some(name.as_str()) {
+            format!("{name} ({})", libraries::folders::name_of(&path))
+        } else {
+            name.clone()
+        };
+        previous = Some(name);
         disk_space.push(DiskSpace {
-            label: name,
+            label,
             path,
             free_space: d.free_space,
             total_space: d.total_space,

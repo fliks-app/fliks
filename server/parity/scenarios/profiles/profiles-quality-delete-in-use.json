@@ -20,6 +20,17 @@
             "freeSpace": 7372922880,
             "totalSpace": 16383139840
           },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 1,
+              "mediaCount": 17,
+              "path": "/tmp/fliks-parity/media/movies",
+              "position": 0
+            }
+          ],
           "icon": "film",
           "id": 1,
           "label": null,
@@ -299,6 +310,17 @@
             "freeSpace": 7372922880,
             "totalSpace": 16383139840
           },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 1,
+              "mediaCount": 17,
+              "path": "/tmp/fliks-parity/media/movies",
+              "position": 0
+            }
+          ],
           "icon": "film",
           "id": 1,
           "label": null,

@@ -103,10 +103,27 @@ pub async fn cover_ranges(c: &mut PgConnection, media: i32) -> sqlx::Result<()> 
     tx.commit().await
 }
 
-/// What a new media is wished with: the quality profile of each of its wants.
+/// What a new media is wished with: the quality profile and the target folder of each of its wants (`None`: the library's default folder now).
 #[derive(Clone, Copy, Default)]
 pub struct NewWant {
     pub quality_profile_id: Option<i32>,
+    pub folder_id: Option<i32>,
+}
+
+/// Re-aims every want of a media at its library's default folder (a library change or a first library).
+pub async fn point_wants_at_default_folder(
+    c: impl sqlx::PgExecutor<'_>,
+    media: i32,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE wants SET "folderId" = (SELECT df."folderId" FROM media m
+             JOIN library_default_folders df ON df."libraryId" = m."libraryId" WHERE m.id = $1)
+           WHERE "mediaId" = $1"#,
+        media
+    )
+    .execute(c)
+    .await?;
+    Ok(())
 }
 
 /// Gives a new media one want per family of its kind and, but for a book, its `video` edition and, without seasons, its sole item.
@@ -118,10 +135,13 @@ pub async fn create_shell(
 ) -> sqlx::Result<()> {
     for family in kind.families() {
         sqlx::query!(
-            r#"INSERT INTO wants ("mediaId", family, "qualityProfileId") VALUES ($1, $2, $3)"#,
+            r#"INSERT INTO wants ("mediaId", family, "qualityProfileId", "folderId")
+               VALUES ($1, $2, $3, COALESCE($4, (SELECT df."folderId" FROM media m
+                 JOIN library_default_folders df ON df."libraryId" = m."libraryId" WHERE m.id = $1)))"#,
             media,
             family.as_str(),
-            want.quality_profile_id
+            want.quality_profile_id,
+            want.folder_id
         )
         .execute(&mut *c)
         .await?;

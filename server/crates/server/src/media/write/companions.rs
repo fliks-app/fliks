@@ -75,6 +75,7 @@ pub struct Companion {
 struct FileRow {
     id: i32,
     rel: String,
+    folder: String,
     info: Option<Value>,
 }
 
@@ -124,7 +125,8 @@ async fn collect(st: &AppState, media_id: i32, file_id: i32) -> Result<Listing, 
         .ok_or_else(|| crate::libraries::media_not_found(media_id))?;
     let mut files = sqlx::query_as!(
         FileRow,
-        r#"SELECT id, "relativePath" AS rel, "streamInfo" AS info FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+        r#"SELECT f.id, f."relativePath" AS rel, lf.path AS folder, f."streamInfo" AS info
+           FROM media_files f JOIN library_folders lf ON lf.id = f."folderId" WHERE f."mediaId" = $1 ORDER BY f.id"#,
         media_id
     )
     .fetch_all(&st.db)
@@ -142,6 +144,20 @@ async fn collect(st: &AppState, media_id: i32, file_id: i32) -> Result<Listing, 
     )
     .fetch_all(&st.db)
     .await?;
+    // The listing is that of the file's own folder: siblings and sidecars live beside it (libraries rule 56).
+    let folder = files[pos].folder.clone();
+    let rows: Vec<SubRow> = rows
+        .into_iter()
+        .filter(|r| {
+            r.file_id.map_or(
+                media.folder.as_ref().is_some_and(|f| f.path == folder),
+                |f| files.iter().any(|x| x.id == f && x.folder == folder),
+            )
+        })
+        .collect();
+    let file_id_kept = files[pos].id;
+    files.retain(|f| f.folder == folder);
+    let pos = files.iter().position(|f| f.id == file_id_kept).unwrap_or(0);
     let own = media.folder_name.as_deref().filter(|f| !f.is_empty());
     let under_media = |rel: &mut String| {
         if let Some(rest) = own.and_then(|f| rel.strip_prefix(&format!("{f}/"))) {
@@ -156,11 +172,13 @@ async fn collect(st: &AppState, media_id: i32, file_id: i32) -> Result<Listing, 
             r
         })
         .collect();
-    let root = media.folder.as_ref().and_then(|l| {
-        let r = fsx::Root::open(&l.path).ok()?;
-        let m = r.media_dir(media.folder_name.as_deref()).ok()?;
-        Some((r, m))
-    });
+    let root = {
+        let r = fsx::Root::open(&folder).ok();
+        r.and_then(|r| {
+            let m = r.media_dir(media.folder_name.as_deref()).ok()?;
+            Some((r, m))
+        })
+    };
     let entries = match &root {
         Some((r, m)) => scan(r, m, media.media_type, own.is_some(), &files, pos, &rows),
         None => vec![],

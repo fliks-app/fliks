@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE library_folders SET position = (n.pos - 1)::int\n        FROM unnest($1::int[]) WITH ORDINALITY AS n(id, pos)\n        WHERE library_folders.id = n.id AND library_folders.position <> (n.pos - 1)::int",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1de6a1f023422c8fc265674e92ba3036eae51714f0d128ce5cda80a5e4ec3015"
+}

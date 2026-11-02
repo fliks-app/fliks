@@ -63,7 +63,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | `likedByFewerThan` | int >= 1 | fewer distinct users than the value liked the media, a season or an episode |
     | `notLikedByRequester` | bool | no requester of the media liked it (no requester matches) |
     | `keepLatestEpisodes` | int >= 1, only when `levels` is `[episode]` (`is only available at episode level`) | the episode is not among the N newest episodes of its series on disk, ranked by `items."airDate"` (no date ranks oldest), then `id` |
-    | `diskFreeBelowPercent` | int 1..100 | its library's default folder has less free space than that percentage of the disk (`libraries::disk`); a library without a folder or with an unreadable one never matches |
+    | `diskFreeBelowPercent` | int 1..100 | a folder holding one of its files, or its target folder when it has none (`libraries.md` rule 58), has less free space than that percentage of the disk (`libraries::disk`); a media without a folder or with only unreadable ones never matches |
 
     The three play-history criteria apply at movie and series level only; a rule selecting season or episode rejects them (`is not available at <level> level`). Day criteria stop at 36500 (100 years) so the date arithmetic stays in range.
 
@@ -71,7 +71,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### C. Matching
 
-8. A rule compiles to one `SELECT` over `media` built with `QueryBuilder`; every value is bound. `diskFreeBelowPercent` is resolved per library in Rust first and bound as a library id list.
+8. A rule compiles to one `SELECT` over `media` built with `QueryBuilder`; every value is bound. `diskFreeBelowPercent` is resolved per folder in Rust first and bound as a folder id list.
 9. Every query excludes what `cleanup_exclusions` protects (rule 3). At movie and series level (each selected level is compiled on its own) a rule whose action is `delete_files_unmonitor` also skips media with `monitored = false`, so a cleaned media is not flagged again. At season level the query runs over `seasons` of the series and at episode level over `episodes`, joined to `media`; a scope matches only if it has at least one file on disk, so a cleaned scope is not flagged again.
 10. Each match carries `size` (bytes of the scope's files) and `lastPlayedAt` (newest play of any user in the scope, or null) for the preview, plus its season and episode ids and numbers.
 

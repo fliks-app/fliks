@@ -276,6 +276,7 @@ impl host::Host for Ctx {
         kind: t::Kind,
         external_ids: Vec<t::ExternalId>,
         library_id: Option<u32>,
+        folder_id: Option<u32>,
     ) -> Result<u32, HostError> {
         let app = self.app();
         call!(
@@ -287,8 +288,14 @@ impl host::Host for Ctx {
                 let app = app?;
                 // Spawned so a deadline stops the wait, not the import and its request hooks.
                 tokio::spawn(async move {
-                    super::acquisition::resolve_or_create(&app, &kind, &external_ids, library_id)
-                        .await
+                    super::acquisition::resolve_or_create(
+                        &app,
+                        &kind,
+                        &external_ids,
+                        library_id,
+                        folder_id,
+                    )
+                    .await
                 })
                 .await
                 .map_err(|e| host_err("ERR", e.to_string()))?

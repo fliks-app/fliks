@@ -229,8 +229,9 @@ interface host {
   media-resolve: func(query: resolve-query) -> result<list<tuple<string, resolved-media>>, host-error>;
   media-exists: func(media-ids: list<u32>) -> result<list<u32>, host-error>;
   /// The media of a work named by external ids, created when the library has none; needs `media:create`.
-  media-resolve-or-create: func(kind: kind, external-ids: list<external-id>, library-id: option<u32>)
-    -> result<u32, host-error>;
+  media-resolve-or-create: func(
+    kind: kind, external-ids: list<external-id>, library-id: option<u32>, folder-id: option<u32>,
+  ) -> result<u32, host-error>;
 
   library-ingest: func(request: ingest-request) -> result<ingest-result, host-error>;
 

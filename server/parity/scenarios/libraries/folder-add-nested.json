@@ -1,0 +1,45 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-add-nested",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/media/movies/sub"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.folder_overlap",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/libraries/1/folders"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/media"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.folder_overlap",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/libraries/1/folders"
+    }
+  ],
+  "strictMessage": true
+}

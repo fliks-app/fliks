@@ -65,6 +65,7 @@ pub struct CreateRequest {
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
+    pub folder_id: Option<i32>,
 }
 
 impl CreateRequest {
@@ -86,6 +87,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
             "qualityProfileId",
             "languageProfileId",
             "libraryId",
+            "folderId",
         ],
         "",
     );
@@ -115,6 +117,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     let quality = opt_int(&mut c, "qualityProfileId", true);
     let language = opt_int(&mut c, "languageProfileId", true);
     let library = opt_int(&mut c, "libraryId", true);
+    let folder = opt_int(&mut c, "folderId", true);
     let title = o
         .get("title")
         .and_then(Value::as_str)
@@ -132,6 +135,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         quality_profile_id: quality.value(),
         language_profile_id: language.value(),
         library_id: library.value(),
+        folder_id: folder.value(),
     })
 }
 

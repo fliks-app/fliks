@@ -14,7 +14,7 @@ Every route needs authentication (JWT or API key). The backup routes need `manag
 | `POST /api/system/restart` | `Manage Settings` | none (body ignored) | 201 `{ok: true, supervisor: string}` | 400 `No process supervisor detected`; 401, 403 | process exits 300 ms later (rule 8) |
 | `GET /api/system/version` | any authenticated user (`() => true`) | none | 200 `{version: string}`, suffixed `-dev` in a debug build | 401 | none |
 | `GET /api/system/update` | `Read Settings` | none | 200 `UpdateStatus` (rule 10) | 401, 403 | outbound HTTPS to GitHub (cached 6 h) |
-| `GET /api/system/stats` | `Read Settings` | none | 200 `{movies: int, series: int, pendingRequests: int, diskSpace: {path: string, label: string, freeSpace: number, totalSpace: number}[]}` | 401, 403 | `statfs` per library |
+| `GET /api/system/stats` | `Read Settings` | none | 200 `{movies: int, series: int, pendingRequests: int, diskSpace: {path: string, label: string, freeSpace: number, totalSpace: number}[]}` | 401, 403 | `statfs` per folder |
 | `POST /api/system/backup` | `manage:all` | none | 201 `{filename: string, size: int}` | 500 tool message (rule 18) | writes a file, runs `pg_dump` |
 | `GET /api/system/backups` | `manage:all` | none | 200 `{filename: string, size: int, date: string}[]`, newest first | 401, 403 | none |
 | `POST /api/system/restore` | `manage:all` | body `{filename: string}`, no DTO (rule 22) | 201, empty body | 400 `Invalid backup name "<name>"`, 404 `Backup "<name>" not found`, 409 `A command is running` (rule 25), 500 tool message | replaces the database content |
@@ -49,7 +49,7 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 ### D. Stats
 
 12. `movies` and `series` = `SELECT type, count(*) FROM media GROUP BY type` folded through the kind registry, zero-filled (`media-details.md` rule 10), `pendingRequests` = `SELECT count(*) FROM requests WHERE status = 'pending'`.
-13. `diskSpace`: libraries `ORDER BY name ASC` (+ `id ASC`) with a default folder; per library `{path: the default folder path as stored, label: name (`label` is always null), freeSpace: f_bfree * f_bsize, totalSpace: f_blocks * f_bsize}`; on a `statfs` error `freeSpace` and `totalSpace` are `-1` (JSON numbers; same semantics as `libraries.md` rule 6, run on the blocking pool). Absolute paths are exposed here by design: the route needs `settings.access`, the audience allowed to see server paths.
+13. `diskSpace`: libraries `ORDER BY name ASC` (+ `id ASC`) with a folder; per folder (`position`, `id` order) `{path: the folder path as stored, label: the library name, `<name> (<last segment of the path>)` for a folder after the first (`label` of the library is always null), freeSpace: f_bfree * f_bsize, totalSpace: f_blocks * f_bsize}`; on a `statfs` error `freeSpace` and `totalSpace` are `-1` (JSON numbers; same semantics as `libraries.md` rule 6, run on the blocking pool). Absolute paths are exposed here by design: the route needs `settings.access`, the audience allowed to see server paths.
 
 ### E. Backups
 

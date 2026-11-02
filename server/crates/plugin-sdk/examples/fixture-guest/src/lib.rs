@@ -405,8 +405,9 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 .into_iter()
                 .collect();
             let library = req.query("library").and_then(|v| v.parse().ok());
+            let folder = req.query("folder").and_then(|v| v.parse().ok());
             let kind = req.query("kind").unwrap_or("movie");
-            host_result(host::media_resolve_or_create(kind, &ids, library))
+            host_result(host::media_resolve_or_create(kind, &ids, library, folder))
         }
         "ingest" => {
             let paths: Vec<String> = req.query("path").map(str::to_owned).into_iter().collect();

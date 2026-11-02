@@ -37,6 +37,12 @@
             "color": "#3b82f6",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
+            "folders": [
+              {
+                "id": 1,
+                "name": "movies"
+              }
+            ],
             "icon": "film",
             "id": 1,
             "mediaTypes": [

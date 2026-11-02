@@ -90,7 +90,7 @@ pub async fn start(
 }
 
 async fn run(st: &AppState, placeholder: i32, source: &Row, automatic: bool) {
-    let media = files::load_media(&st.db, source.media_id.unwrap_or(0))
+    let media = files::load_media_of(&st.db, source.media_id.unwrap_or(0), source.media_file_id)
         .await
         .ok()
         .flatten();

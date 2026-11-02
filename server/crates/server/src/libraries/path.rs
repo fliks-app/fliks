@@ -130,6 +130,18 @@ pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppE
     if !exists {
         return Err(not_found(id));
     }
+    super::folders::lock(c).await?;
+    let several = sqlx::query_scalar!(
+        r#"SELECT count(*) > 1 AS "several!" FROM library_folders WHERE "libraryId" = $1"#,
+        id
+    )
+    .fetch_one(&mut *c)
+    .await?;
+    if several {
+        return Err(AppError::bad_request(format!(
+            "Path cannot be set on a library with several folders: use /libraries/{id}/folders"
+        )));
+    }
     let current = sqlx::query_scalar!(
         r#"SELECT path AS "path!" FROM library_default_folders WHERE "libraryId" = $1"#,
         id
@@ -159,15 +171,14 @@ pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppE
     if current.as_deref().map(normalize).as_deref() == Some(&path) {
         return Ok(());
     }
-    let others = sqlx::query_scalar!(
-        r#"SELECT path FROM library_folders WHERE "libraryId" <> $1"#,
-        id
-    )
-    .fetch_all(&mut *c)
-    .await?;
-    if others
-        .iter()
-        .any(|o| crate::ingest::fsx::same_dir(Path::new(o), Path::new(&path)))
+    if super::folders::reserved(&path) {
+        return Err(AppError::bad_request(format!(
+            "Path \"{path}\" is reserved"
+        )));
+    }
+    if super::folders::overlapping(c, &path, None, Some(id))
+        .await?
+        .is_some()
     {
         return Err(taken(&path));
     }
@@ -179,15 +190,21 @@ pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppE
             )));
         }
     }
-    if tokio::fs::metadata(&path).await.is_err()
-        && let Err(e) = tokio::fs::create_dir_all(Path::new(&path)).await
+    ensure_dir(&path).await?;
+    save(c, id, &path).await
+}
+
+/// `mkdir -p` of a missing folder, the last step before the write (rule 13.5).
+pub async fn ensure_dir(path: &str) -> Result<(), AppError> {
+    if tokio::fs::metadata(path).await.is_err()
+        && let Err(e) = tokio::fs::create_dir_all(Path::new(path)).await
     {
         return Err(AppError::bad_request(format!(
             "Path \"{path}\" could not be created on the server: {}, mkdir '{path}'",
             io_text(&e)
         )));
     }
-    save(c, id, &path).await
+    Ok(())
 }
 
 fn taken(path: &str) -> AppError {

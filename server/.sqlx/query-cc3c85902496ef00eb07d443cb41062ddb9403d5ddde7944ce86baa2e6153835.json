@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.title, m.\"originalTitle\" AS original_title, m.year, m.type AS \"media_type!\",\n                  ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, ids.imdb AS imdb_id, m.monitored,\n                  m.\"folderName\" AS folder_name, m.\"libraryId\" AS library_id, l.name AS \"library_name?\",\n                  df.\"folderId\" AS \"folder_id?\", df.path AS \"folder_path?\", l.\"mediaTypes\" AS \"library_types?\"\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           LEFT JOIN library_default_folders df ON df.\"libraryId\" = m.\"libraryId\"\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $3)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $4) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = $1",
+  "query": "SELECT m.id, m.title, m.\"originalTitle\" AS original_title, m.year, m.type AS \"media_type!\",\n                  ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, ids.imdb AS imdb_id, m.monitored,\n                  m.\"folderName\" AS folder_name, m.\"libraryId\" AS library_id, l.name AS \"library_name?\",\n                  df.\"folderId\" AS \"folder_id?\", df.path AS \"folder_path?\", l.\"mediaTypes\" AS \"library_types?\"\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           LEFT JOIN media_target_folders df ON df.\"mediaId\" = m.id\n           LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,\n             max(value) FILTER (WHERE provider = $3)::int AS tvdb,\n             max(value) FILTER (WHERE provider = $4) AS imdb\n           FROM media_external_ids WHERE \"mediaId\" = m.id) ids ON true\n           WHERE m.id = $1",
   "describe": {
     "columns": [
       {
@@ -126,7 +126,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "library_default_folders",
+            "table": "media_target_folders",
             "name": "folderId"
           }
         }
@@ -137,7 +137,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "library_default_folders",
+            "table": "media_target_folders",
             "name": "path"
           }
         }
@@ -180,5 +180,5 @@
       true
     ]
   },
-  "hash": "7d46038219aebe4c19513e599ce13178c0edd9bc8612bfc9a15e526b90518218"
+  "hash": "cc3c85902496ef00eb07d443cb41062ddb9403d5ddde7944ce86baa2e6153835"
 }

@@ -38,7 +38,7 @@ pub async fn items_view(
     acl: Option<&[i32]>,
 ) -> Result<Vec<Value>, sqlx::Error> {
     let sql = format!(
-        r#"SELECT media.id AS id, df.path AS lib_path, media."folderName" AS folder_name,
+        r#"SELECT media.id AS id, tf.path AS lib_path, media."folderName" AS folder_name,
   (jsonb_build_object(
     'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
     'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
@@ -88,6 +88,7 @@ pub async fn items_view(
 FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
 LEFT JOIN library_default_folders df ON df."libraryId" = media."libraryId"
+LEFT JOIN media_target_folders tf ON tf."mediaId" = media.id
 LEFT JOIN wants w ON w."mediaId" = media.id AND w.family = 'video'
 LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
 LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"

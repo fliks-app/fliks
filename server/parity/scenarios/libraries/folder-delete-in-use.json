@@ -1,0 +1,70 @@
+{
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-folder-delete-in-use",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.folder_in_use",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "DELETE",
+      "path": "/api/libraries/1/folders/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "color": "#3b82f6",
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 1,
+              "mediaCount": 17,
+              "path": "/tmp/fliks-parity/media/movies",
+              "position": 0
+            }
+          ],
+          "icon": "film",
+          "id": 1,
+          "label": null,
+          "mediaTypes": [
+            "movie"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Movies",
+          "path": "/tmp/fliks-parity/media/movies",
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/1"
+    }
+  ],
+  "strictMessage": true
+}

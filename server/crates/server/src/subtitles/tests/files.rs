@@ -1004,3 +1004,61 @@ async fn cancelling_a_sync_drops_a_queued_item_and_settles_a_running_one(pool: P
         SRT
     );
 }
+
+#[sqlx::test]
+async fn a_sidecar_is_read_against_its_files_folder_else_the_target(pool: PgPool) {
+    let c = ctx(pool).await;
+    let second = c.root.join("second");
+    std::fs::create_dir_all(&second).unwrap();
+    let second = second.to_string_lossy().into_owned();
+    let folder: i32 = sqlx::query_scalar(r#"INSERT INTO library_folders ("libraryId", path, position) VALUES ((SELECT "libraryId" FROM media WHERE id = $1), $2, 1) RETURNING id"#)
+        .bind(c.media)
+        .bind(&second)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let file: i32 = sqlx::query_scalar(r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId") VALUES ('Movie (2020)/B.mkv', 1, '1080p', $1, $2) RETURNING id"#)
+        .bind(c.media)
+        .bind(folder)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let path = |m: Option<sfiles::MediaCtx>| m.unwrap().folder_path.unwrap();
+    let target = path(sfiles::load_media(&c.pool, c.media).await.unwrap());
+    assert_ne!(target, second);
+    assert_eq!(
+        path(
+            sfiles::load_media_of(&c.pool, c.media, Some(file))
+                .await
+                .unwrap()
+        ),
+        second
+    );
+    assert_eq!(
+        path(sfiles::load_media_of(&c.pool, c.media, None).await.unwrap()),
+        target
+    );
+    // the want's folder is the target, unless it belongs to another library
+    sqlx::query(r#"INSERT INTO wants ("mediaId", family, "folderId") VALUES ($1, 'video', $2)
+        ON CONFLICT ON CONSTRAINT "UQ_wants_media_family_language" DO UPDATE SET "folderId" = EXCLUDED."folderId""#)
+        .bind(c.media)
+        .bind(folder)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        path(sfiles::load_media(&c.pool, c.media).await.unwrap()),
+        second
+    );
+    let other = c.root.join("other").to_string_lossy().into_owned();
+    sqlx::query(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('Other') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, $1 FROM l) UPDATE media SET "libraryId" = (SELECT id FROM l) WHERE id = $2"#)
+        .bind(&other)
+        .bind(c.media)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        path(sfiles::load_media(&c.pool, c.media).await.unwrap()),
+        other
+    );
+}

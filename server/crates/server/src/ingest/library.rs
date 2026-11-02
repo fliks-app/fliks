@@ -94,6 +94,7 @@ pub async fn ingest(
     _guard: &OwnedMutexGuard<()>,
     mut req: Request,
 ) -> Result<Outcome, String> {
+    let _moves = st.folder_moves.read().await;
     let media = load_media(&st.db, req.media_id)
         .await
         .map_err(|e| e.to_string())?

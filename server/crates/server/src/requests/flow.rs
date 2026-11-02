@@ -332,6 +332,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         Some(l) => l,
         None => resolve_sole_library(st, a, dto.media_type).await?,
     };
+    if let Some(f) = dto.folder_id {
+        crate::libraries::assert_folder_in_library(&mut *tx, library_id, f).await?;
+    }
     if dto.media_type.has_seasons()
         && let Some((q, l)) = existing_series_profiles(st, &key).await?
     {
@@ -350,6 +353,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             quality_profile_id: dto.quality_profile_id,
             language_profile_id: dto.language_profile_id,
             library_id: Some(library_id),
+            folder_id: dto.folder_id,
             seasons: dto.seasons.clone(),
         };
         ensure_media(st, spec, Some(a.user.id)).await?
@@ -369,6 +373,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             quality_profile_id: quality,
             language_profile_id: language,
             library_id: Some(library_id),
+            folder_id: dto.folder_id,
             media_id,
             poster_url: None,
             fanart_url: None,
@@ -475,6 +480,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
             quality_profile_id: None,
             language_profile_id: None,
             library_id: media.library_id.filter(|l| *l != 0),
+            folder_id: None,
             media_id: Some(media.id),
             poster_url: media.poster_url.as_deref(),
             fanart_url: media.fanart_url.as_deref(),
@@ -607,6 +613,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         quality_profile_id: row.quality_profile_id,
         language_profile_id: row.language_profile_id,
         library_id: row.library_id,
+        folder_id: row.folder_id,
         seasons: row.seasons.as_ref().map(|s| s.0.clone()),
     };
     let media = match ensure_media(st, spec, row.user_id).await {
@@ -645,16 +652,19 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
     if let Some(m) = media {
         match services::remove_media(st, m.id).await {
             Ok(removed) => {
-                if let Some(path) = removed.disk_path {
+                if !removed.disk_paths.is_empty() {
                     tokio::spawn(async move {
                         let _lock = removed.lock;
-                        if let Err(e) =
-                            crate::media::write::remove_media_folder(path.clone().into()).await
-                        {
-                            tracing::error!(
-                                "Media file deletion failed after delete request #{id} — title=\"{}\" path=\"{path}\" error={e}",
-                                removed.title
-                            );
+                        for path in removed.disk_paths {
+                            if let Err(e) =
+                                crate::media::write::remove_media_folder(path.clone()).await
+                            {
+                                tracing::error!(
+                                    "Media file deletion failed after delete request #{id}: title=\"{}\" path=\"{}\" error={e}",
+                                    removed.title,
+                                    path.display()
+                                );
+                            }
                         }
                     });
                 }

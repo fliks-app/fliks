@@ -46,7 +46,7 @@ pub async fn apply(
         .clone()
         .filter(|p| !p.is_empty())
         .ok_or_else(|| AppError::bad_request("Subtitle has no file path"))?;
-    let media = files::load_media(&st.db, row.media_id.unwrap_or(0)).await?;
+    let media = files::load_media_of(&st.db, row.media_id.unwrap_or(0), row.media_file_id).await?;
     let dirs = media
         .and_then(|m| m.dirs("no root").ok())
         .ok_or_else(|| AppError::not_found("Subtitle file path could not be resolved"))?;

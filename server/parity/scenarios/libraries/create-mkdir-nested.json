@@ -22,6 +22,17 @@
           "disk": {
             "accessible": true
           },
+          "folders": [
+            {
+              "disk": {
+                "accessible": true
+              },
+              "id": 3,
+              "mediaCount": 0,
+              "path": "/tmp/fliks-parity/libs/a/b/c",
+              "position": 0
+            }
+          ],
           "icon": null,
           "id": 3,
           "label": null,
