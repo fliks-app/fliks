@@ -7,7 +7,8 @@ use super::{
 use crate::{
     config::Config,
     metadata::{
-        EditionRef, Metadata, MetadataProvider, PersonDetails, Search, Upstream, provider::Call,
+        EditionRef, MetaError, Metadata, MetadataProvider, PersonDetails, Search, Upstream,
+        provider::Call,
     },
     state::AppState,
 };
@@ -571,6 +572,9 @@ async fn identify_reads_the_title_of_an_asin_and_needs_the_anchor(db: PgPool) {
     );
 
     let st = state(&db, vec![Fake::new(Audible)]);
-    assert!(identify(&st, &hints(), P).await.unwrap().is_none());
+    assert!(matches!(
+        identify(&st, &hints(), P).await,
+        Err(MetaError::Upstream(_))
+    ));
     assert_eq!(ANCHOR, OpenLibrary);
 }

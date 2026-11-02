@@ -1239,7 +1239,7 @@ mod book_ingest {
         books::register(&c.st, m, &placed(&c, &["Mirelune/Mirelune.epub"]))
             .await
             .unwrap();
-        books::identify_media(&c.st, m).await.unwrap();
+        assert!(books::identify_media(&c.st, m).await.is_err());
         assert_eq!(
             count(&c, "SELECT count(*) FROM edition_external_ids").await,
             0
@@ -1779,6 +1779,10 @@ mod book_import {
         limits: Limits,
         priorities: Mutex<Vec<Priority>>,
         busy: Mutex<(u32, u32)>,
+        /// Searches that fail 503 before the first answer.
+        down: Mutex<u32>,
+        /// Dropped by the first search: deletes every book media, as a user would mid-import.
+        wipe: Mutex<Option<PgPool>>,
     }
 
     fn number(s: &str) -> u32 {
@@ -1827,6 +1831,20 @@ mod book_import {
             p: Priority,
         ) -> Call<'a, Vec<Value>> {
             Box::pin(async move {
+                {
+                    let mut down = self.down.lock().unwrap();
+                    if *down > 0 {
+                        *down -= 1;
+                        return Err(Upstream::new(Some(503), "provider down"));
+                    }
+                }
+                let wipe = self.wipe.lock().unwrap().take();
+                if let Some(db) = wipe {
+                    sqlx::query("DELETE FROM media WHERE type = 'book'")
+                        .execute(&db)
+                        .await
+                        .unwrap();
+                }
                 let title = q.title.unwrap_or_default();
                 let n = number(title);
                 let hit = self.call(format!("/search/{n}"), p).await?;
@@ -1924,6 +1942,8 @@ mod book_import {
             limits,
             priorities: Mutex::default(),
             busy: Mutex::default(),
+            down: Mutex::default(),
+            wipe: Mutex::default(),
         };
         (Arc::new(p), seen)
     }
@@ -2117,7 +2137,8 @@ mod book_import {
 
     #[sqlx::test(migrations = false)]
     async fn the_import_waits_for_a_folder_move(pool: PgPool) {
-        let c = ctx(pool).await;
+        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
+        let c = ctx_with(pool, Some(p)).await;
         let l = shelf(&c).await;
         work(&c, 1);
         let moving = c.st.folder_moves.write().await;
@@ -2132,7 +2153,8 @@ mod book_import {
 
     #[sqlx::test(migrations = false)]
     async fn an_interrupted_import_resumes_without_repeating_a_work(pool: PgPool) {
-        let c = ctx(pool).await;
+        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
+        let c = ctx_with(pool, Some(p)).await;
         let l = shelf(&c).await;
         for n in 1..=40 {
             work(&c, n);
@@ -2172,7 +2194,7 @@ mod book_import {
         let done = finished(&c, l, 60).await;
         assert_eq!(
             (&done["status"], &done["pending"], &done["manual"]),
-            (&json!("completed"), &json!(0), &json!(40)),
+            (&json!("completed"), &json!(0), &json!(13)),
             "{done}"
         );
         assert_eq!(
@@ -2180,6 +2202,98 @@ mod book_import {
             40
         );
         assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 40);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_item_whose_media_vanishes_fails_alone(pool: PgPool) {
+        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
+        *p.wipe.lock().unwrap() = Some(pool.clone());
+        let c = ctx_with(pool, Some(p)).await;
+        let l = shelf(&c).await;
+        work(&c, 1);
+        work(&c, 2);
+        assert_eq!(start(&c, l).await.0, 202);
+        let done = finished(&c, l, 20).await;
+        assert_eq!(
+            (&done["status"], &done["pending"], &done["total"]),
+            (&json!("completed"), &json!(0), &json!(2)),
+            "{done}"
+        );
+        let first: (String, Option<i32>) = sqlx::query_as(
+            r#"SELECT status, "mediaId" FROM book_import_items ORDER BY id LIMIT 1"#,
+        )
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(first, ("manual".into(), None));
+        assert_eq!(done["matched"], 1, "{done}");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_provider_outage_keeps_the_item_pending_until_it_recovers(pool: PgPool) {
+        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
+        *p.down.lock().unwrap() = 1;
+        let c = ctx_with(pool, Some(p)).await;
+        let l = shelf(&c).await;
+        work(&c, 1);
+        assert_eq!(start(&c, l).await.0, 202);
+        let mut cause = None;
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            cause = sqlx::query_scalar::<_, Option<String>>(
+                "SELECT error FROM book_import_items WHERE status = 'pending' LIMIT 1",
+            )
+            .fetch_optional(&c.st.db)
+            .await
+            .unwrap()
+            .flatten();
+            if cause.is_some() {
+                break;
+            }
+        }
+        assert!(cause.is_some_and(|e| e.contains("provider down")));
+        let done = finished(&c, l, 30).await;
+        assert_eq!(
+            (&done["status"], &done["matched"], &done["manual"]),
+            (&json!("completed"), &json!(1), &json!(0)),
+            "{done}"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_folder_that_moved_after_its_path_was_read_is_not_linked(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        work(&c, 1);
+        let user: i32 = sqlx::query_scalar("SELECT id FROM users LIMIT 1")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let (folder, path): (i32, String) =
+            sqlx::query_as(r#"SELECT id, path FROM library_folders WHERE "libraryId" = $1"#)
+                .bind(l)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        let work = |folder_path: &str| crate::ingest::disk::BookWork {
+            library_id: l,
+            folder_id: folder,
+            folder_path: folder_path.into(),
+            folder_name: "Author0001/Title0001".into(),
+            title: "Title0001".into(),
+            year: None,
+            files: vec![c.dir.join("books/Author0001/Title0001/Title0001.epub")],
+        };
+        let err = crate::ingest::disk::link_book_work(&c.st, user, work("/elsewhere"))
+            .await
+            .err()
+            .expect("a stale folder path");
+        assert_eq!(err.text(), crate::ingest::disk::FOLDER_MOVED);
+        assert_eq!(count(&c, "SELECT count(*) FROM media").await, 0);
+        let linked = crate::ingest::disk::link_book_work(&c.st, user, work(&path))
+            .await
+            .unwrap();
+        assert_eq!(linked.linked, 1);
     }
 
     #[sqlx::test(migrations = false)]

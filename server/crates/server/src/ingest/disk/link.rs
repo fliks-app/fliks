@@ -27,13 +27,25 @@ pub(super) async fn link_files(
     }
     let guard = st.ingest.media.lock(media.id).await;
     let (mut errors, mut slot) = (vec![], false);
-    let (linked, present) = if d.reorganize || d.transfer.is_some() {
-        relink_moved(st, &guard, d, lib, media, &mut errors, &mut slot).await?
-    } else {
-        let linked =
-            relink_in_place(st, &guard, d, lib, media, folder, &mut errors, &mut slot).await?;
-        (linked, 0)
-    };
+    let (linked, present) =
+        if d.reorganize || d.transfer.is_some() {
+            relink_moved(st, &guard, d, lib, media, &mut errors, &mut slot).await?
+        } else {
+            let linked =
+                match relink_in_place(st, &guard, d, lib, media, folder, &mut errors, &mut slot)
+                    .await
+                {
+                    Ok(l) => l,
+                    Err(e) => {
+                        drop(guard);
+                        if let Some(key) = unmatched_key.filter(|_| created) {
+                            drop_unmatched_if_empty(st, media.id, key).await?;
+                        }
+                        return Err(e);
+                    }
+                };
+            (linked, 0)
+        };
     let identified = media.tmdb_id.is_some() || media.tvdb_id.is_some() || media.imdb_id.is_some();
     if media.has_seasons()
         && slot
@@ -126,6 +138,16 @@ async fn relink_in_place(
 ) -> Result<i64, AppError> {
     let mut linked = 0i64;
     let _moves = st.folder_moves.read().await;
+    if let (Some(id), Some(path)) = (d.folder_id, &d.folder_path) {
+        let now: Option<String> =
+            sqlx::query_scalar("SELECT path FROM library_folders WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&st.db)
+                .await?;
+        if now.as_ref() != Some(path) {
+            return Err(AppError::conflict(FOLDER_MOVED));
+        }
+    }
     let mut current = load_media(&st.db, media.id)
         .await?
         .unwrap_or_else(|| media.clone());

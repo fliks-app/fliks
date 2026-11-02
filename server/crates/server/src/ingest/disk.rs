@@ -661,11 +661,16 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
 pub(crate) struct BookWork {
     pub library_id: i32,
     pub folder_id: i32,
+    /// The folder's path `files` were resolved against.
+    pub folder_path: String,
     pub folder_name: String,
     pub title: String,
     pub year: Option<i32>,
     pub files: Vec<PathBuf>,
 }
+
+/// The message of the error a link raises when its folder moved after the caller read the path.
+pub(crate) const FOLDER_MOVED: &str = "errors.folder_moved";
 
 pub(crate) struct Linked {
     pub media_id: i32,
@@ -692,6 +697,7 @@ pub(crate) async fn link_book_work(
         reorganize: false,
         transfer: None,
         folder_id: Some(w.folder_id),
+        folder_path: Some(w.folder_path),
         files: w
             .files
             .into_iter()

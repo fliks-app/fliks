@@ -613,10 +613,7 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
         let (hints, record) = hints_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
         let found = match identify::identify(st, &hints, Priority::Background).await {
             Ok(m) => m,
-            Err(e) => {
-                tracing::warn!("identify of book #{media} edition #{}: {e:?}", c.edition);
-                continue;
-            }
+            Err(e) => return Err(format!("identify of edition #{}: {e:?}", c.edition)),
         };
         let m = match found {
             Some(m) => m,
@@ -628,7 +625,7 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
                 _ => continue,
             },
         };
-        if let Err(e) = link::attach_with(
+        link::attach_with(
             st,
             media,
             Some(c.edition),
@@ -637,9 +634,7 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<(), String> {
             Priority::Background,
         )
         .await
-        {
-            tracing::warn!("attach of book #{media} edition #{}: {e:?}", c.edition);
-        }
+        .map_err(|e| format!("attach of edition #{}: {e:?}", c.edition))?;
     }
     Ok(())
 }
@@ -673,6 +668,7 @@ async fn hints_of(
 /// Settles a book once its post-import work is done (`post_import::settled`).
 pub async fn settled(st: &AppState, media: i32) {
     if let Err(e) = identify_media(st, media).await {
-        tracing::warn!("Post-import[book #{media}]: {e}");
+        tracing::warn!("Post-import[book #{media}]: {e}, retrying");
+        st.ingest.settle.schedule(st, media);
     }
 }

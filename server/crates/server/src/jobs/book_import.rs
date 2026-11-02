@@ -8,6 +8,7 @@ use crate::{
         library::file_name,
     },
     libraries::accessible_library_ids,
+    metadata::books::ANCHOR,
     state::AppState,
 };
 use axum::{
@@ -27,9 +28,11 @@ use fliks_domain::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool, types::Json as Jsonb};
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 const QUEUE_LIMIT: i64 = 500;
+const RETRY_MIN: Duration = Duration::from_secs(5);
+const RETRY_MAX: Duration = Duration::from_secs(300);
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -177,10 +180,15 @@ struct QueueItem {
     error: Option<String>,
 }
 
-const QUEUED: &str = r#"FROM book_import_items x JOIN book_imports i ON i.id = x."importId"
+fn queued() -> String {
+    format!(
+        r#"FROM book_import_items x JOIN book_imports i ON i.id = x."importId"
   WHERE i."libraryId" = $1 AND x.status = 'manual' AND x."mediaId" IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM media_external_ids e
-                    WHERE e."mediaId" = x."mediaId" AND e.provider = 'openlibrary')"#;
+                    WHERE e."mediaId" = x."mediaId" AND e.provider = '{}')"#,
+        ANCHOR.as_str()
+    )
+}
 
 /// `GET /api/imports/library/:libraryId/books/queue` (rule 11).
 #[utoipa::path(get, path = "/api/imports/library/{libraryId}/books/queue", responses((status = 200)))]
@@ -192,15 +200,17 @@ pub async fn queue(
     let lib = guard(&st, &a, id).await?;
     let items: Vec<QueueItem> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT x.id, x."importId", x."mediaId", x.title, x."folderName", x.files, x.error
-           {QUEUED} ORDER BY x.id LIMIT {QUEUE_LIMIT}"#
+           {} ORDER BY x.id LIMIT {QUEUE_LIMIT}"#,
+        queued()
     )))
     .bind(lib)
     .fetch_all(&st.db)
     .await?;
-    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) {QUEUED}")))
-        .bind(lib)
-        .fetch_one(&st.db)
-        .await?;
+    let total: i64 =
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) {}", queued())))
+            .bind(lib)
+            .fetch_one(&st.db)
+            .await?;
     Ok(Json(json!({"total": total, "items": items})))
 }
 
@@ -273,6 +283,7 @@ async fn drive(st: &AppState, id: i32, key: &str) -> Result<(), String> {
     if total.is_none() {
         plan(st, id, &job).await?;
     }
+    let mut wait = RETRY_MIN;
     loop {
         let next: Option<Item> = sqlx::query_as(
             r#"SELECT id, "folderId", "folderName", title, year, files FROM book_import_items
@@ -295,16 +306,33 @@ async fn drive(st: &AppState, id: i32, key: &str) -> Result<(), String> {
             return Ok(());
         };
         let done = import_item(st, &job, &item).await;
-        sqlx::query(
-            r#"UPDATE book_import_items SET status = $2, "mediaId" = $3, error = $4 WHERE id = $1"#,
+        let saved = sqlx::query(
+            r#"UPDATE book_import_items SET status = $2, "mediaId" = (SELECT id FROM media WHERE id = $3),
+               error = $4 WHERE id = $1"#,
         )
         .bind(item.id)
         .bind(done.status)
         .bind(done.media)
-        .bind(done.error)
+        .bind(&done.error)
         .execute(&st.db)
-        .await
-        .map_err(db)?;
+        .await;
+        if let Err(e) = &saved {
+            tracing::warn!("Book import #{id}: item #{} not saved: {e}", item.id);
+            sqlx::query(
+                r#"UPDATE book_import_items SET status = 'failed', "mediaId" = NULL, error = $2 WHERE id = $1"#,
+            )
+            .bind(item.id)
+            .bind(e.to_string())
+            .execute(&st.db)
+            .await
+            .map_err(db)?;
+        }
+        if done.status == "pending" && saved.is_ok() {
+            tokio::time::sleep(wait).await;
+            wait = (wait * 2).min(RETRY_MAX);
+        } else {
+            wait = RETRY_MIN;
+        }
     }
 }
 
@@ -420,35 +448,39 @@ fn failed(error: String) -> Done {
 
 /// Rules 6-8: links the work, then identifies it before the next item starts.
 async fn import_item(st: &AppState, job: &Job, item: &Item) -> Done {
-    let folder: Option<String> =
-        match sqlx::query_scalar(r#"SELECT path FROM library_folders WHERE id = $1"#)
-            .bind(item.folder_id)
-            .fetch_optional(&st.db)
-            .await
-        {
-            Ok(f) => f,
-            Err(e) => return failed(e.to_string()),
+    let linked = loop {
+        let folder: Option<String> =
+            match sqlx::query_scalar(r#"SELECT path FROM library_folders WHERE id = $1"#)
+                .bind(item.folder_id)
+                .fetch_optional(&st.db)
+                .await
+            {
+                Ok(f) => f,
+                Err(e) => return failed(e.to_string()),
+            };
+        let Some(folder) = folder else {
+            return failed("The folder no longer exists".into());
         };
-    let Some(folder) = folder else {
-        return failed("The folder no longer exists".into());
-    };
-    let files = item
-        .files
-        .0
-        .iter()
-        .map(|r| PathBuf::from(resolve(&join(&folder, r), "/")))
-        .collect();
-    let work = BookWork {
-        library_id: job.library,
-        folder_id: item.folder_id,
-        folder_name: item.folder_name.clone(),
-        title: item.title.clone(),
-        year: item.year,
-        files,
-    };
-    let linked = match disk::link_book_work(st, job.user, work).await {
-        Ok(l) => l,
-        Err(e) => return failed(e.text()),
+        let files = item
+            .files
+            .0
+            .iter()
+            .map(|r| PathBuf::from(resolve(&join(&folder, r), "/")))
+            .collect();
+        let work = BookWork {
+            library_id: job.library,
+            folder_id: item.folder_id,
+            folder_path: folder,
+            folder_name: item.folder_name.clone(),
+            title: item.title.clone(),
+            year: item.year,
+            files,
+        };
+        match disk::link_book_work(st, job.user, work).await {
+            Ok(l) => break l,
+            Err(e) if e.text() == disk::FOLDER_MOVED => {}
+            Err(e) => return failed(e.text()),
+        }
     };
     let errors = (!linked.errors.is_empty()).then(|| linked.errors.join("; "));
     if linked.linked == 0 {
@@ -465,17 +497,25 @@ async fn import_item(st: &AppState, job: &Job, item: &Item) -> Done {
     st.ingest.settle.cancel(media);
     if let Err(e) = books::identify_media(st, media).await {
         tracing::warn!("Book import: identification of book #{media}: {e}");
+        return Done {
+            status: "pending",
+            media: Some(media),
+            error: Some(e),
+        };
     }
     let matched = sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'openlibrary')"#,
+        r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2)"#,
     )
     .bind(media)
+    .bind(ANCHOR.as_str())
     .fetch_one(&st.db)
-    .await
-    .unwrap_or(false);
-    Done {
-        status: if matched { "matched" } else { "manual" },
-        media: Some(media),
-        error: errors,
+    .await;
+    match matched {
+        Ok(matched) => Done {
+            status: if matched { "matched" } else { "manual" },
+            media: Some(media),
+            error: errors,
+        },
+        Err(e) => failed(e.to_string()),
     }
 }
