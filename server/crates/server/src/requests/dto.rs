@@ -3,9 +3,14 @@ use crate::http::{
     AppError,
     validate::{Check, int_param, int4, object},
 };
+use crate::metadata::books::{ANCHOR, work_id};
 use fliks_domain::{
     external_id::MAX_NUMERIC_ID,
-    media::{kind::MediaKind, query::js_number},
+    media::{
+        kind::MediaKind,
+        query::js_number,
+        wants::{WantSpec, parse_wants},
+    },
 };
 use serde_json::{Map, Value, json};
 
@@ -59,9 +64,10 @@ fn opt_int(c: &mut Check, key: &str, coerced: bool) -> Field<i32> {
 pub struct CreateRequest {
     pub media_type: MediaKind,
     pub delete: bool,
-    pub tmdb_id: i32,
+    pub key: super::TitleKey,
     pub title: String,
     pub seasons: Option<Vec<i64>>,
+    pub wants: Option<Vec<WantSpec>>,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
@@ -70,32 +76,109 @@ pub struct CreateRequest {
 
 impl CreateRequest {
     pub fn key(&self) -> super::TitleKey {
-        super::TitleKey::tmdb(self.media_type, self.tmdb_id)
+        self.key.clone()
     }
 }
 
+const VIDEO_KEYS: [&str; 9] = [
+    "mediaType",
+    "kind",
+    "tmdbId",
+    "title",
+    "seasons",
+    "qualityProfileId",
+    "languageProfileId",
+    "libraryId",
+    "folderId",
+];
+/// A book is an Open Library work asked per edition (`wants`), with no profile of its own.
+const BOOK_KEYS: [&str; 7] = [
+    "mediaType",
+    "kind",
+    "externalId",
+    "title",
+    "wants",
+    "libraryId",
+    "folderId",
+];
+
 pub fn create_request(v: Value) -> Res<CreateRequest> {
     let o = object(v);
-    let mut c = Check::new(
-        &o,
-        &[
-            "mediaType",
-            "kind",
-            "tmdbId",
-            "title",
-            "seasons",
-            "qualityProfileId",
-            "languageProfileId",
-            "libraryId",
-            "folderId",
-        ],
-        "",
-    );
+    let book = o.get("mediaType").and_then(Value::as_str) == Some(MediaKind::Book.as_str());
+    let mut c = Check::new(&o, if book { &BOOK_KEYS } else { &VIDEO_KEYS }, "");
     let media_type = c.kind("mediaType", false);
-    if media_type.is_some_and(|m| !m.is_video()) {
+    if !book && media_type.is_some_and(|m| !m.is_video()) {
         c.err("mediaType", "must be movie or series");
     }
     let kind = c.one_of("kind", &KINDS, true);
+    let delete = kind.as_deref() == Some("delete");
+    let key = match media_type {
+        Some(m) if book => book_key(&mut c, &o, m),
+        Some(m) => tmdb_key(&mut c, &o, m),
+        None => {
+            tmdb_key(&mut c, &o, MediaKind::Movie);
+            None
+        }
+    };
+    if !o.get("title").is_some_and(Value::is_string) {
+        c.err("title", "must be a string");
+    }
+    let wants = match o.get("wants") {
+        Some(w) if book && !delete => match parse_wants(w, MediaKind::Book) {
+            Ok(w) => Some(w),
+            Err(m) => {
+                c.err("wants", &m);
+                None
+            }
+        },
+        None if book && !delete => {
+            c.err("wants", "must be an array");
+            None
+        }
+        _ => None,
+    };
+    let seasons = if book {
+        None
+    } else {
+        c.int_array("seasons", true)
+    };
+    let (quality, language) = if book {
+        (Field::Absent, Field::Absent)
+    } else {
+        (
+            opt_int(&mut c, "qualityProfileId", true),
+            opt_int(&mut c, "languageProfileId", true),
+        )
+    };
+    let library = opt_int(&mut c, "libraryId", true);
+    let folder = opt_int(&mut c, "folderId", true);
+    let title = o
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let (Some(media_type), Some(key)) = (media_type, key) else {
+        return Err(AppError::bad_request(c.errs));
+    };
+    c.finish(CreateRequest {
+        media_type,
+        delete,
+        key,
+        title,
+        seasons,
+        wants,
+        quality_profile_id: quality.value(),
+        language_profile_id: language.value(),
+        library_id: library.value(),
+        folder_id: folder.value(),
+    })
+}
+
+fn tmdb_key(
+    c: &mut Check,
+    o: &Map<String, Value>,
+    media_type: MediaKind,
+) -> Option<super::TitleKey> {
     // `media_external_ids` and `requests` hold nine digits at most
     let tmdb_id = match o.get("tmdbId") {
         Some(v)
@@ -110,32 +193,25 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         }
         v => c.int("tmdbId", v.unwrap_or(&Value::Null), false, Some(1), None),
     };
-    if !o.get("title").is_some_and(Value::is_string) {
-        c.err("title", "must be a string");
-    }
-    let seasons = c.int_array("seasons", true);
-    let quality = opt_int(&mut c, "qualityProfileId", true);
-    let language = opt_int(&mut c, "languageProfileId", true);
-    let library = opt_int(&mut c, "libraryId", true);
-    let folder = opt_int(&mut c, "folderId", true);
-    let title = o
-        .get("title")
+    tmdb_id.map(|t| super::TitleKey::tmdb(media_type, t))
+}
+
+fn book_key(
+    c: &mut Check,
+    o: &Map<String, Value>,
+    media_type: MediaKind,
+) -> Option<super::TitleKey> {
+    let work = o
+        .get("externalId")
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-    let (Some(media_type), Some(tmdb_id)) = (media_type, tmdb_id) else {
-        return Err(AppError::bad_request(c.errs));
-    };
-    c.finish(CreateRequest {
+        .and_then(work_id);
+    if work.is_none() {
+        c.err("externalId", "must be an Open Library work id");
+    }
+    work.map(|external_id| super::TitleKey {
         media_type,
-        delete: kind.as_deref() == Some("delete"),
-        tmdb_id,
-        title,
-        seasons,
-        quality_profile_id: quality.value(),
-        language_profile_id: language.value(),
-        library_id: library.value(),
-        folder_id: folder.value(),
+        provider: ANCHOR,
+        external_id,
     })
 }
 
@@ -292,15 +368,25 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
     })
 }
 
-/// The `tmdbId` and `mediaType` of `title-state` (canonical integers; the enum is validated here).
-pub fn title_state(q: &[(String, String)]) -> Res<(i32, MediaKind)> {
+/// The title `title-state` asks about: `tmdbId` of a video kind (canonical integer) or `externalId` of a book.
+pub fn title_state(q: &[(String, String)]) -> Res<super::TitleKey> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+    if one("mediaType") == Some(MediaKind::Book.as_str()) {
+        let work = one("externalId").and_then(work_id).ok_or_else(|| {
+            AppError::bad_request(vec!["externalId must be an Open Library work id"])
+        })?;
+        return Ok(super::TitleKey {
+            media_type: MediaKind::Book,
+            provider: ANCHOR,
+            external_id: work,
+        });
+    }
     let tmdb =
         int_param(one("tmdbId").ok_or_else(|| {
             AppError::bad_request("Validation failed (numeric string is expected)")
         })?)?;
     match one("mediaType").and_then(MediaKind::parse) {
-        Some(m) if m.is_video() => Ok((tmdb, m)),
+        Some(m) if m.is_video() => Ok(super::TitleKey::tmdb(m, tmdb)),
         _ => Err(AppError::bad_request(vec![format!(
             "mediaType {}",
             MediaKind::one_of_message()
@@ -533,8 +619,15 @@ mod tests {
         };
         assert_eq!(
             title_state(&q(&[("tmdbId", "9"), ("mediaType", "movie")])).unwrap(),
-            (9, MediaKind::Movie)
+            super::super::TitleKey::tmdb(MediaKind::Movie, 9)
         );
+        assert_eq!(
+            title_state(&q(&[("externalId", "ol9w"), ("mediaType", "book")]))
+                .unwrap()
+                .external_id,
+            "OL9W"
+        );
+        assert!(title_state(&q(&[("tmdbId", "9"), ("mediaType", "book")])).is_err());
         assert!(title_state(&q(&[("tmdbId", "09"), ("mediaType", "movie")])).is_err());
         assert!(title_state(&q(&[("tmdbId", "9"), ("mediaType", "x")])).is_err());
     }

@@ -1,0 +1,319 @@
+//! Book requests (`docs/spec/requests.md` rules 45-50) through the real routers over a fake Open Library.
+use super::Lifecycle;
+use crate::{
+    media,
+    metadata::books::tests::{anchor, state},
+    state::AppState,
+};
+use axum::{Router, body::Body, http::Request};
+use serde_json::{Value, json};
+use sqlx::PgPool;
+use tower::ServiceExt;
+
+struct Ctx {
+    app: Router,
+    st: AppState,
+    pool: PgPool,
+    admin: String,
+    user: String,
+    manager: String,
+    reader: String,
+}
+
+async fn ctx(pool: PgPool) -> Ctx {
+    crate::db::migrate(&pool).await.unwrap();
+    let mut ol = anchor();
+    for n in 2..=9 {
+        ol.works.insert(
+            format!("OL{n}W"),
+            json!({"title": format!("Title {n}"), "year": 2001}),
+        );
+    }
+    let st = state(&pool, vec![ol]);
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO roles (id, name, permissions, "isDefault") VALUES
+          (1, 'U', '["media.read","requests.create"]', false),
+          (2, 'M', '["media.read","requests.create","requests.manage"]', false),
+          (3, 'R', '["media.read"]', false);
+        INSERT INTO users (id, username, "isAdmin", "roleId") VALUES
+          (1, 'admin', true, NULL), (2, 'user', false, 1), (3, 'manager', false, 2), (4, 'reader', false, 3);
+        INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]');
+        INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/one');
+        INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3), (1, 4);
+        INSERT INTO user_quotas ("userId", kind, "limit") VALUES (2, 'book', 2);
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let tok = |id, name| st.jwt.sign_access(id, name).unwrap().token;
+    Ctx {
+        admin: tok(1, "admin"),
+        user: tok(2, "user"),
+        manager: tok(3, "manager"),
+        reader: tok(4, "reader"),
+        app: media::router()
+            .merge(super::router())
+            .with_state(st.clone()),
+        pool,
+        st,
+    }
+}
+
+impl Ctx {
+    async fn call(&self, tok: &str, method: &str, uri: &str, body: Value) -> (u16, Value) {
+        let req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {tok}"))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let res = self.app.clone().oneshot(req).await.unwrap();
+        let status = res.status().as_u16();
+        let b = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&b).unwrap_or(Value::Null))
+    }
+
+    async fn request(&self, tok: &str, work: &str, wants: Value) -> (u16, Value) {
+        let body = json!({"mediaType": "book", "externalId": work, "title": work, "wants": wants});
+        self.call(tok, "POST", "/api/requests", body).await
+    }
+
+    async fn wants(&self, media: i32) -> Vec<(String, Option<String>)> {
+        sqlx::query_as(
+            "SELECT family, language FROM wants WHERE \"mediaId\" = $1 ORDER BY family, language NULLS FIRST",
+        )
+        .bind(media)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap()
+    }
+}
+
+fn want(family: &str, language: Option<&str>) -> Value {
+    json!({"family": family, "language": language})
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_is_requested_per_edition(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, r) = c
+        .request(&c.user, "ol2w", json!([want("text", Some("fr"))]))
+        .await;
+    assert_eq!(
+        (s, &r["status"], &r["tmdbId"]),
+        (201, &json!("pending"), &Value::Null),
+        "{r}"
+    );
+    assert_eq!(
+        (&r["externalId"], &r["wants"][0]["family"]),
+        (&json!("OL2W"), &json!("text"))
+    );
+    let (_, state) = c
+        .call(
+            &c.user,
+            "GET",
+            "/api/requests/title-state?mediaType=book&externalId=OL2W",
+            json!(null),
+        )
+        .await;
+    assert_eq!(
+        (&state["requested"], &state["requestedWants"][0]["language"]),
+        (&json!(true), &json!("fr"))
+    );
+
+    for (wants, clash) in [
+        (json!([want("text", Some("fr"))]), true),
+        (json!([want("text", None)]), true),
+        (json!([want("text", Some("en"))]), false),
+    ] {
+        let (s, r) = c.request(&c.manager, "OL2W", wants).await;
+        assert_eq!(s, if clash { 409 } else { 201 }, "{r}");
+    }
+    for body in [
+        json!({"mediaType": "book", "externalId": "OL2W", "title": "t"}),
+        json!({"mediaType": "book", "externalId": "10", "title": "t", "wants": [want("text", None)]}),
+        json!({"mediaType": "book", "tmdbId": 10, "title": "t", "wants": [want("text", None)]}),
+        json!({"mediaType": "book", "externalId": "OL3W", "title": "t", "wants": [want("video", None)]}),
+    ] {
+        assert_eq!(
+            c.call(&c.user, "POST", "/api/requests", body.clone())
+                .await
+                .0,
+            400,
+            "{body}"
+        );
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_requests_cannot_pass_the_quota_together(pool: PgPool) {
+    let c = ctx(pool).await;
+    let calls = (2..=9).map(|n| {
+        let (app, tok) = (c.app.clone(), c.user.clone());
+        tokio::spawn(async move {
+            let body = json!({"mediaType": "book", "externalId": format!("OL{n}W"), "title": "t",
+                              "wants": [want("text", None)]});
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/requests")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {tok}"))
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            app.oneshot(req).await.unwrap().status().as_u16()
+        })
+    });
+    let mut codes = vec![];
+    for h in calls.collect::<Vec<_>>() {
+        codes.push(h.await.unwrap());
+    }
+    assert_eq!(codes.iter().filter(|s| **s == 201).count(), 2, "{codes:?}");
+    assert_eq!(codes.iter().filter(|s| **s == 403).count(), 6, "{codes:?}");
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM requests WHERE \"userId\" = 2")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn only_a_manager_approves_and_the_book_gets_the_requested_wants(pool: PgPool) {
+    let c = ctx(pool).await;
+    let wants = json!([want("text", Some("fr")), want("audio", Some("en"))]);
+    let (_, r) = c.request(&c.user, "OL2W", wants).await;
+    let uri = format!("/api/requests/{}/approve", r["id"]);
+    for tok in [&c.user, &c.reader] {
+        assert_eq!(c.call(tok, "POST", &uri, json!({})).await.0, 403);
+    }
+    let (s, r) = c.call(&c.manager, "POST", &uri, json!({})).await;
+    assert_eq!((s, &r["status"]), (201, &json!("approved")), "{r}");
+    let media = r["mediaId"].as_i64().unwrap() as i32;
+    assert_eq!(
+        c.wants(media).await,
+        [
+            ("audio".into(), Some("en".into())),
+            ("text".into(), Some("fr".into()))
+        ]
+    );
+    let monitored: bool = sqlx::query_scalar("SELECT monitored FROM media WHERE id = $1")
+        .bind(media)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert!(monitored);
+    assert_eq!(c.call(&c.manager, "POST", &uri, json!({})).await.0, 409);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_already_in_the_library_gets_the_wants_added(pool: PgPool) {
+    let c = ctx(pool).await;
+    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W"});
+    let (s, m) = c.call(&c.admin, "POST", "/api/media/import", body).await;
+    assert_eq!(s, 201, "{m}");
+    let media = m["id"].as_i64().unwrap() as i32;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("audio", Some("fr"))]))
+        .await;
+    let uri = format!("/api/requests/{}/approve", r["id"]);
+    let (s, r) = c.call(&c.manager, "POST", &uri, json!({})).await;
+    assert_eq!((s, &r["mediaId"]), (201, &json!(media)), "{r}");
+    assert_eq!(
+        c.wants(media).await,
+        [
+            ("audio".into(), None),
+            ("audio".into(), Some("fr".into())),
+            ("text".into(), None)
+        ]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_request_is_available_once_every_want_has_a_part(pool: PgPool) {
+    let c = ctx(pool).await;
+    let wants = json!([want("text", Some("fr")), want("audio", Some("en"))]);
+    let (_, r) = c.request(&c.user, "OL2W", wants).await;
+    let id = r["id"].as_i64().unwrap();
+    let uri = format!("/api/requests/{id}/approve");
+    let (_, r) = c.call(&c.manager, "POST", &uri, json!({})).await;
+    let media = r["mediaId"].as_i64().unwrap();
+    let status = async || -> String {
+        Lifecycle::of(&c.st)
+            .on_import_complete(media as i32)
+            .await
+            .unwrap();
+        sqlx::query_scalar("SELECT status::text FROM requests WHERE id = $1")
+            .bind(id as i32)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(status().await, "approved");
+    for (n, family, language) in [(0, "text", "fr"), (1, "audio", "fr"), (2, "audio", "en")] {
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            r#"INSERT INTO editions (id, "mediaId", family, language) VALUES ({e}, {media}, '{family}', '{language}');
+               INSERT INTO items (id, "mediaId", "editionId", monitored) VALUES ({i}, {media}, {e}, true);
+               INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId")
+                 VALUES ({f}, {media}, 'f{n}', 1, 'x', (SELECT id FROM library_folders WHERE "libraryId" = 1));
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES ({i}, {f}, {media}, 0);"#,
+            e = 500 + n,
+            i = 600 + n,
+            f = 700 + n
+        )))
+        .execute(&c.pool)
+        .await
+        .unwrap();
+        let expected = if n == 0 { "approved" } else { "available" };
+        // the French audio edition does not satisfy the English want
+        let expected = if n == 1 { "approved" } else { expected };
+        assert_eq!(status().await, expected, "after {family}-{language}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn auto_approval_reads_the_book_kind_and_fails_closed_on_tmdb_facts(pool: PgPool) {
+    let c = ctx(pool).await;
+    let rule = async |criteria: Value| {
+        let body = json!({"name": "r", "criteria": criteria});
+        assert_eq!(
+            c.call(&c.admin, "POST", "/api/auto-approval-rules", body)
+                .await
+                .0,
+            201
+        );
+    };
+    rule(json!({"mediaType": "book", "genreIds": [1]})).await;
+    let (_, r) = c
+        .request(&c.manager, "OL2W", json!([want("text", None)]))
+        .await;
+    assert_eq!(r["status"], "pending", "genre criteria cannot match a book");
+    rule(json!({"mediaType": "book", "userIds": [3]})).await;
+    let (s, r) = c
+        .request(&c.manager, "OL3W", json!([want("text", Some("de"))]))
+        .await;
+    assert_eq!((s, &r["status"]), (201, &json!("approved")), "{r}");
+    assert!(r["media"]["id"].is_i64(), "{r}");
+    let (_, r) = c
+        .request(&c.user, "OL4W", json!([want("text", None)]))
+        .await;
+    assert_eq!(r["status"], "pending", "the rule names another user");
+}
+
+#[sqlx::test(migrations = false)]
+async fn requesting_needs_the_requests_permission(pool: PgPool) {
+    let c = ctx(pool).await;
+    assert_eq!(
+        c.request(&c.reader, "OL2W", json!([want("text", None)]))
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        c.request("", "OL2W", json!([want("text", None)])).await.0,
+        401
+    );
+}

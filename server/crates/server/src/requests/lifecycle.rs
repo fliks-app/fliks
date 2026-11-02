@@ -138,15 +138,17 @@ impl Lifecycle {
             return Ok(());
         };
         let (eps, files) = match media.media_type {
-            MediaKind::Movie | MediaKind::Book => {
-                (vec![], db::file_count(&self.st.db, media_id).await?)
-            }
+            MediaKind::Movie => (vec![], db::file_count(&self.st.db, media_id).await?),
             MediaKind::Series => (db::episodes(&self.st.db, media_id).await?, 0),
+            MediaKind::Book => (vec![], 0),
         };
         for r in active {
-            let covered = match media.media_type {
-                MediaKind::Movie | MediaKind::Book => files > 0,
-                MediaKind::Series => scope_covered(r.scope(), &eps),
+            let covered = match (media.media_type, &r.wants) {
+                (MediaKind::Book, Some(w)) => {
+                    db::wants_covered(&self.st.db, media_id, &w.0).await?
+                }
+                (MediaKind::Series, _) => scope_covered(r.scope(), &eps),
+                _ => files > 0,
             };
             if !covered {
                 continue;

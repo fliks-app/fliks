@@ -274,3 +274,37 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
     });
     Ok(id)
 }
+
+/// A book request approval: the work in the request's library with the requested editions wished; a work
+/// already in the library gets them added to its wants. No caller ACL, the requester is `added_by`.
+pub async fn import_book_for_request(
+    st: &AppState,
+    work: &str,
+    wants: &[WantSpec],
+    (library, folder): (Option<i32>, Option<i32>),
+    added_by: Option<i32>,
+) -> Result<i32, AppError> {
+    if let Some(id) = external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await? {
+        let mut tx = st.db.begin().await?;
+        wants::add(&mut tx, id, wants)
+            .await
+            .map_err(|e| wants::write_error(e, id))?;
+        tx.commit().await?;
+        return Ok(id);
+    }
+    let all = super::all_library_ids(&st.db).await?;
+    let target = super::resolve_target_in(st, &all, MediaKind::Book, library, folder).await?;
+    create_book(
+        st,
+        &NewBook {
+            target: &target,
+            folder,
+            user: added_by.filter(|u| *u != 0),
+            work,
+            prio: Priority::Interactive,
+            wants: Some(wants),
+            discovered: false,
+        },
+    )
+    .await
+}

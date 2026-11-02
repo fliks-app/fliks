@@ -1,6 +1,8 @@
 //! `/api/requests/*`, `/api/auto-approval-rules/*` and the request lifecycle (`docs/spec/requests.md`).
 mod db;
 pub(crate) use db::lock_title;
+#[cfg(test)]
+mod book_tests;
 pub(crate) mod dto;
 mod flow;
 mod lifecycle;
@@ -77,7 +79,8 @@ pub struct Art {
     pub fanart: Option<String>,
 }
 
-/// What `importFromTmdb` is asked for (rule 24); `seasons` scopes the monitoring of a series.
+/// What `importFromTmdb` is asked for (rule 24); `seasons` scopes the monitoring of a series, `wants` the
+/// editions of a book.
 #[derive(Debug, Clone)]
 pub struct ImportSpec {
     pub title: TitleKey,
@@ -86,6 +89,7 @@ pub struct ImportSpec {
     pub library_id: Option<i32>,
     pub folder_id: Option<i32>,
     pub seasons: Option<Vec<i64>>,
+    pub wants: Option<Vec<fliks_domain::media::wants::WantSpec>>,
 }
 
 /// The media a delete request removed: its title, the folder to purge when it has one, and the media

@@ -134,14 +134,36 @@ pub fn write_error(e: sqlx::Error, media: i32) -> AppError {
     }
 }
 
-/// Replaces the wants of a media by `specs` under the media's row lock (`wants-follows.md` rule 3).
-pub async fn replace(c: &mut PgConnection, media: i32, specs: &[WantSpec]) -> sqlx::Result<()> {
+/// Adds `specs` to the wants of a media (a present one takes a named profile) under the media's row lock.
+pub async fn add(c: &mut PgConnection, media: i32, specs: &[WantSpec]) -> sqlx::Result<()> {
     sqlx::query_scalar::<_, i32>(
         r#"UPDATE media SET "updatedAt" = now() WHERE id = $1 RETURNING id"#,
     )
     .bind(media)
     .fetch_one(&mut *c)
     .await?;
+    upsert(c, media, specs).await
+}
+
+/// Replaces the wants of a media by `specs` under the media's row lock (`wants-follows.md` rule 3).
+pub async fn replace(c: &mut PgConnection, media: i32, specs: &[WantSpec]) -> sqlx::Result<()> {
+    add(c, media, specs).await?;
+    let families: Vec<&str> = specs.iter().map(|s| s.family.as_str()).collect();
+    let languages: Vec<Option<&str>> = specs.iter().map(|s| s.language.as_deref()).collect();
+    sqlx::query(
+        r#"DELETE FROM wants w WHERE w."mediaId" = $1 AND NOT EXISTS (
+             SELECT 1 FROM UNNEST($2::text[], $3::text[]) AS v(f, l)
+             WHERE v.f = w.family AND v.l IS NOT DISTINCT FROM w.language)"#,
+    )
+    .bind(media)
+    .bind(&families)
+    .bind(&languages)
+    .execute(&mut *c)
+    .await
+    .map(drop)
+}
+
+async fn upsert(c: &mut PgConnection, media: i32, specs: &[WantSpec]) -> sqlx::Result<()> {
     let families: Vec<&str> = specs.iter().map(|s| s.family.as_str()).collect();
     let languages: Vec<Option<&str>> = specs.iter().map(|s| s.language.as_deref()).collect();
     let profiles: Vec<Option<i32>> = specs.iter().map(|s| s.quality_profile_id).collect();
@@ -160,16 +182,6 @@ pub async fn replace(c: &mut PgConnection, media: i32, specs: &[WantSpec]) -> sq
     .bind(&families)
     .bind(&languages)
     .bind(&profiles)
-    .execute(&mut *c)
-    .await?;
-    sqlx::query(
-        r#"DELETE FROM wants w WHERE w."mediaId" = $1 AND NOT EXISTS (
-             SELECT 1 FROM UNNEST($2::text[], $3::text[]) AS v(f, l)
-             WHERE v.f = w.family AND v.l IS NOT DISTINCT FROM w.language)"#,
-    )
-    .bind(media)
-    .bind(&families)
-    .bind(&languages)
     .execute(&mut *c)
     .await
     .map(drop)

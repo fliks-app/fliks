@@ -16,9 +16,10 @@ use axum::http::StatusCode;
 use chrono::Utc;
 use fliks_domain::{
     acl::{Action, Subject},
-    media::kind::MediaKind,
+    media::{kind::MediaKind, wants::WantSpec},
 };
 use serde_json::{Map, Value, json};
+use sqlx::PgConnection;
 use std::time::Duration;
 
 pub type Res<T> = Result<T, AppError>;
@@ -118,8 +119,9 @@ async fn resolve_sole_library(st: &AppState, a: &Authed, media_type: MediaKind) 
     }
 }
 
-/// Rule 13: the ADD requests of the window still pending or approved count against the limit.
-async fn check_quota(st: &AppState, a: &Authed, media_type: MediaKind) -> Res<()> {
+/// Rule 13: the ADD requests of the window still pending or approved count against the limit; the
+/// caller holds the user's quota lock, so the count is still true at the insert.
+async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -> Res<()> {
     let limit = a.user.quotas.limit(media_type);
     if limit == 0 {
         return Ok(());
@@ -129,7 +131,7 @@ async fn check_quota(st: &AppState, a: &Authed, media_type: MediaKind) -> Res<()
         n => n,
     };
     let since = Utc::now() - chrono::Duration::days(i64::from(period));
-    let count = db::quota_count(&st.db, a.user.id, media_type, since).await?;
+    let count = db::quota_count(&mut *tx, a.user.id, media_type, since).await?;
     if count >= i64::from(limit) {
         return Err(AppError::forbidden(format!(
             "Quota exceeded: {count}/{limit} {media_type} requests in last {period} days"
@@ -143,6 +145,24 @@ async fn assert_no_active_duplicate(st: &AppState, dto: &CreateRequest) -> Res<(
     let existing = db::active_adds(&st.db, &dto.key()).await?;
     if existing.is_empty() {
         return Ok(());
+    }
+    if let Some(wants) = &dto.wants {
+        let taken: Vec<&WantSpec> = existing
+            .iter()
+            .flat_map(|e| e.wants.iter().flat_map(|w| w.0.iter()))
+            .collect();
+        let overlap: Vec<String> = wants
+            .iter()
+            .filter(|w| taken.iter().any(|t| overlaps(w, t)))
+            .map(want_label)
+            .collect();
+        if overlap.is_empty() {
+            return Ok(());
+        }
+        return Err(AppError::conflict(format!(
+            "Edition(s) {} have already been requested",
+            overlap.join(", ")
+        )));
     }
     let wanted = dto.seasons.as_deref().unwrap_or_default();
     if !dto.media_type.has_seasons() || wanted.is_empty() {
@@ -173,6 +193,19 @@ async fn assert_no_active_duplicate(st: &AppState, dto: &CreateRequest) -> Res<(
     )))
 }
 
+/// Two wants clash on one family when their languages are equal or one of them is any.
+fn overlaps(a: &WantSpec, b: &WantSpec) -> bool {
+    a.family == b.family
+        && (a.language.is_none() || b.language.is_none() || a.language == b.language)
+}
+
+fn want_label(w: &WantSpec) -> String {
+    match &w.language {
+        Some(l) => format!("{}-{l}", w.family),
+        None => w.family.to_string(),
+    }
+}
+
 type Profiles = (Option<i32>, Option<i32>);
 
 /// Rule 12b: the profiles of the earliest active request, else of the library row.
@@ -200,14 +233,23 @@ pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
     } else {
         None
     };
-    Ok(json!({
+    let mut state = json!({
         "requested": if series { whole } else { !active.is_empty() },
         "wholeSeriesRequested": whole,
         "requestedSeasons": seasons,
         "profilesLocked": locked.is_some(),
         "lockedQualityProfileId": locked.and_then(|l| l.0),
         "lockedLanguageProfileId": locked.and_then(|l| l.1),
-    }))
+    });
+    if key.media_type == MediaKind::Book {
+        let wants: Vec<&WantSpec> = active
+            .iter()
+            .flat_map(|r| r.wants.iter().flat_map(|w| w.0.iter()))
+            .collect();
+        state["requested"] = json!(!wants.is_empty());
+        state["requestedWants"] = json!(wants);
+    }
+    Ok(state)
 }
 
 /// Ids Postgres would reject as a foreign key violation answer 400 instead of 500.
@@ -237,7 +279,7 @@ pub async fn ensure_media(
     spec: ImportSpec,
     added_by: Option<i32>,
 ) -> Res<Option<i32>> {
-    let media_id = match services::import_from_tmdb(st, spec.clone(), added_by).await {
+    let media_id = match services::import_title(st, spec.clone(), added_by).await {
         Ok(id) => id,
         Err(e) if e.status != 409 => return Err(e.into()),
         Err(_) => {
@@ -313,8 +355,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     if dto.delete {
         return create_delete(st, a, &dto).await;
     }
-    check_quota(st, a, dto.media_type).await?;
     let mut tx = st.db.begin().await?;
+    db::lock_user_quota(&mut tx, a.user.id).await?;
+    check_quota(&mut tx, a, dto.media_type).await?;
     let key = dto.key();
     db::lock_title(&mut tx, &key).await?;
     assert_no_active_duplicate(st, &dto).await?;
@@ -345,6 +388,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         some_id(dto.language_profile_id),
     );
     assert_exist(st, quality, language, None).await?;
+    if let Some(w) = &dto.wants {
+        crate::media::wants::check_profiles(&st.db, w).await?;
+    }
 
     let auto = rules::should_auto_approve(st, a, &dto, library_id).await?;
     let media_id = if auto {
@@ -355,6 +401,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             library_id: Some(library_id),
             folder_id: dto.folder_id,
             seasons: dto.seasons.clone(),
+            wants: dto.wants.clone(),
         };
         ensure_media(st, spec, Some(a.user.id)).await?
     } else {
@@ -377,6 +424,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             media_id,
             poster_url: None,
             fanart_url: None,
+            wants: dto.wants.as_deref(),
         },
     )
     .await?;
@@ -484,6 +532,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
             media_id: Some(media.id),
             poster_url: media.poster_url.as_deref(),
             fanart_url: media.fanart_url.as_deref(),
+            wants: None,
         },
     )
     .await?;
@@ -615,6 +664,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         library_id: row.library_id,
         folder_id: row.folder_id,
         seasons: row.seasons.as_ref().map(|s| s.0.clone()),
+        wants: row.wants.as_ref().map(|w| w.0.clone()),
     };
     let media = match ensure_media(st, spec, row.user_id).await {
         Ok(m) => m,

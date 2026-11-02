@@ -111,17 +111,19 @@ pub async fn should_auto_approve(
         return Ok(false);
     }
     let scoped = dto.seasons.as_deref().filter(|s| !s.is_empty());
-    let facts = if rules
-        .iter()
-        .any(|r| reads_metadata(&r.criteria.0, scoped.is_some()))
+    let tmdb_id = dto.key.tmdb_id();
+    let facts = if let Some(tmdb_id) = tmdb_id
+        && rules
+            .iter()
+            .any(|r| reads_metadata(&r.criteria.0, scoped.is_some()))
     {
-        match services::title_facts(st, dto.media_type, dto.tmdb_id).await {
+        match services::title_facts(st, dto.media_type, tmdb_id).await {
             Ok(f) => Some(f),
             Err(e) => {
                 tracing::warn!(
                     "Auto-approval: metadata lookup failed for {} {}, genre/year/season criteria cannot match: {e}",
                     dto.media_type,
-                    dto.tmdb_id
+                    tmdb_id
                 );
                 None
             }
@@ -148,7 +150,7 @@ pub async fn should_auto_approve(
         tracing::info!(
             "Auto-approving {} {} for user {}: rule \"{}\" (#{})",
             dto.media_type,
-            dto.tmdb_id,
+            dto.key.external_id,
             a.user.id,
             r.name,
             r.id
