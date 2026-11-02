@@ -328,7 +328,7 @@ async fn device_user(st: &AppState, req: &ResolveRequest) -> Result<Option<Calle
 }
 
 /// `Basic <base64(identifier:password)>` as `(identifier, password)`; the identifier is free, at most 255 bytes.
-fn basic(credential: &str) -> Option<(String, String)> {
+pub(crate) fn basic(credential: &str) -> Option<(String, String)> {
     use base64::{Engine, engine::general_purpose::STANDARD};
     let mut words = credential.split_whitespace();
     let (scheme, encoded) = (words.next()?, words.next()?);

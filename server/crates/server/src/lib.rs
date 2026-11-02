@@ -27,6 +27,7 @@ pub mod media_servers;
 pub mod metadata;
 pub mod net;
 pub mod notifications;
+pub mod opds;
 pub mod outbound;
 pub mod party;
 pub mod paths;

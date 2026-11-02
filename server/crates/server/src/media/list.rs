@@ -334,11 +334,22 @@ pub async fn find_all(
     uid: i32,
     see_paths: bool,
 ) -> Result<Page, sqlx::Error> {
+    let (page_ids, total) = find_ids(db, p, ids, uid).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
+    attach_watched(db, &mut data, &page_ids, uid).await?;
+    books::attach_list_info(db, &mut data, uid, ids).await?;
+    Ok(Page { data, total })
+}
+
+/// The ids of one page of `p` in order, and the total, before any hydration.
+pub(crate) async fn find_ids(
+    db: &PgPool,
+    p: &Search,
+    ids: &[i32],
+    uid: i32,
+) -> Result<(Vec<i32>, i64), sqlx::Error> {
     if ids.is_empty() {
-        return Ok(Page {
-            data: vec![],
-            total: 0,
-        });
+        return Ok((vec![], 0));
     }
     let today = Utc::now().date_naive();
     let map = if p.cutoff_unmet {
@@ -382,10 +393,7 @@ pub async fn find_all(
         qb.build_query_scalar().fetch_one(db).await?
     };
 
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
-    attach_watched(db, &mut data, &page_ids, uid).await?;
-    books::attach_list_info(db, &mut data, uid, ids).await?;
-    Ok(Page { data, total })
+    Ok((page_ids, total))
 }
 
 /// Rule 27 verbatim: the percentage stays in SQL (`round(float8)` is half-to-even).
