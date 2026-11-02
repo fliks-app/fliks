@@ -176,6 +176,7 @@ impl Plugins {
                 rt: None,
                 declared,
                 registered,
+                bundled: false,
             });
         }
         self.registry.install_declarations(id, m, &declared);
@@ -266,6 +267,8 @@ impl Plugins {
             ingest_roots: strs("ingestRoots"),
             provider: m.get("provider").is_some(),
             defaults: defaults::for_plugin(m, pkg.verified_by_key_id.is_some()),
+            requires_ok: AtomicBool::new(false),
+            unauthorized: AtomicBool::new(false),
             era: AtomicU64::new(0),
             stopped: Notify::new(),
             mem_total: Default::default(),
@@ -295,6 +298,7 @@ impl Plugins {
             rt: Some(rt),
             declared,
             registered,
+            bundled: pkg.origin == "bundled",
         })
     }
 
@@ -347,7 +351,7 @@ impl Plugins {
     /// Waits for `ready` (at most the boot wait), then activates; the outcome is `statusReason`.
     pub async fn settle(&self, p: Pending) -> Result<(), Fail> {
         let Some(rt) = p.rt.clone() else {
-            self.activate(p);
+            self.activate(p).await;
             return Ok(());
         };
         let mut w = rt.watch();
@@ -365,7 +369,7 @@ impl Plugins {
         .await;
         match ready {
             Ok(State::Ready) => {
-                self.activate(p);
+                self.activate(p).await;
                 Ok(())
             }
             Ok(_) => {
@@ -396,7 +400,7 @@ impl Plugins {
                 if s == State::Ready {
                     if plugins.rt(&p.id).is_some_and(|r| Arc::ptr_eq(&r, &rt)) {
                         let id = p.id.clone();
-                        plugins.activate(p);
+                        plugins.activate(p).await;
                         let _ = packages::set_status(&st.db, &id, None).await;
                     }
                     return;
@@ -416,7 +420,7 @@ impl Plugins {
         });
     }
 
-    pub(super) fn activate(&self, p: Pending) {
+    pub(super) async fn activate(&self, p: Pending) {
         let id = p.id.clone();
         let picker = p.registered.manifest["ui"].get("releasePicker").is_some();
         let player = p.registered.manifest["ui"].get("player").is_some();
@@ -440,6 +444,7 @@ impl Plugins {
             self.registry.set_jobs(&id, p.declared.jobs.clone());
             self.start_crons(&id, &p.declared.jobs);
         }
+        self.offer_provider(&id, p.rt.as_ref(), p.bundled).await;
     }
 
     pub(super) fn start_crons(&self, id: &str, jobs: &[registry::Job]) {

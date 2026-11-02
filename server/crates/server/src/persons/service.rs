@@ -104,7 +104,9 @@ async fn call_provider<T, Fut>(
 where
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
-    let primary = md.resolve(p.provider.as_deref());
+    let primary = md
+        .resolve_person(p.provider.as_deref())
+        .unwrap_or(ExternalProvider::Tmdb);
     let e = match call(primary).await {
         Ok(v) => return Ok((v, primary)),
         Err(e) => e,
@@ -140,8 +142,11 @@ async fn try_refresh(
     let Some(ext) = p.tmdb_id.map(|id| id.to_string()) else {
         return Ok(());
     };
-    let (d, _) = call_provider(md, db, p, |pr| {
-        md.of(pr).fetch_person(&ext, lang, Priority::Interactive)
+    let ext = &ext;
+    let (d, _) = call_provider(md, db, p, |pr| async move {
+        md.of(pr)
+            .fetch_person(ext, lang, Priority::Interactive)
+            .await
     })
     .await
     .map_err(|(pr, e)| format!("{}: {e}", pr.as_str()))?;
@@ -336,8 +341,11 @@ pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Valu
         return Ok(json!({"provider": null, "cast": [], "crew": []}));
     };
     let md = &*st.metadata;
-    let (credits, served) = call_provider(md, &st.db, &mut p, |pr| {
-        md.of(pr).person_credits(&ext, &lang, Priority::Interactive)
+    let (ext, lang) = (&ext, &lang);
+    let (credits, served) = call_provider(md, &st.db, &mut p, |pr| async move {
+        md.of(pr)
+            .person_credits(ext, lang, Priority::Interactive)
+            .await
     })
     .await
     .map_err(|(pr, e)| {

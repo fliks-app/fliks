@@ -171,4 +171,37 @@ impl PluginRt {
     pub fn memory(&self) -> Option<u64> {
         (self.live_instances() > 0).then(|| self.sh.mem_total.load(Ordering::Relaxed) as u64)
     }
+
+    /// Waits at most `wait` for a starting plugin to turn `ready`; the other states fail at once.
+    pub async fn wait_ready(&self, wait: Duration) -> Result<(), CallError> {
+        let mut w = self.watch();
+        let started = |s: State| matches!(s, State::Starting | State::Handshaking);
+        if started(*w.borrow_and_update()) {
+            let _ = tokio::time::timeout(wait, w.wait_for(|s| !started(*s))).await;
+        }
+        match self.state() {
+            State::Ready => Ok(()),
+            s => Err(CallError::Unavailable(s.as_str().into())),
+        }
+    }
+
+    /// One export of the `metadata-provider` interface on the provider lane (rules 49-51).
+    pub async fn provider_call<R: Send + 'static>(
+        self: &Arc<Self>,
+        budget: Budget,
+        wait: Duration,
+        p: Priority,
+        f: impl for<'a> FnOnce(&'a mut Inst) -> BoxFuture<'a, wasmtime::Result<R>> + Send + 'static,
+    ) -> Result<R, CallError> {
+        let lane = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| CallError::Unavailable("not a provider".into()))?;
+        self.wait_ready(wait).await?;
+        let run = call_fn(move |i| {
+            i.store.data_mut().set_priority(p);
+            f(i)
+        });
+        lane.call(self, budget, run).await
+    }
 }

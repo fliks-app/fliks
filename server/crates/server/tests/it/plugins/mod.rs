@@ -5,6 +5,7 @@ mod create;
 mod harness;
 mod net;
 mod provider;
+mod provider_host;
 mod roles;
 mod runtime;
 mod sql;

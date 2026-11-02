@@ -205,12 +205,11 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
         Some(p) => Some(p),
         None => preferred(&st.db, bare(&q, "mediaId").as_deref()).await?,
     };
-    let primary = md.resolve(name.as_deref());
-    let search = Search::text(
-        MediaKind::from_tv(tv),
-        query,
-        year(bare(&q, "year").as_deref()),
-    );
+    let kind = MediaKind::from_tv(tv);
+    let primary = md
+        .resolve(name.as_deref(), kind)
+        .unwrap_or(ExternalProvider::Tmdb);
+    let search = Search::text(kind, query, year(bare(&q, "year").as_deref()));
     let lang = lang(&st).await?;
     let go = Priority::Interactive;
     let mut found = md.of(primary).search(&search, &lang, go).await;
