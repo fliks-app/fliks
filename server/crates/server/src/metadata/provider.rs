@@ -57,8 +57,12 @@ pub trait MetadataProvider: Send + Sync {
     /// Whether `fetch_person` and `person_credits` are answered.
     fn has_persons(&self) -> bool;
     fn limits(&self) -> Limits;
-    /// How long a fetched record answers without a call; `None` never expires.
-    fn snapshot_ttl(&self) -> Option<Duration> {
+    /// Whether a call can be made now: a built-in always, a plugin while it is up.
+    fn available(&self) -> bool {
+        true
+    }
+    /// How long a fetched `resource` (`work`, `children`, `edition`) answers without a call; `None` never expires.
+    fn snapshot_ttl(&self, _resource: &str) -> Option<Duration> {
         Some(Duration::ZERO)
     }
     fn search<'a>(

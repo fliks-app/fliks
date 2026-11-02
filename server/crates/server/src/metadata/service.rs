@@ -372,7 +372,10 @@ async fn read_for_library(
 /// `tmdbId` filled from the `tvdbId`.
 pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, AppError> {
     let kind = l.media_type;
-    let finder = st.metadata.resolve(l.provider.as_deref());
+    let finder = st
+        .metadata
+        .resolve(l.provider.as_deref(), kind)
+        .unwrap_or(ExternalProvider::Tmdb);
     let lib = library(st, Some(l.library_id)).await?;
     let lang = language(st, lib.as_ref()).await?;
     let (p, id, mut details, provenance) =

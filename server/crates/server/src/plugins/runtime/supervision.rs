@@ -219,6 +219,7 @@ impl PluginRt {
             }
             for l in [&self.http, &self.task]
                 .into_iter()
+                .chain(&self.provider)
                 .chain(self.jobs.values())
             {
                 l.reap(cfg.idle_after);
