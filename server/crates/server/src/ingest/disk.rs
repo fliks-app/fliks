@@ -791,6 +791,9 @@ async fn relink_core(
         media.id,
         errors.len()
     );
+    for e in &errors {
+        tracing::warn!("Orphan relink — media #{}: {e}", media.id);
+    }
     Ok(json!({
         "mediaId": media.id,
         "created": created,
