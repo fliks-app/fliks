@@ -31,6 +31,10 @@
     {
       "as": "admin",
       "expect": {
+        "body": {
+          "removedMedia": 0,
+          "unlinkedMedia": 0
+        },
         "status": 200
       },
       "method": "DELETE",
