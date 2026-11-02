@@ -9,8 +9,6 @@ import type { MediaType } from '../../enums/media-type.enum';
 export interface LibraryFolderChoice {
   id: number;
   name: string;
-  /** Present for managers only. */
-  freeSpace?: number | null;
 }
 
 /** Lightweight library projection for non-admin users (sidebar, route resolution). */
@@ -37,8 +35,15 @@ export interface LibraryFolder {
   id: number;
   path: string;
   position: number;
-  disk: LibraryDiskMetrics | null;
+  disk: LibraryDiskMetrics;
   mediaCount: number;
+}
+
+export interface RemoveFolderResult {
+  /** Media whose files were all in the folder: gone from Fliks. */
+  removedMedia: number;
+  /** Media with files elsewhere: only this folder's files were dropped. */
+  unlinkedMedia: number;
 }
 
 export interface UpdateLibraryFolderBody {
@@ -131,7 +136,7 @@ export class LibrariesApiService {
   /** Answers 409 `folder_in_use` while files are linked; `removeMedia` drops those media from Fliks instead, files kept. The caller reports the failure. */
   removeFolder(libraryId: number, folderId: number, removeMedia = false) {
     return firstValueFrom(
-      this.http.delete<void>(`/api/libraries/${libraryId}/folders/${folderId}`, {
+      this.http.delete<RemoveFolderResult>(`/api/libraries/${libraryId}/folders/${folderId}`, {
         params: removeMedia ? { removeMedia: true } : {},
         context: new HttpContext().set(SKIP_ERROR_TOAST, true),
       }),

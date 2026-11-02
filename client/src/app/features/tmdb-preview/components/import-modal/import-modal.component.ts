@@ -17,14 +17,14 @@ import { ProfilesService } from '../../../../core/services/api/profiles.service'
 import {
   LibrariesApiService,
   Library,
-  LibraryFolderChoice,
-} from '../../../../core/services/api/libraries-api.service';
+  } from '../../../../core/services/api/libraries-api.service';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import {
+  LibraryFolderOption,
   LibraryFolderSelectComponent,
   defaultFolderId,
 } from '../../../../shared/components/library-folder-select/library-folder-select';
@@ -145,12 +145,12 @@ export class ImportModalComponent {
     }
   }
 
-  private folderChoicesOf(libraryId: number | null): LibraryFolderChoice[] {
+  private folderChoicesOf(libraryId: number | null): LibraryFolderOption[] {
     const lib = this.libraries().find((l) => l.id === libraryId);
     return (lib?.folders ?? []).map((f) => ({
       id: f.id,
       name: f.path,
-      freeSpace: f.disk?.accessible ? f.disk.freeSpace : null,
+      freeSpace: f.disk.accessible ? f.disk.freeSpace : null,
     }));
   }
 

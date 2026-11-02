@@ -132,7 +132,10 @@ export class LibraryFoldersComponent {
 
   private removeFolder(folder: LibraryFolder, removeMedia: boolean) {
     return this.run(
-      () => this.api.removeFolder(this.state.libraryId(), folder.id, removeMedia),
+      async () => {
+        const res = await this.api.removeFolder(this.state.libraryId(), folder.id, removeMedia);
+        if (removeMedia) this.toast.success(this.translate.instant('settings.libraries.folder_removed', res));
+      },
       (err) => {
         if (isFolderInUse(err)) {
           this.blocked.set(folder);

@@ -46,15 +46,15 @@
                 @if (i === 0) {
                   <span class="badge badge-primary badge-sm shrink-0">{{ 'settings.libraries.folder_default' | translate }}</span>
                 }
-                @if (folder.disk && !folder.disk.accessible) {
+                @if (!folder.disk.accessible) {
                   <span class="badge badge-error badge-sm shrink-0">{{ 'settings.libraries.inaccessible' | translate }}</span>
                 }
               </div>
               <p class="text-xs text-base-content/60 mt-0.5">
-                @if (folder.disk?.accessible) {
+                @if (folder.disk.accessible) {
                   {{ 'settings.libraries.folder_space' | translate: {
-                    free: formatBytes(folder.disk!.freeSpace),
-                    total: formatBytes(folder.disk!.totalSpace)
+                    free: formatBytes(folder.disk.freeSpace),
+                    total: formatBytes(folder.disk.totalSpace)
                   } }}
                   ·
                 }

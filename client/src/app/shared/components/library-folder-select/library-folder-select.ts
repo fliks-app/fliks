@@ -5,8 +5,11 @@ import type { LibraryFolderChoice } from '../../../core/services/api/libraries-a
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 
+/** A choice, with the free space only a manager screen knows. */
+export type LibraryFolderOption = LibraryFolderChoice & { freeSpace?: number | null };
+
 /** Folder of the chosen library: absent when there is nothing to choose, the first one being the library's default. */
-export const defaultFolderId = (folders: LibraryFolderChoice[] | undefined): number | null =>
+export const defaultFolderId = (folders: LibraryFolderOption[] | undefined): number | null =>
   folders && folders.length > 1 ? folders[0].id : null;
 
 @Component({
@@ -15,7 +18,7 @@ export const defaultFolderId = (folders: LibraryFolderChoice[] | undefined): num
   templateUrl: './library-folder-select.html',
 })
 export class LibraryFolderSelectComponent {
-  readonly folders = input<LibraryFolderChoice[]>([]);
+  readonly folders = input<LibraryFolderOption[]>([]);
   readonly folderId = model<number | null>(null);
   protected readonly formatBytes = formatBytes;
 }

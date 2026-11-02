@@ -17,7 +17,7 @@ const folder = (id: number, path: string, mediaCount = 0): LibraryFolder => ({
   id,
   path,
   position: id - 1,
-  disk: null,
+  disk: { freeSpace: 1, totalSpace: 2, accessible: true },
   mediaCount,
 });
 
@@ -33,7 +33,7 @@ function setup(removeError?: unknown) {
     },
     removeFolder: (_l: number, id: number, removeMedia: boolean) => {
       calls.push(`remove ${id} ${removeMedia}`);
-      return !removeMedia && removeError ? Promise.reject(removeError) : Promise.resolve();
+      return !removeMedia && removeError ? Promise.reject(removeError) : Promise.resolve({ removedMedia: 2, unlinkedMedia: 1 });
     },
   };
 
@@ -47,7 +47,7 @@ function setup(removeError?: unknown) {
       { provide: LibrariesApiService, useValue: api },
       { provide: FolderPickerService, useValue: {} },
       { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true) } },
-      { provide: ToastService, useValue: { error: (m: string) => toasts.push(m) } },
+      { provide: ToastService, useValue: { error: (m: string) => toasts.push(m), success: (m: string) => toasts.push(m) } },
       LibraryDetailState,
     ],
   });
@@ -77,7 +77,7 @@ describe('LibraryFoldersComponent', () => {
     // jsdom has no modal dialog support.
     HTMLDialogElement.prototype.showModal = () => undefined;
     HTMLDialogElement.prototype.close = () => undefined;
-    const { cmp, calls, toasts } = setup({ error: { code: 'folder_in_use' } });
+    const { cmp, calls, toasts } = setup({ error: { message: 'errors.folder_in_use' } });
 
     await cmp.remove(folder(1, '/a', 3));
     expect(calls).toEqual(['remove 1 false']);
@@ -86,6 +86,7 @@ describe('LibraryFoldersComponent', () => {
 
     await cmp.removeWithMedia();
     expect(calls).toEqual(['remove 1 false', 'remove 1 true']);
+    expect(toasts).toEqual(['settings.libraries.folder_removed']);
   });
 
   it('toasts any other removal failure', async () => {
