@@ -33,7 +33,10 @@ use fliks_domain::{
         validate_folder_name, validate_folder_path,
     },
     nfo::NfoData,
-    release::parsing::{quality::parse_release_quality, title::extract_media_title},
+    release::parsing::{
+        quality::parse_release_quality,
+        title::{ExtractedRelease, extract_media_title},
+    },
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -309,7 +312,7 @@ async fn scan_under(
     for g in &mut groups {
         let sample = PathBuf::from(&g.files[0].file_path);
         g.nfo = nfo::for_video(&sample).await;
-        let ex = extract_media_title(&file_name(&sample));
+        let ex = guess_from_path(root_p, &sample);
         g.guess_title = g
             .nfo
             .as_ref()
@@ -331,6 +334,21 @@ async fn scan_under(
         scanned_files: all.len(),
         orphan_count,
     }
+}
+
+/// The file name's title, unless it has no year and a folder between it and `root` has one
+/// (`00000.m2ts` in `Title (2024)/`, a disc's `BDMV/STREAM`).
+fn guess_from_path(root: &Path, file: &Path) -> ExtractedRelease {
+    let ex = extract_media_title(&file_name(file));
+    if ex.year.is_some() {
+        return ex;
+    }
+    file.ancestors()
+        .skip(1)
+        .take_while(|d| d.starts_with(root) && *d != root)
+        .map(|d| extract_media_title(&file_name(d)))
+        .find(|f| f.year.is_some())
+        .unwrap_or(ex)
 }
 
 /// The works the book files make, one orphan group each for the works that have a file still
@@ -807,7 +825,28 @@ use relink_dto::*;
 
 #[cfg(test)]
 mod tests {
-    use super::parse_relink;
+    use super::{guess_from_path, parse_relink};
+    use std::path::Path;
+
+    #[test]
+    fn a_yearless_file_name_takes_the_title_of_its_folder() {
+        let root = Path::new("/m/Movies");
+        let g = |p: &str| {
+            let e = guess_from_path(root, &root.join(p));
+            (e.title, e.year)
+        };
+        let extra = ("A Little Something Extra".to_owned(), Some(2024));
+        assert_eq!(g("A Little Something Extra (2024)/00000.m2ts"), extra);
+        assert_eq!(
+            g("A Little Something Extra (2024)/BDMV/STREAM/00000.m2ts"),
+            extra
+        );
+        assert_eq!(
+            g("Other (2001)/Avatar.2009.2160p.mkv"),
+            ("Avatar".to_owned(), Some(2009))
+        );
+        assert_eq!(g("Avatar.mkv").1, None);
+    }
     use serde_json::json;
 
     fn body(path: &str) -> serde_json::Value {
