@@ -84,6 +84,8 @@ export interface FieldDef {
   /** Stripped from every read response; only written back when non-empty. A resource lists its set keys
    *  under `SECRETS_SET_KEY` and treats an incoming `null` as "erase" (blank already means "unchanged"). */
   secret?: boolean;
+  /** Read response only: Fliks supplies a value for this field when none is stored. */
+  hasDefault?: boolean;
   /** A `string[]` only for `multiselect`, which is the set a new row starts from. */
   default?: string | number | boolean | string[];
   /** Required for `multiselect`. For that type the value is a `string[]` of the declared

@@ -11,7 +11,23 @@
           [value]="fieldValue(field)"
           (valueChange)="setValue(field, $event)"
         />
-        @if (isSecretStored(field)) {
+        @if (field.hasDefault) {
+          <p class="text-xs text-base-content/60">
+            @if (isSecretStored(field) && !isCleared(field)) {
+              {{ 'common.secret_custom' | translate }}
+              <button type="button" class="link link-hover font-medium" [disabled]="disabled()" (click)="clearSecret(field)">
+                {{ 'common.secret_reset' | translate }}
+              </button>
+            } @else if (isCleared(field)) {
+              {{ 'common.secret_will_reset' | translate }}
+              <button type="button" class="link link-hover font-medium" (click)="setValue(field, '')">
+                {{ 'common.secret_keep' | translate }}
+              </button>
+            } @else {
+              {{ 'common.secret_default' | translate }}
+            }
+          </p>
+        } @else if (isSecretStored(field)) {
           @if (isCleared(field)) {
             <p class="text-warning text-xs">
               {{ 'common.secret_will_clear' | translate }}
@@ -29,6 +45,9 @@
               {{ 'common.secret_clear' | translate }}
             </button>
           }
+        }
+        @if (field.secret && field.required && !field.hasDefault && !isSecretStored(field)) {
+          <p class="text-warning text-xs">{{ 'common.secret_required' | translate }}</p>
         }
         @for (err of fieldErrors(field); track err.key) {
           <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>

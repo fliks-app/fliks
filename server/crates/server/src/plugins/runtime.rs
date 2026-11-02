@@ -221,6 +221,8 @@ pub struct Shared {
     pub ingest_roots: Vec<String>,
     /// The manifest carries a `provider` block.
     pub provider: bool,
+    /// Fliks defaults resolved for this plugin (`defaults.rs`), never served by a route.
+    pub defaults: Vec<(String, String)>,
     /// Bumped by a stop: instances of an older generation trap at their next epoch tick.
     pub era: AtomicU64,
     pub stopped: Notify,
@@ -579,7 +581,7 @@ impl PluginRt {
         });
         store.set_epoch_deadline(1);
         let hello = env.cfg.deadlines.hello;
-        let config = super::imports::config_for(&env.core, &id, None)
+        let config = super::imports::config_for(&env.core, &id, &self.sh.defaults, None)
             .await
             .unwrap_or_default();
         let fail = |e: String| SpawnError::Failed(e);

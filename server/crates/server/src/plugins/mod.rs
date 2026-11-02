@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod compile;
 pub mod counts;
 pub mod db;
+pub mod defaults;
 pub mod events;
 pub mod fetch;
 pub mod imports;

@@ -35,6 +35,7 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.custom_formats', href: '/admin/settings/custom-formats' },
     { label: 'settings.nav.auto_approval', href: '/admin/settings/auto-approval' },
     { label: 'settings.nav.cleanup', href: '/admin/settings/cleanup' },
+    { label: 'settings.nav.metadata', href: '/admin/settings/metadata' },
   ] },
   { label: 'admin.section_subtitles', links: [
     { label: 'settings.nav.subtitles', href: '/admin/settings/subtitles' },

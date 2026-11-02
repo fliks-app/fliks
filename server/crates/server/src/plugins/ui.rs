@@ -72,6 +72,24 @@ fn without_collisions(plugins: Vec<Registered>) -> Vec<Registered> {
         .collect()
 }
 
+/// Rule 39: every field of a page carries `hasDefault`, never the value.
+fn mark_defaults(page: &mut Value, p: &Registered) {
+    let keys: Vec<String> = super::defaults::for_plugin(&p.manifest, p.signature == "official")
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    fn walk(items: &mut Value, keys: &[String]) {
+        for i in items.as_array_mut().into_iter().flatten() {
+            if i["kind"] == "group" {
+                walk(&mut i["fields"], keys);
+            } else if let Some(k) = i["key"].as_str() {
+                i["hasDefault"] = json!(keys.iter().any(|d| d == k));
+            }
+        }
+    }
+    walk(&mut page["fields"], &keys);
+}
+
 impl Plugins {
     fn may_read(&self, id: &str, page: &Value, perms: &Permissions) -> bool {
         let kind = page["kind"].as_str();
@@ -111,6 +129,10 @@ impl Plugins {
                         ok
                     })
                     .cloned()
+                    .map(|mut page| {
+                        mark_defaults(&mut page, &p);
+                        page
+                    })
                     .collect();
                 let contributions: Vec<Value> = ui["contributions"]
                     .as_array()
@@ -131,6 +153,22 @@ impl Plugins {
                     "i18n".into(),
                     p.manifest.get("i18n").cloned().unwrap_or(json!({})),
                 );
+                if let Some(block) = p.manifest.get("provider") {
+                    let names: Vec<_> = block["namespaces"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|n| n["name"].clone())
+                        .collect();
+                    let kinds: Vec<_> = block["kinds"]
+                        .as_object()
+                        .map(|o| o.keys().collect())
+                        .unwrap_or_default();
+                    e.insert(
+                        "provider".into(),
+                        json!({"namespaces": names, "kinds": kinds}),
+                    );
+                }
                 if let Some(rp) = self.registry.release_picker_for(id) {
                     e.insert("releasePicker".into(), picker_entry(rp));
                 }
@@ -159,5 +197,24 @@ mod tests {
             movie_only.as_object().unwrap().keys().collect::<Vec<_>>(),
             ["byKind"]
         );
+    }
+
+    #[test]
+    fn marking_adds_a_flag_and_no_value() {
+        let manifest = json!({"provider": {"namespaces": [{"name": "tmdb"}]}});
+        let reg = |signature: &str| Registered {
+            plugin_id: "fliks.tmdb".into(),
+            version: "1".into(),
+            manifest: manifest.clone(),
+            signature: signature.into(),
+            archive: Default::default(),
+        };
+        let page = json!({"fields": [{"key": "apiKey", "default": "fliks:apiKey"}]});
+        for sig in ["official", "unsigned"] {
+            let mut p = page.clone();
+            mark_defaults(&mut p, &reg(sig));
+            assert!(p["fields"][0]["hasDefault"].is_boolean());
+            assert!(!p.to_string().contains("FLIKS_DEFAULT"));
+        }
     }
 }

@@ -1,0 +1,63 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="space-y-6">
+    <div>
+      <h1 class="text-xl font-bold">{{ 'settings.metadata.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60">{{ 'settings.metadata.subtitle' | translate }}</p>
+    </div>
+
+    <section class="space-y-2">
+      <h2 class="font-semibold">{{ 'settings.metadata.providers' | translate }}</h2>
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'settings.metadata.col_provider' | translate }}</th>
+              <th>{{ 'settings.metadata.col_kinds' | translate }}</th>
+              <th>{{ 'settings.metadata.col_namespaces' | translate }}</th>
+              <th class="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of providers(); track p.pluginId) {
+              <tr>
+                <td class="font-medium text-sm">{{ p.name }}</td>
+                <td class="text-sm text-base-content/60">{{ p.kinds.join(', ') }}</td>
+                <td class="text-sm font-mono text-base-content/60">{{ p.namespaces.join(', ') }}</td>
+                <td>
+                  @if (configLink(p.pluginId).length) {
+                    <a class="link link-hover text-sm" [routerLink]="configLink(p.pluginId)">{{ 'settings.metadata.configure' | translate }}</a>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="text-sm text-base-content/60">{{ 'settings.metadata.empty' | translate }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="font-semibold">{{ 'settings.metadata.order' | translate }}</h2>
+      @for (kind of kinds; track kind) {
+        @if (rows(kind).length) {
+          <div class="space-y-1">
+            <h3 class="text-sm font-medium">{{ 'settings.metadata.kind.' + kind | translate }}</h3>
+            <ol class="flex flex-col gap-1 px-1 -mx-1 py-1">
+              @for (r of rows(kind); track r.namespace; let i = $index; let last = $last) {
+                <li class="flex items-center gap-2 rounded-lg border border-base-200 px-3 py-2">
+                  <span class="w-5 text-sm text-base-content/50">{{ i + 1 }}</span>
+                  <span class="flex-1 text-sm"><span class="font-mono">{{ r.namespace }}</span> <span class="text-base-content/50">{{ r.name }}</span></span>
+                  <button type="button" class="btn btn-ghost btn-xs" [disabled]="i === 0" [attr.aria-label]="'settings.metadata.move_up' | translate" (click)="move(kind, i, -1)">&uarr;</button>
+                  <button type="button" class="btn btn-ghost btn-xs" [disabled]="last" [attr.aria-label]="'settings.metadata.move_down' | translate" (click)="move(kind, i, 1)">&darr;</button>
+                </li>
+              }
+            </ol>
+          </div>
+        }
+      }
+    </section>
+  </div>
+}
