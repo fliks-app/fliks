@@ -27,22 +27,22 @@ describe('ReaderProgressService', () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('collapses a burst of positions into one save of the latest', () => {
+  it('collapses a burst of positions into one save of the latest', async () => {
     svc.report(T, at(0.1));
     vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS - 1);
     svc.report(T, at(0.2));
     vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS - 1);
     svc.report(T, at(0.3));
-    vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(PROGRESS_DEBOUNCE_MS);
     expect(save).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith(T, at(0.3));
   });
 
-  it('saves again after a later pause', () => {
+  it('saves again after a later pause', async () => {
     svc.report(T, at(0.1));
-    vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(PROGRESS_DEBOUNCE_MS);
     svc.report(T, at(0.5));
-    vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(PROGRESS_DEBOUNCE_MS);
     expect(save.mock.calls.map((c) => c[1].progression)).toEqual([0.1, 0.5]);
   });
 
@@ -53,6 +53,20 @@ describe('ReaderProgressService', () => {
     vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS * 2);
     await svc.flush();
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a flush only after the save in flight ended', async () => {
+    let release!: () => void;
+    save.mockReturnValueOnce(new Promise<void>((r) => (release = r)));
+    svc.report(T, at(0.1));
+    const first = svc.flush();
+    svc.report(T, at(0.2));
+    const second = svc.flush();
+    await Promise.resolve();
+    expect(save).toHaveBeenCalledTimes(1);
+    release();
+    await Promise.all([first, second]);
+    expect(save.mock.calls.map((c) => c[1].progression)).toEqual([0.1, 0.2]);
   });
 
   it('drops a failed save without throwing', async () => {

@@ -35,6 +35,8 @@ import {
 /** Pages around the viewport that are drawn; the others hold only their size. */
 const RENDER_MARGIN = '150% 0px';
 const MAX_FIT_WIDTH = 1100;
+/** Canvas area cap, under the iOS limit. */
+const MAX_CANVAS_PIXELS = 16_000_000;
 
 /** The PDF of a book, one canvas per page in a scroller; pdf.js and its worker load on first open. */
 @Component({
@@ -119,6 +121,7 @@ export class PdfReaderComponent implements OnDestroy {
         url: new URL(this.serverConfig.resolveUrl(`/api/stream/${target.fileId}`), document.baseURI).href,
         httpHeaders: this.serverConfig.isNative && token ? { Authorization: `Bearer ${token}` } : undefined,
         useWasm: false,
+        wasmUrl: new URL('pdfjs/wasm/', document.baseURI).href,
         enableXfa: false,
       });
       this.loadingTask = task;
@@ -133,7 +136,11 @@ export class PdfReaderComponent implements OnDestroy {
       this.resizer.observe(root);
       this.observer = new IntersectionObserver(
         (entries) =>
-          entries.forEach((e) => e.isIntersecting && void this.render(Number((e.target as HTMLElement).dataset['page']))),
+          entries.forEach((e) => {
+            const n = Number((e.target as HTMLElement).dataset['page']);
+            if (e.isIntersecting) void this.render(n);
+            else this.release(n, e.target as HTMLElement);
+          }),
         { root, rootMargin: RENDER_MARGIN },
       );
       const resumeAt = pdfPageOf(saved?.locator, doc.numPages);
@@ -141,6 +148,7 @@ export class PdfReaderComponent implements OnDestroy {
       this.pages.set(Array.from({ length: doc.numPages }, (_, i) => i + 1));
       this.loading.set(false);
       afterNextRender(() => this.scrollToPage(resumeAt), { injector: this.injector });
+      if (doc.numPages === 1) this.reportPage(1);
     } catch {
       if (this.destroyed) return;
       this.toast.error(this.translate.instant('reader.open_failed'));
@@ -155,6 +163,14 @@ export class PdfReaderComponent implements OnDestroy {
     this.scroller().nativeElement.querySelectorAll('[data-page]').forEach((el) => this.observer?.observe(el));
   }
 
+  /** Frees the canvas of a page that left the render margin. */
+  private release(n: number, slot: HTMLElement): void {
+    this.tasks.get(n)?.cancel();
+    this.tasks.delete(n);
+    slot.replaceChildren();
+    delete slot.dataset['drawn'];
+  }
+
   private async render(n: number): Promise<void> {
     const slot = this.scroller().nativeElement.querySelector<HTMLElement>(`[data-page="${n}"]`);
     const css = this.pageWidth();
@@ -163,7 +179,9 @@ export class PdfReaderComponent implements OnDestroy {
     try {
       const page = await this.doc.getPage(n);
       const unit = page.getViewport({ scale: 1 });
-      const viewport = page.getViewport({ scale: (css / unit.width) * (window.devicePixelRatio || 1) });
+      const wanted = (css / unit.width) * (window.devicePixelRatio || 1);
+      const cap = Math.sqrt(MAX_CANVAS_PIXELS / (unit.width * unit.height));
+      const viewport = page.getViewport({ scale: Math.min(wanted, cap) });
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
@@ -189,10 +207,14 @@ export class PdfReaderComponent implements OnDestroy {
       const n = Number(hit?.dataset['page'] ?? 1);
       if (n === this.page()) return;
       this.page.set(n);
-      this.progress.report(this.target(), {
-        progression: pdfProgression(n, this.pages().length),
-        locator: { page: n },
-      });
+      this.reportPage(n);
+    });
+  }
+
+  private reportPage(n: number): void {
+    this.progress.report(this.target(), {
+      progression: pdfProgression(n, this.pages().length),
+      locator: { page: n },
     });
   }
 

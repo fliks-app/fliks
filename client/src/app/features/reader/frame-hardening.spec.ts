@@ -29,6 +29,18 @@ describe('sandboxContentFrames', () => {
     stop();
   });
 
+  it('covers a frame inside a wrapper added as a whole', async () => {
+    const container = document.createElement('div');
+    const stop = sandboxContentFrames(container);
+    const wrapper = document.createElement('div');
+    const frame = frameWithToolkitSandbox();
+    wrapper.append(frame);
+    container.append(wrapper);
+    await Promise.resolve();
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin');
+    stop();
+  });
+
   it('stops once disconnected', async () => {
     const container = document.createElement('div');
     sandboxContentFrames(container)();

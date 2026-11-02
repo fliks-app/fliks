@@ -3960,6 +3960,7 @@
     "layout_scroll": "Scroll",
     "open_failed": "This book could not be opened.",
     "zoom_out": "Zoom out",
-    "zoom_in": "Zoom in"
+    "zoom_in": "Zoom in",
+    "fixed_unsupported": "Fixed-layout books are not supported yet."
   }
 }

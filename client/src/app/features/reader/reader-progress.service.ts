@@ -10,6 +10,7 @@ export class ReaderProgressService {
   private readonly api = inject(ReaderApiService);
   private pending: { target: ReaderTarget; progress: ReaderProgress } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private inflight: Promise<void> = Promise.resolve();
 
   report(target: ReaderTarget, progress: ReaderProgress): void {
     this.pending = { target, progress };
@@ -24,10 +25,14 @@ export class ReaderProgressService {
     const send = this.pending;
     this.pending = null;
     if (!send) return;
-    try {
-      await this.api.saveProgress(send.target, send.progress);
-    } catch {
-      // Best effort: reading goes on without a server.
-    }
+    // Chained so a late flush cannot overtake an earlier request and move the position back.
+    this.inflight = this.inflight.then(async () => {
+      try {
+        await this.api.saveProgress(send.target, send.progress);
+      } catch {
+        // Best effort: reading goes on without a server.
+      }
+    });
+    return this.inflight;
   }
 }

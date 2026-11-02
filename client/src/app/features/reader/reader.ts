@@ -16,7 +16,7 @@ import {
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideArrowLeft, LucideListTree, LucideSettings, LucideX } from '@lucide/angular';
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from '@readium/navigator';
-import { Locator, ReadingProgression, type Link } from '@readium/shared';
+import { Layout, Locator, ReadingProgression, type Link } from '@readium/shared';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -135,12 +135,17 @@ export class ReaderComponent implements OnDestroy {
   }
 
   private async open(): Promise<void> {
+    let fixed = false;
     try {
       const [{ publication, positions }, saved] = await Promise.all([
         this.api.open(this.target().itemId),
         this.api.loadProgress(this.target()),
       ]);
       if (this.destroyed) return;
+      if (publication.metadata.effectiveLayout === Layout.fixed) {
+        fixed = true;
+        throw new Error('fixed layout');
+      }
       this.positions = positions;
       this.title.set(publication.metadata.title.getTranslation() || '');
       this.toc.set(flattenToc(publication.toc?.items ?? []));
@@ -166,7 +171,7 @@ export class ReaderComponent implements OnDestroy {
       this.loading.set(false);
     } catch {
       if (this.destroyed) return;
-      this.toast.error(this.translate.instant('reader.open_failed'));
+      this.toast.error(this.translate.instant(fixed ? 'reader.fixed_unsupported' : 'reader.open_failed'));
       this.back();
     }
   }

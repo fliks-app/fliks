@@ -5,7 +5,9 @@ export function sandboxContentFrames(container: HTMLElement): () => void {
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
-        if (node instanceof HTMLIFrameElement) node.setAttribute('sandbox', 'allow-same-origin');
+        if (!(node instanceof Element)) continue;
+        const frames = node instanceof HTMLIFrameElement ? [node] : node.querySelectorAll('iframe');
+        frames.forEach((f) => f.setAttribute('sandbox', 'allow-same-origin'));
       }
     }
   });

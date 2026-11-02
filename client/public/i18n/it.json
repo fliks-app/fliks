@@ -3960,6 +3960,7 @@
     "layout_scroll": "Scorrimento",
     "open_failed": "Impossibile aprire questo libro.",
     "zoom_out": "Riduci",
-    "zoom_in": "Ingrandisci"
+    "zoom_in": "Ingrandisci",
+    "fixed_unsupported": "I libri a layout fisso non sono ancora supportati."
   }
 }

@@ -29,6 +29,11 @@
                 "glob": "pdf.worker.min.mjs",
                 "input": "node_modules/pdfjs-dist/build",
                 "output": "pdfjs"
+              },
+              {
+                "glob": "{openjpeg,jbig2}_nowasm_fallback.js",
+                "input": "node_modules/pdfjs-dist/wasm",
+                "output": "pdfjs/wasm"
               }
             ],
             "styles": [
