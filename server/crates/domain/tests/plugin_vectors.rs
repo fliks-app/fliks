@@ -78,8 +78,8 @@ fn address_class() {
 #[test]
 fn provider_namespace() {
     use fliks_domain::external_id::ExternalProvider;
-    use fliks_domain::plugins::provider::{Class, check_namespaces, classify, normalize_id};
-    replay("provider-namespace", 78, |i| {
+    use fliks_domain::plugins::provider::{Class, IdRule, check_namespaces, classify};
+    replay("provider-namespace", 97, |i| {
         let s = |k: &str| i[k].as_str().unwrap_or_default();
         match s("kind") {
             "classify" => match classify(s("name")) {
@@ -97,7 +97,9 @@ fn provider_namespace() {
                     Err(reason) => json!({"reason": reason}),
                 }
             }
-            _ => json!({"id": normalize_id(s("idPattern"), s("case"), s("value"))}),
+            _ => {
+                json!({"id": IdRule::new(s("idPattern"), s("case")).and_then(|r| r.normalize(s("value")))})
+            }
         }
     });
 }

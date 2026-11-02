@@ -219,6 +219,8 @@ pub struct Shared {
     pub db: Option<Arc<PluginDb>>,
     pub scopes: Vec<String>,
     pub ingest_roots: Vec<String>,
+    /// The manifest carries a `provider` block.
+    pub provider: bool,
     /// Bumped by a stop: instances of an older generation trap at their next epoch tick.
     pub era: AtomicU64,
     pub stopped: Notify,

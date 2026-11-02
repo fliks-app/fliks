@@ -134,7 +134,7 @@ Route order: the concrete routes above are registered before the proxy wildcard 
 The contract is `provider-plugins.md`; these rules are the part the plugin pipeline enforces.
 
 58. A `process` manifest may carry `provider` (shape: `provider-plugins.md` "Manifest block", `PLUGIN_BAD_MANIFEST` when malformed). The component of a provider exports `fliks:plugin/metadata-provider@3.0.0` (world `provider`); a provider has `database.schema: false` and may have empty `scopes`. A manifest without `provider` whose component exports the interface, or the reverse, fails registration `invalid-component`.
-59. Registration of the block checks the declared namespaces in order (`provider-plugins.md` rules 19-21): `namespace-not-owned`, `unknown-provider-namespace`, `core-namespace-not-official`, `invalid-namespace-pattern`, then `namespace-signer-changed` against `provider_namespaces`. The first failure ends the registration with that reason.
+59. Registration of the block checks the declared namespaces in order (`provider-plugins.md` rules 19-21): `namespace-not-owned`, `unknown-provider-namespace`, `core-namespace-not-official`, `invalid-namespace-pattern`, then `namespace-signer-changed` against `provider_namespaces` (not checked until that table exists, PV.10). The first failure ends the registration with that reason.
 60. A provider is served on its own `provider` lane and its outbound requests take the limiter semantics of `provider-plugins.md` rules 50-55 instead of the plain outbound guard alone.
 61. A provider's config fields may declare `"default": "fliks:<key>"`; the `hello` config and `config.get` resolve the stored override, else the Fliks default (`provider-plugins.md` rules 34-40). Rule 24's ownership applies to the override.
 
@@ -485,26 +485,30 @@ interface metadata-provider {
     isbn: option<string>,
     language: option<string>,
     page: u32,
+    /// Extension slot: further search parameters by name, ignored by a provider that knows none.
+    extra: list<tuple<string, string>>,
   }
+  /// An upstream failure: its HTTP status when it had one, and a message without a URL or secret.
+  record upstream-error { status: option<u16>, message: string }
   variant provider-error {
     not-found,
     unsupported,
     unauthorized,
-    /// The upstream's quota or rate-limit error body, read by the plugin.
-    rate-limited,
-    upstream(string),
+    /// The upstream refused for quota or rate; the payload is its retry delay in seconds, if it gave one.
+    rate-limited(option<u32>),
+    upstream(upstream-error),
   }
 
   /// A record is a `json` document of the shape the metadata specs name, validated by the host.
   search: func(q: search-query, lang: lang) -> result<json, provider-error>;
-  fetch-work: func(kind: kind, id: string, lang: lang) -> result<json, provider-error>;
-  fetch-children: func(kind: kind, id: string, lang: lang) -> result<json, provider-error>;
-  child-stubs: func(kind: kind, id: string, lang: lang) -> result<json, provider-error>;
-  find-by: func(source: external-id, lang: lang) -> result<option<tuple<string, kind>>, provider-error>;
+  fetch-work: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
+  fetch-children: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
+  child-stubs: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
+  find-by: func(source: external-id, lang: lang) -> result<option<tuple<external-id, kind>>, provider-error>;
   fetch-edition: func(edition: external-id, lang: lang) -> result<option<json>, provider-error>;
-  fetch-chapters: func(asin: string, lang: lang) -> result<option<json>, provider-error>;
-  fetch-person: func(id: string, lang: lang) -> result<json, provider-error>;
-  person-credits: func(id: string, lang: lang) -> result<json, provider-error>;
+  fetch-chapters: func(edition: external-id, lang: lang) -> result<option<json>, provider-error>;
+  fetch-person: func(id: external-id, lang: lang) -> result<json, provider-error>;
+  person-credits: func(id: external-id, lang: lang) -> result<json, provider-error>;
   %list: func(kind: kind, name: string, params: list<tuple<string, string>>, lang: lang)
     -> result<json, provider-error>;
 }

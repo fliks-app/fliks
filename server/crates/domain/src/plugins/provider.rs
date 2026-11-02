@@ -1,7 +1,11 @@
 //! The `provider` manifest block and plugin id namespaces (`docs/spec/provider-plugins.md`).
+use regex::{Regex, RegexBuilder};
 use serde_json::{Map, Value};
+use std::sync::LazyLock;
 use unicode_normalization::UnicodeNormalization;
 
+/// The component export of a provider.
+pub const EXPORT: &str = "fliks:plugin/metadata-provider@3.0.0";
 /// The kinds of work a provider may serve (the documented set of the WIT `kind`).
 pub const KINDS: [&str; 5] = ["movie", "series", "book", "comic", "album"];
 /// The capabilities a kind lists, one per `metadata-provider` function family.
@@ -20,11 +24,15 @@ pub const CAPABILITIES: [&str; 10] = [
 /// The resources `snapshotTtlSecs` may name.
 pub const RESOURCES: [&str; 5] = ["work", "children", "edition", "person", "chapters"];
 
-const BLOCK_KEYS: [&str; 9] = [
+/// The longest `snapshotTtlSecs` value: ten years.
+const MAX_TTL_SECS: u64 = 315_360_000;
+
+const BLOCK_KEYS: [&str; 10] = [
     "namespaces",
     "kinds",
     "findBy",
     "editionNamespaces",
+    "chapterNamespaces",
     "limits",
     "requestTimeoutMs",
     "snapshotTtlSecs",
@@ -101,7 +109,7 @@ fn config_key(k: &str) -> bool {
     (1..=64).contains(&k.len())
         && k.as_bytes()[0].is_ascii_alphabetic()
         && k.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
 }
 
 fn namespace_entry(v: &Value) -> Option<&str> {
@@ -168,11 +176,13 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
     if !kinds_ok {
         return Err("provider.kinds must map documented kinds to non-empty capability sets");
     }
-    for key in ["findBy", "editionNamespaces"] {
+    for key in ["findBy", "editionNamespaces", "chapterNamespaces"] {
         if let Some(v) = o.get(key)
             && unique_strings(v, |n| classify(n).is_some()).is_none()
         {
-            return Err("provider.findBy and editionNamespaces must list namespace names");
+            return Err(
+                "provider.findBy, editionNamespaces and chapterNamespaces must list namespace names",
+            );
         }
     }
     if !o.get("limits").is_some_and(limits_shaped) {
@@ -184,9 +194,11 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
         return Err("provider.requestTimeoutMs must be 1000 to 60000");
     }
     if let Some(t) = o.get("snapshotTtlSecs")
-        && !t
-            .as_object()
-            .is_some_and(|t| closed(t, &RESOURCES) && t.values().all(|v| v.is_null() || v.is_u64()))
+        && !t.as_object().is_some_and(|t| {
+            closed(t, &RESOURCES)
+                && t.values()
+                    .all(|v| v.is_null() || is_uint(v, 0, MAX_TTL_SECS))
+        })
     {
         return Err("provider.snapshotTtlSecs must map resources to seconds or null");
     }
@@ -203,10 +215,66 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn full_pattern(p: &str) -> Option<regress::Regex> {
-    (p.len() <= 256 && p.starts_with('^') && p.ends_with('$'))
-        .then(|| regress::Regex::new(p).ok())
-        .flatten()
+/// A plugin namespace's `idPattern`, compiled once per namespace: a full match, in linear time.
+pub struct IdRule {
+    re: Regex,
+    case: Case,
+}
+
+#[derive(Clone, Copy)]
+enum Case {
+    Preserve,
+    Lower,
+    Upper,
+}
+
+static FORMAT_CHAR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{Cf}").expect("static"));
+
+impl IdRule {
+    /// `None` unless `pattern` is at most 256 characters, anchored (`^` first, an unescaped `$`
+    /// last) and compiles within the size limits.
+    pub fn new(pattern: &str, case: &str) -> Option<Self> {
+        let escapes = pattern
+            .bytes()
+            .rev()
+            .skip(1)
+            .take_while(|&b| b == b'\\')
+            .count();
+        let anchored = pattern.starts_with('^') && pattern.ends_with('$') && escapes % 2 == 0;
+        if pattern.chars().count() > 256 || !anchored {
+            return None;
+        }
+        let re = RegexBuilder::new(&format!("^(?:{pattern})$"))
+            .size_limit(1 << 20)
+            .dfa_size_limit(1 << 20)
+            .nest_limit(32)
+            .build()
+            .ok()?;
+        let case = match case {
+            "lower" => Case::Lower,
+            "upper" => Case::Upper,
+            _ => Case::Preserve,
+        };
+        Some(Self { re, case })
+    }
+
+    /// A plugin id as the core stores it: trimmed, NFC, cased by `case`, 1 to 128 characters
+    /// without a control, format or whitespace character or a `:`, and a full match of the pattern.
+    pub fn normalize(&self, value: &str) -> Option<String> {
+        let v: String = value.trim().nfc().collect();
+        let v = match self.case {
+            Case::Lower => v.to_lowercase(),
+            Case::Upper => v.to_uppercase(),
+            Case::Preserve => v,
+        };
+        let ok = (1..=128).contains(&v.chars().count())
+            && !v
+                .chars()
+                .any(|c| c.is_control() || c.is_whitespace() || c == ':')
+            && !FORMAT_CHAR.is_match(&v)
+            && self.re.is_match(&v);
+        ok.then_some(v)
+    }
 }
 
 /// Registration checks of the declared namespaces, in manifest order: the reason of the first
@@ -228,10 +296,7 @@ pub fn check_namespaces(
                 if p != plugin_id {
                     return Err("namespace-not-owned");
                 }
-                if !ns["idPattern"]
-                    .as_str()
-                    .is_some_and(|p| full_pattern(p).is_some())
-                {
+                if IdRule::new(ns["idPattern"].as_str().unwrap_or_default(), "preserve").is_none() {
                     return Err("invalid-namespace-pattern");
                 }
             }
@@ -239,21 +304,6 @@ pub fn check_namespaces(
         }
     }
     Ok(())
-}
-
-/// A plugin id as the core stores it: trimmed, NFC, cased by `case`, 1 to 128 characters without
-/// a control character or a `:`, and a full match of the namespace's `idPattern`.
-pub fn normalize_id(id_pattern: &str, case: &str, value: &str) -> Option<String> {
-    let v: String = value.trim().nfc().collect();
-    let v = match case {
-        "lower" => v.to_lowercase(),
-        "upper" => v.to_uppercase(),
-        _ => v,
-    };
-    let ok = (1..=128).contains(&v.chars().count())
-        && !v.chars().any(|c| c.is_control() || c == ':')
-        && full_pattern(id_pattern)?.find(&v).is_some();
-    ok.then_some(v)
 }
 
 #[cfg(test)]
@@ -278,12 +328,17 @@ mod tests {
 
     #[test]
     fn ids_follow_their_pattern() {
+        let id = |p: &str, case: &str, v: &str| IdRule::new(p, case).and_then(|r| r.normalize(v));
         let num = "^[1-9][0-9]{0,8}$";
-        assert_eq!(normalize_id(num, "preserve", " 42 "), Some("42".into()));
-        assert_eq!(normalize_id(num, "preserve", "042"), None);
-        assert_eq!(normalize_id("^[a-z]+$", "lower", "AbC"), Some("abc".into()));
-        assert_eq!(normalize_id("^.+$", "preserve", "a:b"), None);
-        assert_eq!(normalize_id("[a-z]+", "preserve", "a"), None);
+        assert_eq!(id(num, "preserve", " 42 "), Some("42".into()));
+        assert_eq!(id(num, "preserve", "042"), None);
+        assert_eq!(id("^[a-z]+$", "lower", "AbC"), Some("abc".into()));
+        assert_eq!(id("^.+$", "preserve", "a:b"), None);
+        assert!(IdRule::new("[a-z]+", "preserve").is_none());
+        assert!(IdRule::new(r"^a\$", "preserve").is_none());
+        assert!(IdRule::new(r"^a\\$", "preserve").is_some());
+        let nested = IdRule::new("^(a+)+$", "preserve").unwrap();
+        assert_eq!(nested.normalize(&format!("{}!", "a".repeat(100))), None);
     }
 
     #[test]

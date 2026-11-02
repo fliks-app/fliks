@@ -4,6 +4,7 @@ mod api;
 mod create;
 mod harness;
 mod net;
+mod provider;
 mod roles;
 mod runtime;
 mod sql;

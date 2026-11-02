@@ -326,16 +326,26 @@ impl Plugins {
                     continue;
                 }
             };
-            let new_scopes: Vec<&str> = granted
+            let held_ns: Vec<&str> = pkg.manifest["provider"]["namespaces"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|n| n["name"].as_str())
+                .collect();
+            let caps = || report.capabilities.iter().flatten();
+            let new_namespaces = caps()
+                .filter_map(|c| c.strip_prefix("namespace:"))
+                .filter(|n| !held_ns.contains(n))
+                .map(|n| format!("namespace:{n}"));
+            let new_scopes: Vec<String> = granted
                 .iter()
                 .flat_map(|g| {
-                    report
-                        .capabilities
-                        .iter()
-                        .flatten()
+                    caps()
                         .filter_map(|c| c.strip_prefix("scope:"))
                         .filter(|s| !g.iter().any(|x| x == s))
                 })
+                .map(str::to_owned)
+                .chain(new_namespaces)
                 .collect();
             if !new_scopes.is_empty() {
                 let detail = new_scopes.join(", ");

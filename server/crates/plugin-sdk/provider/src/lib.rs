@@ -47,7 +47,9 @@ pub mod bindings {
     });
 }
 
-pub use bindings::exports::fliks::plugin::metadata_provider::{Lang, ProviderError, SearchQuery};
+pub use bindings::exports::fliks::plugin::metadata_provider::{
+    Lang, ProviderError, SearchQuery, UpstreamError,
+};
 #[doc(hidden)]
 pub use fliks_plugin_sdk as sdk;
 
@@ -57,20 +59,32 @@ pub trait MetadataProvider {
     fn search(_q: SearchQuery, _lang: Lang) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
     }
-    fn fetch_work(_kind: String, _id: String, _lang: Lang) -> Result<String, ProviderError> {
+    fn fetch_work(
+        _kind: String,
+        _id: fliks_plugin_sdk::ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
     }
-    fn fetch_children(_kind: String, _id: String, _lang: Lang) -> Result<String, ProviderError> {
+    fn fetch_children(
+        _kind: String,
+        _id: fliks_plugin_sdk::ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
     }
-    fn child_stubs(_kind: String, _id: String, _lang: Lang) -> Result<String, ProviderError> {
+    fn child_stubs(
+        _kind: String,
+        _id: fliks_plugin_sdk::ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
     }
     /// The id and kind this provider knows the work of `source` by.
     fn find_by(
         _source: fliks_plugin_sdk::ExternalId,
         _lang: Lang,
-    ) -> Result<Option<(String, String)>, ProviderError> {
+    ) -> Result<Option<(fliks_plugin_sdk::ExternalId, String)>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
     fn fetch_edition(
@@ -79,13 +93,22 @@ pub trait MetadataProvider {
     ) -> Result<Option<String>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
-    fn fetch_chapters(_asin: String, _lang: Lang) -> Result<Option<String>, ProviderError> {
+    fn fetch_chapters(
+        _edition: fliks_plugin_sdk::ExternalId,
+        _lang: Lang,
+    ) -> Result<Option<String>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
-    fn fetch_person(_id: String, _lang: Lang) -> Result<String, ProviderError> {
+    fn fetch_person(
+        _id: fliks_plugin_sdk::ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
     }
-    fn person_credits(_id: String, _lang: Lang) -> Result<String, ProviderError> {
+    fn person_credits(
+        _id: fliks_plugin_sdk::ExternalId,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
     }
     fn list(
@@ -117,21 +140,21 @@ macro_rules! export_provider {
             }
             fn fetch_work(
                 kind: String,
-                id: String,
+                id: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::fetch_work(kind, id, lang)
             }
             fn fetch_children(
                 kind: String,
-                id: String,
+                id: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::fetch_children(kind, id, lang)
             }
             fn child_stubs(
                 kind: String,
-                id: String,
+                id: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::child_stubs(kind, id, lang)
@@ -139,7 +162,7 @@ macro_rules! export_provider {
             fn find_by(
                 source: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
-            ) -> Result<Option<(String, String)>, $crate::ProviderError> {
+            ) -> Result<Option<($crate::sdk::ExternalId, String)>, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::find_by(source, lang)
             }
             fn fetch_edition(
@@ -149,19 +172,19 @@ macro_rules! export_provider {
                 <$t as $crate::MetadataProvider>::fetch_edition(edition, lang)
             }
             fn fetch_chapters(
-                asin: String,
+                edition: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
             ) -> Result<Option<String>, $crate::ProviderError> {
-                <$t as $crate::MetadataProvider>::fetch_chapters(asin, lang)
+                <$t as $crate::MetadataProvider>::fetch_chapters(edition, lang)
             }
             fn fetch_person(
-                id: String,
+                id: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::fetch_person(id, lang)
             }
             fn person_credits(
-                id: String,
+                id: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::person_credits(id, lang)
