@@ -105,16 +105,15 @@ async fn create(
     }
 }
 
-/// Rule 57: the first id of a unique core namespace an available provider serves, else the first
-/// id of any namespace an available provider serves for `kind`; each id normalised by its namespace.
+/// Rule 57: the first id of a unique core namespace a provider serves, else the first id of any
+/// namespace a provider serves for `kind`; each id normalised by its namespace.
 fn entry(
     st: &AppState,
     kind: MediaKind,
     ids: &[t::ExternalId],
 ) -> Result<(Namespace, String), HostError> {
-    let served = |ns: Namespace| {
-        st.metadata.available(ns) && st.metadata.get(ns).is_some_and(|p| p.supports(kind))
-    };
+    // An id is looked up whatever the provider's state; only creating needs it available.
+    let served = |ns: Namespace| st.metadata.get(ns).is_some_and(|p| p.supports(kind));
     let parsed: Vec<(Namespace, Option<String>)> = ids
         .iter()
         .filter_map(|i| Some((Namespace::parse(&i.provider)?, i.value.as_str())))
