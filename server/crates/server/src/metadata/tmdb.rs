@@ -777,8 +777,8 @@ fn id_string(v: &Value) -> Option<String> {
     }
 }
 
-/// Best raster clearlogo (the image store decodes no SVG): community vote plus a language bonus,
-/// the provider's order breaking ties.
+/// Best clearlogo: community vote plus a language bonus, the provider's order breaking ties.
+/// An SVG is fetched as the PNG rendition TMDB serves for it: the image store decodes no SVG.
 pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
     let bonus = |l: &Value| match get(l, "iso_639_1").as_str() {
         Some(x) if x == prefer => 0.5,
@@ -788,16 +788,23 @@ pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
     let mut best: Option<(&Value, f64)> = None;
     for l in arr(images, "logos")
         .iter()
-        .filter(|l| text(l, "file_path").is_some_and(|p| !p.to_ascii_lowercase().ends_with(".svg")))
+        .filter(|l| text(l, "file_path").is_some())
     {
         let s = score(l, "vote_average") + bonus(l);
         if best.is_none_or(|(_, b)| s > b) {
             best = Some((l, s));
         }
     }
-    best.map_or(Value::Null, |(l, _)| {
-        image(base, "original", l, "file_path")
-    })
+    best.and_then(|(l, _)| text(l, "file_path"))
+        .map_or(Value::Null, |p| {
+            let p = match p.len().checked_sub(4) {
+                Some(i) if p.is_char_boundary(i) && p[i..].eq_ignore_ascii_case(".svg") => {
+                    format!("{}.png", &p[..i])
+                }
+                _ => p.to_owned(),
+            };
+            json!(format!("{base}/original{p}"))
+        })
 }
 
 /// The top backdrops other than the primary one, by vote.
@@ -896,14 +903,14 @@ mod tests {
     }
 
     #[test]
-    fn an_svg_logo_is_never_picked() {
+    fn an_svg_logo_is_fetched_as_png() {
         let images = json!({"logos": [
             {"file_path": "/a.svg", "vote_average": 9, "iso_639_1": "en"},
             {"file_path": "/b.png", "vote_average": 1},
         ]});
         assert_eq!(
             pick_logo("https://img", &images, "en"),
-            json!("https://img/original/b.png")
+            json!("https://img/original/a.png")
         );
     }
 
