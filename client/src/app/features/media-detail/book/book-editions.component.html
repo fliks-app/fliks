@@ -1,0 +1,41 @@
+<h2 class="text-lg font-bold mb-3">{{ 'books_work.editions' | translate }}</h2>
+<div class="overflow-x-auto scroll-ring-safe">
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>{{ 'books_work.col_format' | translate }}</th>
+        <th>{{ 'books_work.col_language' | translate }}</th>
+        <th>{{ 'books_work.col_published' | translate }}</th>
+        <th>{{ 'books_work.col_length' | translate }}</th>
+        <th>{{ 'books_work.col_narrators' | translate }}</th>
+        <th>{{ 'books_work.col_file' | translate }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (e of editions(); track e.id) {
+        <tr data-testid="edition-row">
+          <td>
+            <span class="badge badge-sm">{{ 'families.' + e.family | translate }}</span>
+            @if (e.format) {
+              <span class="ml-2 uppercase">{{ e.format }}</span>
+            }
+            @if (e.publisher) {
+              <div class="text-xs text-base-content/60">{{ e.publisher }}</div>
+            }
+          </td>
+          <td>{{ e.language ?? '' }}</td>
+          <td>{{ e.published ?? '' }}</td>
+          <td class="tabular-nums">
+            @if (e.durationSeconds != null) {
+              {{ clock(e.durationSeconds) }}
+            } @else if (e.pageCount != null) {
+              {{ 'books_work.pages' | translate: { count: e.pageCount } }}
+            }
+          </td>
+          <td>{{ e.narrators.map((n) => n.name).join(', ') }}</td>
+          <td>{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

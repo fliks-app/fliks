@@ -1,0 +1,15 @@
+<app-horizontal-scroller [title]="heading()">
+  @for (w of items(); track w.id) {
+    <app-media-card
+      class="shrink-0 w-28 sm:w-32 lg:w-40"
+      [aspect]="'portrait'"
+      [imageUrl]="w.posterUrl"
+      [title]="w.title"
+      [subtitle]="w.label ? '#' + w.label : ''"
+      [progressPercent]="w.progressPercent"
+      [highlighted]="w.id === currentId()"
+      [link]="link(w.id)"
+      [posterMorph]="false"
+    />
+  }
+</app-horizontal-scroller>

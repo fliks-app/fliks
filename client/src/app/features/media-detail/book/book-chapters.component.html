@@ -1,0 +1,29 @@
+@if (chapters().length) {
+  <app-collapsible-section
+    [heading]="'books_work.chapters' | translate"
+    persistKey="book-chapters"
+    [defaultOpen]="false"
+  >
+    @if (audio().length > 1) {
+      <select
+        class="select select-sm mb-3"
+        [attr.aria-label]="'books_work.chapters_edition' | translate"
+        (change)="pick($event)"
+      >
+        @for (e of audio(); track e.id) {
+          <option [value]="e.id" [selected]="e.id === editionId()">{{ label(e) }}</option>
+        }
+      </select>
+    }
+    <ol class="flex flex-col divide-y divide-base-300">
+      @for (c of chapters(); track $index) {
+        <li class="flex justify-between gap-4 py-1.5" data-testid="chapter">
+          <span class="truncate">
+            {{ c.title ?? ('books_work.chapter_n' | translate: { n: $index + 1 }) }}
+          </span>
+          <span class="tabular-nums text-base-content/60">{{ clock(c.startSeconds) }}</span>
+        </li>
+      }
+    </ol>
+  </app-collapsible-section>
+}

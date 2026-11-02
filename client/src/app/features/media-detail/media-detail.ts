@@ -1,6 +1,6 @@
-import { Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NgTemplateOutlet } from '@angular/common';
+import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
 import { IdentifyModalService } from '../../core/services/identify-modal.service';
 import { hasProviderId } from '../../core/utils/media-identity';
 import { TrackingModalService } from '../../core/services/tracking-modal.service';
@@ -84,6 +84,7 @@ import { RequestFlowController } from './request-flow-controller';
 import { WatchedController } from './watched-controller';
 import { EpisodeViewController } from './episode-view-controller';
 import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { asBookMedia } from './book/book-media';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -128,6 +129,7 @@ interface HandedEpisode {
     DownloadDetailModalComponent,
     RouterLink,
     NgTemplateOutlet,
+    NgComponentOutlet,
     ResolveUrlPipe,
     SeasonLabelPipe,
     ImgFadeInDirective,
@@ -396,6 +398,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   protected readonly armSlide = armPageSlide;
 
   readonly media = signal<Media | null>(null);
+  protected readonly bookMedia = computed(() => asBookMedia(this.media()));
+  /** Fetched on the first book, so movie and series pages never load it. */
+  protected readonly bookWork = signal<Type<unknown> | null>(null);
+  private readonly bookWorkLoader = effect(() => {
+    if (!this.bookMedia() || untracked(this.bookWork)) return;
+    void import('./book/book-work.component').then((m) => this.bookWork.set(m.BookWorkComponent));
+  });
   readonly cast = signal<MediaCastEntry[]>([]);
   readonly crew = signal<MediaCrewEntry[]>([]);
   readonly similar = signal<RelatedMedia[]>([]);
