@@ -777,7 +777,8 @@ fn id_string(v: &Value) -> Option<String> {
     }
 }
 
-/// Best clearlogo: community vote plus a language bonus, the provider's order breaking ties.
+/// Best raster clearlogo (the image store decodes no SVG): community vote plus a language bonus,
+/// the provider's order breaking ties.
 pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
     let bonus = |l: &Value| match get(l, "iso_639_1").as_str() {
         Some(x) if x == prefer => 0.5,
@@ -787,7 +788,7 @@ pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
     let mut best: Option<(&Value, f64)> = None;
     for l in arr(images, "logos")
         .iter()
-        .filter(|l| text(l, "file_path").is_some())
+        .filter(|l| text(l, "file_path").is_some_and(|p| !p.to_ascii_lowercase().ends_with(".svg")))
     {
         let s = score(l, "vote_average") + bonus(l);
         if best.is_none_or(|(_, b)| s > b) {
@@ -892,6 +893,18 @@ mod tests {
         let tmdb = Tmdb::new(&url, "https://img", "key", Duration::from_secs(5));
         tmdb.seasons(1, &resolve(None, None), Priority::Interactive)
             .await
+    }
+
+    #[test]
+    fn an_svg_logo_is_never_picked() {
+        let images = json!({"logos": [
+            {"file_path": "/a.svg", "vote_average": 9, "iso_639_1": "en"},
+            {"file_path": "/b.png", "vote_average": 1},
+        ]});
+        assert_eq!(
+            pick_logo("https://img", &images, "en"),
+            json!("https://img/original/b.png")
+        );
     }
 
     #[tokio::test]
