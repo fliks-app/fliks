@@ -44,6 +44,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
@@ -288,6 +289,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly navbar = inject(NavbarService);
   private readonly queue = inject(PlaybackQueueService);
+  private readonly audioPlayer = inject(AudioPlayerService);
   private readonly translate = inject(TranslateService);
   private readonly title = inject(Title);
 
@@ -1095,6 +1097,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
 
   async ngAfterViewInit() {
+    void this.audioPlayer.close();
     this.keyboardOverlay.enter();
     this.state.reset();
     this.qoe.reset();

@@ -2,6 +2,8 @@ import { Component, computed, effect, inject, input, signal, untracked } from '@
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
+import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { PlaybackQueueService } from '../../../core/services/playback-queue.service';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookFormatFamily, CollectionDetail } from '../../../core/services/api/books.models';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -46,6 +48,8 @@ export class BookWorkComponent {
 
   private readonly api = inject(BooksApiService);
   private readonly auth = inject(AuthService);
+  private readonly audio = inject(AudioPlayerService);
+  private readonly queue = inject(PlaybackQueueService);
 
   protected readonly book = computed(() => this.media().book);
   protected readonly canEdit = computed(() => this.auth.hasPermission('media.edit'));
@@ -90,6 +94,33 @@ export class BookWorkComponent {
         void this.loadSeries(id, seriesId);
         void this.loadAuthor(id, authorId);
       });
+    });
+  }
+
+  /** Plays the audio edition last listened to, else the first one with a file; the next volumes of the series queue behind it. */
+  protected listen(): void {
+    const { editions, progress, series } = this.book();
+    const playable = editions.filter((e) => e.family === 'audio' && e.hasFile && e.itemId != null);
+    const edition = playable.find((e) => e.id === progress?.editionId) ?? playable[0];
+    if (!edition?.itemId) return;
+    const m = this.media();
+    const volumes = this.seriesItems();
+    const at = volumes.findIndex((v) => v.id === m.id);
+    if (at >= 0 && series[0]) {
+      this.queue.start(
+        volumes.map((v) => ({ mediaId: v.id, title: v.title })),
+        at,
+        { source: 'series', sourceId: series[0].id, autoplay: true },
+      );
+    } else {
+      this.queue.clear();
+    }
+    void this.audio.play({
+      mediaId: m.id,
+      itemId: edition.itemId,
+      title: m.title,
+      artist: this.book().authors.map((a) => a.name).join(', '),
+      coverUrl: edition.coverUrl ?? m.posterUrl,
     });
   }
 

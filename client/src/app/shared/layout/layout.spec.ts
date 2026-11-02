@@ -29,6 +29,7 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
@@ -73,6 +74,8 @@ interface Fixture {
   /** Marks the active page as a hero (fanart) page. */
   isHeroPage?: boolean;
   away?: boolean;
+  /** An audio item is loaded in the root audio player. */
+  audio?: boolean;
   /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
   countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
   /** Defaults to granting only `livetv.read`, so a fixture that denies it still
@@ -202,6 +205,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         useValue: { hasMedia: () => false, mediaTitle: () => '' },
       },
       { provide: PlaybackSession, useValue: { isLocal: () => !f.away, openPlayer: () => {} } },
+      { provide: AudioPlayerService, useValue: { active: () => !!f.audio } },
       { provide: AppUpdateService, useValue: { available: () => false } },
       {
         provide: PluginUiRegistryService,
@@ -594,6 +598,14 @@ describe('LayoutComponent — chrome clearance', () => {
     TestBed.resetTestingModule();
     const away = (await createFixture({ ...NATIVE_PHONE, away: true })).componentInstance;
     expect(away.chromeBottomTotal()).toBe(`calc(${away.chromeBottom()} + 4.25rem)`);
+  });
+
+  it('adds the audio mini-bar to the bottom clearance while an item is loaded, on top of the cast one', async () => {
+    const audio = (await createFixture({ ...NATIVE_PHONE, audio: true })).componentInstance;
+    expect(audio.chromeBottomTotal()).toBe(`calc(${audio.chromeBottom()} + 4.25rem)`);
+    TestBed.resetTestingModule();
+    const both = (await createFixture({ ...NATIVE_PHONE, audio: true, away: true })).componentInstance;
+    expect(both.chromeBottomTotal()).toBe(`calc(${both.chromeBottom()} + 8.5rem)`);
   });
 });
 

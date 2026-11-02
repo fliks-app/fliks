@@ -145,6 +145,21 @@ export interface PlaybackInfoResponse {
   sessionId?: string;
   /** Profile hash this session's transcode cache is keyed under, or `null` for DirectPlay; shown on the admin dashboard. */
   profileHash?: string | null;
+  /** Audio items only: the parts in playing order, `offsetS` on the item timeline. */
+  parts?: ItemPlaybackPart[];
+  itemId?: number;
+  version?: number;
+  /** Audio items only: the sum of the part durations. */
+  durationSeconds?: number;
+}
+
+export interface ItemPlaybackPart {
+  index: number;
+  /** Byte-range URL of the part (Direct Play). */
+  playUrl: string;
+  offsetS: number;
+  durationS: number;
+  contentType: string;
 }
 
 export type LivePlaybackState = 'playing' | 'paused' | 'buffering';
@@ -504,6 +519,26 @@ export class StreamingApiService {
     );
   }
 
+  /** Opens the session of an audio item (`POST /api/items/:id/playback-info`): its parts, or one HLS timeline. */
+  getItemPlaybackInfo(
+    itemId: number,
+    deviceProfile: DeviceProfile,
+    opts: { startAt?: number; version?: number } = {},
+  ): Promise<PlaybackInfoResponse> {
+    const query = this.buildQuery({
+      token: this.playbackToken ?? undefined,
+      startAt: opts.startAt ?? undefined,
+      version: opts.version ?? undefined,
+    });
+    return firstValueFrom(
+      this.http.post<PlaybackInfoResponse>(
+        `/api/items/${itemId}/playback-info${query ? `?${query}` : ''}`,
+        deviceProfile,
+        { headers: this.sseConnectionHeaders() },
+      ),
+    );
+  }
+
   /** `.edl` ranges on the container timeline (original-file downloads). */
   async getEdl(mediaFileId: number): Promise<EdlRange[]> {
     const res = await firstValueFrom(
@@ -591,6 +626,8 @@ export class StreamingApiService {
       durationSeconds: number;
       mediaFileId: number;
       episodeId?: number;
+      /** Names an item directly (a book edition); `episodeId` is then not read. */
+      itemId?: number;
       /** Epoch ms of an offline replay; the server keeps a newer row over it. */
       playedAt?: number;
       // Live-session heartbeat fields, present once `getPlaybackInfo` returned a `sessionId`; the backend tolerates their absence.

@@ -1,0 +1,23 @@
+{
+  "audio_player": {
+    "open": "Ouvrir le lecteur",
+    "play": "Lecture",
+    "pause": "Pause",
+    "close": "Fermer le lecteur",
+    "collapse": "Réduire",
+    "seek": "Position",
+    "previous_chapter": "Chapitre précédent",
+    "next_chapter": "Chapitre suivant",
+    "skip_back": "Retour {{s}} s",
+    "skip_forward": "Avance {{s}} s",
+    "speed": "Vitesse de lecture",
+    "sleep": "Minuteur de sommeil",
+    "sleep_chapter": "Fin du chapitre",
+    "chapters": "Chapitres",
+    "chapter_n": "Chapitre {{n}}",
+    "bookmarks": "Signets",
+    "bookmark_add": "Ajouter un signet",
+    "bookmark_remove": "Supprimer le signet",
+    "no_bookmarks": "Aucun signet"
+  }
+}

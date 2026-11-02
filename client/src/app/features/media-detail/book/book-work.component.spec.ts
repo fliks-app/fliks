@@ -1,8 +1,10 @@
 import { Component, input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../../core/services/auth.service';
+import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { PlaybackQueueService } from '../../../core/services/playback-queue.service';
 import {
   bookChaptersFixture, bookDetailFixture, bookSourcesFixture, collectionDetailFixture, personWorksFixture,
   textEditionFixture,
@@ -26,12 +28,15 @@ function bookMedia(book: Partial<BookDetail> = {}): BookMedia {
 }
 
 describe('BookWorkComponent', () => {
+  const play = vi.fn();
+
   async function setup(book: Partial<BookDetail> = {}, canEdit = false) {
+    play.mockClear();
     TestBed.configureTestingModule({
-      providers: bookSpecProviders({
-        provide: AuthService,
-        useValue: { hasPermission: (p: string) => canEdit && p === 'media.edit' },
-      }),
+      providers: bookSpecProviders(
+        { provide: AuthService, useValue: { hasPermission: (p: string) => canEdit && p === 'media.edit' } },
+        { provide: AudioPlayerService, useValue: { play } },
+      ),
     });
     TestBed.overrideComponent(BookWorkComponent, {
       remove: { imports: [BookWorksRowComponent] },
@@ -65,7 +70,21 @@ describe('BookWorkComponent', () => {
     expect(series.querySelector('[data-testid="next"]')!.getAttribute('href')).toBe('/books/2');
   });
 
-  it('puts the family last played first and keeps both format buttons disabled', async () => {
+  it('plays the audio edition and queues the series from this volume', async () => {
+    const { fixture, http, el } = await setup();
+    http.expectOne('/api/collections/10').flush(collectionDetailFixture);
+    http.expectOne('/api/persons/1/works?role=author').flush(personWorksFixture);
+    http.expectOne('/api/media/1/editions/101/chapters').flush([]);
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="format-button"]')!.click();
+    expect(play).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 1, itemId: 1001, title: 'Book One' }));
+    const queue = TestBed.inject(PlaybackQueueService);
+    expect(queue.source()).toBe('series');
+    expect(queue.current()?.mediaId).toBe(1);
+    expect(queue.autoplay()).toBe(true);
+  });
+
+  it('puts the family last played, with only the audio button enabled', async () => {
     const { fixture, http, el } = await setup();
     http.expectOne('/api/collections/10').flush(collectionDetailFixture);
     http.expectOne('/api/persons/1/works?role=author').flush(personWorksFixture);
@@ -73,7 +92,7 @@ describe('BookWorkComponent', () => {
     await settle(fixture);
     const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="format-button"]'));
     expect(buttons.map((b) => b.textContent!.trim())).toEqual(['books_work.listen', 'books_work.read']);
-    expect(buttons.every((b) => b.disabled)).toBe(true);
+    expect(buttons.map((b) => b.disabled)).toEqual([false, true]);
     expect(buttons[0].classList).toContain('btn-primary');
     expect(el.textContent).toContain('books_work.progress');
   });
