@@ -3,6 +3,9 @@ pub mod identify;
 pub mod link;
 pub mod merge;
 #[cfg(test)]
+mod route_tests;
+pub mod routes;
+#[cfg(test)]
 mod tests;
 
 use fliks_domain::external_id::ExternalProvider;

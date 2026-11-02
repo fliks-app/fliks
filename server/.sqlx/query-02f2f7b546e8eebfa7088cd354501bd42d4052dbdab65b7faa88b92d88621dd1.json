@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id,\n             COALESCE(jsonb_agg(jsonb_build_object('provider', x.provider, 'value', x.value)\n               ORDER BY x.provider, x.value) FILTER (WHERE x.provider IS NOT NULL), '[]'::jsonb) AS \"ids!: Value\"\n           FROM editions e JOIN media m ON m.id = e.\"mediaId\"\n           LEFT JOIN edition_external_ids x ON x.\"editionId\" = e.id\n           WHERE e.\"mediaId\" = $1 AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2)\n           GROUP BY e.id\n           ORDER BY CASE e.family WHEN 'text' THEN 0 ELSE 1 END, e.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "editions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ids!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "02f2f7b546e8eebfa7088cd354501bd42d4052dbdab65b7faa88b92d88621dd1"
+}

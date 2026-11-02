@@ -1,0 +1,146 @@
+{
+  "engine": "down",
+  "name": "book-metadata-sources-edition-link",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "editionId": 101,
+        "level": "edition",
+        "provider": "asin",
+        "value": "B000000002"
+      },
+      "expect": {
+        "body": {
+          "editions": [
+            {
+              "editionId": 101,
+              "ids": [
+                {
+                  "provider": "asin",
+                  "value": "B000000002"
+                },
+                {
+                  "provider": "isbn",
+                  "value": "9780000000002"
+                }
+              ]
+            },
+            {
+              "editionId": 102,
+              "ids": []
+            }
+          ],
+          "work": null
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "editionId": 101,
+        "level": "edition",
+        "provider": "asin",
+        "value": "B000000003"
+      },
+      "expect": {
+        "body": {
+          "editions": [
+            {
+              "editionId": 101,
+              "ids": [
+                {
+                  "provider": "asin",
+                  "value": "B000000003"
+                },
+                {
+                  "provider": "isbn",
+                  "value": "9780000000002"
+                }
+              ]
+            },
+            {
+              "editionId": 102,
+              "ids": []
+            }
+          ],
+          "work": null
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/media/101/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "editions": [
+            {
+              "editionId": 101,
+              "ids": [
+                {
+                  "provider": "asin",
+                  "value": "B000000003"
+                }
+              ]
+            },
+            {
+              "editionId": 102,
+              "ids": []
+            }
+          ],
+          "work": null
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/media/101/sources?level=edition&editionId=101&provider=isbn&value=9780000000002"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "editions": [
+            {
+              "editionId": 101,
+              "ids": [
+                {
+                  "provider": "asin",
+                  "value": "B000000003"
+                }
+              ]
+            },
+            {
+              "editionId": 102,
+              "ids": []
+            }
+          ],
+          "work": null
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/media/101/sources?level=work&provider=openlibrary&value=OL1W"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property x should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "DELETE",
+      "path": "/api/media/101/sources?level=work&provider=openlibrary&value=OL1W&x=1"
+    }
+  ]
+}

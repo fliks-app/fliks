@@ -2114,6 +2114,44 @@
         }
       }
     },
+    "/api/media/{id}/sources": {
+      "get": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`GET /api/media/{id}/sources` (rule 22).",
+        "operationId": "sources_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`PUT /api/media/{id}/sources` (rules 23-24).",
+        "operationId": "sources_put",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`DELETE /api/media/{id}/sources` (rule 25).",
+        "operationId": "sources_delete",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media/{id}/streams/{mediaFileId}": {
       "get": {
         "tags": [
@@ -2424,6 +2462,20 @@
         }
       }
     },
+    "/api/metadata/search/book": {
+      "get": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`GET /api/metadata/search/book` (rules 18-19).",
+        "operationId": "search_book",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/metadata/search/movie": {
       "get": {
         "tags": [
@@ -2521,6 +2573,20 @@
           "metadata"
         ],
         "operationId": "upcoming_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/{provider}/book/{externalId}": {
+      "get": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`GET /api/metadata/{provider}/book/{externalId}` (rule 20).",
+        "operationId": "preview_book",
         "responses": {
           "200": {
             "description": ""

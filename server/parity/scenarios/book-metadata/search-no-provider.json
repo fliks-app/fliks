@@ -1,0 +1,80 @@
+{
+  "engine": "down",
+  "name": "book-metadata-search-no-provider",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/book"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "No book metadata provider is available",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/book?q=alpha"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "page must not be less than 1",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/book?q=alpha&page=0"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Unknown provider: tmdb",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/book?q=alpha&provider=tmdb"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Unknown provider: openlibrary",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/metadata/openlibrary/book/OL1W"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/book?q=a"
+    }
+  ]
+}

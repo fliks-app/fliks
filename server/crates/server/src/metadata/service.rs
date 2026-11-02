@@ -263,7 +263,7 @@ async fn read_seasons(
     ext_i64(external_id)?;
     let v = st
         .metadata
-        .children(p, external_id, lang, prio)
+        .children(p, MediaKind::Series, external_id, lang, prio)
         .await
         .map_err(|e| fail_meta(p, e))?;
     Ok(v.iter().map(SeasonDetails::from_value).collect())

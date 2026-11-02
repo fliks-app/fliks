@@ -245,7 +245,10 @@ pub async fn import_title(
 }
 
 /// The stored folder format, else the import's own default (not the naming service's, rule 13).
-async fn folder_format(db: &sqlx::PgPool, media_type: MediaKind) -> Result<String, sqlx::Error> {
+pub(super) async fn folder_format(
+    db: &sqlx::PgPool,
+    media_type: MediaKind,
+) -> Result<String, sqlx::Error> {
     let key = naming::setting_key(media_type, naming::Scope::Folder);
     let default = match media_type {
         MediaKind::Movie => "{Original Title} ({Release Year})",
@@ -523,6 +526,9 @@ pub async fn import_media(
     ValidJson(v): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Create, Subject::Media)?;
+    if v.get("type").and_then(Value::as_str) == Some(MediaKind::Book.as_str()) {
+        return super::book_import::import_book(&st, &a, v).await;
+    }
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let c = common(&b)?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;
