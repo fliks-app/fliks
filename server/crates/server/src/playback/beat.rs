@@ -49,9 +49,12 @@ struct Reading {
     locator: Option<Value>,
 }
 
+/// When, at which position and with which reading the last write happened.
+type LastWrite = (i64, f64, Option<Reading>);
+
 /// Last history write per `user:media:episode`, per process and never persisted (rules 1, 13, 14).
 #[derive(Default)]
-pub struct Debounce(Mutex<HashMap<String, (i64, f64, Option<Reading>)>>);
+pub struct Debounce(Mutex<HashMap<String, LastWrite>>);
 
 impl Debounce {
     /// Decides and, on a flush, records the write before it happens, so a failed write still debounces.
