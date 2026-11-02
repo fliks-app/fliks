@@ -88,14 +88,14 @@ pub async fn ctx(pool: PgPool) -> Ctx {
     .await
     .unwrap();
     let lib: i32 =
-        sqlx::query_scalar("INSERT INTO libraries (name, path) VALUES ('L1', $1) RETURNING id")
+        sqlx::query_scalar(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L1') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, $1 FROM l) SELECT id FROM l"#)
             .bind(root.to_string_lossy().as_ref())
             .fetch_one(&pool)
             .await
             .unwrap();
     let lib2 = one(
         &pool,
-        r#"INSERT INTO libraries (name, path) VALUES ('L2', '/nowhere') RETURNING id"#,
+        r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L2') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '/nowhere' FROM l) SELECT id FROM l"#,
     )
     .await;
     sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, $2)"#)
@@ -119,8 +119,8 @@ pub async fn ctx(pool: PgPool) -> Ctx {
     .unwrap();
     let other_media: i32 = sqlx::query_scalar(r#"INSERT INTO media (title, "type", "libraryId") VALUES ('Other', 'movie', $1) RETURNING id"#).bind(lib2).fetch_one(&pool).await.unwrap();
     let file: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId")
-           VALUES ('Movie.2020.1080p.BluRay.x264-GRP.mkv', 5, '1080p', '{"video":[],"audio":[],"subtitles":[]}', $1) RETURNING id"#,
+        r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "folderId")
+           VALUES ('Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.mkv', 5, '1080p', '{"video":[],"audio":[],"subtitles":[]}', $1, (SELECT min(id) FROM library_folders)) RETURNING id"#,
     )
     .bind(media)
     .fetch_one(&pool)
@@ -540,7 +540,7 @@ async fn search_download_list_upgrade_post_process_and_delete(pool: PgPool) {
         (
             json!("en"),
             json!("downloaded"),
-            json!("Movie.2020.1080p.BluRay.x264-GRP.en.srt")
+            json!("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt")
         )
     );
     assert!(media_dir_files(&c).contains(&"Movie.2020.1080p.BluRay.x264-GRP.en.srt".to_owned()));
@@ -556,7 +556,7 @@ async fn search_download_list_upgrade_post_process_and_delete(pool: PgPool) {
     .await;
     assert_eq!(
         v2["relativePath"],
-        "Movie.2020.1080p.BluRay.x264-GRP.en-1.srt"
+        "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en-1.srt"
     );
     let (_, list) = call(&c, "GET", &uri, &c.reader, None).await;
     assert_eq!(list.as_array().unwrap().len(), 2);
@@ -855,7 +855,7 @@ async fn upload_validates_cleans_and_names_the_file(pool: PgPool) {
     );
     assert_eq!(
         v["relativePath"],
-        "Movie.2020.1080p.BluRay.x264-GRP.en.forced.srt"
+        "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.forced.srt"
     );
     let text =
         std::fs::read_to_string(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.en.forced.srt"))
@@ -871,19 +871,25 @@ async fn upload_validates_cleans_and_names_the_file(pool: PgPool) {
         (s, v["relativePath"].clone(), v["hearingImpaired"].clone()),
         (
             201,
-            json!("Movie.2020.1080p.BluRay.x264-GRP.en.hi.ass"),
+            json!("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.hi.ass"),
             json!(true)
         )
     );
     let (s, v) = send("y.srt", SRT.as_bytes().to_vec(), f(vec![])).await;
     assert_eq!(
         (s, v["relativePath"].clone()),
-        (201, json!("Movie.2020.1080p.BluRay.x264-GRP.en.srt"))
+        (
+            201,
+            json!("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt")
+        )
     );
     let (s, v) = send("z.srt", SRT.as_bytes().to_vec(), f(vec![])).await;
     assert_eq!(
         (s, v["relativePath"].clone()),
-        (201, json!("Movie.2020.1080p.BluRay.x264-GRP.en-1.srt")),
+        (
+            201,
+            json!("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en-1.srt")
+        ),
         "a taken name is never replaced"
     );
     assert_eq!(send("x.txt", b"x".to_vec(), f(vec![])).await.0, 400);

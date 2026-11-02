@@ -156,14 +156,12 @@ pub struct SeasonInfo {
     pub media_id: i32,
     pub season_number: i32,
     pub media_title: String,
-    pub media_path: Option<String>,
 }
 
 pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<SeasonInfo>> {
     let Some(r) = sqlx::query!(
-        r#"SELECT s."mediaId" AS media_id, s."number" AS season_number, m.title AS "title?",
-                  l.path AS "lib_path?", m."folderName" AS "folder_name?"
-           FROM item_groups s LEFT JOIN media m ON m.id = s."mediaId" LEFT JOIN libraries l ON l.id = m."libraryId"
+        r#"SELECT s."mediaId" AS media_id, s."number" AS season_number, m.title AS "title?"
+           FROM item_groups s LEFT JOIN media m ON m.id = s."mediaId"
            WHERE s.id = $1"#,
         season
     )
@@ -177,10 +175,6 @@ pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<Season
         media_id,
         season_number: r.season_number,
         media_title: r.title.unwrap_or_else(|| format!("media #{media_id}")),
-        media_path: fliks_domain::media::path::media_path(
-            r.lib_path.as_deref(),
-            r.folder_name.as_deref(),
-        ),
     }))
 }
 
@@ -247,6 +241,7 @@ pub struct EpisodeFile {
     pub episode_id: i32,
     pub episode_number: i32,
     pub file_id: Option<i32>,
+    pub folder_path: Option<String>,
     pub relative_path: Option<String>,
     pub info: Option<Value>,
 }
@@ -254,11 +249,12 @@ pub struct EpisodeFile {
 /// Episodes of the season with a file, by episode number; each with its highest-id file.
 pub async fn episodes_with_files(db: &PgPool, season: i32) -> sqlx::Result<Vec<EpisodeFile>> {
     let rows = sqlx::query!(
-        r#"SELECT "id!", "number!", "file_id?", "rel?", "info?" FROM (
+        r#"SELECT "id!", "number!", "file_id?", "folder?", "rel?", "info?" FROM (
              SELECT DISTINCT ON (e.id) e.id AS "id!", e."number" AS "number!", f.id AS "file_id?",
-                    f."relativePath" AS "rel?", f."streamInfo" AS "info?"
+                    lf.path AS "folder?", f."relativePath" AS "rel?", f."streamInfo" AS "info?"
              FROM items e JOIN media_file_items fi ON fi."episodeId" = e.id
              JOIN media_files f ON f.id = fi."mediaFileId"
+             JOIN library_folders lf ON lf.id = f."folderId"
              WHERE e."groupId" = $1 ORDER BY e.id, f.id DESC) x
            ORDER BY "number!", "id!""#,
         season
@@ -271,6 +267,7 @@ pub async fn episodes_with_files(db: &PgPool, season: i32) -> sqlx::Result<Vec<E
             episode_id: r.id,
             episode_number: r.number,
             file_id: r.file_id,
+            folder_path: r.folder,
             relative_path: r.rel,
             info: r.info,
         })

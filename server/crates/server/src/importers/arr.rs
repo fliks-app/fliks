@@ -14,7 +14,7 @@ use fliks_domain::{
     },
     media::{
         kind::MediaKind,
-        path::{join, media_path, normalize},
+        path::{join, normalize},
     },
     metadata::limiter::Priority,
     naming::validate_folder_name,
@@ -564,6 +564,7 @@ async fn radarr_movie_subtitles(
     let Some(file) = db::latest_file(&st.db, media.id).await.map_err(db_err)? else {
         return Ok(0);
     };
+    let folder = file.folder_name.as_deref().filter(|f| !f.is_empty());
     let url = format!("{}/api/v3/extrafile?movieId={id}", req.base);
     let res = fetch(url, &req.key, ITEM_TIMEOUT)
         .await
@@ -594,16 +595,17 @@ async fn radarr_movie_subtitles(
             Some(name) => language_from_name(name),
             None => parse_language_from_path(rel),
         };
+        let stored = folder.map_or_else(|| rel.to_owned(), |f| format!("{f}/{rel}"));
         count += subtitles::upsert(
             &st.db,
             req.update,
             &subtitles::Sidecar {
                 media_id: media.id,
-                media_file_id: file,
+                media_file_id: file.id,
                 episode_id: None,
                 provider: "radarr",
                 language: &language,
-                relative_path: rel,
+                relative_path: &stored,
             },
         )
         .await
@@ -665,11 +667,9 @@ async fn sonarr_series_subtitles(
     let Some(local) = db::series_by_tmdb(&st.db, tmdb).await.map_err(db_err)? else {
         return Ok(0);
     };
-    let Some(root) = media_path(local.library_path.as_deref(), local.folder_name.as_deref()) else {
-        return Ok(0);
-    };
     let mut count = 0;
     for file in db::series_files(&st.db, local.id).await.map_err(db_err)? {
+        let root = file.folder_path.clone();
         let video = join(&root, &file.relative_path);
         let dir = video.rsplit_once('/').map_or(".", |(d, _)| d).to_owned();
         let names = {

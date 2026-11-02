@@ -89,6 +89,19 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     roles::seed(&pool).await?;
     profiles::seed_quality_definitions(&pool).await?;
     profiles::warn_invalid_regexes(&pool).await?;
+    let folders_db = pool.clone();
+    tokio::spawn(async move {
+        match tokio::time::timeout(
+            Duration::from_secs(60),
+            libraries::warn_overlapping_folders(&folders_db),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => tracing::warn!("library folder overlap check failed: {e}"),
+            Err(_) => tracing::warn!("library folder overlap check timed out"),
+        }
+    });
     let secret = jwt_secret::resolve(&cfg);
     let mut cfg = cfg;
     if !cfg.engine_url.is_empty() {

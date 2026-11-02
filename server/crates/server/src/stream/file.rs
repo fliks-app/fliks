@@ -1,7 +1,8 @@
 //! `StreamingService.resolveFile` (spec rules 38-39): a media file row, the library ACL and the path rules.
 use crate::{
-    engine::resolve::{lexical_resolve, media_root},
+    engine::resolve::lexical_resolve,
     http::{AppError, auth::Authed},
+    ingest::fsx::locate,
     state::AppState,
 };
 use fliks_domain::{
@@ -9,7 +10,7 @@ use fliks_domain::{
     media::kind::MediaKind,
 };
 use fliks_engine_core::api::MediaInfo;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct ResolvedFile {
     pub id: i32,
@@ -27,7 +28,7 @@ pub struct ResolvedFile {
     pub media_type: Option<MediaKind>,
     pub poster_url: Option<String>,
     pub fanart_url: Option<String>,
-    /// The media's root folder, the base of its sidecars.
+    /// The folder root the file lives under, the base of its sidecars.
     pub root: PathBuf,
 }
 
@@ -67,12 +68,12 @@ pub async fn resolve_file(
                       mf."mediaId" AS media_id,
                       (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS episode_id,
                       (SELECT fi."itemId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id) AS item_id,
-                      m.title AS "title?", m."type" AS media_type,
+                      m.title AS "title?", m."type" AS "media_type?",
                       m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
-                      m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path
+                      m."libraryId" AS library_id, lf.path AS folder_path
                FROM media_files mf
                LEFT JOIN media m ON m.id = mf."mediaId"
-               LEFT JOIN libraries l ON l.id = m."libraryId"
+               JOIN library_folders lf ON lf.id = mf."folderId"
                WHERE mf.id = $1"#,
             id
         )
@@ -99,26 +100,16 @@ pub async fn resolve_file(
             return Err(missing());
         }
     }
-    let root = media_root(row.library_path, row.folder).ok_or_else(|| {
-        let title = row.title.clone().unwrap_or_else(|| {
-            row.media_id.map_or_else(String::new, |m| m.to_string())
-        });
-        AppError::not_found(format!(
-            "Media \"{title}\" has no root folder assigned. Go to the media detail page and set a root folder."
-        ))
-    })?;
-    let absolute = lexical_resolve(&root, &row.relative_path);
     let invalid = || AppError::not_found("Invalid file path");
-    if !absolute.starts_with(&root) {
-        return Err(invalid());
-    }
+    let absolute = locate(&row.folder_path, &row.relative_path).ok_or_else(invalid)?;
     let meta = tokio::fs::metadata(&absolute).await.map_err(|_| {
         AppError::not_found(format!("File not found on disk: {}", absolute.display()))
     })?;
     let real = dunce::canonicalize(&absolute).map_err(|_| invalid())?;
-    if !real.starts_with(&root) {
+    if !dunce::canonicalize(&row.folder_path).is_ok_and(|root| real.starts_with(root)) {
         return Err(invalid());
     }
+    let root = lexical_resolve(Path::new(&row.folder_path), "");
     let ext = extname(&row.relative_path);
     let info = row.stream_info.and_then(|v| {
         serde_json::from_value::<MediaInfo>(v)
@@ -127,7 +118,7 @@ pub async fn resolve_file(
     });
     Ok(ResolvedFile {
         id: id as i32,
-        absolute,
+        absolute: real,
         size: meta.len(),
         content_type: content_type(&ext),
         ext,

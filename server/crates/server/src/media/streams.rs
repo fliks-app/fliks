@@ -1,6 +1,6 @@
 //! `GET /api/media/:id/streams/:mediaFileId` (`media-query.md` rules 59-61).
 use crate::{http::AppError, state::AppState};
-use fliks_domain::media::path::{join, media_path, resolve};
+use fliks_domain::media::path::{join, resolve};
 use serde_json::{Value, json};
 
 fn file_not_found(file: i32) -> AppError {
@@ -9,9 +9,9 @@ fn file_not_found(file: i32) -> AppError {
 
 pub async fn streams(st: &AppState, media: i32, file: i32) -> Result<Vec<Value>, AppError> {
     let Some(row) = sqlx::query!(
-        r#"SELECT f."relativePath" AS relative_path, l.path AS lib_path, m."folderName" AS folder_name
-           FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
-           JOIN media_files f ON f."mediaId" = m.id AND f.id = $2 WHERE m.id = $1"#,
+        r#"SELECT f."relativePath" AS relative_path, lf.path AS folder
+           FROM media m JOIN media_files f ON f."mediaId" = m.id AND f.id = $2
+           JOIN library_folders lf ON lf.id = f."folderId" WHERE m.id = $1"#,
         media,
         file
     )
@@ -20,14 +20,10 @@ pub async fn streams(st: &AppState, media: i32, file: i32) -> Result<Vec<Value>,
     else {
         return Err(file_not_found(file));
     };
-    // A library without path cannot place the file: 404.
-    let Some(base) = media_path(row.lib_path.as_deref(), row.folder_name.as_deref()) else {
-        return Err(file_not_found(file));
-    };
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "/".into());
-    let path = resolve(&join(&base, &row.relative_path), &cwd);
+    let path = resolve(&join(&row.folder, &row.relative_path), &cwd);
     let info = match st.engine.probe(&path, false, false, false).await {
         Ok(p) if p.ok => p.info,
         Ok(_) | Err(_) => None,

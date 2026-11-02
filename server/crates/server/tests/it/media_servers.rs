@@ -616,7 +616,8 @@ async fn dispatch_hits_enabled_subscribers_only(pool: PgPool) {
 
 async fn seed_library(pool: &PgPool) {
     let q = |s: &'static str| sqlx::query(s);
-    q(r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1,'Movies','["movie"]','/tmp/fliks-parity/s5-importers/m'),(2,'Series','["series"]','/tmp/fliks-parity/s5-importers/s')"#).execute(pool).await.unwrap();
+    sqlx::raw_sql(r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]'), (2, 'Series', '["series"]');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/tmp/fliks-parity/s5-importers/m'), (2, '/tmp/fliks-parity/s5-importers/s')"#).execute(pool).await.unwrap();
     q(r#"UPDATE roles SET "isDefault" = (name = 'User')"#)
         .execute(pool)
         .await

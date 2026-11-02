@@ -15,7 +15,7 @@ async fn seed(pool: &PgPool) -> (i32, i32, i32) {
         .await
         .unwrap();
     let lib: i32 =
-        sqlx::query_scalar(r#"INSERT INTO libraries (name, path) VALUES ('L', '/l') RETURNING id"#)
+        sqlx::query_scalar(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '/l' FROM l) SELECT id FROM l"#)
             .fetch_one(pool)
             .await
             .unwrap();
@@ -28,8 +28,8 @@ async fn seed(pool: &PgPool) -> (i32, i32, i32) {
     .await
     .unwrap();
     let file = sqlx::query_scalar(
-        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-           VALUES ($1, 'M.mkv', 1, 'x') RETURNING id"#,
+        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+           VALUES ($1, 'M.mkv', 1, 'x', (SELECT min(id) FROM library_folders)) RETURNING id"#,
     )
     .bind(media)
     .fetch_one(pool)
@@ -144,8 +144,8 @@ async fn finishing_a_range_file_completes_every_episode_it_plays(pool: PgPool) {
     .await
     .unwrap();
     let file: i32 = sqlx::query_scalar(
-        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-                      VALUES ($1, 'S01E01-E03.mkv', 1, 'x') RETURNING id),
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+                      VALUES ($1, 'S01E01-E03.mkv', 1, 'x', (SELECT min(id) FROM library_folders)) RETURNING id),
                 p AS (INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
                       SELECT i, f.id, $1, 0 FROM f, UNNEST($2::int[]) i RETURNING 1)
            SELECT id FROM f"#,

@@ -63,7 +63,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | `likedByFewerThan` | int >= 1 | fewer distinct users than the value liked the media, a season or an episode |
     | `notLikedByRequester` | bool | no requester of the media liked it (no requester matches) |
     | `keepLatestEpisodes` | int >= 1, only when `levels` is `[episode]` (`is only available at episode level`) | the episode is not among the N newest episodes of its series on disk, ranked by `items."airDate"` (no date ranks oldest), then `id` |
-    | `diskFreeBelowPercent` | int 1..100 | its library path has less free space than that percentage of the disk (`libraries::disk`); a library without a readable path never matches |
+    | `diskFreeBelowPercent` | int 1..100 | its library's default folder has less free space than that percentage of the disk (`libraries::disk`); a library without a folder or with an unreadable one never matches |
 
     The three play-history criteria apply at movie and series level only; a rule selecting season or episode rejects them (`is not available at <level> level`). Day criteria stop at 36500 (100 years) so the date arithmetic stays in range.
 

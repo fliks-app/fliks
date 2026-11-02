@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.id, l.name, df.path AS \"path?\", l.\"mediaTypes\" AS types,\n                  l.\"preferredProvider\" AS provider, l.\"defaultQualityProfileId\" AS dq,\n                  l.\"defaultLanguageProfileId\" AS dl\n           FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id WHERE l.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "path?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_default_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "types",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mediaTypes"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "provider",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "preferredProvider"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "defaultQualityProfileId"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "dl",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "defaultLanguageProfileId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "94df5b5c63d785a9b293d7cba2934a7fae1890bff91c8fc04cb37ed35220dea8"
+}

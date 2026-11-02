@@ -588,7 +588,8 @@ mod tests {
     async fn resolve_names_groups_and_items_with_their_units(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         sqlx::raw_sql(
-            r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'Film', 'movie', 1), (2, 'Show', 'series', 1)"#,
         )
         .execute(&db)

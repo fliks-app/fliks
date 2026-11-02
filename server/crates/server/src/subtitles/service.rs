@@ -183,7 +183,7 @@ pub async fn resolve_file(
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media_id))?;
     if media
-        .library_path
+        .folder_path
         .as_deref()
         .is_none_or(|p| p.trim().is_empty())
     {

@@ -319,20 +319,6 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T00:00:00.000Z",
-                "episodeId": 29,
-                "id": 62,
-                "language": "en",
-                "mediaId": 47,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "WEBDL-1080p",
-                "relativePath": "Season 01/e29.mkv",
-                "size": 1000062,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
                 "createdAt": "2026-02-02T11:00:00.000Z",
                 "episodeId": 27,
                 "id": 61,
@@ -341,8 +327,22 @@
                 "osdbBytesize": null,
                 "osdbHash": null,
                 "quality": "WEBDL-1080p",
-                "relativePath": "Season 01/e27.mkv",
+                "relativePath": "Series Calendar (2020)/Season 01/e27.mkv",
                 "size": 1000061,
+                "streamInfo": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              {
+                "createdAt": "2026-02-04T00:00:00.000Z",
+                "episodeId": 29,
+                "id": 62,
+                "language": "en",
+                "mediaId": 47,
+                "osdbBytesize": null,
+                "osdbHash": null,
+                "quality": "WEBDL-1080p",
+                "relativePath": "Series Calendar (2020)/Season 01/e29.mkv",
+                "size": 1000062,
                 "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               }
@@ -478,24 +478,6 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-05T03:00:00.000Z",
-                "episodeId": 24,
-                "id": 60,
-                "language": "en",
-                "mediaId": 45,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "WEBDL-1080p",
-                "relativePath": "Season 01/e24.mkv",
-                "size": 1000060,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
                 "createdAt": "2026-02-03T14:00:00.000Z",
                 "episodeId": 23,
                 "id": 59,
@@ -504,9 +486,27 @@
                 "osdbBytesize": null,
                 "osdbHash": null,
                 "quality": "WEBDL-1080p",
-                "relativePath": "Season 01/e23.mkv",
+                "relativePath": "Series Half Watched (2020)/Season 01/e23.mkv",
                 "size": 1000059,
                 "streamInfo": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              {
+                "createdAt": "2026-02-05T03:00:00.000Z",
+                "episodeId": 24,
+                "id": 60,
+                "language": "en",
+                "mediaId": 45,
+                "osdbBytesize": null,
+                "osdbHash": null,
+                "quality": "WEBDL-1080p",
+                "relativePath": "Series Half Watched (2020)/Season 01/e24.mkv",
+                "size": 1000060,
+                "streamInfo": {
+                  "audio": [],
+                  "subtitles": [],
+                  "video": []
+                },
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               }
             ],
@@ -583,7 +583,7 @@
                 "osdbBytesize": null,
                 "osdbHash": null,
                 "quality": "Bluray-1080p",
-                "relativePath": "Season 01/e20.mkv",
+                "relativePath": "Series Watched (2020)/Season 01/e20.mkv",
                 "size": 1000058,
                 "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
@@ -672,7 +672,7 @@
                 "osdbBytesize": null,
                 "osdbHash": null,
                 "quality": "WEBDL-720p",
-                "relativePath": "Season 01/e13.mkv",
+                "relativePath": "Series Multi (2020)/Season 01/e13.mkv",
                 "size": 1000057,
                 "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
@@ -750,26 +750,7 @@
             "createdAt": "2026-02-12T00:00:00.000Z",
             "digitalRelease": null,
             "fanartUrl": null,
-            "files": [
-              {
-                "createdAt": "2026-02-02T08:00:00.000Z",
-                "episodeId": null,
-                "id": 50,
-                "language": "en",
-                "mediaId": 42,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "WEBDL-1080p",
-                "relativePath": "Pathless Library Movie (2020)/Pathless Library Movie (2020).mkv",
-                "size": 1000050,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
-              }
-            ],
+            "files": [],
             "folderName": "Pathless Library Movie (2020)",
             "genres": null,
             "id": 42,
@@ -811,7 +792,7 @@
             "rating": null,
             "releaseDate": null,
             "runtime": null,
-            "sizeOnDisk": 1000050,
+            "sizeOnDisk": 0,
             "status": "released",
             "title": "Pathless Library Movie",
             "tmdbCollectionId": null,
@@ -1168,24 +1149,6 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-01T15:00:00.000Z",
-                "episodeId": null,
-                "id": 55,
-                "language": "en",
-                "mediaId": 37,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "HDTV-720p",
-                "relativePath": "Profile Movie Met (2020)/Profile Movie Met (2020).720.mkv",
-                "size": 1000055,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
                 "createdAt": "2026-02-03T01:00:00.000Z",
                 "episodeId": null,
                 "id": 45,
@@ -1196,6 +1159,24 @@
                 "quality": "Bluray-1080p",
                 "relativePath": "Profile Movie Met (2020)/Profile Movie Met (2020).mkv",
                 "size": 1000045,
+                "streamInfo": {
+                  "audio": [],
+                  "subtitles": [],
+                  "video": []
+                },
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              {
+                "createdAt": "2026-02-01T15:00:00.000Z",
+                "episodeId": null,
+                "id": 55,
+                "language": "en",
+                "mediaId": 37,
+                "osdbBytesize": null,
+                "osdbHash": null,
+                "quality": "HDTV-720p",
+                "relativePath": "Profile Movie Met (2020)/Profile Movie Met (2020).720.mkv",
+                "size": 1000055,
                 "streamInfo": {
                   "audio": [],
                   "subtitles": [],

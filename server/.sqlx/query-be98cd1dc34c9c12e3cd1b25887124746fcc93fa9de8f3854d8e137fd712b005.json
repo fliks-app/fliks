@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id FROM media m\n           WHERE m.id = (SELECT \"mediaId\" FROM media_external_ids\n             WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "be98cd1dc34c9c12e3cd1b25887124746fcc93fa9de8f3854d8e137fd712b005"
+}

@@ -111,3 +111,6 @@ cast-receiver/fonts/
 .env.local
 client/src/environments/cast-app-id.generated.ts
 client/ios/App/App/Local.xcconfig
+
+# dev data dir (pre-migration dumps and the like)
+server/data/

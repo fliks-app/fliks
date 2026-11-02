@@ -358,7 +358,8 @@ mod tests {
         crate::db::migrate(&db).await.unwrap();
         sqlx::raw_sql(
             r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
-               INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+               INSERT INTO libraries (id, name) VALUES (1, 'L');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                INSERT INTO media (title, year, type, status, "libraryId", "folderName", monitored)
                  SELECT 'm' || n, 2000, 'movie', 'released', 1, 'm' || n, n % 5 <> 0 FROM generate_series(1, 250) n;
                INSERT INTO wants ("mediaId", family, "qualityProfileId") SELECT id, 'video', 1 FROM media;"#,
@@ -394,7 +395,8 @@ mod tests {
     async fn the_context_of_a_movie_item_is_null(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         sqlx::raw_sql(
-            r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'm', 'movie', 1)"#,
         )
         .execute(&db)
@@ -430,7 +432,8 @@ mod tests {
     async fn series_with_episodes(db: &PgPool) -> (i32, Vec<i32>) {
         sqlx::raw_sql(
             r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
-               INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+               INSERT INTO libraries (id, name) VALUES (1, 'L');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                INSERT INTO media (id, title, type, "libraryId", monitored) VALUES (1, 'Show', 'series', 1, true);
                INSERT INTO media_external_ids ("mediaId", kind, provider, value)
                  VALUES (1, 'series', 'tmdb', '5'), (1, 'series', 'tvdb', '7')"#,

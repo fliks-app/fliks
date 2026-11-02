@@ -39,7 +39,8 @@ pub struct Library {
 
 pub async fn libraries(db: &PgPool) -> sqlx::Result<Vec<Library>> {
     let rows = sqlx::query!(
-        r#"SELECT id, name, path, "mediaTypes" AS "media_types: Json<Vec<String>>" FROM libraries ORDER BY id"#
+        r#"SELECT l.id, l.name, df.path AS "path?", l."mediaTypes" AS "media_types: Json<Vec<String>>"
+           FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id ORDER BY l.id"#
     )
     .fetch_all(db)
     .await?;
@@ -161,8 +162,11 @@ pub async fn update_media(
 ) -> Result<(), WriteError> {
     let mut tx = db.begin().await?;
     sqlx::query!(
-        r#"UPDATE media SET title = $2, year = $3, "folderName" = $4,
-                  overview = $5, "libraryId" = $6, "updatedAt" = now()
+        r#"UPDATE media SET title = $2, year = $3,
+                  "folderName" = CASE WHEN has.files THEN "folderName" ELSE $4 END,
+                  overview = $5,
+                  "libraryId" = CASE WHEN has.files THEN COALESCE("libraryId", $6) ELSE $6 END, "updatedAt" = now()
+           FROM (SELECT EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1) AS files) has
            WHERE id = $1"#,
         m.id,
         m.title,
@@ -214,15 +218,12 @@ pub async fn insert_quality_profile(
 
 pub struct Series {
     pub id: i32,
-    pub library_path: Option<String>,
-    pub folder_name: Option<String>,
 }
 
 pub async fn series_by_tmdb(db: &PgPool, tmdb_id: i32) -> sqlx::Result<Option<Series>> {
     sqlx::query_as!(
         Series,
-        r#"SELECT m.id, l.path AS library_path, m."folderName" AS folder_name
-           FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
+        r#"SELECT m.id FROM media m
            WHERE m.id = (SELECT "mediaId" FROM media_external_ids
              WHERE kind = $2 AND provider = $3 AND value = $1::int4::text)"#,
         tmdb_id,
@@ -233,10 +234,17 @@ pub async fn series_by_tmdb(db: &PgPool, tmdb_id: i32) -> sqlx::Result<Option<Se
     .await
 }
 
-/// The highest-id file of a movie.
-pub async fn latest_file(db: &PgPool, media_id: i32) -> sqlx::Result<Option<i32>> {
-    sqlx::query_scalar!(
-        r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id DESC LIMIT 1"#,
+/// The highest-id file of a movie and the folder name its media lives under.
+pub struct LatestFile {
+    pub id: i32,
+    pub folder_name: Option<String>,
+}
+
+pub async fn latest_file(db: &PgPool, media_id: i32) -> sqlx::Result<Option<LatestFile>> {
+    sqlx::query_as!(
+        LatestFile,
+        r#"SELECT f.id, m."folderName" AS folder_name FROM media_files f JOIN media m ON m.id = f."mediaId"
+           WHERE f."mediaId" = $1 ORDER BY f.id DESC LIMIT 1"#,
         media_id
     )
     .fetch_optional(db)
@@ -245,6 +253,7 @@ pub async fn latest_file(db: &PgPool, media_id: i32) -> sqlx::Result<Option<i32>
 
 pub struct SeriesFile {
     pub id: i32,
+    pub folder_path: String,
     pub relative_path: String,
     pub episode_id: Option<i32>,
 }
@@ -252,9 +261,10 @@ pub struct SeriesFile {
 pub async fn series_files(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<SeriesFile>> {
     sqlx::query_as!(
         SeriesFile,
-        r#"SELECT id, "relativePath" AS relative_path,
-                  (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = media_files.id) AS episode_id
-           FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+        r#"SELECT f.id, lf.path AS folder_path, f."relativePath" AS relative_path,
+                  (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) AS episode_id
+           FROM media_files f JOIN library_folders lf ON lf.id = f."folderId"
+           WHERE f."mediaId" = $1 ORDER BY f.id"#,
         media_id
     )
     .fetch_all(db)

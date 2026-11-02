@@ -374,7 +374,7 @@ export class MediaDetailSeasonsComponent {
   }
 
   fileDiskPath(relativePath: string): string {
-    return displayMediaFilePath(this.media().path, relativePath);
+    return displayMediaFilePath(this.media().library?.path, relativePath);
   }
 
   episodeBadgeLabel = episodeBadgeLabel;

@@ -12,8 +12,8 @@ SELECT setval('items_id_seq', (SELECT max(id) FROM items));
 INSERT INTO items ("number", title, "groupId", "mediaId", "editionId")
   VALUES (3, 'Episode 3', 1, 18, (SELECT id FROM editions WHERE "mediaId" = 18));
 WITH f AS (
-  INSERT INTO media_files ("mediaId", "relativePath", size, quality, language, "streamInfo")
-  SELECT "mediaId", 'Season 01/Parity Series A - S01E03.mkv', size, quality, language, "streamInfo"
+  INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, language, "streamInfo")
+  SELECT "mediaId", "folderId", 'Parity Series A/Season 01/Parity Series A - S01E03.mkv', size, quality, language, "streamInfo"
   FROM media_files WHERE id = (SELECT "mediaFileId" FROM item_parts WHERE "itemId" = 1 LIMIT 1)
   RETURNING id, "mediaId")
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT (SELECT max(id) FROM items), id, "mediaId", 0 FROM f;

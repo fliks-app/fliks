@@ -166,26 +166,7 @@
               "createdAt": "2026-02-12T00:00:00.000Z",
               "digitalRelease": null,
               "fanartUrl": null,
-              "files": [
-                {
-                  "createdAt": "2026-02-02T08:00:00.000Z",
-                  "episodeId": null,
-                  "id": 50,
-                  "language": "en",
-                  "mediaId": 42,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
-                  "quality": "WEBDL-1080p",
-                  "relativePath": "Pathless Library Movie (2020)/Pathless Library Movie (2020).mkv",
-                  "size": 1000050,
-                  "streamInfo": {
-                    "audio": [],
-                    "subtitles": [],
-                    "video": []
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
-                }
-              ],
+              "files": [],
               "folderName": "Pathless Library Movie (2020)",
               "genres": null,
               "id": 42,
@@ -228,7 +209,7 @@
               "rating": null,
               "releaseDate": null,
               "runtime": null,
-              "sizeOnDisk": 1000050,
+              "sizeOnDisk": 0,
               "status": "released",
               "title": "Pathless Library Movie",
               "tmdbCollectionId": null,

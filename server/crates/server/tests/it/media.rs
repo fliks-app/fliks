@@ -20,7 +20,8 @@ async fn ctx(pool: PgPool) -> Ctx {
         r#"
         INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read"]', false);
         INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'plain', false, 1);
-        INSERT INTO libraries (id, name, path) VALUES (1, 'L1', '/m/one'), (2, 'L2', '/m/two');
+        INSERT INTO libraries (id, name) VALUES (1, 'L1'), (2, 'L2');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m/one'), (2, '/m/two');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
         INSERT INTO media (id, title, "originalTitle", overview, year, type, "libraryId", "folderName") VALUES
@@ -29,8 +30,10 @@ async fn ctx(pool: PgPool) -> Ctx {
           (3, 'Aaa Gamma', NULL, 'alpha story', 2000, 'movie', 1, 'c'),
           (4, 'Delta', NULL, NULL, 2000, 'movie', 2, 'd');
         INSERT INTO wants ("mediaId", family, "qualityProfileId") SELECT id, 'video', 1 FROM media;
-        INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES
-          (1, 'f', 1, 'WEBDL-720p'), (2, 'f', 1, 'Bluray-1080p'), (3, 'f', 1, 'HDTV-720p'), (4, 'f', 1, 'CAM');
+        INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+          SELECT v.mid, v.rel, 1, v.q, df."folderId"
+            FROM (VALUES (1, 'a/f', 'WEBDL-720p'), (2, 'b/f', 'Bluray-1080p'), (3, 'c/f', 'HDTV-720p'), (4, 'd/f', 'CAM')) v(mid, rel, q)
+            JOIN media m ON m.id = v.mid JOIN library_default_folders df ON df."libraryId" = m."libraryId";
         "#,
     )
     .execute(&pool)
@@ -212,7 +215,7 @@ async fn moving_a_media_with_files_is_a_409(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn grid_view_keeps_the_first_file_and_counts_the_rest(pool: PgPool) {
     let c = ctx(pool.clone()).await;
-    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (1, 'g', 1, 'CAM')"#)
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId") VALUES (1, 'g', 1, 'CAM', (SELECT min(id) FROM library_folders))"#)
         .execute(&pool)
         .await
         .unwrap();

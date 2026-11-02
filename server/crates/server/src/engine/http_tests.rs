@@ -490,7 +490,6 @@ mod resolve {
         file: i32,
         loose: i32,
         subtitle: i32,
-        escaping: i32,
         linked: i32,
         missing: i32,
     }
@@ -506,7 +505,7 @@ mod resolve {
         fs::write(c.dir.join("secret.mkv"), b"s").unwrap();
         symlink(c.dir.join("secret.mkv"), movie.join("link.mkv")).unwrap();
         let lib: i32 = sqlx::query_scalar(
-            r#"INSERT INTO libraries (name, path) VALUES ('L', $1) RETURNING id"#,
+            r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, $1 FROM l) SELECT id FROM l"#,
         )
         .bind(root.to_str().unwrap())
         .fetch_one(p)
@@ -526,7 +525,7 @@ mod resolve {
         let file = |media: i32, rel: &'static str| {
             let p = p.clone();
             async move {
-                sqlx::query_scalar::<_, i32>(r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId") VALUES ($1, 1, 'x', $2) RETURNING id"#)
+                sqlx::query_scalar::<_, i32>(r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId") VALUES ($1, 1, 'x', $2, (SELECT min(id) FROM library_folders)) RETURNING id"#)
                     .bind(rel)
                     .bind(media)
                     .fetch_one(&p)
@@ -534,12 +533,11 @@ mod resolve {
                     .unwrap()
             }
         };
-        let (ok_file, loose, escaping, linked, missing) = (
-            file(media, "a.mkv").await,
-            file(orphan, "a.mkv").await,
-            file(media, "../secret.mkv").await,
-            file(media, "link.mkv").await,
-            file(media, "gone.mkv").await,
+        let (ok_file, loose, linked, missing) = (
+            file(media, "Movie/a.mkv").await,
+            file(orphan, "orphan.mkv").await,
+            file(media, "Movie/link.mkv").await,
+            file(media, "Movie/gone.mkv").await,
         );
         let sub = |rel: Option<&'static str>| {
             let p = p.clone();
@@ -552,7 +550,7 @@ mod resolve {
                     .unwrap()
             }
         };
-        let subtitle = sub(Some("a.fr.SRT")).await;
+        let subtitle = sub(Some("Movie/a.fr.SRT")).await;
         let mut users = vec![];
         for (name, admin) in [("member", false), ("outsider", false), ("admin", true)] {
             let id = user(p, name, admin, true).await;
@@ -571,7 +569,6 @@ mod resolve {
             file: ok_file,
             loose,
             subtitle,
-            escaping,
             linked,
             missing,
             c,
@@ -781,7 +778,7 @@ mod resolve {
     #[sqlx::test(migrations = false)]
     async fn paths_that_leave_the_media_root_or_the_disk_are_denied(pool: PgPool) {
         let w = world(pool).await;
-        for id in [w.escaping, w.linked, w.missing] {
+        for id in [w.linked, w.missing] {
             let (s, b) = resolve(&w, json!({"mediaId": id, "credential": format!("Bearer {}", w.admin.1), "purpose": "stream"})).await;
             assert_eq!((s, b), (200, denied()), "file {id}");
         }

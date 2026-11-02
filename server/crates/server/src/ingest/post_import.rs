@@ -197,8 +197,8 @@ pub async fn file_path(
     id: i32,
 ) -> Result<Option<(std::path::PathBuf, Option<MediaInfo>)>, sqlx::Error> {
     let Some(r) = sqlx::query!(
-        r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, m."folderName" AS folder, l.path AS "lib?"
-           FROM media_files f JOIN media m ON m.id = f."mediaId" LEFT JOIN libraries l ON l.id = m."libraryId"
+        r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, lf.path AS folder
+           FROM media_files f JOIN library_folders lf ON lf.id = f."folderId"
            WHERE f.id = $1"#,
         id
     )
@@ -208,11 +208,8 @@ pub async fn file_path(
         return Ok(None);
     };
     let resolved = (|| {
-        let root = fsx::Root::open(r.lib.as_deref()?).ok()?;
-        let p = root
-            .media_dir(r.folder.as_deref())
-            .ok()?
-            .join(fsx::safe_rel(&r.rel)?);
+        let root = fsx::Root::open(&r.folder).ok()?;
+        let p = root.path().join(fsx::safe_rel(&r.rel)?);
         root.contains(&p, false).then_some(p)
     })();
     let info = r.info.and_then(|v| serde_json::from_value(v).ok());

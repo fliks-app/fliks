@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.\"libraryId\" AS library_id, sf.\"filePath\" AS stored\n           FROM subtitle_files sf\n           LEFT JOIN media m ON m.\"id\" = sf.\"mediaId\"\n           WHERE sf.\"id\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "library_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "stored",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "subtitle_files",
+            "name": "filePath"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "952c547e656adeef08b4aea383056ddd77c989d48a02ceb0fd446ebad750305d"
+}

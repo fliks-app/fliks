@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_files (\"mediaId\", \"folderId\", \"relativePath\", size, quality, \"streamInfo\")\n               VALUES ($1, $2, $3, $4, $5, $6)\n               ON CONFLICT (\"folderId\", \"relativePath\") DO UPDATE\n               SET size = EXCLUDED.size, quality = EXCLUDED.quality, \"streamInfo\" = EXCLUDED.\"streamInfo\"\n               WHERE media_files.\"mediaId\" = EXCLUDED.\"mediaId\"\n               RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Int8",
+        "Varchar",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "102c78266bab35a3605c49256c1e999e79eaea4dfbf69bb16db14e351b20e05a"
+}

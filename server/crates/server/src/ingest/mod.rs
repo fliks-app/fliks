@@ -10,6 +10,7 @@ pub mod transfer;
 #[cfg(test)]
 mod tests;
 
+use crate::libraries::Folder;
 use crate::media::external_ids;
 use crate::state::AppState;
 use crate::sync::MutexExt;
@@ -72,7 +73,7 @@ pub struct MediaRow {
     pub folder_name: Option<String>,
     pub library_id: Option<i32>,
     pub library_name: Option<String>,
-    pub library_path: Option<String>,
+    pub folder: Option<Folder>,
     pub library_types: Option<serde_json::Value>,
 }
 
@@ -84,7 +85,7 @@ impl MediaRow {
     /// The `Media.path` getter (lexical, for messages and outbound notifications only).
     pub fn path(&self) -> Option<String> {
         fliks_domain::media::path::media_path(
-            self.library_path.as_deref(),
+            self.folder.as_ref().map(|f| f.path.as_str()),
             self.folder_name.as_deref(),
         )
     }
@@ -103,8 +104,9 @@ pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::
         r#"SELECT m.id, m.title, m."originalTitle" AS original_title, m.year, m.type AS "media_type!",
                   ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id, ids.imdb AS imdb_id, m.monitored,
                   m."folderName" AS folder_name, m."libraryId" AS library_id, l.name AS "library_name?",
-                  l.path AS "library_path?", l."mediaTypes" AS "library_types?"
+                  df."folderId" AS "folder_id?", df.path AS "folder_path?", l."mediaTypes" AS "library_types?"
            FROM media m LEFT JOIN libraries l ON l.id = m."libraryId"
+           LEFT JOIN library_default_folders df ON df."libraryId" = m."libraryId"
            LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $2)::int AS tmdb,
              max(value) FILTER (WHERE provider = $3)::int AS tvdb,
              max(value) FILTER (WHERE provider = $4) AS imdb
@@ -133,7 +135,10 @@ pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::
         folder_name: r.folder_name,
         library_id: r.library_id,
         library_name: r.library_name,
-        library_path: r.library_path,
+        folder: r
+            .folder_id
+            .zip(r.folder_path)
+            .map(|(id, path)| Folder { id, path }),
         library_types: r.library_types,
     }))
 }

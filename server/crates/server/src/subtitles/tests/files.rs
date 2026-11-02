@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::time::Duration;
 
-const VIDEO: &str = "Movie.2020.1080p.BluRay.x264-GRP.mkv";
+const VIDEO: &str = "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.mkv";
 
 pub(super) async fn row(
     c: &Ctx,
@@ -108,7 +108,10 @@ async fn sidecar_writes_never_leave_the_media_directory(pool: PgPool) {
     )
     .unwrap();
     let rel = dirs.write_sidecar(VIDEO, "en", ".srt", b"ok").unwrap();
-    assert_eq!(rel, "Movie.2020.1080p.BluRay.x264-GRP.en-1.srt");
+    assert_eq!(
+        rel,
+        "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en-1.srt"
+    );
     assert!(!outside.join("nothing.srt").exists());
     // A missing video directory is not recreated.
     assert!(
@@ -147,9 +150,9 @@ async fn discovery_reconcile_carry_over_and_delete(pool: PgPool) {
     assert_eq!(n, rows.len());
     let paths: Vec<_> = rows.iter().map(|r| r.2.as_str()).collect();
     assert!(
-        paths.contains(&format!("{stem}.fr.srt").as_str())
-            && paths.contains(&format!("{stem}.en.forced.srt").as_str())
-            && paths.contains(&format!("{stem}.sup").as_str())
+        paths.contains(&format!("Movie (2020)/{stem}.fr.srt").as_str())
+            && paths.contains(&format!("Movie (2020)/{stem}.en.forced.srt").as_str())
+            && paths.contains(&format!("Movie (2020)/{stem}.sup").as_str())
     );
     assert!(
         !paths
@@ -168,7 +171,7 @@ async fn discovery_reconcile_carry_over_and_delete(pool: PgPool) {
         &c,
         "en",
         "disk",
-        Some(&format!("{stem}.en.forced.srt")),
+        Some(&format!("Movie (2020)/{stem}.en.forced.srt")),
         None,
         None,
     )
@@ -183,7 +186,7 @@ async fn discovery_reconcile_carry_over_and_delete(pool: PgPool) {
     assert_eq!(alive, 1, "the higher id of equal rows wins");
     assert!(c.dir.join(format!("{stem}.en.forced.srt")).exists());
     // Carry-over renames after the new video and drops the hash flag.
-    let new_file: i32 = sqlx::query_scalar(r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId") VALUES ('New.Movie.mkv', 1, '1080p', $1) RETURNING id"#).bind(c.media).fetch_one(&c.pool).await.unwrap();
+    let new_file: i32 = sqlx::query_scalar(r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId") VALUES ('Movie (2020)/New.Movie.mkv', 1, '1080p', $1, (SELECT min(id) FROM library_folders)) RETURNING id"#).bind(c.media).fetch_one(&c.pool).await.unwrap();
     sqlx::query(r#"UPDATE subtitle_files SET "hashMatched" = true WHERE id = $1"#)
         .bind(dup)
         .execute(&c.pool)
@@ -204,7 +207,7 @@ async fn discovery_reconcile_carry_over_and_delete(pool: PgPool) {
     .unwrap();
     assert_eq!(
         (path.as_str(), file, hm),
-        ("New.Movie.en.forced.srt", new_file, false)
+        ("Movie (2020)/New.Movie.en.forced.srt", new_file, false)
     );
     // Deleting with the video unlinks the sidecars, except a file another video lists.
     sidecars::delete_files_on_disk(&c.st, c.media, new_file).await;
@@ -274,8 +277,8 @@ async fn embedded_tracks_follow_the_probe_and_keep_rows_when_it_fails(pool: PgPo
 #[sqlx::test]
 async fn a_sync_job_runs_end_to_end_and_a_failure_is_recorded(pool: PgPool) {
     let c = ctx(pool).await;
-    let stored = "Movie.2020.1080p.BluRay.x264-GRP.en.srt";
-    std::fs::write(c.dir.join(stored), SRT).unwrap();
+    let stored = "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt";
+    std::fs::write(c.root.join(stored), SRT).unwrap();
     let id = row(&c, "en", "disk", Some(stored), None, None).await;
     let shifted = "1\n00:00:05,000 --> 00:00:06,000\nHello there.\n";
     script_job(
@@ -313,7 +316,7 @@ async fn a_sync_job_runs_end_to_end_and_a_failure_is_recorded(pool: PgPool) {
     })
     .await;
     assert_eq!(
-        std::fs::read_to_string(c.dir.join(stored)).unwrap(),
+        std::fs::read_to_string(c.root.join(stored)).unwrap(),
         shifted
     );
     let (synced, status, locked): (bool, String, bool) =
@@ -502,9 +505,12 @@ async fn an_ocr_job_runs_end_to_end_and_a_failed_run_stays_failed(pool: PgPool) 
         .fetch_one(&c.pool)
         .await
         .unwrap();
-    assert_eq!(path, "Movie.2020.1080p.BluRay.x264-GRP.fr.ocr.srt");
     assert_eq!(
-        std::fs::read_to_string(c.dir.join(&path))
+        path,
+        "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.fr.ocr.srt"
+    );
+    assert_eq!(
+        std::fs::read_to_string(c.root.join(&path))
             .unwrap()
             .trim_end(),
         SRT.trim_end()
@@ -624,7 +630,15 @@ async fn post_processing_refuses_image_formats_and_a_convert_onto_an_existing_sr
     for ext in ["sup", "sub"] {
         let name = format!("Movie.2020.1080p.BluRay.x264-GRP.en.{ext}");
         std::fs::write(c.dir.join(&name), b"x").unwrap();
-        let id = row(&c, "en", "disk", Some(&name), None, None).await;
+        let id = row(
+            &c,
+            "en",
+            "disk",
+            Some(&format!("Movie (2020)/{name}")),
+            None,
+            None,
+        )
+        .await;
         let (s, v) = call(
             &c,
             "POST",
@@ -647,7 +661,7 @@ async fn post_processing_refuses_image_formats_and_a_convert_onto_an_existing_sr
         &c,
         "fr",
         "disk",
-        Some("Movie.2020.1080p.BluRay.x264-GRP.fr.ass"),
+        Some("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.fr.ass"),
         None,
         None,
     )
@@ -797,7 +811,7 @@ async fn a_rescan_and_a_file_delete_reach_the_subtitle_hooks(pool: PgPool) {
         &c,
         "en",
         "disk",
-        Some("Movie.2020.1080p.BluRay.x264-GRP.en.srt"),
+        Some("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.en.srt"),
         None,
         None,
     )
@@ -844,8 +858,8 @@ async fn the_sync_queue_dedupes_live_items_and_runs_each_with_its_own_options(po
     let c = ctx(pool).await;
     let mut ids = vec![];
     for n in ["a", "b", "c"] {
-        let stored = format!("Movie.2020.1080p.BluRay.x264-GRP.{n}.srt");
-        std::fs::write(c.dir.join(&stored), SRT).unwrap();
+        let stored = format!("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.{n}.srt");
+        std::fs::write(c.root.join(&stored), SRT).unwrap();
         ids.push(row(&c, "en", "disk", Some(&stored), None, None).await);
     }
     let done = |j: &str| {
@@ -923,8 +937,8 @@ async fn cancelling_a_sync_drops_a_queued_item_and_settles_a_running_one(pool: P
     let c = ctx(pool).await;
     let mut ids = vec![];
     for n in ["a", "b", "c"] {
-        let stored = format!("Movie.2020.1080p.BluRay.x264-GRP.{n}.srt");
-        std::fs::write(c.dir.join(&stored), SRT).unwrap();
+        let stored = format!("Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP.{n}.srt");
+        std::fs::write(c.root.join(&stored), SRT).unwrap();
         ids.push(row(&c, "en", "disk", Some(&stored), None, None).await);
     }
     c.fake.script(

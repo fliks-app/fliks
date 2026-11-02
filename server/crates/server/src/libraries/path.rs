@@ -1,8 +1,11 @@
-//! A library's root path: `sanitizeFsPath`, `statfs` and the `assignPath` state machine (rules 6, 13, 37).
+//! A library's folder path: `sanitizeFsPath`, `statfs` and the `assignPath` state machine (rules 6, 13, 37, 42-46).
 use super::db::{Disk, not_found};
 use crate::http::AppError;
 use sqlx::PgConnection;
-use std::{io, path::Path};
+use std::{
+    io,
+    path::{Component, Path, PathBuf},
+};
 
 /// Strips bidi marks and zero-width characters, then trims like JS `trim()` (Rust also trims U+0085).
 pub fn sanitize(raw: &str) -> String {
@@ -72,12 +75,67 @@ fn io_text(e: &io::Error) -> String {
     s.split(" (os error").next().unwrap_or(&s).to_owned()
 }
 
-/// `assignPath` (rule 13): the directory is created last, right before the `UPDATE`.
+/// The input without `.`, `..`, doubled or trailing separators, never touching the disk.
+pub fn normalize(path: &str) -> String {
+    let mut out = PathBuf::new();
+    for c in Path::new(path).components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            c => out.push(c),
+        }
+    }
+    out.to_string_lossy().into_owned()
+}
+
+/// Boot check: warns for every pair of folders of different libraries that name one directory
+/// (case, symlink or bind-mount variants); nothing is changed. The filesystem work runs on a
+/// blocking thread so a hung mount stalls only this check.
+pub async fn warn_overlapping_folders(db: &sqlx::PgPool) -> sqlx::Result<()> {
+    let folders =
+        sqlx::query!(r#"SELECT "libraryId" AS library_id, path FROM library_folders ORDER BY id"#)
+            .fetch_all(db)
+            .await?;
+    let _ = tokio::task::spawn_blocking(move || {
+        for (i, a) in folders.iter().enumerate() {
+            for b in &folders[i + 1..] {
+                if a.library_id != b.library_id
+                    && crate::ingest::fsx::same_dir(Path::new(&a.path), Path::new(&b.path))
+                {
+                    tracing::warn!(
+                        "library #{} \"{}\" and library #{} \"{}\" are one directory: media there is listed twice",
+                        a.library_id,
+                        a.path,
+                        b.library_id,
+                        b.path
+                    );
+                }
+            }
+        }
+    })
+    .await;
+    Ok(())
+}
+
+/// `assignPath` (rule 13): the directory is created last, right before the write.
 pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppError> {
-    let current = sqlx::query_scalar!("SELECT path FROM libraries WHERE id = $1", id)
-        .fetch_optional(&mut *c)
-        .await?
-        .ok_or_else(|| not_found(id))?;
+    let exists = sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM libraries WHERE id = $1) AS "e!""#,
+        id
+    )
+    .fetch_one(&mut *c)
+    .await?;
+    if !exists {
+        return Err(not_found(id));
+    }
+    let current = sqlx::query_scalar!(
+        r#"SELECT path AS "path!" FROM library_default_folders WHERE "libraryId" = $1"#,
+        id
+    )
+    .fetch_optional(&mut *c)
+    .await?;
     let path = sanitize(raw);
     if path.is_empty() {
         let Some(current) = current else {
@@ -89,31 +147,35 @@ pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppE
                 "Path \"{current}\" still contains {used} media item(s)."
             )));
         }
-        return save(c, id, None).await;
+        sqlx::query!(r#"DELETE FROM library_folders WHERE "libraryId" = $1"#, id)
+            .execute(&mut *c)
+            .await?;
+        return touch(c, id).await;
     }
-    if current.as_deref() == Some(&path) {
-        return Ok(());
-    }
-    if !path.starts_with('/') {
+    if !Path::new(&path).is_absolute() {
         return Err(AppError::bad_request(vec!["path must be an absolute path"]));
     }
-    let taken = sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM libraries WHERE path = $1 AND id <> $2) AS "taken!""#,
-        path,
+    let path = normalize(&path);
+    if current.as_deref().map(normalize).as_deref() == Some(&path) {
+        return Ok(());
+    }
+    let others = sqlx::query_scalar!(
+        r#"SELECT path FROM library_folders WHERE "libraryId" <> $1"#,
         id
     )
-    .fetch_one(&mut *c)
+    .fetch_all(&mut *c)
     .await?;
-    if taken {
-        return Err(AppError::bad_request(format!(
-            "Path \"{path}\" is already attached to another library"
-        )));
+    if others
+        .iter()
+        .any(|o| crate::ingest::fsx::same_dir(Path::new(o), Path::new(&path)))
+    {
+        return Err(taken(&path));
     }
     if let Some(current) = current {
         let used = media_count(c, id).await?;
         if used > 0 {
             return Err(AppError::bad_request(format!(
-                "Path \"{current}\" still contains {used} media item(s) — cannot change the library's root path."
+                "Path \"{current}\" still contains {used} media item(s) \u{2014} cannot change the library's root path."
             )));
         }
     }
@@ -125,7 +187,13 @@ pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppE
             io_text(&e)
         )));
     }
-    save(c, id, Some(&path)).await
+    save(c, id, &path).await
+}
+
+fn taken(path: &str) -> AppError {
+    AppError::bad_request(format!(
+        "Path \"{path}\" is already attached to another library"
+    ))
 }
 
 async fn media_count(c: &mut PgConnection, id: i32) -> Result<i64, sqlx::Error> {
@@ -137,15 +205,43 @@ async fn media_count(c: &mut PgConnection, id: i32) -> Result<i64, sqlx::Error> 
     .await
 }
 
-async fn save(c: &mut PgConnection, id: i32, path: Option<&str>) -> Result<(), AppError> {
+async fn touch(c: &mut PgConnection, id: i32) -> Result<(), AppError> {
     sqlx::query!(
-        r#"UPDATE libraries SET path = $2, "updatedAt" = now() WHERE id = $1"#,
-        id,
-        path
+        r#"UPDATE libraries SET "updatedAt" = now() WHERE id = $1"#,
+        id
     )
     .execute(c)
     .await?;
     Ok(())
+}
+
+async fn save(c: &mut PgConnection, id: i32, path: &str) -> Result<(), AppError> {
+    let lost = |e: sqlx::Error| {
+        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
+            taken(path)
+        } else {
+            e.into()
+        }
+    };
+    let updated = sqlx::query!(
+        r#"UPDATE library_folders SET path = $2 WHERE "libraryId" = $1"#,
+        id,
+        path
+    )
+    .execute(&mut *c)
+    .await
+    .map_err(lost)?;
+    if updated.rows_affected() == 0 {
+        sqlx::query!(
+            r#"INSERT INTO library_folders ("libraryId", path) VALUES ($1, $2)"#,
+            id,
+            path
+        )
+        .execute(&mut *c)
+        .await
+        .map_err(lost)?;
+    }
+    touch(c, id).await
 }
 
 #[cfg(test)]
@@ -159,6 +255,13 @@ mod tests {
         assert_eq!(sanitize(" \t\u{A0}\u{3000}/x\n"), "/x");
         assert_eq!(sanitize(" \u{200B} "), "");
         assert_eq!(sanitize("\u{85}/x\u{85}"), "\u{85}/x\u{85}");
+    }
+
+    #[test]
+    fn normalize_folds_dots_and_separators() {
+        assert_eq!(normalize("/a//b/./c/../d/"), "/a/b/d");
+        assert_eq!(normalize("/.."), "/");
+        assert_eq!(normalize("/"), "/");
     }
 
     #[tokio::test]

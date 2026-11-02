@@ -45,7 +45,7 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
     let mut scan_dirs: Vec<PathBuf> = vec![dirs.m.clone()];
     for f in &mfiles {
         if let Some(p) = fsx::safe_rel(&f.relative_path)
-            .and_then(|r| dirs.m.join(r).parent().map(Path::to_path_buf))
+            .and_then(|r| dirs.l.join(r).parent().map(Path::to_path_buf))
             && !scan_dirs.contains(&p)
         {
             scan_dirs.push(p);
@@ -55,7 +55,7 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
         .iter()
         .map(|f| {
             fsx::safe_rel(&f.relative_path)
-                .and_then(|r| dirs.m.join(r).parent().map(Path::to_path_buf))
+                .and_then(|r| dirs.l.join(r).parent().map(Path::to_path_buf))
         })
         .collect();
     let mut found = 0;

@@ -92,7 +92,7 @@ async fn ctx_with(pool: PgPool, engine: bool, features: &[&str]) -> Ctx {
     .await
     .unwrap();
     let lib: i32 =
-        sqlx::query_scalar(r#"INSERT INTO libraries (name, "path") VALUES ('L', $1) RETURNING id"#)
+        sqlx::query_scalar(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('L') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, $1 FROM l) SELECT id FROM l"#)
             .bind(dir.to_string_lossy().as_ref())
             .fetch_one(&pool)
             .await
@@ -105,8 +105,8 @@ async fn ctx_with(pool: PgPool, engine: bool, features: &[&str]) -> Ctx {
     .await
     .unwrap();
     let file: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId")
-           VALUES ('clip.mkv', 1, '720p', $1, $2) RETURNING id"#,
+        r#"INSERT INTO media_files ("relativePath", size, quality, "streamInfo", "mediaId", "folderId")
+           VALUES ('clip.mkv', 1, '720p', $1, $2, (SELECT min(id) FROM library_folders)) RETURNING id"#,
     )
     .bind(stream_info())
     .bind(media)

@@ -41,7 +41,7 @@ async fn detect(
     let Some(rel) = fsx::safe_rel(&file.relative_path) else {
         return Ok(vec![]);
     };
-    let video = dirs.m.join(rel);
+    let video = dirs.l.join(rel);
     let probe = st
         .engine
         .probe(&video.to_string_lossy(), false, false, false)

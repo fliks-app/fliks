@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.id, l.name, df.path AS \"path?\", l.\"mediaTypes\" AS types,\n                  l.\"defaultQualityProfileId\" AS dq, l.\"defaultLanguageProfileId\" AS dl\n           FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n           WHERE l.id = ANY($1) ORDER BY l.name ASC, l.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "path?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_default_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "types",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mediaTypes"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "dq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "defaultQualityProfileId"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dl",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "defaultLanguageProfileId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "84c35463e040d796547f2b642007a3058eeb5eb15e9b645e4bc4f6b0f42ba639"
+}

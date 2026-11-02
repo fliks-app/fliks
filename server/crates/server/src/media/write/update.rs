@@ -520,11 +520,15 @@ fn library_not_found(id: i32) -> AppError {
 /// The target of a move: in the caller's libraries and with a root path.
 async fn move_target(st: &AppState, a: &Authed, library_id: i32) -> Result<(), AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
-    let lib = sqlx::query!("SELECT name, path FROM libraries WHERE id = $1", library_id)
-        .fetch_optional(&st.db)
-        .await?
-        .filter(|_| libs.contains(&library_id))
-        .ok_or_else(|| library_not_found(library_id))?;
+    let lib = sqlx::query!(
+        r#"SELECT l.name, df.path AS "path?" FROM libraries l
+           LEFT JOIN library_default_folders df ON df."libraryId" = l.id WHERE l.id = $1"#,
+        library_id
+    )
+    .fetch_optional(&st.db)
+    .await?
+    .filter(|_| libs.contains(&library_id))
+    .ok_or_else(|| library_not_found(library_id))?;
     if lib.path.is_none_or(|p| p.is_empty()) {
         return Err(AppError::bad_request(format!(
             "Library \"{}\" has no root path configured",

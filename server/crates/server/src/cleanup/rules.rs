@@ -299,7 +299,7 @@ pub fn compile(
 /// Libraries whose free space is under `percent`; an unreadable or pathless library never qualifies.
 async fn low_disk_libraries(db: &PgPool, percent: i64) -> sqlx::Result<Vec<i32>> {
     let libs: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT id, path FROM libraries WHERE path IS NOT NULL AND path <> '' ORDER BY id"#,
+        r#"SELECT "libraryId", path FROM library_default_folders ORDER BY "libraryId""#,
     )
     .fetch_all(db)
     .await?;

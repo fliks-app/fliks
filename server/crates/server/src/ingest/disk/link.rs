@@ -142,9 +142,14 @@ async fn relink_in_place(
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
     if current.library_id.is_none() {
-        current.library_id = Some(lib.id);
-        current.library_path = Some(lib.path.clone());
-        current.library_name = Some(lib.name.clone());
+        sqlx::query!(
+            r#"UPDATE media SET "libraryId" = $2 WHERE id = $1 AND "libraryId" IS NULL"#,
+            media.id,
+            lib.id
+        )
+        .execute(&st.db)
+        .await?;
+        current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
     for f in &d.files {
         let abs = PathBuf::from(resolve(&f.path, "/"));

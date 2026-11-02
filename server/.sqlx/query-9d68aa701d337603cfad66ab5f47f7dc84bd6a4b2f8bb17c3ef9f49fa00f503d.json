@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mf.\"relativePath\" AS \"relative_path!\", mf.\"streamInfo\" AS stream_info,\n                      mf.\"mediaId\" AS media_id,\n                      (SELECT fi.\"episodeId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = mf.id) AS episode_id,\n                      (SELECT fi.\"itemId\" FROM media_file_items fi WHERE fi.\"mediaFileId\" = mf.id) AS item_id,\n                      m.title AS \"title?\", m.\"type\" AS \"media_type?\",\n                      m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n                      m.\"libraryId\" AS library_id, lf.path AS folder_path\n               FROM media_files mf\n               LEFT JOIN media m ON m.id = mf.\"mediaId\"\n               JOIN library_folders lf ON lf.id = mf.\"folderId\"\n               WHERE mf.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "relative_path!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "stream_info",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "media_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mediaId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "item_id",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "title?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "media_type?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "poster_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "fanart_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "library_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "folder_path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      null,
+      null,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "9d68aa701d337603cfad66ab5f47f7dc84bd6a4b2f8bb17c3ef9f49fa00f503d"
+}

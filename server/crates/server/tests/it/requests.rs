@@ -192,7 +192,7 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
         (MOVIES, "Movies", r#"["movie"]"#),
         (SERIES, "Series", r#"["series"]"#),
     ] {
-        sqlx::query(r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES ($1, $2, $3::jsonb, $4)"#)
+        sqlx::query(r#"WITH l AS (INSERT INTO libraries (id, name, "mediaTypes") VALUES ($1, $2, $3::jsonb) RETURNING id) INSERT INTO library_folders ("libraryId", path) SELECT id, $4 FROM l"#)
             .bind(id)
             .bind(name)
             .bind(types)
@@ -1215,8 +1215,8 @@ async fn episode(
                      (SELECT id FROM editions WHERE "mediaId" = 15))
              RETURNING id),
            f AS (
-             INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-             SELECT 15, 's' || $5 || 'e' || $1, 1, 'q' FROM i WHERE $3 RETURNING id)
+             INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+             SELECT 15, 's' || $5 || 'e' || $1, 1, 'q', (SELECT min(id) FROM library_folders) FROM i WHERE $3 RETURNING id)
            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT i.id, f.id, 15, 0 FROM i, f"#,
     ).bind(number).bind(end).bind(has_file).bind(monitored).bind(season).execute(pool).await.unwrap();
 }
@@ -1267,7 +1267,7 @@ async fn import_complete_needs_a_file_for_a_movie(pool: PgPool) {
     let lc = Lifecycle::of(&c.st);
     lc.on_import_complete(16).await.unwrap();
     assert_eq!(status_of(&c, 1).await.0, "approved");
-    q(&p, r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{}', 16)"#).await;
+    q(&p, r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId", "folderId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{}', 16, (SELECT min(id) FROM library_folders))"#).await;
     lc.on_import_complete(16).await.unwrap();
     assert_eq!(status_of(&c, 1).await.0, "available");
 }
@@ -1279,7 +1279,7 @@ async fn reconcile_makes_open_requests_available_when_their_scope_is_on_disk(poo
     for (id, tmdb, file) in [(18, 97, true), (19, 98, false)] {
         q(&p, &format!(r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES ({id}, 'M', 'movie', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', ({tmdb})::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#)).await;
         if file {
-            q(&p, &format!(r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{{}}', {id})"#)).await;
+            q(&p, &format!(r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId", "folderId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{{}}', {id}, (SELECT min(id) FROM library_folders))"#)).await;
         }
     }
     // approved and processing with a file, approved without, pending with a file (never touched)
@@ -1308,7 +1308,7 @@ async fn the_event_subscriptions_drive_the_lifecycle(pool: PgPool) {
     let p = c.pool();
     fliks_server::requests::spawn(&c.st);
     q(&p, r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (17, 'M', 'movie', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (96)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
-    q(&p, r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{}', 17)"#).await;
+    q(&p, r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId", "folderId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{}', 17, (SELECT min(id) FROM library_folders))"#).await;
     q(&p, r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, status, "mediaId") VALUES (1, 'add', 'movie', 'tmdb', '96', 'M', 'approved', 17)"#).await;
     c.st.hub.emit_domain(DomainEvent::AcquisitionGrabbed {
         media_id: 17,

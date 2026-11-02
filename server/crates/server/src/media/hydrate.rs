@@ -21,7 +21,7 @@ pub async fn items_view(
     grid: bool,
 ) -> Result<Vec<Value>, sqlx::Error> {
     let rows = sqlx::query!(
-        r#"SELECT media.id AS "id!", l.path AS lib_path, media."folderName" AS folder_name,
+        r#"SELECT media.id AS "id!", df.path AS lib_path, media."folderName" AS folder_name,
   (jsonb_build_object(
     'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
     'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
@@ -44,7 +44,7 @@ pub async fn items_view(
     'library', CASE WHEN l.id IS NULL THEN 'null'::jsonb ELSE
       jsonb_build_object('id', l.id, 'createdAt', iso_ms(l."createdAt"), 'updatedAt', iso_ms(l."updatedAt"),
         'name', l.name, 'icon', l.icon, 'color', l.color, 'mediaTypes', l."mediaTypes",
-        'preferredProvider', l."preferredProvider", 'path', l.path, 'label', l.label,
+        'preferredProvider', l."preferredProvider", 'path', df.path, 'label', NULL,
         'metadataLanguage', l."metadataLanguage", 'metadataRegion', l."metadataRegion",
         'defaultQualityProfileId', l."defaultQualityProfileId", 'defaultLanguageProfileId', l."defaultLanguageProfileId") END,
     'qualityProfile', CASE WHEN qp.id IS NULL THEN 'null'::jsonb ELSE
@@ -70,6 +70,7 @@ pub async fn items_view(
      ELSE '{}'::jsonb END) AS "json!: Value"
 FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
+LEFT JOIN library_default_folders df ON df."libraryId" = media."libraryId"
 LEFT JOIN wants w ON w."mediaId" = media.id AND w.family = 'video'
 LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
 LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"

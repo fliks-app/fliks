@@ -98,10 +98,10 @@ pub async fn ingest(
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Media #{} not found", req.media_id))?;
-    let lib = media
-        .library_path
+    let folder = media
+        .folder
         .clone()
-        .filter(|p| !p.is_empty())
+        .filter(|f| !f.path.is_empty())
         .ok_or_else(|| format!("Media #{} is not anchored to a library folder", media.id))?;
     if media.folder_name.as_deref().is_none_or(str::is_empty) {
         return Err(format!(
@@ -113,7 +113,8 @@ pub async fn ingest(
     if req.files.is_empty() {
         return Ok(out);
     }
-    let root = fsx::Root::open(&lib).map_err(|e| format!("Library root \"{lib}\": {e}"))?;
+    let root = fsx::Root::open(&folder.path)
+        .map_err(|e| format!("Library root \"{}\": {e}", folder.path))?;
     let mdir = root.media_dir(media.folder_name.as_deref())?;
     let formats = naming_formats(&st.db).await.map_err(|e| e.to_string())?;
     let allowed = transfer::companion_exts(&st.db)
@@ -124,6 +125,7 @@ pub async fn ingest(
             st,
             media: &media,
             root: &root,
+            folder_id: folder.id,
             mdir: &mdir,
             formats: &formats,
             allowed: &allowed,
@@ -228,6 +230,7 @@ struct Ctx<'a> {
     st: &'a AppState,
     media: &'a MediaRow,
     root: &'a fsx::Root,
+    folder_id: i32,
     mdir: &'a Path,
     formats: &'a naming::NamingFormats,
     allowed: &'a [String],
@@ -318,6 +321,11 @@ impl Ctx<'_> {
                     "{name}: destination outside the library root"
                 )));
             }
+            if let Some(other) = self.owner(&dest).await?.filter(|o| *o != self.media.id) {
+                return Ok(Placed::Error(format!(
+                    "{name}: destination belongs to media #{other}"
+                )));
+            }
             let scanned = scan_source(self.st, &src, &probed.info).await;
             if let Some((scan, _)) = &scanned
                 && let Some((end, declared)) = truncated(&probed.info, scan)
@@ -373,7 +381,8 @@ impl Ctx<'_> {
             .await;
         }
         let dest = dir.join(&file);
-        let rel = fsx::rel_under(self.mdir, &dest).ok_or("computed dest outside media folder")?;
+        let rel =
+            fsx::rel_under(self.root.path(), &dest).ok_or("computed dest outside media folder")?;
         let size = tokio::fs::metadata(&dest)
             .await
             .map_or(src_size, |m| m.len()) as i64;
@@ -448,17 +457,33 @@ impl Ctx<'_> {
         (dir, base)
     }
 
+    /// The media whose file row sits at `dest`, if any.
+    async fn owner(&self, dest: &Path) -> Result<Option<i32>, String> {
+        let Some(rel) = fsx::rel_under(self.root.path(), dest) else {
+            return Ok(None);
+        };
+        sqlx::query_scalar!(
+            r#"SELECT "mediaId" FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2"#,
+            self.folder_id,
+            rel
+        )
+        .fetch_optional(&self.st.db)
+        .await
+        .map(Option::flatten)
+        .map_err(|e| e.to_string())
+    }
+
     async fn collides(&self, dir: &Path, file: &str) -> Result<bool, String> {
         let dest = dir.join(file);
         if fs::symlink_metadata(&dest).is_ok() {
             return Ok(true);
         }
-        let Some(rel) = fsx::rel_under(self.mdir, &dest) else {
+        let Some(rel) = fsx::rel_under(self.root.path(), &dest) else {
             return Ok(false);
         };
         sqlx::query_scalar!(
-            r#"SELECT 1 AS "x!" FROM media_files WHERE "mediaId" = $1 AND "relativePath" = $2 LIMIT 1"#,
-            self.media.id,
+            r#"SELECT 1 AS "x!" FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2 LIMIT 1"#,
+            self.folder_id,
             rel
         )
         .fetch_optional(&self.st.db)
@@ -545,12 +570,14 @@ impl Ctx<'_> {
         let db = &self.st.db;
         let info = serde_json::to_value(&probed.info).map_err(|e| e.to_string())?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "streamInfo")
-               VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT ("mediaId", "relativePath") DO UPDATE
+            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "streamInfo")
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT ("folderId", "relativePath") DO UPDATE
                SET size = EXCLUDED.size, quality = EXCLUDED.quality, "streamInfo" = EXCLUDED."streamInfo"
+               WHERE media_files."mediaId" = EXCLUDED."mediaId"
                RETURNING id"#,
             self.media.id,
+            self.folder_id,
             rel,
             size,
             quality,

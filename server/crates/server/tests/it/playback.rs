@@ -16,6 +16,13 @@ struct Ctx {
 
 async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (name) VALUES ('fixture');
+           INSERT INTO library_folders ("libraryId", path) SELECT id, '/fixture' FROM libraries"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let cfg = Config::from_lookup(|_| None);
     let st = AppState::new(pool.clone(), cfg, SECRET);
     let user: i32 = sqlx::query_scalar(
@@ -126,8 +133,8 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
     let item = c.shell(m).await;
     let f = c
         .id(&format!(
-            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo")
-                 VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}') RETURNING id)
+            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "streamInfo", "folderId")
+                 VALUES ('x', 1, 'q', {m}, '{{"durationSeconds": 90.5}}', (SELECT min(id) FROM library_folders)) RETURNING id)
                INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
                RETURNING "mediaFileId""#
         ))
@@ -279,8 +286,8 @@ async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) 
             ))
             .await;
         c.id(&format!(
-            r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-                 VALUES ({m}, 'e{n}.mkv', 1, 'q') RETURNING id)
+            r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+                 VALUES ({m}, 'e{n}.mkv', 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id)
                INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
                RETURNING "itemId""#
         ))
@@ -327,8 +334,8 @@ async fn series_with_episode(c: &Ctx, library: i32) -> (i32, i32, i32) {
         ))
         .await;
     c.id(&format!(
-        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-             VALUES ({m}, 'e.mkv', 1, 'q') RETURNING id)
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+             VALUES ({m}, 'e.mkv', 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id)
            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {m}, 0 FROM f
            RETURNING "mediaFileId""#
     ))
@@ -377,8 +384,8 @@ async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
     let item = c.shell(movie).await;
     let file = c
         .id(&format!(
-            r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-                 VALUES ({movie}, 'm.mkv', 1, 'q') RETURNING id)
+            r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+                 VALUES ({movie}, 'm.mkv', 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id)
                INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {movie}, 0 FROM f
                RETURNING "mediaFileId""#
         ))
@@ -421,7 +428,6 @@ async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
     let u = c.user;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"ALTER TABLE media DROP CONSTRAINT "CK_media_type";
-        INSERT INTO libraries (id, name) VALUES (1, 'l');
         INSERT INTO media (id, title, type, "libraryId") VALUES
           (1, 'done', 'movie', 1), (2, 'begun', 'movie', 1), (3, 'all', 'series', 1),
           (4, 'half', 'series', 1), (5, 'third', 'third', 1), (6, 'empty', 'series', 1);
@@ -430,8 +436,8 @@ async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 1, 1), (2, 2, 2), (5, 5, 5);
         INSERT INTO items (id, "number", "groupId", "mediaId", "editionId")
           VALUES (31, 1, 13, 3, 3), (32, 2, 13, 3, 3), (41, 1, 14, 4, 4), (42, 2, 14, 4, 4), (61, 1, 16, 6, 6);
-        INSERT INTO media_files (id, "mediaId", "relativePath", size, quality)
-          SELECT i.id, i."mediaId", 'f' || i.id, 1, 'q' FROM items i WHERE i.id IN (31, 32, 41, 42);
+        INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId")
+          SELECT i.id, i."mediaId", 'f' || i.id, 1, 'q', (SELECT min(id) FROM library_folders) FROM items i WHERE i.id IN (31, 32, 41, 42);
         INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT id, id, "mediaId", 0 FROM items WHERE id IN (31, 32, 41, 42);
         INSERT INTO playback_states ("userId", "itemId", completed) VALUES
           ({u}, 1, true), ({u}, 2, false), ({u}, 31, true), ({u}, 32, true), ({u}, 41, true),
@@ -461,8 +467,8 @@ async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
     let state = format!("/api/playback/media/{m}/state");
     let file = c
         .id(&format!(
-            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId")
-                 VALUES ('x', 1, 'q', {m}) RETURNING id)
+            r#"WITH f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId")
+                 VALUES ('x', 1, 'q', {m}, (SELECT min(id) FROM library_folders)) RETURNING id)
                INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
                SELECT {item}, id, {m}, 0 FROM f RETURNING "mediaFileId""#
         ))

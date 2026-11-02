@@ -730,7 +730,7 @@
                 "audioLanguages": [],
                 "createdAt": "2026-01-01T00:00:00.000Z",
                 "id": 1,
-                "name": "Toutes les langues (d\u00e9faut)",
+                "name": "Toutes les langues (défaut)",
                 "subtitleLanguages": [],
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               },
@@ -797,13 +797,13 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Les \u00c9vad\u00e9s (2020)/Les \u00c9vad\u00e9s (2020).mkv",
+                  "relativePath": "Les Évadés (2020)/Les Évadés (2020).mkv",
                   "size": 1000034,
                   "streamInfo": null,
                   "updatedAt": "2026-01-01T00:00:00.000Z"
                 }
               ],
-              "folderName": "Les \u00c9vad\u00e9s (2020)",
+              "folderName": "Les Évadés (2020)",
               "genres": [
                 "Drama",
                 "Crime"
@@ -836,7 +836,7 @@
               "minimumAvailability": "released",
               "monitored": true,
               "originalTitle": "The Shawshank Redemption",
-              "overview": "Un banquier condamn\u00e9 s'\u00e9vade de prison",
+              "overview": "Un banquier condamné s'évade de prison",
               "physicalRelease": null,
               "posterUrl": null,
               "preferredProvider": null,
@@ -848,7 +848,7 @@
               "runtime": null,
               "sizeOnDisk": 1000034,
               "status": "released",
-              "title": "Les \u00c9vad\u00e9s",
+              "title": "Les Évadés",
               "tmdbCollectionId": null,
               "tmdbCollectionName": null,
               "tmdbId": 3025,
@@ -1020,7 +1020,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 01 (2020).mkv",
+                  "relativePath": "Parity Movie 01 (2020)/Parity Movie 01 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -1142,7 +1142,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 02 (2020).mp4",
+                  "relativePath": "Parity Movie 02 (2020)/Parity Movie 02 (2020).mp4",
                   "size": 74465,
                   "streamInfo": {
                     "audio": [
@@ -1266,7 +1266,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 03 (2020).mkv",
+                  "relativePath": "Parity Movie 03 (2020)/Parity Movie 03 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -1389,7 +1389,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 04 (2020).mp4",
+                  "relativePath": "Parity Movie 04 (2020)/Parity Movie 04 (2020).mp4",
                   "size": 74465,
                   "streamInfo": {
                     "audio": [
@@ -1512,7 +1512,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 05 (2020).mkv",
+                  "relativePath": "Parity Movie 05 (2020)/Parity Movie 05 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -1632,7 +1632,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 06 (2020).mp4",
+                  "relativePath": "Parity Movie 06 (2020)/Parity Movie 06 (2020).mp4",
                   "size": 74465,
                   "streamInfo": {
                     "audio": [
@@ -1755,7 +1755,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 07 (2020).mkv",
+                  "relativePath": "Parity Movie 07 (2020)/Parity Movie 07 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -1878,7 +1878,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 08 (2020).mp4",
+                  "relativePath": "Parity Movie 08 (2020)/Parity Movie 08 (2020).mp4",
                   "size": 74465,
                   "streamInfo": {
                     "audio": [
@@ -2002,7 +2002,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 09 (2020).mkv",
+                  "relativePath": "Parity Movie 09 (2020)/Parity Movie 09 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -2122,7 +2122,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 10 (2020).mp4",
+                  "relativePath": "Parity Movie 10 (2020)/Parity Movie 10 (2020).mp4",
                   "size": 74465,
                   "streamInfo": {
                     "audio": [
@@ -2245,7 +2245,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 11 (2020).mkv",
+                  "relativePath": "Parity Movie 11 (2020)/Parity Movie 11 (2020).mkv",
                   "size": 73237,
                   "streamInfo": {
                     "audio": [
@@ -2367,7 +2367,7 @@
                   "osdbBytesize": null,
                   "osdbHash": null,
                   "quality": "WEBDL-1080p",
-                  "relativePath": "Parity Movie 12 (2020).mp4",
+                  "relativePath": "Parity Movie 12 (2020)/Parity Movie 12 (2020).mp4",
                   "size": 74465,
                   "streamInfo": {
                     "audio": [

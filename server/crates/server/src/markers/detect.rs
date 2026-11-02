@@ -96,14 +96,10 @@ async fn pass(
     } else {
         ("intro", "Fingerprinting")
     };
-    let info = db::season_info(&st.db, season)
+    db::season_info(&st.db, season)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Season #{season} not found"))?;
-    let Some(media_path) = info.media_path else {
-        tracing::warn!("Skip season #{season}: parent media has no path");
-        return Ok(0);
-    };
     let episodes = db::episodes_with_files(&st.db, season)
         .await
         .map_err(|e| e.to_string())?;
@@ -135,7 +131,6 @@ async fn pass(
     let mut prints = fingerprint_all(
         st,
         &targets,
-        &media_path,
         &Run {
             lookup_sec,
             outro,
@@ -177,7 +172,6 @@ struct Run<'a> {
 async fn fingerprint_all<'a>(
     st: &AppState,
     targets: &[&'a EpisodeFile],
-    media_path: &str,
     run: &Run<'_>,
 ) -> Vec<Fingerprinted<'a>> {
     let Run {
@@ -194,7 +188,10 @@ async fn fingerprint_all<'a>(
         let runs = slice.iter().map(|ep| async {
             let file_id = ep.file_id.expect("eligible");
             let abs = resolve(
-                &join(media_path, ep.relative_path.as_deref().unwrap_or_default()),
+                &join(
+                    ep.folder_path.as_deref().unwrap_or_default(),
+                    ep.relative_path.as_deref().unwrap_or_default(),
+                ),
                 &std::env::current_dir()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| "/".into()),

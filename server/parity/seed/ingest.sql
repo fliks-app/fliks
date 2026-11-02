@@ -4,10 +4,13 @@
 UPDATE roles SET permissions = '["media.read","media.create","media.edit","media.delete","livetv.read"]' WHERE id = 3;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items) VALUES
  (1, '2026-01-01', '2026-01-01', 'Parity HD', 18, '[]');
-INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", path) VALUES
- (3, '2026-01-01', '2026-01-01', 'Work Movies', 'film', '#111111', '["movie"]', '/tmp/fliks-parity/s5-ingest/work/movies'),
- (4, '2026-01-01', '2026-01-01', 'Work Series', 'tv', '#222222', '["series"]', '/tmp/fliks-parity/s5-ingest/work/series'),
- (5, '2026-01-01', '2026-01-01', 'Pathless', 'film', '#333333', '["movie"]', NULL);
+INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes") VALUES
+ (3, '2026-01-01', '2026-01-01', 'Work Movies', 'film', '#111111', '["movie"]'),
+ (4, '2026-01-01', '2026-01-01', 'Work Series', 'tv', '#222222', '["series"]'),
+ (5, '2026-01-01', '2026-01-01', 'Pathless', 'film', '#333333', '["movie"]');
+INSERT INTO library_folders (id, "createdAt", "updatedAt", "libraryId", path) VALUES
+ (3, '2026-01-01', '2026-01-01', 3, '/tmp/fliks-parity/s5-ingest/work/movies'),
+ (4, '2026-01-01', '2026-01-01', 4, '/tmp/fliks-parity/s5-ingest/work/series');
 INSERT INTO library_user_access ("createdAt", "updatedAt", "libraryId", "userId") VALUES ('2026-01-01', '2026-01-01', 3, 3);
 INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, overview, status, monitored, "folderName", genres, "libraryId") VALUES
  (101, '2026-01-01', '2026-01-01', 'Work Movie', 2020, 'movie', 'Work movie', 'released', true, 'Work Movie (2020)', '[]', 3),
@@ -31,10 +34,10 @@ INSERT INTO items (id, "createdAt", "updatedAt", "number", title, monitored, "gr
 INSERT INTO items ("mediaId", "editionId", monitored)
   SELECT m.id, e.id, true FROM media m JOIN editions e ON e."mediaId" = m.id
   WHERE m.type = 'movie' AND NOT EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = m.id) ORDER BY m.id;
-INSERT INTO media_files (id, "createdAt", "updatedAt", "mediaId", "relativePath", size, quality, language) VALUES
- (101, '2026-01-01', '2026-01-01', 101, 'Work Movie (2020).mkv', 73237, 'WEBDL-1080p', 'en'),
- (102, '2026-01-01', '2026-01-01', 103, 'Season 01/Work Show - S01E01.mkv', 73237, 'WEBDL-1080p', 'en'),
- (103, '2026-01-01', '2026-01-01', 104, 'Work Solo (2019).mkv', 73237, 'WEBDL-1080p', 'en');
+INSERT INTO media_files (id, "createdAt", "updatedAt", "mediaId", "folderId", "relativePath", size, quality, language) VALUES
+ (101, '2026-01-01', '2026-01-01', 101, 3, 'Work Movie (2020)/Work Movie (2020).mkv', 73237, 'WEBDL-1080p', 'en'),
+ (102, '2026-01-01', '2026-01-01', 103, 4, 'Work Show/Season 01/Work Show - S01E01.mkv', 73237, 'WEBDL-1080p', 'en'),
+ (103, '2026-01-01', '2026-01-01', 104, 3, 'Work Solo (2019)/Work Solo (2019).mkv', 73237, 'WEBDL-1080p', 'en');
 INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
   SELECT COALESCE(v.item, i.id), f.id, f."mediaId", (row_number() OVER (PARTITION BY COALESCE(v.item, i.id) ORDER BY f.id) - 1)::int FROM media_files f
   JOIN (VALUES (101, NULL::int), (102, 101), (103, NULL::int)) AS v(file, item) ON v.file = f.id

@@ -142,21 +142,27 @@ async fn collect(st: &AppState, media_id: i32, file_id: i32) -> Result<Listing, 
     )
     .fetch_all(&st.db)
     .await?;
-    let root = media.library_path.as_deref().and_then(|l| {
-        let r = fsx::Root::open(l).ok()?;
+    let own = media.folder_name.as_deref().filter(|f| !f.is_empty());
+    let under_media = |rel: &mut String| {
+        if let Some(rest) = own.and_then(|f| rel.strip_prefix(&format!("{f}/"))) {
+            *rel = rest.to_owned();
+        }
+    };
+    files.iter_mut().for_each(|f| under_media(&mut f.rel));
+    let rows: Vec<SubRow> = rows
+        .into_iter()
+        .map(|mut r| {
+            under_media(&mut r.rel);
+            r
+        })
+        .collect();
+    let root = media.folder.as_ref().and_then(|l| {
+        let r = fsx::Root::open(&l.path).ok()?;
         let m = r.media_dir(media.folder_name.as_deref()).ok()?;
         Some((r, m))
     });
     let entries = match &root {
-        Some((r, m)) => scan(
-            r,
-            m,
-            media.media_type,
-            media.folder_name.as_deref().is_some_and(|f| !f.is_empty()),
-            &files,
-            pos,
-            &rows,
-        ),
+        Some((r, m)) => scan(r, m, media.media_type, own.is_some(), &files, pos, &rows),
         None => vec![],
     };
     let file = files.swap_remove(pos);

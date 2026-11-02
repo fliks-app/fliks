@@ -75,7 +75,7 @@ async fn seed(pool: &PgPool) -> Seed {
     let lib1 = scalar(
         pool,
         &format!(
-            r#"INSERT INTO libraries (name, path) VALUES ('one', '{}') RETURNING id"#,
+            r#"WITH l AS (INSERT INTO libraries (name) VALUES ('one') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '{}' FROM l) SELECT id FROM l"#,
             dir.display()
         ),
     )
@@ -124,7 +124,7 @@ async fn seed(pool: &PgPool) -> Seed {
     exec(
         pool,
         &format!(
-            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES ({m1}, 'a.mkv', 2147483648, 'x')"#
+            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId") VALUES ({m1}, 'a.mkv', 2147483648, 'x', (SELECT min(id) FROM library_folders))"#
         ),
     )
     .await;
@@ -487,7 +487,7 @@ async fn unmonitor_removes_the_files_and_keeps_the_media(pool: PgPool) {
     let s = seed(&pool).await;
     let st = state(&pool).await;
     let lib: String = sqlx::query_scalar(
-        r#"SELECT l.path FROM media m JOIN libraries l ON l.id = m."libraryId" WHERE m.id = $1"#,
+        r#"SELECT df.path FROM media m JOIN library_default_folders df ON df."libraryId" = m."libraryId" WHERE m.id = $1"#,
     )
     .bind(s.m1)
     .fetch_one(&pool)
@@ -495,7 +495,11 @@ async fn unmonitor_removes_the_files_and_keeps_the_media(pool: PgPool) {
     .unwrap();
     exec(
         &pool,
-        &format!(r#"UPDATE media SET "folderName" = 'A' WHERE id = {}"#, s.m1),
+        &format!(
+            r#"WITH m AS (UPDATE media SET "folderName" = 'A' WHERE id = {} RETURNING id)
+               UPDATE media_files SET "relativePath" = 'A/a.mkv' WHERE "mediaId" IN (SELECT id FROM m)"#,
+            s.m1
+        ),
     )
     .await;
     fs::create_dir_all(format!("{lib}/A")).unwrap();
@@ -549,7 +553,7 @@ async fn show(pool: &PgPool) -> Show {
     let lib = scalar(
         pool,
         &format!(
-            r#"INSERT INTO libraries (name, path) VALUES ('tv', '{}') RETURNING id"#,
+            r#"WITH l AS (INSERT INTO libraries (name) VALUES ('tv') RETURNING id), f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '{}' FROM l) SELECT id FROM l"#,
             dir.display()
         ),
     )
@@ -596,8 +600,8 @@ async fn show(pool: &PgPool) -> Show {
             exec(
                 pool,
                 &format!(
-                    r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-                      VALUES ({media}, '{name}', 1073741824, 'x') RETURNING id)
+                    r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+                      VALUES ({media}, 'Show/{name}', 1073741824, 'x', (SELECT min(id) FROM library_folders)) RETURNING id)
                     INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {ep}, id, {media}, 0 FROM f"#
                 ),
             )
@@ -780,7 +784,10 @@ async fn a_season_is_deleted_and_unmonitored_but_the_series_stays(pool: PgPool) 
             ("removed".into(), Some(json!([2])))
         ]
     );
-    assert_eq!(files_left(&pool).await, ["S01E01.mkv", "S01E02.mkv"]);
+    assert_eq!(
+        files_left(&pool).await,
+        ["Show/S01E01.mkv", "Show/S01E02.mkv"]
+    );
     assert!(!s.dir.join("Show/S02E01.mkv").exists());
     assert!(s.dir.join("Show/S01E01.mkv").exists());
     let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM items ORDER BY id")
@@ -818,7 +825,7 @@ async fn an_episode_is_deleted_alone(pool: PgPool) {
     job::run(&st).await.unwrap();
     assert_eq!(
         files_left(&pool).await,
-        ["S01E02.mkv", "S02E01.mkv", "S02E02.mkv"]
+        ["Show/S01E02.mkv", "Show/S02E01.mkv", "Show/S02E02.mkv"]
     );
     let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM items ORDER BY id")
         .fetch_all(&pool)
@@ -1258,10 +1265,14 @@ async fn bulk_keep_and_delete_now_report_each_item(pool: PgPool) {
     job::run(&st).await.unwrap();
     exec(
         &pool,
-        &format!(r#"UPDATE media SET "folderName" = 'A' WHERE id = {}"#, s.m1),
+        &format!(
+            r#"WITH m AS (UPDATE media SET "folderName" = 'A' WHERE id = {} RETURNING id)
+               UPDATE media_files SET "relativePath" = 'A/a.mkv' WHERE "mediaId" IN (SELECT id FROM m)"#,
+            s.m1
+        ),
     )
     .await;
-    let lib: String = sqlx::query_scalar(r#"SELECT path FROM libraries WHERE name = 'one'"#)
+    let lib: String = sqlx::query_scalar(r#"SELECT df.path FROM libraries l JOIN library_default_folders df ON df."libraryId" = l.id WHERE l.name = 'one'"#)
         .fetch_one(&pool)
         .await
         .unwrap();

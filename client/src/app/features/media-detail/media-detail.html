@@ -166,7 +166,7 @@
           <div class="divider my-6"></div>
           <app-media-file-info
             [file]="sf"
-            [mediaPath]="m.path ?? null"
+            [mediaPath]="m.library?.path ?? null"
             [canDelete]="canDelete()"
             [canManageSubtitles]="canManageSubtitles()"
             [canEditMedia]="canEditProfiles()"
@@ -293,7 +293,7 @@
           <div class="divider my-6"></div>
           <app-media-file-info
             [file]="af"
-            [mediaPath]="m.path ?? null"
+            [mediaPath]="m.library?.path ?? null"
             [canDelete]="canDelete()"
             [canManageSubtitles]="canManageSubtitles()"
             [canEditMedia]="canEditProfiles()"

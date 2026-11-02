@@ -11,11 +11,16 @@ CREATE TRIGGER persons_search_vector BEFORE INSERT OR UPDATE OF name
   ON persons FOR EACH ROW EXECUTE FUNCTION persons_search_vector_update();
 ALTER TABLE libraries DISABLE TRIGGER set_updated_at;
 UPDATE libraries SET "preferredProvider" = 'tvdb' WHERE id = 2;
-INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", path, "metadataLanguage", "metadataRegion") VALUES
- (6, '2026-01-01', '2026-01-01', 'Plain Series', 'tv', '#444444', '["series"]', '/tmp/fliks-parity/providers/series', NULL, NULL),
- (7, '2026-01-01', '2026-01-01', 'French Movies', 'film', '#555555', '["movie"]', '/tmp/fliks-parity/providers/movies-fr', 'fr', 'FR'),
- (8, '2026-01-01', '2026-01-01', 'Provider Movies', 'film', '#666666', '["movie"]', '/tmp/fliks-parity/providers/movies', NULL, NULL),
- (9, '2026-01-01', '2026-01-01', 'Rescan Series', 'tv', '#888888', '["series"]', '/tmp/fliks-parity/s5-ingest/work/provider-series', NULL, NULL);
+INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", "metadataLanguage", "metadataRegion") VALUES
+ (6, '2026-01-01', '2026-01-01', 'Plain Series', 'tv', '#444444', '["series"]', NULL, NULL),
+ (7, '2026-01-01', '2026-01-01', 'French Movies', 'film', '#555555', '["movie"]', 'fr', 'FR'),
+ (8, '2026-01-01', '2026-01-01', 'Provider Movies', 'film', '#666666', '["movie"]', NULL, NULL),
+ (9, '2026-01-01', '2026-01-01', 'Rescan Series', 'tv', '#888888', '["series"]', NULL, NULL);
+INSERT INTO library_folders ("libraryId", path) VALUES
+ (6, '/tmp/fliks-parity/providers/series'),
+ (7, '/tmp/fliks-parity/providers/movies-fr'),
+ (8, '/tmp/fliks-parity/providers/movies'),
+ (9, '/tmp/fliks-parity/s5-ingest/work/provider-series');
 ALTER TABLE libraries ENABLE TRIGGER set_updated_at;
 DELETE FROM media_external_ids WHERE provider = 'tmdb' AND value IN ('1001', '1002', '1003', '1004', '2000', '1396');
 INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, overview, status, monitored, "folderName", genres, "libraryId", "preferredProvider") VALUES

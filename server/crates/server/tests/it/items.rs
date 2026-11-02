@@ -51,7 +51,8 @@ async fn create_and_type_change_keep_the_shell(pool: PgPool) {
     );
     sqlx::raw_sql(
         r#"INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL);
-           INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m')"#,
+           INSERT INTO libraries (id, name) VALUES (1, 'L');
+INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m')"#,
     )
     .execute(&pool)
     .await
@@ -78,7 +79,7 @@ async fn create_and_type_change_keep_the_shell(pool: PgPool) {
         .await
         .unwrap();
 
-    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES ($1, 'a.mkv', 1, 'q')"#)
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId") VALUES ($1, 'a.mkv', 1, 'q', (SELECT min(id) FROM library_folders))"#)
         .bind(made[1])
         .execute(&pool)
         .await
@@ -133,6 +134,13 @@ async fn movie_with_files(pool: &PgPool, n: i32) -> (i32, i32, Vec<i32>) {
             .fetch_one(pool)
             .await
             .unwrap();
+    sqlx::query(
+        r#"WITH l AS (INSERT INTO libraries (name) SELECT 'folder' WHERE NOT EXISTS (SELECT 1 FROM library_folders) RETURNING id)
+           INSERT INTO library_folders ("libraryId", path) SELECT id, '/folder' FROM l"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
     let mut c = pool.acquire().await.unwrap();
     media::items::create_shell(
         &mut c,
@@ -150,11 +158,11 @@ async fn movie_with_files(pool: &PgPool, n: i32) -> (i32, i32, Vec<i32>) {
     for i in 0..n {
         files.push(
             sqlx::query_scalar(
-                r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-                   VALUES ($1, $2, 1, 'q') RETURNING id"#,
+                r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+                   VALUES ($1, $2, 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id"#,
             )
             .bind(media)
-            .bind(format!("f{i}.mkv"))
+            .bind(format!("m{media}/f{i}.mkv"))
             .fetch_one(pool)
             .await
             .unwrap(),
@@ -214,8 +222,8 @@ async fn a_new_file_is_a_new_version_and_a_reattached_one_keeps_its_own(pool: Pg
         .unwrap();
     assert_eq!(versions(&pool, item2).await, vec![(g[0], 0, 0)]);
     let again = sqlx::query_scalar::<_, i32>(
-        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality)
-           VALUES ($1, 'late.mkv', 1, 'q') RETURNING id"#,
+        r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+           VALUES ($1, 'late.mkv', 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id"#,
     )
     .bind(media)
     .fetch_one(&pool)
@@ -379,7 +387,7 @@ async fn a_book_is_created_without_edition_or_item_and_keeps_its_kind(pool: PgPo
     assert_eq!(owned, 0);
     assert_media_have_shells(&pool, &[]).await;
 
-    sqlx::raw_sql(r#"INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m'); UPDATE media SET "libraryId" = 1"#)
+    sqlx::raw_sql(r#"INSERT INTO libraries (id, name) VALUES (1, 'L'); INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m'); UPDATE media SET "libraryId" = 1"#)
         .execute(&pool)
         .await
         .unwrap();

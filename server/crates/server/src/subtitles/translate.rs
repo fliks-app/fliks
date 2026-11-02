@@ -278,7 +278,7 @@ async fn try_run(
         .await
         .map_err(|e| other(&e))?
         .ok_or_else(|| other(&"media file is gone"))?;
-    let video = dirs.m.join(
+    let video = dirs.l.join(
         crate::ingest::fsx::safe_rel(&file.relative_path)
             .ok_or_else(|| other(&"media file path is invalid"))?,
     );

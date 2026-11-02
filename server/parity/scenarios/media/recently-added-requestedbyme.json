@@ -15,20 +15,6 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T04:00:00.000Z",
-                "episodeId": null,
-                "id": 56,
-                "language": null,
-                "mediaId": 21,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "Bluray-720p",
-                "relativePath": "alpha test (2020)/alpha test (2020).720.mkv",
-                "size": 1000056,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
                 "createdAt": "2026-02-05T04:00:00.000Z",
                 "episodeId": null,
                 "id": 30,
@@ -44,6 +30,20 @@
                   "subtitles": [],
                   "video": []
                 },
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              {
+                "createdAt": "2026-02-03T04:00:00.000Z",
+                "episodeId": null,
+                "id": 56,
+                "language": null,
+                "mediaId": 21,
+                "osdbBytesize": null,
+                "osdbHash": null,
+                "quality": "Bluray-720p",
+                "relativePath": "alpha test (2020)/alpha test (2020).720.mkv",
+                "size": 1000056,
+                "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               }
             ],
@@ -122,20 +122,6 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T00:00:00.000Z",
-                "episodeId": 29,
-                "id": 62,
-                "language": "en",
-                "mediaId": 47,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "WEBDL-1080p",
-                "relativePath": "Season 01/e29.mkv",
-                "size": 1000062,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
                 "createdAt": "2026-02-02T11:00:00.000Z",
                 "episodeId": 27,
                 "id": 61,
@@ -144,8 +130,22 @@
                 "osdbBytesize": null,
                 "osdbHash": null,
                 "quality": "WEBDL-1080p",
-                "relativePath": "Season 01/e27.mkv",
+                "relativePath": "Series Calendar (2020)/Season 01/e27.mkv",
                 "size": 1000061,
+                "streamInfo": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              {
+                "createdAt": "2026-02-04T00:00:00.000Z",
+                "episodeId": 29,
+                "id": 62,
+                "language": "en",
+                "mediaId": 47,
+                "osdbBytesize": null,
+                "osdbHash": null,
+                "quality": "WEBDL-1080p",
+                "relativePath": "Series Calendar (2020)/Season 01/e29.mkv",
+                "size": 1000062,
                 "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               }

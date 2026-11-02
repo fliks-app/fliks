@@ -28,6 +28,13 @@ pub struct Library {
     pub label: Option<String>,
 }
 
+/// A library's root folder (`libraries.md` rule 42).
+#[derive(Debug, Clone)]
+pub struct Folder {
+    pub id: i32,
+    pub path: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
@@ -82,12 +89,14 @@ pub fn not_found(id: i32) -> AppError {
 pub async fn list(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Library>> {
     sqlx::query_as!(
         Library,
-        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, icon, color,
-        "mediaTypes" AS "media_types: Json<Vec<String>>", "preferredProvider" AS preferred_provider,
+        r#"SELECT l.id, l."createdAt" AS created_at, l."updatedAt" AS updated_at, l.name, l.icon, l.color,
+        l."mediaTypes" AS "media_types: Json<Vec<String>>", l."preferredProvider" AS preferred_provider,
         "metadataLanguage" AS metadata_language, "metadataRegion" AS metadata_region,
         "defaultQualityProfileId" AS default_quality_profile_id,
-        "defaultLanguageProfileId" AS default_language_profile_id, path, label
-        FROM libraries WHERE id = ANY($1) ORDER BY name COLLATE "C", id"#,
+        "defaultLanguageProfileId" AS default_language_profile_id,
+        df.path AS "path?", NULL::text AS label
+        FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id
+        WHERE l.id = ANY($1) ORDER BY name COLLATE "C", l.id"#,
         ids
     )
     .fetch_all(db)

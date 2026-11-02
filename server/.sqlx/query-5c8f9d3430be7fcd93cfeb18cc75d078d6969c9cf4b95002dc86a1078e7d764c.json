@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"id!\", \"number!\", \"file_id?\", \"folder?\", \"rel?\", \"info?\" FROM (\n             SELECT DISTINCT ON (e.id) e.id AS \"id!\", e.\"number\" AS \"number!\", f.id AS \"file_id?\",\n                    lf.path AS \"folder?\", f.\"relativePath\" AS \"rel?\", f.\"streamInfo\" AS \"info?\"\n             FROM items e JOIN media_file_items fi ON fi.\"episodeId\" = e.id\n             JOIN media_files f ON f.id = fi.\"mediaFileId\"\n             JOIN library_folders lf ON lf.id = f.\"folderId\"\n             WHERE e.\"groupId\" = $1 ORDER BY e.id, f.id DESC) x\n           ORDER BY \"number!\", \"id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "number!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "file_id?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "folder?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_folders",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rel?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "info?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "5c8f9d3430be7fcd93cfeb18cc75d078d6969c9cf4b95002dc86a1078e7d764c"
+}
