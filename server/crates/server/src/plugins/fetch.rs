@@ -57,7 +57,7 @@ fn classify(e: reqwest::Error) -> FetchError {
 
 impl Fetcher {
     fn builder(&self, timeout: Duration, ua: &str) -> reqwest::ClientBuilder {
-        let mut b = Client::builder()
+        let mut b = guard::client_builder()
             .redirect(redirect::Policy::none())
             .timeout(timeout)
             .read_timeout(READ_IDLE)

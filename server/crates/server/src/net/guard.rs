@@ -64,6 +64,11 @@ impl Net for SystemNet {
     }
 }
 
+/// The one client builder of the guard: no proxy, which would dial instead of the pinned addresses.
+pub fn client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder().no_proxy()
+}
+
 pub fn system() -> Arc<dyn Net> {
     static NET: OnceLock<Arc<dyn Net>> = OnceLock::new();
     NET.get_or_init(|| Arc::new(SystemNet::new())).clone()

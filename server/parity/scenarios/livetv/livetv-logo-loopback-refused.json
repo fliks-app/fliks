@@ -4,14 +4,17 @@
     "$..updatedAt",
     "$..lastSyncAt"
   ],
-  "name": "livetv-logo-cached",
+  "name": "livetv-logo-loopback-refused",
   "seed": "livetv",
   "steps": [
     {
       "as": "user",
       "expect": {
-        "body": "\ufffdPNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015\u0109\u0000\u0000\u0000\rIDATx\ufffdc`\u0000\u0000\u0002\u0000\u0000\u0001\ufffd!\ufffd3\u0000\u0000\u0000\u0000IEND\ufffdB`\ufffd",
-        "status": 200
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "status": 404
       },
       "method": "GET",
       "path": "/api/livetv/channels/1/logo"
@@ -41,12 +44,11 @@
     {
       "as": "user",
       "expect": {
-        "body": "\ufffdPNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015\u0109\u0000\u0000\u0000\rIDATx\ufffdc`\u0000\u0000\u0002\u0000\u0000\u0001\ufffd!\ufffd3\u0000\u0000\u0000\u0000IEND\ufffdB`\ufffd",
-        "headers": {
-          "cache-control": "private, max-age=86400",
-          "x-image-size-served": null
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
         },
-        "status": 200
+        "status": 404
       },
       "method": "GET",
       "path": "/api/livetv/channels/1/logo"
@@ -54,12 +56,11 @@
     {
       "as": "user",
       "expect": {
-        "body": "\ufffdPNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015\u0109\u0000\u0000\u0000\rIDATx\ufffdc`\u0000\u0000\u0002\u0000\u0000\u0001\ufffd!\ufffd3\u0000\u0000\u0000\u0000IEND\ufffdB`\ufffd",
-        "headers": {
-          "cache-control": "private, max-age=86400",
-          "x-image-size-served": "full"
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
         },
-        "status": 200
+        "status": 404
       },
       "method": "GET",
       "path": "/api/livetv/channels/1/logo?size=thumb"
@@ -67,12 +68,11 @@
     {
       "as": "user",
       "expect": {
-        "body": "\ufffdPNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015\u0109\u0000\u0000\u0000\rIDATx\ufffdc`\u0000\u0000\u0002\u0000\u0000\u0001\ufffd!\ufffd3\u0000\u0000\u0000\u0000IEND\ufffdB`\ufffd",
-        "headers": {
-          "cache-control": "private, max-age=86400",
-          "x-image-size-served": null
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
         },
-        "status": 200
+        "status": 404
       },
       "method": "GET",
       "path": "/api/livetv/channels/1/logo?size=huge"
@@ -95,7 +95,7 @@
             "groupName": "News",
             "guideChannelId": "one.fr",
             "id": 1,
-            "logoPath": "/api/livetv/channels/1/logo?v=7e1d1bae",
+            "logoPath": null,
             "name": "One",
             "number": 1
           },
