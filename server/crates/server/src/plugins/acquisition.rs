@@ -3,6 +3,7 @@ use super::imports::{db_err, host_err};
 use super::runtime::HostError;
 use super::runtime::fliks::plugin::types as t;
 use crate::profiles::db as profiles;
+use crate::scene::Mapping;
 use crate::state::AppState;
 use chrono::{Days, NaiveDate, Utc};
 use fliks_domain::media::family::Family;
@@ -11,7 +12,6 @@ use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quali
 use fliks_domain::release::parsing::season_episode::{
     ReleaseCoverage, coverage_of, parse_season_episode,
 };
-use fliks_domain::release::scene::SceneMap;
 use fliks_domain::release::scoring::{
     AudioLanguageItem, CustomFormat, ExpectedTitle, Param, QualityProfileItem, ReleaseCandidate,
     ScoreOptions, SearchMedia, SizeLimits, WhenUnreadable, allowed_audio_language_ids,
@@ -671,6 +671,103 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                 .search_units
                 .is_empty()
         );
+    }
+
+    async fn map_scene_three_to_aired_two(db: &PgPool) {
+        let entries: Vec<_> = (1..=3)
+            .map(|e| serde_json::json!({"sceneSeason": 3, "sceneEpisode": e, "season": 2, "episode": e}))
+            .collect();
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES (7, $1)"#)
+            .bind(sqlx::types::Json(serde_json::json!({ "entries": entries })))
+            .execute(db)
+            .await
+            .unwrap();
+    }
+
+    fn app_state(db: &PgPool) -> AppState {
+        let cfg = crate::config::Config::from_lookup(|k| {
+            (k == "FLIKS_XEM_API_URL").then(|| "http://127.0.0.1:1".to_owned())
+        });
+        AppState::new(db.clone(), cfg, "0123456789abcdef0123456789abcdef")
+    }
+
+    fn title(id: &str, title: &str) -> t::ReleaseTitle {
+        t::ReleaseTitle {
+            id: id.into(),
+            title: title.into(),
+            publish_date: "2020-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn releases_match_reads_scene_numbers_as_aired(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        series_with_episodes(&db).await;
+        let st = app_state(&db);
+        let titles = || {
+            vec![
+                title("a", "Show.S03E02.1080p.WEB"),
+                title("b", "Show.S02E02.1080p.WEB"),
+            ]
+        };
+        let unit = |m: &t::ReleaseMatch| m.unit.as_ref().map(|u| (u.group, u.number));
+        let before = matches(&st, titles(), None).await.unwrap();
+        assert_eq!(before[0].skip_reason, Some(t::SkipReason::NotAvailable));
+        assert_eq!(unit(&before[1]), Some((Some(2), Some(2.0))));
+        map_scene_three_to_aired_two(&db).await;
+        let after = matches(&st, titles(), None).await.unwrap();
+        assert_eq!(unit(&after[0]), Some((Some(2), Some(2.0))));
+        assert_ne!(after[0].skip_reason, Some(t::SkipReason::NotAvailable));
+        // A scene number the mapping does not list keeps its number.
+        assert_eq!(unit(&after[1]), Some((Some(2), Some(2.0))));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unknown_mapping_skips_numbered_releases(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        series_with_episodes(&db).await;
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId") VALUES (7)"#)
+            .execute(&db)
+            .await
+            .unwrap();
+        let st = app_state(&db);
+        let out = matches(&st, vec![title("a", "Show.S03E02.1080p.WEB")], None)
+            .await
+            .unwrap();
+        assert_eq!(out[0].skip_reason, Some(t::SkipReason::SceneUnresolved));
+        assert_eq!(out[0].decision, t::MatchDecision::Skip);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn candidates_carry_the_scene_units_of_a_mapped_series(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        series_with_episodes(&db).await;
+        map_scene_three_to_aired_two(&db).await;
+        let q = t::CandidatesQuery {
+            kind: Some("series".into()),
+            family: None,
+            media_ids: None,
+            available_on: "2030-01-01".into(),
+            limit: 50,
+            cursor: None,
+        };
+        let on = NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
+        let page = candidates(&db, q, on).await.unwrap();
+        let units: Vec<_> = page
+            .items
+            .iter()
+            .map(|tg| {
+                tg.search_units
+                    .iter()
+                    .map(|u| (u.group, u.number))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert_eq!(units.len(), 4, "the season pack and its three episodes");
+        assert!(units.contains(&vec![(Some(3), None)]));
+        for n in 1..=3 {
+            assert!(units.contains(&vec![(Some(3), Some(f64::from(n)))]));
+        }
     }
 
     #[sqlx::test(migrations = false)]

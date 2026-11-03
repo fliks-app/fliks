@@ -112,7 +112,9 @@ interface types {
 
   record release-title { id: string, title: string, publish-date: string }
   enum match-decision { grab, skip }
-  enum skip-reason { on-disk, not-monitored, unmatched, too-fresh, not-available, unprofiled }
+  enum skip-reason {
+    on-disk, not-monitored, unmatched, too-fresh, not-available, unprofiled, scene-unresolved,
+  }
   record release-match {
     id: string,
     media-id: option<u32>,

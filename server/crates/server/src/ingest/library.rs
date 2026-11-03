@@ -4,6 +4,7 @@ use super::{
     MediaRow, Probed, books, fsx, load_media, naming_formats, probe,
     transfer::{self, Method},
 };
+use crate::scene::Mapping;
 use crate::{
     events::{DomainEvent, event::ImportSource},
     media::items::{self, Link},
@@ -322,6 +323,18 @@ fn clock(secs: f64) -> String {
     format!("{}:{:02}", s / 60, s % 60)
 }
 
+/// Why a file's episode could not be resolved: a retry may succeed, or the import failed.
+enum Refusal {
+    Retry(String),
+    Failed(String),
+}
+
+impl From<String> for Refusal {
+    fn from(e: String) -> Self {
+        Self::Failed(e)
+    }
+}
+
 enum Placed {
     Imported(Imported),
     Book(books::Placed),
@@ -539,7 +552,11 @@ impl Ctx<'_> {
             )));
         };
         let ep = if self.media.has_seasons() {
-            self.episode(f).await?
+            match self.episode(f).await {
+                Ok(ep) => ep,
+                Err(Refusal::Retry(why)) => return Ok(Placed::Error(format!("{name}: {why}"))),
+                Err(Refusal::Failed(e)) => return Err(e),
+            }
         } else {
             None
         };
@@ -774,12 +791,20 @@ impl Ctx<'_> {
         Ok(None)
     }
 
-    /// The aired numbers of a name's scene numbers; the explicit episode of a grab never gets here.
-    async fn aired(&self, n: EpisodeNumbers) -> Result<EpisodeNumbers, String> {
-        let map = crate::scene::for_media(&self.st.db, self.media.id)
+    /// The aired numbers of a name's numbers, for a series with a scene mapping.
+    async fn aired(&self, n: EpisodeNumbers) -> Result<EpisodeNumbers, Refusal> {
+        let scene = crate::scene::for_media(self.st, self.media.id)
             .await
             .map_err(|e| e.to_string())?;
-        let Some(map) = map else { return Ok(n) };
+        let map = match scene {
+            Mapping::Unmapped => return Ok(n),
+            Mapping::Mapped(map) => map,
+            Mapping::Unknown => {
+                return Err(Refusal::Retry(
+                    "the scene mapping of this series is not known yet, import it later".into(),
+                ));
+            }
+        };
         let p = ParsedSeasonEpisode {
             season: Some(n.season),
             episode: Some(n.episode),
@@ -788,7 +813,9 @@ impl Ctx<'_> {
             episode_end: n.episode_end,
             is_complete_series: false,
         };
-        let t = map.translate(&p);
+        let ambiguous =
+            || Refusal::Retry("the scene number is ambiguous in the series' scene mapping".into());
+        let t = map.translate(&p).ok_or_else(ambiguous)?;
         Ok(EpisodeNumbers {
             season: t.season.unwrap_or(n.season),
             episode: t.episode.unwrap_or(n.episode),
@@ -797,7 +824,7 @@ impl Ctx<'_> {
     }
 
     /// Rule 20: `(episode, episodeEnd)`; ingest never creates seasons or episodes.
-    async fn episode(&self, f: &File) -> Result<Option<(Ep, Option<i32>)>, String> {
+    async fn episode(&self, f: &File) -> Result<Option<(Ep, Option<i32>)>, Refusal> {
         let db = &self.st.db;
         let name = file_name(&f.path);
         let base = transfer::split_ext(&name).0.to_owned();
@@ -807,10 +834,6 @@ impl Ctx<'_> {
                 .as_deref()
                 .and_then(|r| parse_episode_numbers(r, None))
         });
-        let nums = match nums {
-            Some(n) if self.media.has_seasons() => Some(self.aired(n).await?),
-            n => n,
-        };
         if let Some(id) = f.episode_id {
             match episode_of_media(db, self.media.id, id)
                 .await
@@ -829,6 +852,7 @@ impl Ctx<'_> {
             }
         }
         if let Some(n) = nums {
+            let n = self.aired(n).await?;
             let hit = find_episode(db, self.media.id, n.season as i32, n.episode as i32)
                 .await
                 .map_err(|e| e.to_string())?;

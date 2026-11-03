@@ -30,6 +30,16 @@ struct Pair {
     tvdb: Side,
 }
 
+impl Entry {
+    fn scene(&self) -> (i64, i64) {
+        (self.scene_season, self.scene_episode)
+    }
+
+    fn aired(&self) -> (i64, i64) {
+        (self.season, self.episode)
+    }
+}
+
 fn data(v: &Value) -> Result<Value, String> {
     match v.get("result").and_then(Value::as_str) {
         Some("success") => Ok(v.get("data").cloned().unwrap_or(Value::Null)),
@@ -52,14 +62,15 @@ pub fn parse_havemap(body: &Value) -> Result<BTreeSet<i64>, String> {
 }
 
 impl SceneMap {
-    /// `/map/all?origin=tvdb&id=<tvdb>`; an empty mapping is an error, never an identity.
+    /// `/map/all?origin=tvdb&id=<tvdb>`; an entry without `scene` or `tvdb` is skipped, and a
+    /// mapping left with no entry is an error, never an identity.
     pub fn from_xem(body: &Value) -> Result<Self, String> {
-        let pairs: Vec<Pair> = serde_json::from_value(data(body)?).map_err(|e| e.to_string())?;
-        if pairs.is_empty() {
-            return Err("empty mapping".into());
-        }
-        let entries = pairs
+        let Value::Array(rows) = data(body)? else {
+            return Err("mapping data is not a list".into());
+        };
+        let entries: Vec<Entry> = rows
             .into_iter()
+            .filter_map(|r| serde_json::from_value::<Pair>(r).ok())
             .map(|p| Entry {
                 scene_season: p.scene.season,
                 scene_episode: p.scene.episode,
@@ -67,10 +78,13 @@ impl SceneMap {
                 episode: p.tvdb.episode,
             })
             .collect();
+        if entries.is_empty() {
+            return Err("empty mapping".into());
+        }
         Ok(Self { entries })
     }
 
-    /// Episode counts per aired season, season 0 left out.
+    /// Episodes per aired season, season 0 left out.
     fn aired_episodes(&self) -> BTreeMap<i64, BTreeSet<i64>> {
         let mut out: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
         for e in self.entries.iter().filter(|e| e.season > 0) {
@@ -79,26 +93,51 @@ impl SceneMap {
         out
     }
 
-    /// Whether the library's episode count per season is the numbering the mapping targets.
+    /// Whether the library has the episode counts of the aired seasons the mapping renumbers; the
+    /// last mapped season may hold more episodes than the mapping lists so far.
     pub fn fits(&self, library: &BTreeMap<i64, i64>) -> bool {
-        self.aired_episodes()
+        let aired = self.aired_episodes();
+        let last = aired.keys().next_back().copied();
+        let renumbered: BTreeSet<i64> = self
+            .entries
             .iter()
-            .all(|(s, eps)| library.get(s) == Some(&(eps.len() as i64)))
+            .filter(|e| e.season > 0 && e.scene() != e.aired())
+            .map(|e| e.season)
+            .collect();
+        renumbered.iter().all(|s| {
+            let (mapped, held) = (aired[s].len() as i64, library.get(s));
+            held == Some(&mapped) || (Some(*s) == last && held.is_some_and(|h| *h > mapped))
+        })
     }
 
-    /// The aired number of a scene episode; no entry keeps the number.
-    pub fn aired(&self, season: i64, episode: i64) -> (i64, i64) {
-        if season == 0 {
-            return (season, episode);
-        }
-        self.entries
+    /// A scene episode that two entries map to different aired episodes.
+    fn ambiguous(&self, season: i64, episode: i64) -> bool {
+        let to: BTreeSet<_> = self
+            .entries
             .iter()
-            .find(|e| e.scene_season == season && e.scene_episode == episode)
-            .map_or((season, episode), |e| (e.season, e.episode))
+            .filter(|e| e.scene() == (season, episode))
+            .map(Entry::aired)
+            .collect();
+        to.len() > 1
+    }
+
+    /// The aired number of a scene episode; no entry keeps the number, an ambiguous one has none.
+    pub fn aired(&self, season: i64, episode: i64) -> Option<(i64, i64)> {
+        if season == 0 {
+            return Some((season, episode));
+        }
+        if self.ambiguous(season, episode) {
+            return None;
+        }
+        let hit = self.entries.iter().find(|e| e.scene() == (season, episode));
+        Some(hit.map_or((season, episode), Entry::aired))
     }
 
     /// The scene units to search for an aired season or episode; none known searches itself.
     pub fn scene_units(&self, season: i64, episode: Option<i64>) -> Vec<(i64, Option<i64>)> {
+        if season == 0 {
+            return vec![(season, episode)];
+        }
         let hits = self
             .entries
             .iter()
@@ -113,26 +152,29 @@ impl SceneMap {
         }
     }
 
-    /// A parse of a release or file name in scene numbering, as aired numbering.
-    pub fn translate(&self, p: &ParsedSeasonEpisode) -> ParsedSeasonEpisode {
+    /// A parse of a release or file name in scene numbering, as aired numbering; none when it
+    /// covers a scene number the mapping gives two aired targets.
+    pub fn translate(&self, p: &ParsedSeasonEpisode) -> Option<ParsedSeasonEpisode> {
         let Some(season) = p.season.filter(|s| *s > 0) else {
-            return p.clone();
+            return Some(p.clone());
         };
-        let out = |season, episode, full, season_end, episode_end| ParsedSeasonEpisode {
-            season: Some(season),
-            episode,
-            is_full_season: full,
-            season_end,
-            episode_end,
-            is_complete_series: p.is_complete_series,
+        let out = |season, episode, full, season_end, episode_end| {
+            Some(ParsedSeasonEpisode {
+                season: Some(season),
+                episode,
+                is_full_season: full,
+                season_end,
+                episode_end,
+                is_complete_series: p.is_complete_series,
+            })
         };
         if let Some(episode) = p.episode {
-            let (s, e) = self.aired(season, episode);
-            let end = p
-                .episode_end
-                .map(|n| self.aired(season, n))
-                .filter(|(es, ee)| *es == s && *ee > e)
-                .map(|(_, ee)| ee);
+            let (s, e) = self.aired(season, episode)?;
+            let end = match p.episode_end {
+                Some(n) => Some(self.aired(season, n)?),
+                None => None,
+            };
+            let end = end.filter(|(es, ee)| *es == s && *ee > e).map(|(_, ee)| ee);
             return out(s, Some(e), false, None, end);
         }
         let aired = self.aired_episodes();
@@ -141,6 +183,9 @@ impl SceneMap {
         for scene in season..=p.season_end.unwrap_or(season) {
             let mut seen = false;
             for e in self.entries.iter().filter(|e| e.scene_season == scene) {
+                if self.ambiguous(e.scene_season, e.scene_episode) {
+                    return None;
+                }
                 covered.entry(e.season).or_default().insert(e.episode);
                 seen = true;
             }
@@ -155,7 +200,10 @@ impl SceneMap {
             let (lo, hi) = (eps.first().copied(), eps.last().copied());
             return out(*s, lo, false, None, hi.filter(|h| Some(*h) > lo));
         }
-        let seasons: BTreeSet<i64> = covered.keys().copied().chain(unmapped).collect();
+        let mut seasons: BTreeSet<i64> = covered.keys().copied().chain(unmapped).collect();
+        if seasons.iter().any(|s| *s > 0) {
+            seasons.remove(&0);
+        }
         let (lo, hi) = (seasons.first().copied(), seasons.last().copied());
         out(
             lo.unwrap_or(season),

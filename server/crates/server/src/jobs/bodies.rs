@@ -120,7 +120,7 @@ async fn refresh_metadata(st: &AppState) -> Outcome {
     if let Err(e) = crate::metadata::prune_snapshots(&st.db).await {
         tracing::warn!("{JOB}: snapshot cleanup failed: {e}");
     }
-    if let Err(e) = crate::scene::refresh(&st.db).await {
+    if let Err(e) = crate::scene::refresh(st).await {
         tracing::warn!("{JOB}: scene mappings failed: {e}");
     }
     if !provider_available(st, JOB) {
