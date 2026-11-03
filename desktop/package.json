@@ -24,13 +24,13 @@
     "node": ">=20"
   },
   "dependencies": {
-    "dbus-native": "^0.16.2",
+    "dbus-native": "^0.16.3",
     "electron-updater": "^6.8.11",
     "velopack": "1.2.161"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
-    "electron": "^45.0.0",
+    "@types/node": "^26.6.6",
+    "electron": "^45.2.1",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "node-addon-api": "^8.9.2",
