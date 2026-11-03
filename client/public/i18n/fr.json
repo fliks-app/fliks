@@ -2455,7 +2455,7 @@
       "default_quality_profile": "Profil de qualité par défaut",
       "default_language_profile": "Profil de langue par défaut",
       "merge_m4b": "Fusionner les parties d'un livre audio en un seul m4b",
-      "merge_m4b_hint": "Crée un m4b avec chapitres à côté des parties d'un livre audio en plusieurs fichiers. Les fichiers d'origine sont conservés.",
+      "merge_m4b_hint": "Crée un m4b avec chapitres à côté des parties d'un livre audio en plusieurs fichiers. Les fichiers d'origine sont conservés, sauf si l'option ci-dessous est activée.",
       "merge_m4b_replace": "Supprimer les parties après la fusion",
       "merge_m4b_replace_hint": "Une fois le m4b vérifié et enregistré, supprime du disque les fichiers d'origine des parties. Une partie modifiée est conservée.",
       "user_access": "Accès utilisateurs",

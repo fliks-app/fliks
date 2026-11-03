@@ -60,7 +60,7 @@ The body also takes `itemId` (names the item, rule 15 of `item-delivery.md`), `p
 | `events.emitToUser` | synchronous throw | **500** | history skipped (not caught) |
 | debounce / map | cannot throw | - | - |
 | `playbackService.updateState`, `!mediaFileId` | validation error | **400** | presence, QoE, emit already done; debounce entry already set |
-| `updateState`, FK violation 23503 (unknown file) | swallowed -> `null` | `state:null` (200) | debounce entry set |
+| `updateState`, FK violation 23503 (unknown file) | swallowed -> `null`, except an item with an `item_version_aliases` row (a merge replaced its files): saved with a NULL `mediaFileId` | `state:null` (200), or the saved state | debounce entry set |
 | `updateState`, pair names no item | `null`, as the line above | `state:null` (200) | debounce entry set |
 | `updateState`, other DB error | propagates | **500** | presence, QoE, emit already done; debounce entry already set (no retry for 30 s unless seek/state change/completion) |
 | playlist auto-remove | any throw | none (warn, caught inside the playback service) | row already saved |

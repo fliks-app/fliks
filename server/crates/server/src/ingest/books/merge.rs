@@ -140,6 +140,16 @@ pub fn output_rel(first: &str, title: &str, language: Option<&str>) -> Option<St
 
 /// What a job result must match in the probe of the file before it is registered.
 pub fn verify(meta: &MergeMeta, info: &MediaInfo, bytes: u64) -> Result<(), String> {
+    verify_within(meta, info, bytes, (meta.duration_seconds * 0.01).max(5.0))
+}
+
+/// `verify` with the duration tolerance in seconds.
+fn verify_within(
+    meta: &MergeMeta,
+    info: &MediaInfo,
+    bytes: u64,
+    tolerance: f64,
+) -> Result<(), String> {
     if info.audio.is_empty() {
         return Err("the merged file has no audio".into());
     }
@@ -148,7 +158,7 @@ pub fn verify(meta: &MergeMeta, info: &MediaInfo, bytes: u64) -> Result<(), Stri
     }
     let want = meta.duration_seconds;
     let got = info.duration_seconds.unwrap_or(0.0);
-    if (got - want).abs() > (want * 0.01).max(5.0) {
+    if (got - want).abs() > tolerance {
         return Err(format!("duration {got}s, expected {want}s"));
     }
     let chapters = info.chapters.as_ref().map_or(0, Vec::len);
@@ -783,7 +793,7 @@ async fn publish(
     {
         return Err(("the library option was turned off".into(), Fail::Transient));
     }
-    check(st, media, parts, abs, merge, out).await?;
+    check(st, media, parts, abs, merge, (out_rel, out)).await?;
     let placed = Placed {
         folder_id: parts[0].folder_id,
         rel: out_rel.to_owned(),
@@ -797,31 +807,94 @@ async fn publish(
     }
     // The m4b is committed: whatever happens to the parts no longer fails the merge.
     if options(st, media).await.is_ok_and(|o| o.1)
-        && let Err(why) =
-            replace_parts(st, media, parts, abs, merge, out, done.files[0].file_id).await
+        && let Err(why) = replace_parts(
+            st,
+            media,
+            parts,
+            abs,
+            merge,
+            (out_rel, out),
+            done.files[0].file_id,
+        )
+        .await
     {
         tracing::warn!("m4b merge of book #{media}: parts kept: {why}");
     }
     Ok(())
 }
 
+/// The parts and the output are still at the paths the merge used: a library folder re-pointed
+/// meanwhile moves no file, so the rows would name files that are not there.
+async fn same_place(
+    st: &AppState,
+    parts: &[Part],
+    abs: &[PathBuf],
+    out_rel: &str,
+    out: &Path,
+) -> Result<(), Failure> {
+    let (now, _) = part_paths(st, parts).await?;
+    let (now_out, _) = output_path(st, parts[0].folder_id, out_rel)
+        .await
+        .map_err(|e| (e, Fail::Transient))?;
+    if now != abs || now_out != out {
+        return Err((
+            "the library folder was re-pointed during the merge".into(),
+            Fail::Transient,
+        ));
+    }
+    Ok(())
+}
+
+/// Seconds since the last save of a playback state under which someone is taken to be listening.
+const LISTENING_SECS: f64 = 600.0;
+
+/// Whether a live session or a recent playback state names an item of these files.
+async fn listening(st: &AppState, ids: &[i32]) -> sqlx::Result<bool> {
+    let items: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT DISTINCT "itemId" FROM item_parts WHERE "mediaFileId" = ANY($1)"#,
+    )
+    .bind(ids)
+    .fetch_all(&st.db)
+    .await?;
+    if st.presence.list().iter().any(|s| {
+        s.item_id.is_some_and(|i| items.contains(&i))
+            || ids.iter().any(|f| *f as u32 == s.media_file_id)
+    }) {
+        return Ok(true);
+    }
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM playback_states WHERE "itemId" = ANY($1)
+             AND "lastPlayedAt" > now() - make_interval(secs => $2))"#,
+    )
+    .bind(&items)
+    .bind(LISTENING_SECS)
+    .fetch_one(&st.db)
+    .await
+}
+
 /// Under the media and `folder_moves` locks, once the m4b `m4b` is registered: the file is probed
-/// again, every part must still be what the merge read, then the parts go through the media file
-/// delete. All or none, since a version cut short would play a wrong timeline.
+/// again, every part must still be what the merge read, then their rows go in one transaction with
+/// the aliases and the playback move, and the files are unlinked after. All or none, since a
+/// version cut short would play a wrong timeline.
 async fn replace_parts(
     st: &AppState,
     media: i32,
     parts: &[Part],
     abs: &[PathBuf],
     merge: &MergeMeta,
-    out: &Path,
+    (out_rel, out): (&str, &Path),
     m4b: i32,
 ) -> Result<(), String> {
+    same_place(st, parts, abs, out_rel, out)
+        .await
+        .map_err(|e| e.0)?;
     let bytes = tokio::fs::metadata(out)
         .await
         .map_err(|e| e.to_string())?
         .len();
-    verify(merge, &probe(st, out, false).await?.info, bytes)?;
+    // Tighter than the registration check: a missing minute must not cost the originals.
+    let tolerance = (merge.duration_seconds * 0.002).max(2.0 + 0.1 * parts.len() as f64);
+    verify_within(merge, &probe(st, out, false).await?.info, bytes, tolerance)?;
     if parts.iter().any(|p| p.mtime_ms.is_none()) || !unchanged(st, media, parts, abs).await {
         return Err("a part is not what the merge read".into());
     }
@@ -829,14 +902,15 @@ async fn replace_parts(
         let regular = tokio::fs::symlink_metadata(path)
             .await
             .is_ok_and(|m| m.is_file());
-        let direct = tokio::fs::canonicalize(path)
-            .await
-            .is_ok_and(|c| c == *path);
+        let direct = dunce::canonicalize(path).is_ok_and(|c| c == *path);
         if !regular || !direct || fsx::safe_rel(&p.rel).is_none() {
             return Err(format!("part #{} is not a plain file of its folder", p.id));
         }
     }
     let ids: Vec<i32> = parts.iter().map(|p| p.id).collect();
+    if listening(st, &ids).await.map_err(|e| e.to_string())? {
+        return Err("someone is listening to the book".into());
+    }
     let mut tx = st.db.begin().await.map_err(|e| e.to_string())?;
     crate::media::items::lock_versions(&mut tx, media)
         .await
@@ -887,16 +961,24 @@ async fn replace_parts(
         .await
         .map_err(|e| e.to_string())?;
     }
-    tx.commit().await.map_err(|e| e.to_string())?;
-    let book = crate::ingest::load_media(&st.db, media)
+    sqlx::query("DELETE FROM media_files WHERE id = ANY($1)")
+        .bind(&ids)
+        .execute(&mut *tx)
         .await
-        .map_err(|e| e.to_string())?
-        .ok_or("the media is gone")?;
-    for p in parts {
-        crate::media::write::delete_media_file(st, &book, p.id, true)
-            .await
-            .map_err(|e| format!("part #{} not removed: {e:?}", p.id))?;
+        .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    // The rows are gone: a file that stays is an orphan, never a loss.
+    let (_, root) = output_path(st, parts[0].folder_id, out_rel).await?;
+    for (p, path) in parts.iter().zip(abs) {
+        if let Err(e) = fsx::unlink_contained(&root, path) {
+            tracing::warn!(
+                "m4b merge of book #{media}: part #{} kept on disk: {e}",
+                p.id
+            );
+        }
+        crate::ingest::drop_thumbnails(st, p.id);
     }
+    crate::media_servers::dispatch_detached(st, "file.deleted");
     tracing::info!("m4b merge of book #{media}: {} parts replaced", parts.len());
     Ok(())
 }
@@ -907,8 +989,9 @@ async fn check(
     parts: &[Part],
     abs: &[PathBuf],
     merge: &MergeMeta,
-    out: &Path,
+    (out_rel, out): (&str, &Path),
 ) -> Result<(), Failure> {
+    same_place(st, parts, abs, out_rel, out).await?;
     if !unchanged(st, media, parts, abs).await {
         return Err(("a part changed during the merge".into(), Fail::Transient));
     }

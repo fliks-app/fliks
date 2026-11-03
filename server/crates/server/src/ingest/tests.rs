@@ -1878,8 +1878,9 @@ mod book_ingest {
         .await
         .unwrap();
         sqlx::query(
-            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
-               VALUES ($1, $2, 1, 42)"#,
+            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds",
+                                            "lastPlayedAt")
+               VALUES ($1, $2, 1, 42, now() - interval '1 day')"#,
         )
         .bind(user)
         .bind(item)
@@ -1972,6 +1973,85 @@ mod book_ingest {
         assert!(c.dir.join("books/Orfaline/02.mp3").exists());
         assert!(c.dir.join("books/Orfaline/Orfaline.m4b").exists());
         assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 3);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_folder_re_pointed_during_the_job_keeps_the_parts_and_registers_nothing(
+        pool: PgPool,
+    ) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        let moves = c.st.folder_moves.write().await;
+        let (st, fake) = (c.st.clone(), &c.fake);
+        let job = tokio::spawn(async move { books::merge::run(&st, m).await });
+        assert!(eventually(|| !fake.seen("GET", "/v1/jobs/j1").is_empty()).await);
+        let elsewhere = c.dir.join("elsewhere");
+        fs::create_dir_all(&elsewhere).unwrap();
+        sqlx::query("UPDATE library_folders SET path = $1")
+            .bind(elsewhere.to_string_lossy().as_ref())
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        drop(moves);
+        assert!(job.await.unwrap().is_err());
+        assert_eq!(parts(&c, m).await.len(), 2);
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+        assert!(c.dir.join("books/Orfaline/02.mp3").exists());
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 2);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_failed_unlink_leaves_an_orphan_file_not_a_cut_version(pool: PgPool) {
+        use std::os::unix::fs::PermissionsExt;
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        let books = c.dir.join("books/Orfaline");
+        for (from, to) in [("01.mp3", "CD1/01.mp3"), ("02.mp3", "CD2/02.mp3")] {
+            fs::create_dir_all(books.join(to).parent().unwrap()).unwrap();
+            fs::rename(books.join(from), books.join(to)).unwrap();
+            sqlx::query(r#"UPDATE media_files SET "relativePath" = $2 WHERE "relativePath" = $1"#)
+                .bind(format!("Orfaline/{from}"))
+                .bind(format!("Orfaline/{to}"))
+                .execute(&c.st.db)
+                .await
+                .unwrap();
+        }
+        let cd2 = books.join("CD2");
+        fs::set_permissions(&cd2, fs::Permissions::from_mode(0o555)).unwrap();
+        let can_write = fs::File::create(cd2.join("probe")).is_ok();
+        let run = books::merge::run(&c.st, m).await;
+        fs::set_permissions(&cd2, fs::Permissions::from_mode(0o755)).unwrap();
+        if can_write {
+            return;
+        }
+        run.unwrap();
+        assert_eq!(
+            parts(&c, m).await,
+            [("Orfaline/Orfaline.m4b".to_owned(), 1, 0)]
+        );
+        assert!(!books.join("CD1/01.mp3").exists());
+        assert!(cd2.join("02.mp3").exists(), "an orphan, not a lost file");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_book_played_a_minute_ago_keeps_its_parts(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        sqlx::query(
+            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
+               SELECT (SELECT min(id) FROM users), id, 1, 42 FROM items WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 3);
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+        assert!(c.dir.join("books/Orfaline/Orfaline.m4b").exists());
     }
 
     #[sqlx::test(migrations = false)]
