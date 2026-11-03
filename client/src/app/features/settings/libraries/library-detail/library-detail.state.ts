@@ -35,6 +35,7 @@ export class LibraryDetailState {
   readonly formColor = signal<string | null>(null);
   readonly formMovies = signal(true);
   readonly formSeries = signal(true);
+  readonly formComics = signal(false);
   readonly formProvider = signal<string | null>(null);
   readonly formMetadataLanguage = signal<string | null>(null);
   readonly formMetadataRegion = signal<string | null>(null);
@@ -56,6 +57,7 @@ export class LibraryDetailState {
     this.formColor.set(lib.color);
     this.formMovies.set(lib.mediaTypes.includes('movie'));
     this.formSeries.set(lib.mediaTypes.includes('series'));
+    this.formComics.set(lib.mediaTypes.includes('comic'));
     this.formProvider.set(lib.preferredProvider);
     this.formMetadataLanguage.set(lib.metadataLanguage);
     this.formMetadataRegion.set(lib.metadataRegion);
@@ -151,6 +153,7 @@ export class LibraryDetailState {
     const types: MediaType[] = [];
     if (this.formMovies()) types.push('movie');
     if (this.formSeries()) types.push('series');
+    if (this.formComics()) types.push('comic');
     if (this.isBook()) types.push('book');
     return types;
   }

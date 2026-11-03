@@ -22,6 +22,7 @@ export type TrackingScope =
   | { kind: 'movie' }
   | { kind: 'series' }
   | { kind: 'book' }
+  | { kind: 'comic' }
   | { kind: 'season'; seasonNumber: number }
   | { kind: 'episode'; episodeId: number };
 
@@ -45,6 +46,7 @@ export class TrackingStatusModalComponent {
     movie: 'tracking.this_movie',
     series: null,
     book: null,
+    comic: null,
   };
   private readonly media = inject(MediaService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');

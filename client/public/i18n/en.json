@@ -2546,7 +2546,8 @@
       "scan_queued_unmatched": "{{count}} title(s) added without metadata, identify them from the Media tab",
       "scan_search_failed_count": "{{count}} folder(s) not scanned (search failed), relaunch the scan from the Media tab",
       "media_filter_unidentified": "Unidentified",
-      "scan_reorganize_needs_folder": "Move/rename only applies to titles with their own folder"
+      "scan_reorganize_needs_folder": "Move/rename only applies to titles with their own folder",
+      "media_type_comic": "Comics"
     },
     "users": {
       "title": "Users",
@@ -3322,7 +3323,8 @@
     "episodes": "Episodes:",
     "total": "Total:",
     "monitored": "Monitored:",
-    "unmonitored": "Not monitored:"
+    "unmonitored": "Not monitored:",
+    "comic_issues": "Issues:"
   },
   "home_settings": {
     "title": "Home",
@@ -3974,7 +3976,8 @@
     "propose_count_other": "Propose {{count}} episodes"
   },
   "kinds": {
-    "book": "Book"
+    "book": "Book",
+    "comic": "Comic"
   },
   "families": {
     "video": "Video",
@@ -4008,7 +4011,15 @@
     "open_failed": "This book could not be opened.",
     "zoom_out": "Zoom out",
     "zoom_in": "Zoom in",
-    "fixed_unsupported": "Fixed-layout books are not supported yet."
+    "fixed_unsupported": "Fixed-layout books are not supported yet.",
+    "comic_mode": "Reading mode",
+    "comic_mode_paged": "Pages",
+    "comic_mode_manga": "Manga",
+    "comic_mode_webtoon": "Webtoon",
+    "comic_spread": "Double page",
+    "comic_pages": "Comic pages",
+    "comic_page_alt": "Page {{n}}",
+    "comic_page_of": "Page {{n}} of {{total}}"
   },
   "email_devices": {
     "title": "E-mail devices",
@@ -4064,5 +4075,21 @@
     "error_format": "This device does not accept that format.",
     "error_too_big": "This file is larger than the mail size limit.",
     "error_rate_limited": "Too many books sent recently, try again later."
+  },
+  "comic": {
+    "volume": "Vol. {{n}}",
+    "read": "Read",
+    "continue": "Continue",
+    "issue_number": "#{{n}}",
+    "annual_number": "Annual {{n}}",
+    "read_count": "{{read}} of {{total}} issues read",
+    "issues": "Issues",
+    "annuals": "Annuals",
+    "pages": "{{n}} pages",
+    "missing": "No file",
+    "finished": "Read",
+    "progress": "Reading progress",
+    "special_number": "Special {{n}}",
+    "specials": "Specials"
   }
 }

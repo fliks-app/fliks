@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import type { IEpubPreferences } from '@readium/navigator';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
+import { COMIC_MODES, COMIC_PREFS_DEFAULT, type ComicPrefs } from './comic-layout';
 
 export type ReaderTheme = 'light' | 'sepia' | 'dark';
 export type ReaderFont = 'publisher' | 'serif' | 'sans';
@@ -126,6 +127,32 @@ export class ReaderSettingsService {
     }
   }
 
+  private readonly comicKey = `reader.comics:${this.scope.suffix()}`;
+  private comics: Record<string, unknown> = this.loadComics();
+
+  comicPrefs(mediaId: number): ComicPrefs {
+    return sanitizeComicPrefs(this.comics[mediaId]);
+  }
+
+  saveComicPrefs(mediaId: number, prefs: ComicPrefs): void {
+    this.comics = { ...this.comics, [mediaId]: sanitizeComicPrefs(prefs) };
+    if (!this.scope.canPersist()) return;
+    try {
+      localStorage.setItem(this.comicKey, JSON.stringify(this.comics));
+    } catch {
+      // Storage blocked or full: the layout lasts for this page only.
+    }
+  }
+
+  private loadComics(): Record<string, unknown> {
+    try {
+      const raw = JSON.parse(localStorage.getItem(this.comicKey) ?? 'null');
+      return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+      return {};
+    }
+  }
+
   private load(): ReaderSettings {
     try {
       const raw = localStorage.getItem(this.key);
@@ -134,4 +161,13 @@ export class ReaderSettingsService {
       return { ...READER_DEFAULTS };
     }
   }
+}
+
+/** Per-volume comic layout, kept apart from the text settings so each volume remembers manga, webtoon or paged. */
+export function sanitizeComicPrefs(raw: unknown): ComicPrefs {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    mode: oneOf(COMIC_MODES, r['mode'], COMIC_PREFS_DEFAULT.mode),
+    spread: typeof r['spread'] === 'boolean' ? r['spread'] : COMIC_PREFS_DEFAULT.spread,
+  };
 }

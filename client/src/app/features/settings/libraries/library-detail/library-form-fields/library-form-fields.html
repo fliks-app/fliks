@@ -70,6 +70,11 @@
         [ngModel]="state.formSeries()" (ngModelChange)="state.formSeries.set($event)" />
       <span class="label-text text-base">{{ 'settings.libraries.media_type_series' | translate }}</span>
     </label>
+    <label class="label cursor-pointer justify-start gap-3 max-w-max">
+      <input type="checkbox" class="toggle"
+        [ngModel]="state.formComics()" (ngModelChange)="state.formComics.set($event)" />
+      <span class="label-text text-base">{{ 'settings.libraries.media_type_comic' | translate }}</span>
+    </label>
   </div>
 </div>
 

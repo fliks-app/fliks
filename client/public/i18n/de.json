@@ -2546,7 +2546,8 @@
       "scan_queued_unmatched": "{{count}} Titel ohne Metadaten hinzugefügt, identifizieren Sie sie im Tab Medien",
       "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut",
       "media_filter_unidentified": "Nicht identifiziert",
-      "scan_reorganize_needs_folder": "Verschieben/Umbenennen gilt nur für Titel mit eigenem Ordner"
+      "scan_reorganize_needs_folder": "Verschieben/Umbenennen gilt nur für Titel mit eigenem Ordner",
+      "media_type_comic": "Comics"
     },
     "users": {
       "title": "Benutzer",
@@ -3322,7 +3323,8 @@
     "episodes": "Folgen:",
     "total": "Gesamt:",
     "monitored": "Überwacht:",
-    "unmonitored": "Nicht überwacht:"
+    "unmonitored": "Nicht überwacht:",
+    "comic_issues": "Ausgaben:"
   },
   "home_settings": {
     "title": "Startseite",
@@ -3974,7 +3976,8 @@
     "propose_count_other": "{{count}} Folgen vorschlagen"
   },
   "kinds": {
-    "book": "Buch"
+    "book": "Buch",
+    "comic": "Comic"
   },
   "families": {
     "video": "Video",
@@ -4008,7 +4011,15 @@
     "open_failed": "Dieses Buch konnte nicht geöffnet werden.",
     "zoom_out": "Verkleinern",
     "zoom_in": "Vergrößern",
-    "fixed_unsupported": "Bücher mit festem Layout werden noch nicht unterstützt."
+    "fixed_unsupported": "Bücher mit festem Layout werden noch nicht unterstützt.",
+    "comic_mode": "Lesemodus",
+    "comic_mode_paged": "Seiten",
+    "comic_mode_manga": "Manga",
+    "comic_mode_webtoon": "Webtoon",
+    "comic_spread": "Doppelseite",
+    "comic_pages": "Comicseiten",
+    "comic_page_alt": "Seite {{n}}",
+    "comic_page_of": "Seite {{n}} von {{total}}"
   },
   "email_devices": {
     "title": "E-Mail-Geräte",
@@ -4064,5 +4075,21 @@
     "error_format": "Dieses Gerät akzeptiert dieses Format nicht.",
     "error_too_big": "Diese Datei ist größer als das Größenlimit für den Versand.",
     "error_rate_limited": "Zu viele Bücher in letzter Zeit gesendet, versuche es später erneut."
+  },
+  "comic": {
+    "volume": "Bd. {{n}}",
+    "read": "Lesen",
+    "continue": "Weiterlesen",
+    "issue_number": "Nr. {{n}}",
+    "annual_number": "Annual {{n}}",
+    "read_count": "{{read}} von {{total}} Ausgaben gelesen",
+    "issues": "Ausgaben",
+    "annuals": "Annuals",
+    "pages": "{{n}} Seiten",
+    "missing": "Keine Datei",
+    "finished": "Gelesen",
+    "progress": "Lesefortschritt",
+    "special_number": "Special {{n}}",
+    "specials": "Specials"
   }
 }

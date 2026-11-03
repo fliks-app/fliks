@@ -95,6 +95,7 @@ export class OrphanScanPanelComponent {
     movie: 'settings.libraries.scan_group_movie',
     series: 'settings.libraries.scan_group_series',
     book: 'kinds.book',
+    comic: 'kinds.comic',
   };
   readonly scanning = signal(false);
   readonly scanError = signal('');

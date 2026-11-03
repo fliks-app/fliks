@@ -32,6 +32,9 @@
                   @if (lib.mediaTypes.includes('series')) {
                     <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_series' | translate }}</span>
                   }
+                  @if (lib.mediaTypes.includes('comic')) {
+                    <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_comic' | translate }}</span>
+                  }
                   @if (lib.preferredProvider) {
                     <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>
                   }

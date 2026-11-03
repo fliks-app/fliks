@@ -1,0 +1,111 @@
+@let m = media();
+@let c = comic();
+
+<header class="relative isolate -mx-4 -mt-4 px-4 pt-16 pb-8">
+  <!-- Clipped on its own so the hero content keeps its focus rings. -->
+  <div class="absolute inset-0 overflow-hidden -z-10" aria-hidden="true">
+    @if (m.posterUrl) {
+      <img class="size-full object-cover scale-125 blur-3xl opacity-40" [cachedSrc]="m.posterUrl | resolveUrl: 'thumb'" alt="" />
+    }
+    <div class="absolute inset-0 bg-linear-to-b from-transparent to-base-100"></div>
+  </div>
+
+  <div class="flex gap-6 lg:gap-10">
+    <div class="w-32 sm:w-40 lg:w-56 shrink-0 aspect-2/3 rounded-xl overflow-hidden bg-base-300 shadow-xl">
+      @if (m.posterUrl) {
+        <img class="size-full object-cover" [cachedSrc]="m.posterUrl | resolveUrl: 'medium'" [alt]="m.title" />
+      }
+    </div>
+
+    <div class="flex-1 min-w-0 flex flex-col gap-2">
+      <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ m.title }}</h1>
+      <p class="flex flex-wrap gap-x-3 text-base-content/70" data-testid="facts">
+        @if (c.publisher) {
+          <span>{{ c.publisher }}</span>
+        }
+        @if (c.startYear) {
+          <span>{{ c.startYear }}</span>
+        }
+        @if (c.volume != null) {
+          <span>{{ 'comic.volume' | translate: { n: c.volume } }}</span>
+        }
+      </p>
+      @if (m.overview) {
+        <p class="mt-2 max-w-3xl text-base-content/80">{{ m.overview }}</p>
+      }
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        @if (canRead && next(); as n) {
+          <a class="btn btn-primary" [routerLink]="readLink(n.itemId)" data-testid="read-button">
+            {{ (started() ? 'comic.continue' : 'comic.read') | translate }}
+            <span class="opacity-70">{{ 'comic.issue_number' | translate: { n: n.number } }}</span>
+          </a>
+        }
+        <span class="text-sm text-base-content/60">
+          {{ 'comic.read_count' | translate: { read: readCount(), total: c.issues.length } }}
+        </span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<ng-template #issueRows let-issues let-kind="kind">
+  <ul class="flex flex-col gap-1">
+    @for (i of issues; track i.itemId) {
+      <li>
+        @if (canRead && i.mediaFileId != null) {
+          <a class="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="readLink(i.itemId)" data-testid="issue">
+            <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
+          </a>
+        } @else {
+          <div class="flex items-center gap-3 rounded-lg px-3 py-2" [class.opacity-50]="i.mediaFileId == null" data-testid="issue">
+            <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
+          </div>
+        }
+      </li>
+    }
+  </ul>
+</ng-template>
+
+<ng-template #row let-i let-kind="kind">
+  <span class="w-24 shrink-0 font-medium tabular-nums">
+    {{ ('comic.' + kind + '_number') | translate: { n: i.number } }}
+  </span>
+  <span class="min-w-0 flex-1 truncate">{{ i.title }}</span>
+  @if (i.releaseDate) {
+    <span class="hidden sm:inline text-sm text-base-content/60">{{ i.releaseDate | date: 'mediumDate' }}</span>
+  }
+  @if (i.pageCount) {
+    <span class="hidden sm:inline text-sm text-base-content/60 tabular-nums">{{ 'comic.pages' | translate: { n: i.pageCount } }}</span>
+  }
+  @if (i.mediaFileId == null) {
+    <span class="badge badge-ghost badge-sm">{{ 'comic.missing' | translate }}</span>
+  } @else if (i.finished) {
+    <span class="badge badge-success badge-sm" data-testid="finished">{{ 'comic.finished' | translate }}</span>
+  } @else if (i.progression != null) {
+    <progress
+      class="progress progress-primary w-20"
+      [value]="percent(i.progression)"
+      max="100"
+      [attr.aria-label]="'comic.progress' | translate"
+    ></progress>
+  }
+</ng-template>
+
+<div class="flex flex-col gap-8">
+  <section>
+    <h2 class="mb-2 text-lg font-semibold">{{ 'comic.issues' | translate }}</h2>
+    <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: main(), kind: 'issue' }" />
+  </section>
+  @if (annuals().length) {
+    <section>
+      <h2 class="mb-2 text-lg font-semibold">{{ 'comic.annuals' | translate }}</h2>
+      <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: annuals(), kind: 'annual' }" />
+    </section>
+  }
+  @if (specials().length) {
+    <section>
+      <h2 class="mb-2 text-lg font-semibold">{{ 'comic.specials' | translate }}</h2>
+      <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: specials(), kind: 'special' }" />
+    </section>
+  }
+</div>

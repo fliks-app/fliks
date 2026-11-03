@@ -229,6 +229,14 @@ export const routes: Routes = [
         data: { kind: 'book', reuse: true },
       },
       {
+        path: 'comics/:id',
+        loadComponent: () =>
+          import('./features/media-detail/media-detail').then(
+            (m) => m.MediaDetailComponent,
+          ),
+        data: { kind: 'comic', reuse: true },
+      },
+      {
         path: 'collections/:id',
         loadComponent: () =>
           import('./features/collection-detail/collection-detail').then(

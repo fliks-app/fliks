@@ -1,3 +1,4 @@
+import type { ComicListInfo } from '../../core/services/api/comics.models';
 import type { MediaType } from '../../core/enums/media-type.enum';
 import {
   Component,
@@ -72,6 +73,7 @@ export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
 type FilterWatched = '' | 'watched' | 'unwatched' | 'inProgress';
 type BookMedia = Media & { book?: BookListInfo };
+type ComicMedia = Media & { comic?: ComicListInfo };
 /** Book-only list keys: the server answers 400 for them on another type. */
 interface BookQuery { format?: string; language?: string; authorId?: number; narratorId?: number; inProgress?: true }
 const BOOK_FILTER_KEYS = ['format', 'language', 'authorId', 'narratorId'] as const;
@@ -90,6 +92,12 @@ const KIND_STATS: Record<MediaType, (m: Media) => { key: string; labelKey: strin
     labelKey: 'books_library.legend_with_file',
     done: (m as BookMedia).book?.formats.length ? 1 : 0,
     total: null,
+  }),
+  comic: (m) => ({
+    key: 'comic',
+    labelKey: 'legend.comic_issues',
+    done: (m as ComicMedia).comic?.readCount ?? 0,
+    total: (m as ComicMedia).comic?.issueCount ?? 0,
   }),
 };
 

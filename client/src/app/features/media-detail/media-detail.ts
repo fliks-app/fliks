@@ -85,6 +85,7 @@ import { WatchedController } from './watched-controller';
 import { EpisodeViewController } from './episode-view-controller';
 import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 import { asBookMedia } from './book/book-media';
+import { asComicMedia } from './comic/comic-media';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -405,6 +406,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   protected readonly bookMedia = computed(() => asBookMedia(this.media()));
   /** Fetched on the first book, so movie and series pages never load it. */
   protected readonly bookWork = signal<Type<unknown> | null>(null);
+  protected readonly comicMedia = computed(() => asComicMedia(this.media()));
+  protected readonly comicVolume = signal<Type<unknown> | null>(null);
+  private readonly comicVolumeLoader = effect(() => {
+    if (!this.comicMedia() || untracked(this.comicVolume)) return;
+    void import('./comic/comic-volume.component').then((m) => this.comicVolume.set(m.ComicVolumeComponent));
+  });
   private readonly bookWorkLoader = effect(() => {
     if (!this.bookMedia() || untracked(this.bookWork)) return;
     void import('./book/book-work.component').then((m) => this.bookWork.set(m.BookWorkComponent));

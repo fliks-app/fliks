@@ -2546,7 +2546,8 @@
       "scan_queued_unmatched": "{{count}} titre(s) ajouté(s) sans métadonnées, identifiez-les depuis l'onglet Médias",
       "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias",
       "media_filter_unidentified": "Non identifiés",
-      "scan_reorganize_needs_folder": "Le déplacement/renommage ne s'applique qu'aux titres dans leur propre dossier"
+      "scan_reorganize_needs_folder": "Le déplacement/renommage ne s'applique qu'aux titres dans leur propre dossier",
+      "media_type_comic": "Bandes dessinées"
     },
     "users": {
       "title": "Utilisateurs",
@@ -3322,7 +3323,8 @@
     "episodes": "Épisodes :",
     "total": "Total :",
     "monitored": "Surveillés :",
-    "unmonitored": "Non surveillés :"
+    "unmonitored": "Non surveillés :",
+    "comic_issues": "Numéros :"
   },
   "home_settings": {
     "title": "Accueil",
@@ -3974,7 +3976,8 @@
     "propose_count_other": "Proposer {{count}} épisodes"
   },
   "kinds": {
-    "book": "Livre"
+    "book": "Livre",
+    "comic": "Bande dessinée"
   },
   "families": {
     "video": "Vidéo",
@@ -4008,7 +4011,15 @@
     "open_failed": "Impossible d'ouvrir ce livre.",
     "zoom_out": "Réduire",
     "zoom_in": "Agrandir",
-    "fixed_unsupported": "Les livres à mise en page fixe ne sont pas encore pris en charge."
+    "fixed_unsupported": "Les livres à mise en page fixe ne sont pas encore pris en charge.",
+    "comic_mode": "Mode de lecture",
+    "comic_mode_paged": "Pages",
+    "comic_mode_manga": "Manga",
+    "comic_mode_webtoon": "Webtoon",
+    "comic_spread": "Double page",
+    "comic_pages": "Pages de la bande dessinée",
+    "comic_page_alt": "Page {{n}}",
+    "comic_page_of": "Page {{n}} sur {{total}}"
   },
   "email_devices": {
     "title": "Appareils e-mail",
@@ -4064,5 +4075,21 @@
     "error_format": "Cet appareil n'accepte pas ce format.",
     "error_too_big": "Ce fichier dépasse la taille maximale d'envoi.",
     "error_rate_limited": "Trop de livres envoyés récemment, réessayez plus tard."
+  },
+  "comic": {
+    "volume": "Vol. {{n}}",
+    "read": "Lire",
+    "continue": "Continuer",
+    "issue_number": "n° {{n}}",
+    "annual_number": "Annuel {{n}}",
+    "read_count": "{{read}} numéros lus sur {{total}}",
+    "issues": "Numéros",
+    "annuals": "Annuels",
+    "pages": "{{n}} pages",
+    "missing": "Aucun fichier",
+    "finished": "Lu",
+    "progress": "Progression de lecture",
+    "special_number": "Spécial {{n}}",
+    "specials": "Spéciaux"
   }
 }

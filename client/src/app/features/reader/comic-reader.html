@@ -1,0 +1,134 @@
+<div class="fixed inset-0 flex flex-col overflow-hidden bg-black text-white select-none">
+  <header
+    class="absolute inset-x-0 top-0 z-30 flex items-center gap-1 bg-base-100/90 px-2 text-base-content backdrop-blur transition-opacity"
+    [class.opacity-0]="!chrome()"
+    [class.pointer-events-none]="!chrome()"
+    [attr.inert]="chrome() ? null : ''"
+    style="padding-top: env(safe-area-inset-top); padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right))"
+  >
+    <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'reader.back' | translate" (click)="closed.emit()">
+      <svg lucideArrowLeft class="h-5 w-5"></svg>
+    </button>
+    <h1 class="min-w-0 flex-1 truncate px-2 text-sm font-medium">{{ title() }}</h1>
+    <div class="join" role="group" [attr.aria-label]="'reader.comic_mode' | translate">
+      @for (mode of modes; track mode) {
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="prefs().mode === mode"
+          [attr.aria-pressed]="prefs().mode === mode"
+          (click)="setMode(mode)"
+        >
+          {{ 'reader.comic_mode_' + mode | translate }}
+        </button>
+      }
+    </div>
+    @if (!webtoon()) {
+      <button
+        type="button"
+        class="btn btn-sm"
+        [class.btn-active]="prefs().spread"
+        [attr.aria-pressed]="prefs().spread"
+        (click)="toggleSpread()"
+      >
+        {{ 'reader.comic_spread' | translate }}
+      </button>
+    }
+    <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'reader.zoom_out' | translate" [disabled]="!canZoomOut()" (click)="zoomBy(-1)">
+      <svg lucideZoomOut class="h-5 w-5"></svg>
+    </button>
+    <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'reader.zoom_in' | translate" [disabled]="!canZoomIn()" (click)="zoomBy(1)">
+      <svg lucideZoomIn class="h-5 w-5"></svg>
+    </button>
+  </header>
+
+  @if (webtoon()) {
+    <div
+      #stage
+      class="comic-stage relative min-h-0 flex-1 overflow-y-auto"
+      tabindex="0"
+      role="group"
+      [attr.aria-label]="'reader.comic_pages' | translate"
+      data-testid="comic-webtoon"
+      (scroll)="onScroll()"
+      (click)="chrome.set(!chrome())"
+      (wheel)="onWheel($event)"
+    >
+      <div class="mx-auto flex w-max min-w-full flex-col items-center">
+        @if (ready()) {
+          @for (p of pages(); track $index; let i = $index) {
+            @let n = i + 1;
+            <img
+              class="block max-w-none bg-neutral"
+              loading="lazy"
+              decoding="async"
+              draggable="false"
+              [attr.data-page]="n"
+              [src]="src(n)"
+              [alt]="'reader.comic_page_alt' | translate: { n: n }"
+              [style.width.px]="webtoonWidth()"
+              [style.aspect-ratio]="aspect(n)"
+            />
+          }
+        }
+      </div>
+    </div>
+  } @else {
+    <div
+      #stage
+      class="comic-stage relative min-h-0 flex-1 touch-none overflow-hidden"
+      tabindex="0"
+      role="group"
+      [attr.aria-label]="'reader.comic_pages' | translate"
+      data-testid="comic-paged"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerCancel($event)"
+      (wheel)="onWheel($event)"
+    >
+      <div class="comic-spread" [class.comic-pair]="shown().length > 1" [style.transform]="transform()">
+        @if (ready()) {
+          @for (n of shown(); track n) {
+            <img
+              decoding="async"
+              draggable="false"
+              [src]="src(n)"
+              [alt]="'reader.comic_page_alt' | translate: { n: n }"
+            />
+          }
+        }
+      </div>
+    </div>
+  }
+
+  @if (!ready()) {
+    <div class="absolute inset-0 flex items-center justify-center">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  }
+
+  <p class="sr-only" aria-live="polite">{{ 'reader.comic_page_of' | translate: { n: page(), total: total() } }}</p>
+
+  <footer
+    class="absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-base-100/90 px-4 py-2 text-base-content backdrop-blur transition-opacity"
+    [class.opacity-0]="!chrome()"
+    [class.pointer-events-none]="!chrome()"
+    [attr.inert]="chrome() ? null : ''"
+    style="padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right))"
+  >
+    <input
+      type="range"
+      class="range range-xs flex-1"
+      min="1"
+      [max]="total() || 1"
+      step="1"
+      [style.direction]="rtl() ? 'rtl' : 'ltr'"
+      [attr.aria-label]="'reader.progress' | translate"
+      [value]="shownPage()"
+      (input)="onScrub($event)"
+      (change)="onSeek($event)"
+    />
+    <span class="shrink-0 text-right text-xs tabular-nums">{{ shownPage() }} / {{ total() }}</span>
+  </footer>
+</div>
