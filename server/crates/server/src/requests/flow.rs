@@ -712,7 +712,7 @@ async fn set_wants(st: &AppState, row: &db::Req, wants: &[WantSpec]) -> Res<()> 
     if !overlap.is_empty() {
         return Err(already_requested(&overlap));
     }
-    if !db::set_wants(&mut *tx, row.id, wants).await? {
+    if !db::set_wants(&mut tx, row.id, wants).await? {
         return Err(AppError::forbidden("Only pending requests can be updated"));
     }
     tx.commit().await?;
