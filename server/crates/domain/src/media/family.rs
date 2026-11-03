@@ -55,5 +55,6 @@ mod tests {
             assert_eq!(k.families(), [Family::Video]);
         }
         assert_eq!(MediaKind::Book.families(), [Family::Text, Family::Audio]);
+        assert_eq!(MediaKind::Comic.families(), [Family::Image]);
     }
 }

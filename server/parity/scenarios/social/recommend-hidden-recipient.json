@@ -36,6 +36,7 @@
         "body": {
           "avatar": "/api/users/4/avatar?v=1767225600000",
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "other@parity.test",
@@ -90,6 +91,7 @@
         "body": {
           "avatar": "/api/users/4/avatar?v=1767225600000",
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "other@parity.test",
@@ -178,6 +180,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "manager@parity.test",
@@ -230,6 +233,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "manager@parity.test",

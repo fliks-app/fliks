@@ -43,6 +43,7 @@ pub fn owns(kind: MediaKind, name: &str) -> bool {
     match kind {
         MediaKind::Book => is_book_file(name),
         MediaKind::Movie | MediaKind::Series => super::is_video(name),
+        MediaKind::Comic => false,
     }
 }
 

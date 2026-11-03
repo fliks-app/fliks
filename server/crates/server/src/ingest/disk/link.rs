@@ -412,7 +412,7 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
                 tmdb_id,
             },
         ),
-        MediaKind::Book => book_folder(f, &m.title, year),
+        MediaKind::Book | MediaKind::Comic => book_folder(f, &m.title, year),
         MediaKind::Movie => naming::apply_movie_folder_format(
             &f.movie_folder,
             &MovieFolder {
@@ -587,7 +587,7 @@ async fn target_folder(
                     tmdb_id: None,
                 },
             ),
-            MediaKind::Book => book_folder(&f, title, year.map(i64::from)),
+            MediaKind::Book | MediaKind::Comic => book_folder(&f, title, year.map(i64::from)),
             MediaKind::Movie => naming::apply_movie_folder_format(
                 &f.movie_folder,
                 &MovieFolder {
@@ -666,7 +666,9 @@ pub(super) async fn find_or_create_unmatched(
 ) -> Result<(MediaRow, bool, String), AppError> {
     let sample = PathBuf::from(resolve(&d.files[0].path, "/"));
     let art_dir = match d.media_type {
-        MediaKind::Movie | MediaKind::Book => sample.parent().unwrap_or(&sample).to_path_buf(),
+        MediaKind::Movie | MediaKind::Book | MediaKind::Comic => {
+            sample.parent().unwrap_or(&sample).to_path_buf()
+        }
         MediaKind::Series if d.transfer.is_some() => {
             series_folder_of(&sample, &d.folder_name, d.scan_root.as_deref())
         }
@@ -674,7 +676,9 @@ pub(super) async fn find_or_create_unmatched(
     };
     let root_movie = d.folder_name.is_empty();
     let art_base = match d.media_type {
-        MediaKind::Movie | MediaKind::Book => Some(split_ext(&file_name(&sample)).0.to_owned()),
+        MediaKind::Movie | MediaKind::Book | MediaKind::Comic => {
+            Some(split_ext(&file_name(&sample)).0.to_owned())
+        }
         MediaKind::Series => None,
     };
     let nfo = group_nfo(d.media_type, &art_dir, &sample, root_movie).await;

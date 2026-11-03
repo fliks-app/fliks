@@ -22,6 +22,7 @@ impl FieldOrder {
                 Self::build(first, &[Namespace::TMDB, Namespace::TVDB], &[])
             }
             MediaKind::Book => Self::book(Family::Text, first),
+            MediaKind::Comic => Self::build(first, &[], &[]),
         }
     }
 

@@ -11,6 +11,7 @@
       "expect": {
         "body": {
           "books": 0,
+          "comics": 0,
           "diskSpace": [
             {
               "label": "Movies",

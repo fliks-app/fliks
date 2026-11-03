@@ -50,7 +50,7 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
     };
     let library = match crate::db::kind(&src.kind)? {
         MediaKind::Movie => src.library_id,
-        MediaKind::Series | MediaKind::Book => None,
+        MediaKind::Series | MediaKind::Book | MediaKind::Comic => None,
     };
     let Some(library) = library else {
         return Ok(vec![]);

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO comic_details (\"mediaId\") VALUES ($1) ON CONFLICT (\"mediaId\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "064b3311d4c1e143707ea01d9b59449ec118a4fa1a1fc593b99bc827da63605e"
+}

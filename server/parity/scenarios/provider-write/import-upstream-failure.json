@@ -92,6 +92,7 @@
       "expect": {
         "body": {
           "books": 0,
+          "comics": 0,
           "movies": 20,
           "series": 9
         },
