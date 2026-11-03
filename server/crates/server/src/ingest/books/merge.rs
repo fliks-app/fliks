@@ -516,8 +516,14 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
         .fetch_one(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    let mut out_rel = output_rel(&parts[0].rel, &title, parts[0].language.as_deref())
-        .ok_or("no folder to write the m4b in")?;
+    // Only a second audio edition needs a name of its own.
+    let named = rows
+        .iter()
+        .any(|r| r.edition != parts[0].edition)
+        .then(|| parts[0].language.as_deref())
+        .flatten();
+    let mut out_rel =
+        output_rel(&parts[0].rel, &title, named).ok_or("no folder to write the m4b in")?;
     if let Some((p, job)) = prior
         .as_ref()
         .and_then(|p| p.job_id.as_deref().map(|j| (p, j)))
