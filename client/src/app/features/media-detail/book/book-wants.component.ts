@@ -37,7 +37,7 @@ export class BookWantsComponent {
 
   private apply(wants: Want[]) {
     this.saved.set(wants);
-    this.draft.set(wants.map(({ family, language }) => ({ family, language })));
+    this.draft.set(wants.map(({ family, language, qualityProfileId }) => ({ family, language, qualityProfileId })));
   }
 
   private async load(id: number) {

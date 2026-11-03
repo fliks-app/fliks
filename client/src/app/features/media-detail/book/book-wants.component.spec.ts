@@ -32,7 +32,10 @@ describe('BookWantsComponent', () => {
     (el.querySelector('[data-testid="wants-save"]') as HTMLButtonElement).click();
     const req = http.expectOne((r) => r.method === 'PUT' && r.url === '/api/media/3/wants');
     expect(req.request.body).toEqual({
-      wants: [{ family: 'audio', language: 'en' }, { family: 'text', language: 'fr' }],
+      wants: [
+        { family: 'audio', language: 'en', qualityProfileId: null },
+        { family: 'text', language: 'fr', qualityProfileId: null },
+      ],
     });
     req.flush({ wants: [want(1, 'audio', 'en', false)] });
     await new Promise((r) => setTimeout(r));

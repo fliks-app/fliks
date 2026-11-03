@@ -6,7 +6,7 @@
         class="select select-bordered select-sm"
         [attr.aria-label]="'wants.family' | translate"
         [ngModel]="w.family"
-        (ngModelChange)="set(i, { family: $event })"
+        (ngModelChange)="setFamily(i, $event)"
       >
         @for (f of families; track f) {
           <option [ngValue]="f">{{ 'families.' + f | translate }}</option>
@@ -22,6 +22,18 @@
         <option [ngValue]="null">{{ 'wants.any_language' | translate }}</option>
         @for (l of languages(); track l) {
           <option [ngValue]="l">{{ label(l) }}</option>
+        }
+      </select>
+      <select
+        appTvSelect
+        class="select select-bordered select-sm"
+        [attr.aria-label]="'wants.quality_profile' | translate"
+        [ngModel]="w.qualityProfileId ?? null"
+        (ngModelChange)="set(i, { qualityProfileId: $event })"
+      >
+        <option [ngValue]="null">{{ 'wants.no_profile' | translate }}</option>
+        @for (p of profiles()[w.family]; track p.id) {
+          <option [ngValue]="p.id">{{ p.name }}</option>
         }
       </select>
       <button
