@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states SET \"mediaFileId\" = $3\n               WHERE \"itemId\" = $1 AND (\"mediaFileId\" = $2 OR version = $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5786b8383365de3ce0b76ca5879c04cebd82c55825e6ad073e0600cbfbe2737d"
+}

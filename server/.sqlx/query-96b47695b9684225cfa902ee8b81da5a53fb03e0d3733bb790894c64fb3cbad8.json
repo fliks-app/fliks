@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.\"mergeM4b\" AS \"merge!\", (l.\"mergeM4b\" AND l.\"mergeM4bReplace\") AS \"replace!\"\n           FROM media m JOIN libraries l ON l.id = COALESCE(\n             (SELECT e.\"libraryId\" FROM editions e\n              WHERE e.\"mediaId\" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1), m.\"libraryId\")\n           WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "merge!",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mergeM4b"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "replace!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "96b47695b9684225cfa902ee8b81da5a53fb03e0d3733bb790894c64fb3cbad8"
+}

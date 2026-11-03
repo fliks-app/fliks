@@ -74,11 +74,9 @@ pub async fn resolve(
     .flatten();
     let version = match version {
         Some(v) if versions.contains(&v) => v,
-        Some(v) => {
-            return Err(AppError::not_found(format!(
-                "Item #{item} has no version {v}"
-            )));
-        }
+        Some(v) => crate::media::items::aliased(&st.db, id, v)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("Item #{item} has no version {v}")))?,
         None => saved
             .filter(|v| versions.contains(v))
             .or_else(|| versions.last().copied())

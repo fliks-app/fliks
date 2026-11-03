@@ -47,6 +47,7 @@
             "series"
           ],
           "mergeM4b": false,
+          "mergeM4bReplace": false,
           "metadataLanguage": null,
           "metadataRegion": null,
           "name": "Anime",
@@ -90,6 +91,7 @@
               "series"
             ],
             "mergeM4b": false,
+            "mergeM4bReplace": false,
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Anime",
@@ -124,6 +126,7 @@
               "movie"
             ],
             "mergeM4b": false,
+            "mergeM4bReplace": false,
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Movies",
@@ -161,6 +164,7 @@
               "series"
             ],
             "mergeM4b": false,
+            "mergeM4bReplace": false,
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Series",

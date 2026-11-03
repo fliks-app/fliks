@@ -191,11 +191,12 @@ pub async fn load(st: &AppState, media: i32) -> sqlx::Result<Vec<Part>> {
         .collect())
 }
 
-/// The option of the library of the media's first audio edition, else its own: the same choice
-/// as `forget_failures` and the backfill.
-async fn enabled(st: &AppState, media: i32) -> sqlx::Result<bool> {
-    Ok(sqlx::query_scalar!(
-        r#"SELECT l."mergeM4b" FROM media m JOIN libraries l ON l.id = COALESCE(
+/// The options of the library of the media's first audio edition, else its own: the same choice
+/// as `forget_failures` and the backfill. The second is `mergeM4bReplace`, off unless the first is on.
+async fn options(st: &AppState, media: i32) -> sqlx::Result<(bool, bool)> {
+    Ok(sqlx::query!(
+        r#"SELECT l."mergeM4b" AS "merge!", (l."mergeM4b" AND l."mergeM4bReplace") AS "replace!"
+           FROM media m JOIN libraries l ON l.id = COALESCE(
              (SELECT e."libraryId" FROM editions e
               WHERE e."mediaId" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1), m."libraryId")
            WHERE m.id = $1"#,
@@ -203,7 +204,11 @@ async fn enabled(st: &AppState, media: i32) -> sqlx::Result<bool> {
     )
     .fetch_optional(&st.db)
     .await?
-    .unwrap_or(false))
+    .map_or((false, false), |r| (r.merge, r.replace)))
+}
+
+async fn enabled(st: &AppState, media: i32) -> sqlx::Result<bool> {
+    options(st, media).await.map(|o| o.0)
 }
 
 /// Whether a file row holds this path: the output is then not ours to remove.
@@ -790,6 +795,109 @@ async fn publish(
     if done.files.len() != 1 {
         return Err(sticky(done.conflicts.join("; ")));
     }
+    // The m4b is committed: whatever happens to the parts no longer fails the merge.
+    if options(st, media).await.is_ok_and(|o| o.1)
+        && let Err(why) =
+            replace_parts(st, media, parts, abs, merge, out, done.files[0].file_id).await
+    {
+        tracing::warn!("m4b merge of book #{media}: parts kept: {why}");
+    }
+    Ok(())
+}
+
+/// Under the media and `folder_moves` locks, once the m4b `m4b` is registered: the file is probed
+/// again, every part must still be what the merge read, then the parts go through the media file
+/// delete. All or none, since a version cut short would play a wrong timeline.
+async fn replace_parts(
+    st: &AppState,
+    media: i32,
+    parts: &[Part],
+    abs: &[PathBuf],
+    merge: &MergeMeta,
+    out: &Path,
+    m4b: i32,
+) -> Result<(), String> {
+    let bytes = tokio::fs::metadata(out)
+        .await
+        .map_err(|e| e.to_string())?
+        .len();
+    verify(merge, &probe(st, out, false).await?.info, bytes)?;
+    if parts.iter().any(|p| p.mtime_ms.is_none()) || !unchanged(st, media, parts, abs).await {
+        return Err("a part is not what the merge read".into());
+    }
+    for (p, path) in parts.iter().zip(abs) {
+        let regular = tokio::fs::symlink_metadata(path)
+            .await
+            .is_ok_and(|m| m.is_file());
+        let direct = tokio::fs::canonicalize(path)
+            .await
+            .is_ok_and(|c| c == *path);
+        if !regular || !direct || fsx::safe_rel(&p.rel).is_none() {
+            return Err(format!("part #{} is not a plain file of its folder", p.id));
+        }
+    }
+    let ids: Vec<i32> = parts.iter().map(|p| p.id).collect();
+    let mut tx = st.db.begin().await.map_err(|e| e.to_string())?;
+    crate::media::items::lock_versions(&mut tx, media)
+        .await
+        .map_err(|e| e.to_string())?;
+    // Each part belongs to one item only, which the m4b belongs to as well.
+    let links = sqlx::query!(
+        r#"SELECT p."mediaFileId" AS file, p."itemId" AS item, p.version, m."version" AS "to?"
+           FROM item_parts p
+           LEFT JOIN item_parts m ON m."itemId" = p."itemId" AND m."mediaFileId" = $2
+           WHERE p."mediaFileId" = ANY($1)"#,
+        &ids,
+        m4b
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    let linked = links.len() == parts.len()
+        && links.iter().all(|l| {
+            l.to.is_some_and(|t| t != l.version)
+                && parts
+                    .iter()
+                    .any(|p| p.id == l.file && p.version == l.version)
+        });
+    if !linked {
+        return Err("a part is linked to another item or version".into());
+    }
+    for l in &links {
+        sqlx::query!(
+            r#"INSERT INTO item_version_aliases ("itemId", version, "toVersion") VALUES ($1, $2, $3)
+               ON CONFLICT ("itemId", version) DO UPDATE SET "toVersion" = EXCLUDED."toVersion""#,
+            l.item,
+            l.version,
+            l.to
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        // The `playback_states_version` trigger moves the saved version along with the file.
+        sqlx::query!(
+            r#"UPDATE playback_states SET "mediaFileId" = $3
+               WHERE "itemId" = $1 AND ("mediaFileId" = $2 OR version = $4)"#,
+            l.item,
+            l.file,
+            m4b,
+            l.version
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().await.map_err(|e| e.to_string())?;
+    let book = crate::ingest::load_media(&st.db, media)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the media is gone")?;
+    for p in parts {
+        crate::media::write::delete_media_file(st, &book, p.id, true)
+            .await
+            .map_err(|e| format!("part #{} not removed: {e:?}", p.id))?;
+    }
+    tracing::info!("m4b merge of book #{media}: {} parts replaced", parts.len());
     Ok(())
 }
 

@@ -39,6 +39,7 @@ struct CreateDto {
     default_quality_profile_id: Option<i32>,
     default_language_profile_id: Option<i32>,
     merge_m4b: Option<bool>,
+    merge_m4b_replace: Option<bool>,
     path: Option<String>,
     user_ids: Option<Vec<i32>>,
 }
@@ -74,6 +75,7 @@ struct UpdateDto {
     #[serde(default, deserialize_with = "present")]
     default_language_profile_id: Patch<i32>,
     merge_m4b: Option<bool>,
+    merge_m4b_replace: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -209,8 +211,8 @@ pub async fn create(
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO libraries (name, icon, color, "mediaTypes", "preferredProvider", "metadataLanguage",
-        "metadataRegion", "defaultQualityProfileId", "defaultLanguageProfileId", "mergeM4b")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id"#,
+        "metadataRegion", "defaultQualityProfileId", "defaultLanguageProfileId", "mergeM4b", "mergeM4bReplace")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id"#,
         dto.name,
         dto.icon,
         dto.color,
@@ -221,6 +223,7 @@ pub async fn create(
         profile(dto.default_quality_profile_id),
         profile(dto.default_language_profile_id),
         dto.merge_m4b.unwrap_or(false),
+        dto.merge_m4b_replace.unwrap_or(false),
     )
     .fetch_one(&mut *tx)
     .await
@@ -349,6 +352,7 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         dto.default_language_profile_id.map(profile)
     );
     set!("mergeM4b", dto.merge_m4b);
+    set!("mergeM4bReplace", dto.merge_m4b_replace);
     let given = dto.name.is_some()
         || dto.icon.is_some()
         || dto.color.is_some()
@@ -358,7 +362,8 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         || dto.metadata_region.is_some()
         || dto.default_quality_profile_id.is_some()
         || dto.default_language_profile_id.is_some()
-        || dto.merge_m4b.is_some();
+        || dto.merge_m4b.is_some()
+        || dto.merge_m4b_replace.is_some();
     if !given {
         return Ok(());
     }

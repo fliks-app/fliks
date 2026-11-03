@@ -205,6 +205,7 @@ pub(crate) async fn chapters(
     if visible.is_none() {
         return Err(edition_not_found(edition));
     }
+    let mut version = version;
     if let Some(n) = version {
         let has = sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId"
@@ -215,9 +216,19 @@ pub(crate) async fn chapters(
         .fetch_one(db)
         .await?;
         if !has {
-            return Err(AppError::not_found(format!(
-                "Edition #{edition} has no version {n}"
-            )));
+            let item = sqlx::query_scalar!(
+                r#"SELECT min(id) FROM items WHERE "editionId" = $1 AND "groupId" IS NULL"#,
+                edition
+            )
+            .fetch_one(db)
+            .await?;
+            let to = match item {
+                Some(i) => crate::media::items::aliased(db, i, n).await?,
+                None => None,
+            };
+            version = Some(to.ok_or_else(|| {
+                AppError::not_found(format!("Edition #{edition} has no version {n}"))
+            })?);
         }
     }
     let file = sqlx::query!(

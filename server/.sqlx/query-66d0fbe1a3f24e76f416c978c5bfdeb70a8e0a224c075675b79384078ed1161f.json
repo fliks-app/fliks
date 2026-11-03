@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO item_version_aliases (\"itemId\", version, \"toVersion\") VALUES ($1, $2, $3)\n               ON CONFLICT (\"itemId\", version) DO UPDATE SET \"toVersion\" = EXCLUDED.\"toVersion\"",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "66d0fbe1a3f24e76f416c978c5bfdeb70a8e0a224c075675b79384078ed1161f"
+}
