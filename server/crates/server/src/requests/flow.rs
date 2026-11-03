@@ -150,22 +150,11 @@ async fn assert_no_active_duplicate(tx: &mut PgConnection, dto: &CreateRequest) 
         return Ok(());
     }
     if let Some(wants) = &dto.wants {
-        let taken: Vec<&WantSpec> = existing
-            .iter()
-            .flat_map(|e| e.wants.iter().flat_map(|w| w.0.iter()))
-            .collect();
-        let overlap: Vec<String> = wants
-            .iter()
-            .filter(|w| taken.iter().any(|t| overlaps(w, t)))
-            .map(want_label)
-            .collect();
+        let overlap = overlapping_wants(&existing, wants);
         if overlap.is_empty() {
             return Ok(());
         }
-        return Err(AppError::conflict(format!(
-            "Edition(s) {} have already been requested",
-            overlap.join(", ")
-        )));
+        return Err(already_requested(&overlap));
     }
     let wanted = dto.seasons.as_deref().unwrap_or_default();
     if !dto.media_type.has_seasons() || wanted.is_empty() {
@@ -194,6 +183,38 @@ async fn assert_no_active_duplicate(tx: &mut PgConnection, dto: &CreateRequest) 
         "Season(s) {} have already been requested",
         overlap.join(", ")
     )))
+}
+
+/// The labels of `wants` that an active request already holds.
+fn overlapping_wants(existing: &[db::Req], wants: &[WantSpec]) -> Vec<String> {
+    let taken: Vec<&WantSpec> = existing
+        .iter()
+        .flat_map(|e| e.wants.iter().flat_map(|w| w.0.iter()))
+        .collect();
+    wants
+        .iter()
+        .filter(|w| taken.iter().any(|t| overlaps(w, t)))
+        .map(want_label)
+        .collect()
+}
+
+fn already_requested(labels: &[String]) -> AppError {
+    AppError::conflict(format!(
+        "Edition(s) {} have already been requested",
+        labels.join(", ")
+    ))
+}
+
+/// A book whose every wanted edition is already in the library has nothing left to request.
+async fn assert_wants_unsatisfied(st: &AppState, key: &TitleKey, wants: &[WantSpec]) -> Res<()> {
+    if let Some(m) = db::media_by_ref(&st.db, key).await?
+        && db::wants_covered(&st.db, m.id, wants).await?
+    {
+        return Err(AppError::conflict(
+            "Every requested edition is already in the library",
+        ));
+    }
+    Ok(())
 }
 
 /// Two wants clash on one family when their languages are equal or one of them is any.
@@ -513,6 +534,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     assert_exist(st, quality, language, None).await?;
     if let Some(w) = &dto.wants {
         crate::media::wants::check_profiles(&st.db, w).await?;
+        assert_wants_unsatisfied(st, &key, w).await?;
     }
 
     let auto = candidates.approves(a, &dto, library_id);
@@ -669,6 +691,34 @@ pub async fn detail(st: &AppState, a: &Authed, row: &db::Req) -> Res<Map<String,
     Ok(json)
 }
 
+/// Replaces a pending book request's wants, refusing editions another active request holds.
+async fn set_wants(st: &AppState, row: &db::Req, wants: &[WantSpec]) -> Res<()> {
+    let key = row.key();
+    crate::media::wants::check_profiles(&st.db, wants).await?;
+    assert_wants_unsatisfied(st, &key, wants).await?;
+    let mut tx = st.db.begin().await?;
+    sqlx::query("SET LOCAL lock_timeout = '10s'")
+        .execute(&mut *tx)
+        .await?;
+    db::lock_title(&mut tx, &key)
+        .await
+        .map_err(|e| lock_err(e, true))?;
+    let others: Vec<db::Req> = db::active_adds(&mut *tx, &key)
+        .await?
+        .into_iter()
+        .filter(|r| r.id != row.id)
+        .collect();
+    let overlap = overlapping_wants(&others, wants);
+    if !overlap.is_empty() {
+        return Err(already_requested(&overlap));
+    }
+    if !db::set_wants(&mut *tx, row.id, wants).await? {
+        return Err(AppError::forbidden("Only pending requests can be updated"));
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> Res<Value> {
     let row = gate(st, a, id).await?;
     if row.status != "pending" {
@@ -685,8 +735,14 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
             "A book request takes its profiles per want",
         ));
     }
+    if dto.wants.is_some() && row.media_type != MediaKind::Book {
+        return Err(AppError::bad_request("Only a book request has wants"));
+    }
     if let Some(Some(l)) = library {
         assert_can_use_library(st, a, l).await?;
+    }
+    if let Some(w) = &dto.wants {
+        set_wants(st, &row, w).await?;
     }
     assert_exist(
         st,

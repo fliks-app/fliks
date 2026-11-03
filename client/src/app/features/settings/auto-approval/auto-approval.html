@@ -209,6 +209,30 @@
             />
           </div>
 
+          @if (showBookCriteria()) {
+            <div class="form-control">
+              <span class="label-text">{{ 'settings.auto_approval.families' | translate }}</span>
+              <app-multi-select
+                class="mt-1"
+                [options]="familyOptions()"
+                [(value)]="formFamilies"
+                [placeholder]="'settings.auto_approval.any_family' | translate"
+              />
+            </div>
+            <div class="form-control">
+              <span class="label-text">{{ 'settings.auto_approval.languages' | translate }}</span>
+              <app-multi-select
+                class="mt-1"
+                [options]="languageOptions()"
+                [(value)]="formLanguages"
+                [placeholder]="'settings.auto_approval.any_language' | translate"
+              />
+              <span class="block text-xs leading-tight text-base-content/50 mt-1">
+                {{ 'settings.auto_approval.book_criteria_hint' | translate }}
+              </span>
+            </div>
+          }
+
           @if (showMaxSeasons()) {
             <label class="form-control">
               <span class="label-text">{{

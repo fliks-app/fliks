@@ -27,6 +27,12 @@
             </select>
           </label>
         }
+        @if (editRow.mediaType === 'book') {
+          <div class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
+            <app-wants-editor [wants]="wants()" (wantsChange)="wantsChange.emit($event)" />
+          </div>
+        }
         @if (qualityProfiles().length && editRow.mediaType !== 'book') {
           <label class="form-control w-full">
             <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>

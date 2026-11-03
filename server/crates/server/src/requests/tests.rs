@@ -4,7 +4,7 @@ use super::{
     lifecycle::scope_covered,
     rules::{Ctx, matches, reads_metadata},
 };
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind, wants::WantSpec};
 use serde_json::json;
 
 fn ctx() -> Ctx {
@@ -16,6 +16,7 @@ fn ctx() -> Ctx {
         genre_ids: vec![16, 35],
         year: Some(2015),
         season_count: Some(2),
+        wants: vec![],
     }
 }
 
@@ -208,4 +209,27 @@ async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: s
         ..key
     };
     assert_eq!(super::db::active_adds(&pool, &key).await.unwrap().len(), 0);
+}
+
+#[test]
+fn family_and_language_criteria_hold_for_every_want() {
+    let want = |family, language: Option<&str>| WantSpec {
+        family,
+        language: language.map(Into::into),
+        quality_profile_id: None,
+    };
+    let mut c = ctx();
+    c.media_type = MediaKind::Book;
+    let rule = json!({"families": ["text"], "languages": ["fr"]});
+    assert!(!matches(&rule, &c), "a title with no wants cannot answer");
+    c.wants = vec![want(Family::Text, Some("fr"))];
+    assert!(matches(&rule, &c));
+    c.wants.push(want(Family::Audio, Some("fr")));
+    assert!(!matches(&rule, &c), "one want outside the families fails");
+    c.wants = vec![want(Family::Text, None)];
+    assert!(
+        !matches(&rule, &c),
+        "an any-language want fails a language criterion"
+    );
+    assert!(matches(&json!({"families": ["text"]}), &c));
 }

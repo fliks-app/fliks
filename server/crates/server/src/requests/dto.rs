@@ -6,7 +6,9 @@ use crate::http::{
 use crate::metadata::books::{ANCHOR, work_id};
 use fliks_domain::{
     external_id::MAX_NUMERIC_ID,
+    language::parse_language_code,
     media::{
+        family::Family,
         kind::MediaKind,
         query::js_number,
         wants::{WantSpec, parse_wants},
@@ -220,16 +222,32 @@ pub struct UpdateRequest {
     pub quality_profile_id: Field<i32>,
     pub language_profile_id: Field<i32>,
     pub library_id: Field<i32>,
+    pub wants: Option<Vec<WantSpec>>,
 }
 
 pub fn update_request(v: Value) -> Res<UpdateRequest> {
     let o = object(v);
     let mut c = Check::new(
         &o,
-        &["qualityProfileId", "languageProfileId", "libraryId"],
+        &[
+            "qualityProfileId",
+            "languageProfileId",
+            "libraryId",
+            "wants",
+        ],
         "",
     );
+    let wants = o
+        .get("wants")
+        .and_then(|w| match parse_wants(w, MediaKind::Book) {
+            Ok(w) => Some(w),
+            Err(m) => {
+                c.err("wants", &m);
+                None
+            }
+        });
     let u = UpdateRequest {
+        wants,
         quality_profile_id: opt_int(&mut c, "qualityProfileId", true),
         language_profile_id: opt_int(&mut c, "languageProfileId", true),
         library_id: opt_int(&mut c, "libraryId", true),
@@ -458,7 +476,9 @@ pub fn rule(v: Value) -> Res<Rule> {
     })
 }
 
-const CRITERIA_KEYS: [&str; 8] = [
+const CRITERIA_KEYS: [&str; 10] = [
+    "families",
+    "languages",
     "userIds",
     "roleIds",
     "mediaType",
@@ -481,6 +501,17 @@ fn criteria(k: &Map<String, Value>, errs: &mut Vec<String>) -> Value {
             ("mediaType", Some(_)) => {
                 if let Some(m) = c.one_of(key, &MediaKind::NAMES, true) {
                     out.insert(key.into(), m.into());
+                }
+            }
+            ("families", Some(_)) => {
+                let family = |s: &str| Family::parse(s).map(|f| f.as_str().to_owned());
+                if let Some(f) = c.text_array(key, family, "a media family") {
+                    out.insert(key.into(), json!(f));
+                }
+            }
+            ("languages", Some(_)) => {
+                if let Some(l) = c.text_array(key, parse_language_code, "a language code") {
+                    out.insert(key.into(), json!(l));
                 }
             }
             ("maxSeasons", Some(v)) => {

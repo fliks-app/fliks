@@ -11,7 +11,12 @@
       "quota_period_days": "Période (jours)"
     },
     "auto_approval": {
-      "media_type_book": "Livre"
+      "media_type_book": "Livre",
+      "families": "Formats",
+      "languages": "Langues",
+      "any_family": "Tous les formats",
+      "any_language": "Toutes les langues",
+      "book_criteria_hint": "Chaque édition demandée d'un livre doit correspondre. Une demande toutes langues échoue à un critère de langue."
     }
   }
 }

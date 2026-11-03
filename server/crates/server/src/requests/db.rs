@@ -427,6 +427,19 @@ pub async fn patch(
         == 1)
 }
 
+/// Replaces the wants of a pending request; false when it is no longer pending.
+pub async fn set_wants(db: &mut PgConnection, id: i32, wants: &[WantSpec]) -> sqlx::Result<bool> {
+    Ok(sqlx::query!(
+        "UPDATE requests SET wants = $2 WHERE id = $1 AND status = 'pending'",
+        id,
+        Json(wants.to_vec()) as Json<Vec<WantSpec>>
+    )
+    .execute(db)
+    .await?
+    .rows_affected()
+        == 1)
+}
+
 /// Deletes the row; `pending_only` (a requester cancelling) leaves a row that moved on. False when nothing went.
 pub async fn delete(db: &PgPool, id: i32, pending_only: bool) -> sqlx::Result<bool> {
     Ok(sqlx::query!(

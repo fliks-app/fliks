@@ -10,12 +10,14 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { TranslatePipe } from '@ngx-translate/core';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../core/services/api/libraries-api.service';
+import type { WantSpec } from '../../../core/services/api/wants-api.service';
+import { WantsEditorComponent } from '../../../shared/components/wants-editor/wants-editor';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-request-edit-modal',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [TvSelectDirective, WantsEditorComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './request-edit-modal.component.html',
 })
 export class RequestEditModalComponent {
@@ -28,11 +30,13 @@ export class RequestEditModalComponent {
   readonly qualityProfileId = input<number | null>(null);
   readonly languageProfileId = input<number | null>(null);
   readonly libraryId = input<number | null>(null);
+  readonly wants = input<WantSpec[]>([]);
   readonly saving = input(false);
 
   readonly qualityProfileIdChange = output<number | null>();
   readonly languageProfileIdChange = output<number | null>();
   readonly libraryIdChange = output<number | null>();
+  readonly wantsChange = output<WantSpec[]>();
   readonly dismissed = output<void>();
   readonly save = output<void>();
 

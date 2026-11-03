@@ -20,7 +20,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::kind::MediaKind,
+    media::{kind::MediaKind, wants::WantSpec},
 };
 use serde_json::Value;
 
@@ -33,6 +33,15 @@ pub struct Ctx {
     pub genre_ids: Vec<i64>,
     pub year: Option<i64>,
     pub season_count: Option<i64>,
+    /// The editions a book request asks for; empty for a video title.
+    pub wants: Vec<WantSpec>,
+}
+
+fn texts<'a>(c: &'a Value, key: &str) -> Vec<&'a str> {
+    c[key]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default()
 }
 
 fn ints(c: &Value, key: &str) -> Vec<i64> {
@@ -59,6 +68,21 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
         .as_str()
         .is_some_and(|m| m != ctx.media_type.as_str())
     {
+        return false;
+    }
+    // every wanted edition must fit; a want in any language fails a language criterion
+    let (families, languages) = (texts(c, "families"), texts(c, "languages"));
+    if (!families.is_empty() || !languages.is_empty()) && ctx.wants.is_empty() {
+        return false;
+    }
+    if ctx.wants.iter().any(|w| {
+        (!families.is_empty() && !families.contains(&w.family.as_str()))
+            || (!languages.is_empty()
+                && !w
+                    .language
+                    .as_deref()
+                    .is_some_and(|l| languages.contains(&l)))
+    }) {
         return false;
     }
     let libraries = ints(c, "libraryIds");
@@ -160,6 +184,7 @@ impl Candidates {
             season_count: scoped
                 .map(|s| s.len() as i64)
                 .or_else(|| facts.and_then(|f| f.season_count).map(i64::from)),
+            wants: dto.wants.clone().unwrap_or_default(),
         };
         let hit = self.rules.iter().find(|r| matches(&r.criteria.0, &ctx));
         if let Some(r) = hit {

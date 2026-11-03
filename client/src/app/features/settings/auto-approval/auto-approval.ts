@@ -30,8 +30,13 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { KIND_REGISTRY } from '../../../core/media-kinds';
+import type { WantFamily } from '../../../core/services/api/wants-api.service';
+import { localizeLanguage } from '../../../core/utils/language.utils';
 
 type RuleMediaType = '' | MediaType;
+
+const FAMILIES: WantFamily[] = ['text', 'audio'];
+const LANGUAGES = ['fr', 'en', 'de', 'es', 'it', 'pt'];
 
 @Component({
   selector: 'app-auto-approval',
@@ -89,6 +94,9 @@ export class AutoApprovalSettingsComponent implements OnInit {
   readonly formMaxSeasons = signal<number | null>(null);
   readonly formYearFrom = signal<number | null>(null);
   readonly formYearTo = signal<number | null>(null);
+  readonly formFamilies = signal<WantFamily[]>([]);
+  readonly formLanguages = signal<string[]>([]);
+  protected readonly showBookCriteria = computed(() => ['', 'book'].includes(this.formMediaType()));
 
   /** Genre list follows the media type: a movie-only rule can't match a TV genre. */
   readonly genres = computed(() => {
@@ -108,6 +116,12 @@ export class AutoApprovalSettingsComponent implements OnInit {
   readonly libraryOptions = computed<MultiSelectOption[]>(() =>
     this.libraries().map((l) => ({ value: l.id, label: l.name })),
   );
+  readonly familyOptions = computed<MultiSelectOption<WantFamily>[]>(() =>
+    FAMILIES.map((f) => ({ value: f, label: this.translate.instant(`families.${f}`) })),
+  );
+  readonly languageOptions = computed<MultiSelectOption<string>[]>(() =>
+    LANGUAGES.map((l) => ({ value: l, label: localizeLanguage(l, this.translate) })),
+  );
   readonly genreOptions = computed<MultiSelectOption[]>(() =>
     this.genres().map((g) => ({ value: g.id, label: g.name })),
   );
@@ -122,7 +136,9 @@ export class AutoApprovalSettingsComponent implements OnInit {
       this.formGenreIds().length === 0 &&
       this.formMaxSeasons() == null &&
       this.formYearFrom() == null &&
-      this.formYearTo() == null,
+      this.formYearTo() == null &&
+      this.formFamilies().length === 0 &&
+      this.formLanguages().length === 0,
   );
 
   ngOnInit() {
@@ -189,6 +205,8 @@ export class AutoApprovalSettingsComponent implements OnInit {
           count: c.maxSeasons,
         }),
       );
+    chips.push(...(c.families ?? []).map((f) => this.translate.instant(`families.${f}`)));
+    chips.push(...(c.languages ?? []).map((l) => localizeLanguage(l, this.translate)));
     if (c.yearFrom != null || c.yearTo != null)
       chips.push(`${c.yearFrom ?? '…'} – ${c.yearTo ?? '…'}`);
     return chips;
@@ -223,6 +241,8 @@ export class AutoApprovalSettingsComponent implements OnInit {
     this.formMaxSeasons.set(c.maxSeasons ?? null);
     this.formYearFrom.set(c.yearFrom ?? null);
     this.formYearTo.set(c.yearTo ?? null);
+    this.formFamilies.set([...(c.families ?? [])]);
+    this.formLanguages.set([...(c.languages ?? [])]);
   }
 
   closeEditor() {
@@ -232,6 +252,10 @@ export class AutoApprovalSettingsComponent implements OnInit {
   setMediaType(value: RuleMediaType) {
     this.formMediaType.set(value);
     if (value && !KIND_REGISTRY[value].hasSeasons) this.formMaxSeasons.set(null);
+    if (value && value !== 'book') {
+      this.formFamilies.set([]);
+      this.formLanguages.set([]);
+    }
     // Genre ids are type-scoped: drop any that the new list no longer offers.
     const allowed = new Set(this.genres().map((g) => g.id));
     this.formGenreIds.update((ids) => ids.filter((id) => allowed.has(id)));
@@ -260,6 +284,8 @@ export class AutoApprovalSettingsComponent implements OnInit {
     if (this.formMaxSeasons() != null) criteria.maxSeasons = this.formMaxSeasons()!;
     if (this.formYearFrom() != null) criteria.yearFrom = this.formYearFrom()!;
     if (this.formYearTo() != null) criteria.yearTo = this.formYearTo()!;
+    if (this.formFamilies().length) criteria.families = this.formFamilies();
+    if (this.formLanguages().length) criteria.languages = this.formLanguages();
 
     const body = { name, enabled: this.formEnabled(), criteria };
     const id = this.editingId();

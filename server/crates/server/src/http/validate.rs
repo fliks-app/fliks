@@ -412,6 +412,25 @@ impl<'a> Check<'a> {
         Some(nums.into_iter().flatten().map(|n| n as i64).collect())
     }
 
+    /// `@IsArray` of strings, each read by `parse`; `what` names a bad entry.
+    pub(crate) fn text_array(
+        &mut self,
+        key: &str,
+        parse: impl Fn(&str) -> Option<String>,
+        what: &str,
+    ) -> Option<Vec<String>> {
+        let v = self.get(key)?;
+        let Some(a) = v.as_array() else {
+            self.err(key, "must be an array");
+            return None;
+        };
+        let out: Option<Vec<String>> = a.iter().map(|x| parse(x.as_str()?)).collect();
+        if out.is_none() {
+            self.err(key, &format!("each value must be {what}"));
+        }
+        out
+    }
+
     pub(crate) fn finish<T>(self, v: T) -> Result<T, AppError> {
         if self.errs.is_empty() {
             Ok(v)
