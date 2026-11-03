@@ -27,7 +27,7 @@ use fliks_engine_core::api::MediaTags;
 use serde_json::{Map, Value};
 use sqlx::{PgConnection, PgPool};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
@@ -598,11 +598,22 @@ async fn lay_out_tx(
         };
         let mut firsts: HashMap<i32, &Facts> = HashMap::new();
         let mut by_hint: BTreeMap<Option<String>, Vec<String>> = BTreeMap::new();
-        for p in new {
-            let hint = fact(&p)
+        let own = |p: &String| {
+            fact(p)
                 .and_then(|f| f.language.clone())
-                .or_else(|| group::name_language(&p));
-            by_hint.entry(hint).or_default().push(p);
+                .or_else(|| group::name_language(p))
+        };
+        let distinct: BTreeSet<String> = new.iter().filter_map(own).collect();
+        if distinct.len() <= 1 {
+            if !new.is_empty() {
+                by_hint.insert(distinct.into_iter().next(), new);
+            }
+        } else {
+            // Several languages: a version goes by the first language one of its files says.
+            for v in group::group(&new).into_iter().flat_map(|w| w.versions) {
+                let hint = v.files.iter().find_map(own);
+                by_hint.entry(hint).or_default().extend(v.files);
+            }
         }
         for (hint, paths) in by_hint {
             let (e, _) = ensure(&mut tx, media, family, language, hint.as_deref()).await?;

@@ -2030,6 +2030,41 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn one_tagged_part_keeps_an_audiobook_in_one_edition(pool: PgPool) {
+        let c = ctx(pool).await;
+        let tagged = audio_probe();
+        let mut untagged = audio_probe();
+        untagged["info"]["tags"]["language"] = Value::Null;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![ok(untagged.clone()), ok(tagged), ok(untagged)],
+        );
+        let m = book(&c, "Orfaline").await;
+        let all = [
+            "Orfaline - 01.mp3",
+            "Orfaline - 02.mp3",
+            "Orfaline - 03.mp3",
+        ];
+        for r in all {
+            touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
+        }
+        let both: Vec<String> = all.iter().map(|r| format!("Orfaline/{r}")).collect();
+        let files = placed(&c, &both.iter().map(String::as_str).collect::<Vec<_>>());
+        books::register(&c.st, m, &files).await.unwrap();
+        let got: Vec<(i32, i32)> = sqlx::query_as(
+            r#"SELECT i."editionId", p.version FROM items i JOIN item_parts p ON p."itemId" = i.id
+               WHERE i."mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(got.len(), 3);
+        assert!(got.iter().all(|g| *g == got[0]), "{got:?}");
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn untagged_files_of_two_languages_land_in_two_editions(pool: PgPool) {
         let c = ctx(pool).await;
         let m = book(&c, "Orfaline").await;
