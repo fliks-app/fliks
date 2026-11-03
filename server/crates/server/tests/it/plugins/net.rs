@@ -662,3 +662,40 @@ async fn guest_outbound_in_flight_cap() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn route_calls_take_the_interactive_rate() {
+    let Some(w) = wasm("fixture_provider") else {
+        return;
+    };
+    let Some(s) = Scratch::create("route-rate").await else {
+        return;
+    };
+    let (port, _) = hold_stub().await;
+    let net = StubNet::new(
+        port,
+        rustls::RootCertStore::empty(),
+        &[("pub.test", &[&["93.184.216.34"]])],
+    );
+    let h = harness_with(
+        &s,
+        "route-rate",
+        Arc::new(|c| c.deadlines.http = Duration::from_secs(30)),
+        move |o| o.fetch.net = net.clone(),
+    )
+    .await;
+    allow_unsigned(&h).await;
+    let mut m = template("fixture-provider");
+    // At background priority the second token is 100 s away, past the route's deadline.
+    m["provider"]["limits"] = json!({"ratePerSec": 1, "burst": 1, "backgroundShare": 0.01});
+    let r = h.install(&pack(&m, "0.1.0", &w, Some(&test_key()))).await;
+    assert_eq!(r["status"], "active", "{r}");
+    let rt = h.st.plugins.rt("org.example.anime").unwrap();
+    for n in 0..2 {
+        let r = rt.http(fetch("http://pub.test/a"), false).await.unwrap();
+        let body: Value = serde_json::from_slice(&r.body).unwrap();
+        assert_eq!(body["status"], 200, "request {n}: {body}");
+    }
+    h.finish().await;
+    s.finish().await;
+}
