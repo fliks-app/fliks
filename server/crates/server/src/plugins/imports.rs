@@ -306,7 +306,7 @@ impl host::Host for Ctx {
     async fn library_ingest(&mut self, r: t::IngestRequest) -> Result<t::IngestResult, HostError> {
         let app = self.app();
         let id = self.sh.id.clone();
-        let data = super::runtime::data_dir(&self.sh.env.cfg.runtime_dir, &id);
+        let runtime = self.sh.env.cfg.runtime_dir.clone();
         call!(
             self,
             "library.ingest",
@@ -314,7 +314,7 @@ impl host::Host for Ctx {
             INGEST_CALL,
             async {
                 let app = app?;
-                super::ingest::run(&app, &id, &data, r).await
+                super::ingest::run(&app, &id, &runtime, r).await
             }
         )
     }

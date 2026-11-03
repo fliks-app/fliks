@@ -340,6 +340,9 @@ impl fliks_server::metadata::MetadataProvider for Fake {
     fn has_persons(&self) -> bool {
         false
     }
+    fn available(&self) -> bool {
+        self.2.get("down").is_none()
+    }
     fn limits(&self) -> fliks_domain::metadata::limiter::Limits {
         fliks_domain::metadata::limiter::Limits::new(100.0, 100)
     }
@@ -529,6 +532,115 @@ async fn a_plugin_namespace_creates_one_book_with_both_wants() {
         .await
         .unwrap();
     assert_eq!(editions, 0, "ingest makes the editions");
+    s.finish().await;
+}
+
+async fn books_state(tag: &str) -> Option<(AppState, Scratch)> {
+    let s = Scratch::create(tag).await?;
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]');
+           INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/b')"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let (st, _) = state_with_tmdb(&s).await;
+    Some((st, s))
+}
+
+fn id(provider: &str, value: &str) -> ExternalId {
+    ExternalId {
+        provider: provider.into(),
+        value: value.into(),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_book_of_the_anchor_links_the_callers_own_ids() {
+    use fliks_domain::external_id::Namespace;
+    let Some((st, s)) = books_state("create_book_anchor").await else {
+        return;
+    };
+    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    let reads = Arc::new(AtomicUsize::new(0));
+    st.metadata
+        .add_plugin(Arc::new(Fake(reads.clone(), "openlibrary", json!({}))));
+    st.metadata
+        .add_plugin(Arc::new(Fake(reads, "org.fake:bid", json!({}))));
+    let ids = vec![id("org.fake:bid", "7"), id("openlibrary", "OL1W")];
+    let first = resolve_or_create(&st, "org.fake", "book", &ids, None, None)
+        .await
+        .unwrap();
+    let held: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT provider, value FROM media_external_ids WHERE "mediaId" = $1 ORDER BY provider"#,
+    )
+    .bind(first as i32)
+    .fetch_all(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        held,
+        [
+            ("openlibrary".into(), "OL1W".into()),
+            ("org.fake:bid".into(), "7".into())
+        ]
+    );
+    let again = resolve_or_create(&st, "org.fake", "book", &ids[..1], None, None)
+        .await
+        .unwrap();
+    assert_eq!(again, first, "the plugin's own id finds the work");
+    assert_eq!(media_count(&s.pool).await, 1);
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_book_needs_an_id_the_caller_owns_and_the_anchor_when_named() {
+    use fliks_domain::external_id::Namespace;
+    let Some((st, s)) = books_state("create_book_owned").await else {
+        return;
+    };
+    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    st.metadata.add_plugin(Arc::new(Fake(
+        Arc::new(AtomicUsize::new(0)),
+        "org.fake:bid",
+        json!({}),
+    )));
+    st.metadata.add_plugin(Arc::new(Fake(
+        Arc::new(AtomicUsize::new(0)),
+        "openlibrary",
+        json!({"down": true}),
+    )));
+    let ids = vec![id("org.fake:bid", "7")];
+    let e = resolve_or_create(&st, "org.other", "book", &ids, None, None).await;
+    assert_eq!(e.unwrap_err().code, "namespace-not-owned");
+    let named = vec![id("openlibrary", "OL1W"), id("org.fake:bid", "7")];
+    let e = resolve_or_create(&st, "org.fake", "book", &named, None, None).await;
+    assert_eq!(
+        e.unwrap_err().code,
+        "unavailable",
+        "an unavailable anchor is retryable, not a duplicate under the plugin namespace"
+    );
+    assert_eq!(media_count(&s.pool).await, 0);
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_creates_of_one_book_make_one_media() {
+    use fliks_domain::external_id::Namespace;
+    let Some((st, s)) = books_state("create_book_race").await else {
+        return;
+    };
+    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    let reads = Arc::new(AtomicUsize::new(0));
+    st.metadata
+        .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:bid", json!({}))));
+    let ids = vec![id("org.fake:bid", "7")];
+    let call = || resolve_or_create(&st, "org.fake", "book", &ids, None, None);
+    let (a, b, c) = tokio::join!(call(), call(), call());
+    let (a, b, c) = (a.unwrap(), b.unwrap(), c.unwrap());
+    assert!(a == b && b == c);
+    assert_eq!(media_count(&s.pool).await, 1);
+    assert_eq!(reads.load(Ordering::SeqCst), 1);
     s.finish().await;
 }
 

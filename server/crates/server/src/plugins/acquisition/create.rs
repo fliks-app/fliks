@@ -4,6 +4,7 @@ use crate::media::{
     external_ids,
     write::{book_import, import_in},
 };
+use crate::metadata::books::ANCHOR;
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
 use crate::requests::{TitleKey, lock_titles};
@@ -56,6 +57,13 @@ pub async fn resolve_or_create(
     let id = match found {
         Some(id) => id,
         None => {
+            // Creating under the plugin's namespace now would leave a duplicate once the anchor is back.
+            if kind == MediaKind::Book
+                && entries.iter().any(|(ns, _)| *ns == ANCHOR)
+                && !st.metadata.available(ANCHOR)
+            {
+                return Err(host_err("unavailable", "the work provider is unavailable"));
+            }
             // Rule 31: created through a core entry or one of the caller's own namespaces, which
             // also links the caller's other own entries; the found path changes nothing.
             let own = |ns: &Namespace| {
