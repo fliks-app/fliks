@@ -741,6 +741,7 @@ mod tests {
         std::sync::Arc::get_mut(&mut s.st.metadata)
             .unwrap()
             .register(std::sync::Arc::new(ol));
+        let req = data_request(&s, "m.epub", t::TransferMode::Move);
         {
             use std::io::Write;
             let opf = r#"<package><metadata xmlns:dc="x"><dc:title>Mirelune</dc:title>
@@ -759,7 +760,6 @@ mod tests {
             }
             w.finish().unwrap();
         }
-        let req = data_request(&s, "m.epub", t::TransferMode::Move);
         run(&s.st, "p", &s.runtime, req).await.unwrap();
         let db = s.st.db.clone();
         let q = |sql: &'static str| {

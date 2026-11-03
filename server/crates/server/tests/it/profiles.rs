@@ -752,7 +752,7 @@ async fn definitions_are_read_and_written_per_family(pool: PgPool) {
         json!(null),
     )
     .await;
-    assert_eq!(text.as_array().unwrap().len(), 5);
+    assert_eq!(text.as_array().unwrap().len(), 7);
     let (s, saved) = call(
         &c,
         "PUT",

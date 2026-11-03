@@ -508,7 +508,7 @@ mod tests {
         let want = first.want.unwrap();
         assert_eq!(
             (want.decision, want.allowed_quality_ids),
-            (t::WantDecision::Missing, vec![202, 203, 204, 205])
+            (t::WantDecision::Missing, vec![202, 203, 204, 205, 206, 207])
         );
         let audio = ctx(Some(Family::Audio)).await.unwrap().unwrap();
         assert_eq!(audio.family, t::Family::Audio);
