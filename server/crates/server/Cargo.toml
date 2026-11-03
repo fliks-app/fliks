@@ -42,7 +42,7 @@ utoipa = "5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 getrandom = "0.4"
 bcrypt = "0.17"
-sha1 = "0.10"
+sha1 = "0.11"
 sha2 = "0.11"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 base64 = "0.23"
