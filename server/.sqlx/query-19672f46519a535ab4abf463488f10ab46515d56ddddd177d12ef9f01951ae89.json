@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM book_merges WHERE \"mediaId\" = $1",
+  "query": "DELETE FROM book_merges WHERE \"editionId\" = $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -10,5 +10,5 @@
     },
     "nullable": []
   },
-  "hash": "74b6a5c5dea390a9c5c45c36380fa979dae8d5f2fcc8d6a96147ae32422ba498"
+  "hash": "19672f46519a535ab4abf463488f10ab46515d56ddddd177d12ef9f01951ae89"
 }

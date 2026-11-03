@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE book_merges SET state = 'failed', error = $2 WHERE \"mediaId\" = $1",
+  "query": "UPDATE book_merges SET \"jobId\" = $2 WHERE \"editionId\" = $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "17c6ad129967fa274febfb900b78742dd2772c952dda224676253661976daf7f"
+  "hash": "e657fb75fafde9c4403dcfa5c6b102429f9ba1100072ac4ab474ee2f8af3bdc1"
 }

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE book_merges SET \"nextAttemptAt\" = now() + make_interval(secs => $2::float8)\n           WHERE \"editionId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f320a50dcf48730bf438eb7ea6c6acf4680acff2723210f1b3deaf443a32a84"
+}

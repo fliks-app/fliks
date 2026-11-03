@@ -293,12 +293,24 @@ pub async fn register_language(
     files: &[Placed],
     language: Option<&str>,
 ) -> Result<Registration, String> {
+    register_to(st, media, files, language, None).await
+}
+
+/// `register_language`, the new audio files joining the edition `into` when it is set.
+pub async fn register_to(
+    st: &AppState,
+    media: i32,
+    files: &[Placed],
+    language: Option<&str>,
+    into: Option<i32>,
+) -> Result<Registration, String> {
     let mut out = vec![];
     let mut conflicts = vec![];
     let mut facts: Vec<(Family, String, Facts)> = vec![];
     let mut cover = None;
-    let anchored =
-        language.is_none() && anchored(&st.db, media).await.map_err(|e| e.to_string())?;
+    let anchored = language.is_none()
+        && into.is_none()
+        && anchored(&st.db, media).await.map_err(|e| e.to_string())?;
     let files: Vec<&Placed> = if anchored {
         own_work(&st.db, media, files, &mut conflicts)
             .await
@@ -388,7 +400,7 @@ pub async fn register_language(
             conflicts,
         });
     }
-    lay_out(&st.db, media, anchored, &facts, language).await?;
+    lay_out(&st.db, media, anchored, &facts, (language, into)).await?;
     if let Some(c) = cover {
         store_cover(st, media, &c).await;
     }
@@ -405,7 +417,7 @@ pub async fn register_language(
 /// Lays out the files the media has again, after a rescan removed some.
 pub async fn relay(st: &AppState, media: i32) -> Result<(), String> {
     let anchored = anchored(&st.db, media).await.map_err(|e| e.to_string())?;
-    lay_out(&st.db, media, anchored, &[], None).await
+    lay_out(&st.db, media, anchored, &[], (None, None)).await
 }
 
 struct Known {
@@ -455,9 +467,12 @@ async fn ensure(
     c: &mut PgConnection,
     media: i32,
     family: Family,
-    language: Option<&str>,
+    (language, into): (Option<&str>, Option<i32>),
     hint: Option<&str>,
 ) -> sqlx::Result<(i32, i32)> {
+    if let Some(e) = into.filter(|_| family == Family::Audio) {
+        return Ok((e, item_of(c, media, e).await?));
+    }
     let editions: Vec<(i32, Option<String>, bool)> = sqlx::query_as(
         r#"SELECT e.id, e.language,
              (e.publisher IS NULL
@@ -526,7 +541,7 @@ async fn lay_out(
     media: i32,
     anchored: bool,
     facts: &[(Family, String, Facts)],
-    language: Option<&str>,
+    target: (Option<&str>, Option<i32>),
 ) -> Result<(), String> {
     let rows = sqlx::query_as!(
         Known,
@@ -536,7 +551,7 @@ async fn lay_out(
     .fetch_all(db)
     .await
     .map_err(|e| e.to_string())?;
-    lay_out_tx(db, media, anchored, &rows, facts, language)
+    lay_out_tx(db, media, anchored, &rows, facts, target)
         .await
         .map_err(|e| match e {
             LayError::Db(e) => e.to_string(),
@@ -561,7 +576,7 @@ async fn lay_out_tx(
     anchored: bool,
     rows: &[Known],
     facts: &[(Family, String, Facts)],
-    language: Option<&str>,
+    (language, into): (Option<&str>, Option<i32>),
 ) -> Result<(), LayError> {
     let mut tx = db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media).await?;
@@ -616,7 +631,7 @@ async fn lay_out_tx(
             }
         }
         for (hint, paths) in by_hint {
-            let (e, _) = ensure(&mut tx, media, family, language, hint.as_deref()).await?;
+            let (e, _) = ensure(&mut tx, media, family, (language, into), hint.as_deref()).await?;
             if let Some(f) = paths.iter().find_map(|p| fact(p)) {
                 firsts.entry(e).or_insert(f);
             }

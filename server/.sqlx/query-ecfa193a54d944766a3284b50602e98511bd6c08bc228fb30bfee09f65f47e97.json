@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fingerprint, state, \"folderId\" AS folder_id, output, \"jobId\" AS job_id\n           FROM book_merges WHERE \"editionId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "folderId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "output",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "output"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "job_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "jobId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ecfa193a54d944766a3284b50602e98511bd6c08bc228fb30bfee09f65f47e97"
+}

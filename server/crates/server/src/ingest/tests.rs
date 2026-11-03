@@ -4,7 +4,7 @@ use super::fsx;
 use crate::{
     app,
     config::Config,
-    engine::testkit::{Fake, RUNTIME, hello_body, ok},
+    engine::testkit::{Fake, RUNTIME, hello_body, ok, status},
     state::AppState,
 };
 use axum::{body::Body, extract::Request};
@@ -1636,13 +1636,14 @@ mod book_ingest {
     /// A `running` row for the parts as registered, written before the files it concerns.
     async fn running_row(c: &Ctx, m: i32) {
         let rows = books::merge::load(&c.st, m).await.unwrap();
-        let fp = books::merge::fingerprint(&books::merge::pick(&rows, None).unwrap());
+        let parts = books::merge::pick(&rows, &[]).unwrap();
         sqlx::query(
-            r#"INSERT INTO book_merges ("mediaId", fingerprint, state, "folderId", output)
-               VALUES ($1, $2, 'running', 1, 'Orfaline/Orfaline.m4b')"#,
+            r#"INSERT INTO book_merges ("mediaId", "editionId", fingerprint, state, "folderId", output)
+               VALUES ($1, $2, $3, 'running', 1, 'Orfaline/Orfaline.m4b')"#,
         )
         .bind(m)
-        .bind(fp)
+        .bind(parts[0].edition)
+        .bind(books::merge::fingerprint(&parts))
         .execute(&c.st.db)
         .await
         .unwrap();
@@ -1958,9 +1959,9 @@ mod book_ingest {
         let m = merge_setup(&c, true, 1).await;
         replace_on(&c).await;
         sqlx::query(
-            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'audio') RETURNING id),
-                    i AS (INSERT INTO items ("mediaId", "editionId", monitored)
-                          SELECT $1, id, true FROM e RETURNING id)
+            r#"WITH i AS (INSERT INTO items ("mediaId", "editionId", monitored)
+                          SELECT $1, id, true FROM editions WHERE "mediaId" = $1 AND family = 'audio'
+                          RETURNING id)
                INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version)
                SELECT i.id, 1, $1, 0 FROM i"#,
         )
@@ -2052,6 +2053,104 @@ mod book_ingest {
         assert_eq!(parts(&c, m).await.len(), 3);
         assert!(c.dir.join("books/Orfaline/01.mp3").exists());
         assert!(c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_replace_held_for_a_listener_is_done_on_a_later_run(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        sqlx::query(
+            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
+               SELECT (SELECT min(id) FROM users), id, 1, 42 FROM items WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("replace"));
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 3, "still listened to");
+        sqlx::query(r#"UPDATE playback_states SET "lastPlayedAt" = now() - interval '1 day'"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(
+            parts(&c, m).await,
+            [("Orfaline/Orfaline.m4b".to_owned(), 1, 0)]
+        );
+        assert!(!c.dir.join("books/Orfaline/01.mp3").exists());
+        assert_eq!(merge_state(&c, m).await, None);
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_m4b_joins_the_edition_of_its_parts_whatever_its_tags_say(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        sqlx::query(r#"UPDATE editions SET language = NULL"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO editions ("mediaId", family, language) VALUES ($1, 'audio', 'fr')"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        let editions: Vec<(i32,)> = sqlx::query_as(
+            r#"SELECT DISTINCT i."editionId" FROM item_parts p JOIN items i ON i.id = p."itemId"
+               WHERE p."mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(editions.len(), 1, "parts and m4b share one edition");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn each_edition_keeps_its_own_merge_record(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        sqlx::query(r#"UPDATE libraries SET "mergeM4b" = true"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let all = [
+            "Orfaline (en) - 01.mp3",
+            "Orfaline (en) - 02.mp3",
+            "Orfaline (fr) - 01.mp3",
+            "Orfaline (fr) - 02.mp3",
+        ];
+        for (language, names) in [("en", &all[..2]), ("fr", &all[2..])] {
+            let full: Vec<String> = names.iter().map(|r| format!("Orfaline/{r}")).collect();
+            for r in &full {
+                touch(&c.dir.join("books").join(r), r.as_bytes());
+            }
+            let p = placed(&c, &full.iter().map(String::as_str).collect::<Vec<_>>());
+            books::register_language(&c.st, m, &p, Some(language))
+                .await
+                .unwrap();
+        }
+        c.fake
+            .script("POST", "/v1/jobs", vec![status(400), status(400)]);
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        let rows: Vec<(String,)> =
+            sqlx::query_as(r#"SELECT state FROM book_merges WHERE "mediaId" = $1"#)
+                .bind(m)
+                .fetch_all(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(rows, [("failed".to_owned(),), ("failed".to_owned(),)]);
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 2, "both are skipped");
     }
 
     #[sqlx::test(migrations = false)]

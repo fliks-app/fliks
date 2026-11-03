@@ -1,10 +1,21 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT fingerprint, state, \"folderId\" AS folder_id, output, \"jobId\" AS job_id,\n                  COALESCE(\"nextAttemptAt\" > now(), false) AS \"waiting!\"\n           FROM book_merges WHERE \"mediaId\" = $1",
+  "query": "SELECT \"editionId\" AS edition, fingerprint, \"folderId\" AS folder, output, merge\n           FROM book_merges WHERE \"mediaId\" = $1 AND state = 'replace'",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "edition",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "editionId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "fingerprint",
         "type_info": "Text",
         "origin": {
@@ -15,19 +26,8 @@
         }
       },
       {
-        "ordinal": 1,
-        "name": "state",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "book_merges",
-            "name": "state"
-          }
-        }
-      },
-      {
         "ordinal": 2,
-        "name": "folder_id",
+        "name": "folder",
         "type_info": "Int4",
         "origin": {
           "Table": {
@@ -49,20 +49,14 @@
       },
       {
         "ordinal": 4,
-        "name": "job_id",
-        "type_info": "Text",
+        "name": "merge",
+        "type_info": "Jsonb",
         "origin": {
           "Table": {
             "table": "book_merges",
-            "name": "jobId"
+            "name": "merge"
           }
         }
-      },
-      {
-        "ordinal": 5,
-        "name": "waiting!",
-        "type_info": "Bool",
-        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -75,9 +69,8 @@
       false,
       false,
       false,
-      true,
-      null
+      true
     ]
   },
-  "hash": "ad5a0312b1543cdcc9a7326ee656987171a71bbf72dec5599388cf43f20529d8"
+  "hash": "ce71fdfb7d52f1e1cbf711666ca30280a1deac4526346bb8295b5ef77ef314d4"
 }
