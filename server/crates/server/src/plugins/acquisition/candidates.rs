@@ -56,7 +56,28 @@ pub(super) fn target(m: &MediaRow, d: Option<Decision>, files: &Files) -> Option
         expected_titles: titles.expected_titles,
         search_title: titles.search_title,
         scope: vec![],
+        search_units: vec![],
     })
+}
+
+/// Sets the unit of a target and the numbers release names use for it.
+pub(super) fn set_scope(tg: &mut t::Target, unit: t::Unit, scene: Option<&SceneMap>) {
+    let aired = &unit.ref_;
+    tg.search_units = match (scene, aired.group) {
+        (Some(map), Some(season)) => map
+            .scene_units(i64::from(season), aired.number.map(|n| n as i64))
+            .into_iter()
+            .map(|(s, e)| t::UnitRef {
+                group: Some(s as u32),
+                number: e.map(|n| n as f64),
+                end_number: None,
+                label: None,
+                absolute: None,
+            })
+            .collect(),
+        _ => vec![aired.clone()],
+    };
+    tg.scope = vec![unit];
 }
 
 /// A group (a season) as a unit; `count` is its items.
@@ -177,10 +198,12 @@ async fn context_of(
             .bind(sid)
             .fetch_one(db)
             .await?;
-        tg.scope = vec![match &episode {
+        let unit = match &episode {
             Some(e) => item_unit((sid, number), e, count),
             None => group_unit(sid, number, count),
-        }];
+        };
+        let scene = crate::scene::for_media(db, m.id).await?;
+        set_scope(&mut tg, unit, scene.as_ref());
     }
     Ok(Some(tg))
 }
@@ -422,6 +445,12 @@ pub(super) async fn targets_for(
         let season_ids: Vec<i32> = by_season.keys().copied().collect();
         let totals = count_by_season(db, &season_ids, None).await?;
         let unaired = count_by_season(db, &season_ids, Some(today)).await?;
+        let mut scenes: HashMap<i32, Option<SceneMap>> = HashMap::new();
+        for e in &eps {
+            if let std::collections::hash_map::Entry::Vacant(v) = scenes.entry(e.media.id) {
+                v.insert(crate::scene::for_media(db, e.media.id).await?);
+            }
+        }
         for (sid, group) in by_season.iter().filter(|(_, g)| g.len() >= 2) {
             if unaired.get(sid).copied().unwrap_or(0) > 0 {
                 continue;
@@ -447,14 +476,16 @@ pub(super) async fn targets_for(
                 continue;
             }
             if let Some(mut tg) = target(m, Some(d), &files) {
-                tg.scope = vec![group_unit(*sid, group[0].season.1, total)];
+                let unit = group_unit(*sid, group[0].season.1, total);
+                set_scope(&mut tg, unit, scenes[&m.id].as_ref());
                 targets.push(tg);
             }
         }
         for e in &eps {
             if let Some(mut tg) = target(&e.media, Some(e.decision), &e.files) {
                 let count = totals.get(&e.season.0).copied().unwrap_or(1);
-                tg.scope = vec![item_unit(e.season, &e.episode, count)];
+                let unit = item_unit(e.season, &e.episode, count);
+                set_scope(&mut tg, unit, scenes[&e.media.id].as_ref());
                 targets.push(tg);
             }
         }

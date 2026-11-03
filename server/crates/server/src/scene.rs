@@ -128,13 +128,13 @@ mod tests {
     #[sqlx::test(migrations = false)]
     async fn a_failed_fetch_keeps_the_stored_mapping(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
-        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId") VALUES (1000)"#)
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId") VALUES (375921)"#)
             .execute(&db)
             .await
             .unwrap();
-        assert!(stored(&db, 1000).await.unwrap().is_none());
-        keep_or_store(&db, 1000, Ok(fixture())).await;
-        keep_or_store(&db, 1000, Err("HTTP 503".into())).await;
-        assert_eq!(stored(&db, 1000).await.unwrap(), Some(fixture()));
+        assert!(stored(&db, 375921).await.unwrap().is_none());
+        keep_or_store(&db, 375921, Ok(fixture())).await;
+        keep_or_store(&db, 375921, Err("HTTP 503".into())).await;
+        assert_eq!(stored(&db, 375921).await.unwrap(), Some(fixture()));
     }
 }

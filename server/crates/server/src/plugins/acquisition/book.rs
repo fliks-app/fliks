@@ -188,6 +188,7 @@ fn target(m: &MediaRow, w: &WantRow, x: &Extras) -> Option<t::Target> {
         expected_titles: titles.expected_titles,
         search_title: titles.search_title,
         scope: vec![],
+        search_units: vec![],
     })
 }
 

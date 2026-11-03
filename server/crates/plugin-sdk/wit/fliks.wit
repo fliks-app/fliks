@@ -84,6 +84,8 @@ interface types {
     search-title: string,
     /// Empty is the whole work.
     scope: list<unit>,
+    /// The numbers release names use for `scope`, to query; empty is the whole work.
+    search-units: list<unit-ref>,
   }
 
   record span { first: f64, last: f64 }

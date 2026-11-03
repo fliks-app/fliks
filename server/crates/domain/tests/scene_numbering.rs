@@ -86,9 +86,12 @@ fn recorded_bodies_parse_and_failures_are_errors() {
     )));
     assert_eq!(
         ids.unwrap().into_iter().collect::<Vec<_>>(),
-        vec![1000, 2000]
+        vec![70668, 70900, 71146, 71313, 375921]
     );
-    assert!(SceneMap::from_xem(&json(r#"{"result":"failure","message":"no"}"#)).is_err());
+    let unknown = json(include_str!(
+        "../../../fixtures/scene-numbering/map-unknown.json"
+    ));
+    assert!(SceneMap::from_xem(&unknown).is_err());
     assert!(SceneMap::from_xem(&json(r#"{"result":"success","data":[]}"#)).is_err());
 }
 

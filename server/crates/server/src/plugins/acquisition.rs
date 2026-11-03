@@ -11,6 +11,7 @@ use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quali
 use fliks_domain::release::parsing::season_episode::{
     ReleaseCoverage, coverage_of, parse_season_episode,
 };
+use fliks_domain::release::scene::SceneMap;
 use fliks_domain::release::scoring::{
     AudioLanguageItem, CustomFormat, ExpectedTitle, Param, QualityProfileItem, ReleaseCandidate,
     ScoreOptions, SearchMedia, SizeLimits, WhenUnreadable, allowed_audio_language_ids,
@@ -625,6 +626,51 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                 ..
             })
         ));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_mapped_series_target_carries_the_scene_units(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let (group, items) = series_with_episodes(&db).await;
+        let st = AppState::new(
+            db.clone(),
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        let units = |tg: &t::Target| -> Vec<(Option<u32>, Option<f64>)> {
+            tg.search_units
+                .iter()
+                .map(|u| (u.group, u.number))
+                .collect()
+        };
+        let season = || context(&st, 1, None, None, Some(group as u32), None);
+        let episode = || context(&st, 1, None, None, None, Some(items[1] as u32));
+        assert_eq!(units(&season().await.unwrap().unwrap()), [(Some(2), None)]);
+        assert_eq!(
+            units(&episode().await.unwrap().unwrap()),
+            [(Some(2), Some(2.0))]
+        );
+        let entries: Vec<_> = (1..=3)
+            .map(|e| serde_json::json!({"sceneSeason": 3, "sceneEpisode": e, "season": 2, "episode": e}))
+            .collect();
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES (7, $1)"#)
+            .bind(sqlx::types::Json(serde_json::json!({ "entries": entries })))
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(units(&season().await.unwrap().unwrap()), [(Some(3), None)]);
+        assert_eq!(
+            units(&episode().await.unwrap().unwrap()),
+            [(Some(3), Some(2.0))]
+        );
+        assert!(
+            context(&st, 1, None, None, None, None)
+                .await
+                .unwrap()
+                .unwrap()
+                .search_units
+                .is_empty()
+        );
     }
 
     #[sqlx::test(migrations = false)]
