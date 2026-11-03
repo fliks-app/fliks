@@ -967,7 +967,6 @@ async fn event_ring_overflow_counts_drops() {
         .await;
     assert_eq!(m[0]["metrics"]["eventDropCount"], 6);
     assert!(restart.await.unwrap());
-    h.set("plugin.fliks.fixture.start", "ok").await;
     until(
         "the ring drained once ready",
         Duration::from_secs(20),
