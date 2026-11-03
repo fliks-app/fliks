@@ -109,10 +109,12 @@ pub(super) async fn season_row(
     q.fetch_optional(db).await
 }
 
-/// `media.acquisitionContext`: null for unknown media, no library, or a scope of another media.
+/// `media.acquisitionContext`: null for unknown media, no library, or a scope of another media;
+/// `family` picks the want of a book.
 pub async fn context(
     st: &AppState,
     media_id: u32,
+    family: Option<Family>,
     season_id: Option<u32>,
     episode_id: Option<u32>,
 ) -> sqlx::Result<Option<t::Target>> {
@@ -122,6 +124,9 @@ pub async fn context(
     };
     if m.library_id.is_none() {
         return Ok(None);
+    }
+    if m.kind == MediaKind::Book {
+        return super::book::context(db, &m, family, season_id, episode_id).await;
     }
     let (mut season, mut episode) = (None, None);
     if let Some(eid) = episode_id {
@@ -190,11 +195,11 @@ pub(super) struct EpTarget {
     decision: Decision,
 }
 
-/// The wire names of the kinds with (`seasonal`) or without seasons.
+/// The wire names of the video kinds with (`seasonal`) or without seasons.
 fn kind_names(seasonal: bool) -> Vec<&'static str> {
     MediaKind::ALL
         .into_iter()
-        .filter(|k| k.has_seasons() == seasonal)
+        .filter(|k| k.has_seasons() == seasonal && k.families().contains(&Family::Video))
         .map(MediaKind::as_str)
         .collect()
 }
@@ -364,17 +369,24 @@ pub(super) async fn media_batch(
     .await
 }
 
-/// The ungrouped items, group packs and grouped items wanted among `ids`.
+/// The ungrouped items, group packs and grouped items wanted among `ids`, and the wants of books.
 pub(super) async fn targets_for(
     db: &PgPool,
     ids: &[i32],
     kind: Option<MediaKind>,
+    family: Option<Family>,
     on: NaiveDate,
 ) -> sqlx::Result<Vec<t::Target>> {
+    let mut targets = vec![];
+    if kind.is_none_or(|k| k == MediaKind::Book) && family != Some(Family::Video) {
+        targets = super::book::targets(db, ids, family, on).await?;
+    }
+    if family.is_some_and(|f| f != Family::Video) {
+        return Ok(targets);
+    }
     let ids = Some(ids);
     let today = Utc::now().date_naive();
-    let mut targets = vec![];
-    if kind.is_none_or(|k| !k.has_seasons()) {
+    if kind.is_none_or(|k| !k.has_seasons() && k != MediaKind::Book) {
         for (m, files, d) in ungrouped_targets(db, ids).await? {
             if available(&m, on) {
                 targets.extend(target(&m, Some(d), &files));
@@ -458,6 +470,7 @@ pub async fn candidates(
         tracing::debug!(family = ?q.family, "candidates: family not served, empty page");
         return Ok(empty());
     }
+    let family = q.family.map(Family::from);
     let limit = q.limit.clamp(1, MAX_LIMIT) as usize;
     let ids: Option<Vec<i32>> = q
         .media_ids
@@ -472,7 +485,7 @@ pub async fn candidates(
         let Some(last) = batch.last() else { break };
         from = last + 1;
         let full = batch.len() == BATCH;
-        let found = targets_for(db, &batch, kind, on).await?;
+        let found = targets_for(db, &batch, kind, family, on).await?;
         items.extend(
             found
                 .into_iter()
@@ -482,8 +495,19 @@ pub async fn candidates(
             break;
         }
     }
-    let more = items.len() > limit;
-    items.truncate(limit);
+    // The cursor names a key: the targets of one key (the wants of a book) are never split.
+    let mut cut = limit.min(items.len());
+    while cut > 0 && cut < items.len() && key(&items[cut]) == key(&items[cut - 1]) {
+        cut -= 1;
+    }
+    if cut == 0 && !items.is_empty() {
+        cut = items
+            .iter()
+            .take_while(|n| key(n) == key(&items[0]))
+            .count();
+    }
+    let more = cut < items.len();
+    items.truncate(cut);
     let cursor = items
         .last()
         .filter(|_| more)

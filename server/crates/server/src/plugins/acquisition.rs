@@ -342,9 +342,11 @@ async fn files_for(
         .collect())
 }
 
+mod book;
 mod candidates;
 mod create;
 mod release;
+pub use book::{family_of, score as score_book};
 pub use candidates::*;
 pub use create::*;
 pub use release::*;
@@ -422,7 +424,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             "0123456789abcdef0123456789abcdef",
         );
         assert!(
-            context(&st, 1, None, Some(item as u32))
+            context(&st, 1, None, None, Some(item as u32))
                 .await
                 .unwrap()
                 .is_none()
@@ -482,7 +484,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             crate::config::Config::from_lookup(|_| None),
             "0123456789abcdef0123456789abcdef",
         );
-        let whole = context(&st, 1, None, None).await.unwrap().unwrap();
+        let whole = context(&st, 1, None, None, None).await.unwrap().unwrap();
         assert!(whole.scope.is_empty() && whole.want.is_none());
         assert_eq!((whole.family, whole.language), (t::Family::Video, None));
         let ids: Vec<_> = whole
@@ -491,7 +493,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             .map(|e| (&*e.provider, &*e.value))
             .collect();
         assert_eq!(ids, [("tmdb", "5"), ("tvdb", "7")]);
-        let pack = context(&st, 1, Some(group as u32), None)
+        let pack = context(&st, 1, None, Some(group as u32), None)
             .await
             .unwrap()
             .unwrap();
@@ -503,7 +505,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             (u.group_id, u.item_id, u.unit_count),
             (Some(group as u32), None, Some(3))
         );
-        let ep = context(&st, 1, None, Some(items[1] as u32))
+        let ep = context(&st, 1, None, None, Some(items[1] as u32))
             .await
             .unwrap()
             .unwrap();

@@ -75,14 +75,14 @@ impl From<runtime::fliks::plugin::types::Family> for Family {
     }
 }
 
-/// The family of a call naming one work: only `video` is served.
+/// The family of a call naming one work: every one but `image` is served.
 pub fn served(f: runtime::fliks::plugin::types::Family) -> Result<Family, HostError> {
     match Family::from(f) {
-        Family::Video => Ok(Family::Video),
-        other => Err(imports::host_err(
+        Family::Image => Err(imports::host_err(
             "unsupported-family",
-            format!("family \"{other}\" is not served"),
+            "family \"image\" is not served",
         )),
+        served => Ok(served),
     }
 }
 

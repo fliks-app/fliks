@@ -95,6 +95,15 @@ pub fn table(family: Family) -> &'static [AppQuality] {
     }
 }
 
+/// The quality ids a want of `family` without a profile allows: every quality but the unknown one.
+pub fn default_allowed(family: Family) -> Vec<u32> {
+    table(family)
+        .iter()
+        .filter(|q| q.source != "unknown")
+        .map(|q| q.id)
+        .collect()
+}
+
 /// The rows `ensureDefaults` inserts: `(qualityId, title, sizes)` per quality of the family.
 pub fn seed_rows(family: Family) -> impl Iterator<Item = (i32, &'static str, Sizes)> {
     table(family)
@@ -129,6 +138,14 @@ mod tests {
             default_sizes(Family::Video, 24),
             s(15000.0, 35000.0, 60000.0)
         );
+    }
+
+    #[test]
+    fn a_want_without_a_profile_allows_every_known_quality() {
+        assert_eq!(default_allowed(Family::Text), [202, 203, 204, 205]);
+        assert_eq!(default_allowed(Family::Audio).len(), 14);
+        assert!(!default_allowed(Family::Audio).contains(&101));
+        assert!(default_allowed(Family::Image).is_empty());
     }
 
     #[test]

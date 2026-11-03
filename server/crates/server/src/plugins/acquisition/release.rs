@@ -88,6 +88,12 @@ async fn match_one(
     coverage: t::ReleaseCoverage,
     hit: Option<usize>,
 ) -> sqlx::Result<t::ReleaseMatch> {
+    if let Some(book) = hit
+        .map(|i| &library[i])
+        .filter(|m| m.kind == MediaKind::Book)
+    {
+        return super::book::match_one(db, book, min_age, entry).await;
+    }
     let skip = |reason: t::SkipReason, media: Option<i32>, s: Option<i32>, e: Option<i32>| {
         t::ReleaseMatch {
             id: entry.id.clone(),
@@ -283,20 +289,13 @@ pub async fn score(
         Some(Decision::Window { min, max, .. }) => (Some(i64::from(min)), max.map(i64::from)),
         _ => (None, None),
     };
+    let inp = Inputs::of(releases);
     let opts = ScoreOptions {
         allowed,
         allowed_langs,
         size_by_quality,
-        source_min_seeders: releases
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.min_seeders.unwrap_or(0).into()))
-            .collect(),
-        source_unknown_lang: releases
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.unknown_language_iso_code.clone()))
-            .collect(),
+        source_min_seeders: inp.min_seeders,
+        source_unknown_lang: inp.unknown_lang,
         runtime_minutes: runtime_minutes(db, &m, season_n, episode_n).await?,
         expected_title: Some(ExpectedTitle::Many(titles.expected_titles)),
         expected_season: season_n.map(i64::from),
@@ -307,31 +306,7 @@ pub async fn score(
         min_rank_exclusive: min_rank,
         max_rank_inclusive: max_rank,
     };
-    let blocked: BTreeMap<i64, bool> = releases
-        .iter()
-        .enumerate()
-        .map(|(i, r)| (i as i64, r.blocked))
-        .collect();
-    let ids: Vec<String> = releases.iter().map(|r| r.id.clone()).collect();
-    let candidates = releases
-        .into_iter()
-        .enumerate()
-        .map(|(i, r)| ReleaseCandidate {
-            flags: release_flags(
-                &r.flags.clone().unwrap_or_default(),
-                r.freeleech,
-                r.download_volume_factor,
-            ),
-            title: r.title,
-            download_url: String::new(),
-            source_id: i as i64,
-            source_name: r.source_ref,
-            size: r.size as f64,
-            seeders: r.seeders.into(),
-            leechers: r.leechers.into(),
-            publish_date: Some(r.publish_date),
-        })
-        .collect();
+    let (blocked, ids, candidates) = (inp.blocked, inp.ids, inp.candidates);
     let scored = tokio::task::spawn_blocking(move || {
         let formats = |title: &str, flags: &[String]| {
             fliks_domain::release::scoring::score_release_with(&formats, title, flags)
@@ -346,7 +321,7 @@ pub async fn score(
 
 type SizeTable = BTreeMap<u32, SizeLimits>;
 
-/// The size limits per quality and the custom formats of the profiles.
+/// The size limits per video quality and the custom formats of the profiles.
 async fn scoring_tables(db: &PgPool) -> sqlx::Result<(SizeTable, Vec<CustomFormat>)> {
     let size_by_quality: SizeTable = profiles::definition_list(db)
         .await?
@@ -362,7 +337,11 @@ async fn scoring_tables(db: &PgPool) -> sqlx::Result<(SizeTable, Vec<CustomForma
             )
         })
         .collect();
-    let formats: Vec<CustomFormat> = profiles::format_list(db)
+    Ok((size_by_quality, custom_formats(db).await?))
+}
+
+pub(super) async fn custom_formats(db: &PgPool) -> sqlx::Result<Vec<CustomFormat>> {
+    Ok(profiles::format_list(db)
         .await?
         .into_iter()
         .filter_map(|f| {
@@ -373,8 +352,56 @@ async fn scoring_tables(db: &PgPool) -> sqlx::Result<(SizeTable, Vec<CustomForma
                 specs: serde_json::from_value(f.specs.0).ok()?,
             })
         })
-        .collect();
-    Ok((size_by_quality, formats))
+        .collect())
+}
+
+/// What the scorers read of the candidate releases, keyed by their position.
+pub(super) struct Inputs {
+    pub ids: Vec<String>,
+    pub candidates: Vec<ReleaseCandidate>,
+    pub min_seeders: BTreeMap<i64, i64>,
+    pub unknown_lang: BTreeMap<i64, Option<String>>,
+    pub blocked: BTreeMap<i64, bool>,
+}
+
+impl Inputs {
+    pub(super) fn of(releases: Vec<t::CandidateRelease>) -> Self {
+        let (mut min_seeders, mut unknown_lang, mut blocked) =
+            <(BTreeMap<_, _>, BTreeMap<_, _>, BTreeMap<_, _>)>::default();
+        for (i, r) in releases.iter().enumerate() {
+            let i = i as i64;
+            min_seeders.insert(i, i64::from(r.min_seeders.unwrap_or(0)));
+            unknown_lang.insert(i, r.unknown_language_iso_code.clone());
+            blocked.insert(i, r.blocked);
+        }
+        let ids = releases.iter().map(|r| r.id.clone()).collect();
+        let candidates = releases
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| ReleaseCandidate {
+                flags: release_flags(
+                    &r.flags.clone().unwrap_or_default(),
+                    r.freeleech,
+                    r.download_volume_factor,
+                ),
+                title: r.title,
+                download_url: String::new(),
+                source_id: i as i64,
+                source_name: r.source_ref,
+                size: r.size as f64,
+                seeders: r.seeders.into(),
+                leechers: r.leechers.into(),
+                publish_date: Some(r.publish_date),
+            })
+            .collect();
+        Inputs {
+            ids,
+            candidates,
+            min_seeders,
+            unknown_lang,
+            blocked,
+        }
+    }
 }
 
 type SeasonRow = (i32, i32, i32, bool);
@@ -431,25 +458,30 @@ fn into_scored(
             coverage: Some(wit_coverage(&s.coverage)),
             size_deviation: s.size_deviation,
             video_codec: s.video_codec.map(str::to_owned),
-            rejections: s
-                .rejections
+            rejections: wit_rejections(s.rejections),
+        })
+        .collect()
+}
+
+pub(super) fn wit_rejections(
+    rejections: Vec<fliks_domain::release::scoring::ReleaseRejection>,
+) -> Vec<t::Rejection> {
+    rejections
+        .into_iter()
+        .map(|r| t::Rejection {
+            code: r.code,
+            params: r
+                .params
+                .unwrap_or_default()
                 .into_iter()
-                .map(|r| t::Rejection {
-                    code: r.code,
-                    params: r
-                        .params
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|(k, v)| {
-                            (
-                                k.to_owned(),
-                                match v {
-                                    Param::Num(n) => t::ParamValue::Number(n as f64),
-                                    Param::Str(s) => t::ParamValue::Text(s),
-                                },
-                            )
-                        })
-                        .collect(),
+                .map(|(k, v)| {
+                    (
+                        k.to_owned(),
+                        match v {
+                            Param::Num(n) => t::ParamValue::Number(n as f64),
+                            Param::Str(s) => t::ParamValue::Text(s),
+                        },
+                    )
                 })
                 .collect(),
         })

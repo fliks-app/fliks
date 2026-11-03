@@ -1196,7 +1196,7 @@ async fn grabs_move_approved_requests_to_processing_by_season(pool: PgPool) {
             VALUES (1, 'add', 'series', 'tmdb', '93', 'S', 'approved', 14, {seasons})"#)).await;
     }
     Lifecycle::of(&c.st)
-        .mark_in_progress(14, Some(2))
+        .mark_in_progress(14, Some(2), fliks_domain::media::family::Family::Video)
         .await
         .unwrap();
     let st: Vec<String> = sqlx::query_scalar("SELECT status::text FROM requests ORDER BY id")
