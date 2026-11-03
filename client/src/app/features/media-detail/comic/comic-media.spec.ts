@@ -5,6 +5,7 @@ import { asComicMedia, nextIssue } from './comic-media';
 const issue = (n: number, over: Partial<ComicIssue> = {}): ComicIssue => ({
   itemId: n,
   mediaFileId: n,
+  format: 'cbz',
   number: String(n),
   sort: n,
   annual: false,

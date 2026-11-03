@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, afterNextRender, inject, signal } from '@angular/core';
-import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
@@ -78,16 +77,12 @@ export class ReaderPageComponent {
     }
   }
 
-  /** An image issue opens the page reader; the server answers 404 for a PDF issue, which the PDF reader takes. */
+  /** An image issue opens the page reader, a PDF issue the PDF reader. */
   private async openComic(comic: ComicMedia, itemId: number): Promise<void> {
     const issue = comic.comic.issues.find((i) => i.itemId === itemId);
     if (!issue?.mediaFileId) throw new Error('not readable');
     const base = { title: comic.title, target: { mediaId: comic.id, itemId, fileId: issue.mediaFileId } };
-    try {
-      this.opened.set({ ...base, format: 'comic', pages: await this.comics.pages(itemId) });
-    } catch (e) {
-      if (!(e instanceof HttpErrorResponse) || e.status !== 404) throw e;
-      this.opened.set({ ...base, format: 'pdf' });
-    }
+    if (issue.format === 'pdf') return void this.opened.set({ ...base, format: 'pdf' });
+    this.opened.set({ ...base, format: 'comic', pages: await this.comics.pages(itemId) });
   }
 }

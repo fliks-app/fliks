@@ -12,6 +12,8 @@ export interface ComicIssue {
   itemId: number;
   /** Null: the issue is known but has no file. */
   mediaFileId: number | null;
+  /** Archive format of the file; a PDF opens the PDF reader. */
+  format: 'cbz' | 'cb7' | 'cbr' | 'pdf' | null;
   number: string;
   sort: number;
   annual: boolean;
