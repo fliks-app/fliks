@@ -1,0 +1,17 @@
+{
+  "book_requests": {
+    "request": "Solicitar",
+    "request_success": "Solicitud enviada",
+    "already_requested": "Ya solicitado:"
+  },
+  "settings": {
+    "users": {
+      "quotas": "Cuotas de solicitudes",
+      "quotas_hint": "Solicitudes permitidas por período, contadas mientras estén pendientes o aprobadas. 0 significa ilimitado.",
+      "quota_period_days": "Período (días)"
+    },
+    "auto_approval": {
+      "media_type_book": "Libro"
+    }
+  }
+}

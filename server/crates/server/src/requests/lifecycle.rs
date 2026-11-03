@@ -138,15 +138,17 @@ impl Lifecycle {
             return Ok(());
         };
         let (eps, files) = match media.media_type {
-            MediaKind::Movie | MediaKind::Book => {
-                (vec![], db::file_count(&self.st.db, media_id).await?)
-            }
+            MediaKind::Movie => (vec![], db::file_count(&self.st.db, media_id).await?),
             MediaKind::Series => (db::episodes(&self.st.db, media_id).await?, 0),
+            MediaKind::Book => (vec![], 0),
         };
         for r in active {
-            let covered = match media.media_type {
-                MediaKind::Movie | MediaKind::Book => files > 0,
-                MediaKind::Series => scope_covered(r.scope(), &eps),
+            let covered = match (media.media_type, &r.wants) {
+                (MediaKind::Book, Some(w)) => {
+                    db::wants_covered(&self.st.db, media_id, &w.0).await?
+                }
+                (MediaKind::Series, _) => scope_covered(r.scope(), &eps),
+                _ => files > 0,
             };
             if !covered {
                 continue;
@@ -164,6 +166,13 @@ impl Lifecycle {
 
     /// Rule 43: `on_import_complete` over every media with an open request, for events that never arrived.
     pub async fn reconcile(&self) {
+        match db::reset_orphans(&self.st.db).await {
+            Ok(0) => {}
+            Ok(n) => tracing::warn!(
+                "request reconcile: {n} approved request(s) without media back to pending"
+            ),
+            Err(e) => tracing::warn!("request reconcile failed to reset orphans: {e}"),
+        }
         let ids = match db::media_with_open_adds(&self.st.db).await {
             Ok(ids) => ids,
             Err(e) => return tracing::warn!("request reconcile failed: {e}"),

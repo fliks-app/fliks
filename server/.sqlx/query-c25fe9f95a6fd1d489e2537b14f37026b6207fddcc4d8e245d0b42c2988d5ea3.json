@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id\n        FROM requests\n        WHERE \"mediaType\" = $1 AND provider = $2 AND \"externalId\" = $3 AND kind = 'add'\n        AND status::text = ANY($4) ORDER BY \"createdAt\" ASC, id ASC",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\"\n        FROM requests WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -146,14 +146,22 @@
             "name": "mediaId"
           }
         }
+      },
+      {
+        "ordinal": 14,
+        "name": "wants: Json<Vec<WantSpec>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "wants"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Text",
-        "Text",
-        "TextArray"
+        "Int4"
       ]
     },
     "nullable": [
@@ -170,8 +178,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "ae417fef8eb2fa751eb37fea363f1ea8d7d6a32ab52d09cea70aede94da81e7d"
+  "hash": "c25fe9f95a6fd1d489e2537b14f37026b6207fddcc4d8e245d0b42c2988d5ea3"
 }

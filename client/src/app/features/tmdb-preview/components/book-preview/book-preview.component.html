@@ -41,7 +41,7 @@
         <div data-preview-actions class="flex flex-col gap-3 max-w-sm">
           @if (inLibraryLink(); as link) {
             <a class="btn btn-primary btn-sm self-start" [routerLink]="link">{{ 'books_search.open_in_library' | translate }}</a>
-          } @else if (canImport()) {
+          } @else if (canImport() || canRequest()) {
             @if (bookLibraries().length === 0 && libraries().length) {
               <div role="alert" class="alert alert-warning text-sm py-2">{{ 'discover.no_compatible_library' | translate }}</div>
             }
@@ -60,11 +60,17 @@
               <app-wants-editor [(wants)]="wants" />
             </div>
             <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
-            <button type="button" class="btn btn-primary btn-sm self-start" [disabled]="adding() || !bookLibraries().length" (click)="add()">
+            @if (canRequest() && requested().length) {
+              <p class="text-xs text-base-content/60" data-testid="book-already-requested">
+                {{ 'book_requests.already_requested' | translate }}
+                <app-request-wants [wants]="requested()" />
+              </p>
+            }
+            <button type="button" class="btn btn-primary btn-sm self-start" [disabled]="adding() || !bookLibraries().length" (click)="canImport() ? add() : request()">
               @if (adding()) {
                 <span class="loading loading-spinner loading-xs"></span>
               }
-              {{ 'discover.add_to_library' | translate }}
+              {{ (canImport() ? 'discover.add_to_library' : 'book_requests.request') | translate }}
             </button>
           }
         </div>

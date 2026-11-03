@@ -1,15 +1,22 @@
 //! The media services the request flows call: TMDB, the image store, `importFromTmdb`, the media delete and the notifications.
 use super::{Art, ImportSpec, PortError, Removed, TitleFacts, TitleKey};
 use crate::{
-    http::AppError,
+    http::{AppError, auth::load_users},
     images::paths::{Target, Variant},
-    media::write::{all_library_ids, import_for_request, remove_media_with_dir, resolve_target_in},
-    metadata::service::Details,
+    libraries::library_ids_of,
+    media::write::{
+        all_library_ids, import_book_for_request, import_for_request, remove_media_with_dir,
+        resolve_target_in,
+    },
+    metadata::{books::ANCHOR, service::Details},
     notifications,
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider, media::kind::MediaKind, metadata::limiter::Priority,
+    acl::{Action, Permissions, Subject},
+    external_id::ExternalProvider,
+    media::kind::MediaKind,
+    metadata::limiter::Priority,
 };
 use serde_json::{Map, Value};
 
@@ -73,6 +80,9 @@ pub async fn title_facts(
 /// Stores the art of a title (`request/<key>`) unless already stored; best effort.
 pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
     let media_type = key.media_type;
+    if media_type == MediaKind::Book {
+        return book_art(st, key).await;
+    }
     let slots = [
         (Variant::Poster, "posterUrl"),
         (Variant::Fanart, "fanartUrl"),
@@ -109,6 +119,53 @@ pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
     Ok(Art { poster, fanart })
 }
 
+/// The cover of a book's work, as the poster; a book has no fanart.
+async fn book_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
+    let Some(t) = Target::request(
+        key.media_type,
+        key.provider,
+        &key.external_id,
+        Variant::Poster,
+    ) else {
+        return Ok(Art::default());
+    };
+    if st.images.has_image(&t) {
+        return Ok(Art {
+            poster: Some(t.api_path()),
+            fanart: None,
+        });
+    }
+    let lang = st
+        .metadata
+        .lang
+        .resolve(None)
+        .await
+        .map_err(|e| e.to_string())?;
+    let record = st
+        .metadata
+        .work(
+            ANCHOR,
+            key.media_type,
+            &key.external_id,
+            &lang,
+            Priority::Interactive,
+        )
+        .await
+        .map_err(|e| format!("{e:?}"))?;
+    let url = record
+        .get("posterUrl")
+        .and_then(Value::as_str)
+        .filter(|u| !u.is_empty());
+    let poster = match url {
+        Some(u) => st.images.download_and_store(u, &t).await,
+        None => None,
+    };
+    Ok(Art {
+        poster,
+        fanart: None,
+    })
+}
+
 /// `resolveImportTarget` over every library: 400 when the title has no library to land in.
 pub async fn assert_import_target(
     st: &AppState,
@@ -122,12 +179,39 @@ pub async fn assert_import_target(
         .map_err(port)
 }
 
-/// `importFromTmdb` (it calls `Lifecycle::on_media_imported` itself); answers the media id.
-pub async fn import_from_tmdb(
+/// The libraries a user reaches: the requester's, or the approver's when the request has no requester.
+async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, sqlx::Error> {
+    let Some((row, role)) = load_users(&st.db, Some(user), false).await?.pop() else {
+        return Ok(vec![]);
+    };
+    let perms = Permissions::from(
+        role.as_ref().map_or(&[][..], |r| &r.permissions),
+        row.is_admin,
+    );
+    library_ids_of(&st.db, user, perms.can(Action::Manage, &Subject::All)).await
+}
+
+/// `importFromTmdb`, or the book import of a book request (it calls `Lifecycle::on_media_imported` itself
+/// for a video title); answers the media id.
+pub async fn import_title(
     st: &AppState,
     spec: ImportSpec,
-    added_by: Option<i32>,
+    (added_by, approver): (Option<i32>, i32),
 ) -> Result<i32, PortError> {
+    if spec.title.media_type == MediaKind::Book {
+        let readable = libraries_of(st, added_by.filter(|u| *u != 0).unwrap_or(approver))
+            .await
+            .map_err(|e| port(e.into()))?;
+        return import_book_for_request(
+            st,
+            &spec.title.external_id,
+            spec.wants.as_deref().unwrap_or_default(),
+            (spec.library_id, spec.folder_id),
+            (added_by, &readable),
+        )
+        .await
+        .map_err(port);
+    }
     let seasons = spec.seasons.map(|s| {
         s.into_iter()
             .filter_map(|n| i32::try_from(n).ok())

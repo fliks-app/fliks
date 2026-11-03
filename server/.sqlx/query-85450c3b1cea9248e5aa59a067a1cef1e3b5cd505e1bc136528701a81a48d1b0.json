@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id\n        FROM requests WHERE \"mediaId\" = $1 AND ($2::text IS NULL OR kind::text = $2)\n        AND status::text = ANY($3) ORDER BY id",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\"\n        FROM requests WHERE \"mediaId\" = $1 AND ($2::text IS NULL OR kind::text = $2)\n        AND status::text = ANY($3) ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -146,6 +146,17 @@
             "name": "mediaId"
           }
         }
+      },
+      {
+        "ordinal": 14,
+        "name": "wants: Json<Vec<WantSpec>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "wants"
+          }
+        }
       }
     ],
     "parameters": {
@@ -169,8 +180,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "dac96dbc671b26ef6f054ac2e76f260d833c072edb495f8b6966e5adfa390879"
+  "hash": "85450c3b1cea9248e5aa59a067a1cef1e3b5cd505e1bc136528701a81a48d1b0"
 }

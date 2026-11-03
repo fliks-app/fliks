@@ -1,0 +1,7 @@
+<span class="flex flex-wrap gap-1" data-testid="request-wants">
+  @for (w of wants(); track $index) {
+    <span class="badge badge-ghost badge-sm">
+      {{ 'families.' + w.family | translate }} · {{ w.language ? (w.language | localizeLanguage) : ('wants.any_language' | translate) }}
+    </span>
+  }
+</span>

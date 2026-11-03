@@ -405,11 +405,12 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   openRequestModal() {
     const m = this.media();
-    if (!m) return;
+    const type = this.type();
+    if (!m || type === 'book') return;
     const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
-      mediaType: this.type(),
+      mediaType: type,
       tmdbId: m.tmdbId,
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,

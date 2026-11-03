@@ -1,7 +1,10 @@
 //! Queries of the `requests`, `request_comments` and `auto_approval_rules` tables (`requests.md` SQL section).
 use super::TitleKey;
 use crate::media::external_ids;
-use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use fliks_domain::{
+    external_id::ExternalProvider,
+    media::{kind::MediaKind, wants::WantSpec},
+};
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool, types::Json};
 
@@ -29,6 +32,7 @@ pub struct Req {
     pub library_id: Option<i32>,
     pub folder_id: Option<i32>,
     pub media_id: Option<i32>,
+    pub wants: Option<Json<Vec<WantSpec>>>,
 }
 
 /// `Req` as the database returns it, before `media_type` is decoded.
@@ -47,6 +51,7 @@ struct RawReq {
     library_id: Option<i32>,
     folder_id: Option<i32>,
     media_id: Option<i32>,
+    wants: Option<Json<Vec<WantSpec>>>,
 }
 
 impl TryFrom<RawReq> for Req {
@@ -70,6 +75,7 @@ impl TryFrom<RawReq> for Req {
             library_id: r.library_id,
             folder_id: r.folder_id,
             media_id: r.media_id,
+            wants: r.wants,
         })
     }
 }
@@ -98,7 +104,8 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
+        wants AS "wants: Json<Vec<WantSpec>>"
         FROM requests WHERE id = $1"#,
         id
     )
@@ -109,13 +116,14 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
 }
 
 /// Active ADD rows of a title, oldest first (the guard, `title-state` and the series profile lock).
-pub async fn active_adds(db: &PgPool, t: &TitleKey) -> sqlx::Result<Vec<Req>> {
+pub async fn active_adds(db: impl PgExecutor<'_>, t: &TitleKey) -> sqlx::Result<Vec<Req>> {
     sqlx::query_as!(
         RawReq,
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
+        wants AS "wants: Json<Vec<WantSpec>>"
         FROM requests
         WHERE "mediaType" = $1 AND provider = $2 AND "externalId" = $3 AND kind = 'add'
         AND status::text = ANY($4) ORDER BY "createdAt" ASC, id ASC"#,
@@ -145,7 +153,7 @@ pub async fn pending_delete_exists(db: &PgPool, t: &TitleKey) -> sqlx::Result<bo
 
 /// ADD requests of a user and type that still count against the quota (rule 13).
 pub async fn quota_count(
-    db: &PgPool,
+    db: impl PgExecutor<'_>,
     user_id: i32,
     media_type: MediaKind,
     since: chrono::DateTime<chrono::Utc>,
@@ -157,6 +165,35 @@ pub async fn quota_count(
         media_type.as_str(),
         since
     )
+    .fetch_one(db)
+    .await
+}
+
+/// First key of the quota advisory lock; the second is the user id.
+const QUOTA_LOCK_NS: i32 = 0x7271_7574;
+
+/// Serialises one user's quota check and insert until the transaction ends, so concurrent creates cannot pass together.
+pub async fn lock_user_quota(tx: &mut PgConnection, user_id: i32) -> sqlx::Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(QUOTA_LOCK_NS)
+        .bind(user_id)
+        .execute(tx)
+        .await?;
+    Ok(())
+}
+
+/// True when every want has an edition of its family (in its language when it names one) holding a part.
+pub async fn wants_covered(db: &PgPool, media_id: i32, wants: &[WantSpec]) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT NOT EXISTS (
+          SELECT 1 FROM jsonb_to_recordset($2) AS w(family text, language text)
+          WHERE NOT EXISTS (SELECT 1 FROM editions e JOIN items i ON i."editionId" = e.id
+            JOIN item_parts ip ON ip."itemId" = i.id
+            WHERE e."mediaId" = $1 AND e.family = w.family
+              AND (w.language IS NULL OR e.language = w.language)))"#,
+    )
+    .bind(media_id)
+    .bind(Json(wants))
     .fetch_one(db)
     .await
 }
@@ -289,14 +326,15 @@ pub struct New<'a> {
     pub media_id: Option<i32>,
     pub poster_url: Option<&'a str>,
     pub fanart_url: Option<&'a str>,
+    pub wants: Option<&'a [WantSpec]>,
 }
 
 pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, seasons, status,
-        "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl")
+        "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl", wants)
         VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,
-        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id"#,
+        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id"#,
         n.user_id,
         n.kind,
         n.title_key.media_type.as_str(),
@@ -312,7 +350,8 @@ pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
         n.folder_id,
         n.media_id,
         n.poster_url,
-        n.fanart_url
+        n.fanart_url,
+        n.wants.map(|w| Json(w.to_vec())) as Option<Json<Vec<WantSpec>>>
     )
     .fetch_one(db)
     .await
@@ -423,6 +462,30 @@ pub async fn rollback_to_pending(db: &PgPool, id: i32, by: i32) -> sqlx::Result<
     Ok(())
 }
 
+/// Takes back an auto-approved row whose import failed: only while `by` still holds its approval.
+pub async fn delete_claimed(db: &PgPool, id: i32, by: i32) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"DELETE FROM requests WHERE id = $1 AND status = 'approved' AND "approvedById" = $2 AND "mediaId" IS NULL"#,
+    )
+    .bind(id)
+    .bind(by)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Gives back the approved ADD rows that never got a media within the hour: an import cut short by a restart.
+pub async fn reset_orphans(db: &PgPool) -> sqlx::Result<u64> {
+    sqlx::query(
+        r#"UPDATE requests SET status = 'pending', "approvedById" = NULL
+           WHERE kind = 'add' AND status = 'approved' AND "mediaId" IS NULL
+             AND "updatedAt" < now() - interval '1 hour'"#,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
 /// Links the media of an approval that imported nothing itself (rule 23 step 8).
 pub async fn link_if_unlinked(db: &PgPool, id: i32, media_id: i32) -> sqlx::Result<()> {
     sqlx::query!(
@@ -442,7 +505,8 @@ pub async fn in_flight_for_media(db: &PgPool, media_id: i32) -> sqlx::Result<Vec
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
+        wants AS "wants: Json<Vec<WantSpec>>"
         FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e
           WHERE e."mediaId" = $1 AND e.kind = r."mediaType" AND e.provider = r.provider
           AND e.value = r."externalId")
@@ -469,7 +533,8 @@ pub async fn linked(
         r#"SELECT id, "userId" AS user_id, "mediaType" AS "media_type!", kind::text AS "kind!",
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
-        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id
+        "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
+        wants AS "wants: Json<Vec<WantSpec>>"
         FROM requests WHERE "mediaId" = $1 AND ($2::text IS NULL OR kind::text = $2)
         AND status::text = ANY($3) ORDER BY id"#,
         media_id,
@@ -732,7 +797,8 @@ pub async fn rows(
       'minimumAvailability', w."minimumAvailability", 'qualityProfileId', w."qualityProfileId",
       'languageProfileId', m."languageProfileId", 'addedById', m."addedById", 'path', NULL) END,
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
-) AS "json!: Value"
+) || CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('provider', r.provider,
+  'externalId', r."externalId", 'wants', r.wants) ELSE '{}'::jsonb END AS "json!: Value"
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"

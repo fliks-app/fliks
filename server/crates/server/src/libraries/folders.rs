@@ -128,7 +128,17 @@ pub async fn assert_in_library(
         library_id
     )
     .fetch_one(db)
-    .await?;
+    .await
+    .map_err(|e| {
+        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("55P03") {
+            AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "A write to this library folder is in progress, try again shortly",
+            )
+        } else {
+            e.into()
+        }
+    })?;
     if ok {
         Ok(())
     } else {

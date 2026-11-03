@@ -87,6 +87,36 @@
 
     </div>
 
+    <!-- Request quotas: requests per period and kind, counted while pending or approved. -->
+    <div class="flex flex-col gap-2" data-testid="user-quotas">
+      <span class="label-text font-semibold">{{ 'settings.users.quotas' | translate }}</span>
+      <p class="text-sm text-base-content/50">{{ 'settings.users.quotas_hint' | translate }}</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        @for (k of quotaKinds; track k.key) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ k.label | translate }}</span>
+            <input
+              type="number"
+              min="0"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formQuotas()[k.key]"
+              (ngModelChange)="setQuota(k.key, $event)"
+            />
+          </label>
+        }
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.users.quota_period_days' | translate }}</span>
+          <input
+            type="number"
+            min="1"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formQuotas().quotaPeriodDays"
+            (ngModelChange)="setQuota('quotaPeriodDays', $event)"
+          />
+        </label>
+      </div>
+    </div>
+
     <!-- Library access — full replacement list. Empty = no library access at all.
          Backend gates this to manage-users so the form is admin-only by route. -->
     <div class="flex flex-col gap-2">

@@ -1,6 +1,6 @@
 //! Auto-approval rules: matching (rule 29) and `/api/auto-approval-rules` (rules 28, 30, 31).
 use super::{
-    db,
+    TitleFacts, db,
     dto::{self, CreateRequest},
     flow::Res,
     services,
@@ -99,29 +99,40 @@ pub(super) fn reads_metadata(c: &Value, has_seasons: bool) -> bool {
         || (c["maxSeasons"].as_i64().is_some() && !has_seasons)
 }
 
-/// `shouldAutoApprove`: the first enabled rule that matches wins. An empty `seasons` is no scope.
-pub async fn should_auto_approve(
-    st: &AppState,
-    a: &Authed,
-    dto: &CreateRequest,
-    library_id: i32,
-) -> Res<bool> {
-    let rules = db::rules_enabled(&st.db).await?;
-    if rules.is_empty() {
-        return Ok(false);
-    }
-    let scoped = dto.seasons.as_deref().filter(|s| !s.is_empty());
-    let facts = if rules
-        .iter()
-        .any(|r| reads_metadata(&r.criteria.0, scoped.is_some()))
+/// The enabled rules and, when one reads TMDB facts, the title's facts: the network part of
+/// `shouldAutoApprove`, fetched before the create takes any lock.
+pub struct Candidates {
+    rules: Vec<db::RuleRow>,
+    facts: Option<TitleFacts>,
+}
+
+/// A rule that names another user or role, or another media type, cannot match this create.
+fn could_match(c: &Value, a: &Authed, media_type: MediaKind) -> bool {
+    let (users, roles) = (ints(c, "userIds"), ints(c, "roleIds"));
+    (users.is_empty() && roles.is_empty()
+        || users.contains(&i64::from(a.user.id))
+        || a.user
+            .role_id
+            .is_some_and(|r| roles.contains(&i64::from(r))))
+        && c["mediaType"]
+            .as_str()
+            .is_none_or(|m| m == media_type.as_str())
+}
+
+pub async fn candidates(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Candidates> {
+    let mut rules = db::rules_enabled(&st.db).await?;
+    rules.retain(|r| could_match(&r.criteria.0, a, dto.media_type));
+    let scoped = dto.seasons.as_deref().is_some_and(|s| !s.is_empty());
+    let facts = if let Some(tmdb_id) = dto.key.tmdb_id()
+        && rules.iter().any(|r| reads_metadata(&r.criteria.0, scoped))
     {
-        match services::title_facts(st, dto.media_type, dto.tmdb_id).await {
+        match services::title_facts(st, dto.media_type, tmdb_id).await {
             Ok(f) => Some(f),
             Err(e) => {
                 tracing::warn!(
                     "Auto-approval: metadata lookup failed for {} {}, genre/year/season criteria cannot match: {e}",
                     dto.media_type,
-                    dto.tmdb_id
+                    tmdb_id
                 );
                 None
             }
@@ -129,32 +140,40 @@ pub async fn should_auto_approve(
     } else {
         None
     };
-    let ctx = Ctx {
-        user_id: a.user.id,
-        role_id: a.user.role_id,
-        media_type: dto.media_type,
-        library_id: Some(library_id),
-        genre_ids: facts
-            .as_ref()
-            .map(|f| f.genre_ids.iter().map(|g| i64::from(*g)).collect())
-            .unwrap_or_default(),
-        year: facts.as_ref().and_then(|f| f.year).map(i64::from),
-        season_count: scoped
-            .map(|s| s.len() as i64)
-            .or_else(|| facts.as_ref().and_then(|f| f.season_count).map(i64::from)),
-    };
-    let hit = rules.iter().find(|r| matches(&r.criteria.0, &ctx));
-    if let Some(r) = hit {
-        tracing::info!(
-            "Auto-approving {} {} for user {}: rule \"{}\" (#{})",
-            dto.media_type,
-            dto.tmdb_id,
-            a.user.id,
-            r.name,
-            r.id
-        );
+    Ok(Candidates { rules, facts })
+}
+
+impl Candidates {
+    /// `shouldAutoApprove`: the first enabled rule that matches wins. An empty `seasons` is no scope.
+    pub fn approves(&self, a: &Authed, dto: &CreateRequest, library_id: i32) -> bool {
+        let facts = self.facts.as_ref();
+        let scoped = dto.seasons.as_deref().filter(|s| !s.is_empty());
+        let ctx = Ctx {
+            user_id: a.user.id,
+            role_id: a.user.role_id,
+            media_type: dto.media_type,
+            library_id: Some(library_id),
+            genre_ids: facts
+                .map(|f| f.genre_ids.iter().map(|g| i64::from(*g)).collect())
+                .unwrap_or_default(),
+            year: facts.and_then(|f| f.year).map(i64::from),
+            season_count: scoped
+                .map(|s| s.len() as i64)
+                .or_else(|| facts.and_then(|f| f.season_count).map(i64::from)),
+        };
+        let hit = self.rules.iter().find(|r| matches(&r.criteria.0, &ctx));
+        if let Some(r) = hit {
+            tracing::info!(
+                "Auto-approving {} {} for user {}: rule \"{}\" (#{})",
+                dto.media_type,
+                dto.key.external_id,
+                a.user.id,
+                r.name,
+                r.id
+            );
+        }
+        hit.is_some()
     }
-    Ok(hit.is_some())
 }
 
 fn rule_not_found(id: i32) -> AppError {

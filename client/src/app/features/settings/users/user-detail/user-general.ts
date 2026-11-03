@@ -10,6 +10,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   UsersApiService,
   UpdateUserBody,
+  UserRow,
 } from '../../../../core/services/api/users-api.service';
 import {
   LibrariesApiService,
@@ -19,6 +20,9 @@ import { UserDetailState } from './user-detail.state';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
+
+type QuotaKey = 'movieQuotaLimit' | 'seriesQuotaLimit' | 'bookQuotaLimit' | 'quotaPeriodDays';
+const QUOTA_KEYS: QuotaKey[] = ['movieQuotaLimit', 'seriesQuotaLimit', 'bookQuotaLimit', 'quotaPeriodDays'];
 
 @Component({
   selector: 'app-user-general',
@@ -47,6 +51,18 @@ export class UserGeneralComponent implements OnInit {
   /** A Set for O(1) checkbox toggles; converted to a sorted array on save. */
   readonly formLibraryIds = signal<ReadonlySet<number>>(new Set());
   readonly libraries = signal<Library[]>([]);
+  /** Request quotas as typed: a limit counts requests per period, 0 is unlimited. */
+  readonly formQuotas = signal<Record<QuotaKey, number>>({
+    movieQuotaLimit: 0,
+    seriesQuotaLimit: 0,
+    bookQuotaLimit: 0,
+    quotaPeriodDays: 7,
+  });
+  protected readonly quotaKinds = [
+    { key: 'movieQuotaLimit', label: 'requests.type_movie' },
+    { key: 'seriesQuotaLimit', label: 'requests.type_series' },
+    { key: 'bookQuotaLimit', label: 'kinds.book' },
+  ] as const;
 
   ngOnInit() {
     const user = this.state.user();
@@ -57,6 +73,12 @@ export class UserGeneralComponent implements OnInit {
       this.formEnabled.set(user.enabled);
       this.formRequirePasswordChange.set(user.requirePasswordChange ?? false);
       this.formLibraryIds.set(new Set(user.libraryIds ?? []));
+      this.formQuotas.set({
+        movieQuotaLimit: user.movieQuotaLimit ?? 0,
+        seriesQuotaLimit: user.seriesQuotaLimit ?? 0,
+        bookQuotaLimit: user.bookQuotaLimit ?? 0,
+        quotaPeriodDays: user.quotaPeriodDays ?? 7,
+      });
     }
     void this.loadLibraries();
   }
@@ -67,6 +89,23 @@ export class UserGeneralComponent implements OnInit {
     } catch {
       // Empty list is acceptable — admin can still save other fields.
     }
+  }
+
+  setQuota(key: QuotaKey, value: number | null) {
+    const min = key === 'quotaPeriodDays' ? 1 : 0;
+    this.formQuotas.update((q) => ({ ...q, [key]: Math.max(min, Math.floor(Number(value ?? min))) }));
+  }
+
+  /** Only the quota fields that changed: they need `users.manage`, which a plain edit must not demand. */
+  private changedQuotas(user: UserRow): Partial<Record<QuotaKey, number>> {
+    const form = this.formQuotas();
+    const before: Record<QuotaKey, number> = {
+      movieQuotaLimit: user.movieQuotaLimit ?? 0,
+      seriesQuotaLimit: user.seriesQuotaLimit ?? 0,
+      bookQuotaLimit: user.bookQuotaLimit ?? 0,
+      quotaPeriodDays: user.quotaPeriodDays ?? 7,
+    };
+    return Object.fromEntries(QUOTA_KEYS.filter((k) => form[k] !== before[k]).map((k) => [k, form[k]]));
   }
 
   toggleLibrary(id: number, checked: boolean) {
@@ -91,6 +130,7 @@ export class UserGeneralComponent implements OnInit {
       enabled: this.formEnabled(),
       requirePasswordChange: this.formRequirePasswordChange(),
       libraryIds: [...this.formLibraryIds()].sort((a, b) => a - b),
+      ...this.changedQuotas(user),
     };
     if (this.formPassword()) body.password = this.formPassword();
     try {

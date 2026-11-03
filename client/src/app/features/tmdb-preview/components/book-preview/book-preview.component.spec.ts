@@ -15,7 +15,7 @@ import { ToastService } from '../../../../core/services/toast.service';
 const lib = (id: number, folders?: { id: number; name: string }[]) =>
   ({ id, name: `Library ${id}`, mediaTypes: ['book'], folders }) as unknown as LibrarySummary;
 
-function setup(libraries: LibrarySummary[], canImport = true) {
+function setup(libraries: LibrarySummary[], canImport = true, allowed: string[] = canImport ? ['media.create'] : []) {
   const navigate = vi.fn();
   TestBed.configureTestingModule({
     providers: [
@@ -25,7 +25,7 @@ function setup(libraries: LibrarySummary[], canImport = true) {
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: Router, useValue: { navigate } },
       { provide: LibrariesApiService, useValue: { listMine: async () => libraries } },
-      { provide: AuthService, useValue: { hasPermission: () => canImport } },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => allowed.includes(p) } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
     ],
   });
@@ -93,5 +93,28 @@ describe('BookPreviewComponent', () => {
   it('offers no Add without the import permission', async () => {
     const { fixture } = setup([lib(1)], false);
     expect((await settle(fixture)).querySelector('button')).toBeNull();
+  });
+
+  it('requests the wished editions when the user cannot add', async () => {
+    const { fixture, http } = setup([lib(1)], false, ['requests.create']);
+    await settle(fixture);
+    http
+      .expectOne('/api/requests/title-state?mediaType=book&externalId=OL1W')
+      .flush({ requested: true, requestedWants: [{ family: 'audio', language: 'en' }] });
+    const el = await settle(fixture);
+    expect(el.querySelector('[data-testid="book-already-requested"]')).not.toBeNull();
+    const pending = fixture.componentInstance.request();
+    const req = http.expectOne('/api/requests');
+    expect(req.request.body).toEqual({
+      mediaType: 'book',
+      externalId: 'OL1W',
+      title: bookPreviewFixture.title,
+      libraryId: 1,
+      wants: [{ family: 'text', language: null }, { family: 'audio', language: null }],
+    });
+    req.flush({ id: 1 });
+    await new Promise((r) => setTimeout(r));
+    http.expectOne('/api/requests/title-state?mediaType=book&externalId=OL1W').flush({ requested: true });
+    await pending;
   });
 });
