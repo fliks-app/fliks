@@ -160,7 +160,17 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   penv+=(FLIKS_PLUGIN_UPSTREAM_OVERRIDE=$over FLIKS_PLUGIN_HOST_VERSION=6.0.0 FLIKS_SUBTITLE_PROVIDERS_URL=$S)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
   [ "$prov" = 1 ] && psql_admin -d "$DB" -c "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'tmdb-parity'), ('plugin.fliks.tvdb.apiKey', 'tvdb-parity')"
-  start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
+  # The runner recreates the database from a template, so the template holds what a first boot writes
+  # (bundled installs, registrations) and the keys: one boot, then the database becomes the template.
+  local tenv=(env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN")
+  start "prime-$1-$2" "$d" "${tenv[@]}"
+  local prime=${PIDS[-1]}
+  wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90 || { log "priming boot failed, see $RUN/prime-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|prime"); FAILED=1; stop_all_but_stubs; return; }
+  kill -TERM -- "-$prime" 2>/dev/null; sleep 2; kill -KILL -- "-$prime" 2>/dev/null
+  unset 'PIDS[-1]'
+  local PTPL=${DBPFX}tplp
+  psql_admin -d postgres -c "DROP DATABASE IF EXISTS $PTPL WITH (FORCE)" -c "CREATE DATABASE $PTPL TEMPLATE $DB" -c "DROP DATABASE $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $PTPL"
+  start "target-$1-$2" "$d" "${tenv[@]}"
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
     log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|target"); FAILED=1
     stop_all_but_stubs; return
@@ -172,7 +182,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   fi
   local out=$RUN/result-$1-$2.log
   # own group like the stubs: a background job ignores SIGINT, so Ctrl-C alone would orphan it
-  (cd "$SERVER" && exec setsid env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$TPL \
+  (cd "$SERVER" && exec setsid env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$PTPL \
     PARITY_ENGINE=$engine PARITY_PROVIDERS=$prov PARITY_STUB=http://127.0.0.1:$P_PROV PARITY_HOST_TOKEN="$HOST_TOK" \
     PARITY_FRONT=$ENG_URL PARITY_LIVETV=http://127.0.0.1:$P_LIVETV PARITY_FILTER="$filter" \
     "$TESTEXE" parity::parity --ignored --nocapture) >"$out" 2>&1 3>&- </dev/null &
