@@ -613,3 +613,39 @@ async fn an_approved_request_without_media_returns_to_pending_after_an_hour(pool
         .unwrap();
     assert_eq!(status, "pending");
 }
+
+#[sqlx::test(migrations = false)]
+async fn an_approval_holds_no_title_lock_while_the_provider_answers(pool: PgPool) {
+    let c = slow_ctx(pool, Duration::from_secs(3)).await;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
+        .await;
+    let slow = {
+        let (app, tok, uri) = (
+            c.app.clone(),
+            c.manager.clone(),
+            format!("/api/requests/{}/approve", r["id"]),
+        );
+        tokio::spawn(async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {tok}"))
+                .body(Body::empty())
+                .unwrap();
+            app.oneshot(req).await.unwrap().status().as_u16()
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let t = Instant::now();
+    let (s, other) = c
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
+        .await;
+    assert_eq!(
+        s, 409,
+        "the approved row answers the duplicate guard: {other}"
+    );
+    assert!(t.elapsed() < Duration::from_secs(2));
+    assert_eq!(slow.await.unwrap(), 201);
+}

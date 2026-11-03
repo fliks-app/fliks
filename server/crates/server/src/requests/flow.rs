@@ -755,12 +755,17 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     settled(tokio::spawn(approve_add(st.clone(), a.user.id, id, row))).await
 }
 
-/// Rule 23 steps 5-11, in a task so a client that leaves cannot strand the claimed row.
+/// Rule 23 steps 5-11: the title lock covers the claim only, not the import. In a task so a client that leaves cannot strand the claimed row.
 async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value> {
     let st = &st;
     let key = row.key();
     let mut lock = st.db.begin().await?;
-    db::lock_title(&mut lock, &key).await?;
+    sqlx::query("SET LOCAL lock_timeout = '10s'")
+        .execute(&mut *lock)
+        .await?;
+    db::lock_title(&mut lock, &key)
+        .await
+        .map_err(|e| lock_err(e, true))?;
     let existing = db::media_by_ref(&st.db, &key).await?;
     if existing.is_none() {
         services::assert_import_target(st, row.media_type, row.library_id).await?;
@@ -768,6 +773,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value>
     if !db::claim_approval(&st.db, id, by, None).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
+    lock.commit().await?;
     let spec = ImportSpec {
         title: key.clone(),
         quality_profile_id: row.quality_profile_id,
