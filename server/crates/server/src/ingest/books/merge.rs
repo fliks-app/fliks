@@ -1211,7 +1211,7 @@ mod tests {
         fr.iter_mut().for_each(|p| p.edition = 2);
         let rows = [&en[..], &fr[..]].concat();
         let failed = fingerprint(&en);
-        let got = pick(&rows, &[failed.clone()]).unwrap();
+        let got = pick(&rows, std::slice::from_ref(&failed)).unwrap();
         assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [3, 4]);
         assert!(pick(&en, &[failed]).is_none());
     }
