@@ -364,7 +364,7 @@ pub async fn refresh_metadata(
         );
     }
     download_media_images(st, id, d, &found.locked).await;
-    service::persist_credits(st, id, media.media_type, d, &found.locked).await?;
+    service::persist_credits(st, id, media.media_type, found.provider.0, d, &found.locked).await?;
     if media.has_seasons() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {
@@ -458,7 +458,7 @@ pub async fn identify(
     let b = Body::new(v, &["tmdbId", "tvdbId", "imdbId", "preferredProvider"])?;
     let (tmdb, tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
     let imdb = b.str("imdbId")?.flatten();
-    let provider = b.one_of("preferredProvider", &["tmdb", "tvdb"])?;
+    let provider = b.namespace("preferredProvider")?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;

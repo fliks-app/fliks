@@ -158,11 +158,10 @@ fn columns(b: &Body) -> Result<Columns, AppError> {
     if b.has("preferredProvider") {
         let v = match b.0.get("preferredProvider") {
             Some(Value::Null) => None,
-            Some(Value::String(s)) if s == "tmdb" || s == "tvdb" => Some(s.clone()),
+            Some(Value::String(s)) if external_ids::preferred(s).is_some() => Some(s.clone()),
             _ => {
                 return Err(AppError::bad_request(vec![
-                    "preferredProvider must be one of the following values: tmdb, tvdb, "
-                        .to_owned(),
+                    "preferredProvider must be a provider namespace".to_owned(),
                 ]));
             }
         };
@@ -853,10 +852,10 @@ pub async fn patch_season(
     let provider = match b.0.get("preferredProvider") {
         None => None,
         Some(Value::Null) => Some(None),
-        Some(Value::String(s)) if s == "tmdb" || s == "tvdb" => Some(Some(s.clone())),
+        Some(Value::String(s)) if external_ids::preferred(s).is_some() => Some(Some(s.clone())),
         _ => {
             return Err(AppError::bad_request(vec![
-                "preferredProvider must be one of the following values: tmdb, tvdb, ".to_owned(),
+                "preferredProvider must be a provider namespace".to_owned(),
             ]));
         }
     };

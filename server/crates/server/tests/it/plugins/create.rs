@@ -318,3 +318,169 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
     assert_eq!(linked, ("approved".into(), Some(id as i32)));
     s.finish().await;
 }
+
+/// A third-party provider of `org.fake:aid`, counting its work reads.
+struct Fake(Arc<AtomicUsize>);
+
+impl fliks_server::metadata::MetadataProvider for Fake {
+    fn id(&self) -> fliks_domain::external_id::Namespace {
+        fliks_domain::external_id::Namespace::parse("org.fake:aid").unwrap()
+    }
+    fn supports(&self, kind: fliks_domain::media::kind::MediaKind) -> bool {
+        kind == fliks_domain::media::kind::MediaKind::Movie
+    }
+    fn has_persons(&self) -> bool {
+        false
+    }
+    fn limits(&self) -> fliks_domain::metadata::limiter::Limits {
+        fliks_domain::metadata::limiter::Limits::new(100.0, 100)
+    }
+    fn search<'a>(
+        &'a self,
+        _: &'a fliks_server::metadata::Search<'a>,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Vec<Value>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn fetch_work<'a>(
+        &'a self,
+        _: fliks_domain::media::kind::MediaKind,
+        id: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Value> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            Ok(json!({"title": format!("Fake {id}"), "status": "Released", "year": 2020}))
+        })
+    }
+    fn fetch_children<'a>(
+        &'a self,
+        _: fliks_domain::media::kind::MediaKind,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Vec<Value>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn child_stubs<'a>(
+        &'a self,
+        _: fliks_domain::media::kind::MediaKind,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Vec<Value>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn find_by<'a>(
+        &'a self,
+        _: fliks_domain::external_id::Namespace,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Option<(String, fliks_domain::media::kind::MediaKind)>>
+    {
+        Box::pin(async { Ok(None) })
+    }
+    fn fetch_person<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, fliks_server::metadata::PersonDetails> {
+        Box::pin(async { Err(fliks_server::metadata::Upstream::new(Some(404), "none")) })
+    }
+    fn person_credits<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, fliks_server::metadata::Credits> {
+        Box::pin(async { Err(fliks_server::metadata::Upstream::new(Some(404), "none")) })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_namespace_resolves_to_one_media_that_refreshes() {
+    use fliks_domain::{external_id::Namespace, metadata::limiter::Priority};
+    let Some(s) = Scratch::create("create_plugin_ns").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let (st, _) = state_with_tmdb(&s).await;
+    let ns = Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    let reads = Arc::new(AtomicUsize::new(0));
+    st.metadata.add_plugin(Arc::new(Fake(reads.clone())));
+    let ids = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "7".into(),
+    }];
+    let first = resolve_or_create(&st, "movie", &ids, None, None)
+        .await
+        .unwrap();
+    let second = resolve_or_create(&st, "movie", &ids, None, None)
+        .await
+        .unwrap();
+    assert_eq!(first, second, "the second call finds the media");
+    assert_eq!(media_count(&s.pool).await, 1);
+    assert_eq!(reads.load(Ordering::SeqCst), 1, "one import");
+    let row: (String, Option<String>) = sqlx::query_as(
+        r#"SELECT e.value, m."preferredProvider" FROM media m
+           JOIN media_external_ids e ON e."mediaId" = m.id AND e.provider = 'org.fake:aid'"#,
+    )
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(row, ("7".into(), Some("org.fake:aid".into())));
+    let found =
+        fliks_server::metadata::service::for_media(&st, first as i32, Priority::Interactive)
+            .await
+            .unwrap();
+    assert_eq!(
+        found.provider,
+        (ns, "7".into()),
+        "a refresh reads the plugin"
+    );
+    assert_eq!(found.details.title, "Fake 7");
+    s.finish().await;
+}
+
+/// TMDB is registered but unconfigured: the plugin entry creates the media (`plugins.md` rule 57).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
+    use fliks_domain::external_id::Namespace;
+    let Some(s) = Scratch::create("create_second_entry").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let mut st = AppState::new(s.pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let data = std::env::temp_dir().join(format!(
+        "fliks-create-{}",
+        fliks_server::config::random_hex(6)
+    ));
+    st.images = Arc::new(ImageStore::with_root(data, "http://127.0.0.1:1/img"));
+    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    st.metadata.add_plugin(Arc::new(Fake(Arc::default())));
+    let both = vec![
+        ExternalId {
+            provider: "tmdb".into(),
+            value: "603".into(),
+        },
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "7".into(),
+        },
+    ];
+    let id = resolve_or_create(&st, "movie", &both, None, None)
+        .await
+        .unwrap();
+    let provider: String =
+        sqlx::query_scalar(r#"SELECT provider FROM media_external_ids WHERE "mediaId" = $1"#)
+            .bind(id as i32)
+            .fetch_one(&s.pool)
+            .await
+            .unwrap();
+    assert_eq!(provider, "org.fake:aid");
+    s.finish().await;
+}

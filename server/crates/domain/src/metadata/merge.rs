@@ -82,6 +82,11 @@ pub type Provenance = Vec<(Field, Namespace)>;
 
 type Record = (Namespace, Map<String, Value>);
 
+/// A third-party provider owns no TMDB id or collection (`provider-plugins.md` rule 26).
+fn unowned(p: Namespace, key: &str) -> bool {
+    p.core().is_none() && (key == "tmdbId" || Field::Collection.keys().contains(&key))
+}
+
 /// Merges `records` key by key: the first provider of the field's order with a non-empty value wins,
 /// else the first record that has the key supplies it as it is. Locked fields are left out.
 pub fn merge(
@@ -96,6 +101,7 @@ pub fn merge(
         let mut has: Vec<_> = records
             .iter()
             .filter_map(|(p, r)| Some((*p, r.get(key)?)))
+            .filter(|(p, _)| !unowned(*p, key))
             .collect();
         has.sort_by_key(|(p, _)| rank(*p));
         has.iter()
@@ -147,6 +153,20 @@ mod tests {
         let (m, p) = merge(&[(Namespace::TMDB, r.clone())], &order, &[]);
         assert_eq!(m, r);
         assert_eq!(p, [(Field::Title, Namespace::TMDB)]);
+    }
+
+    #[test]
+    fn a_third_party_record_gives_no_tmdb_id_or_collection() {
+        let third = Namespace::declare("org.merge.t:aid", "T", "^.+$", "preserve").unwrap();
+        let r = rec(
+            json!({"title": "A", "tmdbId": 5, "tmdbCollectionId": 9, "tmdbCollectionName": "c"}),
+        );
+        let (m, _) = merge(
+            &[(third, r)],
+            &FieldOrder::new(MediaKind::Movie, &[third]),
+            &[],
+        );
+        assert_eq!(m, rec(json!({"title": "A"})));
     }
 
     #[test]

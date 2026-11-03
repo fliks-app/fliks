@@ -232,6 +232,12 @@ impl PluginProvider {
         self.checked(parse(json, array)).map(|v| self.sanitized(v))
     }
 
+    /// `record` for an answer that may be absent (`fetch-edition`, `fetch-chapters`).
+    fn optional_record(&self, json: Option<String>) -> Result<Option<Value>, Upstream> {
+        let parsed = self.checked(json.map(|j| parse(&j, false)).transpose())?;
+        Ok(parsed.map(|v| self.sanitized(v)))
+    }
+
     fn array(&self, json: &str) -> Result<Vec<Value>, Upstream> {
         let list = self.checked(parse_list(json))?;
         Ok(list.into_iter().map(|v| self.sanitized(v)).collect())
@@ -487,7 +493,7 @@ impl MetadataProvider for PluginProvider {
                 .await?;
             Ok(found.and_then(|(id, kind)| {
                 let value = (id.provider == self.key.as_str())
-                    .then(|| self.key.normalize(&id.value))
+                    .then(|| provider::answered_id(self.key, &id.value))
                     .flatten()?;
                 Some((value, MediaKind::parse(&kind)?))
             }))
@@ -631,7 +637,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.checked(json.map(|j| parse(&j, false)).transpose())
+            self.optional_record(json)
         }
         .boxed()
     }
@@ -663,7 +669,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.checked(json.map(|j| parse(&j, false)).transpose())
+            self.optional_record(json)
         }
         .boxed()
     }

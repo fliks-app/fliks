@@ -11,6 +11,11 @@ pub const TMDB: &str = ExternalProvider::Tmdb.as_str();
 pub const TVDB: &str = ExternalProvider::Tvdb.as_str();
 pub const IMDB: &str = ExternalProvider::Imdb.as_str();
 
+/// A `preferredProvider` value: a core namespace (not `file`) or a plugin namespace declared.
+pub fn preferred(name: &str) -> Option<Namespace> {
+    Namespace::parse(name).filter(|n| *n != Namespace::FILE)
+}
+
 /// The join giving a query the `ids.tmdb`, `ids.tvdb` and `ids.imdb` of media `alias`, for queries
 /// built at run time (the checked ones inline the same text with bound provider names).
 pub fn ids_join(alias: &str) -> String {

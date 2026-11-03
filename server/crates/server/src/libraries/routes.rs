@@ -93,6 +93,16 @@ fn max_len(field: &str, v: Option<&str>, max: usize) -> Result<(), AppError> {
     }
 }
 
+/// An empty name clears the preference; any other is a core namespace or a declared plugin one.
+fn check_preferred(v: Option<&str>) -> Result<(), AppError> {
+    match v.filter(|p| !p.is_empty()) {
+        Some(p) if crate::media::external_ids::preferred(p).is_none() => {
+            Err(bad("preferredProvider must be a provider namespace"))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn check_media_types(v: &[String]) -> Result<(), AppError> {
     if v.iter().all(|t| MediaKind::parse(t).is_some()) {
         Ok(())
@@ -180,6 +190,7 @@ pub async fn create(
 ) -> Result<Response, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     let dto: CreateDto = body(req).await?;
+    check_preferred(dto.preferred_provider.as_deref())?;
     max_len("icon", dto.icon.as_deref(), 48)?;
     max_len("color", dto.color.as_deref(), 32)?;
     max_len("metadataLanguage", dto.metadata_language.as_deref(), 8)?;
@@ -243,6 +254,7 @@ pub async fn update(
     if let Some(Some(t)) = &dto.media_types {
         check_media_types(t)?;
     }
+    check_preferred(dto.preferred_provider.clone().flatten().as_deref())?;
     max_len("icon", dto.icon.clone().flatten().as_deref(), 48)?;
     max_len("color", dto.color.clone().flatten().as_deref(), 32)?;
     max_len(

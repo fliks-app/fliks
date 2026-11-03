@@ -49,9 +49,10 @@ pub async fn check_install(
     Ok(held.map_or(Ok(()), Err))
 }
 
-/// Records the namespaces on first activation; later ones refresh label, pattern and case, and a
-/// signed package takes over an unsigned row. `Err(name)` when another signer holds `name`
-/// (nothing is written).
+/// Records the namespaces once the plugin answered `hello`; later ones refresh label, pattern and
+/// case (warning how many stored ids a changed pattern no longer matches, rule 28), and a signed
+/// package takes over an unsigned row. `Err(name)` when another signer holds `name` (nothing is
+/// written).
 pub async fn claim(
     db: &PgPool,
     plugin_id: &str,
@@ -59,7 +60,17 @@ pub async fn claim(
     list: &[Declared<'_>],
 ) -> sqlx::Result<Result<(), String>> {
     let mut tx = db.begin().await?;
+    let mut changed = vec![];
     for n in list {
+        let old: Option<(String, String)> = sqlx::query_as(
+            r#"SELECT "idPattern", "case" FROM provider_namespaces WHERE name = $1"#,
+        )
+        .bind(n.name)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if old.is_some_and(|(pattern, case)| pattern != n.id_pattern || case != n.case) {
+            changed.push(n.name);
+        }
         let held: Option<String> = sqlx::query_scalar(
             r#"INSERT INTO provider_namespaces (name, "pluginId", "signerKeyId", "idPattern", "case", label)
                VALUES ($1, $2, $3, $4, $5, $6)
@@ -84,19 +95,53 @@ pub async fn claim(
     }
     tx.commit().await?;
     for n in list {
-        Namespace::declare(n.name, n.id_pattern, n.case);
+        if Namespace::declare(n.name, n.label, n.id_pattern, n.case).is_none() {
+            tracing::error!(
+                "provider namespace \"{}\" was stored but the core refuses it",
+                n.name
+            );
+        }
+    }
+    for name in changed {
+        let Some(ns) = Namespace::parse(name) else {
+            continue;
+        };
+        match stale(db, ns).await {
+            Ok(0) => {}
+            Ok(n) => tracing::warn!(
+                "provider namespace \"{name}\": {n} stored id(s) no longer match its idPattern"
+            ),
+            Err(e) => tracing::warn!("provider namespace \"{name}\": stored ids not counted: {e}"),
+        }
     }
     Ok(Ok(()))
 }
 
+/// How many ids stored under `ns` its rule no longer accepts as they are.
+pub async fn stale(db: &PgPool, ns: Namespace) -> sqlx::Result<usize> {
+    let values: Vec<String> = sqlx::query_scalar(
+        r#"SELECT value FROM media_external_ids WHERE provider = $1
+           UNION ALL SELECT value FROM edition_external_ids WHERE provider = $1
+           UNION ALL SELECT value FROM person_external_ids WHERE provider = $1
+           UNION ALL SELECT value FROM collection_external_ids WHERE provider = $1"#,
+    )
+    .bind(ns.as_str())
+    .fetch_all(db)
+    .await?;
+    Ok(values
+        .iter()
+        .filter(|v| ns.normalize(v).as_deref() != Some(v.as_str()))
+        .count())
+}
+
 /// Declares every stored namespace (kept ones included) so stored ids and settings parse at boot.
 pub async fn load(db: &PgPool) -> sqlx::Result<()> {
-    let rows: Vec<(String, String, String)> =
-        sqlx::query_as(r#"SELECT name, "idPattern", "case" FROM provider_namespaces"#)
+    let rows: Vec<(String, String, String, String)> =
+        sqlx::query_as(r#"SELECT name, label, "idPattern", "case" FROM provider_namespaces"#)
             .fetch_all(db)
             .await?;
-    for (name, pattern, case) in rows {
-        if Namespace::declare(&name, &pattern, &case).is_none() {
+    for (name, label, pattern, case) in rows {
+        if Namespace::declare(&name, &label, &pattern, &case).is_none() {
             tracing::warn!("provider namespace \"{name}\" has a pattern the core refuses");
         }
     }
@@ -104,7 +149,7 @@ pub async fn load(db: &PgPool) -> sqlx::Result<()> {
 }
 
 /// `DELETE /api/plugins/:id?deleteData=true`: the plugin's namespaces and every id, snapshot and
-/// source under them, in one transaction. An unfinished request with no media on such an id fails
+/// source under them, in one transaction; the process forgets them once it commits. An unfinished request with no media on such an id fails
 /// with `provider-removed`; the others keep their row.
 pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
@@ -145,5 +190,9 @@ pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
             .execute(&mut *tx)
             .await?;
     }
-    tx.commit().await
+    tx.commit().await?;
+    for name in &names {
+        Namespace::forget(name);
+    }
+    Ok(())
 }

@@ -155,6 +155,8 @@ impl EpisodeDetails {
 /// A title as read from its provider; `seasons` is every season with full episode lists (series).
 #[derive(Debug, Clone)]
 pub struct Found {
+    /// The namespace that served the title and the id it was read by.
+    pub provider: Source,
     pub details: Details,
     pub seasons: Vec<SeasonDetails>,
     /// The media's locked fields, left out of `details`.
@@ -397,6 +399,7 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
         }
     }
     Ok(Found {
+        provider: (p, id),
         details,
         seasons,
         locked: vec![],
@@ -452,7 +455,7 @@ async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
     })
 }
 
-type Source = (Namespace, String);
+pub type Source = (Namespace, String);
 
 /// Links a cross-referenced id; one another media of the kind holds stays with that media.
 async fn set_external(st: &AppState, m: &Row, p: Namespace, ext: i32) -> Result<(), sqlx::Error> {
@@ -484,6 +487,16 @@ async fn external_id_for(
     };
     if let Some(id) = direct.filter(|i| *i != 0) {
         return Ok(Some(id.to_string()));
+    }
+    if p.core().is_none() {
+        // A plugin's id is only the one stored for it; no other provider cross-references it.
+        return Ok(sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2"#,
+        )
+        .bind(m.id)
+        .bind(p.as_str())
+        .fetch_optional(&st.db)
+        .await?);
     }
     let label = m.label();
     let found = async |via: Namespace, source: Namespace, id: &str| {
@@ -731,6 +744,7 @@ pub async fn for_media(st: &AppState, media_id: i32, prio: Priority) -> Result<F
         vec![]
     };
     Ok(Found {
+        provider: media,
         details,
         seasons,
         locked,

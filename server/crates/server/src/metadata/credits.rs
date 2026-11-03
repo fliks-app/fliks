@@ -2,7 +2,7 @@
 use super::service::{Details, n, s};
 use crate::media::details;
 use crate::{http::AppError, images::paths::Target, persons::service::Person, state::AppState};
-use fliks_domain::{media::kind::MediaKind, metadata::field::Field};
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::field::Field};
 use futures_util::{StreamExt, stream};
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap};
@@ -22,11 +22,13 @@ fn ext(c: &Value) -> Option<i32> {
 }
 
 /// `persistMediaMetadata` (rule 58): the details row of the media's kind, persons, cast and crew,
-/// the credits untouched while their field is locked.
+/// the credits untouched while their field is locked. Person ids go under `provider`, the namespace
+/// that served the record, never a field of it.
 pub async fn persist_credits(
     st: &AppState,
     media_id: i32,
     kind: MediaKind,
+    provider: Namespace,
     d: &Details,
     locked: &[Field],
 ) -> Result<(), AppError> {
@@ -34,16 +36,12 @@ pub async fn persist_credits(
     if locked.contains(&Field::Credits) {
         return Ok(());
     }
-    let provider = d
-        .raw
-        .get("provider")
-        .and_then(Value::as_str)
-        .unwrap_or("tmdb");
     let (cast, crew) = (credits(d, "cast"), credits(d, "crew"));
     let all: Vec<&Value> = cast.iter().chain(&crew).collect();
     let mut unique: Vec<i32> = vec![];
-    // person_external_ids refuses ids outside 1..=999999999.
-    let valid = |i: &i32| (1..=999_999_999).contains(i);
+    // person_external_ids refuses ids outside 1..=999999999; a plugin's idPattern may refuse more.
+    let valid =
+        |i: &i32| (1..=999_999_999).contains(i) && provider.normalize(&i.to_string()).is_some();
     for id in all.iter().filter_map(|c| ext(c)).filter(valid) {
         if !unique.contains(&id) {
             unique.push(id);
@@ -51,7 +49,7 @@ pub async fn persist_credits(
     }
     let mut people: HashMap<i32, Person> = HashMap::new();
     if !unique.is_empty() {
-        people = upsert_persons(st, provider, &unique, &all).await?;
+        people = upsert_persons(st, provider.as_str(), &unique, &all).await?;
     }
     replace_credits(st, media_id, &cast, &crew, &people).await?;
     if unique.is_empty() {

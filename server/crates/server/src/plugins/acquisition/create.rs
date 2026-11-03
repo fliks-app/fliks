@@ -17,7 +17,7 @@ pub async fn resolve_or_create(
     let kind = MediaKind::parse(kind)
         .filter(|k| k.families().contains(&Family::Video))
         .ok_or_else(|| host_err("unsupported-kind", format!("kind \"{kind}\" is not served")))?;
-    let (ns, value) = entry(st, kind, ids)?;
+    let mut entries = served_entries(st, kind, ids)?;
     let library = library_id
         .map(i32::try_from)
         .transpose()
@@ -31,20 +31,39 @@ pub async fn resolve_or_create(
         .execute(&mut *tx)
         .await
         .map_err(db_err)?;
-    lock_title(
-        &mut tx,
-        &TitleKey {
+    // Locked in one order, so two calls naming the same titles cannot deadlock.
+    let mut order: Vec<&(Namespace, String)> = entries.iter().collect();
+    order.sort_by(|a, b| (a.0.as_str(), &a.1).cmp(&(b.0.as_str(), &b.1)));
+    for (ns, value) in order {
+        let key = TitleKey {
             media_type: kind,
-            provider: ns,
+            provider: *ns,
             external_id: value.clone(),
-        },
-    )
-    .await
-    .map_err(lock_err)?;
-    let found = external_ids::find(&mut *tx, kind, ns, &value).await;
-    let id = match found.map_err(db_err)? {
+        };
+        lock_title(&mut tx, &key).await.map_err(lock_err)?;
+    }
+    let mut found = None;
+    for (ns, value) in &entries {
+        found = external_ids::find(&mut *tx, kind, *ns, value)
+            .await
+            .map_err(db_err)?;
+        if found.is_some() {
+            break;
+        }
+    }
+    let id = match found {
         Some(id) => id,
-        None => create(st, kind, (ns, &value), (library, folder)).await?,
+        None => {
+            // Rule 57: created by the first entry whose provider is available.
+            entries.retain(|(ns, _)| st.metadata.available(*ns));
+            let Some((ns, value)) = entries.first() else {
+                return Err(host_err(
+                    "unsupported-provider",
+                    "the provider is not available",
+                ));
+            };
+            create(st, kind, (*ns, value), (library, folder)).await?
+        }
     };
     tx.commit().await.map_err(db_err)?;
     Ok(id as u32)
@@ -64,12 +83,6 @@ async fn create(
     (ns, value): (Namespace, &str),
     (library, folder): (Option<i32>, Option<i32>),
 ) -> Result<i32, HostError> {
-    if !st.metadata.available(ns) {
-        return Err(host_err(
-            "unsupported-provider",
-            "the provider is not available",
-        ));
-    }
     match import_in(
         st,
         kind,
@@ -105,39 +118,37 @@ async fn create(
     }
 }
 
-/// Rule 57: the first id of a unique core namespace a provider serves, else the first id of any
-/// namespace a provider serves for `kind`; each id normalised by its namespace.
-fn entry(
+/// Rule 57: the ids a provider serves for `kind`, each normalised by its namespace, those of a
+/// unique core namespace first. An id is looked up whatever the provider's state; only creating
+/// needs it available.
+fn served_entries(
     st: &AppState,
     kind: MediaKind,
     ids: &[t::ExternalId],
-) -> Result<(Namespace, String), HostError> {
-    // An id is looked up whatever the provider's state; only creating needs it available.
+) -> Result<Vec<(Namespace, String)>, HostError> {
     let served = |ns: Namespace| st.metadata.get(ns).is_some_and(|p| p.supports(kind));
     let parsed: Vec<(Namespace, Option<String>)> = ids
         .iter()
         .filter_map(|i| Some((Namespace::parse(&i.provider)?, i.value.as_str())))
+        .filter(|(ns, _)| served(*ns))
         .map(|(ns, v)| (ns, ns.normalize(v)))
         .collect();
-    let known: Vec<(Namespace, String)> = parsed
+    let mut known: Vec<(Namespace, String)> = parsed
         .iter()
         .filter_map(|(ns, v)| Some((*ns, v.clone()?)))
         .collect();
-    let picked = known
-        .iter()
-        .find(|(ns, _)| ns.is_unique() && served(*ns))
-        .or_else(|| known.iter().find(|(ns, _)| served(*ns)))
-        .cloned();
-    if picked.is_none() && parsed.iter().any(|(ns, v)| v.is_none() && served(*ns)) {
+    known.sort_by_key(|(ns, _)| !ns.is_unique());
+    if known.is_empty() && !parsed.is_empty() {
         return Err(host_err(
             "ERR_VALIDATION",
             "an id is not valid for its namespace",
         ));
     }
-    picked.ok_or_else(|| {
-        host_err(
+    if known.is_empty() {
+        return Err(host_err(
             "unsupported-provider",
             "no id names the work for an available provider",
-        )
-    })
+        ));
+    }
+    Ok(known)
 }

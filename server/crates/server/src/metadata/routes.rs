@@ -340,35 +340,42 @@ pub async fn discover_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs)
     discovered(st, a, q, true).await
 }
 
-/// `registry.get(name)` (availability unchecked) and the canonical integer id.
-fn target(md: &Metadata, provider: &str, id: &str) -> Result<(Namespace, i64), AppError> {
+/// `registry.get(name)` (availability unchecked) and the id: a canonical integer for a core
+/// provider, the plugin's own normal form for a plugin namespace.
+fn target(md: &Metadata, provider: &str, id: &str) -> Result<(Namespace, String), AppError> {
     let p = Namespace::parse(provider)
         .filter(|p| md.get(*p).is_some())
         .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {provider}")))?;
-    Ok((p, i64::from(int_param(id)?)))
+    let id = match p.core() {
+        Some(_) => int_param(id)?.to_string(),
+        None => p
+            .normalize(id)
+            .ok_or_else(|| AppError::bad_request(format!("Invalid id for provider: {provider}")))?,
+    };
+    Ok((p, id))
 }
 
 pub(crate) type Ids = Result<PathParams<(String, String)>, AppError>;
 
-async fn details(st: &AppState, p: Namespace, kind: MediaKind, id: i64) -> Res {
+async fn details(st: &AppState, p: Namespace, kind: MediaKind, id: &str) -> Res {
     let l = lang(st).await?;
     let v = st
         .metadata
         .of(p)
-        .fetch_work(kind, &id.to_string(), &l, Priority::Interactive)
+        .fetch_work(kind, id, &l, Priority::Interactive)
         .await
         .map_err(|e| fail(p, &e, true))?;
     Ok(Json(v))
 }
 
-async fn seasons_of(st: &AppState, p: Namespace, id: i64, stubs: bool) -> Res {
+async fn seasons_of(st: &AppState, p: Namespace, id: &str, stubs: bool) -> Res {
     let l = lang(st).await?;
-    let (id, go, series) = (id.to_string(), Priority::Interactive, MediaKind::Series);
+    let (go, series) = (Priority::Interactive, MediaKind::Series);
     let provider = st.metadata.of(p);
     let found = if stubs {
-        provider.child_stubs(series, &id, &l, go).await
+        provider.child_stubs(series, id, &l, go).await
     } else {
-        provider.fetch_children(series, &id, &l, go).await
+        provider.fetch_children(series, id, &l, go).await
     };
     Ok(Json(Value::Array(found.map_err(|e| fail(p, &e, true))?)))
 }
@@ -377,28 +384,28 @@ async fn seasons_of(st: &AppState, p: Namespace, id: i64, stubs: bool) -> Res {
 pub async fn details_movie(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st.metadata, &p, &id)?;
-    details(&st, p, MediaKind::Movie, id).await
+    details(&st, p, MediaKind::Movie, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}", responses((status = 200)))]
 pub async fn details_tv(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st.metadata, &p, &id)?;
-    details(&st, p, MediaKind::Series, id).await
+    details(&st, p, MediaKind::Series, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/seasons", responses((status = 200)))]
 pub async fn seasons(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st.metadata, &p, &id)?;
-    seasons_of(&st, p, id, false).await
+    seasons_of(&st, p, &id, false).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/season-stubs", responses((status = 200)))]
 pub async fn season_stubs(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st.metadata, &p, &id)?;
-    seasons_of(&st, p, id, true).await
+    seasons_of(&st, p, &id, true).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/movie/{tmdbId}", responses((status = 200)))]
@@ -407,7 +414,7 @@ pub async fn legacy_movie(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    details(&st, Namespace::TMDB, MediaKind::Movie, i64::from(id?.0)).await
+    details(&st, Namespace::TMDB, MediaKind::Movie, &id?.0.to_string()).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
@@ -416,7 +423,7 @@ pub async fn legacy_tv(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    details(&st, Namespace::TMDB, MediaKind::Series, i64::from(id?.0)).await
+    details(&st, Namespace::TMDB, MediaKind::Series, &id?.0.to_string()).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
@@ -425,5 +432,5 @@ pub async fn legacy_seasons(
     _a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
-    seasons_of(&st, Namespace::TMDB, i64::from(id?.0), false).await
+    seasons_of(&st, Namespace::TMDB, &id?.0.to_string(), false).await
 }

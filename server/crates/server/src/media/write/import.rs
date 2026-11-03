@@ -155,6 +155,7 @@ pub async fn import_title(
     imp: Import,
     prio: Priority,
 ) -> Result<i32, AppError> {
+    let lookup = (st.metadata.named(provider.as_deref()), external_id.clone());
     let found = service::import(
         st,
         Lookup {
@@ -176,7 +177,7 @@ pub async fn import_title(
     if let Some(f) = imp.folder_id {
         crate::libraries::assert_folder_in_library(&mut *tx, imp.library_id, f).await?;
     }
-    let (id, free) = insert_media(&mut tx, &imp, &found, &folder)
+    let (id, free) = insert_media(&mut tx, &imp, &found, &lookup, &folder)
         .await
         .map_err(|e| {
             if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
@@ -235,9 +236,11 @@ pub async fn import_title(
         library_id: Some(i64::from(imp.library_id)),
         added_by_user_id: imp.added_by.map(i64::from),
     });
-    let (st2, details) = (st.clone(), d.clone());
+    let (st2, details, provider) = (st.clone(), d.clone(), found.provider.0);
     tokio::spawn(async move {
-        if let Err(e) = service::persist_credits(&st2, id, imp.media_type, &details, &[]).await {
+        if let Err(e) =
+            service::persist_credits(&st2, id, imp.media_type, provider, &details, &[]).await
+        {
             tracing::warn!("cast/metadata persist of media #{id} failed: {e}");
         }
     });
@@ -326,6 +329,7 @@ async fn insert_media(
     tx: &mut PgConnection,
     imp: &Import,
     found: &Found,
+    (lookup, lookup_id): &(Namespace, String),
     folder: &str,
 ) -> Result<(i32, bool), sqlx::Error> {
     let d = &found.details;
@@ -382,6 +386,18 @@ async fn insert_media(
         imdb: d.imdb_id.clone(),
     };
     let free = ids.fill(tx, id, imp.media_type).await?.taken.is_empty();
+    // A plugin's id is not one of the three of `Ids`: link the one the title was looked up by, and
+    // pin the media to the plugin when it served the record, so a refresh reads it again.
+    if lookup.core().is_none() {
+        external_ids::link(tx, id, imp.media_type, *lookup, lookup_id).await?;
+        if found.provider.0 == *lookup {
+            sqlx::query(r#"UPDATE media SET "preferredProvider" = $2 WHERE id = $1"#)
+                .bind(id)
+                .bind(lookup.as_str())
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
     set_field_sources(tx, id, &found.provenance).await?;
     Ok((id, free))
 }
