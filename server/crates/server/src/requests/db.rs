@@ -126,6 +126,8 @@ pub async fn active_adds(db: impl PgExecutor<'_>, t: &TitleKey) -> sqlx::Result<
         wants AS "wants: Json<Vec<WantSpec>>"
         FROM requests
         WHERE "mediaType" = $1 AND provider = $2 AND "externalId" = $3 AND kind = 'add'
+        AND "namespaceGeneration" IS NOT DISTINCT FROM
+            (SELECT generation FROM provider_namespaces WHERE name = $2)
         AND status::text = ANY($4) ORDER BY "createdAt" ASC, id ASC"#,
         t.media_type.as_str(),
         t.provider.as_str(),
@@ -142,7 +144,9 @@ pub async fn active_adds(db: impl PgExecutor<'_>, t: &TitleKey) -> sqlx::Result<
 pub async fn pending_delete_exists(db: &PgPool, t: &TitleKey) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"SELECT EXISTS(SELECT 1 FROM requests WHERE "mediaType" = $1 AND provider = $2
-        AND "externalId" = $3 AND kind = 'delete' AND status = 'pending') AS "e!""#,
+        AND "externalId" = $3 AND kind = 'delete' AND status = 'pending'
+        AND "namespaceGeneration" IS NOT DISTINCT FROM
+            (SELECT generation FROM provider_namespaces WHERE name = $2)) AS "e!""#,
         t.media_type.as_str(),
         t.provider.as_str(),
         t.external_id
@@ -351,9 +355,11 @@ pub struct New<'a> {
 pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, seasons, status,
-        "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl", wants)
+        "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl", wants,
+        "namespaceGeneration")
         VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,
-        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id"#,
+        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+        (SELECT generation FROM provider_namespaces WHERE name = $4)) RETURNING id"#,
         n.user_id,
         n.kind,
         n.title_key.media_type.as_str(),

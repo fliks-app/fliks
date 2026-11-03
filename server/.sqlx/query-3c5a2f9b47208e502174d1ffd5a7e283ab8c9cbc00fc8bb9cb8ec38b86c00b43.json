@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM requests WHERE \"mediaType\" = $1 AND provider = $2\n        AND \"externalId\" = $3 AND kind = 'delete' AND status = 'pending'\n        AND \"namespaceGeneration\" IS NOT DISTINCT FROM\n            (SELECT generation FROM provider_namespaces WHERE name = $2)) AS \"e!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3c5a2f9b47208e502174d1ffd5a7e283ab8c9cbc00fc8bb9cb8ec38b86c00b43"
+}
