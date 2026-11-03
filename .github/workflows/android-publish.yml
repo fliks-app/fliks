@@ -89,7 +89,7 @@ jobs:
           java-version: 21
 
       # Read-only: a tag can't save a cache other refs restore; native-build.yml seeds it from main.
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           build-root-directory: client/android
           cache-read-only: true
