@@ -267,6 +267,15 @@ pub async fn sweep(db: &sqlx::PgPool) -> sqlx::Result<()> {
     .map(drop)
 }
 
+/// The daily prune: a send log older than 30 days is of no use, and `book_sends` grows by up to 20
+/// rows per user per hour.
+pub async fn prune(db: &sqlx::PgPool) -> sqlx::Result<u64> {
+    sqlx::query(r#"DELETE FROM book_sends WHERE "createdAt" < now() - interval '30 days'"#)
+        .execute(db)
+        .await
+        .map(|r| r.rows_affected())
+}
+
 #[utoipa::path(get, path = "/api/book-sends", responses((status = 200)))]
 pub async fn recent(
     State(st): State<AppState>,

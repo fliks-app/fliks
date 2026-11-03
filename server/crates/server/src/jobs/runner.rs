@@ -65,6 +65,9 @@ pub fn spawn(st: &AppState) {
             if let Err(e) = audit::prune(&db).await {
                 tracing::error!("PruneOldCommands: {e}");
             }
+            if let Err(e) = crate::email::prune(&db).await {
+                tracing::error!("book_sends prune: {e}");
+            }
         });
     });
 }
