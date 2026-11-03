@@ -12,6 +12,7 @@ use serde_json::{Map, Value, json};
 use std::{sync::OnceLock, time::Duration};
 
 const STORE: &str = "https://storeapi.kobo.com";
+const STORE_ENV: &str = "FLIKS_KOBO_STORE_URL";
 const CDN: &str = "https://cdn.kobo.com/book-images";
 const SETTING: &str = "kobo_store_proxy";
 const FORWARDED: [&str; 4] = ["authorization", "content-type", "accept", "user-agent"];
@@ -37,6 +38,11 @@ pub fn store_cover(id: &str, w: &str, h: &str) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     }
     Redirect::temporary(&format!("{CDN}/{id}/{w}/{h}/false/image.jpg")).into_response()
+}
+
+/// The store; the operator can point it elsewhere (a test double), a user never.
+fn store() -> String {
+    std::env::var(STORE_ENV).unwrap_or_else(|_| STORE.to_owned())
 }
 
 /// No redirect is followed: the host is fixed.
@@ -67,25 +73,44 @@ fn request(
     r
 }
 
+/// The answer of the store, its status, content type and capped body; 3xx is no answer (the host is fixed).
+async fn send(r: reqwest::RequestBuilder) -> Option<(StatusCode, Option<HeaderValue>, Vec<u8>)> {
+    let mut res = r.send().await.ok()?;
+    let status = StatusCode::from_u16(res.status().as_u16()).ok()?;
+    if status.is_redirection() {
+        return None;
+    }
+    let kind = res.headers().get(CONTENT_TYPE).cloned();
+    let kind = kind.and_then(|v| HeaderValue::from_bytes(v.as_bytes()).ok());
+    let mut bytes = Vec::new();
+    while let Some(c) = res.chunk().await.ok()? {
+        if bytes.len() + c.len() > MAX_ANSWER {
+            return None;
+        }
+        bytes.extend_from_slice(&c);
+    }
+    Some((status, kind, bytes))
+}
+
 /// The store's own `Resources`, for the keys this server does not serve.
 pub async fn store_resources(headers: &HeaderMap) -> Option<Map<String, Value>> {
-    let res = request(
+    let (status, _, body) = send(request(
         Method::GET,
-        &format!("{STORE}/v1/initialization"),
+        &format!("{}/v1/initialization", store()),
         headers,
         5,
-    )
-    .send()
-    .await
-    .ok()?;
-    let mut body: Value = res.json().await.ok()?;
-    match body["Resources"].take() {
+    ))
+    .await?;
+    if !status.is_success() {
+        return None;
+    }
+    match serde_json::from_slice::<Value>(&body).ok()?["Resources"].take() {
         Value::Object(m) => Some(m),
         _ => None,
     }
 }
 
-/// The request, path after the token and all, sent to the store.
+/// The request, path after the token and all, sent to the store; a redirect or a failure is a 502.
 pub async fn forward(req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let path = original_path(&parts);
@@ -94,32 +119,19 @@ pub async fn forward(req: Request) -> Response {
         .and_then(|p| p.split_once('/'))
         .map_or("v1", |(_, t)| t);
     let url = match parts.uri.query() {
-        Some(q) => format!("{STORE}/{tail}?{q}"),
-        None => format!("{STORE}/{tail}"),
+        Some(q) => format!("{}/{tail}?{q}", store()),
+        None => format!("{}/{tail}", store()),
     };
     let Ok(body) = to_bytes(body, MAX_BODY).await else {
         return StatusCode::PAYLOAD_TOO_LARGE.into_response();
     };
-    let bad = || StatusCode::BAD_GATEWAY.into_response();
-    let Ok(mut res) = request(parts.method, &url, &parts.headers, 30)
-        .body(body)
-        .send()
-        .await
+    let Some((status, kind, bytes)) =
+        send(request(parts.method, &url, &parts.headers, 30).body(body)).await
     else {
-        return bad();
+        return StatusCode::BAD_GATEWAY.into_response();
     };
-    let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let kind = res.headers().get(CONTENT_TYPE).cloned();
-    let mut bytes = Vec::new();
-    loop {
-        match res.chunk().await {
-            Ok(Some(c)) if bytes.len() + c.len() <= MAX_ANSWER => bytes.extend_from_slice(&c),
-            Ok(None) => break,
-            _ => return bad(),
-        }
-    }
     let mut out = (status, bytes).into_response();
-    if let Some(v) = kind.and_then(|v| HeaderValue::from_bytes(v.as_bytes()).ok()) {
+    if let Some(v) = kind {
         out.headers_mut().insert(CONTENT_TYPE, v);
     }
     out

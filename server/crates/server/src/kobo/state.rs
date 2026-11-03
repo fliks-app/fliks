@@ -2,15 +2,15 @@
 use super::{
     BOOK_PREFIX, Kobo,
     books::{self, not_found},
-    iso, json_response, uuid,
+    iso, json_response, proxy, uuid,
 };
 use crate::{
-    http::{AppError, validate::ValidJson},
+    http::AppError,
     playback::{Watch, finish_context, record_watch},
     state::AppState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Request, State},
     http::StatusCode,
     response::Response,
 };
@@ -20,6 +20,18 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 
 const MAX_STATE: usize = 16 * 1024;
+const MAX_BODY: usize = 1 << 20;
+const STRIPES: usize = 64;
+
+/// One write per `(user, book)` at a time, holding no connection while it waits.
+// ponytail: per process; an advisory lock if the server ever runs as several instances.
+async fn serialise(user: i32, item: i32) -> tokio::sync::MutexGuard<'static, ()> {
+    static LOCKS: std::sync::OnceLock<Vec<tokio::sync::Mutex<()>>> = std::sync::OnceLock::new();
+    let locks = LOCKS.get_or_init(|| (0..STRIPES).map(|_| tokio::sync::Mutex::new(())).collect());
+    locks[(user as usize).wrapping_mul(31).wrapping_add(item as usize) % STRIPES]
+        .lock()
+        .await
+}
 
 /// A book's playback state and the state this token's device last wrote.
 #[derive(sqlx::FromRow)]
@@ -104,7 +116,11 @@ pub async fn get(
     State(st): State<AppState>,
     k: Kobo,
     Path((_, id)): Path<(String, String)>,
+    req: Request,
 ) -> Result<Response, AppError> {
+    if proxy::store_book(&st, &id).await? {
+        return Ok(proxy::forward(req).await);
+    }
     let Some(b) = books::find(&st.db, &k, &id).await? else {
         return Ok(not_found());
     };
@@ -123,10 +139,19 @@ pub async fn put(
     State(st): State<AppState>,
     k: Kobo,
     Path((_, id)): Path<(String, String)>,
-    ValidJson(body): ValidJson<Value>,
+    req: Request,
 ) -> Result<Response, AppError> {
+    if proxy::store_book(&st, &id).await? {
+        return Ok(proxy::forward(req).await);
+    }
     let Some(b) = books::find(&st.db, &k, &id).await? else {
         return Ok(not_found());
+    };
+    let Ok(raw) = axum::body::to_bytes(req.into_body(), MAX_BODY).await else {
+        return Ok(invalid());
+    };
+    let Ok(body) = serde_json::from_slice::<Value>(&raw) else {
+        return Ok(invalid());
     };
     let want = uuid(BOOK_PREFIX, b.item);
     let Some(s) = body["ReadingStates"].as_array().and_then(|a| {
@@ -147,12 +172,7 @@ pub async fn put(
     };
     let user = k.a.user.id;
     if let Some(p) = progression {
-        // One write per (user, book) at a time: the beat, the read-back and the row go together.
-        let mut tx = st.db.begin().await?;
-        sqlx::query("SELECT pg_advisory_xact_lock($1)")
-            .bind((i64::from(user) << 32) | i64::from(b.item))
-            .execute(&mut *tx)
-            .await?;
+        let _one = serialise(user, b.item).await;
         let (family, last_chapter_start) = finish_context(&st.db, b.item, b.file).await?;
         let watch = Watch {
             position: 0.0,
@@ -173,7 +193,7 @@ pub async fn put(
         )
         .bind(user)
         .bind(b.item)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&st.db)
         .await?;
         if let Some(at) = at {
             let kept = json!({
@@ -191,10 +211,9 @@ pub async fn put(
             .bind(b.item)
             .bind(at)
             .bind(kept)
-            .execute(&mut *tx)
+            .execute(&st.db)
             .await?;
         }
-        tx.commit().await?;
     }
     let ok = json!({"Result": "Success"});
     Ok(json_response(

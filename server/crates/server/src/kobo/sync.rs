@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{http::AppError, state::AppState};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Request, State},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -227,7 +227,11 @@ pub async fn archive(
     State(st): State<AppState>,
     k: Kobo,
     Path((_, id)): Path<(String, String)>,
+    req: Request,
 ) -> Result<Response, AppError> {
+    if super::proxy::store_book(&st, &id).await? {
+        return Ok(super::proxy::forward(req).await);
+    }
     let Some(b) = books::find(&st.db, &k, &id).await? else {
         return Ok(books::not_found());
     };

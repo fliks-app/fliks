@@ -67,8 +67,8 @@ pub struct Index {
     pub updated: DateTime<Utc>,
 }
 
-pub async fn index(
-    db: &PgPool,
+pub async fn index<'e>(
+    db: impl sqlx::PgExecutor<'e>,
     acl: &[i32],
     only: Option<&[i32]>,
 ) -> Result<Vec<Index>, sqlx::Error> {
@@ -82,8 +82,8 @@ pub async fn index(
     .await
 }
 
-pub async fn fetch(
-    db: &PgPool,
+pub async fn fetch<'e>(
+    db: impl sqlx::PgExecutor<'e>,
     acl: &[i32],
     only: Option<&[i32]>,
 ) -> Result<Vec<Book>, sqlx::Error> {

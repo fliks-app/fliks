@@ -194,12 +194,18 @@ async fn initialization(
         "user_profile": format!("{root}/v1/user/profile"),
         "user_loyalty_benefits": format!("{root}/v1/user/loyalty/benefits"),
         "get_tests_request": format!("{root}/v1/analytics/gettests"),
+        "kobo_audiobooks_enabled": "False",
+        "kobo_audiobooks_orange_deal_enabled": "False",
+        "kobo_audiobooks_subscriptions_enabled": "False",
+        "kobo_audiobooks_credit_redemption": "False",
+        "kobo_nativeborrow_enabled": "False",
+        "kobo_onestorelibrary_enabled": "False",
+        "kobo_shelfie_enabled": "False",
+        "kobo_subscriptions_enabled": "False",
+        "kobo_superpoints_enabled": "False",
     });
     // The native map, or the store's own when the proxy is on, then ours on top.
-    let mut resources: serde_json::Map<String, Value> = resources::NATIVE
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), Value::from(*v)))
-        .collect();
+    let mut resources = resources::native();
     if proxy::enabled(&st).await? {
         resources.extend(proxy::store_resources(&headers).await.unwrap_or_default());
     }

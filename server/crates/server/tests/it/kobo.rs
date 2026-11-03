@@ -929,3 +929,176 @@ async fn the_auth_stub_echoes_the_user_key(pool: PgPool) {
         .await;
     assert_eq!(r.body["UserKey"], "abc");
 }
+
+#[sqlx::test(migrations = false)]
+async fn with_the_proxy_on_store_books_state_and_deletes_reach_the_store(pool: PgPool) {
+    use std::sync::{Arc, Mutex};
+    let (c, _) = ctx(pool).await;
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let log = seen.clone();
+    let store = Router::new().fallback(move |req: Request<Body>| {
+        let log = log.clone();
+        async move {
+            let line = format!("{} {}", req.method(), req.uri().path());
+            log.lock().unwrap().push(line.clone());
+            if line.contains("redirect") {
+                return axum::response::Response::builder()
+                    .status(302)
+                    .header("location", "https://elsewhere.example/")
+                    .body(Body::empty())
+                    .unwrap();
+            }
+            let body = if line.ends_with("/v1/initialization") {
+                json!({"Resources": {"zzz": "x", "kobo_subscriptions_enabled": "True"}})
+            } else {
+                json!({"from": "store"})
+            };
+            axum::response::Response::builder()
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, store).await.unwrap() });
+    // SAFETY: the only test that sets it; the others never read a proxy answer.
+    unsafe { std::env::set_var("FLIKS_KOBO_STORE_URL", format!("http://{addr}")) };
+    sqlx::query("INSERT INTO app_settings (key, value) VALUES ('kobo_store_proxy', 'true')")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let foreign = "0b6ee1c2-aaaa-4bbb-8ccc-123456789abc";
+    let put = state_put(1, 5.0, "Reading", "x");
+    let r = c
+        .call("PUT", &format!("/v1/library/{foreign}/state"), Some(put))
+        .await;
+    assert_eq!((r.status, r.body["from"].as_str()), (200, Some("store")));
+    let r = c
+        .call("GET", &format!("/v1/library/{foreign}/state"), None)
+        .await;
+    assert_eq!(r.body["from"], "store");
+    let r = c
+        .call("DELETE", &format!("/v1/library/{foreign}"), None)
+        .await;
+    assert_eq!(r.status, 200);
+    let r = c.call("GET", "/v1/redirect/me", None).await;
+    assert_eq!(r.status, 502, "a store redirect is no answer");
+    let seen_now = seen.lock().unwrap().clone();
+    assert!(
+        seen_now.contains(&format!("PUT /v1/library/{foreign}/state")),
+        "{seen_now:?}"
+    );
+    assert!(seen_now.contains(&format!("DELETE /v1/library/{foreign}")));
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM playback_states")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "nothing of a store book is written here");
+
+    let res = c.call("GET", "/v1/initialization", None).await.body["Resources"].clone();
+    assert_eq!(res["zzz"], "x", "the store's own keys are merged");
+    assert_eq!(
+        res["kobo_subscriptions_enabled"], "False",
+        "ours win over the store"
+    );
+    assert_eq!(res["kobo_superpoints_enabled"], "False");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_reused_playlist_the_device_never_saw_is_still_sent(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let t = c.sync(None).await.sync_token.unwrap();
+    let t = c.sync(Some(&t)).await.sync_token.unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO playlists (id, name, "ownerId") VALUES (70, 'Old', 1);
+           INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (70, 1, 0);"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let made = c
+        .call(
+            "POST",
+            "/v1/library/tags",
+            Some(json!({"Name": "Old", "Items": [{"RevisionId": book(4)}]})),
+        )
+        .await;
+    assert_eq!(
+        made.body.as_str().unwrap(),
+        format!("f11c5a60-0000-4000-8000-{:012x}", 70)
+    );
+    let r = c.sync(Some(&t)).await;
+    assert_eq!(
+        ids(&r),
+        ["NewTag 46"],
+        "the device had never seen the playlist, so it gets all of it"
+    );
+    assert_eq!(
+        r.body[0]["NewTag"]["Tag"]["Items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_crafted_delete_never_removes_a_playlist_the_device_cannot_see(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    sqlx::query(r#"INSERT INTO playlists (id, name, "ownerId") VALUES (71, 'Empty', 1)"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let tag = format!("f11c5a60-0000-4000-8000-{:012x}", 71);
+    assert_eq!(
+        c.call("DELETE", &format!("/v1/library/tags/{tag}"), None)
+            .await
+            .status,
+        404
+    );
+    assert_eq!(
+        c.call(
+            "PUT",
+            &format!("/v1/library/tags/{tag}"),
+            Some(json!({"Name": "X"}))
+        )
+        .await
+        .status,
+        404
+    );
+    let name: String = sqlx::query_scalar("SELECT name FROM playlists WHERE id = 71")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(name, "Empty");
+}
+
+#[sqlx::test(migrations = false)]
+async fn native_resources_keep_json_values_and_the_store_host(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let res = c.call("GET", "/v1/initialization", None).await.body["Resources"].clone();
+    assert_eq!(
+        res["blackstone_header"],
+        json!({"key": "x-amz-request-payer", "value": "requester"})
+    );
+    assert!(
+        res["free_books_page"]["FR"]
+            .as_str()
+            .unwrap()
+            .contains("livres-gratuits")
+    );
+    assert_eq!(res["ppx_purchasing_url"], "https://purchasing.kobo.com");
+    assert_eq!(
+        res["category_featured_lists"],
+        "https://storeapi.kobo.com/v1/categories/{CategoryId}/featured"
+    );
+    assert!(!res.to_string().contains("storeapi.mobile.kobo.com"));
+    for k in [
+        "kobo_audiobooks_enabled",
+        "kobo_subscriptions_enabled",
+        "kobo_superpoints_enabled",
+    ] {
+        assert_eq!(res[k], "False", "{k}");
+    }
+}

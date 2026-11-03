@@ -817,14 +817,11 @@ mod resolve {
         .await
         .1;
         assert_eq!(live, denied(), "live is out of scope");
-        for purpose in ["stream", "sprite", "subtitle", "download"] {
-            let b = ask_device(&w, &kobo, Some("path"), purpose).await;
-            assert_eq!(
-                b,
-                denied(),
-                "{purpose}: a kobo token reads text downloads only, not video"
-            );
-        }
+        assert_eq!(
+            ask_device(&w, &kobo, Some("path"), "download").await,
+            denied(),
+            "a kobo token never reads a file that is not a text edition"
+        );
         sqlx::query(
             r#"WITH e AS (INSERT INTO editions ("mediaId", family) SELECT "mediaId", 'text' FROM media_files WHERE id = $1 RETURNING id, "mediaId"),
                     i AS (INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM e RETURNING id, "mediaId")
@@ -839,10 +836,13 @@ mod resolve {
             b["allow"], true,
             "a kobo token downloads a text edition from the path"
         );
-        assert_eq!(
-            ask_device(&w, &kobo, Some("path"), "stream").await,
-            denied()
-        );
+        for purpose in ["stream", "sprite", "subtitle"] {
+            assert_eq!(
+                ask_device(&w, &kobo, Some("path"), purpose).await,
+                denied(),
+                "{purpose} is outside the purposes of a kobo token"
+            );
+        }
         let jwt = w.member.1.clone();
         assert_eq!(
             ask_device(&w, &format!("Bearer {jwt}"), Some("basic"), "stream").await,
