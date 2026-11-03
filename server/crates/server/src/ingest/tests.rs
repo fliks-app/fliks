@@ -1851,6 +1851,44 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_requested_language_is_in_the_file_name(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = book(&c, "Orfaline").await;
+        let inbox = c.dir.join("inbox/Orfaline");
+        for (dir, language) in [("a", Some("fr")), ("b", Some("en")), ("c", None)] {
+            let src = inbox.join(dir).join("x.epub");
+            touch(&src, dir.as_bytes());
+            let guard = c.st.ingest.media.lock(m).await;
+            let req = Request {
+                media_id: m,
+                files: vec![File {
+                    path: src,
+                    episode_id: None,
+                }],
+                transfer: Method::Copy,
+                fallback_quality: None,
+                release_name: None,
+                force: false,
+                uniquify_on_collision: false,
+                replace_existing: false,
+                language: language.map(str::to_owned),
+            };
+            let out = library::ingest(&c.st, &guard, req).await.unwrap();
+            assert_eq!(out.errors.len(), 0, "{:?}", out.errors);
+        }
+        let mut got: Vec<String> = parts(&c, m).await.into_iter().map(|p| p.0).collect();
+        got.sort();
+        assert_eq!(
+            got,
+            [
+                "Orfaline/Orfaline (en).epub",
+                "Orfaline/Orfaline (fr).epub",
+                "Orfaline/Orfaline.epub"
+            ]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_orphan_scan_groups_book_files_into_works(pool: PgPool) {
         let c = ctx(pool).await;
         let lib = c.dir.join("shelf");

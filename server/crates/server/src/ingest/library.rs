@@ -432,6 +432,15 @@ impl Ctx<'_> {
                 ..Default::default()
             },
         );
+        // The language is in the name so two languages of one format never collide (as `.fr` for a subtitle).
+        if let Some(l) = self
+            .req
+            .language
+            .as_deref()
+            .filter(|_| !self.formats.book.contains("{Language}"))
+        {
+            base = format!("{base} ({l})");
+        }
         if let Some((i, _)) = part.filter(|(_, n)| *n > 1) {
             base = format!("{base} - {:02}", i + 1);
         }
