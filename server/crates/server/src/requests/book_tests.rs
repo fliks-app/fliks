@@ -9,6 +9,7 @@ use axum::{Router, body::Body, http::Request};
 use fliks_domain::media::{family::Family, wants::WantSpec};
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use std::time::{Duration, Instant};
 use tower::ServiceExt;
 
 struct Ctx {
@@ -22,8 +23,13 @@ struct Ctx {
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
+    slow_ctx(pool, Duration::ZERO).await
+}
+
+async fn slow_ctx(pool: PgPool, delay: Duration) -> Ctx {
     crate::db::migrate(&pool).await.unwrap();
     let mut ol = anchor();
+    ol.delay = delay;
     for n in 2..=9 {
         ol.works.insert(
             format!("OL{n}W"),
@@ -328,7 +334,7 @@ async fn concurrent_approvals_of_one_work_keep_every_edition_wished(pool: PgPool
                 "OL6W",
                 &[w],
                 (Some(1), None),
-                Some(2),
+                (Some(2), None),
             )
             .await
             .map_err(|e| e.status())
@@ -374,5 +380,142 @@ async fn requesting_needs_the_requests_permission(pool: PgPool) {
     assert_eq!(
         c.request("", "OL2W", json!([want("text", None)])).await.0,
         401
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_auto_approved_import_holds_no_lock_while_the_provider_answers(pool: PgPool) {
+    let c = slow_ctx(pool, Duration::from_secs(3)).await;
+    let rule = json!({"name": "r", "criteria": {"mediaType": "book"}});
+    assert_eq!(
+        c.call(&c.admin, "POST", "/api/auto-approval-rules", rule)
+            .await
+            .0,
+        201
+    );
+    let folder: i32 = sqlx::query_scalar("SELECT id FROM library_folders WHERE \"libraryId\" = 1")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let body = json!({"mediaType": "book", "externalId": "OL2W", "title": "t", "folderId": folder,
+                      "wants": [want("text", None)]});
+    let slow = {
+        let (app, tok) = (c.app.clone(), c.user.clone());
+        tokio::spawn(async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/requests")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {tok}"))
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            app.oneshot(req).await.unwrap().status().as_u16()
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let t = Instant::now();
+    let mut tx = c.pool.begin().await.unwrap();
+    sqlx::query("SET LOCAL lock_timeout = '1s'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT 1 FROM library_folders WHERE id = $1 FOR UPDATE")
+        .bind(folder)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    assert!(t.elapsed() < Duration::from_secs(1));
+    let (s, other) = c
+        .request(&c.manager, "OL2W", json!([want("text", None)]))
+        .await;
+    assert_eq!(
+        s, 409,
+        "the approved row answers the duplicate guard at once: {other}"
+    );
+    assert_eq!(slow.await.unwrap(), 201);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_failed_auto_approved_import_leaves_the_request_pending(pool: PgPool) {
+    let c = ctx(pool).await;
+    let rule = json!({"name": "r", "criteria": {"mediaType": "book"}});
+    c.call(&c.admin, "POST", "/api/auto-approval-rules", rule)
+        .await;
+    let (s, _) = c
+        .request(&c.user, "OL404W", json!([want("text", None)]))
+        .await;
+    assert!(s >= 400, "{s}");
+    let (status, approver): (String, Option<i32>) = sqlx::query_as(
+        "SELECT status::text, \"approvedById\" FROM requests WHERE \"externalId\" = 'OL404W'",
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), approver), ("pending", None));
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_existing_work_only_gets_the_missing_wants_and_stays_inside_the_requesters_libraries(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W"});
+    let (_, m) = c.call(&c.admin, "POST", "/api/media/import", body).await;
+    let media = m["id"].as_i64().unwrap() as i32;
+    let before: Vec<(String, Option<i32>)> = sqlx::query_as(
+        "SELECT family, \"qualityProfileId\" FROM wants WHERE \"mediaId\" = $1 ORDER BY family",
+    )
+    .bind(media)
+    .fetch_all(&c.pool)
+    .await
+    .unwrap();
+    let wants = json!([want("text", None), want("audio", Some("fr"))]);
+    let (_, r) = c.request(&c.user, "OL2W", wants).await;
+    let uri = format!("/api/requests/{}/approve", r["id"]);
+    // the requester loses the library: the approval is refused and the request stays pending
+    sqlx::query("DELETE FROM library_user_access WHERE \"userId\" = 2")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, r) = c.call(&c.manager, "POST", &uri, json!({})).await;
+    assert_eq!(
+        (s, &r["message"]),
+        (403, &json!("errors.book_library_not_accessible")),
+        "{r}"
+    );
+    sqlx::query("INSERT INTO library_user_access (\"libraryId\", \"userId\") VALUES (1, 2)")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(c.call(&c.manager, "POST", &uri, json!({})).await.0, 201);
+    let after: Vec<(String, Option<i32>)> =
+        sqlx::query_as("SELECT family, \"qualityProfileId\" FROM wants WHERE \"mediaId\" = $1 AND language IS NULL ORDER BY family")
+            .bind(media)
+            .fetch_all(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(after, before, "the existing wants are untouched");
+    assert_eq!(c.wants(media).await.len(), before.len() + 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_request_refuses_a_request_level_profile_patch(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", None)]))
+        .await;
+    let uri = format!("/api/requests/{}", r["id"]);
+    for body in [
+        json!({"qualityProfileId": 1}),
+        json!({"languageProfileId": null}),
+    ] {
+        assert_eq!(c.call(&c.user, "PATCH", &uri, body).await.0, 400);
+    }
+    assert_eq!(
+        c.call(&c.user, "PATCH", &uri, json!({"libraryId": 1}))
+            .await
+            .0,
+        200
     );
 }

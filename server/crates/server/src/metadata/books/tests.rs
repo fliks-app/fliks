@@ -40,6 +40,7 @@ pub(crate) struct Fake {
     finds: HashMap<(ExternalProvider, String), String>,
     pub(crate) found: Vec<Value>,
     pub(crate) broken: bool,
+    pub(crate) delay: std::time::Duration,
     calls: Mutex<Vec<String>>,
 }
 
@@ -100,7 +101,11 @@ impl MetadataProvider for Fake {
     ) -> Call<'a, Value> {
         self.log("work");
         let r = self.works.get(id).cloned();
-        Box::pin(async move { r.ok_or_else(|| Upstream::new(Some(404), "no work")) })
+        let delay = self.delay;
+        Box::pin(async move {
+            tokio::time::sleep(delay).await;
+            r.ok_or_else(|| Upstream::new(Some(404), "no work"))
+        })
     }
     fn fetch_children<'a>(
         &'a self,

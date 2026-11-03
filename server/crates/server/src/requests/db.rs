@@ -169,10 +169,14 @@ pub async fn quota_count(
     .await
 }
 
+/// First key of the quota advisory lock; the second is the user id.
+const QUOTA_LOCK_NS: i32 = 0x7271_7574;
+
 /// Serialises one user's quota check and insert until the transaction ends, so concurrent creates cannot pass together.
 pub async fn lock_user_quota(tx: &mut PgConnection, user_id: i32) -> sqlx::Result<()> {
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(format!("requests:quota:{user_id}"))
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(QUOTA_LOCK_NS)
+        .bind(user_id)
         .execute(tx)
         .await?;
     Ok(())

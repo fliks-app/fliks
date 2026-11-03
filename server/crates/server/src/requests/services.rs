@@ -1,8 +1,9 @@
 //! The media services the request flows call: TMDB, the image store, `importFromTmdb`, the media delete and the notifications.
 use super::{Art, ImportSpec, PortError, Removed, TitleFacts, TitleKey};
 use crate::{
-    http::AppError,
+    http::{AppError, auth::load_users},
     images::paths::{Target, Variant},
+    libraries::library_ids_of,
     media::write::{
         all_library_ids, import_book_for_request, import_for_request, remove_media_with_dir,
         resolve_target_in,
@@ -12,7 +13,10 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider, media::kind::MediaKind, metadata::limiter::Priority,
+    acl::{Action, Permissions, Subject},
+    external_id::ExternalProvider,
+    media::kind::MediaKind,
+    metadata::limiter::Priority,
 };
 use serde_json::{Map, Value};
 
@@ -175,6 +179,26 @@ pub async fn assert_import_target(
         .map_err(port)
 }
 
+/// The libraries the requester reaches; `None` when the request has no requester.
+async fn requester_libraries(
+    st: &AppState,
+    user: Option<i32>,
+) -> Result<Option<Vec<i32>>, sqlx::Error> {
+    let Some(user) = user.filter(|u| *u != 0) else {
+        return Ok(None);
+    };
+    let Some((row, role)) = load_users(&st.db, Some(user), false).await?.pop() else {
+        return Ok(Some(vec![]));
+    };
+    let perms = Permissions::from(
+        role.as_ref().map_or(&[][..], |r| &r.permissions),
+        row.is_admin,
+    );
+    library_ids_of(&st.db, user, perms.can(Action::Manage, &Subject::All))
+        .await
+        .map(Some)
+}
+
 /// `importFromTmdb`, or the book import of a book request (it calls `Lifecycle::on_media_imported` itself
 /// for a video title); answers the media id.
 pub async fn import_title(
@@ -183,12 +207,15 @@ pub async fn import_title(
     added_by: Option<i32>,
 ) -> Result<i32, PortError> {
     if spec.title.media_type == MediaKind::Book {
+        let readable = requester_libraries(st, added_by)
+            .await
+            .map_err(|e| port(e.into()))?;
         return import_book_for_request(
             st,
             &spec.title.external_id,
             spec.wants.as_deref().unwrap_or_default(),
             (spec.library_id, spec.folder_id),
-            added_by,
+            (added_by, readable.as_deref()),
         )
         .await
         .map_err(port);

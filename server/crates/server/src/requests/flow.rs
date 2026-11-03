@@ -284,7 +284,9 @@ pub async fn ensure_media(
 ) -> Res<Option<i32>> {
     let media_id = match services::import_title(st, spec.clone(), added_by).await {
         Ok(id) => id,
-        Err(e) if e.status != 409 => return Err(e.into()),
+        Err(e) if e.status != 409 || spec.title.media_type == MediaKind::Book => {
+            return Err(e.into());
+        }
         Err(_) => {
             let Some(existing) = db::media_by_ref(&st.db, &spec.title).await? else {
                 return Ok(None);
@@ -354,13 +356,31 @@ fn id_obj(id: Option<i32>) -> Value {
     id.map_or(Value::Null, |i| json!({ "id": i }))
 }
 
+/// A lock wait past `lock_timeout` answers busy (409 for the title lock, else 503), not a database fault.
+fn lock_err(e: sqlx::Error, title: bool) -> AppError {
+    if e.as_database_error().and_then(|d| d.code()).as_deref() != Some("55P03") {
+        return e.into();
+    }
+    if title {
+        AppError::conflict("Another request for this title is being processed, try again shortly")
+    } else {
+        AppError::with_message(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Your other requests are still being processed, try again shortly",
+        )
+    }
+}
+
 pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Value> {
     if dto.delete {
         return create_delete(st, a, &dto).await;
     }
+    let key = dto.key();
+    // network first: no lock, no connection held while TMDB answers
+    let candidates = rules::candidates(st, &dto).await?;
     let limited = a.user.quotas.limit(dto.media_type) != 0;
     // waiters queue here without a connection, so the lock holder can always get the ones it needs
-    let _turn = match limited {
+    let turn = match limited {
         true => Some(QUOTA_TURNS.lock(a.user.id).await),
         false => None,
     };
@@ -369,11 +389,14 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         .execute(&mut *tx)
         .await?;
     if limited {
-        db::lock_user_quota(&mut tx, a.user.id).await?;
+        db::lock_user_quota(&mut tx, a.user.id)
+            .await
+            .map_err(|e| lock_err(e, false))?;
     }
     check_quota(&mut tx, a, dto.media_type).await?;
-    let key = dto.key();
-    db::lock_title(&mut tx, &key).await?;
+    db::lock_title(&mut tx, &key)
+        .await
+        .map_err(|e| lock_err(e, true))?;
     assert_no_active_duplicate(&mut tx, &dto).await?;
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
@@ -406,21 +429,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         crate::media::wants::check_profiles(&st.db, w).await?;
     }
 
-    let auto = rules::should_auto_approve(st, a, &dto, library_id).await?;
-    let media_id = if auto {
-        let spec = ImportSpec {
-            title: key.clone(),
-            quality_profile_id: dto.quality_profile_id,
-            language_profile_id: dto.language_profile_id,
-            library_id: Some(library_id),
-            folder_id: dto.folder_id,
-            seasons: dto.seasons.clone(),
-            wants: dto.wants.clone(),
-        };
-        ensure_media(st, spec, Some(a.user.id)).await?
-    } else {
-        None
-    };
+    let auto = candidates.approves(a, &dto, library_id);
     let id = db::insert(
         &mut *tx,
         db::New {
@@ -435,14 +444,16 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             language_profile_id: language,
             library_id: Some(library_id),
             folder_id: dto.folder_id,
-            media_id,
+            media_id: None,
             poster_url: None,
             fanart_url: None,
             wants: dto.wants.as_deref(),
         },
     )
-    .await?;
+    .await
+    .map_err(|e| lock_err(e, false))?;
     tx.commit().await?;
+    drop(turn);
 
     st.hub.emit_domain(DomainEvent::RequestCreated {
         request_id: i64::from(id),
@@ -452,7 +463,33 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         kind: "add".into(),
         seasons: dto.seasons.clone(),
     });
+    let mut media_id = None;
     if auto {
+        // the row is committed approved, so `on_media_imported` links it; a failure gives it back, as `approve`
+        let spec = ImportSpec {
+            title: key.clone(),
+            quality_profile_id: dto.quality_profile_id,
+            language_profile_id: dto.language_profile_id,
+            library_id: Some(library_id),
+            folder_id: dto.folder_id,
+            seasons: dto.seasons.clone(),
+            wants: dto.wants.clone(),
+        };
+        media_id = match ensure_media(st, spec, Some(a.user.id)).await {
+            Ok(m) => m,
+            Err(e) => {
+                db::rollback_to_pending(&st.db, id, a.user.id).await?;
+                notify(
+                    st,
+                    "request.created",
+                    json!({"title": dto.title, "mediaType": dto.media_type}),
+                );
+                return Err(e);
+            }
+        };
+        if let Some(m) = media_id {
+            db::link_if_unlinked(&st.db, id, m).await?;
+        }
         st.hub.emit_domain(DomainEvent::RequestApproved {
             request_id: i64::from(id),
             media_id: media_id.map(i64::from),
@@ -594,6 +631,11 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
         falsy(&dto.language_profile_id),
         dto.library_id.touched(),
     );
+    if row.media_type == MediaKind::Book && (quality.is_some() || language.is_some()) {
+        return Err(AppError::bad_request(
+            "A book request takes its profiles per want",
+        ));
+    }
     if let Some(Some(l)) = library {
         assert_can_use_library(st, a, l).await?;
     }

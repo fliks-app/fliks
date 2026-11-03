@@ -44,6 +44,7 @@ const FIELDS: [&str; 6] = [
     "wants",
 ];
 const TAKEN: &str = "This title is already in the library";
+const NOT_READABLE: &str = "errors.book_library_not_accessible";
 
 pub(super) async fn import_book(
     st: &AppState,
@@ -276,15 +277,16 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
 }
 
 /// A book request approval: the work in the request's library with the requested editions wished; a work
-/// already in the library gets them added to its wants. No caller ACL, the requester is `added_by`.
+/// already in the library gets the missing ones added to its wants. `readable` is the requester's library
+/// scope (`None`: no requester): an existing work outside it is refused.
 pub async fn import_book_for_request(
     st: &AppState,
     work: &str,
     wants: &[WantSpec],
     (library, folder): (Option<i32>, Option<i32>),
-    added_by: Option<i32>,
+    (added_by, readable): (Option<i32>, Option<&[i32]>),
 ) -> Result<i32, AppError> {
-    if let Some(id) = add_to_existing(st, work, wants).await? {
+    if let Some(id) = add_to_existing(st, work, wants, readable).await? {
         return Ok(id);
     }
     let all = super::all_library_ids(&st.db).await?;
@@ -305,33 +307,60 @@ pub async fn import_book_for_request(
     match created {
         // lost a race with another import of the work: it is there now
         Err(e) if e.status() == StatusCode::CONFLICT => {
-            add_to_existing(st, work, wants).await?.ok_or(e)
+            add_to_existing(st, work, wants, readable).await?.ok_or(e)
         }
         r => r,
     }
 }
 
-/// Adds `wants` to the work when it is already in the library; the union stays within `MAX_WANTS`.
+/// Adds the wants the work lacks when it is already in the library, under its row lock; the union stays
+/// within `MAX_WANTS`. A work in a library outside `readable` is 403.
 async fn add_to_existing(
     st: &AppState,
     work: &str,
     wants: &[WantSpec],
+    readable: Option<&[i32]>,
 ) -> Result<Option<i32>, AppError> {
     let Some(id) = external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await? else {
         return Ok(None);
     };
     let mut tx = st.db.begin().await?;
-    wants::add(&mut tx, id, wants)
-        .await
-        .map_err(|e| wants::write_error(e, id))?;
-    let n: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM wants WHERE "mediaId" = $1"#)
-        .bind(id)
-        .fetch_one(&mut *tx)
-        .await?;
-    if n > MAX_WANTS as i64 {
+    let library: Option<Option<i32>> =
+        sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1 FOR UPDATE"#)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some(library) = library else {
+        return Ok(None);
+    };
+    if let Some(ids) = readable
+        && !library.is_some_and(|l| ids.contains(&l))
+    {
+        return Err(AppError::forbidden(NOT_READABLE));
+    }
+    let held: Vec<(String, Option<String>)> =
+        sqlx::query_as(r#"SELECT family, language FROM wants WHERE "mediaId" = $1"#)
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+    let missing: Vec<WantSpec> = wants
+        .iter()
+        .filter(|w| {
+            !held
+                .iter()
+                .any(|(f, l)| *f == w.family.as_str() && *l == w.language)
+        })
+        .cloned()
+        .collect();
+    if held.len() + missing.len() > MAX_WANTS {
         return Err(AppError::bad_request(format!(
             "the book would hold more than {MAX_WANTS} wants"
         )));
+    }
+    if !missing.is_empty() {
+        wants::add(&mut tx, id, &missing)
+            .await
+            .map_err(|e| wants::write_error(e, id))?;
     }
     tx.commit().await?;
     Ok(Some(id))
