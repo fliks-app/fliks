@@ -66,6 +66,14 @@ pub async fn set_status(db: &PgPool, id: &str, reason: Option<&str>) -> sqlx::Re
     .map(drop)
 }
 
+pub async fn mark_bundled(db: &PgPool, id: &str) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE plugin_packages SET origin = 'bundled' WHERE "pluginId" = $1 AND origin <> 'bundled'"#)
+        .bind(id)
+        .execute(db)
+        .await
+        .map(drop)
+}
+
 pub async fn set_enabled(db: &PgPool, id: &str, enabled: bool) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE plugin_packages SET enabled = $2, "updatedAt" = now() WHERE "pluginId" = $1"#,

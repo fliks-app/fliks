@@ -31,7 +31,7 @@ fn main() {
         let path = dir.join(format!("{id}-{version}.fkplugin"));
         if !path.exists() {
             fs::create_dir_all(&dir).unwrap();
-            let tmp = path.with_extension("part");
+            let tmp = path.with_extension(format!("{}.part", std::process::id()));
             let ok = Command::new("curl")
                 .args(["-fsSL", "--retry", "3", "-o"])
                 .arg(&tmp)
@@ -42,6 +42,11 @@ fn main() {
                 ok,
                 "providers.lock: cannot fetch {url} (offline? put the archive at {})",
                 path.display()
+            );
+            let got = sha256_hex(&fs::read(&tmp).unwrap());
+            assert!(
+                got == sha,
+                "{url}: sha256 {got} differs from providers.lock {sha}"
             );
             fs::rename(&tmp, &path).unwrap();
         }

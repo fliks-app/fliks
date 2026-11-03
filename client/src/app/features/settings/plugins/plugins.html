@@ -112,9 +112,11 @@
                 <button type="button" class="btn btn-ghost btn-xs" (click)="exportData(row)">
                   {{ 'settings.plugins.export.button' | translate }}
                 </button>
-                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="uninstall(row)">
-                  {{ 'settings.plugins.uninstall' | translate }}
-                </button>
+                @if (row.origin !== 'bundled') {
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="uninstall(row)">
+                    {{ 'settings.plugins.uninstall' | translate }}
+                  </button>
+                }
               </td>
             </tr>
             @if (row.kind === 'process') {

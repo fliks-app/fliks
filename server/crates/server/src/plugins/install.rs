@@ -283,7 +283,9 @@ impl Plugins {
         origin: &str,
         activate: bool,
     ) -> Result<InstallResult, InstallError> {
-        self.refuse_while_restoring()?;
+        if origin != "bundled" {
+            self.refuse_while_restoring()?;
+        }
         let id = &i.id;
         let m = &i.manifest;
         if i.signature == super::trust::Trust::Unsigned {
@@ -306,6 +308,13 @@ impl Plugins {
                 && let (Ok(new), Ok(old)) = (Version::parse(&i.version), Version::parse(&e.version))
                 && new < old
             {
+                if origin == "bundled" {
+                    return Err(ie(
+                        StatusCode::CONFLICT,
+                        "PLUGIN_DOWNGRADE",
+                        format!("the installed {} is newer", e.version),
+                    ));
+                }
                 tracing::warn!(
                     "installing \"{id}\" {} over the newer {}",
                     i.version,

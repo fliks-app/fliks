@@ -18,7 +18,12 @@ impl Plugins {
                 continue;
             };
             match packages::find(&self.db, id).await {
-                Ok(Some(e)) if Version::parse(&e.version).is_ok_and(|old| old >= new) => continue,
+                Ok(Some(e)) if Version::parse(&e.version).is_ok_and(|old| old >= new) => {
+                    if let Err(e) = packages::mark_bundled(&self.db, id).await {
+                        tracing::warn!("bundled plugin \"{id}\" not marked: {e}");
+                    }
+                    continue;
+                }
                 Ok(_) => {}
                 Err(e) => {
                     tracing::warn!("bundled plugin \"{id}\" skipped: {e}");
