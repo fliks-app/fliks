@@ -496,8 +496,7 @@ pub async fn import_for_request(
         profiles,
         target,
         added_by,
-        seasons,
-        vec![],
+        (seasons, vec![]),
     )
     .await
 }
@@ -510,8 +509,7 @@ pub async fn import_in(
     profiles: (Option<i32>, Option<i32>),
     (library_id, folder_id): (Option<i32>, Option<i32>),
     added_by: Option<i32>,
-    seasons: Option<Vec<i32>>,
-    links: Vec<(Namespace, String)>,
+    (seasons, links): (Option<Vec<i32>>, Vec<(Namespace, String)>),
 ) -> Result<i32, AppError> {
     if ns == Namespace::TMDB {
         if !st.metadata.available(ns) {
