@@ -9,6 +9,7 @@ export type WantFamily = 'text' | 'audio';
 export interface WantSpec {
   family: WantFamily;
   language: string | null;
+  qualityProfileId?: number | null;
 }
 
 // GET/PUT /api/media/:id/wants

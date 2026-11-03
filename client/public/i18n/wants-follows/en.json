@@ -10,6 +10,8 @@
     "family": "Format",
     "language": "Language",
     "any_language": "Any language",
+    "quality_profile": "Quality profile",
+    "no_profile": "No profile",
     "add": "Add a format",
     "remove": "Remove",
     "save": "Save",

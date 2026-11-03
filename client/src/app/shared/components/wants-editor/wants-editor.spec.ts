@@ -36,4 +36,10 @@ describe('WantsEditorComponent', () => {
     const { rows } = setup([{ family: 'text', language: 'fr' }]);
     expect((rows()[0].querySelector('button') as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('resets the profile when the family changes', () => {
+    const { fixture } = setup([{ family: 'text', language: null, qualityProfileId: 3 }]);
+    fixture.componentInstance['setFamily'](0, 'audio');
+    expect(fixture.componentInstance.wants()).toEqual([{ family: 'audio', language: null, qualityProfileId: null }]);
+  });
 });

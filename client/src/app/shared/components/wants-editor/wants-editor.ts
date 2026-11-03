@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { WantFamily, WantSpec } from '../../../core/services/api/wants-api.service';
+import { ProfilesService, type QualityProfile } from '../../../core/services/api/profiles.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 
@@ -19,9 +20,12 @@ const MAX_WANTS = 8;
 export class WantsEditorComponent {
   private readonly translate = inject(TranslateService);
 
+  private readonly profilesApi = inject(ProfilesService);
+
   readonly wants = model.required<WantSpec[]>();
 
   protected readonly families = FAMILIES;
+  protected readonly profiles = signal<Record<WantFamily, QualityProfile[]>>({ text: [], audio: [] });
   protected readonly canAdd = computed(() => this.wants().length < MAX_WANTS && this.free() !== null);
   protected readonly canRemove = computed(() => this.wants().length > 1);
 
@@ -30,12 +34,25 @@ export class WantsEditorComponent {
     ...new Set([...LANGUAGES, ...this.wants().flatMap((w) => (w.language ? [w.language] : []))]),
   ]);
 
+  constructor() {
+    for (const family of FAMILIES) {
+      this.profilesApi
+        .getQualityProfiles(family)
+        .then((list) => this.profiles.update((p) => ({ ...p, [family]: list })))
+        .catch(() => undefined);
+    }
+  }
+
   protected label(code: string) {
     return localizeLanguage(code, this.translate);
   }
 
   protected set(i: number, patch: Partial<WantSpec>) {
     this.wants.update((all) => all.map((w, j) => (j === i ? { ...w, ...patch } : w)));
+  }
+
+  protected setFamily(i: number, family: WantFamily) {
+    this.set(i, { family, qualityProfileId: null });
   }
 
   protected remove(i: number) {
