@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_moves SET \"mediaId\" = $2 WHERE \"mediaId\" = $1\n             AND NOT EXISTS (SELECT 1 FROM media_moves WHERE \"mediaId\" = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52f8ae0c4e65bc2deac1aa2f81116f32fbaa67e31a1ed1a6f9fbdcce9f6d16dc"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH d AS (DELETE FROM recommendation_dismissals WHERE \"mediaId\" = $1 RETURNING \"userId\")\n           INSERT INTO recommendation_dismissals (\"userId\", \"mediaId\") SELECT \"userId\", $2 FROM d\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b88cb157c728e19a959812322e45be5aadbac01cfdff146502ab777f521a4f61"
+}

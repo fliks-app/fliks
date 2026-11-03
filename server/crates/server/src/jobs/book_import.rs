@@ -496,6 +496,7 @@ async fn import_item(st: &AppState, job: &Job, item: &Item) -> Done {
     let media = linked.media_id;
     st.ingest.settle.cancel(media);
     let identified = books::identify_media(st, media).await;
+    let media = identified.as_ref().map_or_else(|e| e.media, |m| *m);
     books::merge::spawn(st, vec![media]);
     if let Err(e) = identified {
         tracing::warn!("Book import: identification of book #{media}: {}", e.cause);

@@ -1,6 +1,7 @@
 //! Writes what a `BookMatch` says (`docs/spec/book-metadata.md` rules 10-17).
 use super::{
     ANCHOR,
+    absorb::absorb,
     identify::BookMatch,
     merge::{self, Records},
     people, text, work_id,
@@ -124,7 +125,17 @@ pub async fn attach_with(
 
     match external_ids::link(&mut tx, media, MediaKind::Book, ANCHOR, &work).await? {
         Link::Linked => {}
-        Link::Taken => tracing::warn!("book #{media}: another work holds the {work} id"),
+        Link::Taken => {
+            let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, &work).await?;
+            match holder.filter(|h| *h != media && edition.is_some()) {
+                Some(holder) => {
+                    absorb(&mut tx, media, holder).await?;
+                    tx.commit().await?;
+                    return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
+                }
+                None => tracing::warn!("book #{media}: another work holds the {work} id"),
+            }
+        }
         Link::Gone => return Ok(()),
     }
     if let Some(e) = edition {

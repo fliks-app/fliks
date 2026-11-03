@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO book_details (\"mediaId\", subtitle, \"originalLanguage\", subjects)\n           SELECT $2, subtitle, \"originalLanguage\", subjects FROM book_details WHERE \"mediaId\" = $1\n           ON CONFLICT (\"mediaId\") DO UPDATE SET\n             subtitle = COALESCE(book_details.subtitle, EXCLUDED.subtitle),\n             \"originalLanguage\" = COALESCE(book_details.\"originalLanguage\", EXCLUDED.\"originalLanguage\"),\n             subjects = COALESCE(book_details.subjects, EXCLUDED.subjects)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a86b09fc421f63a0597bc4726429438adcbabd9e3451771ae6edcf3845e1c26"
+}
