@@ -20,6 +20,8 @@ Kobo sync: [`spec/kobo.md`](spec/kobo.md) (emulated Kobo store API on a `kobo` d
 KOReader sync: [`spec/kosync.md`](spec/kosync.md) (kosync server: routes, wire, auth by device token, document hash, shared progression).
 Send to device: [`spec/email-devices.md`](spec/email-devices.md) (admin SMTP settings, e-mail devices, mailing a book edition file, limits).
 
+Scene numbering: [`spec/scene-numbering.md`](spec/scene-numbering.md) (TheXEM scene to aired mapping of releases and files).
+
 Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item parts: what a media is made of).
 
 Media details: [`spec/media-details.md`](spec/media-details.md) (release dates, the calendar and the counters).

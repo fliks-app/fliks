@@ -1,0 +1,8 @@
+{
+ "result": "success",
+ "data": [
+  "1000",
+  "2000"
+ ],
+ "message": "mapped ids on tvdb"
+}

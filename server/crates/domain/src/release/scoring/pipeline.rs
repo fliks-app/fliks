@@ -5,7 +5,10 @@ use super::sort::{Sortable, sort_releases_by_relevance};
 use crate::language::AppLanguage;
 use crate::release::parsing::language::{parse_release_language, resolve_unknown_languages};
 use crate::release::parsing::quality::parse_release_quality;
-use crate::release::parsing::season_episode::{ReleaseCoverage, Span, release_coverage};
+use crate::release::parsing::season_episode::{
+    ReleaseCoverage, Span, coverage_of, parse_season_episode,
+};
+use crate::release::scene::SceneMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -107,6 +110,9 @@ pub struct ScoreOptions {
     pub min_rank_exclusive: Option<i64>,
     #[serde(default)]
     pub max_rank_inclusive: Option<i64>,
+    /// Release titles carry scene numbers: read them as aired numbers.
+    #[serde(default)]
+    pub scene_map: Option<SceneMap>,
 }
 
 /// Custom-format score of a release title and its flags, read from tables the caller precomputed.
@@ -132,7 +138,13 @@ pub fn score_and_sort_releases(
             let lang_ids: BTreeSet<u32> = langs.iter().map(|l| l.id).collect();
             let custom_format_score = score_custom_formats(&r.title, &r.flags);
             let blocklisted = is_blocked(&r.title, r.source_id);
-            let coverage = release_coverage(&r.title);
+            let se = parse_season_episode(&r.title);
+            let coverage = coverage_of(
+                &opts
+                    .scene_map
+                    .as_ref()
+                    .map_or(se.clone(), |m| m.translate(&se)),
+            );
             let quality = parsed.quality;
             let rejections = compute_rejections(&RejectionInput {
                 quality_id: quality.id,
