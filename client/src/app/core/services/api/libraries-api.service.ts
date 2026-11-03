@@ -63,6 +63,7 @@ export interface Library {
   metadataRegion: string | null;
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
+  mergeM4b: boolean;
   /** First folder, kept for older clients: `folders` is the list. */
   path: string | null;
   label: string | null;
@@ -81,6 +82,7 @@ export interface CreateLibraryBody {
   metadataRegion?: string | null;
   defaultQualityProfileId?: number | null;
   defaultLanguageProfileId?: number | null;
+  mergeM4b?: boolean;
   path?: string;
   userIds?: number[];
 }

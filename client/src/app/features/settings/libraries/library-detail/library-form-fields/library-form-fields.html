@@ -73,6 +73,15 @@
   </div>
 </div>
 
+@if (state.isBook()) {
+  <label class="label cursor-pointer justify-start gap-3 max-w-max">
+    <input type="checkbox" class="toggle"
+      [ngModel]="state.formMergeM4b()" (ngModelChange)="state.formMergeM4b.set($event)" />
+    <span class="label-text text-base">{{ 'settings.libraries.merge_m4b' | translate }}</span>
+  </label>
+  <p class="text-sm opacity-70 max-w-md -mt-2">{{ 'settings.libraries.merge_m4b_hint' | translate }}</p>
+}
+
 <div class="divider my-0"></div>
 <h2 class="card-title text-lg">{{ 'settings.libraries.section_metadata' | translate }}</h2>
 

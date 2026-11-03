@@ -36,6 +36,7 @@
             "mediaTypes": [
               "movie"
             ],
+            "mergeM4b": false,
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Movies",
@@ -72,6 +73,7 @@
             "mediaTypes": [
               "series"
             ],
+            "mergeM4b": false,
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Series",

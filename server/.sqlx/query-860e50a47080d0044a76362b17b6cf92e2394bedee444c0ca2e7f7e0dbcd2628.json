@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM book_merges b USING media m\n           WHERE b.\"mediaId\" = m.id AND b.state <> 'running' AND COALESCE(\n             (SELECT e.\"libraryId\" FROM editions e\n              WHERE e.\"mediaId\" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1), m.\"libraryId\") = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "860e50a47080d0044a76362b17b6cf92e2394bedee444c0ca2e7f7e0dbcd2628"
+}

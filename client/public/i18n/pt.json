@@ -2454,6 +2454,8 @@
       "metadata_inherit": "Herdar da definição global",
       "default_quality_profile": "Perfil de qualidade predefinido",
       "default_language_profile": "Perfil de idioma predefinido",
+      "merge_m4b": "Unir as partes de um audiolivro num só m4b",
+      "merge_m4b_hint": "Cria um m4b com capítulos junto às partes de um audiolivro em vários ficheiros. Os ficheiros originais são mantidos.",
       "user_access": "Acesso de utilizadores",
       "user_access_hint": "Os administradores têm sempre acesso a todas as bibliotecas.",
       "load_error": "Não foi possível carregar as bibliotecas.",

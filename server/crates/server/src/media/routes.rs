@@ -256,12 +256,23 @@ pub async fn edition_chapters(
     State(st): State<AppState>,
     a: Authed,
     ids: Result<PathParams<(i32, i32)>, AppError>,
+    Query(q): Pairs,
 ) -> Result<Json<Vec<Value>>, AppError> {
     a.require(Action::Read, Subject::Media)?;
     let PathParams((id, edition)) = ids?;
+    let version = q
+        .iter()
+        .find(|(k, _)| k == "version")
+        .map(|(_, v)| {
+            v.parse::<i32>()
+                .map_err(|_| AppError::bad_request("version must be an integer"))
+        })
+        .transpose()?;
     let acl = accessible_library_ids(&st.db, &a).await?;
     assert_media_accessible(&st.db, id, &acl).await?;
-    Ok(Json(books::chapters(&st.db, id, edition, &acl).await?))
+    Ok(Json(
+        books::chapters(&st.db, a.user.id, id, edition, version, &acl).await?,
+    ))
 }
 
 /// `counts.md`: the sidebar counters; each degrades to empty without its ability, never a 403.

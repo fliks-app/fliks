@@ -39,6 +39,7 @@
           "mediaTypes": [
             "movie"
           ],
+          "mergeM4b": false,
           "metadataLanguage": null,
           "metadataRegion": null,
           "name": "Films",
@@ -83,6 +84,7 @@
           "mediaTypes": [
             "movie"
           ],
+          "mergeM4b": false,
           "metadataLanguage": null,
           "metadataRegion": null,
           "name": "Films",

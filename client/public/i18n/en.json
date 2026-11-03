@@ -2454,6 +2454,8 @@
       "metadata_inherit": "Inherit from the global setting",
       "default_quality_profile": "Default quality profile",
       "default_language_profile": "Default language profile",
+      "merge_m4b": "Merge audiobook parts into one m4b",
+      "merge_m4b_hint": "Creates a chaptered m4b next to the parts of a multi-file audiobook. The original files are kept.",
       "user_access": "User access",
       "user_access_hint": "Administrators always have access to all libraries.",
       "load_error": "Unable to load the libraries.",

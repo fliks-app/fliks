@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE book_merges SET \"nextAttemptAt\" = now() + make_interval(secs => $2::float8)\n           WHERE \"mediaId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fd6034e8b72c5da6cabc397d8f36e3e620273f9db0150a5d40340e8a9d505bd0"
+}

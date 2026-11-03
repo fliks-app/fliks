@@ -184,11 +184,13 @@ fn edition_not_found(id: i32) -> AppError {
     AppError::not_found(format!("Edition #{id} not found"))
 }
 
-/// `BookChapter[]` of an edition on its version timeline (A6).
+/// `BookChapter[]` of an edition on the timeline of `version`, else of the version the user plays.
 pub(crate) async fn chapters(
     db: &PgPool,
+    user: i32,
     media: i32,
     edition: i32,
+    version: Option<i32>,
     acl: &[i32],
 ) -> Result<Vec<Value>, AppError> {
     let visible = sqlx::query_scalar!(
@@ -203,9 +205,27 @@ pub(crate) async fn chapters(
     if visible.is_none() {
         return Err(edition_not_found(edition));
     }
+    if let Some(n) = version {
+        let has = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId"
+                 WHERE i."editionId" = $1 AND i."groupId" IS NULL AND p.version = $2) AS "e!""#,
+            edition,
+            n
+        )
+        .fetch_one(db)
+        .await?;
+        if !has {
+            return Err(AppError::not_found(format!(
+                "Edition #{edition} has no version {n}"
+            )));
+        }
+    }
     let file = sqlx::query!(
         r#"WITH it AS (SELECT min(id) AS id FROM items WHERE "editionId" = $1 AND "groupId" IS NULL),
-v AS (SELECT max(ip.version) AS v FROM item_parts ip, it WHERE ip."itemId" = it.id),
+v AS (SELECT COALESCE($2::int,
+    (SELECT ps.version FROM playback_states ps, it WHERE ps."userId" = $3 AND ps."itemId" = it.id
+       AND EXISTS (SELECT 1 FROM item_parts x WHERE x."itemId" = it.id AND x.version = ps.version)),
+    (SELECT max(ip.version) FROM item_parts ip, it WHERE ip."itemId" = it.id)) AS v),
 parts AS (SELECT ip."itemId", ip."mediaFileId" AS fid, ip.position,
     COALESCE(sum(COALESCE((f."streamInfo"->>'durationSeconds')::float8, 0))
       OVER (ORDER BY ip.position ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS off
@@ -214,7 +234,9 @@ parts AS (SELECT ip."itemId", ip."mediaFileId" AS fid, ip.position,
 SELECT mk.title AS "title?", (parts.off + mk."startSeconds")::float8 AS "start!", (parts.off + mk."endSeconds")::float8 AS "end!"
 FROM parts JOIN item_markers mk ON mk."itemId" = parts."itemId" AND mk."mediaFileId" = parts.fid AND mk.kind = 'chapter'
 ORDER BY parts.off + mk."startSeconds", mk.id"#,
-        edition
+        edition,
+        version,
+        user
     )
     .fetch_all(db)
     .await?;

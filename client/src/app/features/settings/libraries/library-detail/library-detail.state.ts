@@ -40,6 +40,7 @@ export class LibraryDetailState {
   readonly formMetadataRegion = signal<string | null>(null);
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
+  readonly formMergeM4b = signal(false);
   /** First folder: only the creation wizard edits it, a saved library's folders have their own routes. */
   readonly formPath = signal('');
   /** Further folders of a library being created, added once it exists. */
@@ -59,6 +60,7 @@ export class LibraryDetailState {
     this.formMetadataRegion.set(lib.metadataRegion);
     this.formQualityProfileId.set(lib.defaultQualityProfileId);
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
+    this.formMergeM4b.set(lib.mergeM4b);
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
   }
@@ -138,10 +140,16 @@ export class LibraryDetailState {
     }
   }
 
+  /** The form has no book toggle: a book library keeps its type on save. */
+  isBook(): boolean {
+    return this.library()?.mediaTypes.includes('book') ?? false;
+  }
+
   mediaTypes(): MediaType[] {
     const types: MediaType[] = [];
     if (this.formMovies()) types.push('movie');
     if (this.formSeries()) types.push('series');
+    if (this.isBook()) types.push('book');
     return types;
   }
 
@@ -156,6 +164,7 @@ export class LibraryDetailState {
       metadataRegion: this.formMetadataRegion(),
       defaultQualityProfileId: this.formQualityProfileId(),
       defaultLanguageProfileId: this.formLanguageProfileId(),
+      mergeM4b: this.formMergeM4b(),
     };
   }
 }

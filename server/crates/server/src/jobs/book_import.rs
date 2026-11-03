@@ -495,7 +495,9 @@ async fn import_item(st: &AppState, job: &Job, item: &Item) -> Done {
     }
     let media = linked.media_id;
     st.ingest.settle.cancel(media);
-    if let Err(e) = books::identify_media(st, media).await {
+    let identified = books::identify_media(st, media).await;
+    books::merge::spawn(st, vec![media]);
+    if let Err(e) = identified {
         tracing::warn!("Book import: identification of book #{media}: {}", e.cause);
         return Done {
             status: if e.retry { "pending" } else { "failed" },
