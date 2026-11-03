@@ -678,6 +678,7 @@ async fn folder_relocation_and_ingest_exclude_each_other(pool: PgPool) {
             force: false,
             uniquify_on_collision: false,
             replace_existing: false,
+            language: None,
         };
         fliks_server::ingest::library::ingest(&st, &guard, req)
             .await

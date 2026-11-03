@@ -110,11 +110,12 @@ pub(super) async fn season_row(
 }
 
 /// `media.acquisitionContext`: null for unknown media, no library, or a scope of another media;
-/// `family` picks the want of a book.
+/// `family` and `language` pick the want of a book.
 pub async fn context(
     st: &AppState,
     media_id: u32,
     family: Option<Family>,
+    language: Option<String>,
     season_id: Option<u32>,
     episode_id: Option<u32>,
 ) -> Result<Option<t::Target>, HostError> {
@@ -123,11 +124,12 @@ pub async fn context(
         return Ok(None);
     };
     wished(m.kind, family)?;
+    let language = book_language(m.kind, family, language.as_deref())?;
     if m.library_id.is_none() {
         return Ok(None);
     }
     if m.kind == MediaKind::Book {
-        return super::book::context(db, &m, family, season_id, episode_id)
+        return super::book::context(db, &m, family, language.as_deref(), season_id, episode_id)
             .await
             .map_err(db_err);
     }

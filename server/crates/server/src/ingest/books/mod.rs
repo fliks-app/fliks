@@ -27,7 +27,7 @@ use fliks_engine_core::api::MediaTags;
 use serde_json::{Map, Value};
 use sqlx::{PgConnection, PgPool};
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashMap, HashSet},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
@@ -67,25 +67,32 @@ pub struct Registration {
     pub conflicts: Vec<String>,
 }
 
-/// The folder a new file of `family` goes to: the media's first want of that family (any language first), else the library default.
-pub async fn folder_for(db: &PgPool, media: i32, family: Family) -> sqlx::Result<Option<Folder>> {
-    let r = sqlx::query!(
-        r#"SELECT COALESCE(wf.id, df."folderId") AS "id?", COALESCE(wf.path, df.path) AS "path?"
+/// The folder a new file of `family` goes to: the media's want of that `language`, else its first
+/// want of the family (any language first), else the library default.
+pub async fn folder_for(
+    db: &PgPool,
+    media: i32,
+    family: Family,
+    language: Option<&str>,
+) -> sqlx::Result<Option<Folder>> {
+    let r: Option<(Option<i32>, Option<String>)> = sqlx::query_as(
+        r#"SELECT COALESCE(wf.id, df."folderId"), COALESCE(wf.path, df.path)
            FROM media m
            LEFT JOIN LATERAL (SELECT "folderId" FROM wants WHERE "mediaId" = m.id AND family = $2
-                              ORDER BY language NULLS FIRST, id LIMIT 1) w ON true
+                              ORDER BY (language IS NOT DISTINCT FROM $3) DESC, language NULLS FIRST, id LIMIT 1) w ON true
            LEFT JOIN library_folders wf ON wf.id = w."folderId" AND wf."libraryId" = m."libraryId"
            LEFT JOIN library_default_folders df ON df."libraryId" = m."libraryId"
            WHERE m.id = $1"#,
-        media,
-        family.as_str()
     )
+    .bind(media)
+    .bind(family.as_str())
+    .bind(language)
     .fetch_optional(db)
     .await?;
-    Ok(r.and_then(|r| {
+    Ok(r.and_then(|(id, path)| {
         Some(Folder {
-            id: r.id?,
-            path: r.path?,
+            id: id?,
+            path: path?,
         })
     }))
 }
@@ -192,11 +199,15 @@ fn tag_facts(t: Option<&MediaTags>) -> Facts {
     }
 }
 
+/// Whether the media owns the one work of its folder (rule 10): a media with a folder name, and
+/// not several editions of a family, whose languages are works of their own.
 async fn anchored(db: &PgPool, media: i32) -> sqlx::Result<bool> {
-    sqlx::query_scalar!(
-        r#"SELECT COALESCE("folderName", '') <> '' AS "a!" FROM media WHERE id = $1"#,
-        media
+    sqlx::query_scalar(
+        r#"SELECT COALESCE(m."folderName", '') <> '' AND NOT EXISTS (
+             SELECT 1 FROM editions e WHERE e."mediaId" = m.id GROUP BY e.family HAVING count(*) > 1)
+           FROM media m WHERE m.id = $1"#,
     )
+    .bind(media)
     .fetch_one(db)
     .await
 }
@@ -273,11 +284,23 @@ async fn own_work<'a>(
 
 /// Inserts or updates the rows of `files`, then lays out every file of the media (rule 6).
 pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Registration, String> {
+    register_language(st, media, files, None).await
+}
+
+/// `register` with the new files joining the edition of `language` (rule 7); a file of a requested
+/// language is not checked against the work of an anchored media, the caller named the media.
+pub async fn register_language(
+    st: &AppState,
+    media: i32,
+    files: &[Placed],
+    language: Option<&str>,
+) -> Result<Registration, String> {
     let mut out = vec![];
     let mut conflicts = vec![];
     let mut facts: Vec<(Family, Facts)> = vec![];
     let mut cover = None;
-    let anchored = anchored(&st.db, media).await.map_err(|e| e.to_string())?;
+    let anchored =
+        language.is_none() && anchored(&st.db, media).await.map_err(|e| e.to_string())?;
     let files: Vec<&Placed> = if anchored {
         own_work(&st.db, media, files, &mut conflicts)
             .await
@@ -367,7 +390,7 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             conflicts,
         });
     }
-    lay_out(&st.db, media, anchored, &facts).await?;
+    lay_out(&st.db, media, anchored, &facts, language).await?;
     if let Some(c) = cover {
         store_cover(st, media, &c).await;
     }
@@ -384,7 +407,7 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
 /// Lays out the files the media has again, after a rescan removed some.
 pub async fn relay(st: &AppState, media: i32) -> Result<(), String> {
     let anchored = anchored(&st.db, media).await.map_err(|e| e.to_string())?;
-    lay_out(&st.db, media, anchored, &[]).await
+    lay_out(&st.db, media, anchored, &[], None).await
 }
 
 struct Known {
@@ -393,28 +416,54 @@ struct Known {
     info: Option<Value>,
 }
 
-/// One edition and its ungrouped item per family; `None` family files are ignored.
-async fn ensure(c: &mut PgConnection, media: i32, family: Family) -> sqlx::Result<(i32, i32)> {
-    let edition = match sqlx::query_scalar!(
-        r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = $2 ORDER BY id LIMIT 1"#,
-        media,
-        family.as_str()
+/// The edition of `family` a new file joins, and its ungrouped item. With a `language`: the edition
+/// of that language, else an empty edition with none, else a new one; without: the first one.
+async fn ensure(
+    c: &mut PgConnection,
+    media: i32,
+    family: Family,
+    language: Option<&str>,
+) -> sqlx::Result<(i32, i32)> {
+    let found: Option<i32> = sqlx::query_scalar(
+        r#"SELECT e.id FROM editions e WHERE e."mediaId" = $1 AND e.family = $2
+             AND ($3::text IS NULL OR e.language = $3
+                  OR (e.language IS NULL AND NOT EXISTS (SELECT 1 FROM items i JOIN item_parts p ON p."itemId" = i.id
+                                                          WHERE i."editionId" = e.id)))
+           ORDER BY (e.language IS NOT DISTINCT FROM $3) DESC, e.language IS NOT NULL, e.id LIMIT 1"#,
     )
+    .bind(media)
+    .bind(family.as_str())
+    .bind(language)
     .fetch_optional(&mut *c)
-    .await?
-    {
-        Some(e) => e,
+    .await?;
+    let edition = match found {
+        Some(e) => {
+            if language.is_some() {
+                sqlx::query(r#"UPDATE editions SET language = $2 WHERE id = $1 AND language IS NULL"#)
+                    .bind(e)
+                    .bind(language)
+                    .execute(&mut *c)
+                    .await?;
+            }
+            e
+        }
         None => {
-            sqlx::query_scalar!(
-                r#"INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id"#,
-                media,
-                family.as_str()
+            sqlx::query_scalar(
+                r#"INSERT INTO editions ("mediaId", family, language) VALUES ($1, $2, $3) RETURNING id"#,
             )
+            .bind(media)
+            .bind(family.as_str())
+            .bind(language)
             .fetch_one(&mut *c)
             .await?
         }
     };
-    let item = match sqlx::query_scalar!(
+    Ok((edition, item_of(c, media, edition).await?))
+}
+
+/// The ungrouped item of an edition, created when it has none.
+async fn item_of(c: &mut PgConnection, media: i32, edition: i32) -> sqlx::Result<i32> {
+    Ok(match sqlx::query_scalar!(
         r#"SELECT id FROM items WHERE "mediaId" = $1 AND "editionId" = $2 AND "groupId" IS NULL
            ORDER BY id LIMIT 1"#,
         media,
@@ -433,8 +482,7 @@ async fn ensure(c: &mut PgConnection, media: i32, family: Family) -> sqlx::Resul
             .fetch_one(&mut *c)
             .await?
         }
-    };
-    Ok((edition, item))
+    })
 }
 
 /// Rules 5-7: the editions, items and parts of every file the media has; an anchored media
@@ -444,6 +492,7 @@ async fn lay_out(
     media: i32,
     anchored: bool,
     facts: &[(Family, Facts)],
+    language: Option<&str>,
 ) -> Result<(), String> {
     let rows = sqlx::query_as!(
         Known,
@@ -459,7 +508,7 @@ async fn lay_out(
         return Err(format!("media #{media}: its folder holds several works"));
     }
     let versions: Vec<group::Version> = works.into_iter().flat_map(|w| w.versions).collect();
-    lay_out_tx(db, media, &rows, &versions, facts)
+    lay_out_tx(db, media, &rows, &versions, facts, language)
         .await
         .map_err(|e| e.to_string())
 }
@@ -470,54 +519,80 @@ async fn lay_out_tx(
     rows: &[Known],
     versions: &[group::Version],
     facts: &[(Family, Facts)],
+    language: Option<&str>,
 ) -> sqlx::Result<()> {
     let by_path = |p: &str| rows.iter().find(|r| r.rel.replace('\\', "/") == p);
     let mut tx = db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media).await?;
+    let placed: HashMap<i32, i32> = sqlx::query_as::<_, (i32, i32)>(
+        r#"SELECT p."mediaFileId", i."editionId" FROM item_parts p JOIN items i ON i.id = p."itemId"
+            WHERE p."mediaId" = $1 ORDER BY i."editionId" DESC"#,
+    )
+    .bind(media)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .collect();
     for family in [Family::Text, Family::Audio] {
-        let mine: Vec<&group::Version> = versions.iter().filter(|v| v.family == family).collect();
-        if mine.is_empty() {
-            continue;
+        // A version stays in the edition its files are in; the others join the one of `language`.
+        let mut by_edition: BTreeMap<Option<i32>, Vec<&group::Version>> = BTreeMap::new();
+        for v in versions.iter().filter(|v| v.family == family) {
+            let held = v
+                .files
+                .iter()
+                .filter_map(|p| by_path(p).and_then(|r| placed.get(&r.id)))
+                .min()
+                .copied();
+            by_edition.entry(held).or_default().push(v);
         }
-        let (edition, item) = ensure(&mut tx, media, family).await?;
-        let ids: Vec<Vec<i32>> = mine
-            .iter()
-            .map(|v| {
-                v.files
-                    .iter()
-                    .filter_map(|p| by_path(p).map(|r| r.id))
-                    .collect()
-            })
-            .collect();
-        parts::write_versions(&mut tx, media, item, &ids).await?;
-        let format =
-            (mine.iter().all(|v| v.format == mine[0].format)).then(|| mine[0].format.clone());
-        let duration = (family == Family::Audio)
-            .then(|| {
-                mine[0]
-                    .files
-                    .iter()
-                    .map(|p| {
-                        by_path(p).and_then(|r| r.info.as_ref()?.get("durationSeconds")?.as_f64())
-                    })
-                    .sum::<Option<f64>>()
-            })
-            .flatten()
-            .map(|d| d.round() as i32)
-            .filter(|d| *d > 0);
-        let first = facts.iter().find(|(f, _)| *f == family).map(|(_, f)| f);
-        sqlx::query!(
-            r#"UPDATE editions SET format = COALESCE(format, $2), "durationSeconds" = COALESCE("durationSeconds", $3),
+        let single = by_edition.len() == 1;
+        for (held, mine) in by_edition {
+            let (edition, item) = match held {
+                Some(e) => (e, item_of(&mut tx, media, e).await?),
+                None => ensure(&mut tx, media, family, language).await?,
+            };
+            let ids: Vec<Vec<i32>> = mine
+                .iter()
+                .map(|v| {
+                    v.files
+                        .iter()
+                        .filter_map(|p| by_path(p).map(|r| r.id))
+                        .collect()
+                })
+                .collect();
+            parts::write_versions(&mut tx, media, item, &ids).await?;
+            let format =
+                (mine.iter().all(|v| v.format == mine[0].format)).then(|| mine[0].format.clone());
+            let duration = (family == Family::Audio)
+                .then(|| {
+                    mine[0]
+                        .files
+                        .iter()
+                        .map(|p| {
+                            by_path(p)
+                                .and_then(|r| r.info.as_ref()?.get("durationSeconds")?.as_f64())
+                        })
+                        .sum::<Option<f64>>()
+                })
+                .flatten()
+                .map(|d| d.round() as i32)
+                .filter(|d| *d > 0);
+            let first = (held.is_none() || single)
+                .then(|| facts.iter().find(|(f, _)| *f == family).map(|(_, f)| f))
+                .flatten();
+            sqlx::query!(
+                r#"UPDATE editions SET format = COALESCE(format, $2), "durationSeconds" = COALESCE("durationSeconds", $3),
                  language = COALESCE(language, $4), publisher = COALESCE(publisher, $5)
                WHERE id = $1"#,
-            edition,
-            format,
-            duration,
-            first.and_then(|f| f.language.clone()),
-            first.and_then(|f| f.publisher.clone())
-        )
-        .execute(&mut *tx)
-        .await?;
+                edition,
+                format,
+                duration,
+                first.and_then(|f| f.language.clone()),
+                first.and_then(|f| f.publisher.clone())
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
     }
     tx.commit().await
 }

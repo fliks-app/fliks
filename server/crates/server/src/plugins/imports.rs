@@ -160,6 +160,7 @@ impl host::Host for Ctx {
         &mut self,
         media_id: u32,
         family: Option<t::Family>,
+        language: Option<String>,
         group_id: Option<u32>,
         item_id: Option<u32>,
     ) -> Result<Option<t::Target>, HostError> {
@@ -172,7 +173,8 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 let family = family.map(super::served).transpose()?;
-                super::acquisition::context(&app, media_id, family, group_id, item_id).await
+                super::acquisition::context(&app, media_id, family, language, group_id, item_id)
+                    .await
             }
         )
     }
@@ -221,6 +223,7 @@ impl host::Host for Ctx {
         &mut self,
         media_id: u32,
         family: Option<t::Family>,
+        language: Option<String>,
         unit: Option<t::UnitRef>,
         releases: Vec<t::CandidateRelease>,
     ) -> Result<Vec<t::ScoredRelease>, HostError> {
@@ -233,7 +236,8 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 let family = family.map(super::served).transpose()?;
-                super::acquisition::score_any(&app, media_id, family, unit, releases).await
+                super::acquisition::score_any(&app, media_id, family, language, unit, releases)
+                    .await
             }
         )
     }

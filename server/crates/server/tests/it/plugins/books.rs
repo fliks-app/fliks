@@ -55,8 +55,9 @@ async fn a_book_call_needs_the_grant_of_its_method() {
     s.finish().await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_plugin_with_acquisition_grants_only_acquires_a_book() {
+/// The fixture installed with every acquisition grant, a monitored book (1) in a book library and
+/// a download folder (`dl`) holding `Mirelune.epub`.
+async fn shelf(tag: &str) -> Option<(H, Scratch, std::path::PathBuf, std::path::PathBuf)> {
     let grants = json!([
         "config:rw",
         "media:read",
@@ -65,9 +66,7 @@ async fn a_plugin_with_acquisition_grants_only_acquires_a_book() {
         "ingest:write",
         "events:emit"
     ]);
-    let Some((h, s)) = install("books_acquire", grants).await else {
-        return;
-    };
+    let (h, s) = install(tag, grants).await?;
     let dir = std::env::temp_dir().join(format!(
         "fliks-books-{}",
         fliks_server::config::random_hex(4)
@@ -104,16 +103,23 @@ async fn a_plugin_with_acquisition_grants_only_acquires_a_book() {
     .execute(&s.pool)
     .await
     .unwrap();
+    Some((h, s, dl, dir))
+}
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_with_acquisition_grants_only_acquires_a_book() {
+    let Some((h, s, dl, dir)) = shelf("books_acquire").await else {
+        return;
+    };
     let r = call(&h, "context", &[("family", "text")]).await;
     assert_eq!(r["ok"], json!(["book", null, [202, 203, 204, 205]]), "{r}");
     let r = call(&h, "context", &[("family", "video")]).await;
     assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
     let title = ("title", "Mirelune.EPUB-GRP");
     let r = call(&h, "score", &[("family", "text"), title]).await;
-    assert_eq!(r["ok"], json!([[205, true]]), "{r}");
+    assert_eq!(r["ok"], json!([[205, true, true]]), "{r}");
     let r = call(&h, "score", &[("family", "audio"), title]).await;
-    assert_eq!(r["ok"], json!([[101, false]]), "{r}");
+    assert_eq!(r["ok"], json!([[101, false, true]]), "{r}");
     let r = call(&h, "grabbed", &[("family", "text")]).await;
     assert_eq!(r["ok"], Value::Null, "{r}");
     let r = call(&h, "grabbed", &[("family", "video")]).await;
@@ -139,6 +145,57 @@ async fn a_plugin_with_acquisition_grants_only_acquires_a_book() {
         r["error"], "ERR_DENIED",
         "a book is never created by a plugin: {r}"
     );
+    let _ = std::fs::remove_dir_all(dir);
+    h.finish().await;
+    s.finish().await;
+}
+
+/// text/NULL satisfied by an English edition, text/fr requested: the host calls serve the French want
+/// and the French file lands in a new edition.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_second_language_is_acquired_through_the_host_calls() {
+    let Some((h, s, dl, dir)) = shelf("books_language").await else {
+        return;
+    };
+    let path = dl.join("Mirelune.epub");
+    let path = path.to_string_lossy();
+    let text = ("family", "text");
+    let r = call(&h, "ingest", &[text, ("language", "en"), ("path", &path)]).await;
+    assert_eq!(r["ok"], 1, "{r}");
+    sqlx::query(r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'text', 'fr')"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let r = call(&h, "candidates", &[text]).await;
+    assert_eq!(r["ok"], json!([[1, "fr"]]), "{r}");
+    let r = call(&h, "context", &[text, ("language", "fr")]).await;
+    assert_eq!(r["ok"], json!(["book", "fr", [202, 203, 204, 205]]), "{r}");
+    let r = call(&h, "context", &[text, ("language", "de")]).await;
+    assert_eq!(r["ok"], Value::Null, "{r}");
+    let r = call(&h, "context", &[("family", "video"), ("language", "fr")]).await;
+    assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
+    let fr = [text, ("language", "fr")];
+    let r = call(&h, "score", &[fr[0], fr[1], ("title", "Mirelune.EPUB")]).await;
+    assert_eq!(r["ok"], json!([[205, true, false]]), "{r}");
+    let r = call(&h, "score", &[fr[0], fr[1], ("title", "Mirelune.FR.EPUB")]).await;
+    assert_eq!(r["ok"], json!([[205, true, true]]), "{r}");
+    let r = call(&h, "ingest", &[text, ("language", "fr"), ("path", &path)]).await;
+    assert_eq!(r["ok"], 1, "{r}");
+    let editions: Vec<(Option<String>, i64)> = sqlx::query_as(
+        r#"SELECT e.language, count(p."mediaFileId") FROM editions e
+           LEFT JOIN items i ON i."editionId" = e.id LEFT JOIN item_parts p ON p."itemId" = i.id
+           WHERE e."mediaId" = 1 AND e.family = 'text' GROUP BY e.id ORDER BY e.id"#,
+    )
+    .fetch_all(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        editions,
+        [(Some("en".to_owned()), 1), (Some("fr".to_owned()), 1)],
+        "the English edition keeps its file"
+    );
+    let r = call(&h, "candidates", &[text]).await;
+    assert_eq!(r["ok"], json!([]), "both languages are satisfied: {r}");
     let _ = std::fs::remove_dir_all(dir);
     h.finish().await;
     s.finish().await;
