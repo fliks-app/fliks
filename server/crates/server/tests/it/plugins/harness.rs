@@ -189,7 +189,7 @@ pub fn options(
             dbname: s.name.clone(),
         },
         tune: Some(Arc::new(move |c: &mut HostConfig| {
-            c.compiler = PathBuf::from(env!("CARGO_BIN_EXE_fliks-server"));
+            c.compiler = crate::server_bin();
             tune(c);
         })),
         fetch: Fetcher::default(),

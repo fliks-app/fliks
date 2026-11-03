@@ -34,3 +34,10 @@ mod settings;
 mod social;
 mod topology;
 mod users;
+
+/// The server binary read at run time: a nextest archive runs it where `env!` baked another path.
+fn server_bin() -> std::path::PathBuf {
+    std::env::var_os("CARGO_BIN_EXE_fliks-server")
+        .expect("cargo and nextest set CARGO_BIN_EXE_fliks-server")
+        .into()
+}
