@@ -11,7 +11,7 @@ export function asComicMedia(m: Media | null): ComicMedia | null {
 /** The issue a read button opens: the one in progress, else the first unfinished, else the first, among main issues with a file (annuals when there are none). */
 export function nextIssue(issues: ComicIssue[]): ComicIssue | null {
   const withFile = issues.filter((i) => i.mediaFileId != null);
-  const main = withFile.filter((i) => !i.annual);
+  const main = withFile.filter((i) => i.kind === 'issue');
   const pool = main.length ? main : withFile;
   return pool.find((i) => !i.finished && i.progression != null) ?? pool.find((i) => !i.finished) ?? pool[0] ?? null;
 }

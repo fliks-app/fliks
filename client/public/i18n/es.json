@@ -4088,6 +4088,8 @@
     "pages": "{{n}} páginas",
     "missing": "Sin archivo",
     "finished": "Leído",
-    "progress": "Progreso de lectura"
+    "progress": "Progreso de lectura",
+    "special_number": "Especial {{n}}",
+    "specials": "Especiales"
   }
 }

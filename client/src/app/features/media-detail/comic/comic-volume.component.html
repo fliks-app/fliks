@@ -48,17 +48,17 @@
   </div>
 </header>
 
-<ng-template #issueRows let-issues let-annual="annual">
+<ng-template #issueRows let-issues let-kind="kind">
   <ul class="flex flex-col gap-1">
     @for (i of issues; track i.itemId) {
       <li>
         @if (canRead && i.mediaFileId != null) {
           <a class="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="readLink(i.itemId)" data-testid="issue">
-            <ng-container *ngTemplateOutlet="row; context: { $implicit: i, annual: annual }" />
+            <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </a>
         } @else {
           <div class="flex items-center gap-3 rounded-lg px-3 py-2" [class.opacity-50]="i.mediaFileId == null" data-testid="issue">
-            <ng-container *ngTemplateOutlet="row; context: { $implicit: i, annual: annual }" />
+            <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </div>
         }
       </li>
@@ -66,9 +66,9 @@
   </ul>
 </ng-template>
 
-<ng-template #row let-i let-annual="annual">
+<ng-template #row let-i let-kind="kind">
   <span class="w-24 shrink-0 font-medium tabular-nums">
-    {{ (annual ? 'comic.annual_number' : 'comic.issue_number') | translate: { n: i.number } }}
+    {{ ('comic.' + kind + '_number') | translate: { n: i.number } }}
   </span>
   <span class="min-w-0 flex-1 truncate">{{ i.title }}</span>
   @if (i.releaseDate) {
@@ -94,12 +94,18 @@
 <div class="flex flex-col gap-8">
   <section>
     <h2 class="mb-2 text-lg font-semibold">{{ 'comic.issues' | translate }}</h2>
-    <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: main(), annual: false }" />
+    <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: main(), kind: 'issue' }" />
   </section>
   @if (annuals().length) {
     <section>
       <h2 class="mb-2 text-lg font-semibold">{{ 'comic.annuals' | translate }}</h2>
-      <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: annuals(), annual: true }" />
+      <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: annuals(), kind: 'annual' }" />
+    </section>
+  }
+  @if (specials().length) {
+    <section>
+      <h2 class="mb-2 text-lg font-semibold">{{ 'comic.specials' | translate }}</h2>
+      <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: specials(), kind: 'special' }" />
     </section>
   }
 </div>

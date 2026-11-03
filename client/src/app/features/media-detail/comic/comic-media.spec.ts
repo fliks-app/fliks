@@ -8,6 +8,7 @@ const issue = (n: number, over: Partial<ComicIssue> = {}): ComicIssue => ({
   format: 'cbz',
   number: String(n),
   sort: n,
+  kind: 'issue',
   annual: false,
   title: null,
   releaseDate: null,
@@ -31,8 +32,8 @@ describe('comic media', () => {
   });
 
   it('skips issues without a file and keeps annuals for last', () => {
-    expect(nextIssue([issue(1, { mediaFileId: null }), issue(2), issue(9, { annual: true })])?.itemId).toBe(2);
-    expect(nextIssue([issue(9, { annual: true })])?.itemId).toBe(9);
+    expect(nextIssue([issue(1, { mediaFileId: null }), issue(2), issue(9, { annual: true, kind: 'annual' })])?.itemId).toBe(2);
+    expect(nextIssue([issue(9, { annual: true, kind: 'annual' })])?.itemId).toBe(9);
     expect(nextIssue([issue(1, { mediaFileId: null })])).toBeNull();
   });
 

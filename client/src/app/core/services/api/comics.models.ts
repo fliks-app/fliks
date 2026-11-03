@@ -16,6 +16,8 @@ export interface ComicIssue {
   format: 'cbz' | 'cb7' | 'cbr' | 'pdf' | null;
   number: string;
   sort: number;
+  /** Where the issue is listed: `annual` is true for anything but a plain issue. */
+  kind: 'issue' | 'annual' | 'special';
   annual: boolean;
   title: string | null;
   releaseDate: string | null;

@@ -22,7 +22,8 @@ export class ComicVolumeComponent {
   protected readonly canRead = !inject(TvService).isTv();
   protected readonly comic = computed(() => this.media().comic);
   protected readonly main = computed(() => this.comic().issues.filter((i) => !i.annual));
-  protected readonly annuals = computed(() => this.comic().issues.filter((i) => i.annual));
+  protected readonly annuals = computed(() => this.comic().issues.filter((i) => i.kind === 'annual'));
+  protected readonly specials = computed(() => this.comic().issues.filter((i) => i.kind === 'special'));
   protected readonly next = computed(() => nextIssue(this.comic().issues));
   protected readonly started = computed(() => !!this.next() && this.next()!.progression != null);
   protected readonly readCount = computed(() => this.comic().issues.filter((i) => i.finished).length);
