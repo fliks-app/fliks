@@ -84,6 +84,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
     movie: this.movieGenres,
     series: this.tvGenres,
     book: () => [],
+    comic: () => [],
   };
   protected readonly showMaxSeasons = computed(() => {
     const type = this.formMediaType();

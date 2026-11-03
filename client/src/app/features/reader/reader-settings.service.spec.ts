@@ -112,3 +112,21 @@ describe('toReaderPreferences', () => {
     expect(toReaderPreferences(READER_DEFAULTS, colors).fontFamily).toBeNull();
   });
 });
+
+describe('ReaderSettingsService comic prefs', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('remembers the layout of each volume apart', () => {
+    const s = make();
+    s.saveComicPrefs(1, { mode: 'manga', spread: true });
+    s.saveComicPrefs(2, { mode: 'webtoon', spread: false });
+    expect(make().comicPrefs(1)).toEqual({ mode: 'manga', spread: true });
+    expect(make().comicPrefs(2)).toEqual({ mode: 'webtoon', spread: false });
+    expect(make().comicPrefs(3)).toEqual({ mode: 'paged', spread: false });
+  });
+
+  it('falls back to paged on a corrupt stored mode', () => {
+    localStorage.setItem('reader.comics:srv::1', JSON.stringify({ 1: { mode: 'sideways', spread: 3 } }));
+    expect(make().comicPrefs(1)).toEqual({ mode: 'paged', spread: false });
+  });
+});
