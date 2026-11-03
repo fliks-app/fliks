@@ -33,8 +33,8 @@ const MAX_PIXELS: u64 = 40_000_000;
 pub struct ImageStore {
     /// `None` is the shared data directory, resolved on first use.
     root: Option<PathBuf>,
-    /// `imageHosts` per provider plugin key; a host also covers its subdomains (`provider-plugins.md` rule 32).
-    plugin_hosts: RwLock<HashMap<String, Vec<String>>>,
+    /// `imageHosts` per provider plugin key; a bundled plugin's host also covers its subdomains (`provider-plugins.md` rule 32).
+    plugin_hosts: RwLock<HashMap<String, (bool, Vec<String>)>>,
     /// `FLIKS_PLUGIN_UPSTREAM_OVERRIDE`, empty outside the `parity` feature (`image-store.md` rule 26).
     over: Override,
     dns: Arc<dyn Net>,
@@ -210,20 +210,22 @@ impl ImageStore {
         self.plugin_hosts.write_clean().remove(plugin);
     }
 
-    /// The hosts `plugin`'s manifest declares as its image CDNs; replaces its earlier list.
-    pub fn allow_hosts(&self, plugin: &str, hosts: Vec<String>) {
+    /// The hosts `plugin`'s manifest declares as its image CDNs, with their subdomains when `bundled`;
+    /// replaces its earlier list.
+    pub fn allow_hosts(&self, plugin: &str, hosts: Vec<String>, bundled: bool) {
         self.plugin_hosts
             .write_clean()
-            .insert(plugin.to_owned(), hosts);
+            .insert(plugin.to_owned(), (bundled, hosts));
     }
 
     fn listed(&self, host: &str) -> bool {
-        self.plugin_hosts.read_clean().values().flatten().any(|h| {
-            host == h
-                || host
-                    .strip_suffix(h.as_str())
-                    .is_some_and(|p| p.ends_with('.'))
-        })
+        let sub = |h: &String| {
+            host.strip_suffix(h.as_str())
+                .is_some_and(|p| p.ends_with('.'))
+        };
+        let all = self.plugin_hosts.read_clean();
+        all.values()
+            .any(|(bundled, hs)| hs.iter().any(|h| host == h || (*bundled && sub(h))))
     }
 
     fn build(root: Option<PathBuf>) -> Self {
@@ -693,7 +695,7 @@ mod tests {
         /// `bare`, with `cdn.test` and `image.tmdb.org` listed.
         fn with_names(&self, names: &[(&str, &str)]) -> ImageStore {
             let s = self.bare(names);
-            s.allow_hosts("t", vec!["cdn.test".into(), "image.tmdb.org".into()]);
+            s.allow_hosts("t", vec!["cdn.test".into(), "image.tmdb.org".into()], false);
             s
         }
 
@@ -1161,14 +1163,22 @@ mod tests {
             s.download(&cdn, false).await.unwrap_err(),
             "host not allowed"
         );
-        s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
+        s.allow_hosts(
+            "org.example",
+            vec!["cdn.test".into(), "lan.test".into()],
+            false,
+        );
         assert!(s.download(&cdn, false).await.is_ok());
         s.forget_hosts("org.example");
         assert_eq!(
             s.download(&cdn, false).await.unwrap_err(),
             "host not allowed"
         );
-        s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
+        s.allow_hosts(
+            "org.example",
+            vec!["cdn.test".into(), "lan.test".into()],
+            false,
+        );
         let lan = format!("http://lan.test:{port}/f/poster.jpg");
         assert_eq!(
             s.download(&lan, false).await.unwrap_err(),
@@ -1180,7 +1190,9 @@ mod tests {
             s.download(&hop, false).await.unwrap_err(),
             "host not allowed"
         );
-        s.allow_hosts("org.example", vec!["archive.org".into()]);
+        s.allow_hosts("org.example", vec!["archive.org".into()], false);
+        assert!(s.listed("archive.org") && !s.listed("ia800.us.archive.org"));
+        s.allow_hosts("fliks.openlibrary", vec!["archive.org".into()], true);
         for host in ["archive.org", "ia800.us.archive.org"] {
             assert!(s.listed(host), "{host}");
         }

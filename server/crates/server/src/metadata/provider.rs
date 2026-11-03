@@ -114,6 +114,10 @@ pub trait MetadataProvider: Send + Sync {
         lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Credits>;
+    /// Whether `search` is answered for `kind`.
+    fn has_search(&self, _kind: MediaKind) -> bool {
+        true
+    }
     /// Whether `list` is answered for `kind`.
     fn has_lists(&self, _kind: MediaKind) -> bool {
         false

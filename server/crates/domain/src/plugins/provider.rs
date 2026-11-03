@@ -97,6 +97,10 @@ fn closed(o: &Map<String, Value>, keys: &[&str]) -> bool {
 fn host_name(h: &str) -> bool {
     h.len() <= 253
         && h.contains('.')
+        && !h
+            .rsplit('.')
+            .next()
+            .is_some_and(|t| t.bytes().all(|b| b.is_ascii_digit()))
         && h.split('.').all(|l| {
             (1..=63).contains(&l.len())
                 && !l.starts_with('-')
@@ -387,6 +391,12 @@ pub fn check_namespaces(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_numeric_last_label_is_not_a_host_name() {
+        assert!(host_name("covers.example.org") && host_name("a1.b2-c.io"));
+        assert!(!host_name("0.1") && !host_name("cdn.example.123") && !host_name("localhost"));
+    }
 
     #[test]
     fn ids_of_a_third_party_record_keep_only_its_own_and_non_unique_namespaces() {

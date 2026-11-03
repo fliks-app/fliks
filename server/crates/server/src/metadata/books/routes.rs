@@ -223,7 +223,11 @@ pub async fn search_book(State(st): State<AppState>, a: Authed, Query(q): Pairs)
     let lang = lang(&st).await?;
     let (mut found, mut answered, mut failed) = (None, false, None);
     for p in order {
-        match st.metadata.of(p).search(&search, &lang, GO).await {
+        let provider = st.metadata.of(p);
+        if !provider.has_search(MediaKind::Book) {
+            continue;
+        }
+        match provider.search(&search, &lang, GO).await {
             Ok(r) if r.is_empty() => answered = true,
             Ok(r) => {
                 found = Some((p, r));

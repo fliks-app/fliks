@@ -195,6 +195,17 @@ async fn refresh_loop(
     chatty: bool,
 ) -> Result<u32, String> {
     let _row = ActivityRows::new(&st.hub, [job.to_owned()]);
+    let served: Vec<&&MediaRow> = rows
+        .iter()
+        .filter(|m| st.metadata.resolve(None, m.kind).is_some())
+        .collect();
+    if served.len() < rows.len() {
+        tracing::info!(
+            "{job}: {} title(s) skipped, no metadata provider for their kind",
+            rows.len() - served.len()
+        );
+    }
+    let rows: Vec<&MediaRow> = served.into_iter().copied().collect();
     let total = rows.len();
     let mut updated = 0;
     for (i, m) in rows.iter().enumerate() {

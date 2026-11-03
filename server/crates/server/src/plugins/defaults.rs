@@ -62,7 +62,13 @@ async fn import_with(
     let mut tx = pool.begin().await?;
     for (var, p, key) in ENV_KEYS {
         let compiled = defaults.iter().find(|(d, n, _)| *d == p && *n == "apiKey");
-        if let Some(v) = set(var).filter(|v| compiled.and_then(|c| c.2) != Some(v.as_str())) {
+        let kept = crate::settings::setting_value(pool, key)
+            .await?
+            .is_some_and(|v| !v.is_empty());
+        if let Some(v) = set(var)
+            .filter(|v| compiled.and_then(|c| c.2) != Some(v.as_str()))
+            .filter(|_| !kept)
+        {
             crate::settings::set_in(&mut tx, key, Some(&v)).await?;
         }
     }
@@ -238,6 +244,25 @@ mod tests {
         assert_eq!(
             stored(&pool, "plugin.fliks.tvdb.apiKey").await.as_deref(),
             Some("t")
+        );
+        assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_admin_value_is_kept_when_the_env_key_differs(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'admin')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        import_with(&pool, &[], env(&[("TMDB_API_KEY", "env")]))
+            .await
+            .unwrap();
+        assert_eq!(
+            stored(&pool, "plugin.fliks.tmdb.apiKey").await.as_deref(),
+            Some("admin")
         );
         assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
     }

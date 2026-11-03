@@ -167,7 +167,7 @@
       },
       "expect": {
         "body": {
-          "id": 6,
+          "id": 1001,
           "key": "subtitle_translation_enabled",
           "value": "true"
         },

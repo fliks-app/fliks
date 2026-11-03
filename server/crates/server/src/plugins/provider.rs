@@ -538,6 +538,10 @@ impl MetadataProvider for PluginProvider {
         .boxed()
     }
 
+    fn has_search(&self, kind: MediaKind) -> bool {
+        self.declares(Some(kind), "search")
+    }
+
     fn has_lists(&self, kind: MediaKind) -> bool {
         self.declares(Some(kind), "lists")
     }
@@ -660,7 +664,8 @@ impl Plugins {
         if let Some(app) = self.app() {
             match PluginProvider::new(rt.clone()) {
                 Some(provider) => {
-                    app.images.allow_hosts(id, provider.image_hosts().to_vec());
+                    app.images
+                        .allow_hosts(id, provider.image_hosts().to_vec(), bundled);
                     app.metadata.add_plugin(Arc::new(provider));
                 }
                 None => {

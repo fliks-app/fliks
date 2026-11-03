@@ -267,7 +267,7 @@ impl Images {
             tls: SystemNet::new(),
         });
         let s = ImageStore::with_root(data).with_net(net);
-        s.allow_hosts("fliks.tmdb", vec!["image.tmdb.org".into()]);
+        s.allow_hosts("fliks.tmdb", vec!["image.tmdb.org".into()], true);
         s
     }
 }
