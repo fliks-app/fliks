@@ -2456,6 +2456,8 @@
       "default_language_profile": "Profilo di lingua predefinito",
       "merge_m4b": "Unisci le parti di un audiolibro in un solo m4b",
       "merge_m4b_hint": "Crea un m4b con capitoli accanto alle parti di un audiolibro in più file. I file originali vengono conservati.",
+      "merge_m4b_replace": "Elimina le parti dopo l'unione",
+      "merge_m4b_replace_hint": "Una volta verificato e registrato l'm4b, elimina dal disco i file originali delle parti. Una parte modificata viene conservata.",
       "user_access": "Accesso utenti",
       "user_access_hint": "Gli amministratori hanno sempre accesso a tutte le librerie.",
       "load_error": "Impossibile caricare le librerie.",

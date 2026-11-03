@@ -64,6 +64,7 @@ export interface Library {
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
   mergeM4b: boolean;
+  mergeM4bReplace: boolean;
   /** First folder, kept for older clients: `folders` is the list. */
   path: string | null;
   label: string | null;
@@ -83,6 +84,7 @@ export interface CreateLibraryBody {
   defaultQualityProfileId?: number | null;
   defaultLanguageProfileId?: number | null;
   mergeM4b?: boolean;
+  mergeM4bReplace?: boolean;
   path?: string;
   userIds?: number[];
 }
