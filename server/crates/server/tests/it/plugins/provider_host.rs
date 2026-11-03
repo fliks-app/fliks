@@ -196,10 +196,6 @@ async fn a_bundled_provider_registers_again_after_the_breaker() {
     let Some((s, h, _)) = up("pvbrk", tune, |_| {}).await else {
         return;
     };
-    sqlx::query("ALTER TYPE plugin_packages_origin_enum ADD VALUE IF NOT EXISTS 'bundled'")
-        .execute(&s.pool)
-        .await
-        .unwrap();
     sqlx::query(r#"UPDATE plugin_packages SET origin = 'bundled' WHERE "pluginId" = $1"#)
         .bind(ID)
         .execute(&s.pool)

@@ -1,0 +1,24 @@
+# server/providers.lock must be what the signed catalog carries (scripts/bump-providers.sh --check):
+# the catalog signature, each entry's sha256 and zipUrl, each archive's hash and its plugin.json.sig.
+name: Providers lock
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/providers.lock'
+      - 'scripts/bump-providers.sh'
+      - 'server/crates/server/src/plugins/trust.rs'
+      - '.github/workflows/providers-lock.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: The lock matches the signed catalog and the archives
+        run: scripts/bump-providers.sh --check

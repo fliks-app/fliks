@@ -1,0 +1,8 @@
+# Bundled provider archives embedded by server/crates/server/build.rs: id version sha256 zipUrl. Bump: scripts/bump-providers.sh
+fliks.tmdb 0.2.0 7eebde51c6ef690de722e65535e30903ff79dbd6d3c1bc617bbe15c1061c03bc https://github.com/fliks-app/plugins/releases/download/tmdb-v0.2.0/fliks.tmdb-0.2.0.fkplugin
+fliks.tvdb 0.2.0 e371e221826f8e3291b90d674df92d79e7afea66b86db9df68c7e9df764ab667 https://github.com/fliks-app/plugins/releases/download/tvdb-v0.2.0/fliks.tvdb-0.2.0.fkplugin
+fliks.openlibrary 0.2.0 3e14451ec6d97340d59ed7423f9e2a516abd178289197d76ac1b5eac14f5c93e https://github.com/fliks-app/plugins/releases/download/openlibrary-v0.2.0/fliks.openlibrary-0.2.0.fkplugin
+fliks.bnf 0.2.0 9fd51bcd1790fa41e86f905f1e04211101903a63d6074f0168e1f3fa19210dc9 https://github.com/fliks-app/plugins/releases/download/bnf-v0.2.0/fliks.bnf-0.2.0.fkplugin
+fliks.googlebooks 0.2.0 4e83b8df3b1b4d0ae20420debe8ce987f6e4c9a204225b360c21e2b83a2157da https://github.com/fliks-app/plugins/releases/download/googlebooks-v0.2.0/fliks.googlebooks-0.2.0.fkplugin
+fliks.audible 0.2.0 48f44edbd805e962ab4f9619266ef7e9295774f4b79d25f9278ec387734d402d https://github.com/fliks-app/plugins/releases/download/audible-v0.2.0/fliks.audible-0.2.0.fkplugin
+fliks.audnexus 0.2.0 343893ac2df68f35f5f1a414cbbad14adf53ab98942fbfde997a872cf915f960 https://github.com/fliks-app/plugins/releases/download/audnexus-v0.2.0/fliks.audnexus-0.2.0.fkplugin

@@ -3,6 +3,7 @@
 pub mod acquisition;
 pub mod archive;
 pub mod backup;
+pub mod bundled;
 pub mod catalog;
 pub mod compile;
 pub mod counts;
@@ -393,6 +394,7 @@ impl Plugins {
     pub async fn boot(self: &Arc<Self>) {
         let dir = &self.opts.runtime_dir;
         clear_leftovers(dir);
+        self.install_bundled().await;
         let Ok(pkgs) = packages::all(&self.db).await else {
             return;
         };
@@ -406,13 +408,12 @@ impl Plugins {
             })
             .collect();
         compile::sweep(dir, &keep);
-        if self.opts.disabled {
-            tracing::warn!("FLIKS_PLUGINS_DISABLED=1 — no plugin will be loaded");
-            return;
-        }
         let mut tasks = vec![];
         let failed = Arc::new(Mutex::new(Vec::<String>::new()));
         for pkg in pkgs {
+            if self.opts.disabled && pkg.origin != "bundled" {
+                continue;
+            }
             if !pkg.enabled {
                 tracing::info!("plugin \"{}\" is disabled — not loaded", pkg.plugin_id);
                 continue;
@@ -435,6 +436,9 @@ impl Plugins {
                     let _ = packages::set_status(&me.db, &pkg.plugin_id, reason.as_deref()).await;
                 }
             }));
+        }
+        if self.opts.disabled {
+            tracing::warn!("FLIKS_PLUGINS_DISABLED=1: only the bundled plugins are loaded");
         }
         let _ =
             tokio::time::timeout(self.opts.ready_wait, futures_util::future::join_all(tasks)).await;

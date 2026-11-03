@@ -66,6 +66,14 @@ pub async fn set_status(db: &PgPool, id: &str, reason: Option<&str>) -> sqlx::Re
     .map(drop)
 }
 
+pub async fn mark_bundled(db: &PgPool, id: &str) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE plugin_packages SET origin = 'bundled' WHERE "pluginId" = $1 AND origin <> 'bundled'"#)
+        .bind(id)
+        .execute(db)
+        .await
+        .map(drop)
+}
+
 pub async fn set_enabled(db: &PgPool, id: &str, enabled: bool) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE plugin_packages SET enabled = $2, "updatedAt" = now() WHERE "pluginId" = $1"#,
@@ -95,7 +103,8 @@ pub async fn upsert(db: &PgPool, u: Upsert<'_>) -> sqlx::Result<bool> {
              manifest, status, "statusReason", enabled, "networkInternal")
            VALUES ($1, $2, $3, $4::plugin_packages_origin_enum, $5, $6, $7, 'active', NULL, true, $8)
            ON CONFLICT ("pluginId") DO UPDATE SET version = EXCLUDED.version, archive = EXCLUDED.archive,
-             origin = EXCLUDED.origin, signature = EXCLUDED.signature, "verifiedByKeyId" = EXCLUDED."verifiedByKeyId",
+             origin = CASE WHEN plugin_packages.origin = 'bundled' THEN plugin_packages.origin ELSE EXCLUDED.origin END,
+             signature = EXCLUDED.signature, "verifiedByKeyId" = EXCLUDED."verifiedByKeyId",
              manifest = EXCLUDED.manifest, status = 'active', "statusReason" = NULL,
              "networkInternal" = EXCLUDED."networkInternal", "cwasmSha256" = NULL, "cwasmEngine" = NULL,
              "heldUpdate" = NULL, "updatedAt" = now()
