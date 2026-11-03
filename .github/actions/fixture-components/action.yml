@@ -1,0 +1,19 @@
+name: Fixture components
+description: Restores the plugin SDK fixture wasm components, building them on a cache miss.
+runs:
+  using: composite
+  steps:
+    # Keyed on every input of the two components (SDK, route crate, WIT, examples, xtask, toolchain, locks).
+    - id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: |
+          ${{ github.workspace }}/server/target/wasm32-wasip2/release/fixture_guest.wasm
+          ${{ github.workspace }}/server/target/wasm32-wasip2/release/fixture_provider.wasm
+        key: fixture-components-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'server/.cargo/**', 'server/crates/plugin-sdk/**', 'server/crates/plugin-route/**') }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: server/crates/plugin-sdk
+      run: |
+        cargo xtask build examples/fixture-guest
+        cargo xtask build examples/fixture-provider

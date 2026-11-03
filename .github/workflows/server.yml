@@ -1,5 +1,5 @@
-# Rust server and plugin SDK, in parallel jobs: lint (em dash, fmt, clippy, sqlx offline cache, parity seeds), test (nextest with the plugin
-# wasm fixture, openapi.json drift), plugin SDK tests, Windows clippy, and the HTTP parity suite (sharded, not required).
+# Rust server and plugin SDK, in parallel jobs: lint (em dash, fmt, clippy, sqlx offline cache, parity seeds), build + test-shard (nextest
+# archive with the plugin wasm fixture, openapi.json drift) aggregated by `test`, plugin SDK tests, Windows clippy, and the HTTP parity suite (sharded, not required).
 name: Server
 
 on:
@@ -118,10 +118,53 @@ jobs:
             psql -v ON_ERROR_STOP=1 -q -d "$db" -f "$f" >/dev/null
           done
 
-  test:
+  # Compiles the test binaries once; the `test-shard` jobs run them, so no shard pays the 4 minute compile.
+  build:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SQLX_OFFLINE: 'true'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: server-test
+          workspaces: server
+      - uses: ./.github/actions/fixture-components
+      - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
+      - name: archive the test binaries
+        run: |
+          mkdir -p "$ARCHIVE_DIR"
+          cargo nextest archive --workspace --archive-file "$ARCHIVE_DIR/tests.tar.zst"
+          cp target/wasm32-wasip2/release/fixture_*.wasm "$ARCHIVE_DIR"
+      # The binary the archive build left in target/: `cargo run` would rebuild the deps without the dev-dependency features.
+      - name: openapi.json is current
+        run: target/debug/fliks-server openapi | diff - openapi.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
+          retention-days: 1
+          compression-level: 0
+
+  test-shard:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    name: test shard ${{ matrix.shard }}/3
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres: *postgres
     defaults:
@@ -132,32 +175,32 @@ jobs:
       SQLX_OFFLINE: 'true'
       S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
       FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
-      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
-      # Where `cargo xtask build` leaves the fixture.
-      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/target/wasm32-wasip2/release
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+      # Where the build job left the fixture components.
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/nextest-archive
     steps:
+      # The tests read the sources (migrations, fixtures, plugin templates, WIT) at the path the build compiled in.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-rust
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          shared-key: server-test
-          workspaces: server
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
       # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
-      - name: build the fixture components
-        working-directory: server/crates/plugin-sdk
-        run: |
-          cargo xtask build examples/fixture-guest
-          cargo xtask build examples/fixture-provider
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
-      # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
-      # nextest pools every test binary instead of running them one after another; this workspace has no doctests.
-      - run: cargo nextest run --workspace --no-fail-fast --profile ci
-      # The binary `cargo nextest` built: `cargo run` would rebuild the deps without the dev-dependency features.
-      - name: openapi.json is current
-        run: target/debug/fliks-server openapi | diff - openapi.json
+      - run: >-
+          cargo nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
+          --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
+
+  # The check name `test` of the former single job: green only if the build and every shard are.
+  test:
+    if: ${{ always() && !startsWith(github.head_ref, 'release-please--') }}
+    needs: [build, test-shard]
+    runs-on: ubuntu-latest
+    steps:
+      - run: '[ "${{ needs.build.result }}" = success ] && [ "${{ needs.test-shard.result }}" = success ]'
 
   plugin-sdk:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
@@ -182,16 +225,12 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           shared-key: server-plugin-sdk
           workspaces: server
-      - name: build the fixture component
-        working-directory: server/crates/plugin-sdk
-        run: |
-          cargo xtask build examples/fixture-guest
-          cargo xtask build examples/fixture-provider
+      - uses: ./.github/actions/fixture-components
       - name: plugin SDK tests (harness on the fixture)
         working-directory: server/crates/plugin-sdk
         run: cargo test --workspace
 
-  # Not a required check. Jobs split parity/run-all.sh by mode and scenario group; each builds on the `test` job's cache (same crate graph).
+  # Not a required check. Jobs split parity/run-all.sh by mode and scenario group; each builds on the `build` job's cache (same crate graph).
   parity:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
@@ -228,7 +267,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          # Restores the `test` job's cache; saving is that job's.
+          # Restores the `build` job's cache; saving is that job's.
           save-if: false
           shared-key: server-test
           workspaces: server
