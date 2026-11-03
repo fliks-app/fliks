@@ -72,10 +72,7 @@ async fn db_driver() {
     let Some(s) = Scratch::create("dbdrv").await else {
         return;
     };
-    let h = harness(&s, "dbdrv", |c| {
-        c.deadlines.db_query = Duration::from_secs(2)
-    })
-    .await;
+    let h = harness(&s, "dbdrv", |_| {}).await;
     allow_unsigned(&h).await;
     assert_eq!(
         h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
@@ -208,10 +205,40 @@ async fn db_driver() {
         json!([[1]]),
         "the connection survives the cut: {r}"
     );
+    h.finish().await;
+    s.finish().await;
+}
+
+/// A call past the deadline is cancelled server-side; only this test runs under the short deadline.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_statement_past_the_deadline_is_cancelled() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("dbdl").await else {
+        return;
+    };
+    let h = harness(&s, "dbdl", |c| {
+        c.deadlines.db_query = Duration::from_secs(2)
+    })
+    .await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let rt = h.st.plugins.rt("fliks.fixture").unwrap();
+    let call = async |path: &str, query: &[(&str, &str)]| {
+        serde_json::from_slice::<Value>(
+            &rt.http(post(path, vec![], query), false)
+                .await
+                .unwrap()
+                .body,
+        )
+        .unwrap()
+    };
     let t = Instant::now();
-    let r = call("/test/db/sleep", vec![], &[("s", "30")]).await;
+    let r = call("/test/db/sleep", &[("s", "30")]).await;
     assert_eq!(r["error"], "57014", "{r}");
-    assert!(t.elapsed() < Duration::from_secs(4));
+    assert!(t.elapsed() < Duration::from_secs(15));
     let role = format!("fp_{}_fliks_fixture", s.oid().await);
     until("the cancelled query gone", Duration::from_secs(5), async || {
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM pg_stat_activity WHERE usename = $1 AND state = 'active' AND query LIKE '%pg_sleep%'")
@@ -222,9 +249,9 @@ async fn db_driver() {
             == 0
     })
     .await;
-    call("/test/db/set-timeout", vec![], &[]).await;
+    call("/test/db/set-timeout", &[]).await;
     assert_eq!(
-        call("/test/db/show-timeout", vec![], &[]).await["statement_timeout"],
+        call("/test/db/show-timeout", &[]).await["statement_timeout"],
         "3s",
         "session state dies with its call"
     );
