@@ -4,6 +4,7 @@ name: Server
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths: &paths
       - 'server/**'
@@ -12,6 +13,7 @@ on:
   push:
     branches: [main]
     paths: *paths
+  workflow_dispatch:
 
 # A newer PR push supersedes a running one; a main run must finish to save the caches.
 concurrency:
@@ -29,7 +31,7 @@ env:
 jobs:
   lint:
     # Release PRs only bump versions; main re-runs this after the merge.
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -120,7 +122,7 @@ jobs:
 
   # Compiles the test binaries once; the `test-shard` jobs run them, so no shard pays the 4 minute compile.
   build:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -196,14 +198,14 @@ jobs:
 
   # The check name `test` of the former single job: green only if the build and every shard are.
   test:
-    if: ${{ always() && !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ always() && !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
     needs: [build, test-shard]
     runs-on: ubuntu-latest
     steps:
       - run: '[ "${{ needs.build.result }}" = success ] && [ "${{ needs.test-shard.result }}" = success ]'
 
   plugin-sdk:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -230,9 +232,10 @@ jobs:
         working-directory: server/crates/plugin-sdk
         run: cargo test --workspace
 
-  # Not a required check. Jobs split parity/run-all.sh by mode and scenario group; each builds on the `build` job's cache (same crate graph).
+  # Main and manual runs only (`gh workflow run server.yml --ref <branch>`): six jobs per PR push saturate the runners.
+  # Jobs split parity/run-all.sh by mode and scenario group; each builds on the `build` job's cache (same crate graph).
   parity:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     name: parity (${{ matrix.name }})
@@ -302,9 +305,9 @@ jobs:
           name: parity-${{ strategy.job-index }}-logs
           path: server/target/run-all/*.log
 
-  # Release builds only run on main and tags; this keeps a Linux-only edit from breaking the Windows target.
+  # Catches a Linux-only edit breaking the Windows target on main, before the release build does.
   windows-clippy:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
