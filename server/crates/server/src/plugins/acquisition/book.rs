@@ -245,7 +245,17 @@ pub(super) async fn targets(
     .bind(on)
     .fetch_all(db)
     .await?;
-    let first: Vec<&WantRow> = rows.iter().filter(|w| !w.satisfied).collect();
+    // A language-less want is the fallback of a family with no language want.
+    let first: Vec<&WantRow> = rows
+        .iter()
+        .filter(|w| {
+            !w.satisfied
+                && !(w.language.is_none()
+                    && rows.iter().any(|o| {
+                        o.media_id == w.media_id && o.family == w.family && o.language.is_some()
+                    }))
+        })
+        .collect();
     let wanted: Vec<i32> = first.iter().map(|w| w.media_id).collect();
     let books: HashMap<i32, MediaRow> = sqlx::query_as::<_, MediaRow>(sqlx::AssertSqlSafe(
         format!("{} WHERE m.id = ANY($1)", media_select()),
@@ -361,6 +371,9 @@ pub async fn score(
         return Ok(vec![]);
     };
     let want = pick(wants(db, m.id, &[family]).await?, language);
+    if language.is_some() && want.is_none() {
+        return Ok(vec![]);
+    }
     let formats = custom_formats(db).await?;
     let inp = Inputs::of(releases);
     let opts = BookScoreOptions {

@@ -1,5 +1,5 @@
 //! Optional merge of a multi-file audio version into one m4b (`book-ingest.md` rule 18).
-use super::{Placed, group::work_dir, register};
+use super::{Placed, group::work_dir, register_language};
 use crate::{
     engine::EngineError,
     ingest::{
@@ -30,6 +30,8 @@ const MIN_FREE: i64 = 1 << 30;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Part {
     pub id: i32,
+    pub edition: i32,
+    pub language: Option<String>,
     pub version: i32,
     pub folder_id: i32,
     pub rel: String,
@@ -40,17 +42,26 @@ pub struct Part {
     pub info: Option<MediaInfo>,
 }
 
-/// The version to merge: the first with several files, probed, in one folder and one work
-/// directory, when the media has no m4b.
+/// The version to merge: in the first audio edition with an m4b-less multi-file version, the first
+/// such version, probed, in one folder and one work directory. A version never spans editions.
 pub fn pick(rows: &[Part]) -> Option<Vec<Part>> {
-    if rows.iter().any(|r| r.quality == "m4b") {
-        return None;
-    }
+    let edition = rows.iter().map(|r| r.edition).find(|e| {
+        let of: Vec<&Part> = rows.iter().filter(|r| r.edition == *e).collect();
+        of.iter().all(|r| r.quality != "m4b")
+            && of
+                .iter()
+                .any(|r| of.iter().filter(|o| o.version == r.version).count() > 1)
+    })?;
+    let rows: Vec<&Part> = rows.iter().filter(|r| r.edition == edition).collect();
     let v = rows
         .iter()
         .map(|r| r.version)
         .find(|v| rows.iter().filter(|r| r.version == *v).count() > 1)?;
-    let parts: Vec<Part> = rows.iter().filter(|r| r.version == v).cloned().collect();
+    let parts: Vec<Part> = rows
+        .into_iter()
+        .filter(|r| r.version == v)
+        .cloned()
+        .collect();
     // What the engine would answer 400 to: too many parts, no duration, control characters.
     if parts.len() > MAX_PARTS {
         return None;
@@ -77,8 +88,8 @@ pub fn fingerprint(parts: &[Part]) -> String {
         .iter()
         .map(|p| {
             format!(
-                "{}:{}:{}:{:?}:{}",
-                p.id, p.version, p.size, p.mtime_ms, p.rel
+                "{}:{}:{}:{}:{:?}:{}",
+                p.id, p.edition, p.version, p.size, p.mtime_ms, p.rel
             )
         })
         .collect::<Vec<_>>()
@@ -153,12 +164,12 @@ pub fn verify(meta: &MergeMeta, info: &MediaInfo, bytes: u64) -> Result<(), Stri
 
 pub async fn load(st: &AppState, media: i32) -> sqlx::Result<Vec<Part>> {
     let rows = sqlx::query!(
-        r#"SELECT f.id, p.version, f."folderId" AS folder_id, f."relativePath" AS rel, f.size,
+        r#"SELECT f.id, i."editionId" AS edition, e.language, p.version, f."folderId" AS folder_id, f."relativePath" AS rel, f.size,
                   f."mtimeMs" AS mtime_ms, f.quality, f."probeVersion" AS probe_version,
                   f."streamInfo" AS info
            FROM item_parts p JOIN items i ON i.id = p."itemId"
              JOIN editions e ON e.id = i."editionId" JOIN media_files f ON f.id = p."mediaFileId"
-           WHERE p."mediaId" = $1 AND e.family = 'audio' ORDER BY p.version, p.position"#,
+           WHERE p."mediaId" = $1 AND e.family = 'audio' ORDER BY i."editionId", p.version, p.position"#,
         media
     )
     .fetch_all(&st.db)
@@ -167,6 +178,8 @@ pub async fn load(st: &AppState, media: i32) -> sqlx::Result<Vec<Part>> {
         .into_iter()
         .map(|r| Part {
             id: r.id,
+            edition: r.edition,
+            language: r.language,
             version: r.version,
             folder_id: r.folder_id,
             rel: r.rel,
@@ -761,7 +774,9 @@ async fn publish(
         rel: out_rel.to_owned(),
         abs: out.to_owned(),
     };
-    let done = register(st, media, &[placed]).await.map_err(sticky)?;
+    let done = register_language(st, media, &[placed], parts[0].language.as_deref())
+        .await
+        .map_err(sticky)?;
     if done.files.len() != 1 {
         return Err(sticky(done.conflicts.join("; ")));
     }
@@ -797,6 +812,8 @@ mod tests {
     fn part(id: i32, version: i32, rel: &str, quality: &str) -> Part {
         Part {
             id,
+            edition: 1,
+            language: None,
             version,
             folder_id: 1,
             rel: rel.into(),
@@ -824,6 +841,21 @@ mod tests {
         assert!(pick(&mp3[..1]).is_none());
         let both = [&mp3[..2], &[part(9, 1, "T/T.m4b", "m4b")]].concat();
         assert!(pick(&both).is_none());
+    }
+
+    #[test]
+    fn a_merge_never_spans_two_editions() {
+        let mut fr = [part(3, 0, "T/c.mp3", "mp3"), part(4, 0, "T/d.mp3", "mp3")];
+        fr.iter_mut().for_each(|p| {
+            p.edition = 2;
+            p.language = Some("fr".into());
+        });
+        let en = [part(1, 0, "T/a.mp3", "mp3"), part(2, 0, "T/b.mp3", "mp3")];
+        let got = pick(&[&en[..], &fr[..]].concat()).unwrap();
+        assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [1, 2]);
+        let m4b = [part(9, 0, "T/T.m4b", "m4b")];
+        let got = pick(&[&m4b[..], &fr[..]].concat()).unwrap();
+        assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [3, 4]);
     }
 
     #[test]

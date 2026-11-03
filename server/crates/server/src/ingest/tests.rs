@@ -1263,10 +1263,10 @@ mod book_ingest {
         let m = book(&c, "Orfaline").await;
         for r in [
             "Orfaline.epub",
-            "Orfaline (1).epub",
+            "Orfaline (fr).epub",
             "Orfaline.m4b",
-            "Orfaline en.m4b",
-            "More.epub",
+            "Orfaline (en).m4b",
+            "Orfaline.pdf",
         ] {
             touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
         }
@@ -1277,10 +1277,10 @@ mod book_ingest {
         books::register(&c.st, m, &rels(&["Orfaline.epub", "Orfaline.m4b"]))
             .await
             .unwrap();
-        books::register_language(&c.st, m, &rels(&["Orfaline (1).epub"]), Some("fr"))
+        books::register_language(&c.st, m, &rels(&["Orfaline (fr).epub"]), Some("fr"))
             .await
             .unwrap();
-        books::register_language(&c.st, m, &rels(&["Orfaline en.m4b"]), Some("en"))
+        books::register_language(&c.st, m, &rels(&["Orfaline (en).m4b"]), Some("en"))
             .await
             .unwrap();
         let held = || async {
@@ -1301,8 +1301,8 @@ mod book_ingest {
         let expect = vec![
             row("text", None, "Orfaline.epub"),
             row("audio", Some("fr"), "Orfaline.m4b"),
-            row("text", Some("fr"), "Orfaline (1).epub"),
-            row("audio", Some("en"), "Orfaline en.m4b"),
+            row("text", Some("fr"), "Orfaline (fr).epub"),
+            row("audio", Some("en"), "Orfaline (en).m4b"),
         ];
         let mut got = held().await;
         got.sort();
@@ -1313,18 +1313,111 @@ mod book_ingest {
         let mut again = held().await;
         again.sort();
         assert_eq!(again, want, "a relay keeps each file in its edition");
-        books::register(&c.st, m, &rels(&["More.epub"]))
+        books::register(&c.st, m, &rels(&["Orfaline.pdf"]))
             .await
             .unwrap();
         let more = held()
             .await
             .into_iter()
-            .find(|r| r.2.ends_with("More.epub"))
+            .find(|r| r.2.ends_with("Orfaline.pdf"))
             .unwrap();
         assert_eq!(
             (more.0.as_str(), more.1),
             ("text", None),
             "no language: the first edition"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn mp3_of_two_languages_stay_in_their_editions_through_a_relay(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        let all = [
+            "Orfaline (en) - 01.mp3",
+            "Orfaline (en) - 02.mp3",
+            "Orfaline (fr) - 01.mp3",
+            "Orfaline (fr) - 02.mp3",
+        ];
+        for r in all {
+            touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
+        }
+        let rels = |names: &[&str]| -> Vec<Placed> {
+            let full: Vec<String> = names.iter().map(|r| format!("Orfaline/{r}")).collect();
+            placed(&c, &full.iter().map(String::as_str).collect::<Vec<_>>())
+        };
+        for (language, names) in [("en", &all[..2]), ("fr", &all[2..])] {
+            let reg = books::register_language(&c.st, m, &rels(names), Some(language))
+                .await
+                .unwrap();
+            assert_eq!(reg.conflicts.len(), 0, "{:?}", reg.conflicts);
+        }
+        let held = || async {
+            sqlx::query_as::<_, (Option<String>, i32, String)>(
+                r#"SELECT e.language, p.version, f."relativePath" FROM editions e
+                   JOIN items i ON i."editionId" = e.id JOIN item_parts p ON p."itemId" = i.id
+                   JOIN media_files f ON f.id = p."mediaFileId" WHERE e."mediaId" = $1
+                   ORDER BY e.id, p.version, p.position"#,
+            )
+            .bind(m)
+            .fetch_all(&c.st.db)
+            .await
+            .unwrap()
+        };
+        let row = |l: &str, p: &str| (Some(l.to_owned()), 0, format!("Orfaline/{p}"));
+        let want = vec![
+            row("en", all[0]),
+            row("en", all[1]),
+            row("fr", all[2]),
+            row("fr", all[3]),
+        ];
+        assert_eq!(held().await, want);
+        books::relay(&c.st, m).await.unwrap();
+        assert_eq!(held().await, want, "a relay keeps each file in its edition");
+        books::register(&c.st, m, &rels(&all)).await.unwrap();
+        assert_eq!(
+            held().await,
+            want,
+            "a rescan keeps each file in its edition"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_single_mp3_per_language_gets_an_edition_each(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        let all = ["Orfaline (en).mp3", "Orfaline (fr).mp3"];
+        for r in all {
+            touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
+        }
+        for (language, name) in [("en", all[0]), ("fr", all[1])] {
+            let p = placed(&c, &[&format!("Orfaline/{name}")]);
+            books::register_language(&c.st, m, &p, Some(language))
+                .await
+                .unwrap();
+        }
+        let got: Vec<(Option<String>, String)> = sqlx::query_as(
+            r#"SELECT e.language, f."relativePath" FROM editions e
+               JOIN items i ON i."editionId" = e.id JOIN item_parts p ON p."itemId" = i.id
+               JOIN media_files f ON f.id = p."mediaFileId" WHERE e."mediaId" = $1 ORDER BY e.id"#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            got,
+            [
+                (
+                    Some("en".to_owned()),
+                    "Orfaline/Orfaline (en).mp3".to_owned()
+                ),
+                (
+                    Some("fr".to_owned()),
+                    "Orfaline/Orfaline (fr).mp3".to_owned()
+                )
+            ]
         );
     }
 

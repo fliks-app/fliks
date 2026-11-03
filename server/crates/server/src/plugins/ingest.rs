@@ -117,21 +117,6 @@ pub async fn run(
         None
     };
     let guard = st.ingest.media.lock(media_id).await;
-    // The first file of a language must not meet the same-named file of another one.
-    let fresh = match &language {
-        Some(l) => !sqlx::query_scalar::<_, bool>(
-            r#"SELECT EXISTS (SELECT 1 FROM editions e JOIN items i ON i."editionId" = e.id
-                 JOIN item_parts p ON p."itemId" = i.id
-                WHERE e."mediaId" = $1 AND e.family = $2 AND e.language = $3)"#,
-        )
-        .bind(media_id)
-        .bind(family.as_str())
-        .bind(l)
-        .fetch_one(&st.db)
-        .await
-        .map_err(db_err)?,
-        None => false,
-    };
     let out = library::ingest(
         st,
         &guard,
@@ -145,7 +130,7 @@ pub async fn run(
             fallback_quality: r.fallback_quality.clone(),
             release_name: Some(r.source_label.clone()),
             force: false,
-            uniquify_on_collision: fresh,
+            uniquify_on_collision: false,
             replace_existing: true,
             language: language.clone(),
         },

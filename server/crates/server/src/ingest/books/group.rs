@@ -54,9 +54,18 @@ pub(super) fn work_dir(path: &str) -> String {
     segs.join("/")
 }
 
+/// The stem without a trailing ` (fr)`: the files of one work in several languages share a key.
 fn stem_key(path: &str) -> String {
     let name = path.rsplit('/').next().unwrap_or(path);
-    let stem = name.rfind('.').map_or(name, |d| &name[..d]);
+    let mut stem = name.rfind('.').map_or(name, |d| &name[..d]);
+    if let Some(i) = stem.rfind(" (")
+        && i > 0
+        && let Some(l) = stem[i + 2..].strip_suffix(')')
+        && (2..=3).contains(&l.len())
+        && l.bytes().all(|b| b.is_ascii_lowercase())
+    {
+        stem = &stem[..i];
+    }
     stem.chars()
         .filter(|c| c.is_alphanumeric())
         .flat_map(char::to_lowercase)
