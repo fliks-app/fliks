@@ -2,7 +2,11 @@
 use lettre::{
     AsyncSmtpTransport, Tokio1Executor,
     message::Mailbox,
-    transport::smtp::{authentication::Credentials, extension::ClientId},
+    transport::smtp::{
+        authentication::{Credentials, DEFAULT_MECHANISMS},
+        client::{AsyncSmtpConnection, TlsParameters},
+        extension::ClientId,
+    },
 };
 use sqlx::PgPool;
 use std::time::Duration;
@@ -115,14 +119,19 @@ impl std::fmt::Debug for Smtp {
     }
 }
 
+pub enum ConnectError {
+    Config(String),
+    Smtp(lettre::transport::smtp::Error),
+}
+
 impl Smtp {
     /// Connect and I/O bound of one mail: a fixed part plus the time to push `bytes` at 256 KiB/s.
     pub fn budget(bytes: usize) -> Duration {
         Duration::from_secs(60 + (bytes / (256 * 1024)) as u64)
     }
 
-    /// Certificates are always verified. Credentials never travel in clear text: `none` refuses them.
-    pub fn transport(&self) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {
+    /// `none` refuses credentials: they never travel in clear text.
+    fn credentials(&self) -> Result<Option<Credentials>, String> {
         let creds = match (&self.username, &self.password) {
             (Some(u), p) => Some(Credentials::new(u.clone(), p.clone().unwrap_or_default())),
             _ => None,
@@ -130,6 +139,44 @@ impl Smtp {
         if creds.is_some() && self.security == Security::None {
             return Err("smtp_security none cannot carry a username".into());
         }
+        Ok(creds)
+    }
+
+    fn hello(&self) -> ClientId {
+        ClientId::Domain(self.from.email.domain().to_owned())
+    }
+
+    /// A connected, secured and authenticated session, so the caller owns the DATA and QUIT steps.
+    pub async fn connect(&self) -> Result<AsyncSmtpConnection, ConnectError> {
+        let creds = self.credentials().map_err(ConnectError::Config)?;
+        let tls = || TlsParameters::new(self.host.clone()).map_err(ConnectError::Smtp);
+        let hello = self.hello();
+        let wrapper = (self.security == Security::Tls).then(tls).transpose()?;
+        let mut conn = AsyncSmtpConnection::connect_tokio1(
+            (self.host.as_str(), self.port),
+            Some(TIMEOUT),
+            &hello,
+            wrapper,
+            None,
+        )
+        .await
+        .map_err(ConnectError::Smtp)?;
+        if self.security == Security::StartTls {
+            conn.starttls(tls()?, &hello)
+                .await
+                .map_err(ConnectError::Smtp)?;
+        }
+        if let Some(c) = creds {
+            conn.auth(DEFAULT_MECHANISMS, &c)
+                .await
+                .map_err(ConnectError::Smtp)?;
+        }
+        Ok(conn)
+    }
+
+    /// Certificates are always verified.
+    pub fn transport(&self) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {
+        let creds = self.credentials()?;
         let builder = match self.security {
             Security::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&self.host),
             Security::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&self.host),
@@ -139,7 +186,7 @@ impl Smtp {
         }
         .map_err(|e| e.to_string())?
         .port(self.port)
-        .hello_name(ClientId::Domain(self.from.email.domain().to_owned()))
+        .hello_name(self.hello())
         .timeout(Some(TIMEOUT));
         Ok(match creds {
             Some(c) => builder.credentials(c),

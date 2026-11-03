@@ -136,6 +136,9 @@ async fn smtp(data_reply: &'static str) -> (u16, Mails) {
                             .await
                             .ok();
                     } else if cmd.starts_with("QUIT") {
+                        if data_reply.contains("quit stalls") {
+                            std::future::pending::<()>().await;
+                        }
                         w.write_all(b"221 bye\r\n").await.ok();
                         return;
                     } else {
@@ -496,6 +499,20 @@ async fn a_user_is_limited_per_hour_and_in_flight(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(c.send(&c.a, dev, 1).await.0, 429);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_server_that_stalls_on_quit_still_counts_as_sent(pool: PgPool) {
+    let c = ctx(pool, "quit").await;
+    let (port, mails) = smtp("250 queued, quit stalls").await;
+    c.configure(port).await;
+    let dev = c.device(&c.a, "Kindle").await;
+    let (_, sent) = c.send(&c.a, dev, 1).await;
+    assert_eq!(
+        c.settled(sent["id"].as_i64().unwrap()).await,
+        ("sent".into(), None)
+    );
+    assert_eq!(mails.lock().unwrap().len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
