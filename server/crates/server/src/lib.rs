@@ -96,6 +96,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     roles::seed(&pool).await?;
     profiles::seed_quality_definitions(&pool).await?;
     profiles::warn_invalid_regexes(&pool).await?;
+    plugins::defaults::import_env(&pool).await;
     let folders_db = pool.clone();
     tokio::spawn(async move {
         match tokio::time::timeout(

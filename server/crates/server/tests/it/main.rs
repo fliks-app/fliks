@@ -9,6 +9,7 @@ mod cleanup_bulk;
 mod device_tokens;
 mod email_devices;
 mod events_ticket;
+mod fakes;
 mod heartbeat;
 mod importers;
 mod items;

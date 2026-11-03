@@ -167,16 +167,9 @@ mod tests {
     #[tokio::test]
     async fn a_failed_list_serves_its_last_copy_but_discover_never() {
         let pool = sqlx::PgPool::connect_lazy("postgres://unused").unwrap();
-        let cfg = crate::config::MetadataConfig {
-            tmdb_key: String::new(),
-            tvdb_key: String::new(),
-            tmdb_url: String::new(),
-            tvdb_url: String::new(),
-            tmdb_image_url: String::new(),
-        };
-        let mut md = Metadata::new(pool, &cfg);
+        let md = Metadata::new(pool);
         let down = Arc::new(Lists(AtomicBool::new(false)));
-        md.register(down.clone());
+        md.add_plugin(down.clone());
         let lang = fliks_domain::metadata::language::resolve(None, None);
         let ask = |name: &'static str, params: Vec<(String, String)>| {
             let (md, lang) = (&md, &lang);

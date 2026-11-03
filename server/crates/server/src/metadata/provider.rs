@@ -57,7 +57,7 @@ pub trait MetadataProvider: Send + Sync {
     /// Whether `fetch_person` and `person_credits` are answered.
     fn has_persons(&self) -> bool;
     fn limits(&self) -> Limits;
-    /// Whether a call can be made now: a built-in always, a plugin while it is up.
+    /// Whether a call can be made now: a plugin while it is up.
     fn available(&self) -> bool {
         true
     }
@@ -149,8 +149,103 @@ pub trait MetadataProvider: Send + Sync {
     }
 }
 
-/// A numeric provider id; callers validate it first, so a failure here never reaches a response.
-pub fn numeric(id: &str) -> Result<i64, Upstream> {
-    id.parse()
-        .map_err(|_| Upstream::new(None, "provider id is not a number"))
+/// Stands in for a provider that is not registered: every call fails 503.
+pub(super) struct Absent(pub Namespace);
+
+impl Absent {
+    fn off<T: Send + 'static>(&self) -> Call<'static, T> {
+        let e = Upstream::outage(format!("the {} provider is not installed", self.0));
+        Box::pin(async move { Err(e) })
+    }
+}
+
+impl MetadataProvider for Absent {
+    fn id(&self) -> Namespace {
+        self.0
+    }
+    fn supports(&self, _: MediaKind) -> bool {
+        false
+    }
+    fn has_persons(&self) -> bool {
+        false
+    }
+    fn limits(&self) -> Limits {
+        Limits::new(1.0, 1)
+    }
+    fn available(&self) -> bool {
+        false
+    }
+    fn search<'a>(
+        &'a self,
+        _: &'a Search<'a>,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        self.off()
+    }
+    fn fetch_work<'a>(
+        &'a self,
+        _: MediaKind,
+        _: &'a str,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, Value> {
+        self.off()
+    }
+    fn fetch_children<'a>(
+        &'a self,
+        _: MediaKind,
+        _: &'a str,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        self.off()
+    }
+    fn child_stubs<'a>(
+        &'a self,
+        _: MediaKind,
+        _: &'a str,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        self.off()
+    }
+    fn find_by<'a>(
+        &'a self,
+        _: Namespace,
+        _: &'a str,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, Option<(String, MediaKind)>> {
+        self.off()
+    }
+    fn fetch_person<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, PersonDetails> {
+        self.off()
+    }
+    fn person_credits<'a>(&'a self, _: &'a str, _: &'a Resolved, _: Priority) -> Call<'a, Credits> {
+        self.off()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn an_unregistered_provider_answers_503_instead_of_panicking() {
+        let db = sqlx::PgPool::connect_lazy("postgres://x@127.0.0.1:1/x").unwrap();
+        let md = super::super::Metadata::new(db);
+        let p = md.of(Namespace::TMDB);
+        let lang = fliks_domain::metadata::language::resolve(None, None);
+        let e = p
+            .fetch_work(MediaKind::Movie, "1", &lang, Priority::Interactive)
+            .await
+            .unwrap_err();
+        assert!(e.is_outage() && !p.available());
+    }
 }

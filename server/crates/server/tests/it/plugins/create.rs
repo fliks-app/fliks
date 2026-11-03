@@ -1,10 +1,7 @@
 //! `media.resolveOrCreate` (`plugins.md` rule 57): scope gate, refusals and the title lock.
 use super::harness::*;
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    routing::get,
-};
+use crate::fakes::Scripted;
+use fliks_domain::external_id::Namespace;
 use fliks_server::{
     config::Config,
     events::{Bus, DomainEvent},
@@ -149,48 +146,35 @@ async fn resolve_or_create_refuses_what_it_does_not_serve_and_finds_what_exists(
     s.finish().await;
 }
 
-async fn details(
-    State(hits): State<Arc<AtomicUsize>>,
-    Path((kind, id)): Path<(String, i32)>,
-) -> Json<Value> {
-    hits.fetch_add(1, Ordering::SeqCst);
-    let mut b = json!({
-        "id": id, "overview": "o", "genres": [], "poster_path": null, "status": "Released",
-        "runtime": 100, "credits": {"cast": [], "crew": []},
-    });
-    if kind == "movie" {
-        b["title"] = json!(format!("Movie {id}"));
-        b["release_date"] = json!("2020-01-01");
-    } else {
-        b["name"] = json!(format!("Series {id}"));
-        b["first_air_date"] = json!("2020-01-01");
-        b["number_of_seasons"] = json!(0);
-        b["seasons"] = json!([]);
-    }
-    Json(b)
-}
-
-/// An `AppState` whose TMDB is a loopback stub answering any id.
+/// An `AppState` whose TMDB is a fake answering any id.
 /// The second value counts the detail reads, one per title imported.
 async fn state_with_tmdb(s: &Scratch) -> (AppState, Arc<AtomicUsize>) {
-    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", l.local_addr().unwrap());
     let hits = Arc::new(AtomicUsize::new(0));
-    let app = Router::new()
-        .route("/tmdb/3/{kind}/{id}", get(details))
-        .with_state(hits.clone());
-    tokio::spawn(async { axum::serve(l, app).await.unwrap() });
-    let cfg = Config::from_lookup(|k| match k {
-        "TMDB_API_KEY" => Some("tmdb-test-key".into()),
-        "FLIKS_TMDB_API_URL" => Some(format!("{base}/tmdb/3")),
-        _ => None,
+    let fake = Scripted::new(Namespace::TMDB);
+    let h = hits.clone();
+    fake.otherwise(move |k| {
+        let mut p = k.split('/');
+        let (kind, id) = (p.next()?, p.last()?.parse::<i32>().ok()?);
+        match kind {
+            "work" => {
+                h.fetch_add(1, Ordering::SeqCst);
+                Some(Ok(json!({
+                    "tmdbId": id, "overview": "o", "genres": [], "status": "released",
+                    "runtime": 100, "year": 2020, "title": format!("Movie {id}"),
+                })))
+            }
+            "children" => Some(Ok(json!([]))),
+            _ => None,
+        }
     });
-    let mut st = AppState::new(s.pool.clone(), cfg, SECRET);
+    let st = AppState::new(s.pool.clone(), Config::from_lookup(|_| None), SECRET);
+    st.metadata.add_plugin(fake);
+    let mut st = st;
     let data = std::env::temp_dir().join(format!(
         "fliks-create-{}",
         fliks_server::config::random_hex(6)
     ));
-    st.images = Arc::new(ImageStore::with_root(data, &format!("{base}/img")));
+    st.images = Arc::new(ImageStore::with_root(data));
     (st, hits)
 }
 
@@ -657,7 +641,7 @@ async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
         "fliks-create-{}",
         fliks_server::config::random_hex(6)
     ));
-    st.images = Arc::new(ImageStore::with_root(data, "http://127.0.0.1:1/img"));
+    st.images = Arc::new(ImageStore::with_root(data));
     Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
     st.metadata
         .add_plugin(Arc::new(Fake(Arc::default(), "org.fake:aid", json!({}))));

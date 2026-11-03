@@ -668,7 +668,7 @@ async fn resolve_provider(
     ))
 }
 
-/// `fetchSingleSeason`: TMDB's single-season endpoint, else the provider's full list (cached per run).
+/// `fetchSingleSeason`: one season out of the provider's full list (cached per run).
 async fn single_season(
     st: &AppState,
     (p, ext): &Source,
@@ -677,15 +677,6 @@ async fn single_season(
     cache: &mut HashMap<String, Vec<SeasonDetails>>,
     prio: Priority,
 ) -> Result<Option<SeasonDetails>, AppError> {
-    if *p == Namespace::TMDB {
-        let v = st
-            .metadata
-            .tmdb
-            .season(ext_i64(ext)?, i64::from(number), lang, prio)
-            .await
-            .map_err(|e| fail(*p, e))?;
-        return Ok(Some(SeasonDetails::from_value(&v)));
-    }
     let key = format!("{}:{ext}", p.as_str());
     if !cache.contains_key(&key) {
         let all = read_seasons(st, *p, ext, lang, prio).await?;

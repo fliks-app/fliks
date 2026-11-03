@@ -1,19 +1,18 @@
-//! `/api/requests/*` and the request lifecycle (`docs/spec/requests.md`) through the real router, with a loopback
-//! stub for TMDB and the image host and a local listener for the webhook notifications.
+//! `/api/requests/*` and the request lifecycle (`docs/spec/requests.md`) through the real router, with a fake
+//! TMDB provider, a loopback image host and a local listener for the webhook notifications.
+use crate::fakes::{Images, Scripted};
 use axum::{
     Json, Router,
     body::Body,
-    extract::{Path, State},
+    extract::State,
     http::{Request, StatusCode},
-    response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::post,
 };
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use fliks_server::{
     app,
     config::Config,
     events::{Bus, DomainEvent},
-    images::ImageStore,
     requests::{Lifecycle, MediaRef, TitleFacts},
     state::AppState,
 };
@@ -41,66 +40,33 @@ impl Tmdb {
         let f = self.facts.lock().unwrap();
         f.as_ref().and_then(|f| f.season_count).unwrap_or(3)
     }
-}
 
-fn unavailable() -> Response {
-    StatusCode::SERVICE_UNAVAILABLE.into_response()
-}
-
-async fn details(State(t): State<Arc<Tmdb>>, Path((kind, id)): Path<(String, i32)>) -> Response {
-    if t.down.lock().unwrap().contains(&id) {
-        return unavailable();
+    /// The mapped record or children of a `work/<kind>/<id>` or `children/<id>` key.
+    fn answer(&self, key: &str) -> Option<Result<Value, u16>> {
+        let parts: Vec<&str> = key.split('/').collect();
+        let id: i32 = parts.last()?.parse().ok()?;
+        if self.down.lock().unwrap().contains(&id) {
+            return Some(Err(503));
+        }
+        if parts[0] == "children" {
+            let seasons = (1..=self.seasons()).map(|n| {
+                json!({"seasonNumber": n, "episodes": [{"episodeNumber": 1, "title": "E1", "airDate": "2020-01-01", "runtime": 40}]})
+            });
+            return Some(Ok(Value::Array(seasons.collect())));
+        }
+        let facts = self.facts.lock().unwrap().clone().unwrap_or_default();
+        let series = parts[1] == "series";
+        let mut body = json!({
+            "tmdbId": id, "overview": "o", "genres": facts.genre_ids.iter().map(|g| format!("g{g}")).collect::<Vec<_>>(),
+            "genreIds": facts.genre_ids, "posterUrl": "https://image.tmdb.org/t/p/w500/p.jpg",
+            "status": "released", "runtime": 100, "year": facts.year.unwrap_or(2020),
+            "title": format!("{} {id}", if series { "Series" } else { "Movie" }),
+        });
+        if series {
+            body["seasonCount"] = json!(self.seasons());
+        }
+        Some(Ok(body))
     }
-    let facts = t.facts.lock().unwrap().clone().unwrap_or_default();
-    let genres: Vec<Value> = facts
-        .genre_ids
-        .iter()
-        .map(|g| json!({"id": g, "name": format!("g{g}")}))
-        .collect();
-    let date = facts
-        .year
-        .map_or("2020-01-01".into(), |y| format!("{y}-01-01"));
-    let mut body = json!({
-        "id": id, "overview": "o", "genres": genres, "poster_path": "/p.jpg", "status": "Released",
-        "runtime": 100, "credits": {"cast": [], "crew": []},
-    });
-    if kind == "movie" {
-        body["title"] = json!(format!("Movie {id}"));
-        body["release_date"] = json!(date);
-    } else {
-        body["name"] = json!(format!("Series {id}"));
-        body["first_air_date"] = json!(date);
-        body["number_of_seasons"] = json!(t.seasons());
-        body["seasons"] = (1..=t.seasons())
-            .map(|n| json!({"season_number": n, "episode_count": 1}))
-            .collect();
-    }
-    Json(body).into_response()
-}
-
-async fn season(State(t): State<Arc<Tmdb>>, Path((id, n)): Path<(i32, i32)>) -> Response {
-    if t.down.lock().unwrap().contains(&id) {
-        return unavailable();
-    }
-    Json(json!({
-        "season_number": n,
-        "episodes": [{"episode_number": 1, "name": "E1", "air_date": "2020-01-01", "runtime": 40}],
-    }))
-    .into_response()
-}
-
-async fn poster() -> impl IntoResponse {
-    let img = image::RgbImage::from_fn(60, 90, |x, y| {
-        image::Rgb([(x % 256) as u8, (y % 256) as u8, 3])
-    });
-    let mut out = vec![];
-    image::DynamicImage::ImageRgb8(img)
-        .write_to(
-            &mut std::io::Cursor::new(&mut out),
-            image::ImageFormat::Jpeg,
-        )
-        .unwrap();
-    ([("content-type", "image/jpeg")], out)
 }
 
 /// The webhook the notification connection posts to.
@@ -143,14 +109,6 @@ async fn ctx(pool: PgPool) -> Ctx {
 async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
     let tmdb = Arc::new(Tmdb::default());
-    let base = serve(
-        Router::new()
-            .route("/tmdb/3/{kind}/{id}", get(details))
-            .route("/tmdb/3/tv/{id}/season/{n}", get(season))
-            .route("/img/t/p/{*file}", get(poster))
-            .with_state(tmdb.clone()),
-    )
-    .await;
     let hook = Arc::new(Hook::default());
     let hook_base = serve(
         Router::new()
@@ -158,18 +116,18 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
             .with_state(hook.clone()),
     )
     .await;
-    let cfg = Config::from_lookup(|k| match k {
-        "TMDB_API_KEY" if tmdb_key => Some("tmdb-test-key".into()),
-        "FLIKS_TMDB_API_URL" => Some(format!("{base}/tmdb/3")),
-        "FLIKS_TMDB_IMAGE_URL" => Some(format!("{base}/img/t/p")),
-        _ => None,
-    });
-    let mut st = AppState::new(pool.clone(), cfg, SECRET);
+    let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    if tmdb_key {
+        let fake = Scripted::new(Namespace::TMDB);
+        let t = tmdb.clone();
+        fake.otherwise(move |k| t.answer(k));
+        st.metadata.add_plugin(fake);
+    }
     let data = std::env::temp_dir().join(format!(
         "fliks-requests-{}",
         fliks_server::config::random_hex(6)
     ));
-    st.images = Arc::new(ImageStore::with_root(data, &format!("{base}/img/t/p")));
+    st.images = Arc::new(Images::start(true).await.store(data));
     sqlx::query(
         r#"INSERT INTO notification_connections (name, type, settings, events, enabled)
            VALUES ('hook', 'webhook', $1, $2, true)"#,

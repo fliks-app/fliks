@@ -1,8 +1,5 @@
 //! Environment configuration; defaults and parsing follow `docs/spec/config.md`.
-use crate::{
-    auth_token::{positive_int_or, ttl_secs},
-    metadata::{tmdb, tvdb},
-};
+use crate::auth_token::{positive_int_or, ttl_secs};
 use sqlx::postgres::PgConnectOptions;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
@@ -47,17 +44,6 @@ pub struct Config {
     pub refresh_token_ttl_days: i64,
     pub engine_url: String,
     pub engine_token: String,
-    pub metadata: MetadataConfig,
-}
-
-/// API keys and upstream bases of the metadata clients (`metadata.md` rules 20, 35).
-#[derive(Debug, Clone)]
-pub struct MetadataConfig {
-    pub tmdb_key: String,
-    pub tvdb_key: String,
-    pub tmdb_url: String,
-    pub tvdb_url: String,
-    pub tmdb_image_url: String,
 }
 
 impl Config {
@@ -119,14 +105,6 @@ impl Config {
             ),
             engine_url: get("FLIKS_ENGINE_URL").unwrap_or_default(),
             engine_token: get("FLIKS_ENGINE_TOKEN").unwrap_or_default(),
-            metadata: MetadataConfig {
-                tmdb_key: text("TMDB_API_KEY").unwrap_or_default(),
-                tvdb_key: text("TVDB_API_KEY").unwrap_or_default(),
-                tmdb_url: text("FLIKS_TMDB_API_URL").unwrap_or_else(|| tmdb::API_URL.into()),
-                tvdb_url: text("FLIKS_TVDB_API_URL").unwrap_or_else(|| tvdb::API_URL.into()),
-                tmdb_image_url: text("FLIKS_TMDB_IMAGE_URL")
-                    .unwrap_or_else(|| tmdb::IMAGE_URL.into()),
-            },
         }
     }
 }
