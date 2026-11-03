@@ -2087,6 +2087,32 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_held_replace_whose_m4b_changed_keeps_the_parts_and_drops_the_record(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        sqlx::query(
+            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
+               SELECT (SELECT min(id) FROM users), id, 1, 42 FROM items WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("replace"));
+        touch(&c.dir.join("books/Orfaline/Orfaline.m4b"), b"another file");
+        sqlx::query(r#"UPDATE playback_states SET "lastPlayedAt" = now() - interval '1 day'"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 3);
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+        assert_eq!(merge_state(&c, m).await, None);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_m4b_joins_the_edition_of_its_parts_whatever_its_tags_say(pool: PgPool) {
         let c = merging_ctx(pool).await;
         let m = merge_setup(&c, true, 1).await;

@@ -2,8 +2,11 @@
 ALTER TABLE "book_merges" ADD COLUMN "editionId" integer REFERENCES "editions"("id") ON DELETE CASCADE;
 ALTER TABLE "book_merges" ADD COLUMN "merge" jsonb;
 ALTER TABLE "book_merges" DISABLE TRIGGER set_updated_at;
-UPDATE "book_merges" b SET "editionId" = (
-  SELECT e.id FROM "editions" e WHERE e."mediaId" = b."mediaId" AND e.family = 'audio' ORDER BY e.id LIMIT 1);
+-- The fingerprint starts with `<file>:<edition>:`; the first audio edition when it names none.
+UPDATE "book_merges" b SET "editionId" = COALESCE(
+  (SELECT e.id FROM "editions" e WHERE e."mediaId" = b."mediaId" AND e.family = 'audio'
+     AND e.id::text = split_part(split_part(b."fingerprint", '|', 1), ':', 2)),
+  (SELECT e.id FROM "editions" e WHERE e."mediaId" = b."mediaId" AND e.family = 'audio' ORDER BY e.id LIMIT 1));
 ALTER TABLE "book_merges" ENABLE TRIGGER set_updated_at;
 DELETE FROM "book_merges" WHERE "editionId" IS NULL;
 ALTER TABLE "book_merges" ALTER COLUMN "editionId" SET NOT NULL;

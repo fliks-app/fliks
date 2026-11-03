@@ -636,7 +636,10 @@ async fn resume_replace(st: &AppState, media: i32) {
         )
         .await
         {
-            Err(Skip::Busy) => continue,
+            Err(Skip::Busy) => {
+                later(st, media, LISTENING_SECS as u64);
+                continue;
+            }
             Err(Skip::Keep(why)) => {
                 tracing::warn!("m4b merge of book #{media}: parts kept: {why}");
             }
@@ -929,7 +932,10 @@ async fn publish(
         .await
         {
             Ok(()) => {}
-            Err(Skip::Busy) => hold(st, parts[0].edition, merge).await,
+            Err(Skip::Busy) => {
+                hold(st, parts[0].edition, merge).await;
+                later(st, media, LISTENING_SECS as u64);
+            }
             Err(Skip::Keep(why)) => {
                 tracing::warn!("m4b merge of book #{media}: parts kept: {why}");
             }
@@ -1037,8 +1043,8 @@ async fn replace_parts(
         .await
         .map_err(|e| e.to_string())?
         .len();
-    // Tighter than the registration check: a missing minute must not cost the originals.
-    let tolerance = (merge.duration_seconds * 0.002).max(2.0 + 0.1 * parts.len() as f64);
+    // Tighter than the registration check, and not relative: a missing minute must not cost the originals.
+    let tolerance = 2.0 + 0.1 * parts.len() as f64;
     verify_within(merge, &probe(st, out, false).await?.info, bytes, tolerance)?;
     if parts.iter().any(|p| p.mtime_ms.is_none()) || !unchanged(st, media, parts, abs).await {
         return Err("a part is not what the merge read".into());
