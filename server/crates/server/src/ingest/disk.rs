@@ -191,23 +191,11 @@ fn progress(st: &AppState, key: &str, root: &str, current: usize, total: usize) 
     st.hub.activity().upsert_running(
         key,
         "OrphanScan",
-        Some(subject_titled(root)),
+        Some(Subj::titled(root)),
         Some(Num(current as f64)),
         Some(Num(total as f64)),
         None,
     );
-}
-
-pub(crate) fn subject_titled(title: &str) -> Subj {
-    Subj {
-        title: title.to_owned(),
-        media_id: None,
-        media_type: None,
-        season_number: None,
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
-    }
 }
 
 /// What one folder walk found.
@@ -587,7 +575,7 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
         act.upsert_pending(
             k,
             "OrphanImport",
-            Some(subject_titled(&d.folder_name)),
+            Some(Subj::titled(&d.folder_name)),
             Some(batch.clone()),
         );
     }
@@ -603,7 +591,7 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
         act.upsert_running(
             &batch,
             "OrphanImport",
-            Some(subject_titled(&d.folder_name)),
+            Some(Subj::titled(&d.folder_name)),
             Some(Num((i + 1) as f64)),
             Some(Num(total as f64)),
             None,
@@ -611,7 +599,7 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
         act.upsert_running(
             k,
             "OrphanImport",
-            Some(subject_titled(&d.folder_name)),
+            Some(Subj::titled(&d.folder_name)),
             None,
             None,
             Some(batch.clone()),

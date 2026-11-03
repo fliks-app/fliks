@@ -348,7 +348,7 @@ fn progress(st: &AppState, key: &str, job: &Job, current: i64, total: i64, item:
         st.hub.activity().upsert_running(
             key,
             "BookImport",
-            Some(disk::subject_titled(&job.name)),
+            Some(crate::events::Subject::titled(&job.name)),
             Some(Num(current as f64)),
             Some(Num(total as f64)),
             None,

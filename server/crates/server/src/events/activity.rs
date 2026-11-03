@@ -260,15 +260,7 @@ mod tests {
     use serde_json::{Value, json};
 
     fn titled(t: &str) -> Option<Subject> {
-        Some(Subject {
-            title: t.into(),
-            media_id: None,
-            media_type: None,
-            season_number: None,
-            episode_number: None,
-            episode_title: None,
-            episode_id: None,
-        })
+        Some(Subject::titled(t))
     }
 
     fn json_of(l: &List) -> Value {

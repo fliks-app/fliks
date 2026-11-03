@@ -40,10 +40,7 @@ fn progress(st: &AppState, done: u64, total: u64, subject: Option<Subject>) {
         command: KIND.into(),
         current: Num(done as f64),
         total: Num(total as f64),
-        message: subject
-            .as_ref()
-            .map(|s| s.title.clone())
-            .unwrap_or_default(),
+        message: subject.as_ref().map(Subject::format).unwrap_or_default(),
         subject,
     });
 }
@@ -176,11 +173,9 @@ impl Queue {
     }
 }
 
-/// The file's media, plus its episode when it is one; `None` when the row is gone.
 async fn file_subject(st: &AppState, id: i32) -> Option<Subject> {
-    crate::jobs::file_subjects(&st.db, &[id])
+    crate::events::subject::for_file(&st.db, id)
         .await
-        .map(|mut s| s.remove(&id))
         .unwrap_or_else(|e| {
             tracing::warn!("Post-import subject of file #{id} failed: {e}");
             None

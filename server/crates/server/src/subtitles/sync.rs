@@ -140,22 +140,13 @@ pub async fn cancel(st: &AppState, id: i32) {
 
 /// `buildMediaProgressSubject`.
 pub fn progress_subject(media: &MediaCtx, ep: Option<(i32, i32, i32, Option<String>)>) -> Subject {
-    let mut s = Subject {
-        title: media.title.clone(),
-        media_id: Some(media.id.into()),
-        media_type: Some(media.kind),
-        season_number: None,
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
-    };
-    if let Some((id, season, number, title)) = ep {
-        s.season_number = Some(season.into());
-        s.episode_number = Some(number.into());
-        s.episode_title = title;
-        s.episode_id = Some(id.into());
+    let s = Subject::media(media.id, &media.title, Some(media.kind));
+    match ep {
+        Some((id, season, number, title)) => {
+            s.with_episode(Some(id), Some(season), Some(number), title)
+        }
+        None => s,
     }
-    s
 }
 
 /// The episode of a subtitle row: `(id, seasonNumber, episodeNumber, title)`.
@@ -193,15 +184,7 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
     };
     let subject = match &media {
         Some(m) => progress_subject(m, ep),
-        None => Subject {
-            title: String::new(),
-            media_id: None,
-            media_type: None,
-            season_number: None,
-            episode_number: None,
-            episode_title: None,
-            episode_id: None,
-        },
+        None => Subject::default(),
     };
     let item = Item {
         subtitle_id: id,

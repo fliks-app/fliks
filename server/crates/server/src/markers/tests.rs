@@ -513,15 +513,7 @@ async fn a_running_season_is_refused(pool: PgPool) {
     c.st.hub
         .activity()
         .upsert_pending("IntroDetection:1", "IntroDetection", None, None);
-    let subject = Subject {
-        title: "t".into(),
-        media_id: None,
-        media_type: None,
-        season_number: None,
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
-    };
+    let subject = Subject::titled("t");
     c.st.hub.activity().upsert_pending(
         &format!("IntroDetection:{}", c.season),
         "IntroDetection",

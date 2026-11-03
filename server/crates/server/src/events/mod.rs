@@ -5,6 +5,7 @@ mod hub;
 mod replay;
 mod routes;
 mod sse;
+pub mod subject;
 mod ticket;
 
 pub use event::{Bus, DomainEvent, ExternalId, Num, RawEvent, SseEvent, Subject};

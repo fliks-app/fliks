@@ -13,7 +13,6 @@ use fliks_domain::{
 };
 use fliks_engine_core::api::JobPriority;
 use sqlx::{FromRow, PgPool};
-use std::collections::HashMap;
 
 type Outcome = Result<(), String>;
 
@@ -92,7 +91,7 @@ impl MediaRow {
     }
 
     fn subject(&self) -> Subject {
-        media_subject(self.id, &self.title, Some(self.kind))
+        Subject::media(self.id, &self.title, Some(self.kind))
     }
 }
 
@@ -250,7 +249,7 @@ async fn rescan(st: &AppState, job: &str, select: MediaQuery<'_>) -> Outcome {
         hub.activity().upsert_pending(
             &child(*id),
             job,
-            Some(media_subject(*id, title, Some(*kind))),
+            Some(Subject::media(*id, title, Some(*kind))),
             Some(job.into()),
         );
     }
@@ -260,7 +259,7 @@ async fn rescan(st: &AppState, job: &str, select: MediaQuery<'_>) -> Outcome {
     );
     let (mut changes, mut skipped) = (0, 0);
     for (i, (id, title, kind)) in media.iter().enumerate() {
-        let subject = media_subject(*id, title, Some(*kind));
+        let subject = Subject::media(*id, title, Some(*kind));
         progress(hub, job, i, total, title.clone(), Some(subject.clone()));
         running(hub, job, job, None, i, total, None);
         hub.activity()
@@ -296,7 +295,7 @@ async fn sprites(st: &AppState, job: &str, force: bool) -> Outcome {
         .fetch_all(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    let subjects = file_subjects(&st.db, &ids)
+    let subjects = crate::events::subject::for_files(&st.db, &ids)
         .await
         .map_err(|e| e.to_string())?;
     let hub = &st.hub;
@@ -318,7 +317,7 @@ async fn sprites(st: &AppState, job: &str, force: bool) -> Outcome {
     let mut generated = 0;
     for (n, batch) in ids.chunks(SPRITE_BATCH).enumerate() {
         let first = subjects.get(&batch[0]);
-        let message = first.map_or_else(|| job.to_owned(), format_subject);
+        let message = first.map_or_else(|| job.to_owned(), Subject::format);
         progress(hub, job, n * SPRITE_BATCH, total, message, first.cloned());
         running(hub, job, job, None, n * SPRITE_BATCH, total, None);
         let one = |id: Option<i32>| async move {
@@ -344,9 +343,8 @@ async fn sprite_of(st: &AppState, id: i32, subject: Option<&Subject>, force: boo
         }
     };
     let title = file.media_title.clone().unwrap_or_default();
-    let subject = subject.cloned().unwrap_or_else(|| Subject {
-        title: title.clone(),
-        ..media_subject(file.media_id.unwrap_or_default(), &title, file.media_type)
+    let subject = subject.cloned().unwrap_or_else(|| {
+        Subject::media(file.media_id.unwrap_or_default(), &title, file.media_type)
     });
     let priority = if force {
         JobPriority::Normal
@@ -369,45 +367,6 @@ async fn sprite_of(st: &AppState, id: i32, subject: Option<&Subject>, force: boo
     .is_some()
 }
 
-/// `buildMediaProgressSubject` for every file, scalar columns only and in chunks of 1 000 ids.
-pub(crate) async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Subject>> {
-    type Row = (
-        i32,
-        i32,
-        String,
-        String,
-        Option<i32>,
-        Option<i32>,
-        Option<String>,
-        Option<i32>,
-    );
-    let mut out = HashMap::new();
-    for chunk in ids.chunks(1000) {
-        let rows: Vec<Row> = sqlx::query_as(
-            r#"SELECT f.id, m.id, m."type", m.title, e.id, e."number", e.title, s."number"
-               FROM media_files f JOIN media m ON m.id = f."mediaId"
-               LEFT JOIN items e ON e.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) LEFT JOIN item_groups s ON s.id = e."groupId"
-               WHERE f.id = ANY($1)"#,
-        )
-        .bind(chunk)
-        .fetch_all(db)
-        .await?;
-        for (file, media, kind, title, ep, number, ep_title, season) in rows {
-            let mut subject = media_subject(media, &title, Some(crate::db::kind(&kind)?));
-            if let Some(season) = season {
-                subject.season_number = Some(i64::from(season));
-                if let Some(number) = number {
-                    subject.episode_number = Some(i64::from(number));
-                    subject.episode_title = ep_title;
-                    subject.episode_id = ep.map(i64::from);
-                }
-            }
-            out.insert(file, subject);
-        }
-    }
-    Ok(out)
-}
-
 async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
     let seasons = markers::list_seasons_for_scan(st, only_missing, None)
         .await
@@ -417,7 +376,7 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
     let child = |s: &ScanSeason| format!("IntroDetection:{}", s.id);
     let subject = |s: &ScanSeason| Subject {
         season_number: Some(i64::from(s.season_number)),
-        ..media_subject(s.media_id, &s.media_title, Some(s.kind))
+        ..Subject::media(s.media_id, &s.media_title, Some(s.kind))
     };
     for s in &seasons {
         st.hub.activity().upsert_pending(
@@ -439,7 +398,7 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
             job,
             i,
             total,
-            format_subject(&subject),
+            subject.format(),
             Some(subject.clone()),
         );
         running(&st.hub, job, job, None, i, total, None);
@@ -461,33 +420,6 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
         total - skipped
     );
     Ok(())
-}
-
-/// `buildMediaProgressSubject(media)`.
-fn media_subject(id: i32, title: &str, kind: Option<MediaKind>) -> Subject {
-    Subject {
-        title: title.to_owned(),
-        media_id: Some(i64::from(id)),
-        media_type: kind,
-        season_number: None,
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
-    }
-}
-
-/// `formatMediaProgressSubject`.
-fn format_subject(s: &Subject) -> String {
-    let Some(season) = s.season_number else {
-        return s.title.clone();
-    };
-    let Some(ep) = s.episode_number else {
-        return format!("{} S{season:02}", s.title);
-    };
-    match s.episode_title.as_deref().filter(|t| !t.is_empty()) {
-        Some(t) => format!("{} S{season:02}E{ep:02}: {t}", s.title),
-        None => format!("{} S{season:02}E{ep:02}", s.title),
-    }
 }
 
 fn progress(
@@ -553,22 +485,5 @@ impl Drop for ActivityRows {
         self.ids
             .iter()
             .for_each(|id| self.hub.activity().remove(id));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn subject_text_matches_the_ts_formatter() {
-        let mut s = media_subject(1, "Show", Some(MediaKind::Series));
-        assert_eq!(format_subject(&s), "Show");
-        s.season_number = Some(1);
-        assert_eq!(format_subject(&s), "Show S01");
-        s.episode_number = Some(12);
-        assert_eq!(format_subject(&s), "Show S01E12");
-        s.episode_title = Some("Pilot".into());
-        assert_eq!(format_subject(&s), "Show S01E12: Pilot");
     }
 }

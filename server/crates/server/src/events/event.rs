@@ -38,7 +38,7 @@ fn nullable<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
 }
 
 /// `MediaProgressSubject`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Subject {
     pub title: String,

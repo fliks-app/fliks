@@ -47,15 +47,7 @@ pub(super) fn report_activity(st: &AppState, token: &str) {
         Some(first) => st.hub.activity().upsert_running(
             &id,
             "livetv.viewing",
-            Some(Subject {
-                title: first.channel_name.clone(),
-                media_id: None,
-                media_type: None,
-                season_number: None,
-                episode_number: None,
-                episode_title: None,
-                episode_id: None,
-            }),
+            Some(Subject::titled(&first.channel_name)),
             Some(Num(mine.len() as f64)),
             None,
             None,

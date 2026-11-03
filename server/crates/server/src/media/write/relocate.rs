@@ -1,5 +1,5 @@
 //! Moves a media's files between library folders (`media-write.md` rules 101-107).
-use super::{already_running, body::Body, gate, subject};
+use super::{already_running, body::Body, gate};
 use crate::{
     events::{Num, SseEvent, Subject},
     http::{
@@ -125,7 +125,7 @@ pub async fn start(st: &AppState, a: &Authed, id: i32, folder: i32) -> Result<()
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let key = format!("MediaMove:{id}");
-    let subj = subject(id, &media.title, media.media_type);
+    let subj = Subject::media(id, &media.title, Some(media.media_type));
     if !st
         .hub
         .activity()

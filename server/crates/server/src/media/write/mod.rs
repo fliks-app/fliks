@@ -20,7 +20,6 @@ pub use update::*;
 
 use super::hydrate;
 use crate::{
-    events::Subject as Subj,
     http::{AppError, auth::Authed, validate::PathParams},
     libraries::{accessible_library_ids, assert_media_accessible, paths_visible},
     state::AppState,
@@ -29,10 +28,7 @@ use axum::{
     Router,
     routing::{delete as del, get, patch, post, put},
 };
-use fliks_domain::{
-    acl::{Action, Subject},
-    media::kind::MediaKind,
-};
+use fliks_domain::acl::{Action, Subject};
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -111,18 +107,6 @@ pub async fn detail_or_404(st: &AppState, a: &Authed, id: i32) -> Result<Value, 
     hydrate::detail(&st.db, id, paths_visible(&a.perms))
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))
-}
-
-fn subject(id: i32, title: &str, media_type: MediaKind) -> Subj {
-    Subj {
-        title: title.to_owned(),
-        media_id: Some(i64::from(id)),
-        media_type: Some(media_type),
-        season_number: None,
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
-    }
 }
 
 fn already_running() -> AppError {
