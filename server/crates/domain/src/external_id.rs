@@ -159,10 +159,12 @@ impl Namespace {
         };
         let rule = Arc::new(IdRule::new(id_pattern, case)?);
         let mut map = PLUGIN.write().unwrap_or_else(|e| e.into_inner());
-        let key = match map.get_key_value(name) {
-            Some((k, _)) => *k,
-            None => Box::leak(name.to_owned().into_boxed_str()),
+        let retired = RETIRED.read().unwrap_or_else(|e| e.into_inner());
+        let key = match (map.get_key_value(name), retired.get(name)) {
+            (Some((k, _)), _) | (None, Some(k)) => *k,
+            (None, None) => Box::leak(name.to_owned().into_boxed_str()),
         };
+        drop(retired);
         map.insert(
             key,
             Declared {

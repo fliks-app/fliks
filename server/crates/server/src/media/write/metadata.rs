@@ -540,7 +540,8 @@ async fn apply_identity(
         )));
     }
     sqlx::query!(
-        r#"UPDATE media SET "preferredProvider" = CASE WHEN $2 THEN $3 ELSE "preferredProvider" END
+        r#"UPDATE media SET "preferredProvider" = CASE WHEN $2 THEN $3
+             WHEN "preferredProvider" LIKE '%:%' THEN NULL ELSE "preferredProvider" END
            WHERE id = $1"#,
         media.id,
         provider.is_some(),

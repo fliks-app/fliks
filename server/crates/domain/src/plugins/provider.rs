@@ -285,10 +285,8 @@ pub const MAX_IDS_PER_NAMESPACE: usize = 16;
 /// The arrays of a record whose elements are records too.
 const NESTED: [&str; 4] = ["cast", "crew", "seasons", "episodes"];
 
-/// Rules 14, 26 and 28 on a record and the records nested in it (`cast`, `crew`, `seasons`,
-/// `episodes`): `ids` (namespace to an id or an array of ids) keeps the namespaces the core knows,
-/// normalised. A third-party provider (`official` false) keeps only its own and the non-unique core
-/// ones, and loses `tmdbId` and the TMDB collection keys. Returns how many entries were dropped.
+/// Rules 14, 26 and 28 on a record and its nested records: `ids` keeps the namespaces the
+/// provider may write, normalised; a third-party one loses `tmdbId` and the TMDB collection keys.
 pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) -> usize {
     let mut dropped = 0;
     if !official {
@@ -344,12 +342,13 @@ pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) 
     dropped
 }
 
-/// An id a provider answers (`find-by`) in its own namespace `ns`, as stored. An OpenLibrary key
-/// may come as a path (`/works/OL1W`); Audible and Audnexus name works by ASIN, for which the core
-/// has no namespace rule of its own.
+/// An id a provider answers (`find-by`) in `ns`, as stored: OpenLibrary keys may be paths and
+/// are works only; Audible and Audnexus answer ASINs.
 pub fn answered_id(ns: Namespace, value: &str) -> Option<String> {
     match ns {
-        Namespace::OPENLIBRARY => ns.normalize(value.trim().rsplit('/').next()?),
+        Namespace::OPENLIBRARY => ns
+            .normalize(value.trim().rsplit('/').next()?)
+            .filter(|v| v.ends_with('W')),
         Namespace::AUDIBLE | Namespace::AUDNEXUS => Namespace::ASIN.normalize(value),
         _ => ns.normalize(value),
     }
@@ -426,6 +425,7 @@ mod tests {
         assert_eq!(ol("OL45883W").as_deref(), Some("OL45883W"));
         assert_eq!(ol(" /works/OL45883W ").as_deref(), Some("OL45883W"));
         assert_eq!(ol("ol45883w"), None);
+        assert_eq!(ol("OL1M"), None, "a work only");
         for ns in [Namespace::AUDIBLE, Namespace::AUDNEXUS] {
             assert_eq!(answered_id(ns, "B002V0QK4C").as_deref(), Some("B002V0QK4C"));
             assert_eq!(answered_id(ns, "b002v0qk4c"), None);

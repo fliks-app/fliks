@@ -3,7 +3,7 @@ use super::*;
 use crate::media::{external_ids, write::import_in};
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
-use crate::requests::{TitleKey, lock_title};
+use crate::requests::{TitleKey, lock_titles};
 use fliks_domain::external_id::Namespace;
 
 /// The media of the work `ids` name, imported when the library has none.
@@ -17,7 +17,7 @@ pub async fn resolve_or_create(
     let kind = MediaKind::parse(kind)
         .filter(|k| k.families().contains(&Family::Video))
         .ok_or_else(|| host_err("unsupported-kind", format!("kind \"{kind}\" is not served")))?;
-    let mut entries = served_entries(st, kind, ids)?;
+    let entries = served_entries(st, kind, ids)?;
     let library = library_id
         .map(i32::try_from)
         .transpose()
@@ -31,17 +31,15 @@ pub async fn resolve_or_create(
         .execute(&mut *tx)
         .await
         .map_err(db_err)?;
-    // Locked in one order, so two calls naming the same titles cannot deadlock.
-    let mut order: Vec<&(Namespace, String)> = entries.iter().collect();
-    order.sort_by(|a, b| (a.0.as_str(), &a.1).cmp(&(b.0.as_str(), &b.1)));
-    for (ns, value) in order {
-        let key = TitleKey {
+    let keys: Vec<TitleKey> = entries
+        .iter()
+        .map(|(ns, value)| TitleKey {
             media_type: kind,
             provider: *ns,
             external_id: value.clone(),
-        };
-        lock_title(&mut tx, &key).await.map_err(lock_err)?;
-    }
+        })
+        .collect();
+    lock_titles(&mut tx, &keys).await.map_err(lock_err)?;
     let mut found = None;
     for (ns, value) in &entries {
         found = external_ids::find(&mut *tx, kind, *ns, value)
@@ -55,8 +53,8 @@ pub async fn resolve_or_create(
         Some(id) => id,
         None => {
             // Rule 57: created by the first entry whose provider is available.
-            entries.retain(|(ns, _)| st.metadata.available(*ns));
-            let Some((ns, value)) = entries.first() else {
+            let Some((ns, value)) = entries.iter().find(|(ns, _)| st.metadata.available(*ns))
+            else {
                 return Err(host_err(
                     "unsupported-provider",
                     "the provider is not available",
@@ -65,6 +63,12 @@ pub async fn resolve_or_create(
             create(st, kind, (*ns, value), (library, folder)).await?
         }
     };
+    // Rule 31: a later call by any one of the entries finds this media.
+    for (ns, value) in entries.iter().filter(|(ns, _)| !ns.is_unique()) {
+        external_ids::link_if_absent(&mut tx, id, kind, *ns, value)
+            .await
+            .map_err(db_err)?;
+    }
     tx.commit().await.map_err(db_err)?;
     Ok(id as u32)
 }
@@ -118,9 +122,8 @@ async fn create(
     }
 }
 
-/// Rule 57: the ids a provider serves for `kind`, each normalised by its namespace, those of a
-/// unique core namespace first. An id is looked up whatever the provider's state; only creating
-/// needs it available.
+/// Rule 57: the ids of served namespaces, normalised, unique core namespaces first; only
+/// creating needs the provider available.
 fn served_entries(
     st: &AppState,
     kind: MediaKind,

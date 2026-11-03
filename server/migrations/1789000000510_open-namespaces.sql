@@ -65,3 +65,10 @@ ALTER TABLE "edition_external_ids" DROP CONSTRAINT "CK_edition_external_ids_prov
 -- A preferred provider may now be a plugin namespace (up to 84 bytes).
 ALTER TABLE "media" ALTER COLUMN "preferredProvider" TYPE text;
 ALTER TABLE "item_groups" ALTER COLUMN "preferredProvider" TYPE text;
+
+-- A library preference is a namespace a provider serves: drop what the form could not send back.
+ALTER TABLE "libraries" DISABLE TRIGGER set_updated_at;
+UPDATE "libraries" SET "preferredProvider" = NULL
+WHERE "preferredProvider" NOT IN ('tmdb', 'tvdb', 'openlibrary', 'googlebooks', 'bnf', 'audible', 'audnexus')
+  AND "preferredProvider" !~ '^[a-z][a-z0-9]*(\.[a-z0-9]+)*:[a-z][a-z0-9-]{0,31}$';
+ALTER TABLE "libraries" ENABLE TRIGGER set_updated_at;

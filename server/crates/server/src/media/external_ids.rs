@@ -11,9 +11,40 @@ pub const TMDB: &str = ExternalProvider::Tmdb.as_str();
 pub const TVDB: &str = ExternalProvider::Tvdb.as_str();
 pub const IMDB: &str = ExternalProvider::Imdb.as_str();
 
-/// A `preferredProvider` value: a core namespace (not `file`) or a plugin namespace declared.
+/// A `preferredProvider` value: a namespace a provider serves, so not `imdb`, `isbn`, `asin` or `file`.
 pub fn preferred(name: &str) -> Option<Namespace> {
-    Namespace::parse(name).filter(|n| *n != Namespace::FILE)
+    Namespace::parse(name).filter(|n| {
+        !matches!(
+            n.core(),
+            Some(
+                ExternalProvider::Imdb
+                    | ExternalProvider::Isbn
+                    | ExternalProvider::Asin
+                    | ExternalProvider::File
+            )
+        )
+    })
+}
+
+/// `link` for a non-unique namespace the media holds no id of yet.
+pub async fn link_if_absent(
+    c: &mut PgConnection,
+    media_id: i32,
+    kind: MediaKind,
+    provider: Namespace,
+    value: &str,
+) -> sqlx::Result<()> {
+    let held: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2)"#,
+    )
+    .bind(media_id)
+    .bind(provider.as_str())
+    .fetch_one(&mut *c)
+    .await?;
+    if !held {
+        link(c, media_id, kind, provider, value).await?;
+    }
+    Ok(())
 }
 
 /// The join giving a query the `ids.tmdb`, `ids.tvdb` and `ids.imdb` of media `alias`, for queries
@@ -327,6 +358,16 @@ impl Ids {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preferred_is_a_namespace_a_provider_serves() {
+        for ok in ["tmdb", "tvdb", "openlibrary", "audible"] {
+            assert!(preferred(ok).is_some(), "{ok}");
+        }
+        for no in ["imdb", "isbn", "asin", "file", "nope", "org.x:aid"] {
+            assert!(preferred(no).is_none(), "{no}");
+        }
+    }
 
     async fn media(db: &sqlx::PgPool, kind: MediaKind) -> i32 {
         sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('t', $1) RETURNING id"#)

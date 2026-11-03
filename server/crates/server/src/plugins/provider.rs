@@ -170,7 +170,7 @@ fn call_error(e: CallError) -> Upstream {
 }
 
 impl PluginProvider {
-    /// The provider of a plugin whose first namespace is a core one; later namespaces are PV.10.
+    /// The provider of a plugin, keyed by its first declared namespace; `None` when it has none.
     pub fn new(rt: Arc<PluginRt>, md: &Metadata) -> Option<Self> {
         let b = rt.manifest.get("provider")?;
         let block = Block::parse(b);
@@ -708,7 +708,9 @@ impl Plugins {
                     app.metadata.add_plugin(Arc::new(provider));
                 }
                 None => {
-                    tracing::info!("provider \"{id}\" has no core first namespace: not registered")
+                    tracing::info!(
+                        "provider \"{id}\" has no declared first namespace: not registered"
+                    )
                 }
             }
         }

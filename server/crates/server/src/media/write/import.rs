@@ -386,17 +386,20 @@ async fn insert_media(
         imdb: d.imdb_id.clone(),
     };
     let free = ids.fill(tx, id, imp.media_type).await?.taken.is_empty();
-    // A plugin's id is not one of the three of `Ids`: link the one the title was looked up by, and
-    // pin the media to the plugin when it served the record, so a refresh reads it again.
-    if lookup.core().is_none() {
-        external_ids::link(tx, id, imp.media_type, *lookup, lookup_id).await?;
-        if found.provider.0 == *lookup {
-            sqlx::query(r#"UPDATE media SET "preferredProvider" = $2 WHERE id = $1"#)
-                .bind(id)
-                .bind(lookup.as_str())
-                .execute(&mut *tx)
-                .await?;
+    // A plugin's id is not one of the three of `Ids`: link the one the title was looked up by and
+    // the one that served it, and pin the media to the plugin when it served the lookup.
+    let (served, served_id) = &found.provider;
+    for (ns, v) in [(lookup, lookup_id), (served, served_id)] {
+        if ns.core().is_none() {
+            external_ids::link(tx, id, imp.media_type, *ns, v).await?;
         }
+    }
+    if lookup.core().is_none() && served == lookup {
+        sqlx::query(r#"UPDATE media SET "preferredProvider" = $2 WHERE id = $1"#)
+            .bind(id)
+            .bind(lookup.as_str())
+            .execute(&mut *tx)
+            .await?;
     }
     set_field_sources(tx, id, &found.provenance).await?;
     Ok((id, free))

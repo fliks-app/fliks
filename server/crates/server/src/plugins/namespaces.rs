@@ -1,5 +1,6 @@
 //! `provider_namespaces`: who owns a plugin namespace, and what goes with it (`provider-plugins.md` 5.1).
 use fliks_domain::external_id::Namespace;
+use futures_util::TryStreamExt;
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -49,10 +50,8 @@ pub async fn check_install(
     Ok(held.map_or(Ok(()), Err))
 }
 
-/// Records the namespaces once the plugin answered `hello`; later ones refresh label, pattern and
-/// case (warning how many stored ids a changed pattern no longer matches, rule 28), and a signed
-/// package takes over an unsigned row. `Err(name)` when another signer holds `name` (nothing is
-/// written).
+/// Records the namespaces once the plugin answered `hello`, refreshing label, pattern and case;
+/// `Err(name)` when another signer holds `name` (nothing is written).
 pub async fn claim(
     db: &PgPool,
     plugin_id: &str,
@@ -117,21 +116,25 @@ pub async fn claim(
     Ok(Ok(()))
 }
 
-/// How many ids stored under `ns` its rule no longer accepts as they are.
+/// How many stored ids under `ns` its rule no longer accepts as they are.
 pub async fn stale(db: &PgPool, ns: Namespace) -> sqlx::Result<usize> {
-    let values: Vec<String> = sqlx::query_scalar(
-        r#"SELECT value FROM media_external_ids WHERE provider = $1
-           UNION ALL SELECT value FROM edition_external_ids WHERE provider = $1
-           UNION ALL SELECT value FROM person_external_ids WHERE provider = $1
-           UNION ALL SELECT value FROM collection_external_ids WHERE provider = $1"#,
+    let mut rows = sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT value, count(*) FROM (
+             SELECT value FROM media_external_ids WHERE provider = $1
+             UNION ALL SELECT value FROM edition_external_ids WHERE provider = $1
+             UNION ALL SELECT value FROM person_external_ids WHERE provider = $1
+             UNION ALL SELECT value FROM collection_external_ids WHERE provider = $1) v
+           GROUP BY value"#,
     )
     .bind(ns.as_str())
-    .fetch_all(db)
-    .await?;
-    Ok(values
-        .iter()
-        .filter(|v| ns.normalize(v).as_deref() != Some(v.as_str()))
-        .count())
+    .fetch(db);
+    let mut n = 0;
+    while let Some((v, c)) = rows.try_next().await? {
+        if ns.normalize(&v).as_deref() != Some(v.as_str()) {
+            n += c as usize;
+        }
+    }
+    Ok(n)
 }
 
 /// Declares every stored namespace (kept ones included) so stored ids and settings parse at boot.
@@ -149,8 +152,7 @@ pub async fn load(db: &PgPool) -> sqlx::Result<()> {
 }
 
 /// `DELETE /api/plugins/:id?deleteData=true`: the plugin's namespaces and every id, snapshot and
-/// source under them, in one transaction; the process forgets them once it commits. An unfinished request with no media on such an id fails
-/// with `provider-removed`; the others keep their row.
+/// source under them, in one transaction; the process forgets them once it commits.
 pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     let names: Vec<String> =

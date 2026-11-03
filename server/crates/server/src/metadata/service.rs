@@ -196,6 +196,20 @@ fn ext_i64(external_id: &str) -> Result<i64, AppError> {
         .map_err(|_| AppError::bad_request("externalId must be a numeric string"))
 }
 
+/// `external_id` as `p` stores it: numeric for a core namespace, its `idPattern` for a plugin's.
+fn checked_id(p: Namespace, external_id: &str) -> Result<String, AppError> {
+    if p.core().is_some() {
+        ext_i64(external_id)?;
+        return Ok(external_id.to_owned());
+    }
+    p.normalize(external_id).ok_or_else(|| {
+        AppError::bad_request(format!(
+            "externalId is not valid for provider {}",
+            p.as_str()
+        ))
+    })
+}
+
 struct Lib {
     preferred: Option<String>,
     over: Override,
@@ -231,10 +245,10 @@ async fn read_record(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Map<String, Value>, AppError> {
-    ext_i64(external_id)?;
+    let external_id = checked_id(p, external_id)?;
     let v = st
         .metadata
-        .work(p, kind, external_id, lang, prio)
+        .work(p, kind, &external_id, lang, prio)
         .await
         .map_err(|e| fail_meta(p, e))?;
     Ok(match v {
@@ -262,10 +276,10 @@ async fn read_seasons(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Vec<SeasonDetails>, AppError> {
-    ext_i64(external_id)?;
+    let external_id = checked_id(p, external_id)?;
     let v = st
         .metadata
-        .children(p, MediaKind::Series, external_id, lang, prio)
+        .children(p, MediaKind::Series, &external_id, lang, prio)
         .await
         .map_err(|e| fail_meta(p, e))?;
     Ok(v.iter().map(SeasonDetails::from_value).collect())
@@ -317,11 +331,12 @@ async fn read_for_library(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<(Namespace, String, Details, Provenance), AppError> {
+    let external_id = &checked_id(found, external_id)?;
     let record = read_record(st, found, kind, external_id, lang, prio).await?;
     let details = Details::from_value(&Value::Object(record.clone()));
     let keep = |record| {
         let (d, p) = merged(kind, &[(found, record)], found, &[]);
-        (found, external_id.to_owned(), d, p)
+        (found, external_id.clone(), d, p)
     };
     let Some(pref) = lib
         .and_then(|l| l.preferred.as_deref())
@@ -384,7 +399,8 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
     } else {
         vec![]
     };
-    if details.tmdb_id.is_none_or(|t| t == 0)
+    if p.core().is_some()
+        && details.tmdb_id.is_none_or(|t| t == 0)
         && st.metadata.available(Namespace::TMDB)
         && let Some(tvdb) = details.tvdb_id.filter(|t| *t != 0)
     {
@@ -555,6 +571,11 @@ async fn external_id_for(
     Ok(None)
 }
 
+/// A plugin's namespace, declared or not: its override is soft, the plugin may be gone.
+fn is_plugin(pref: &str) -> bool {
+    Namespace::stored(pref).is_some_and(|n| n.core().is_none())
+}
+
 async fn try_preferred(
     st: &AppState,
     m: &Row,
@@ -576,8 +597,8 @@ async fn try_preferred(
         .map(|id| (p, id)))
 }
 
-/// `resolveProviderForMedia`: season override (strict), media override (strict), library preference
-/// (soft), then whichever id exists.
+/// `resolveProviderForMedia`: season override, media override (strict, but a plugin's falls through
+/// when it cannot be read, rule 27), library preference (soft), then whichever id exists.
 async fn resolve_provider(
     st: &AppState,
     m: &Row,
@@ -588,18 +609,24 @@ async fn resolve_provider(
 ) -> Result<Source, AppError> {
     let label = m.label();
     if let Some(pref) = season_pref.filter(|p| !p.is_empty()) {
-        return try_preferred(st, m, pref, "season", lang, prio).await?.ok_or_else(|| {
-            AppError::bad_request(format!(
+        if let Some(r) = try_preferred(st, m, pref, "season", lang, prio).await? {
+            return Ok(r);
+        }
+        if !is_plugin(pref) {
+            return Err(AppError::bad_request(format!(
                 "Season override \"{pref}\" cannot be resolved for {label}: no matching external ID available (check API key + cross-reference)."
-            ))
-        });
+            )));
+        }
     }
     if let Some(pref) = m.preferred.as_deref().filter(|p| !p.is_empty()) {
-        return try_preferred(st, m, pref, "media", lang, prio).await?.ok_or_else(|| {
-            AppError::bad_request(format!(
+        if let Some(r) = try_preferred(st, m, pref, "media", lang, prio).await? {
+            return Ok(r);
+        }
+        if !is_plugin(pref) {
+            return Err(AppError::bad_request(format!(
                 "Media override \"{pref}\" cannot be resolved for {label}: no matching external ID available."
-            ))
-        });
+            )));
+        }
     }
     if let Some(pref) = lib
         .and_then(|l| l.preferred.as_deref())
