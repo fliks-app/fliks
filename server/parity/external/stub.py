@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Loopback stand-in for TMDB, TVDB and image.tmdb.org (docs/spec/metadata.md Vectors/parity).
+"""Loopback stand-in for the provider hosts, reached through FLIKS_PLUGIN_UPSTREAM_OVERRIDE (docs/spec/metadata.md Vectors/parity).
 
-Usage: stub.py PORT. Routes: /tmdb/3/*, /tvdb/v4/*, /img/t/p/<size>/<file>, /tvdb-art/* (artworks.thetvdb.com, 403).
+Usage: stub.py PORT. Routes: /tmdb/3/*, /tvdb/v4/*, /img/t/p/<size>/<file>, /tvdb-art/* (artworks.thetvdb.com, 403), /books/* (every book host, 404).
 Fixture of a GET: <dir>/<path with / as _>.<query value>.json, else <path>.json, else 404.
 Subtitles (docs/spec/subtitle-providers.md): GET /subdl/api/v1/subtitles (releases by `type`/`languages`), GET /subtitle/<n>.zip.
 Control (used by scenario steps with "stub": true): POST /__reset, POST /__fail {prefix,status|"hang"},
@@ -50,12 +50,6 @@ def subdl_zip(n):
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(zipfile.ZipInfo("subtitle.srt", (2026, 1, 1, 0, 0, 0)), cue)
     return out.getvalue()
-
-
-def local_images(body):
-    """Absolute image hosts in fixtures point back here; the runner maps them back in response bodies."""
-    base = f"http://127.0.0.1:{sys.argv[1]}".encode()
-    return body.replace(b"https://image.tmdb.org/t/p", base + b"/img/t/p").replace(b"https://artworks.thetvdb.com", base + b"/tvdb-art")
 
 
 class H(BaseHTTPRequestHandler):
@@ -116,7 +110,7 @@ class H(BaseHTTPRequestHandler):
             if u.path.startswith(prefix + "/"):
                 p = fixture(kind, u.path[len(prefix):], query)
                 if p:
-                    return self.send(200, local_images(open(p, "rb").read()))
+                    return self.send(200, open(p, "rb").read())
                 return self.send(404, {"status_code": 34, "status_message": "The resource you requested could not be found.", "message": "not found"})
         self.send(404, {})
 

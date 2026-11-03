@@ -151,11 +151,14 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_CAST_DIR="$ROOT/server/public" RUST_LOG=info
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
-  # provider hosts are the stub in every mode, so a keyless run never leaves loopback
-  penv+=(FLIKS_TMDB_API_URL=http://127.0.0.1:$P_PROV/tmdb/3 FLIKS_TVDB_API_URL=http://127.0.0.1:$P_PROV/tvdb/v4
-    FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV)
-  [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity)
+  # provider hosts are the stub in every mode, so a keyless run never leaves loopback (rule 59)
+  local S=http://127.0.0.1:$P_PROV over=api.themoviedb.org=$S/tmdb,api4.thetvdb.com=$S/tvdb,image.tmdb.org=$S/img,artworks.thetvdb.com=$S/tvdb-art
+  for h in openlibrary.org covers.openlibrary.org archive.org www.googleapis.com books.google.com catalogue.bnf.fr \
+    api.audnex.us m.media-amazon.com images-na.ssl-images-amazon.com api.audible.com api.audible.fr api.audible.de api.audible.co.uk \
+    api.audible.it api.audible.es api.audible.ca api.audible.com.au api.audible.co.jp api.audible.in; do over+=,$h=$S/books; done
+  penv+=(FLIKS_PLUGIN_UPSTREAM_OVERRIDE=$over FLIKS_SUBTITLE_PROVIDERS_URL=$S)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
+  [ "$prov" = 1 ] && psql_admin -d "$DB" -c "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'tmdb-parity'), ('plugin.fliks.tvdb.apiKey', 'tvdb-parity')"
   start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
     log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|target"); FAILED=1
