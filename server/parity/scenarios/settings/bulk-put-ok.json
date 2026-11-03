@@ -25,7 +25,6 @@
       "expect": {
         "body": {
           "a_key": "1",
-          "metadata.env_keys_imported": "true",
           "parity_flag": "off",
           "parity_json": "{\"a\":1}",
           "parity_null": null

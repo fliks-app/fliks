@@ -168,6 +168,8 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90 || { log "priming boot failed, see $RUN/prime-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|prime"); FAILED=1; stop_all_but_stubs; return; }
   kill -TERM -- "-$prime" 2>/dev/null; sleep 2; kill -KILL -- "-$prime" 2>/dev/null
   unset 'PIDS[-1]'
+  # the import marker is not part of the seeded state: drop it and give its id back to the sequence
+  psql_admin -d "$DB" -c "DELETE FROM app_settings WHERE key = 'metadata.env_keys_imported'" -c "SELECT setval(pg_get_serial_sequence('app_settings', 'id'), (SELECT max(id) FROM app_settings))" >/dev/null
   local PTPL=${DBPFX}tplp
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $PTPL WITH (FORCE)" -c "CREATE DATABASE $PTPL TEMPLATE $DB" -c "DROP DATABASE $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $PTPL"
   start "target-$1-$2" "$d" "${tenv[@]}"
