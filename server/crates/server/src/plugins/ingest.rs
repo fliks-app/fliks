@@ -8,7 +8,7 @@ use fliks_domain::language::parse_language_code;
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::json;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// `realpath` of `raw`, which must sit under the `realpath` of one of `roots`.
 pub fn contained(raw: &str, roots: &[String]) -> Result<PathBuf, HostError> {
@@ -36,9 +36,74 @@ pub fn contained(raw: &str, roots: &[String]) -> Result<PathBuf, HostError> {
     }
 }
 
+/// A file the guest named `/data/<rel>`: opened beneath the plugin's data dir (a path or symlink
+/// leading out is refused whatever the guest does meanwhile), checked on the open handle and copied
+/// to `dest`, which the guest cannot reach. Returns the copy and `<rel>`.
+fn stage_from_data(raw: &str, data: &Path, dest: &Path) -> Result<(PathBuf, String), HostError> {
+    use cap_std::{ambient_authority, fs::Dir};
+    let rel = raw.strip_prefix("/data/").unwrap_or_default();
+    let denied = || {
+        host_err(
+            "ERR_DENIED",
+            format!("library.ingest: \"{raw}\" is outside the plugin data dir"),
+        )
+    };
+    if rel
+        .split('/')
+        .any(|s| s.is_empty() || s == "." || s == ".." || s.contains('\\'))
+    {
+        return Err(denied());
+    }
+    let io = |e: std::io::Error| match e.kind() {
+        std::io::ErrorKind::NotFound => host_err(
+            "ERR_NOT_FOUND",
+            format!("library.ingest: \"{raw}\" does not exist"),
+        ),
+        std::io::ErrorKind::PermissionDenied => denied(),
+        _ => host_err("ERR", format!("library.ingest: \"{raw}\": {e}")),
+    };
+    let dir = Dir::open_ambient_dir(data, ambient_authority()).map_err(io)?;
+    if dir.symlink_metadata(rel).map_err(io)?.is_symlink() {
+        return Err(denied());
+    }
+    let mut src = dir.open(rel).map_err(io)?.into_std();
+    if !src.metadata().map_err(io)?.is_file() {
+        return Err(host_err(
+            "ERR_VALIDATION",
+            format!("library.ingest: \"{raw}\" is not a regular file"),
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let m = src.metadata().map_err(io)?;
+        if m.blocks() * 512 < m.len() / 8 {
+            return Err(host_err(
+                "ERR_VALIDATION",
+                format!("library.ingest: \"{raw}\" is a sparse file"),
+            ));
+        }
+    }
+    std::fs::create_dir_all(dest).map_err(io)?;
+    let out = dest.join(rel.rsplit('/').next().unwrap_or(rel));
+    let mut copy = std::fs::File::create_new(&out).map_err(io)?;
+    std::io::copy(&mut src, &mut copy).map_err(io)?;
+    Ok((out, rel.to_owned()))
+}
+
+/// The scratch copies of one call, removed whatever the outcome.
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 pub async fn run(
     st: &AppState,
     id: &str,
+    runtime_dir: &Path,
     r: t::IngestRequest,
 ) -> Result<t::IngestResult, HostError> {
     let family = super::served(r.family)?;
@@ -63,22 +128,45 @@ pub async fn run(
     .await
     .map_err(|e| host_err("ERR", e.to_string()))?
     .unwrap_or_default();
-    if roots.is_empty() {
+    if roots.is_empty() && (r.paths.is_empty() || r.paths.iter().any(|p| !p.starts_with("/data/")))
+    {
         return Err(host_err(
             "ERR_DENIED",
             format!("library.ingest: no ingestRoots configured for plugin \"{id}\""),
         ));
     }
-    let files = r
-        .paths
-        .iter()
-        .map(|p| {
-            contained(p, &roots).map(|path| library::File {
-                path,
-                episode_id: None,
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let data = super::runtime::data_dir(runtime_dir, id);
+    let scratch = Scratch(
+        runtime_dir
+            .join("ingest-staging")
+            .join(crate::config::random_hex(8)),
+    );
+    let mut files = vec![];
+    let mut sources: Vec<(PathBuf, String)> = vec![];
+    for (i, p) in r.paths.iter().enumerate() {
+        let path = match contained(p, &roots) {
+            Ok(path) => path,
+            Err(_) if p.starts_with("/data/") => {
+                let (raw, data, dest) = (p.clone(), data.clone(), scratch.0.join(i.to_string()));
+                let (copy, rel) =
+                    tokio::task::spawn_blocking(move || stage_from_data(&raw, &data, &dest))
+                        .await
+                        .map_err(|e| host_err("ERR", e.to_string()))??;
+                sources.push((copy.clone(), rel));
+                copy
+            }
+            Err(e) => return Err(e),
+        };
+        files.push(library::File {
+            path,
+            episode_id: None,
+        });
+    }
+    let transfer = match r.transfer {
+        _ if !files.is_empty() && sources.len() == files.len() => Method::Move,
+        t::TransferMode::Copy => Method::Copy,
+        t::TransferMode::Move => Method::Move,
+    };
     let media_id = r.media_id as i32;
     let not_found = || host_err("ERR_NOT_FOUND", format!("Media #{media_id} not found"));
     let kind: Option<String> = sqlx::query_scalar("SELECT type FROM media WHERE id = $1")
@@ -123,10 +211,7 @@ pub async fn run(
         library::Request {
             media_id,
             files,
-            transfer: match r.transfer {
-                t::TransferMode::Copy => Method::Copy,
-                t::TransferMode::Move => Method::Move,
-            },
+            transfer,
             fallback_quality: r.fallback_quality.clone(),
             release_name: Some(r.source_label.clone()),
             force: false,
@@ -141,6 +226,9 @@ pub async fn run(
         return Err(host_err("ERR", out.errors.join("; ")));
     }
     drop(guard);
+    if r.transfer == t::TransferMode::Move {
+        remove_sources(&data, &ingested(&sources, &out));
+    }
     let mut items = placed(st, &out.imported).await?;
     if let Some(first) = out.imported.first() {
         let title: Option<String> = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
@@ -190,6 +278,31 @@ pub async fn run(
     })
 }
 
+/// The `/data` files whose staged copy the ingest took or already held; a rejected one stays.
+fn ingested(sources: &[(PathBuf, String)], out: &library::Outcome) -> Vec<String> {
+    sources
+        .iter()
+        .filter(|(staged, _)| {
+            out.imported.iter().any(|i| i.source_path == *staged)
+                || out.already_present.iter().any(|p| Path::new(p) == staged)
+        })
+        .map(|(_, rel)| rel.clone())
+        .collect()
+}
+
+/// A `move` empties the plugin's scratch of what was ingested (beneath the dir, never following out).
+fn remove_sources(data: &Path, rels: &[String]) {
+    use cap_std::{ambient_authority, fs::Dir};
+    let Ok(dir) = Dir::open_ambient_dir(data, ambient_authority()) else {
+        return;
+    };
+    for rel in rels {
+        if let Err(e) = dir.remove_file(rel) {
+            tracing::warn!("library.ingest: \"/data/{rel}\" not removed: {e}");
+        }
+    }
+}
+
 fn db_err(e: sqlx::Error) -> HostError {
     host_err("ERR", e.to_string())
 }
@@ -222,12 +335,15 @@ async fn placed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fliks_domain::external_id::Namespace;
     use sqlx::PgPool;
     use std::path::Path;
 
     struct Shelf {
         st: AppState,
         dl: PathBuf,
+        data: PathBuf,
+        runtime: PathBuf,
     }
 
     /// A book (1) wished in text and audio, a plugin `p` allowed to ingest from `dl`.
@@ -237,8 +353,8 @@ mod tests {
             "fliks-plugin-books-{}",
             crate::config::random_hex(6)
         ));
-        let (books, dl) = (dir.join("books"), dir.join("dl"));
-        for d in [&books, &dl] {
+        let (books, dl, data) = (dir.join("books"), dir.join("dl"), dir.join("data/p"));
+        for d in [&books, &dl, &data] {
             std::fs::create_dir_all(d).unwrap();
         }
         sqlx::query(
@@ -265,7 +381,12 @@ mod tests {
             crate::config::Config::from_lookup(|_| None),
             "0123456789abcdef0123456789abcdef",
         );
-        Shelf { st, dl }
+        Shelf {
+            st,
+            dl,
+            data,
+            runtime: dir,
+        }
     }
 
     fn request(
@@ -294,6 +415,7 @@ mod tests {
         let r = run(
             &s.st,
             "p",
+            &s.runtime,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -320,6 +442,7 @@ mod tests {
         let again = run(
             &s.st,
             "p",
+            &s.runtime,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -354,9 +477,14 @@ mod tests {
     #[sqlx::test(migrations = false)]
     async fn a_second_language_of_a_family_lands_in_its_own_edition(db: PgPool) {
         let s = shelf(db).await;
-        run(&s.st, "p", request(&s, t::Family::Text, None, "dl.epub"))
-            .await
-            .unwrap();
+        run(
+            &s.st,
+            "p",
+            &s.runtime,
+            request(&s, t::Family::Text, None, "dl.epub"),
+        )
+        .await
+        .unwrap();
         sqlx::query(r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'text', 'fr')"#)
             .execute(&s.st.db)
             .await
@@ -369,6 +497,7 @@ mod tests {
         let fr = run(
             &s.st,
             "p",
+            &s.runtime,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -395,6 +524,7 @@ mod tests {
         let again = run(
             &s.st,
             "p",
+            &s.runtime,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -415,26 +545,273 @@ mod tests {
         let s = shelf(db).await;
         let code = |r: Result<t::IngestResult, HostError>| r.unwrap_err().code;
         let epub = request(&s, t::Family::Audio, None, "a.epub");
-        assert_eq!(code(run(&s.st, "p", epub).await), "ERR_VALIDATION");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, epub).await),
+            "ERR_VALIDATION"
+        );
         let epub = request(&s, t::Family::Video, None, "b.epub");
-        assert_eq!(code(run(&s.st, "p", epub).await), "ERR_VALIDATION");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, epub).await),
+            "ERR_VALIDATION"
+        );
         let language = request(&s, t::Family::Video, Some("fr"), "c.epub");
-        assert_eq!(code(run(&s.st, "p", language).await), "ERR_VALIDATION");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, language).await),
+            "ERR_VALIDATION"
+        );
         let bad = request(&s, t::Family::Text, Some("zz zz"), "d.epub");
-        assert_eq!(code(run(&s.st, "p", bad).await), "ERR_VALIDATION");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, bad).await),
+            "ERR_VALIDATION"
+        );
         let image = request(&s, t::Family::Image, None, "e.epub");
-        assert_eq!(code(run(&s.st, "p", image).await), "unsupported-family");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, image).await),
+            "unsupported-family"
+        );
         let mut gone = request(&s, t::Family::Text, None, "f.epub");
         gone.media_id = 99;
-        assert_eq!(code(run(&s.st, "p", gone).await), "ERR_NOT_FOUND");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, gone).await),
+            "ERR_NOT_FOUND"
+        );
         let mut outside = request(&s, t::Family::Text, None, "g.epub");
         outside.paths = vec![std::env::temp_dir().to_string_lossy().into_owned()];
-        assert_eq!(code(run(&s.st, "p", outside).await), "ERR_DENIED");
+        assert_eq!(
+            code(run(&s.st, "p", &s.runtime, outside).await),
+            "ERR_DENIED"
+        );
         let none: i64 = sqlx::query_scalar("SELECT count(*) FROM media_files")
             .fetch_one(&s.st.db)
             .await
             .unwrap();
         assert_eq!(none, 0);
+    }
+
+    fn data_request(s: &Shelf, name: &str, transfer: t::TransferMode) -> t::IngestRequest {
+        std::fs::write(s.data.join(name), name.as_bytes()).unwrap();
+        let mut req = request(s, t::Family::Text, None, "unused.epub");
+        req.paths = vec![format!("/data/{name}")];
+        req.transfer = transfer;
+        req
+    }
+
+    async fn library_file(s: &Shelf) -> PathBuf {
+        let rel: String = sqlx::query_scalar(r#"SELECT "relativePath" FROM media_files"#)
+            .fetch_one(&s.st.db)
+            .await
+            .unwrap();
+        s.runtime.join("books").join(rel)
+    }
+
+    /// With declared roots (the host path of `dl` wins) and none, `/data/...` is the plugin's scratch.
+    #[cfg(unix)]
+    #[sqlx::test(migrations = false)]
+    async fn a_data_dir_file_is_copied_in_and_a_move_empties_the_scratch(db: PgPool) {
+        use std::os::unix::fs::MetadataExt;
+        let s = shelf(db).await;
+        let kept = data_request(&s, "keep.epub", t::TransferMode::Copy);
+        run(&s.st, "p", &s.runtime, kept).await.unwrap();
+        assert!(
+            s.data.join("keep.epub").exists(),
+            "a copy keeps the scratch file"
+        );
+        let held = std::fs::metadata(library_file(&s).await).unwrap().ino();
+        assert_ne!(
+            held,
+            std::fs::metadata(s.data.join("keep.epub")).unwrap().ino()
+        );
+        sqlx::query(r#"UPDATE plugin_registrations SET "ingestRoots" = '{}'"#)
+            .execute(&s.st.db)
+            .await
+            .unwrap();
+        let mut moved = data_request(&s, "go.epub", t::TransferMode::Move);
+        moved.language = Some("fr".into());
+        let r = run(&s.st, "p", &s.runtime, moved).await.unwrap();
+        assert_eq!(r.imported.len(), 1, "{r:?}");
+        assert!(
+            !s.data.join("go.epub").exists(),
+            "a move unlinks the source"
+        );
+        assert!(
+            !s.runtime
+                .join("ingest-staging")
+                .read_dir()
+                .unwrap()
+                .any(|e| e.is_ok()),
+            "no staged copy is left"
+        );
+        let mut out = request(&s, t::Family::Text, None, "x.epub");
+        out.paths = vec!["/data/../dl/x.epub".into()];
+        let code = |r: Result<t::IngestResult, HostError>| r.unwrap_err().code;
+        assert_eq!(code(run(&s.st, "p", &s.runtime, out).await), "ERR_DENIED");
+        let mut host = request(&s, t::Family::Text, None, "y.epub");
+        host.paths = vec![s.dl.join("y.epub").to_string_lossy().into_owned()];
+        assert_eq!(code(run(&s.st, "p", &s.runtime, host).await), "ERR_DENIED");
+    }
+
+    /// A relative symlink the guest could create is never followed out of its dir.
+    #[cfg(unix)]
+    #[sqlx::test(migrations = false)]
+    async fn a_symlink_in_the_data_dir_pulls_nothing_in(db: PgPool) {
+        let s = shelf(db).await;
+        std::fs::create_dir_all(s.data.join("d")).unwrap();
+        std::fs::write(s.dl.join("secret.epub"), b"secret").unwrap();
+        std::os::unix::fs::symlink("../../dl", s.data.join("d/out")).unwrap();
+        std::os::unix::fs::symlink("../../../dl/secret.epub", s.data.join("d/leaf.epub")).unwrap();
+        for p in ["/data/d/out/secret.epub", "/data/d/leaf.epub"] {
+            let mut req = request(&s, t::Family::Text, None, "unused.epub");
+            req.paths = vec![p.into()];
+            req.transfer = t::TransferMode::Move;
+            assert_eq!(
+                run(&s.st, "p", &s.runtime, req).await.unwrap_err().code,
+                "ERR_DENIED"
+            );
+        }
+        assert!(
+            s.dl.join("secret.epub").exists(),
+            "a move never reaches outside"
+        );
+        let files: i64 = sqlx::query_scalar("SELECT count(*) FROM media_files")
+            .fetch_one(&s.st.db)
+            .await
+            .unwrap();
+        assert_eq!(files, 0);
+    }
+
+    /// The anchor is linked by identify once an edition exists, not by the ingest itself.
+    #[sqlx::test(migrations = false)]
+    async fn identify_links_the_anchor_after_an_ingest(db: PgPool) {
+        let mut s = shelf(db).await;
+        let mut ol = crate::metadata::books::tests::Fake::new(Namespace::OPENLIBRARY);
+        ol.works.insert(
+            "OL1W".into(),
+            json!({"title": "Mirelune", "authors": [{"name": "Una Roe"}]}),
+        );
+        ol.found = vec![
+            json!({"externalId": "OL1W", "title": "Mirelune", "authors": [{"name": "Una Roe"}]}),
+        ];
+        std::sync::Arc::get_mut(&mut s.st.metadata)
+            .unwrap()
+            .register(std::sync::Arc::new(ol));
+        let req = data_request(&s, "m.epub", t::TransferMode::Move);
+        {
+            use std::io::Write;
+            let opf = r#"<package><metadata xmlns:dc="x"><dc:title>Mirelune</dc:title>
+                <dc:creator>Una Roe</dc:creator></metadata><manifest/></package>"#;
+            let mut w = zip::ZipWriter::new(std::fs::File::create(s.data.join("m.epub")).unwrap());
+            let o = zip::write::SimpleFileOptions::default();
+            for (n, b) in [
+                (
+                    "META-INF/container.xml",
+                    r#"<container><rootfiles><rootfile full-path="o.opf"/></rootfiles></container>"#,
+                ),
+                ("o.opf", opf),
+            ] {
+                w.start_file(n, o).unwrap();
+                w.write_all(b.as_bytes()).unwrap();
+            }
+            w.finish().unwrap();
+        }
+        run(&s.st, "p", &s.runtime, req).await.unwrap();
+        let anchors = || async {
+            sqlx::query_scalar::<_, String>(
+                r#"SELECT value FROM media_external_ids WHERE provider = 'openlibrary'"#,
+            )
+            .fetch_all(&s.st.db)
+            .await
+            .unwrap()
+        };
+        assert!(anchors().await.is_empty(), "ingest alone links nothing");
+        assert!(books::identify_media(&s.st, 1).await.is_ok());
+        assert_eq!(anchors().await, ["OL1W"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_data_dir_root_refuses_escapes_and_stages_a_copy() {
+        let base = std::env::temp_dir().join(format!("fliks-ingest-data-{}", std::process::id()));
+        let (data, outside, dest) = (base.join("data"), base.join("outside"), base.join("dest"));
+        std::fs::create_dir_all(data.join("sub")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(data.join("sub/a.epub"), b"x").unwrap();
+        std::fs::write(outside.join("b.epub"), b"x").unwrap();
+        let link = std::os::unix::fs::symlink;
+        link("../outside/b.epub", data.join("file.epub")).unwrap();
+        link("../outside", data.join("dir")).unwrap();
+        link("sub/a.epub", data.join("inner.epub")).unwrap();
+        let stage = |p: &str| stage_from_data(p, &data, &dest);
+        let code = |p: &str| stage(p).unwrap_err().code;
+        let (copy, rel) = stage("/data/sub/a.epub").unwrap();
+        assert_eq!(rel, "sub/a.epub");
+        assert_eq!(std::fs::read(&copy).unwrap(), b"x");
+        assert_ne!(
+            copy,
+            data.join("sub/a.epub"),
+            "a copy, not the guest's file"
+        );
+        assert_eq!(code("/data/file.epub"), "ERR_DENIED", "a leaf symlink");
+        assert_eq!(
+            code("/data/inner.epub"),
+            "ERR_DENIED",
+            "even one staying inside"
+        );
+        assert_eq!(
+            code("/data/dir/b.epub"),
+            "ERR_DENIED",
+            "a symlinked parent leading out"
+        );
+        for p in [
+            "/data/../outside/b.epub",
+            "/data/sub/../../outside/b.epub",
+            "/data//sub/a.epub",
+            "/data/./sub/a.epub",
+            "/data/sub/./a.epub",
+            "/data/sub/",
+            "/data/sub\\a.epub",
+        ] {
+            assert_eq!(code(p), "ERR_DENIED", "{p}");
+        }
+        assert_eq!(code("/data/nope.epub"), "ERR_NOT_FOUND");
+        assert_eq!(code("/data/sub"), "ERR_VALIDATION", "a directory");
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_sparse_file_is_not_staged() {
+        let base = std::env::temp_dir().join(format!("fliks-ingest-sparse-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::File::create(base.join("big.epub"))
+            .unwrap()
+            .set_len(1 << 30)
+            .unwrap();
+        let e = stage_from_data("/data/big.epub", &base, &base.join("dest")).unwrap_err();
+        assert_eq!(e.code, "ERR_VALIDATION");
+        assert!(!base.join("dest").exists(), "nothing was copied");
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn only_the_sources_the_ingest_took_are_unlinked() {
+        let p = |n: &str| PathBuf::from(format!("/stage/{n}"));
+        let imported = |n: &str| library::Imported {
+            file_id: 1,
+            relative_path: n.into(),
+            quality: "epub".into(),
+            episode_id: None,
+            season_number: None,
+            episode_number: None,
+            episode_end: None,
+            source_path: p(n),
+        };
+        let sources: Vec<_> = ["a", "b", "c"].map(|n| (p(n), format!("{n}.epub"))).into();
+        let out = library::Outcome {
+            imported: vec![imported("a")],
+            already_present: vec![p("b").to_string_lossy().into_owned()],
+            errors: vec!["c.epub: not a book file".into()],
+        };
+        assert_eq!(ingested(&sources, &out), ["a.epub", "b.epub"]);
     }
 
     #[test]

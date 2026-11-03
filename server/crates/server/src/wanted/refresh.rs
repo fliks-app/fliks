@@ -289,6 +289,7 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
             prio: BACKGROUND,
             wants: Some(&specs),
             discovered: true,
+            links: &[],
         },
     )
     .await?;

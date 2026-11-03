@@ -442,7 +442,7 @@ async fn person(
 }
 
 /// Replaces the credits of `role` on the work (`edition` `None`) or on an edition; an empty list changes nothing.
-async fn replace_credits(
+pub(crate) async fn replace_credits(
     c: &mut PgConnection,
     media: i32,
     edition: Option<i32>,

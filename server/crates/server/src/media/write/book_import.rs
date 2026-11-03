@@ -19,14 +19,15 @@ use crate::{
         books::{
             ANCHOR,
             identify::BookMatch,
-            link::{attach, stored},
-            text, work_id,
+            link::{attach, replace_credits, stored},
+            people, text, work_id,
         },
         {fail, unavailable},
     },
     state::AppState,
 };
 use axum::{Json, http::StatusCode};
+use fliks_domain::external_id::Namespace;
 use fliks_domain::{
     media::kind::MediaKind,
     media::wants::{MAX_WANTS, WantSpec, parse_wants},
@@ -89,6 +90,7 @@ pub(super) async fn import_book(
             prio: Priority::Interactive,
             wants: wants.as_deref(),
             discovered: false,
+            links: &[],
         },
     )
     .await?;
@@ -110,6 +112,8 @@ pub(crate) struct NewBook<'a> {
     pub prio: Priority,
     pub wants: Option<&'a [WantSpec]>,
     pub discovered: bool,
+    /// Ids of the caller's own namespaces, linked with the media.
+    pub links: &'a [(Namespace, String)],
 }
 
 /// Creates the book from its provider record; a failure after the row exists deletes it.
@@ -122,6 +126,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         prio,
         wants,
         discovered,
+        links,
     } = *new;
     let over = sqlx::query!(
         r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
@@ -215,6 +220,9 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         },
     )
     .await?;
+    for (ns, value) in links {
+        external_ids::link(&mut tx, id, MediaKind::Book, *ns, value).await?;
+    }
     if let Some(w) = wants {
         wants::replace(&mut tx, id, w)
             .await
@@ -276,6 +284,137 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
     Ok(id)
 }
 
+/// `media.resolveOrCreate` for a book: a work of the anchor goes through `create_book`; one named only by
+/// a plugin namespace is made from that provider's work record, with no anchor id (the plugin's ids and
+/// the caller's own links are the only ones written) and the wants of every family.
+pub(crate) async fn create_for_plugin(
+    st: &AppState,
+    (ns, value): (Namespace, &str),
+    (library, folder): (Option<i32>, Option<i32>),
+    links: Vec<(Namespace, String)>,
+) -> Result<i32, AppError> {
+    let all = super::all_library_ids(&st.db).await?;
+    let target = super::resolve_target_in(st, &all, MediaKind::Book, library, folder).await?;
+    let prio = Priority::Interactive;
+    if ns == ANCHOR {
+        let work = work_id(value)
+            .ok_or_else(|| AppError::bad_request("an Open Library work id is needed"))?;
+        return create_book(
+            st,
+            &NewBook {
+                target: &target,
+                folder,
+                user: None,
+                work: &work,
+                prio,
+                wants: None,
+                discovered: false,
+                links: &links,
+            },
+        )
+        .await;
+    }
+    if !st.metadata.available(ns) {
+        return Err(AppError::bad_request("the provider is not available"));
+    }
+    let over = sqlx::query!(
+        r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
+        target.id
+    )
+    .fetch_one(&st.db)
+    .await?;
+    let lang = st
+        .metadata
+        .lang
+        .resolve(Some(&Override {
+            language: over.language,
+            region: over.region,
+        }))
+        .await?;
+    let Value::Object(record) = st
+        .metadata
+        .work(ns, MediaKind::Book, value, &lang, prio)
+        .await
+        .map_err(|e| match e {
+            crate::metadata::MetaError::Upstream(e) => fail(ns, &e, true),
+            crate::metadata::MetaError::Db(e) => e.into(),
+        })?
+    else {
+        return Err(unavailable(
+            "request",
+            ns,
+            &Upstream::new(None, "unexpected work record"),
+        ));
+    };
+    let title = text(&record, "title")
+        .ok_or_else(|| unavailable("request", ns, &Upstream::new(None, "the work has no title")))?;
+    let year = record
+        .get("year")
+        .and_then(Value::as_i64)
+        .filter(|y| (1..=9999).contains(y))
+        .map(|y| y as i32);
+    let format = folder_format(&st.db, MediaKind::Book).await?;
+    let name = naming::apply_book_format(
+        &format,
+        &BookNameTokens {
+            title: title.clone(),
+            year: year.map(i64::from),
+            ..Default::default()
+        },
+    );
+    let name = validate_folder_path(&name)
+        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
+        .to_owned();
+    let mut tx = st.db.begin().await?;
+    let id: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, overview,
+             "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt")
+           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5, $6, now())
+           RETURNING id"#,
+    )
+    .bind(&title)
+    .bind(year)
+    .bind(text(&record, "overview"))
+    .bind(target.id)
+    .bind(&name)
+    .bind(ns.as_str())
+    .fetch_one(&mut *tx)
+    .await?;
+    items::create_shell(
+        &mut tx,
+        id,
+        MediaKind::Book,
+        NewWant {
+            quality_profile_id: None,
+            folder_id: folder,
+        },
+    )
+    .await?;
+    let own = std::iter::once((ns, value.to_owned())).chain(links);
+    for (n, v) in own {
+        external_ids::link(&mut tx, id, MediaKind::Book, n, &v).await?;
+    }
+    sqlx::query(r#"INSERT INTO book_details ("mediaId") VALUES ($1) ON CONFLICT DO NOTHING"#)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    let authors = people(&record, "authors");
+    replace_credits(&mut tx, id, None, "author", None, &authors).await?;
+    tx.commit().await?;
+    tracing::info!(
+        "Imported book \"{title}\" (#{id}) from {ns} into library #{}",
+        target.id
+    );
+    st.hub.emit_domain(DomainEvent::MediaImported {
+        media_id: i64::from(id),
+        external_ids: external_ids::refs(&st.db, id).await?,
+        media_type: MediaKind::Book,
+        library_id: Some(i64::from(target.id)),
+        added_by_user_id: None,
+    });
+    Ok(id)
+}
+
 /// A book request approval: the work in the request's library with the requested editions wished; a work
 /// already in the library gets the missing ones added to its wants. `readable` is the requester's library
 /// scope: an existing work outside it is refused.
@@ -301,6 +440,7 @@ pub async fn import_book_for_request(
             prio: Priority::Interactive,
             wants: Some(wants),
             discovered: false,
+            links: &[],
         },
     )
     .await;
