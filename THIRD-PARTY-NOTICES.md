@@ -75,6 +75,31 @@ Consortium's emoji and CLDR data (Unicode-3.0).
 | emojibase-data | MIT | https://github.com/milesj/emojibase | localized names and groups, bundled as one lazy chunk per UI language |
 | emojis (Rust crate) | (MIT OR Apache-2.0) AND Unicode-3.0 | https://github.com/rossmacarthur/emojis | server-side check that a reaction is a standard emoji |
 
+## Server: KEPUB conversion
+
+The `kepub` crate (`server/crates/kepub`) is a Rust port of the transformations of
+**kepubify** (https://github.com/pgaskin/kepubify), linked into every server build. kepubify's
+license applies to the ported logic:
+
+> MIT License
+>
+> Copyright (c) 2016 Patrick Gaskin
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+> NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+> DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ## Package-manager dependencies
 
 npm, Gradle, CocoaPods and Swift packages declare their own licenses in their

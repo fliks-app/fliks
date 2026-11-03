@@ -2046,6 +2046,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kepub"
+version = "5.2.1"
+dependencies = [
+ "encoding_rs",
+ "percent-encoding",
+ "zip",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

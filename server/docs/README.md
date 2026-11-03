@@ -12,7 +12,7 @@ Item delivery: [`spec/item-delivery.md`](spec/item-delivery.md) (audio and text 
 
 Comics: [`spec/comics.md`](spec/comics.md) (the `comic` kind, volumes and issues, `comic_details`, `comic_issues`, the detail and list shapes).
 
-Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash).
+Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash). KEPUB conversion: [`spec/kepub.md`](spec/kepub.md).
 OPDS: [`spec/opds.md`](spec/opds.md) (OPDS 1.2 catalogue on device tokens: routes, ACL, throttle, feed shapes).
 
 Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
