@@ -1856,6 +1856,124 @@ mod book_ingest {
         );
     }
 
+    async fn replace_on(c: &Ctx) {
+        sqlx::query(r#"UPDATE libraries SET "mergeM4bReplace" = true"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_verified_merge_replaces_the_parts_and_playback_moves_to_the_m4b(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        let (user, item, lib, edition): (i32, i32, i32, i32) = sqlx::query_as(
+            r#"SELECT (SELECT min(id) FROM users), (SELECT min(id) FROM items WHERE "mediaId" = m.id),
+                      m."libraryId", (SELECT id FROM editions WHERE "mediaId" = m.id AND family = 'audio')
+               FROM media m WHERE m.id = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
+               VALUES ($1, $2, 1, 42)"#,
+        )
+        .bind(user)
+        .bind(item)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(
+            parts(&c, m).await,
+            [("Orfaline/Orfaline.m4b".to_owned(), 1, 0)]
+        );
+        assert!(!c.dir.join("books/Orfaline/01.mp3").exists());
+        assert!(!c.dir.join("books/Orfaline/02.mp3").exists());
+        assert!(c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+        let state: (Option<i32>, Option<i32>, f64) = sqlx::query_as(
+            r#"SELECT "mediaFileId", version, "positionSeconds" FROM playback_states"#,
+        )
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        let m4b: i32 = sqlx::query_scalar(r#"SELECT id FROM media_files WHERE quality = 'm4b'"#)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(state, (Some(m4b), Some(1), 42.0));
+        let chapters =
+            crate::media::books::chapters(&c.st.db, user, m, edition, Some(0), &[lib]).await;
+        assert_eq!(
+            chapters.unwrap().len(),
+            1,
+            "the removed version reads the m4b"
+        );
+        assert_eq!(
+            crate::media::items::aliased(&c.st.db, item, 0)
+                .await
+                .unwrap(),
+            Some(1)
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_parts_stay_while_the_replace_option_is_off(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 3);
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_replace_option_does_nothing_without_the_merge_option(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, false, 1).await;
+        replace_on(&c).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 2);
+        assert!(c.dir.join("books/Orfaline/02.mp3").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_part_changed_during_the_merge_is_kept(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        touch(&c.dir.join("books/Orfaline/02.mp3"), b"changed bytes");
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(parts(&c, m).await.len(), 2);
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+        assert!(c.dir.join("books/Orfaline/02.mp3").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_part_referenced_by_another_item_is_kept(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        replace_on(&c).await;
+        sqlx::query(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'audio') RETURNING id),
+                    i AS (INSERT INTO items ("mediaId", "editionId", monitored)
+                          SELECT $1, id, true FROM e RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version)
+               SELECT i.id, 1, $1, 0 FROM i"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        books::merge::run(&c.st, m).await.unwrap();
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+        assert!(c.dir.join("books/Orfaline/02.mp3").exists());
+        assert!(c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 3);
+    }
+
     #[sqlx::test(migrations = false)]
     async fn nothing_merges_while_the_library_option_is_off(pool: PgPool) {
         let c = merging_ctx(pool).await;
