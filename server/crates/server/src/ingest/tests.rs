@@ -1912,6 +1912,12 @@ mod book_ingest {
             .unwrap();
         books::merge::resume_backfills(&c.st).await;
         assert!(eventually(|| c.fake.seen("POST", "/v1/jobs").len() == 1).await);
+        for _ in 0..100 {
+            if parts(&c, m).await.len() == 3 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
         assert_eq!(parts(&c, m).await.len(), 3);
     }
 
