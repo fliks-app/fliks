@@ -35,7 +35,6 @@ harness = [
   "dep:axum",
   "dep:tower",
   "dep:sqlx",
-  "dep:tracing-subscriber",
 ]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -48,7 +47,6 @@ axum = { version = "0.8", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
 tokio-rustls = { version = "0.26", default-features = false, optional = true }
 sqlx = { version = "0.9", features = ["postgres", "runtime-tokio"], optional = true }
-tracing-subscriber = { version = "0.3", optional = true }
 
 [profile.release]
 opt-level = "s"
