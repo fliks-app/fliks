@@ -303,7 +303,7 @@ pub async fn update(
     patch(&mut tx, id, &dto).await.map_err(db::constraint)?;
     if dto.merge_m4b == Some(true) && !was_merging {
         sqlx::query!(
-            r#"UPDATE libraries SET "mergeM4bBackfill" = true WHERE id = $1"#,
+            r#"UPDATE libraries SET "mergeM4bBackfill" = "mergeM4bBackfill" + 1 WHERE id = $1"#,
             id
         )
         .execute(&mut *tx)

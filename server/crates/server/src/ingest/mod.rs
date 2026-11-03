@@ -60,6 +60,8 @@ pub struct Shared {
     pub merge_slot: AsyncMutex<()>,
     /// Libraries whose merge backfill is running, and whether another round was asked for.
     pub backfills: Mutex<HashMap<i32, bool>>,
+    /// Books waiting out the quiet period before their merge.
+    pub merge_waiting: Mutex<std::collections::HashSet<i32>>,
     pub unmatched_holders: Mutex<HashMap<i32, usize>>,
     pub queue: post_import::Queue,
     pub settle: post_import::Settle,

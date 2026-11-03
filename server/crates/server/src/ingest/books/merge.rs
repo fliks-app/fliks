@@ -723,6 +723,9 @@ pub async fn settle(st: &AppState, media: i32) -> Result<(), String> {
     let Some(mut left) = quiet_left(st, media).await? else {
         return run(st, media).await;
     };
+    if !st.ingest.merge_waiting.lock_clean().insert(media) {
+        return Ok(());
+    }
     let st = st.clone();
     tokio::spawn(async move {
         loop {
@@ -730,9 +733,13 @@ pub async fn settle(st: &AppState, media: i32) -> Result<(), String> {
             match quiet_left(&st, media).await {
                 Ok(Some(l)) => left = l,
                 Ok(None) => break,
-                Err(e) => return tracing::warn!("m4b merge of book #{media}: {e}"),
+                Err(e) => {
+                    st.ingest.merge_waiting.lock_clean().remove(&media);
+                    return tracing::warn!("m4b merge of book #{media}: {e}");
+                }
             }
         }
+        st.ingest.merge_waiting.lock_clean().remove(&media);
         if let Err(e) = run(&st, media).await {
             tracing::warn!("m4b merge of book #{media}: {e}");
         }
@@ -794,6 +801,15 @@ pub fn spawn_library(st: &AppState, library: i32) {
     tokio::spawn(async move {
         let _guard = guard;
         loop {
+            let round = sqlx::query_scalar!(
+                r#"SELECT "mergeM4bBackfill" FROM libraries WHERE id = $1"#,
+                library
+            )
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(0);
             let _ = forget_failures(&st, library).await;
             let ids = sqlx::query_scalar!(
                 r#"SELECT DISTINCT m.id FROM media m JOIN editions e ON e."mediaId" = m.id
@@ -824,8 +840,10 @@ pub fn spawn_library(st: &AppState, library: i32) {
             };
             if finished {
                 let _ = sqlx::query!(
-                    r#"UPDATE libraries SET "mergeM4bBackfill" = false WHERE id = $1"#,
-                    library
+                    r#"UPDATE libraries SET "mergeM4bBackfill" = 0
+                       WHERE id = $1 AND "mergeM4bBackfill" = $2"#,
+                    library,
+                    round
                 )
                 .execute(&st.db)
                 .await;
@@ -835,9 +853,33 @@ pub fn spawn_library(st: &AppState, library: i32) {
     });
 }
 
-/// Resumes the backfills a restart cut.
+/// Resumes what a restart cut: the backfills, and the books of a merging library that have
+/// several files in a version and no merge record (a settle that was waiting out its quiet period).
 pub async fn resume_backfills(st: &AppState) {
-    let ids = sqlx::query_scalar!(r#"SELECT id FROM libraries WHERE "mergeM4bBackfill""#)
+    let waiting = sqlx::query_scalar!(
+        r#"SELECT DISTINCT m.id AS "id!" FROM media m
+             JOIN editions e ON e."mediaId" = m.id AND e.family = 'audio'
+             JOIN libraries l ON l.id = COALESCE(e."libraryId", m."libraryId") AND l."mergeM4b"
+           WHERE m.type = 'book' AND l."mergeM4bBackfill" = 0
+             AND NOT EXISTS (SELECT 1 FROM book_merges b WHERE b."editionId" = e.id)
+             AND NOT EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId"
+                               JOIN media_files f ON f.id = p."mediaFileId"
+                             WHERE i."editionId" = e.id AND f.quality = 'm4b')
+             AND EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId"
+                         WHERE i."editionId" = e.id GROUP BY p.version HAVING count(*) > 1)"#
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    let st2 = st.clone();
+    tokio::spawn(async move {
+        for m in waiting {
+            if let Err(e) = settle(&st2, m).await {
+                tracing::warn!("m4b merge of book #{m}: {e}");
+            }
+        }
+    });
+    let ids = sqlx::query_scalar!(r#"SELECT id FROM libraries WHERE "mergeM4bBackfill" > 0"#)
         .fetch_all(&st.db)
         .await
         .unwrap_or_default();

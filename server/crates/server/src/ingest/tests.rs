@@ -1893,10 +1893,33 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn settles_while_parts_arrive_share_one_waiter(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::settle(&c.st, m).await.unwrap();
+        books::merge::settle(&c.st, m).await.unwrap();
+        assert_eq!(c.st.ingest.merge_waiting.lock().unwrap().len(), 1);
+        assert!(c.fake.seen("POST", "/v1/jobs").is_empty());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_restart_settles_a_book_whose_merge_never_started(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        sqlx::query(r#"UPDATE media_files SET "createdAt" = now() - interval '1 hour'"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        books::merge::resume_backfills(&c.st).await;
+        assert!(eventually(|| c.fake.seen("POST", "/v1/jobs").len() == 1).await);
+        assert_eq!(parts(&c, m).await.len(), 3);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_flagged_backfill_resumes_after_a_restart(pool: PgPool) {
         let c = merging_ctx(pool).await;
         let m = merge_setup(&c, true, 1).await;
-        sqlx::query(r#"UPDATE libraries SET "mergeM4bBackfill" = true"#)
+        sqlx::query(r#"UPDATE libraries SET "mergeM4bBackfill" = 1"#)
             .execute(&c.st.db)
             .await
             .unwrap();
@@ -1909,7 +1932,7 @@ mod book_ingest {
         assert_eq!(
             count(
                 &c,
-                r#"SELECT count(*) FROM libraries WHERE "mergeM4bBackfill""#
+                r#"SELECT count(*) FROM libraries WHERE "mergeM4bBackfill" > 0"#
             )
             .await,
             0
