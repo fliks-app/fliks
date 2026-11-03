@@ -40,6 +40,9 @@ export interface DownloadTarget {
 }
 
 /** An edition of a book to put on the device: the readable file of a text edition, or the parts of an audio item. */
+/** A book download the device or the settings rule out; its message is already translated for a toast. */
+export class BookDownloadRefused extends Error {}
+
 export interface BookDownloadTarget {
   mediaId: number;
   itemId: number;
@@ -449,6 +452,9 @@ export class DownloadManagerService {
 
   /** Puts a book edition on the device, in the background: no HLS, the files are kept as they are on the server. */
   async createBookDownload(t: BookDownloadTarget, opts?: { auto?: boolean }): Promise<DownloadTask> {
+    if (this.isNative && this.downloadSettings.wifiOnly() && this.network.connectionType() === 'cellular') {
+      throw new BookDownloadRefused(this.translate.instant('books_work.offline_wifi_only'));
+    }
     const { book, mediaFileId, urls } = await this.describeBook(t);
     const task: DownloadTask = {
       id: this.nextLocalId++,
@@ -463,8 +469,9 @@ export class DownloadManagerService {
       media: { id: t.mediaId, title: t.title, posterUrl: t.posterUrl, type: 'book' },
     };
     this.persistTask(task);
-    this.bookRuns.add(task.id);
-    this.enqueue(() => this.handleBookDownload(task, urls));
+    const abort = new AbortController();
+    this.bookRuns.set(task.id, abort);
+    this.enqueue(() => this.handleBookDownload(task, urls, abort.signal));
     return task;
   }
 
@@ -484,6 +491,8 @@ export class DownloadManagerService {
     }
     const info = await this.streamingApi.getItemPlaybackInfo(t.itemId, this.deviceProfile.getProfile());
     if (info.sessionId) this.streamingApi.stopSession(info.sessionId).catch(() => undefined);
+    // The original parts are what is stored: a profile that would transcode them has nothing to keep.
+    if (info.playMethod !== 'DirectPlay') throw new BookDownloadRefused(this.translate.instant('books_work.offline_audio_unplayable'));
     const parts = info.parts?.length ? info.parts : [{ index: 0, playUrl: info.playUrl, offsetS: 0, durationS: info.durationSeconds ?? 0 }];
     return {
       mediaFileId: info.mediaFileId,
@@ -501,28 +510,33 @@ export class DownloadManagerService {
   }
 
   /** Ids of book downloads running in this page, so a recovery pass does not mistake them for ones a restart killed. */
-  private readonly bookRuns = new Set<number>();
+  private readonly bookRuns = new Map<number, AbortController>();
 
-  private async handleBookDownload(task: DownloadTask, urls: (i: number) => Promise<string>) {
+  private async handleBookDownload(task: DownloadTask, urls: (i: number) => Promise<string>, signal: AbortSignal) {
+    if (signal.aborted) return;
     const book = task.book!;
     const set = (progress: number) => this.updateTaskStatus(task.id, 'downloading', Math.round(progress * 100));
     this.updateTaskStatus(task.id, 'downloading', 0);
     try {
       let bytes = 0;
       if (book.family === 'text' && book.format === 'epub') {
-        bytes = await this.books.storeEpub(book.itemId, set);
+        bytes = await this.books.storeEpub(book.itemId, set, signal);
       } else {
         for (const [i, f] of book.files.entries()) {
-          bytes += await this.books.storeFile(book, f.key, await urls(i), (p) => set((i + p) / book.files.length));
+          signal.throwIfAborted();
+          bytes += await this.books.storeFile(book, f.key, await urls(i), (p) => set((i + p) / book.files.length), signal);
         }
       }
+      signal.throwIfAborted();
       this.cache.save(this.cache.load().map((t) => (t.id === task.id ? { ...t, sizeBytes: bytes } : t)));
       this.updateTaskStatus(task.id, 'ready', 100);
       this.prefetchArtwork(task.media?.posterUrl, null, null);
     } catch (err) {
-      console.error('[DL] book download failed:', err);
       await this.books.remove(book);
-      this.updateTaskStatus(task.id, 'failed', 0);
+      if (!signal.aborted) {
+        console.error('[DL] book download failed:', err);
+        this.updateTaskStatus(task.id, 'failed', 0);
+      }
     } finally {
       this.bookRuns.delete(task.id);
     }
@@ -570,6 +584,8 @@ export class DownloadManagerService {
       this.webGates.get(task.id)?.open();
       this.webGates.delete(task.id);
       if (task.book) {
+        this.bookRuns.get(task.id)?.abort();
+        this.bookRuns.delete(task.id);
         await this.books.remove(task.book);
         this.cache.remove(task.id);
         return;
@@ -815,16 +831,27 @@ export class DownloadManagerService {
     return false;
   }
 
+  /** Leftovers of a dead task, unless a live task holds the same item's files. */
+  private async dropBookFiles(t: DownloadTask) {
+    const shared = this.cache.load().some((x) => x.id !== t.id && x.book?.itemId === t.book!.itemId && x.status !== 'failed');
+    if (!shared) await this.books.remove(t.book!);
+  }
+
   /** A book download runs in this page (no OS daemon): one still marked in flight at start-up was killed with the previous page. */
   private async recoverBook(t: DownloadTask, onStartup: boolean) {
     if (t.status === 'ready') {
       if (!(await this.books.has(t.book!))) this.cache.remove(t.id);
     } else if (t.status === 'failed') {
+      await this.dropBookFiles(t);
       this.cache.remove(t.id);
     } else if (onStartup && !this.bookRuns.has(t.id)) {
       // Auto items are re-fetched by the reconciler, manual ones flagged for a retry.
-      if (t.auto) await this.deleteDownload(t);
-      else this.updateTaskStatus(t.id, 'failed', 0);
+      if (t.auto) {
+        await this.deleteDownload(t);
+      } else {
+        await this.dropBookFiles(t);
+        this.updateTaskStatus(t.id, 'failed', 0);
+      }
     }
   }
 

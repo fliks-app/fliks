@@ -4,7 +4,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { BookEdition } from '../../../core/services/api/books.models';
 import { EmailDevice, EmailDevicesApiService } from '../../../core/services/api/email-devices-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
-import { DownloadManagerService } from '../../../core/services/download-manager.service';
+import { BookDownloadRefused, DownloadManagerService } from '../../../core/services/download-manager.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { deliverFiles } from '../../../core/plugins/save-file.plugin';
@@ -69,8 +69,8 @@ export class BookEditionsComponent implements OnInit {
     const names = editionFileNames(this.title(), e);
     try {
       await deliverFiles(e.fileIds.map((id, i) => ({ url: this.streaming.getOriginalDownloadUrl(id), name: names[i] })));
-    } catch {
-      this.toast.error(this.translate.instant('books_work.download_failed'));
+    } catch (err) {
+      this.toast.error(err instanceof BookDownloadRefused ? err.message : this.translate.instant('books_work.download_failed'));
     }
   }
 
@@ -84,8 +84,8 @@ export class BookEditionsComponent implements OnInit {
           bookDownloadTarget({ mediaId: this.mediaId(), title: this.title(), artist: this.artist() }, e),
         );
       }
-    } catch {
-      this.toast.error(this.translate.instant('books_work.download_failed'));
+    } catch (err) {
+      this.toast.error(err instanceof BookDownloadRefused ? err.message : this.translate.instant('books_work.download_failed'));
     }
   }
 }

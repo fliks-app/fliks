@@ -53,6 +53,9 @@ export class ReaderApiService {
   /** Null when the user has not started the item. Without the server, the last position this device saved. */
   async loadProgress(t: ReaderTarget): Promise<Partial<ReaderProgress> | null> {
     const local = () => (this.sync.resumePositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined) ?? null;
+    // A position queued on this device is newer than the server's.
+    const queued = this.sync.queuedPositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined;
+    if (queued) return queued;
     if (!this.network.isOnline()) return local();
     return firstValueFrom(
       this.http.get<Partial<ReaderProgress> | null>(`/api/playback/media/${t.mediaId}/state`, {

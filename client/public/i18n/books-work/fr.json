@@ -49,6 +49,8 @@
     "download_failed": "Échec du téléchargement",
     "offline_save": "Garder hors ligne",
     "offline_remove": "Retirer de l'appareil",
-    "offline_retry": "Réessayer"
+    "offline_retry": "Réessayer",
+    "offline_audio_unplayable": "Cet audiolivre ne peut pas être lu tel quel sur cet appareil, il ne peut donc pas être enregistré hors ligne",
+    "offline_wifi_only": "Les téléchargements sont limités au Wi-Fi"
   }
 }

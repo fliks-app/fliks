@@ -49,6 +49,8 @@
     "download_failed": "Falha na transferência",
     "offline_save": "Guardar offline",
     "offline_remove": "Remover do dispositivo",
-    "offline_retry": "Tentar novamente"
+    "offline_retry": "Tentar novamente",
+    "offline_audio_unplayable": "Este audiolivro não pode ser reproduzido tal como está neste dispositivo, por isso não pode ser guardado offline",
+    "offline_wifi_only": "As transferências estão limitadas a Wi-Fi"
   }
 }

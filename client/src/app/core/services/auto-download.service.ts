@@ -1,5 +1,7 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import { Router } from '@angular/router';
+import { AudioPlayerService } from './audio-player/audio-player.service';
 import { AuthService } from './auth.service';
 import { TvService } from './tv.service';
 import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
@@ -50,6 +52,8 @@ export class AutoDownloadService {
   private readonly playlistsApi = inject(PlaylistsApiService);
   private readonly scope = inject(StorageScopeService);
   private readonly mediaService = inject(MediaService);
+  private readonly audio = inject(AudioPlayerService);
+  private readonly router = inject(Router);
 
   private running = false;
 
@@ -272,17 +276,28 @@ export class AutoDownloadService {
     }
   }
 
-  /** Opt-in: removes the offline copy of every book the user has finished, whoever started the download. */
+  /** Opt-in: removes the offline copy of each book item the user finished after saving it, never one that is open. */
   private async deleteFinishedBooks(): Promise<void> {
     if (!this.settings.autoDeleteBooks()) return;
-    const books = this.cache.load().filter((t) => t.book && t.status === 'ready');
-    if (!books.length) return;
-    try {
-      const watched = new Set(await this.streamingApi.getWatchedMediaIds());
-      for (const t of books) if (watched.has(t.mediaId)) await this.downloads.deleteDownload(t);
-    } catch {
-      /* offline / transient: retry next reconcile */
+    for (const t of this.cache.load().filter((x) => x.book && x.status === 'ready')) {
+      try {
+        const state = await this.streamingApi.getPlaybackState(t.mediaId, undefined, t.book!.itemId);
+        const finishedSince = state?.completed && Date.parse(state.lastPlayedAt) >= Date.parse(t.createdAt);
+        if (finishedSince && !this.openItemIds().has(t.book!.itemId)) await this.downloads.deleteDownload(t);
+      } catch {
+        /* offline / transient: retry next reconcile */
+      }
     }
+  }
+
+  /** Items being listened to or read, whose files must stay under the player. */
+  private openItemIds(): Set<number> {
+    const ids = new Set<number>();
+    const playing = this.audio.track()?.itemId;
+    if (playing != null) ids.add(playing);
+    const reading = /^\/read\/\d+\/(\d+)/.exec(this.router.url);
+    if (reading) ids.add(Number(reading[1]));
+    return ids;
   }
 
   /** Remove auto-managed downloads the user has finished watching. */

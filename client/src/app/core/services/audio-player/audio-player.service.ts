@@ -150,11 +150,13 @@ export class AudioPlayerService {
           });
       }
       if (generation !== this.generation) return;
-      // A downloaded item plays from the device, with the server's session and resume point when it answers.
+      // A downloaded item plays from the device, with the server's session and resume point when it answers; a position queued here is newer than the server's.
+      const queued = this.sync.queuedPositionFor(req.mediaId, undefined, req.itemId);
       const info = local
         ? ({
             startAtSeconds: this.sync.resumePositionFor(req.mediaId, undefined, req.itemId)?.positionSeconds ?? 0,
             ...opened,
+            ...(queued && { startAtSeconds: queued.positionSeconds }),
             mediaFileId: opened?.mediaFileId ?? local.mediaFileId,
             playMethod: 'DirectPlay',
             durationSeconds: local.book.durationSeconds,

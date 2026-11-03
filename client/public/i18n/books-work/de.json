@@ -49,6 +49,8 @@
     "download_failed": "Download fehlgeschlagen",
     "offline_save": "Offline speichern",
     "offline_remove": "Vom Gerät entfernen",
-    "offline_retry": "Erneut versuchen"
+    "offline_retry": "Erneut versuchen",
+    "offline_audio_unplayable": "Dieses Hörbuch lässt sich auf diesem Gerät nicht unverändert abspielen und kann daher nicht offline gespeichert werden",
+    "offline_wifi_only": "Downloads sind auf WLAN beschränkt"
   }
 }

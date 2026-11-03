@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { Subject } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
@@ -22,7 +23,7 @@ const text: BookDownloadTarget = {
   mediaId: 3, itemId: 30, family: 'text', format: 'epub', fileIds: [300], title: 'Book', posterUrl: null,
 };
 
-function setup(initial: DownloadTask[] = []) {
+function setup(initial: DownloadTask[] = [], opts: { wifiOnly?: boolean; connection?: string } = {}) {
   let saved = initial;
   const books = {
     storeEpub: vi.fn(async (..._a: unknown[]) => 1234),
@@ -34,7 +35,7 @@ function setup(initial: DownloadTask[] = []) {
     getOriginalDownloadUrl: (id: number) => `/api/stream/${id}?download=1`,
     buildPlayUrl: ({ playUrl }: { playUrl: string }) => `${playUrl}?token=t`,
     getItemPlaybackInfo: vi.fn(async () => ({
-      mediaFileId: 400, playUrl: '/api/stream/400/parts/0', durationSeconds: 30, sessionId: 'sid', chapters: [{ startSeconds: 0, endSeconds: 30 }],
+      mediaFileId: 400, playMethod: 'DirectPlay', playUrl: '/api/stream/400/parts/0', durationSeconds: 30, sessionId: 'sid', chapters: [{ startSeconds: 0, endSeconds: 30 }],
       parts: [
         { index: 0, playUrl: '/api/stream/400/parts/0', offsetS: 0, durationS: 10 },
         { index: 1, playUrl: '/api/stream/400/parts/1', offsetS: 10, durationS: 20 },
@@ -64,9 +65,9 @@ function setup(initial: DownloadTask[] = []) {
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: AppSettingsService, useValue: {} },
       { provide: ImageCacheService, useValue: { prefetch: () => Promise.resolve() } },
-      { provide: DownloadSettingsService, useValue: { maxConcurrent: () => 3 } },
+      { provide: DownloadSettingsService, useValue: { maxConcurrent: () => 3, wifiOnly: () => !!opts.wifiOnly } },
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },
-      { provide: NetworkService, useValue: { isOnline: () => true } },
+      { provide: NetworkService, useValue: { isOnline: () => true, connectionType: () => opts.connection ?? 'unknown' } },
     ],
   });
   const service = TestBed.inject(DownloadManagerService);
@@ -75,13 +76,16 @@ function setup(initial: DownloadTask[] = []) {
 }
 
 describe('DownloadManagerService, book downloads', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+  });
 
   it('keeps an EPUB publication and marks the task ready with its size', async () => {
     const { service, books, saved, settled } = setup();
     await service.createBookDownload(text);
     await settled();
-    expect(books.storeEpub).toHaveBeenCalledWith(30, expect.any(Function));
+    expect(books.storeEpub).toHaveBeenCalledWith(30, expect.any(Function), expect.any(AbortSignal));
     expect(saved()[0]).toMatchObject({ status: 'ready', progress: 100, sizeBytes: 1234, mediaFileId: 300, quality: 'epub', media: { type: 'book' } });
     expect(service.bookTask(30)).toBeTruthy();
   });
@@ -113,14 +117,14 @@ describe('DownloadManagerService, book downloads', () => {
   });
 
   it('on start-up, flags an interrupted manual download and refetches an interrupted auto one', async () => {
-    const book = { itemId: 30, family: 'text' as const, format: 'epub', files: [{ key: '300', offsetS: 0, durationS: 0 }] };
     const task = (id: number, auto: boolean): DownloadTask => ({
-      id, mediaId: 3, mediaFileId: 300, quality: 'epub', status: 'downloading', progress: 40, createdAt: '', auto, book,
+      id, mediaId: 3, mediaFileId: 300, quality: 'epub', status: 'downloading', progress: 40, createdAt: '', auto,
+      book: { itemId: 30 + id, family: 'text' as const, format: 'epub', files: [{ key: '300', offsetS: 0, durationS: 0 }] },
     });
     const { service, saved, books } = setup([task(1, false), task(2, true)]);
     await (service as unknown as { recover(s: boolean): Promise<void> }).recover(true);
     expect(saved().map((t) => [t.id, t.status])).toEqual([[1, 'failed']]);
-    expect(books.remove).toHaveBeenCalledTimes(1);
+    expect(books.remove).toHaveBeenCalledTimes(2);
   });
 
   it('drops a ready download whose files are gone', async () => {
@@ -131,5 +135,30 @@ describe('DownloadManagerService, book downloads', () => {
     books.has.mockResolvedValueOnce(false);
     await (service as unknown as { recover(): Promise<void> }).recover();
     expect(saved()).toEqual([]);
+  });
+
+  it('refuses an audiobook the device would not play as is', async () => {
+    const { service, streaming, saved } = setup();
+    streaming.getItemPlaybackInfo.mockResolvedValueOnce({ playMethod: 'Transcode' } as never);
+    await expect(service.createBookDownload({ ...text, family: 'audio', format: 'm4b' })).rejects.toThrow('books_work.offline_audio_unplayable');
+    expect(saved()).toEqual([]);
+  });
+
+  it('refuses a book on a cellular link when downloads are Wi-Fi only', async () => {
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    const { service, saved } = setup([], { wifiOnly: true, connection: 'cellular' });
+    await expect(service.createBookDownload(text)).rejects.toThrow('books_work.offline_wifi_only');
+    expect(saved()).toEqual([]);
+  });
+
+  it('deleting a running download aborts it and leaves nothing stored', async () => {
+    const { service, books, saved, settled } = setup();
+    books.storeEpub.mockImplementationOnce((...a: unknown[]) => new Promise<number>((_, reject) => (a[2] as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')))));
+    const task = await service.createBookDownload(text);
+    await settled();
+    await service.deleteDownload(task);
+    await settled();
+    expect(saved()).toEqual([]);
+    expect(books.remove).toHaveBeenCalledTimes(2);
   });
 });

@@ -82,4 +82,23 @@ describe('OfflineBookStoreService', () => {
     expect(progress).toHaveBeenLastCalledWith(1);
     vi.unstubAllGlobals();
   });
+
+  it('ends an @import cycle between two stored stylesheets', async () => {
+    keep('a.css', '@import url("b.css"); p{color:red}', 'text/css');
+    keep('b.css', '@import url("a.css"); i{color:blue}', 'text/css');
+    const res = await svc.fetch(`${BASE}a.css`);
+    expect(await res.text()).toContain('p{color:red}');
+  });
+
+  it('streams a file into chunk records and rebuilds it from them', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('hello world', { headers: { 'content-type': 'audio/mpeg' } })));
+    (svc as unknown as Priv).put = async (key, blob) => void blobs.set(key, blob);
+    const bytes = await svc.storeFile({ family: 'audio' }, '9-0', '/api/stream/9/parts/0?token=t', vi.fn());
+    expect(bytes).toBe(11);
+    expect([...blobs.keys()].sort()).toEqual(['s|file|9-0', 's|file|9-0|000000']);
+    const created: Blob[] = [];
+    URL.createObjectURL = vi.fn((b: Blob | MediaSource) => (created.push(b as Blob), 'blob:local/file'));
+    expect(await svc.fileUrl({ family: 'audio' }, '9-0')).toBe('blob:local/file');
+    expect(await created[0].text()).toBe('hello world');
+  });
 });

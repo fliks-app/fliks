@@ -9,6 +9,9 @@ export class NetworkService {
    *  network change: a VPN with no underlying link keeps `isOnline` true. */
   readonly connectivityDoubt = signal(0);
 
+  /** The OS connection type on native ('cellular', 'wifi', ...), 'unknown' elsewhere. */
+  readonly connectionType = signal('unknown');
+
   reportDoubt(): void {
     this.connectivityDoubt.update((n) => n + 1);
   }
@@ -26,12 +29,14 @@ export class NetworkService {
           void Network.getStatus().then((s) => {
             last = key(s);
             this.isOnline.set(s.connected);
+            this.connectionType.set(s.connectionType);
           });
           // Android repeats an unchanged status on every link-property update, every few seconds on some phones.
           void Network.addListener('networkStatusChange', (s) => {
             if (key(s) === last) return;
             last = key(s);
             this.isOnline.set(s.connected);
+            this.connectionType.set(s.connectionType);
             this.reportDoubt();
           });
         })
