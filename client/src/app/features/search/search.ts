@@ -23,6 +23,7 @@ import {
   MetadataService,
   MetadataSearchResult,
   DiscoverFilters,
+  searchResultKey,
 } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
@@ -59,6 +60,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   /** Opted out of the social layer → the people tab is hidden. */
+  protected readonly resultKey = searchResultKey;
   protected readonly sharingDisabled = this.auth.sharingDisabled;
   private readonly requestsApi = inject(RequestsService);
   private readonly scrollMemory = inject(ScrollMemoryService);
@@ -161,7 +163,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly bookExternal = signal<BookSearchResult[]>([]);
   readonly bookLoading = signal(false);
 
-  readonly requestedTmdbIds = signal<Map<string, FliksRequestStatus>>(new Map());
+  readonly requestedTitles = signal<Map<string, FliksRequestStatus>>(new Map());
 
   private static readonly SCROLL_KEY = 'search';
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -240,10 +242,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         const byTitle = new Map<string, FliksRequestStatus>();
         // Newest first: keep the first row of each title.
         for (const r of res.data) {
-          const key = `${r.mediaType}:${r.tmdbId}`;
+          const key = `${r.mediaType}:${r.provider}:${r.externalId}`;
           if (!byTitle.has(key)) byTitle.set(key, r.status);
         }
-        this.requestedTmdbIds.set(byTitle);
+        this.requestedTitles.set(byTitle);
       } catch { /* ignore */ }
     }
   }
@@ -402,13 +404,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       ),
     );
     const out: MetadataSearchResult[] = [];
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     const maxLen = Math.max(0, ...perGenre.map((a) => a.length));
     for (let i = 0; i < maxLen; i++) {
       for (const arr of perGenre) {
         const r = arr[i];
-        if (r && !seen.has(r.tmdbId)) {
-          seen.add(r.tmdbId);
+        if (r && !seen.has(searchResultKey(r))) {
+          seen.add(searchResultKey(r));
           out.push(r);
         }
       }
@@ -704,7 +706,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   cardStatus(row: MetadataSearchResult): CardBadge {
     if (row.existingMediaId) return 'library';
-    const reqStatus = this.requestedTmdbIds().get(`${row.mediaType}:${row.tmdbId}`);
+    const asked = this.requestedTitles();
+    const reqStatus =
+      asked.get(`${row.mediaType}:tmdb:${row.tmdbId}`) ??
+      asked.get(`${row.mediaType}:${row.provider}:${row.externalId}`);
     if (!reqStatus || reqStatus === 'removed') return null;
     if (reqStatus === 'declined' || reqStatus === 'failed') return 'declined';
     if (reqStatus === 'available') return 'library';
@@ -716,7 +721,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       return mediaDetailLink(row.existingMediaType ?? 'movie', row.existingMediaId);
     }
     const provider = row.provider ?? 'tmdb';
-    const externalId = provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId);
+    const externalId =
+      row.externalId ?? (provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId));
     return ['/add/' + KIND_REGISTRY[row.mediaType].providerSegment, provider, externalId];
   }
 

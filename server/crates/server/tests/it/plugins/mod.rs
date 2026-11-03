@@ -7,6 +7,7 @@ mod create;
 mod harness;
 mod namespaces;
 mod net;
+mod no_tmdb;
 mod provider;
 mod provider_host;
 mod roles;

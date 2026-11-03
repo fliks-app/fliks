@@ -56,12 +56,6 @@ impl TitleKey {
             value: self.external_id.clone(),
         }]
     }
-
-    pub fn tmdb_id(&self) -> Option<i32> {
-        (self.provider == Namespace::TMDB)
-            .then(|| self.external_id.parse().ok())
-            .flatten()
-    }
 }
 
 /// The TMDB facts auto-approval reads (rule 29).

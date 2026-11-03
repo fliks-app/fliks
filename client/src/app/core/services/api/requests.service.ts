@@ -24,12 +24,19 @@ export type FliksRequestStatus =
  *  is already imported. Omitting `kind` on create defaults to an add request. */
 export type RequestKind = 'add' | 'delete';
 
-/** The kinds TMDB names: requested by `tmdbId`. */
+/** The kinds a video provider names. */
 export type VideoMediaType = Exclude<MediaType, 'book'>;
 
-export interface CreateVideoRequestBody {
+/** A video title: its TMDB id when known, else the provider and id of the search result. */
+export type TitleKey = { tmdbId: number } | { provider: string; externalId: string };
+
+/** The `[provider, externalId]` a title key names. */
+export function titleRef(key: TitleKey): [string, string] {
+  return 'tmdbId' in key ? ['tmdb', String(key.tmdbId)] : [key.provider, key.externalId];
+}
+
+export type CreateVideoRequestBody = TitleKey & {
   mediaType: VideoMediaType;
-  tmdbId: number;
   title: string;
   kind?: RequestKind;
   qualityProfileId?: number;
@@ -38,7 +45,7 @@ export interface CreateVideoRequestBody {
   /** One of the library's folders; omitted means its default one. */
   folderId?: number;
   seasons?: number[];
-}
+};
 
 /** A book is the Open Library work it is, asked per edition (format and language). */
 export interface CreateBookRequestBody {
@@ -79,11 +86,11 @@ export interface FliksRequestRow {
   userId: number;
   user: RequestUser;
   mediaType: MediaType;
-  /** `null` for a book, which is named by `externalId`. */
+  /** `null` for a book and for a title of another provider. */
   tmdbId: number | null;
-  /** Books only: the Open Library work and the editions asked for. */
   provider?: string;
   externalId?: string;
+  /** Books only: the editions asked for. */
   wants?: WantSpec[];
   title: string;
   status: FliksRequestStatus;
@@ -133,6 +140,9 @@ export interface ListRequestsParams {
   /** Narrow to one title. Pass `mediaType` alongside it — TMDB ids are only
    *  unique within a namespace, so a movie and a series can share a number. */
   tmdbId?: number;
+  /** Another provider's id, given together with `externalId`. */
+  provider?: string;
+  externalId?: string;
   mediaType?: MediaType;
   page?: number;
   limit?: number;
@@ -141,7 +151,7 @@ export interface ListRequestsParams {
 /** The add page of a request's title, for a request whose media is not in the library yet. */
 export function requestAddLink(r: FliksRequestRow): (string | number)[] {
   const base = ['/add', KIND_REGISTRY[r.mediaType].providerSegment];
-  return r.mediaType === 'book' ? [...base, r.provider ?? '', r.externalId ?? ''] : [...base, r.tmdbId ?? ''];
+  return [...base, r.provider ?? 'tmdb', r.externalId ?? r.tmdbId ?? ''];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -172,9 +182,11 @@ export class RequestsService {
     );
   }
 
-  getTitleState(tmdbId: number, mediaType: MediaType) {
+  getTitleState(key: TitleKey, mediaType: MediaType) {
+    const [provider, externalId] = titleRef(key);
     const params = new HttpParams()
-      .set('tmdbId', String(tmdbId))
+      .set('provider', provider)
+      .set('externalId', externalId)
       .set('mediaType', mediaType);
     return firstValueFrom(
       this.http.get<TitleRequestState>('/api/requests/title-state', { params }),

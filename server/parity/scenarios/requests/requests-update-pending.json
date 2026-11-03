@@ -42,6 +42,7 @@
             }
           ],
           "declinedReason": null,
+          "externalId": "9001",
           "fanartUrl": null,
           "id": 1,
           "kind": "add",
@@ -57,6 +58,7 @@
           "mediaId": null,
           "mediaType": "movie",
           "posterUrl": null,
+          "provider": "tmdb",
           "qualityProfile": {
             "id": 1
           },
@@ -126,6 +128,7 @@
             }
           ],
           "declinedReason": null,
+          "externalId": "9001",
           "fanartUrl": null,
           "id": 1,
           "kind": "add",
@@ -135,6 +138,7 @@
           "mediaId": null,
           "mediaType": "movie",
           "posterUrl": null,
+          "provider": "tmdb",
           "qualityProfileId": 1,
           "seasons": null,
           "status": "pending",

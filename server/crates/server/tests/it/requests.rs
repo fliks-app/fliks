@@ -480,7 +480,7 @@ async fn without_a_tmdb_key_an_approval_is_refused_and_a_metadata_rule_fails_clo
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(24)).await;
     assert_eq!(
         (s, r["message"].clone()),
-        (400, json!("TMDB API key is not configured"))
+        (503, json!("The tmdb provider is not available"))
     );
     let (_, list) = call(&c, "GET", "/api/requests?tmdbId=24", &c.admin, json!(null)).await;
     assert_eq!(list["total"], 0, "the failed import aborted the create");

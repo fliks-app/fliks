@@ -348,7 +348,7 @@ async fn row_json(st: &AppState, id: i32) -> Res<Map<String, Value>> {
         libraries: None,
         status: None,
         kind: None,
-        tmdb_id: None,
+        title: None,
         media_type: None,
     };
     match db::rows(&st.db, &f, 1, 0).await?.into_iter().next() {
@@ -946,6 +946,8 @@ pub async fn comment_add(st: &AppState, a: &Authed, id: i32, message: &str) -> R
         "mediaType",
         "kind",
         "tmdbId",
+        "provider",
+        "externalId",
         "title",
         "status",
         "declinedReason",
@@ -1004,7 +1006,7 @@ pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
         libraries: libraries.as_deref(),
         status: q.status.as_deref(),
         kind: q.kind.as_deref(),
-        tmdb_id: q.tmdb_id.filter(|t| *t != 0),
+        title: q.title.as_ref().map(|(p, e)| (p.as_str(), e.as_str())),
         media_type: q.media_type,
     };
     let offset = (q.page - 1).saturating_mul(q.limit);

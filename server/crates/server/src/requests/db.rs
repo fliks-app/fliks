@@ -775,7 +775,7 @@ pub struct Filter<'a> {
     pub libraries: Option<&'a [i32]>,
     pub status: Option<&'a str>,
     pub kind: Option<&'a str>,
-    pub tmdb_id: Option<i32>,
+    pub title: Option<(&'a str, &'a str)>,
     pub media_type: Option<MediaKind>,
 }
 
@@ -785,16 +785,16 @@ pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
         WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
         AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
         AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-        AND ($6::text IS NULL OR (r.provider = $8 AND r."externalId" = $6))
+        AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $8))
         AND ($7::text IS NULL OR r."mediaType" = $7)"#,
         f.id,
         f.user_id,
         f.libraries,
         f.status,
         f.kind,
-        f.tmdb_id.map(|t| t.to_string()),
+        f.title.map(|t| t.0),
         f.media_type.map(MediaKind::as_str),
-        external_ids::TMDB
+        f.title.map(|t| t.1)
     )
     .fetch_one(db)
     .await
@@ -835,8 +835,8 @@ pub async fn rows(
       'minimumAvailability', w."minimumAvailability", 'qualityProfileId', w."qualityProfileId",
       'languageProfileId', m."languageProfileId", 'addedById', m."addedById", 'path', NULL) END,
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
-) || CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('provider', r.provider,
-  'externalId', r."externalId", 'wants', r.wants) ELSE '{}'::jsonb END AS "json!: Value"
+) || jsonb_build_object('provider', r.provider, 'externalId', r."externalId")
+|| CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('wants', r.wants) ELSE '{}'::jsonb END AS "json!: Value"
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"
@@ -860,7 +860,7 @@ LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_dat
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-AND ($6::text IS NULL OR (r.provider = $10 AND r."externalId" = $6))
+AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $13))
 AND ($7::text IS NULL OR r."mediaType" = $7)
 ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.id,
@@ -868,13 +868,14 @@ ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.libraries,
         f.status,
         f.kind,
-        f.tmdb_id.map(|t| t.to_string()),
+        f.title.map(|t| t.0),
         f.media_type.map(MediaKind::as_str),
         limit,
         offset,
         external_ids::TMDB,
         external_ids::TVDB,
-        external_ids::IMDB
+        external_ids::IMDB,
+        f.title.map(|t| t.1)
     )
     .fetch_all(db)
     .await

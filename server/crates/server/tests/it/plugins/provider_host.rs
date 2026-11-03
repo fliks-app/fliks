@@ -254,15 +254,16 @@ async fn id_reads_stay_in_the_named_namespace() {
         return;
     };
     let md = &h.st.metadata;
-    assert_eq!(md.named(None), Ns::TMDB);
-    assert_eq!(md.named(Some("tvdb")), Ns::TMDB, "tvdb has no key");
+    assert_eq!(md.require(None).unwrap(), Ns::TMDB);
+    assert_eq!(md.named(Some("tvdb")), None, "tvdb has no key");
     let e = work(&h, MediaKind::Series, "unauthorized", &lang)
         .await
         .unwrap_err();
     assert_eq!(e.status, Some(401));
+    let e = md.require(None).unwrap_err();
     assert_eq!(
-        md.named(None),
-        Ns::TMDB,
+        e.status().as_u16(),
+        503,
         "an unavailable TMDB is not swapped for another namespace"
     );
     h.finish().await;
@@ -327,9 +328,14 @@ async fn lists_go_through_the_plugin_and_are_validated() {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let lang = lang.clone();
-        async move { md.list(kind, name, &params, &lang, GO).await }
+        async move {
+            let id = md
+                .lister(kind)
+                .ok_or_else(|| (Ns::TMDB, Upstream::new(Some(404), "no lister")))?;
+            md.list(id, kind, name, &params, &lang, GO).await
+        }
     };
-    assert_eq!(md.lister(tv), Ns::TMDB);
+    assert_eq!(md.lister(tv), Some(Ns::TMDB));
     let got = list(tv, "trending", &[("window", "day")]).await.unwrap();
     assert_eq!(got[0]["title"], format!("series:day:{}", lang.tmdb_locale));
     let got = list(tv, "discover", &[("genres", "28,12"), ("yearGte", "1999")])

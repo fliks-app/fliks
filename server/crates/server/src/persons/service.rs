@@ -104,7 +104,14 @@ async fn call_provider<T, Fut>(
 where
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
-    let primary = md.named(p.provider.as_deref());
+    let Some(primary) = md.named(p.provider.as_deref()) else {
+        let ns = p.provider.as_deref().and_then(Namespace::parse);
+        let ns = ns.unwrap_or(Namespace::TMDB);
+        return Err((
+            ns,
+            Upstream::outage(format!("the {ns} provider is not available")),
+        ));
+    };
     let e = match call(primary).await {
         Ok(v) => return Ok((v, primary)),
         Err(e) => e,

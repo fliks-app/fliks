@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
-import { RequestsService, VideoMediaType } from '../../../../core/services/api/requests.service';
+import { RequestsService, TitleKey, VideoMediaType, titleRef } from '../../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
@@ -64,7 +64,7 @@ export class RequestModalComponent {
 
   readonly title = signal('');
   readonly mediaType = signal<VideoMediaType>('movie');
-  readonly tmdbId = signal(0);
+  readonly titleKey = signal<TitleKey>({ tmdbId: 0 });
   readonly qualityProfileId = signal<number | null>(null);
   readonly languageProfileId = signal<number | null>(null);
   readonly libraryId = signal<number | null>(null);
@@ -119,7 +119,7 @@ export class RequestModalComponent {
   open(params: {
     title: string;
     mediaType: VideoMediaType;
-    tmdbId: number;
+    titleKey: TitleKey;
     alreadyRequestedSeasons?: number[];
     /** Pre-ticks these seasons on open (still editable), filtered against `alreadyRequestedSeasons`. */
     preselectedSeasons?: number[];
@@ -131,7 +131,7 @@ export class RequestModalComponent {
   }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
-    this.tmdbId.set(params.tmdbId);
+    this.titleKey.set(params.titleKey);
     this.alreadyRequestedSeasons.set(new Set(params.alreadyRequestedSeasons ?? []));
     const locked = !!params.profilesLocked;
     this.profilesLocked.set(locked);
@@ -152,7 +152,7 @@ export class RequestModalComponent {
       this.seasonsLoading.set(true);
       const preselected = new Set(params.preselectedSeasons ?? []);
       this.metadata
-        .getSeasonStubs('tmdb', String(params.tmdbId))
+        .getSeasonStubs(...titleRef(params.titleKey))
         .then((s) => {
           this.seasons.set(s);
           // Default empty unless `preselectedSeasons` is passed; already-requested rows are disabled, so filter them out.
@@ -200,7 +200,7 @@ export class RequestModalComponent {
       const isSeries = KIND_REGISTRY[this.mediaType()].hasSeasons;
       await this.requestsApi.create({
         mediaType: this.mediaType(),
-        tmdbId: this.tmdbId(),
+        ...this.titleKey(),
         title: this.title(),
         qualityProfileId: this.qualityProfileId() ?? undefined,
         languageProfileId: this.languageProfileId() ?? undefined,

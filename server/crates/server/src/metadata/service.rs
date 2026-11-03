@@ -396,7 +396,7 @@ async fn read_for_library(
 /// `tmdbId` filled from the `tvdbId`.
 pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, AppError> {
     let kind = l.media_type;
-    let finder = st.metadata.named(l.provider.as_deref());
+    let finder = st.metadata.require(l.provider.as_deref())?;
     let lib = library(st, Some(l.library_id)).await?;
     let lang = language(st, lib.as_ref()).await?;
     let (p, id, mut details, provenance) =
@@ -541,7 +541,10 @@ async fn external_id_for(
                 set_external(st, m, p, n).await?;
                 return Ok(Some(id));
             }
-            if let Some(tmdb) = m.tmdb_id.filter(|t| *t != 0) {
+            if let Some(tmdb) = m
+                .tmdb_id
+                .filter(|t| *t != 0 && st.metadata.available(Namespace::TMDB))
+            {
                 let d = read_details(st, Namespace::TMDB, m.kind, &tmdb.to_string(), lang, prio)
                     .await?;
                 if let Some(tvdb) = d.tvdb_id.filter(|t| *t != 0) {
