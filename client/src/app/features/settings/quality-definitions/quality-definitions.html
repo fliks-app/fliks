@@ -2,7 +2,7 @@
   <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
     <div>
       <h1 class="text-2xl font-bold">{{ 'settings.quality_definitions.title' | translate }}</h1>
-      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.quality_definitions.subtitle' | translate }}</p>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.quality_definitions.subtitle_' + family() | translate }}</p>
     </div>
     <div class="flex gap-2">
       <button type="button" class="btn btn-ghost btn-sm" (click)="resetDefaults()">
@@ -21,6 +21,8 @@
       </button>
     </div>
   </div>
+
+  <app-family-tabs [value]="family()" (valueChange)="setFamily($event)" />
 
   @if (error()) {
     <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
@@ -100,6 +102,6 @@
         </div>
       }
     </div>
-    <p class="text-xs text-base-content/50">{{ 'settings.quality_definitions.hint' | translate }}</p>
+    <p class="text-xs text-base-content/50">{{ 'settings.quality_definitions.hint_' + family() | translate }}</p>
   }
 </div>

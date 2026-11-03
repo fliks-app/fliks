@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1",
+  "query": "SELECT id FROM quality_profiles WHERE family = 'video' ORDER BY id ASC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "81711711b4e3c2961f7e607767c253a92e283419fa46afb575b83e3e7740e88c"
+  "hash": "daabd24c439feee0f8e5175b1bf42e16e6c577fc3ee54d85734b2fc719daf700"
 }

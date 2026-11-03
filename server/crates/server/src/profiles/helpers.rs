@@ -34,13 +34,16 @@ pub async fn resolve_quality_profile_id_for_import(
     library_default: Option<i32>,
 ) -> Res<Option<i32>> {
     if let Some(id) = requested {
-        let p = db::quality_find(db, id).await?;
+        let p = db::quality_find(db, id)
+            .await?
+            .filter(|p| p.family == "video");
         return p
             .map(|p| Some(p.id))
             .ok_or_else(|| AppError::bad_request(format!("Quality profile #{id} not found")));
     }
     if let Some(id) = library_default
         && let Some(p) = db::quality_find(db, id).await?
+        && p.family == "video"
     {
         return Ok(Some(p.id));
     }

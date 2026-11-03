@@ -1,7 +1,7 @@
 //! Counts, genres, collections and the quality table (`media-query.md` rules 35-38).
 use fliks_domain::{
-    media::{kind::MediaKind, query::js_parse_int},
-    release::parsing::quality::APP_QUALITIES,
+    media::{family::Family, kind::MediaKind, query::js_parse_int},
+    profiles::table,
 };
 use serde::{Serialize, ser::SerializeMap};
 use serde_json::{Value, json};
@@ -61,8 +61,8 @@ pub async fn counts_by_library(db: &PgPool, ids: &[i32]) -> Result<ByLibrary, sq
     ))
 }
 
-pub fn qualities() -> Value {
-    json!(APP_QUALITIES)
+pub fn qualities(family: Family) -> Value {
+    json!(table(family))
 }
 
 /// Rule 38: `libraryId` narrows to itself when accessible; unparsable or `0` keeps the whole scope.

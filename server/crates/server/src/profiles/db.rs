@@ -16,6 +16,8 @@ pub struct QualityProfile {
     #[serde(with = "iso_ms")]
     pub updated_at: DateTime<Utc>,
     pub name: String,
+    #[serde(skip)]
+    pub family: String,
     pub cutoff: i32,
     pub items: Json<Value>,
     pub upgrade_allowed: bool,
@@ -64,14 +66,15 @@ pub struct QualityDefinition {
     pub max_size: f64,
 }
 
-pub async fn quality_list(db: &PgPool) -> sqlx::Result<Vec<QualityProfile>> {
+pub async fn quality_list(db: &PgPool, family: Family) -> sqlx::Result<Vec<QualityProfile>> {
     sqlx::query_as!(
         QualityProfile,
-        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, cutoff,
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, family, cutoff,
         items AS "items: Json<Value>", "upgradeAllowed" AS upgrade_allowed,
         "resolutionUpgradeOnly" AS resolution_upgrade_only,
         "minCustomFormatScore" AS min_custom_format_score
-        FROM quality_profiles ORDER BY name ASC, id ASC"#
+        FROM quality_profiles WHERE family = $1 ORDER BY name ASC, id ASC"#,
+        family.as_str()
     )
     .fetch_all(db)
     .await
@@ -80,7 +83,7 @@ pub async fn quality_list(db: &PgPool) -> sqlx::Result<Vec<QualityProfile>> {
 pub async fn quality_find(db: &PgPool, id: i32) -> sqlx::Result<Option<QualityProfile>> {
     sqlx::query_as!(
         QualityProfile,
-        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, cutoff,
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, family, cutoff,
         items AS "items: Json<Value>", "upgradeAllowed" AS upgrade_allowed,
         "resolutionUpgradeOnly" AS resolution_upgrade_only,
         "minCustomFormatScore" AS min_custom_format_score
@@ -94,10 +97,10 @@ pub async fn quality_find(db: &PgPool, id: i32) -> sqlx::Result<Option<QualityPr
 pub async fn quality_insert(db: &PgPool, v: QualityValues) -> sqlx::Result<QualityProfile> {
     sqlx::query_as!(
         QualityProfile,
-        r#"INSERT INTO quality_profiles (name, cutoff, items, "upgradeAllowed",
+        r#"INSERT INTO quality_profiles (name, family, cutoff, items, "upgradeAllowed",
         "resolutionUpgradeOnly", "minCustomFormatScore")
-        VALUES ($1, $2, $3, COALESCE($4, false), COALESCE($5, false), COALESCE($6, 0))
-        RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, cutoff,
+        VALUES ($1, $7, $2, $3, COALESCE($4, false), COALESCE($5, false), COALESCE($6, 0))
+        RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, family, cutoff,
         items AS "items: Json<Value>", "upgradeAllowed" AS upgrade_allowed,
         "resolutionUpgradeOnly" AS resolution_upgrade_only,
         "minCustomFormatScore" AS min_custom_format_score"#,
@@ -106,7 +109,8 @@ pub async fn quality_insert(db: &PgPool, v: QualityValues) -> sqlx::Result<Quali
         v.items,
         v.upgrade_allowed,
         v.resolution_upgrade_only,
-        v.min_custom_format_score
+        v.min_custom_format_score,
+        v.family.as_str()
     )
     .fetch_one(db)
     .await
@@ -124,7 +128,7 @@ pub async fn quality_update(
         "resolutionUpgradeOnly" = COALESCE($6, "resolutionUpgradeOnly"),
         "minCustomFormatScore" = COALESCE($7, "minCustomFormatScore")
         WHERE id = $1
-        RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, cutoff,
+        RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, family, cutoff,
         items AS "items: Json<Value>", "upgradeAllowed" AS upgrade_allowed,
         "resolutionUpgradeOnly" AS resolution_upgrade_only,
         "minCustomFormatScore" AS min_custom_format_score"#,
@@ -151,9 +155,11 @@ pub async fn quality_delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
 }
 
 pub async fn quality_first_id(db: &PgPool) -> sqlx::Result<Option<i32>> {
-    sqlx::query_scalar!("SELECT id FROM quality_profiles ORDER BY id ASC LIMIT 1")
-        .fetch_optional(db)
-        .await
+    sqlx::query_scalar!(
+        "SELECT id FROM quality_profiles WHERE family = 'video' ORDER BY id ASC LIMIT 1"
+    )
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn language_list(db: &PgPool) -> sqlx::Result<Vec<LanguageProfile>> {
@@ -325,29 +331,35 @@ pub async fn seed_quality_definitions(db: &PgPool) -> sqlx::Result<()> {
     Ok(())
 }
 
-pub async fn definition_list(db: &PgPool) -> sqlx::Result<Vec<QualityDefinition>> {
+pub async fn definition_list(db: &PgPool, family: Family) -> sqlx::Result<Vec<QualityDefinition>> {
     sqlx::query_as!(
         QualityDefinition,
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, "qualityId" AS quality_id,
         title, "minSize" AS min_size, "preferredSize" AS preferred_size, "maxSize" AS max_size
-        FROM quality_definitions WHERE family = 'video' ORDER BY "qualityId" ASC"#
+        FROM quality_definitions WHERE family = $1 ORDER BY "qualityId" ASC"#,
+        family.as_str()
     )
     .fetch_all(db)
     .await
 }
 
 /// One transaction for the whole loop; an unknown `qualityId` updates nothing.
-pub async fn definitions_update(db: &PgPool, items: Vec<DefinitionValues>) -> sqlx::Result<()> {
+pub async fn definitions_update(
+    db: &PgPool,
+    family: Family,
+    items: Vec<DefinitionValues>,
+) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     for it in items {
         sqlx::query!(
             r#"UPDATE quality_definitions SET title = COALESCE($2, title), "minSize" = $3,
-            "preferredSize" = $4, "maxSize" = $5 WHERE family = 'video' AND "qualityId" = $1"#,
+            "preferredSize" = $4, "maxSize" = $5 WHERE family = $6 AND "qualityId" = $1"#,
             it.quality_id,
             it.title,
             it.sizes[0],
             it.sizes[1],
-            it.sizes[2]
+            it.sizes[2],
+            family.as_str()
         )
         .execute(&mut *tx)
         .await?;

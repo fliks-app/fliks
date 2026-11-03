@@ -13,12 +13,15 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ProfilesService, QualityProfile } from '../../../core/services/api/profiles.service';
 import { MediaService, AppQualityDef } from '../../../core/services/api/media.service';
+import { FamilyTabsComponent } from '../../../shared/components/family-tabs/family-tabs';
+import type { Family } from '../../../core/enums/family.enum';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-quality-profiles',
   imports: [TvSelectDirective, 
+    FamilyTabsComponent,
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
@@ -34,6 +37,7 @@ export class QualityProfilesComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
+  readonly family = signal<Family>('video');
   readonly profiles = signal<QualityProfile[]>([]);
   readonly definitions = signal<AppQualityDef[]>([]);
   readonly loading = signal(true);
@@ -58,8 +62,8 @@ export class QualityProfilesComponent implements OnInit {
     this.listError.set('');
     try {
       const [profiles, defs] = await Promise.all([
-        this.profilesApi.getQualityProfiles(),
-        this.mediaApi.getAppQualities(),
+        this.profilesApi.getQualityProfiles(this.family()),
+        this.mediaApi.getAppQualities(this.family()),
       ]);
       this.profiles.set(profiles);
       this.definitions.set(defs);
@@ -67,6 +71,38 @@ export class QualityProfilesComponent implements OnInit {
       this.listError.set(this.translate.instant('settings.quality_profiles.load_error'));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  setFamily(family: Family) {
+    this.family.set(family);
+    void this.reloadAll();
+  }
+
+  /** The highest-ranked quality of the family, which a new profile caps at. */
+  private defaultCutoff(): number {
+    const top = this.definitions().reduce<AppQualityDef | null>(
+      (best, q) => (best && best.rank >= q.rank ? best : q),
+      null,
+    );
+    return top?.id ?? 0;
+  }
+
+  /** `1080p · web`, `aac · 128 kbps`, `lossless · 16 bit`, or just the source for a text format. */
+  qualityDetail(q: AppQualityDef): string {
+    switch (this.family()) {
+      case 'video':
+        return `${q.resolution}p · ${q.source}`;
+      case 'audio':
+        if (!q.resolution) return q.source;
+        return `${q.source} · ${this.translate.instant(
+          q.source === 'lossless'
+            ? 'settings.quality_profiles.unit_bit'
+            : 'settings.quality_profiles.unit_kbps',
+          { value: q.resolution },
+        )}`;
+      default:
+        return q.source;
     }
   }
 
@@ -82,7 +118,7 @@ export class QualityProfilesComponent implements OnInit {
   openCreate() {
     this.editingId.set(null);
     this.formName.set('');
-    this.formCutoff.set(16);
+    this.formCutoff.set(this.defaultCutoff());
     this.formUpgrade.set(true);
     this.formResolutionUpgradeOnly.set(false);
     this.formMinCustomFormatScore.set(0);
@@ -122,6 +158,7 @@ export class QualityProfilesComponent implements OnInit {
     const defs = this.definitions();
     return {
       name: this.formName().trim(),
+      family: this.family(),
       cutoff: this.formCutoff(),
       upgradeAllowed: this.formUpgrade(),
       resolutionUpgradeOnly: this.formResolutionUpgradeOnly(),

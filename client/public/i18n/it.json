@@ -2136,6 +2136,11 @@
       "companion_extensions": "Estensioni dei file compagni",
       "companion_extensions_hint": "Estensioni copiate con il file video (separate da virgole)."
     },
+    "families": {
+      "video": "Video",
+      "audio": "Audio",
+      "text": "Testo"
+    },
     "quality_profiles": {
       "title": "Profili di qualità",
       "subtitle": "Definisci le qualità consentite e la soglia di taglio.",
@@ -2173,11 +2178,15 @@
       "size_error_pref_lt_min": "Il consigliato deve essere superiore al minimo.",
       "size_error_pref_gt_max": "Il consigliato deve essere inferiore al massimo.",
       "field_min_cf_score": "Punteggio minimo dei formati personalizzati",
-      "field_min_cf_score_hint": "Le release sotto questo punteggio vengono rifiutate, non solo messe per ultime. 0 rifiuta solo un totale negativo."
+      "field_min_cf_score_hint": "Le release sotto questo punteggio vengono rifiutate, non solo messe per ultime. 0 rifiuta solo un totale negativo.",
+      "unit_kbps": "{{value}} kbps",
+      "unit_bit": "{{value}} bit"
     },
     "quality_definitions": {
       "title": "Definizioni di qualità",
-      "subtitle": "Limiti di dimensione per qualità, applicati a tutti i profili. Valori in MB per ora di contenuto.",
+      "subtitle_video": "Limiti di dimensione per qualità, applicati a tutti i profili. Valori in MB per ora di contenuto.",
+      "subtitle_audio": "Limiti di dimensione per qualità audio, applicati a tutti i profili. Valori in MB per ora di audio.",
+      "subtitle_text": "Limiti di dimensione per formato di testo, applicati a tutti i profili. Valori in MB per file.",
       "col_quality": "Qualità",
       "col_title": "Titolo",
       "col_size_limit": "Limite di dimensione",
@@ -2187,7 +2196,9 @@
       "load_error": "Impossibile caricare le definizioni.",
       "save_error": "Salvataggio non riuscito.",
       "unlimited": "Illimitato",
-      "hint": "Min (blu) = dimensione minima, Verde = dimensione consigliata, Arancione = dimensione massima. Valori in MB per ora di contenuto."
+      "hint_video": "Min (blu) = dimensione minima, Verde = dimensione consigliata, Arancione = dimensione massima. Valori in MB per ora di contenuto.",
+      "hint_audio": "Min (blu) = dimensione minima, Verde = dimensione consigliata, Arancione = dimensione massima. Valori in MB per ora di audio.",
+      "hint_text": "Min (blu) = dimensione minima, Verde = dimensione consigliata, Arancione = dimensione massima. Valori in MB per file."
     },
     "language_profiles": {
       "title": "Profili di lingua",

@@ -13,20 +13,39 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{FromRequest, Request, State},
+    extract::{FromRequest, Query, Request, State},
     http::StatusCode,
 };
 use fliks_domain::{
     acl::{Action, Subject},
     language::APP_LANGUAGES,
     media::family::Family,
-    profiles::default_sizes,
+    profiles::{default_sizes, table},
     release::scoring::{self, CustomFormatMatch},
 };
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 type Res<T> = Result<T, AppError>;
+
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct FamilyQuery {
+    /// `video` (default), `audio` or `text`.
+    #[param(value_type = Option<String>)]
+    family: Option<Family>,
+}
+
+impl FamilyQuery {
+    /// Video when absent; a family without a quality table is a 400.
+    pub fn family(&self) -> Res<Family> {
+        let f = self.family.unwrap_or(Family::Video);
+        if table(f).is_empty() {
+            return Err(AppError::bad_request("family has no quality table"));
+        }
+        Ok(f)
+    }
+}
 
 /// Body parsing after the policy and id checks, as 4.x guards run before its pipes.
 async fn body<T: DeserializeOwned>(req: Request) -> Res<T> {
@@ -38,13 +57,14 @@ fn created<T: serde::Serialize>(v: T) -> (StatusCode, Json<T>) {
     (StatusCode::CREATED, Json(v))
 }
 
-#[utoipa::path(get, path = "/api/profiles/quality", responses((status = 200)))]
+#[utoipa::path(get, path = "/api/profiles/quality", params(FamilyQuery), responses((status = 200)))]
 pub async fn quality_list(
     State(st): State<AppState>,
     a: Authed,
+    Query(q): Query<FamilyQuery>,
 ) -> Res<Json<Vec<db::QualityProfile>>> {
     a.require(Action::Read, Subject::QualityProfile)?;
-    Ok(Json(db::quality_list(&st.db).await?))
+    Ok(Json(db::quality_list(&st.db, q.family()?).await?))
 }
 
 #[utoipa::path(post, path = "/api/profiles/quality", responses((status = 201)))]
@@ -54,7 +74,7 @@ pub async fn quality_create(
     req: Request,
 ) -> Res<(StatusCode, Json<db::QualityProfile>)> {
     a.require(Action::Create, Subject::QualityProfile)?;
-    let v = body::<dto::QualityProfile>(req).await?.validate()?;
+    let v = body::<dto::QualityProfile>(req).await?.validate(None)?;
     Ok(created(db::quality_insert(&st.db, v).await?))
 }
 
@@ -79,7 +99,11 @@ pub async fn quality_update(
 ) -> Res<Json<db::QualityProfile>> {
     a.require(Action::Update, Subject::QualityProfile)?;
     let id = int_param(&id)?;
-    let v = body::<dto::QualityProfile>(req).await?.validate()?;
+    let dto = body::<dto::QualityProfile>(req).await?;
+    let current = db::quality_find(&st.db, id)
+        .await?
+        .ok_or_else(|| quality_not_found(id))?;
+    let v = dto.validate(Family::parse(&current.family))?;
     let p = db::quality_update(&st.db, id, v).await?;
     Ok(Json(p.ok_or_else(|| quality_not_found(id))?))
 }
@@ -253,41 +277,47 @@ pub async fn format_delete(
     Ok(StatusCode::OK)
 }
 
-#[utoipa::path(get, path = "/api/quality-definitions", responses((status = 200)))]
+#[utoipa::path(get, path = "/api/quality-definitions", params(FamilyQuery), responses((status = 200)))]
 pub async fn definitions_list(
     State(st): State<AppState>,
     a: Authed,
+    Query(q): Query<FamilyQuery>,
 ) -> Res<Json<Vec<db::QualityDefinition>>> {
     a.require(Action::Read, Subject::Settings)?;
+    let family = q.family()?;
     db::seed_quality_definitions(&st.db).await?;
-    Ok(Json(db::definition_list(&st.db).await?))
+    Ok(Json(db::definition_list(&st.db, family).await?))
 }
 
 /// Computes the defaults only; the client saves them with `PUT` (rule 28).
-#[utoipa::path(post, path = "/api/quality-definitions/reset", responses((status = 201)))]
+#[utoipa::path(post, path = "/api/quality-definitions/reset", params(FamilyQuery), responses((status = 201)))]
 pub async fn definitions_reset(
     State(st): State<AppState>,
     a: Authed,
+    Query(q): Query<FamilyQuery>,
 ) -> Res<(StatusCode, Json<Vec<db::QualityDefinition>>)> {
     a.require(Action::Update, Subject::Settings)?;
+    let family = q.family()?;
     db::seed_quality_definitions(&st.db).await?;
-    let mut rows = db::definition_list(&st.db).await?;
+    let mut rows = db::definition_list(&st.db, family).await?;
     for r in &mut rows {
-        let s = default_sizes(Family::Video, i64::from(r.quality_id));
+        let s = default_sizes(family, i64::from(r.quality_id));
         (r.min_size, r.preferred_size, r.max_size) = (s.min, s.preferred, s.max);
     }
     Ok(created(rows))
 }
 
-#[utoipa::path(put, path = "/api/quality-definitions", responses((status = 200)))]
+#[utoipa::path(put, path = "/api/quality-definitions", params(FamilyQuery), responses((status = 200)))]
 pub async fn definitions_update(
     State(st): State<AppState>,
     a: Authed,
+    Query(q): Query<FamilyQuery>,
     req: Request,
 ) -> Res<Json<Vec<db::QualityDefinition>>> {
     a.require(Action::Update, Subject::Settings)?;
+    let family = q.family()?;
     let items = body::<Definitions>(req).await?.validate()?;
     db::seed_quality_definitions(&st.db).await?;
-    db::definitions_update(&st.db, items).await?;
-    Ok(Json(db::definition_list(&st.db).await?))
+    db::definitions_update(&st.db, family, items).await?;
+    Ok(Json(db::definition_list(&st.db, family).await?))
 }

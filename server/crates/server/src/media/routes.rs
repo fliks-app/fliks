@@ -104,10 +104,13 @@ pub async fn count_by_library(
     Ok(Json(aggregates::counts_by_library(&st.db, &ids).await?))
 }
 
-#[utoipa::path(get, path = "/api/media/qualities", responses((status = 200)))]
-pub async fn quality_table(a: Authed) -> Result<Json<Value>, AppError> {
+#[utoipa::path(get, path = "/api/media/qualities", params(crate::profiles::FamilyQuery), responses((status = 200)))]
+pub async fn quality_table(
+    a: Authed,
+    Query(q): Query<crate::profiles::FamilyQuery>,
+) -> Result<Json<Value>, AppError> {
     a.require(Action::Read, Subject::Media)?;
-    Ok(Json(aggregates::qualities()))
+    Ok(Json(aggregates::qualities(q.family()?)))
 }
 
 #[utoipa::path(get, path = "/api/media/genres", responses((status = 200)))]

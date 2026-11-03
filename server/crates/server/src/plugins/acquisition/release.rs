@@ -334,7 +334,7 @@ type SizeTable = BTreeMap<u32, SizeLimits>;
 
 /// The size limits per video quality and the custom formats of the profiles.
 async fn scoring_tables(db: &PgPool) -> sqlx::Result<(SizeTable, Vec<CustomFormat>)> {
-    let size_by_quality: SizeTable = profiles::definition_list(db)
+    let size_by_quality: SizeTable = profiles::definition_list(db, Family::Video)
         .await?
         .into_iter()
         .map(|d| {

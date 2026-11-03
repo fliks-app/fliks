@@ -2136,6 +2136,11 @@
       "companion_extensions": "Erweiterungen der Begleitdateien",
       "companion_extensions_hint": "Mit der Videodatei kopierte Erweiterungen (durch Kommas getrennt)."
     },
+    "families": {
+      "video": "Video",
+      "audio": "Audio",
+      "text": "Text"
+    },
     "quality_profiles": {
       "title": "Qualitätsprofile",
       "subtitle": "Legen Sie die erlaubten Qualitäten und den Cutoff-Schwellenwert fest.",
@@ -2173,11 +2178,15 @@
       "size_error_pref_lt_min": "Der empfohlene Wert muss größer als das Minimum sein.",
       "size_error_pref_gt_max": "Der empfohlene Wert muss kleiner als das Maximum sein.",
       "field_min_cf_score": "Mindestpunktzahl für benutzerdefinierte Formate",
-      "field_min_cf_score_hint": "Releases unter dieser Punktzahl werden abgelehnt, nicht nur zuletzt einsortiert. 0 lehnt nur eine negative Summe ab."
+      "field_min_cf_score_hint": "Releases unter dieser Punktzahl werden abgelehnt, nicht nur zuletzt einsortiert. 0 lehnt nur eine negative Summe ab.",
+      "unit_kbps": "{{value}} kbit/s",
+      "unit_bit": "{{value}} Bit"
     },
     "quality_definitions": {
       "title": "Qualitätsdefinitionen",
-      "subtitle": "Größenbeschränkungen pro Qualität, für alle Profile angewendet. Werte in MB pro Stunde Inhalt.",
+      "subtitle_video": "Größenbeschränkungen pro Qualität, für alle Profile angewendet. Werte in MB pro Stunde Inhalt.",
+      "subtitle_audio": "Größenbeschränkungen pro Audioqualität, für alle Profile angewendet. Werte in MB pro Stunde Audio.",
+      "subtitle_text": "Größenbeschränkungen pro Textformat, für alle Profile angewendet. Werte in MB pro Datei.",
       "col_quality": "Qualität",
       "col_title": "Titel",
       "col_size_limit": "Größenbeschränkung",
@@ -2187,7 +2196,9 @@
       "load_error": "Die Definitionen konnten nicht geladen werden.",
       "save_error": "Speichern nicht möglich.",
       "unlimited": "Unbegrenzt",
-      "hint": "Min (blau) = Mindestgröße, Grün = empfohlene Größe, Orange = maximale Größe. Werte in MB pro Stunde Inhalt."
+      "hint_video": "Min (blau) = Mindestgröße, Grün = empfohlene Größe, Orange = maximale Größe. Werte in MB pro Stunde Inhalt.",
+      "hint_audio": "Min (blau) = Mindestgröße, Grün = empfohlene Größe, Orange = maximale Größe. Werte in MB pro Stunde Audio.",
+      "hint_text": "Min (blau) = Mindestgröße, Grün = empfohlene Größe, Orange = maximale Größe. Werte in MB pro Datei."
     },
     "language_profiles": {
       "title": "Sprachprofile",
