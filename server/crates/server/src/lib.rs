@@ -44,6 +44,7 @@ pub mod qoe;
 pub mod remote;
 pub mod requests;
 pub mod roles;
+pub mod scene;
 pub mod settings;
 pub mod social;
 pub mod state;

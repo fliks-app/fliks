@@ -88,6 +88,18 @@ async fn match_one(
     coverage: t::ReleaseCoverage,
     hit: Option<usize>,
 ) -> sqlx::Result<t::ReleaseMatch> {
+    // The title's numbers are scene numbers: read them as aired ones before anything uses them.
+    let translated;
+    let (se, coverage) = match hit.map(|i| &library[i]).filter(|m| m.kind.has_seasons()) {
+        Some(m) => match crate::scene::for_media(db, m.id).await? {
+            Some(map) => {
+                translated = map.translate(se);
+                (&translated, wit_coverage(&coverage_of(&translated)))
+            }
+            None => (se, coverage),
+        },
+        None => (se, coverage),
+    };
     if let Some(book) = hit
         .map(|i| &library[i])
         .filter(|m| m.kind == MediaKind::Book)
@@ -288,6 +300,11 @@ pub(super) async fn score_of(
     let titles = resolve_search_titles(&m.search(), None);
     let (size_by_quality, formats) = scoring_tables(db).await?;
     let (season, episode) = season_and_episode(db, m, season_n, episode_n).await?;
+    let scene_map = if m.kind.has_seasons() {
+        crate::scene::for_media(db, m.id).await?
+    } else {
+        None
+    };
     let files = files_for(db, m, season.map(|s| s.0), episode.as_ref()).await?;
     let quals: Vec<Option<&str>> = files.iter().map(|f| f.as_deref()).collect();
     let min_resolution = if m.qp_res_only == Some(true) && !files.is_empty() {
@@ -316,6 +333,7 @@ pub(super) async fn score_of(
         min_custom_format_score: m.qp_id.map(|_| i64::from(m.qp_min_cf.unwrap_or(0))),
         min_rank_exclusive: min_rank,
         max_rank_inclusive: max_rank,
+        scene_map,
     };
     let (blocked, ids, candidates) = (inp.blocked, inp.ids, inp.candidates);
     let scored = tokio::task::spawn_blocking(move || {

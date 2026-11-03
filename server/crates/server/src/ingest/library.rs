@@ -9,6 +9,7 @@ use crate::{
     media::items::{self, Link},
     state::AppState,
 };
+use fliks_domain::release::parsing::season_episode::ParsedSeasonEpisode;
 use fliks_domain::{
     media::{VIDEO_EXTS, family::Family, kind::MediaKind},
     naming::{
@@ -773,6 +774,28 @@ impl Ctx<'_> {
         Ok(None)
     }
 
+    /// The aired numbers of a name's scene numbers; the explicit episode of a grab never gets here.
+    async fn aired(&self, n: EpisodeNumbers) -> Result<EpisodeNumbers, String> {
+        let map = crate::scene::for_media(&self.st.db, self.media.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let Some(map) = map else { return Ok(n) };
+        let p = ParsedSeasonEpisode {
+            season: Some(n.season),
+            episode: Some(n.episode),
+            is_full_season: false,
+            season_end: None,
+            episode_end: n.episode_end,
+            is_complete_series: false,
+        };
+        let t = map.translate(&p);
+        Ok(EpisodeNumbers {
+            season: t.season.unwrap_or(n.season),
+            episode: t.episode.unwrap_or(n.episode),
+            episode_end: t.episode_end,
+        })
+    }
+
     /// Rule 20: `(episode, episodeEnd)`; ingest never creates seasons or episodes.
     async fn episode(&self, f: &File) -> Result<Option<(Ep, Option<i32>)>, String> {
         let db = &self.st.db;
@@ -784,6 +807,10 @@ impl Ctx<'_> {
                 .as_deref()
                 .and_then(|r| parse_episode_numbers(r, None))
         });
+        let nums = match nums {
+            Some(n) if self.media.has_seasons() => Some(self.aired(n).await?),
+            n => n,
+        };
         if let Some(id) = f.episode_id {
             match episode_of_media(db, self.media.id, id)
                 .await
