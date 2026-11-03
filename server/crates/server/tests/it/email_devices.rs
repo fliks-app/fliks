@@ -724,3 +724,26 @@ async fn a_send_to_an_other_device_needs_settings_access(pool: PgPool) {
         (403, Some("email_devices.error_kind_forbidden"))
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn the_prune_drops_sends_older_than_30_days(pool: PgPool) {
+    let c = ctx(pool, "prune").await;
+    let (port, _) = smtp("250 queued").await;
+    c.configure(port).await;
+    let dev = c.device(&c.a, "Kindle").await;
+    let (_, sent) = c.send(&c.a, dev, 1).await;
+    let id = sent["id"].as_i64().unwrap();
+    c.settled(id).await;
+    sqlx::query(r#"UPDATE book_sends SET "createdAt" = now() - interval '31 days'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (_, fresh) = c.send(&c.a, dev, 1).await;
+    c.settled(fresh["id"].as_i64().unwrap()).await;
+    assert_eq!(email::prune(&c.pool).await.unwrap(), 1);
+    let left: Vec<i32> = sqlx::query_scalar("SELECT id FROM book_sends")
+        .fetch_all(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(left.len(), 1);
+}
