@@ -272,6 +272,17 @@ impl Plugins {
         i: &Inspected,
         origin: &str,
     ) -> Result<InstallResult, InstallError> {
+        self.promote_with(bytes, i, origin, true).await
+    }
+
+    /// `activate = false` stores the row and leaves registration to the caller (boot).
+    pub async fn promote_with(
+        &self,
+        bytes: &[u8],
+        i: &Inspected,
+        origin: &str,
+        activate: bool,
+    ) -> Result<InstallResult, InstallError> {
         self.refuse_while_restoring()?;
         let id = &i.id;
         let m = &i.manifest;
@@ -373,8 +384,8 @@ impl Plugins {
             packages::grant_scopes(&self.db, id, m)
                 .await
                 .map_err(internal)?;
-            if !enabled {
-                tracing::info!("plugin \"{id}\" upgraded while disabled — not activated");
+            if !enabled || !activate {
+                tracing::info!("plugin \"{id}\" stored, not activated now");
                 return Ok(InstallResult {
                     plugin_id: id.clone(),
                     version: i.version.clone(),

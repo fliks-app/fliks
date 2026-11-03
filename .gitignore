@@ -90,6 +90,7 @@ docker-compose.prod.yml
 /server/**/target/
 .tags
 /server/.cargo/config.toml
+/server/bundled-plugins/
 
 release/
 !server/crates/domain/src/release/

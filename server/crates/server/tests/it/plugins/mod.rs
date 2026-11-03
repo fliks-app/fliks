@@ -2,6 +2,7 @@
 //! Need `S8_PG_ADMIN_URL` and the fixture wasm (`FLIKS_TEST_WASM_DIR`); skipped otherwise.
 mod api;
 mod books;
+mod bundled;
 mod create;
 mod harness;
 mod namespaces;

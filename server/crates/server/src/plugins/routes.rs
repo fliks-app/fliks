@@ -372,6 +372,17 @@ pub async fn uninstall(
     Query(q): Query<UninstallQuery>,
 ) -> Res {
     need(&a, Action::Manage)?;
+    if packages::find(&st.plugins.db, &id)
+        .await
+        .map_err(db)?
+        .is_some_and(|p| p.origin == "bundled")
+    {
+        return Err(inst(ie(
+            StatusCode::CONFLICT,
+            "PLUGIN_BUNDLED",
+            format!("plugin \"{id}\" ships with Fliks: disable it instead of uninstalling it"),
+        )));
+    }
     st.plugins.uninstall(&id, q.delete_data).await.map_err(db)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
