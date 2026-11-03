@@ -117,17 +117,31 @@ pub async fn context(
     family: Option<Family>,
     season_id: Option<u32>,
     episode_id: Option<u32>,
-) -> sqlx::Result<Option<t::Target>> {
+) -> Result<Option<t::Target>, HostError> {
     let db = &st.db;
-    let Some(m) = media(db, media_id as i32).await? else {
+    let Some(m) = media(db, media_id as i32).await.map_err(db_err)? else {
         return Ok(None);
     };
+    wished(m.kind, family)?;
     if m.library_id.is_none() {
         return Ok(None);
     }
     if m.kind == MediaKind::Book {
-        return super::book::context(db, &m, family, season_id, episode_id).await;
+        return super::book::context(db, &m, family, season_id, episode_id)
+            .await
+            .map_err(db_err);
     }
+    context_of(db, m, season_id, episode_id)
+        .await
+        .map_err(db_err)
+}
+
+async fn context_of(
+    db: &PgPool,
+    m: MediaRow,
+    season_id: Option<u32>,
+    episode_id: Option<u32>,
+) -> sqlx::Result<Option<t::Target>> {
     let (mut season, mut episode) = (None, None);
     if let Some(eid) = episode_id {
         let e: Option<EpisodeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
@@ -386,7 +400,7 @@ pub(super) async fn targets_for(
     }
     let ids = Some(ids);
     let today = Utc::now().date_naive();
-    if kind.is_none_or(|k| !k.has_seasons() && k != MediaKind::Book) {
+    if kind.is_none_or(|k| !k.has_seasons()) {
         for (m, files, d) in ungrouped_targets(db, ids).await? {
             if available(&m, on) {
                 targets.extend(target(&m, Some(d), &files));
@@ -480,9 +494,13 @@ pub async fn candidates(
     let after = q.cursor.as_deref().and_then(parse_cursor);
     let mut from = after.map_or(0, |k| k.0 as i32);
     let mut items: Vec<t::Target> = vec![];
+    let mut exhausted = false;
     while items.len() <= limit {
         let batch = media_batch(db, from, ids.as_deref(), kind).await?;
-        let Some(last) = batch.last() else { break };
+        let Some(last) = batch.last() else {
+            exhausted = true;
+            break;
+        };
         from = last + 1;
         let full = batch.len() == BATCH;
         let found = targets_for(db, &batch, kind, family, on).await?;
@@ -492,6 +510,7 @@ pub async fn candidates(
                 .filter(|tg| after.is_none_or(|a| key(tg) > a)),
         );
         if !full {
+            exhausted = true;
             break;
         }
     }
@@ -506,7 +525,7 @@ pub async fn candidates(
             .take_while(|n| key(n) == key(&items[0]))
             .count();
     }
-    let more = cut < items.len();
+    let more = cut < items.len() || !exhausted;
     items.truncate(cut);
     let cursor = items
         .last()

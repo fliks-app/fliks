@@ -1,8 +1,6 @@
 //! The audio and text families of rule 31: the wants of a book as targets, matches and scores.
 use super::release::{Inputs, custom_formats, wit_rejections};
 use super::*;
-use crate::plugins::imports::host_err;
-use crate::plugins::runtime::HostError;
 use fliks_domain::profiles::{default_allowed, default_sizes};
 use fliks_domain::release::audio::quality::parse_audio_release;
 use fliks_domain::release::scoring::{BookScoreOptions, score_and_sort_book_releases};
@@ -18,6 +16,7 @@ struct WantRow {
     qp_items: Option<Value>,
     qp_min_cf: Option<i32>,
     satisfied: bool,
+    released: Option<NaiveDate>,
 }
 
 impl WantRow {
@@ -49,7 +48,7 @@ impl WantRow {
 fn want_sql(filter: &str) -> String {
     format!(
         r#"SELECT w."mediaId" AS media_id, w.family, w.language, qp.id AS qp_id, qp.items AS qp_items,
-    qp."minCustomFormatScore" AS qp_min_cf, {sat} AS satisfied
+    qp."minCustomFormatScore" AS qp_min_cf, {sat} AS satisfied, rel.date AS released
   FROM wants w JOIN media m ON m.id = w."mediaId"
   LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
   LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d."editionId" IS NULL
@@ -72,101 +71,76 @@ async fn wants(db: &PgPool, media: i32, families: &[Family]) -> sqlx::Result<Vec
         .await
 }
 
-/// The family a call naming `media` and maybe a `family` is about: none for an unknown media, an
-/// error for a family its kind is not wished in, the first want's for a book without one.
-pub async fn family_of(
-    db: &PgPool,
-    media: u32,
-    requested: Option<Family>,
-) -> Result<Option<Family>, HostError> {
-    let kind: Option<String> = sqlx::query_scalar("SELECT type FROM media WHERE id = $1")
-        .bind(media as i32)
-        .fetch_optional(db)
-        .await
-        .map_err(crate::plugins::imports::db_err)?;
-    let Some(kind) = kind.as_deref().and_then(MediaKind::parse) else {
-        return Ok(None);
-    };
-    let families = kind.families();
-    if let Some(f) = requested {
-        return if families.contains(&f) {
-            Ok(Some(f))
-        } else {
-            Err(host_err(
-                "ERR_VALIDATION",
-                format!("a {kind} is not wished in family \"{f}\""),
-            ))
-        };
-    }
-    if let [only] = families {
-        return Ok(Some(*only));
-    }
-    let first = wants(db, media as i32, families)
-        .await
-        .map_err(crate::plugins::imports::db_err)?
-        .first()
-        .map(WantRow::family);
-    Ok(first.or(families.first().copied()))
+/// The family of the first want of a book, text when it has none.
+pub async fn first_family(db: &PgPool, media: i32) -> sqlx::Result<Family> {
+    let wanted = wants(db, media, MediaKind::Book.families()).await?;
+    Ok(wanted.first().map_or(Family::Text, WantRow::family))
 }
 
-async fn creators(db: &PgPool, media: i32) -> sqlx::Result<Vec<t::Creator>> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT name, role FROM (
-             SELECT DISTINCT ON (c.role, p.id) p.name, c.role, c.position
+/// What a target adds to its media row, read once for a batch of media.
+#[derive(Default)]
+struct Extras {
+    creators: HashMap<i32, Vec<t::Creator>>,
+    /// Per media: the edition (family, language) and its external ids.
+    editions: HashMap<i32, Vec<(String, Option<String>, t::ExternalId)>>,
+    /// The longest audio edition of a media, in minutes.
+    minutes: HashMap<i32, u32>,
+}
+
+async fn extras(db: &PgPool, media: &[i32]) -> sqlx::Result<Extras> {
+    let mut out = Extras::default();
+    let rows: Vec<(i32, String, String)> = sqlx::query_as(
+        r#"SELECT "mediaId", name, role FROM (
+             SELECT DISTINCT ON (c."mediaId", c.role, p.id) c."mediaId", p.name, c.role, c.position
                FROM media_credits c JOIN persons p ON p.id = c."personId"
-              WHERE c."mediaId" = $1 AND c.role IN ('author', 'narrator')
-              ORDER BY c.role, p.id, c.position) x
-           ORDER BY role, position, name"#,
+              WHERE c."mediaId" = ANY($1) AND c.role IN ('author', 'narrator')
+              ORDER BY c."mediaId", c.role, p.id, c.position) x
+           ORDER BY "mediaId", role, position, name"#,
     )
     .bind(media)
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|(name, role)| t::Creator { name, role })
-        .collect())
-}
-
-async fn edition_ids(
-    db: &PgPool,
-    media: i32,
-    family: Family,
-    language: Option<&str>,
-) -> sqlx::Result<Vec<t::ExternalId>> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT x.provider, x.value FROM edition_external_ids x JOIN editions e ON e.id = x."editionId"
-            WHERE e."mediaId" = $1 AND e.family = $2 AND ($3::text IS NULL OR e.language IS NULL OR e.language = $3)
-            ORDER BY x."editionId", x.provider, x.value"#,
+    for (id, name, role) in rows {
+        out.creators
+            .entry(id)
+            .or_default()
+            .push(t::Creator { name, role });
+    }
+    let rows: Vec<(i32, String, Option<String>, String, String)> = sqlx::query_as(
+        r#"SELECT e."mediaId", e.family, e.language, x.provider, x.value
+             FROM edition_external_ids x JOIN editions e ON e.id = x."editionId"
+            WHERE e."mediaId" = ANY($1) ORDER BY x."editionId", x.provider, x.value"#,
     )
     .bind(media)
-    .bind(family.as_str())
-    .bind(language)
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|(provider, value)| t::ExternalId { provider, value })
-        .collect())
-}
-
-/// The longest audio edition of the media, in minutes.
-async fn audio_minutes(db: &PgPool, media: i32) -> sqlx::Result<Option<u32>> {
-    let secs: Option<i32> = sqlx::query_scalar(
-        r#"SELECT max("durationSeconds") FROM editions WHERE "mediaId" = $1 AND family = 'audio'"#,
+    for (id, family, language, provider, value) in rows {
+        out.editions.entry(id).or_default().push((
+            family,
+            language,
+            t::ExternalId { provider, value },
+        ));
+    }
+    let rows: Vec<(i32, Option<i32>)> = sqlx::query_as(
+        r#"SELECT "mediaId", max("durationSeconds") FROM editions
+            WHERE "mediaId" = ANY($1) AND family = 'audio' GROUP BY "mediaId""#,
     )
     .bind(media)
-    .fetch_one(db)
+    .fetch_all(db)
     .await?;
-    Ok(secs.filter(|s| *s > 0).map(|s| (s / 60) as u32))
+    for (id, secs) in rows {
+        if let Some(s) = secs.filter(|s| *s > 0) {
+            out.minutes.insert(id, (s / 60) as u32);
+        }
+    }
+    Ok(out)
 }
 
-async fn target(db: &PgPool, m: &MediaRow, w: &WantRow) -> sqlx::Result<Option<t::Target>> {
-    let Some(library_id) = m.library_id else {
-        return Ok(None);
-    };
+fn target(m: &MediaRow, w: &WantRow, x: &Extras) -> Option<t::Target> {
+    let library_id = m.library_id?;
     let family = w.family();
     let titles = resolve_search_titles(&m.search(), None);
-    Ok(Some(t::Target {
+    Some(t::Target {
         media_id: m.id as u32,
         kind: m.kind.as_str().to_owned(),
         family: family.into(),
@@ -174,15 +148,22 @@ async fn target(db: &PgPool, m: &MediaRow, w: &WantRow) -> sqlx::Result<Option<t
         title: m.title.clone(),
         original_title: m.original_title.clone(),
         alternative_titles: m.alt(),
-        creators: creators(db, m.id).await?,
+        creators: x.creators.get(&m.id).cloned().unwrap_or_default(),
         year: m.year.map(|y| y as u32),
-        runtime_minutes: if family == Family::Audio {
-            audio_minutes(db, m.id).await?
-        } else {
-            None
-        },
+        runtime_minutes: (family == Family::Audio)
+            .then(|| x.minutes.get(&m.id).copied())
+            .flatten(),
         external_ids: m.external_ids(),
-        edition_ids: edition_ids(db, m.id, family, w.language.as_deref()).await?,
+        edition_ids: x
+            .editions
+            .get(&m.id)
+            .into_iter()
+            .flatten()
+            .filter(|(f, l, _)| {
+                *f == family.as_str() && (w.language.is_none() || l.is_none() || *l == w.language)
+            })
+            .map(|(_, _, id)| id.clone())
+            .collect(),
         library_id: library_id as u32,
         want: Some(t::Want {
             decision: if w.satisfied {
@@ -200,7 +181,7 @@ async fn target(db: &PgPool, m: &MediaRow, w: &WantRow) -> sqlx::Result<Option<t
         expected_titles: titles.expected_titles,
         search_title: titles.search_title,
         scope: vec![],
-    }))
+    })
 }
 
 /// `media.acquisitionContext` of a book: its want of `family` (any), null for a group or a foreign item.
@@ -234,12 +215,13 @@ pub(super) async fn context(
     }
     let families = family.map_or_else(|| MediaKind::Book.families().to_vec(), |f| vec![f]);
     match wants(db, m.id, &families).await?.first() {
-        Some(w) => target(db, m, w).await,
+        Some(w) => Ok(target(m, w, &extras(db, &[m.id]).await?)),
         None => Ok(None),
     }
 }
 
-/// The unsatisfied wants of the monitored books among `ids` whose release date has come, one target each.
+/// The monitored books among `ids` whose release date has come, one target per family: its first
+/// want, when unsatisfied, as `context`, `score` and the ingest serve it.
 pub(super) async fn targets(
     db: &PgPool,
     ids: &[i32],
@@ -247,32 +229,34 @@ pub(super) async fn targets(
     on: NaiveDate,
 ) -> sqlx::Result<Vec<t::Target>> {
     let families = family.map_or_else(|| MediaKind::Book.families().to_vec(), |f| vec![f]);
-    let filter = format!(
-        "AND m.monitored AND NOT {} AND (rel.date IS NULL OR rel.date <= $3)",
-        crate::media::wants::satisfied_sql()
-    );
-    let rows: Vec<WantRow> = sqlx::query_as(sqlx::AssertSqlSafe(want_sql(&filter)))
-        .bind(ids)
-        .bind(names(&families))
-        .bind(on)
-        .fetch_all(db)
-        .await?;
+    let rows: Vec<WantRow> = sqlx::query_as(sqlx::AssertSqlSafe(want_sql(
+        "AND m.monitored AND (rel.date IS NULL OR rel.date <= $3)",
+    )))
+    .bind(ids)
+    .bind(names(&families))
+    .bind(on)
+    .fetch_all(db)
+    .await?;
+    let mut seen = BTreeSet::new();
+    let first: Vec<&WantRow> = rows
+        .iter()
+        .filter(|w| seen.insert((w.media_id, w.family.clone())) && !w.satisfied)
+        .collect();
+    let wanted: Vec<i32> = first.iter().map(|w| w.media_id).collect();
     let books: HashMap<i32, MediaRow> = sqlx::query_as::<_, MediaRow>(sqlx::AssertSqlSafe(
         format!("{} WHERE m.id = ANY($1)", media_select()),
     ))
-    .bind(ids)
+    .bind(&wanted)
     .fetch_all(db)
     .await?
     .into_iter()
     .map(|m| (m.id, m))
     .collect();
-    let mut out = vec![];
-    for w in &rows {
-        if let Some(m) = books.get(&w.media_id) {
-            out.extend(target(db, m, w).await?);
-        }
-    }
-    Ok(out)
+    let x = extras(db, &wanted).await?;
+    Ok(first
+        .into_iter()
+        .filter_map(|w| target(books.get(&w.media_id)?, w, &x))
+        .collect())
 }
 
 /// The families a release name carries: its audio or text format, both when it names none.
@@ -309,6 +293,12 @@ pub(super) async fn match_one(
     }
     if wants.iter().all(|w| w.satisfied) {
         return Ok(skip(t::SkipReason::OnDisk));
+    }
+    if wants
+        .iter()
+        .all(|w| w.released.is_some_and(|d| d > Utc::now().date_naive()))
+    {
+        return Ok(skip(t::SkipReason::TooFresh));
     }
     if let Some(min) = min_age.filter(|m| *m > 0)
         && let Some(at) = published(&entry.publish_date)
@@ -377,7 +367,14 @@ pub async fn score(
         size_by_quality: sizes(db, family).await?,
         source_min_seeders: inp.min_seeders,
         source_unknown_lang: inp.unknown_lang,
-        duration_minutes: f64::from(audio_minutes(db, m.id).await?.unwrap_or(0)),
+        duration_minutes: f64::from(
+            extras(db, &[m.id])
+                .await?
+                .minutes
+                .get(&m.id)
+                .copied()
+                .unwrap_or(0),
+        ),
         expected_title: Some(ExpectedTitle::Many(
             resolve_search_titles(&m.search(), None).expected_titles,
         )),
@@ -527,10 +524,10 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        assert_eq!(family_of(&db, 1, None).await.unwrap(), Some(Family::Text));
-        assert_eq!(family_of(&db, 99, None).await.unwrap(), None);
-        let err = family_of(&db, 1, Some(Family::Video)).await.unwrap_err();
-        assert_eq!(err.code, "ERR_VALIDATION");
+        assert!(context(&st, 99, None, None, None).await.unwrap().is_none());
+        let err = context(&st, 1, Some(Family::Video), None, None).await;
+        assert_eq!(err.unwrap_err().code, "ERR_VALIDATION");
+        assert_eq!(first_family(&db, 1).await.unwrap(), Family::Text);
     }
 
     #[sqlx::test(migrations = false)]
@@ -662,6 +659,52 @@ mod tests {
             ..fresh
         };
         let m = matches(&st, vec![fresh], Some(60)).await.unwrap();
+        assert_eq!(m[0].skip_reason, Some(t::SkipReason::TooFresh));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_second_language_of_a_family_is_no_target_while_its_first_want_is_satisfied(
+        db: PgPool,
+    ) {
+        books(&db).await;
+        sqlx::raw_sql(
+            r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'text', 'fr');
+               WITH e AS (INSERT INTO editions ("mediaId", family) VALUES (1, 'text') RETURNING id),
+                    i AS (INSERT INTO items ("mediaId", "editionId", monitored) SELECT 1, id, true FROM e RETURNING id),
+                    f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId")
+                          VALUES ('a.epub', 1, 'epub', 1, (SELECT min(id) FROM library_folders)) RETURNING id)
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position)
+                 SELECT i.id, f.id, 1, 0, 0 FROM i, f"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let on = NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
+        let got = targets(&db, &[1], Some(Family::Text), on).await.unwrap();
+        assert!(
+            got.is_empty(),
+            "the text/NULL want is satisfied, text/fr is not served"
+        );
+        let got = targets(&db, &[1], None, on).await.unwrap();
+        assert_eq!(
+            got.iter().map(|g| g.family).collect::<Vec<_>>(),
+            [t::Family::Audio]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unreleased_book_is_too_fresh(db: PgPool) {
+        books(&db).await;
+        sqlx::query(r#"INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (1, 'release', '2999-01-01')"#)
+            .execute(&db)
+            .await
+            .unwrap();
+        let ask = t::ReleaseTitle {
+            id: "a".into(),
+            title: "Mirelune.EPUB-GRP".into(),
+            publish_date: "2020-01-01T00:00:00Z".into(),
+        };
+        let m = matches(&state(&db), vec![ask], None).await.unwrap();
         assert_eq!(m[0].skip_reason, Some(t::SkipReason::TooFresh));
     }
 }

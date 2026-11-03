@@ -4,7 +4,7 @@ use super::runtime::{HostError, fliks::plugin::types as t};
 use super::units;
 use crate::ingest::{books, library, transfer::Method};
 use crate::state::AppState;
-use fliks_domain::language::normalize_language_code;
+use fliks_domain::language::parse_language_code;
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::json;
 use std::collections::HashMap;
@@ -48,11 +48,7 @@ pub async fn run(
             "library.ingest: a video ingest has no language",
         ));
     }
-    let language = r
-        .language
-        .as_deref()
-        .map(|l| normalize_language_code(Some(l)))
-        .filter(|l| l != "und" && l.len() <= 8 && l.chars().all(|c| c.is_ascii_alphanumeric()));
+    let language = r.language.as_deref().and_then(parse_language_code);
     if r.language.is_some() && language.is_none() {
         return Err(host_err(
             "ERR_VALIDATION",
@@ -121,6 +117,25 @@ pub async fn run(
         None
     };
     let guard = st.ingest.media.lock(media_id).await;
+    if let Some(l) = &language {
+        let held: Option<String> = sqlx::query_scalar(
+            r#"SELECT language FROM editions WHERE "mediaId" = $1 AND family = $2 ORDER BY id LIMIT 1"#,
+        )
+        .bind(media_id)
+        .bind(family.as_str())
+        .fetch_optional(&st.db)
+        .await
+        .map_err(db_err)?
+        .flatten();
+        if let Some(held) = held.filter(|h| h != l) {
+            return Err(host_err(
+                "ERR_VALIDATION",
+                format!(
+                    "library.ingest: the {family} edition of media #{media_id} is in \"{held}\", one language per family is acquired"
+                ),
+            ));
+        }
+    }
     let out = library::ingest(
         st,
         &guard,
@@ -140,17 +155,23 @@ pub async fn run(
     )
     .await
     .map_err(|e| host_err("ERR", e))?;
-    drop(guard);
     if out.imported.is_empty() && !out.errors.is_empty() {
         return Err(host_err("ERR", out.errors.join("; ")));
     }
-    let mut items = placed(st, &out.imported).await.unwrap_or_else(|e| {
-        tracing::warn!(
-            "library.ingest: item ids of media {media_id} unreadable: {}",
-            e.message
-        );
-        HashMap::new()
-    });
+    if let Some(l) = &language {
+        sqlx::query(
+            r#"UPDATE editions SET language = $3 WHERE language IS NULL AND id = (
+                 SELECT id FROM editions WHERE "mediaId" = $1 AND family = $2 ORDER BY id LIMIT 1)"#,
+        )
+        .bind(media_id)
+        .bind(family.as_str())
+        .bind(l)
+        .execute(&st.db)
+        .await
+        .map_err(db_err)?;
+    }
+    drop(guard);
+    let mut items = placed(st, &out.imported).await?;
     if let Some(first) = out.imported.first() {
         let title: Option<String> = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
             .bind(media_id)
@@ -170,33 +191,30 @@ pub async fn run(
     }
     let single =
         (out.imported.len() == 1 && out.imported[0].episode_id.is_some()).then(|| &out.imported[0]);
-    if let Some(l) = language.as_deref().filter(|_| family != Family::Video) {
-        let editions: Vec<i32> = items.values().map(|(e, _)| *e).collect();
-        if let Err(e) =
-            sqlx::query("UPDATE editions SET language = $2 WHERE id = ANY($1) AND language IS NULL")
-                .bind(&editions)
-                .bind(l)
-                .execute(&st.db)
-                .await
-        {
-            tracing::warn!("library.ingest: language of the editions of media {media_id}: {e}");
-        }
-    }
     Ok(t::IngestResult {
         imported: out
             .imported
             .iter()
             .map(|i| {
-                let (edition, item_ids) = items.remove(&i.file_id).unwrap_or_default();
-                t::ImportedFile {
+                let (edition, item_ids) = match (items.remove(&i.file_id), video_edition) {
+                    (Some(p), _) => p,
+                    (None, Some(edition)) => (edition, vec![]),
+                    (None, None) => {
+                        return Err(host_err(
+                            "ERR",
+                            format!("library.ingest: \"{}\" has no item", i.relative_path),
+                        ));
+                    }
+                };
+                Ok(t::ImportedFile {
                     media_file_id: i.file_id as u32,
                     relative_path: i.relative_path.clone(),
                     quality: i.quality.clone(),
                     edition_id: video_edition.unwrap_or(edition) as u32,
                     item_ids,
-                }
+                })
             })
-            .collect(),
+            .collect::<Result<_, HostError>>()?,
         already_present: out.already_present.clone(),
         unit: single.and_then(|i| units::unit_ref(i.season_number, i.episode_number)),
     })
@@ -342,6 +360,46 @@ mod tests {
             1,
             "a retry lands in alreadyPresent"
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_retry_with_a_language_satisfies_the_want_and_another_language_is_refused(
+        db: PgPool,
+    ) {
+        let s = shelf(db).await;
+        run(&s.st, "p", request(&s, t::Family::Text, None, "dl.epub"))
+            .await
+            .unwrap();
+        async fn language(s: &Shelf) -> Option<String> {
+            sqlx::query_scalar("SELECT language FROM editions WHERE family = 'text'")
+                .fetch_one(&s.st.db)
+                .await
+                .unwrap()
+        }
+        assert_eq!(language(&s).await, None);
+        sqlx::query(r#"UPDATE wants SET language = 'fr' WHERE family = 'text'"#)
+            .execute(&s.st.db)
+            .await
+            .unwrap();
+        let again = run(
+            &s.st,
+            "p",
+            request(&s, t::Family::Text, Some("fr"), "dl.epub"),
+        )
+        .await
+        .unwrap();
+        assert!(again.imported.is_empty() && again.already_present.len() == 1);
+        assert_eq!(language(&s).await.as_deref(), Some("fr"));
+        let wants = crate::media::wants::list(&s.st.db, 1).await.unwrap();
+        assert!(wants.iter().any(|w| w.family == "text" && w.satisfied));
+        let other = request(&s, t::Family::Text, Some("de"), "de.epub");
+        let err = run(&s.st, "p", other).await.unwrap_err();
+        assert_eq!(err.code, "ERR_VALIDATION");
+        let files: i64 = sqlx::query_scalar("SELECT count(*) FROM media_files")
+            .fetch_one(&s.st.db)
+            .await
+            .unwrap();
+        assert_eq!(files, 1, "a refused language imports nothing");
     }
 
     #[sqlx::test(migrations = false)]

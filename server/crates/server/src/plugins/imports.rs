@@ -7,7 +7,6 @@ use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
 use crate::state::AppState;
-use fliks_domain::media::family::Family;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
@@ -173,13 +172,7 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 let family = family.map(super::served).transpose()?;
-                let Some(family) = super::acquisition::family_of(&app.db, media_id, family).await?
-                else {
-                    return Ok(None);
-                };
-                super::acquisition::context(&app, media_id, Some(family), group_id, item_id)
-                    .await
-                    .map_err(db_err)
+                super::acquisition::context(&app, media_id, family, group_id, item_id).await
             }
         )
     }
@@ -240,19 +233,7 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 let family = family.map(super::served).transpose()?;
-                let Some(family) = super::acquisition::family_of(&app.db, media_id, family).await?
-                else {
-                    return Ok(vec![]);
-                };
-                let scored = if family == Family::Video {
-                    let (season, episode) = units::video(unit.as_ref())?;
-                    super::acquisition::score(&app, media_id, season, episode, releases).await
-                } else if unit.is_some() {
-                    return Err(host_err("ERR_VALIDATION", "a book has no units"));
-                } else {
-                    super::acquisition::score_book(&app, media_id, family, releases).await
-                };
-                scored.map_err(db_err)
+                super::acquisition::score_any(&app, media_id, family, unit, releases).await
             }
         )
     }

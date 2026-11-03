@@ -269,15 +269,26 @@ pub async fn score(
     episode_n: Option<u32>,
     releases: Vec<t::CandidateRelease>,
 ) -> sqlx::Result<Vec<t::ScoredRelease>> {
-    let db = &st.db;
-    let Some(m) = media(db, media_id as i32).await? else {
+    let Some(m) = media(&st.db, media_id as i32).await? else {
         return Ok(vec![]);
     };
+    score_of(st, &m, season_n, episode_n, releases).await
+}
+
+/// `score` of an already loaded media.
+pub(super) async fn score_of(
+    st: &AppState,
+    m: &MediaRow,
+    season_n: Option<u32>,
+    episode_n: Option<u32>,
+    releases: Vec<t::CandidateRelease>,
+) -> sqlx::Result<Vec<t::ScoredRelease>> {
+    let db = &st.db;
     let (allowed, allowed_langs) = m.allowed();
     let titles = resolve_search_titles(&m.search(), None);
     let (size_by_quality, formats) = scoring_tables(db).await?;
-    let (season, episode) = season_and_episode(db, &m, season_n, episode_n).await?;
-    let files = files_for(db, &m, season.map(|s| s.0), episode.as_ref()).await?;
+    let (season, episode) = season_and_episode(db, m, season_n, episode_n).await?;
+    let files = files_for(db, m, season.map(|s| s.0), episode.as_ref()).await?;
     let quals: Vec<Option<&str>> = files.iter().map(|f| f.as_deref()).collect();
     let min_resolution = if m.qp_res_only == Some(true) && !files.is_empty() {
         max_resolution_from_quality_strings(&quals)
@@ -285,7 +296,7 @@ pub async fn score(
         0
     };
     let whole_series = m.kind.has_seasons() && season.is_none();
-    let (min_rank, max_rank) = match (!whole_series).then(|| classify(&m, &files)) {
+    let (min_rank, max_rank) = match (!whole_series).then(|| classify(m, &files)) {
         Some(Decision::Window { min, max, .. }) => (Some(i64::from(min)), max.map(i64::from)),
         _ => (None, None),
     };
@@ -296,7 +307,7 @@ pub async fn score(
         size_by_quality,
         source_min_seeders: inp.min_seeders,
         source_unknown_lang: inp.unknown_lang,
-        runtime_minutes: runtime_minutes(db, &m, season_n, episode_n).await?,
+        runtime_minutes: runtime_minutes(db, m, season_n, episode_n).await?,
         expected_title: Some(ExpectedTitle::Many(titles.expected_titles)),
         expected_season: season_n.map(i64::from),
         expected_episode: episode_n.map(i64::from),
