@@ -622,7 +622,7 @@ impl PluginRt {
         })
         .allow_ip_name_lookup(false)
         .socket_addr_check(|_, _| Box::pin(async { false }));
-        let data = env.cfg.runtime_dir.join("data").join(&*id);
+        let data = data_dir(&env.cfg.runtime_dir, &id);
         if std::fs::create_dir_all(&data).is_ok() {
             set_mode(&data, 0o700);
             b.preopened_dir(&data, "/data", FsPerms::ReadWrite)
@@ -762,6 +762,11 @@ mod calls;
 mod lane;
 pub use lane::*;
 mod supervision;
+
+/// The host side of the guest's `/data`.
+pub fn data_dir(runtime_dir: &std::path::Path, id: &str) -> PathBuf {
+    runtime_dir.join("data").join(id)
+}
 
 pub fn set_mode(p: &std::path::Path, mode: u32) {
     #[cfg(unix)]

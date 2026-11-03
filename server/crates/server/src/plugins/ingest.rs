@@ -8,7 +8,7 @@ use fliks_domain::language::parse_language_code;
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::json;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 /// `realpath` of `raw`, which must sit under the `realpath` of one of `roots`.
 pub fn contained(raw: &str, roots: &[String]) -> Result<PathBuf, HostError> {
@@ -36,9 +36,47 @@ pub fn contained(raw: &str, roots: &[String]) -> Result<PathBuf, HostError> {
     }
 }
 
+/// The guest's `/data/...` is the plugin's own data dir, an implicit ingest root: only plain
+/// components, no symlink as the file, and the real path must stay inside the real dir.
+fn in_data_dir(raw: &str, data: &Path) -> Option<Result<PathBuf, HostError>> {
+    let rest = raw.strip_prefix("/data/")?;
+    let denied = || {
+        host_err(
+            "ERR_DENIED",
+            format!("library.ingest: \"{raw}\" is outside the plugin data dir"),
+        )
+    };
+    if !Path::new(rest)
+        .components()
+        .all(|c| matches!(c, Component::Normal(_)))
+    {
+        return Some(Err(denied()));
+    }
+    let file = data.join(rest);
+    let checked = match std::fs::symlink_metadata(&file) {
+        Ok(m) if m.is_symlink() => return Some(Err(denied())),
+        Ok(_) => dunce::canonicalize(&file).and_then(|f| Ok((f, dunce::canonicalize(data)?))),
+        Err(e) => Err(e),
+    };
+    Some(match checked {
+        Ok((file, root)) if file.starts_with(&root) => Ok(file),
+        Ok(_) => Err(denied()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(host_err(
+            "ERR_NOT_FOUND",
+            format!("library.ingest: \"{raw}\" does not exist"),
+        )),
+        Err(e) => Err(host_err("ERR", format!("library.ingest: \"{raw}\": {e}"))),
+    })
+}
+
+fn resolved(raw: &str, roots: &[String], data: &Path) -> Result<PathBuf, HostError> {
+    contained(raw, roots).or_else(|e| in_data_dir(raw, data).unwrap_or(Err(e)))
+}
+
 pub async fn run(
     st: &AppState,
     id: &str,
+    data: &Path,
     r: t::IngestRequest,
 ) -> Result<t::IngestResult, HostError> {
     let family = super::served(r.family)?;
@@ -63,7 +101,8 @@ pub async fn run(
     .await
     .map_err(|e| host_err("ERR", e.to_string()))?
     .unwrap_or_default();
-    if roots.is_empty() {
+    if roots.is_empty() && (r.paths.is_empty() || r.paths.iter().any(|p| !p.starts_with("/data/")))
+    {
         return Err(host_err(
             "ERR_DENIED",
             format!("library.ingest: no ingestRoots configured for plugin \"{id}\""),
@@ -73,7 +112,7 @@ pub async fn run(
         .paths
         .iter()
         .map(|p| {
-            contained(p, &roots).map(|path| library::File {
+            resolved(p, &roots, data).map(|path| library::File {
                 path,
                 episode_id: None,
             })
@@ -228,6 +267,7 @@ mod tests {
     struct Shelf {
         st: AppState,
         dl: PathBuf,
+        data: PathBuf,
     }
 
     /// A book (1) wished in text and audio, a plugin `p` allowed to ingest from `dl`.
@@ -237,8 +277,8 @@ mod tests {
             "fliks-plugin-books-{}",
             crate::config::random_hex(6)
         ));
-        let (books, dl) = (dir.join("books"), dir.join("dl"));
-        for d in [&books, &dl] {
+        let (books, dl, data) = (dir.join("books"), dir.join("dl"), dir.join("data"));
+        for d in [&books, &dl, &data] {
             std::fs::create_dir_all(d).unwrap();
         }
         sqlx::query(
@@ -265,7 +305,7 @@ mod tests {
             crate::config::Config::from_lookup(|_| None),
             "0123456789abcdef0123456789abcdef",
         );
-        Shelf { st, dl }
+        Shelf { st, dl, data }
     }
 
     fn request(
@@ -294,6 +334,7 @@ mod tests {
         let r = run(
             &s.st,
             "p",
+            &s.data,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -320,6 +361,7 @@ mod tests {
         let again = run(
             &s.st,
             "p",
+            &s.data,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -354,9 +396,14 @@ mod tests {
     #[sqlx::test(migrations = false)]
     async fn a_second_language_of_a_family_lands_in_its_own_edition(db: PgPool) {
         let s = shelf(db).await;
-        run(&s.st, "p", request(&s, t::Family::Text, None, "dl.epub"))
-            .await
-            .unwrap();
+        run(
+            &s.st,
+            "p",
+            &s.data,
+            request(&s, t::Family::Text, None, "dl.epub"),
+        )
+        .await
+        .unwrap();
         sqlx::query(r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'text', 'fr')"#)
             .execute(&s.st.db)
             .await
@@ -369,6 +416,7 @@ mod tests {
         let fr = run(
             &s.st,
             "p",
+            &s.data,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -395,6 +443,7 @@ mod tests {
         let again = run(
             &s.st,
             "p",
+            &s.data,
             request(&s, t::Family::Text, Some("fr"), "dl.epub"),
         )
         .await
@@ -415,26 +464,89 @@ mod tests {
         let s = shelf(db).await;
         let code = |r: Result<t::IngestResult, HostError>| r.unwrap_err().code;
         let epub = request(&s, t::Family::Audio, None, "a.epub");
-        assert_eq!(code(run(&s.st, "p", epub).await), "ERR_VALIDATION");
+        assert_eq!(code(run(&s.st, "p", &s.data, epub).await), "ERR_VALIDATION");
         let epub = request(&s, t::Family::Video, None, "b.epub");
-        assert_eq!(code(run(&s.st, "p", epub).await), "ERR_VALIDATION");
+        assert_eq!(code(run(&s.st, "p", &s.data, epub).await), "ERR_VALIDATION");
         let language = request(&s, t::Family::Video, Some("fr"), "c.epub");
-        assert_eq!(code(run(&s.st, "p", language).await), "ERR_VALIDATION");
+        assert_eq!(
+            code(run(&s.st, "p", &s.data, language).await),
+            "ERR_VALIDATION"
+        );
         let bad = request(&s, t::Family::Text, Some("zz zz"), "d.epub");
-        assert_eq!(code(run(&s.st, "p", bad).await), "ERR_VALIDATION");
+        assert_eq!(code(run(&s.st, "p", &s.data, bad).await), "ERR_VALIDATION");
         let image = request(&s, t::Family::Image, None, "e.epub");
-        assert_eq!(code(run(&s.st, "p", image).await), "unsupported-family");
+        assert_eq!(
+            code(run(&s.st, "p", &s.data, image).await),
+            "unsupported-family"
+        );
         let mut gone = request(&s, t::Family::Text, None, "f.epub");
         gone.media_id = 99;
-        assert_eq!(code(run(&s.st, "p", gone).await), "ERR_NOT_FOUND");
+        assert_eq!(code(run(&s.st, "p", &s.data, gone).await), "ERR_NOT_FOUND");
         let mut outside = request(&s, t::Family::Text, None, "g.epub");
         outside.paths = vec![std::env::temp_dir().to_string_lossy().into_owned()];
-        assert_eq!(code(run(&s.st, "p", outside).await), "ERR_DENIED");
+        assert_eq!(code(run(&s.st, "p", &s.data, outside).await), "ERR_DENIED");
         let none: i64 = sqlx::query_scalar("SELECT count(*) FROM media_files")
             .fetch_one(&s.st.db)
             .await
             .unwrap();
         assert_eq!(none, 0);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_file_in_the_plugin_data_dir_is_ingested_and_moved(db: PgPool) {
+        let s = shelf(db).await;
+        std::fs::write(s.data.join("dl.epub"), b"book").unwrap();
+        sqlx::query(r#"UPDATE plugin_registrations SET "ingestRoots" = '{}'"#)
+            .execute(&s.st.db)
+            .await
+            .unwrap();
+        let mut req = request(&s, t::Family::Text, None, "unused.epub");
+        req.paths = vec!["/data/dl.epub".into()];
+        req.transfer = t::TransferMode::Move;
+        let r = run(&s.st, "p", &s.data, req).await.unwrap();
+        assert_eq!(r.imported.len(), 1);
+        assert!(
+            !s.data.join("dl.epub").exists(),
+            "a move empties the scratch"
+        );
+        let mut out = request(&s, t::Family::Text, None, "x.epub");
+        out.paths = vec!["/data/../dl/x.epub".into()];
+        assert_eq!(
+            run(&s.st, "p", &s.data, out).await.unwrap_err().code,
+            "ERR_DENIED"
+        );
+        let mut host = request(&s, t::Family::Text, None, "y.epub");
+        host.paths = vec![s.dl.join("y.epub").to_string_lossy().into_owned()];
+        assert_eq!(
+            run(&s.st, "p", &s.data, host).await.unwrap_err().code,
+            "ERR_DENIED"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_data_dir_root_refuses_escapes() {
+        let base = std::env::temp_dir().join(format!("fliks-ingest-data-{}", std::process::id()));
+        let (data, outside) = (base.join("data"), base.join("outside"));
+        std::fs::create_dir_all(data.join("sub")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(data.join("sub/a.epub"), b"x").unwrap();
+        std::fs::write(outside.join("b.epub"), b"x").unwrap();
+        std::os::unix::fs::symlink(outside.join("b.epub"), data.join("file.epub")).unwrap();
+        std::os::unix::fs::symlink(&outside, data.join("dir")).unwrap();
+        std::os::unix::fs::symlink(data.join("sub/a.epub"), data.join("inner.epub")).unwrap();
+        let code = |p: &str| in_data_dir(p, &data).unwrap().unwrap_err().code;
+        assert!(in_data_dir("/data/sub/a.epub", &data).unwrap().is_ok());
+        assert_eq!(code("/data/file.epub"), "ERR_DENIED");
+        assert_eq!(code("/data/inner.epub"), "ERR_DENIED");
+        assert_eq!(code("/data/dir/b.epub"), "ERR_DENIED");
+        assert_eq!(code("/data/../outside/b.epub"), "ERR_DENIED");
+        assert_eq!(code("/data/sub/../../outside/b.epub"), "ERR_DENIED");
+        assert_eq!(code("/data//sub/./a.epub"), "ERR_DENIED");
+        assert_eq!(code("/data/nope.epub"), "ERR_NOT_FOUND");
+        assert!(in_data_dir("/dataX/a.epub", &data).is_none());
+        assert!(in_data_dir("/data", &data).is_none());
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]

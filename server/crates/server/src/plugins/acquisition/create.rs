@@ -1,6 +1,9 @@
 //! `media.resolveOrCreate` (`plugins.md` rule 57).
 use super::*;
-use crate::media::{external_ids, write::import_in};
+use crate::media::{
+    external_ids,
+    write::{book_import, import_in},
+};
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
 use crate::requests::{TitleKey, lock_titles};
@@ -16,7 +19,7 @@ pub async fn resolve_or_create(
     folder_id: Option<u32>,
 ) -> Result<u32, HostError> {
     let kind = MediaKind::parse(kind)
-        .filter(|k| k.families().contains(&Family::Video))
+        .filter(|k| k.families().contains(&Family::Video) || *k == MediaKind::Book)
         .ok_or_else(|| host_err("unsupported-kind", format!("kind \"{kind}\" is not served")))?;
     let entries = served_entries(st, kind, ids)?;
     let library = library_id
@@ -100,17 +103,21 @@ async fn create(
     (library, folder): (Option<i32>, Option<i32>),
     links: Vec<(Namespace, String)>,
 ) -> Result<i32, HostError> {
-    match import_in(
-        st,
-        kind,
-        (ns, value),
-        (None, None),
-        (library, folder),
-        None,
-        (None, links),
-    )
-    .await
-    {
+    let created = if kind == MediaKind::Book {
+        book_import::create_for_plugin(st, (ns, value), (library, folder), links).await
+    } else {
+        import_in(
+            st,
+            kind,
+            (ns, value),
+            (None, None),
+            (library, folder),
+            None,
+            (None, links),
+        )
+        .await
+    };
+    match created {
         Ok(id) => Ok(id),
         // Held by an import that does not take the title lock: the media exists now.
         Err(e) if e.status() == 409 => external_ids::find(&st.db, kind, ns, value)

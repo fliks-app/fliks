@@ -450,7 +450,8 @@ impl Plugins {
             if delete_data && fliks_domain::plugins::legal_plugin_id(id) {
                 super::db::deprovision(&self.db, id).await?;
                 super::namespaces::delete_data(&self.db, id).await?;
-                let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
+                let _ =
+                    std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
             }
             return Ok(());
         };
@@ -499,7 +500,7 @@ impl Plugins {
         }
         packages::delete(&self.db, id).await?;
         if delete_data {
-            let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
+            let _ = std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
         }
         self.fk_warnings.lock_clean().remove(id);
         Ok(())
