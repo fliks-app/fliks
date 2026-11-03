@@ -43,6 +43,8 @@ const SEEK_STALL_GRACE_MS = 32_000;
 const MAX_RECOVER_ATTEMPTS = 3;
 const RECOVER_CONFIRM_MS = 5_000;
 const RESUME_RETRY_MS = 5_000;
+/** A recovery that has played no frame this long after its first trigger ends on the error card. */
+const RECOVERY_DEADLINE_MS = 45_000;
 
 /** Stall watchdog, lost-session recovery with backoff, offline parking with one in-place retry, and the
  *  wake-gap resume. Driven by the player's 1 s tick. */
@@ -63,6 +65,10 @@ export class RecoveryController {
   private confirmAt = 0;
   /** One in-place retry per outage: if it fails too, the next recovery mints a new session. */
   private retriedInPlace = false;
+  /** When the recovery in progress gives up, whatever it is waiting on; 0 when none runs. */
+  private deadlineAt = 0;
+  /** Bumped by a give-up, so a reload still in flight from before it is dropped when it settles. */
+  private gen = 0;
 
   /** Last playhead position and when seen: no advance for the stall timeout while playing reloads. */
   private lastProgressPos = 0;
@@ -95,7 +101,12 @@ export class RecoveryController {
   }
 
   dispose(): void {
+    this.clearRetry();
+  }
+
+  private clearRetry(): void {
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 
   /** Re-baseline the stall watchdog so the next window starts from the current playhead; call wherever the
@@ -146,8 +157,13 @@ export class RecoveryController {
   /** Ticked once a second; detects a frozen playhead during intended playback and routes it through the
    *  lost-session recovery (re-mint sid + reload at position). */
   checkStall(): void {
+    if (this.host.isDestroyed()) return;
+    if (this.deadlineAt && Date.now() >= this.deadlineAt) {
+      this.giveUp();
+      return;
+    }
     const engine = this.host.engine();
-    if (this.host.isDestroyed() || !engine) return;
+    if (!engine) return;
     if (this.host.isCasting()) return;
     // Not playing (yet): keep the baseline fresh. A fatal-no-retry error also bails: a fresh sid can't fix a
     // codec the browser rejects, so show the terminal error instead of flapping the card/spinner.
@@ -204,6 +220,7 @@ export class RecoveryController {
     if (this.host.reloadInFlight()) {
       this.host.setRecovering(false);
       this.episode = null;
+      this.deadlineAt = 0;
       return;
     }
     if (this.retryTimer) return; // a backoff retry is already queued
@@ -215,6 +232,7 @@ export class RecoveryController {
     if (this.host.isCasting()) return;
     const engine = this.host.engine();
     if (!engine || !this.host.hasMedia()) return;
+    this.deadlineAt ||= Date.now() + RECOVERY_DEADLINE_MS;
     if (!this.host.isOnline()) {
       this.retriedInPlace = false;
       this.whenOnline ??= { reason, frozenSince };
@@ -223,15 +241,18 @@ export class RecoveryController {
     }
     // The server keeps the session through a short outage: re-prepare the loaded stream, keeping the last frame up.
     if (afterOffline && !this.retriedInPlace && engine.retry) {
+      const gen = this.gen;
       this.recovering = true;
       try {
-        if (await engine.retry()) {
+        const retried = await engine.retry();
+        if (gen !== this.gen) return;
+        if (retried) {
           this.retriedInPlace = true;
           this.awaitConfirm();
           return;
         }
       } finally {
-        this.recovering = false;
+        if (gen === this.gen) this.recovering = false;
       }
     }
     // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the wait
@@ -251,8 +272,10 @@ export class RecoveryController {
     // again would re-enter at 0 and loop. Cleared only after playback sustains for the confirm window.
     this.attempts += 1;
     const pos = this.host.resumePosition();
+    const gen = this.gen;
     try {
       await this.host.reloadSession(pos);
+      if (gen !== this.gen) return;
       const episode = this.episode;
       this.episode = null;
       this.host.reportRecovery(
@@ -261,6 +284,7 @@ export class RecoveryController {
       );
       this.awaitConfirm();
     } catch (e) {
+      if (gen !== this.gen) return;
       if (!this.host.isOnline()) {
         this.attempts -= 1;
         this.whenOnline ??= { reason };
@@ -276,14 +300,17 @@ export class RecoveryController {
         }, backoff);
       }
     } finally {
-      this.recovering = false;
-      this.host.graceAfterReload();
+      if (gen === this.gen) {
+        this.recovering = false;
+        this.host.graceAfterReload();
+      }
     }
   }
 
   /** Keeps the episode counter until the recovered stream proves it plays ({@link checkStall} confirms), so a
    *  re-fail keeps counting. */
   private awaitConfirm(): void {
+    this.deadlineAt = 0;
     this.resetStallWatchdog();
     this.host.setRecovering(false);
     this.confirmPending = true;
@@ -293,6 +320,11 @@ export class RecoveryController {
   /** The terminal card means playback is over: an engine left loaded would keep buffering and play on behind
    *  it once the network comes back. */
   private giveUp(e?: unknown): void {
+    this.gen += 1;
+    this.recovering = false;
+    this.deadlineAt = 0;
+    this.whenOnline = null;
+    this.clearRetry();
     this.episode = null;
     this.host.setRecovering(false);
     void this.host.engine()?.unload();

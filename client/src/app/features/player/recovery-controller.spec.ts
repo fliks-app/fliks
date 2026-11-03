@@ -107,6 +107,42 @@ describe('RecoveryController', () => {
     expect(host.failWith).toHaveBeenCalledWith(undefined, { source: 'session' });
   });
 
+  it('a reload that never plays ends on the error card at the deadline; its late settle is dropped', async () => {
+    let settle!: () => void;
+    const { ctl, host, engine } = setup({
+      reloadSession: vi.fn(() => new Promise<void>((r) => (settle = r))),
+    });
+    void ctl.recoverFromLostSession('stall');
+    await flush();
+    vi.advanceTimersByTime(44_000);
+    ctl.checkStall();
+    expect(host.failWith).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1_000);
+    ctl.checkStall();
+    expect(engine.unload).toHaveBeenCalled();
+    expect(host.failWith).toHaveBeenCalledWith(undefined, { source: 'session' });
+    expect(ctl.active).toBe(false);
+
+    settle();
+    await flush();
+    expect(host.reportRecovery).not.toHaveBeenCalled();
+  });
+
+  it('a recovery parked offline past the deadline ends on the error card', async () => {
+    const { ctl, host, setOnline } = setup();
+    setOnline(false);
+    await ctl.recoverFromLostSession('stall');
+    vi.advanceTimersByTime(45_000);
+    ctl.checkStall();
+    expect(host.failWith).toHaveBeenCalledWith(undefined, { source: 'session' });
+
+    setOnline(true);
+    ctl.tickClockWatch();
+    await flush();
+    expect(host.reloadSession).not.toHaveBeenCalled();
+  });
+
   it('a stall while offline spends no attempt and recovers once back online', async () => {
     const { ctl, host, setOnline } = setup();
     setOnline(false);
