@@ -278,13 +278,13 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
 
 /// A book request approval: the work in the request's library with the requested editions wished; a work
 /// already in the library gets the missing ones added to its wants. `readable` is the requester's library
-/// scope (`None`: no requester): an existing work outside it is refused.
+/// scope: an existing work outside it is refused.
 pub async fn import_book_for_request(
     st: &AppState,
     work: &str,
     wants: &[WantSpec],
     (library, folder): (Option<i32>, Option<i32>),
-    (added_by, readable): (Option<i32>, Option<&[i32]>),
+    (added_by, readable): (Option<i32>, &[i32]),
 ) -> Result<i32, AppError> {
     if let Some(id) = add_to_existing(st, work, wants, readable).await? {
         return Ok(id);
@@ -319,7 +319,7 @@ async fn add_to_existing(
     st: &AppState,
     work: &str,
     wants: &[WantSpec],
-    readable: Option<&[i32]>,
+    readable: &[i32],
 ) -> Result<Option<i32>, AppError> {
     let Some(id) = external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await? else {
         return Ok(None);
@@ -333,9 +333,7 @@ async fn add_to_existing(
     let Some(library) = library else {
         return Ok(None);
     };
-    if let Some(ids) = readable
-        && !library.is_some_and(|l| ids.contains(&l))
-    {
+    if !library.is_some_and(|l| readable.contains(&l)) {
         return Err(AppError::forbidden(NOT_READABLE));
     }
     let held: Vec<(String, Option<String>)> =

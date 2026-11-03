@@ -280,9 +280,9 @@ fn some_id(id: Option<i32>) -> Option<i32> {
 pub async fn ensure_media(
     st: &AppState,
     spec: ImportSpec,
-    added_by: Option<i32>,
+    (added_by, approver): (Option<i32>, i32),
 ) -> Res<Option<i32>> {
-    let media_id = match services::import_title(st, spec.clone(), added_by).await {
+    let media_id = match services::import_title(st, spec.clone(), (added_by, approver)).await {
         Ok(id) => id,
         Err(e) if e.status != 409 || spec.title.media_type == MediaKind::Book => {
             return Err(e.into());
@@ -357,7 +357,7 @@ fn id_obj(id: Option<i32>) -> Value {
 }
 
 /// A lock wait past `lock_timeout` answers busy (409 for the title lock, else 503), not a database fault.
-fn lock_err(e: sqlx::Error, title: bool) -> AppError {
+pub(super) fn lock_err(e: sqlx::Error, title: bool) -> AppError {
     if e.as_database_error().and_then(|d| d.code()).as_deref() != Some("55P03") {
         return e.into();
     }
@@ -371,13 +371,99 @@ fn lock_err(e: sqlx::Error, title: bool) -> AppError {
     }
 }
 
+/// What a create leaves to do once its row is committed.
+struct Added {
+    id: i32,
+    user: i32,
+    key: TitleKey,
+    title: String,
+    seasons: Option<Vec<i64>>,
+}
+
+/// A request handler is dropped when its client leaves; the post-commit work runs in a task so it completes.
+async fn settled<T>(task: tokio::task::JoinHandle<Res<T>>) -> Res<T> {
+    task.await
+        .map_err(|e| AppError::internal(format!("request task failed: {e}")))?
+}
+
+/// The media an import that failed late had already linked to the request (`on_media_imported` adopts it).
+async fn adopted(st: &AppState, id: i32) -> Option<i32> {
+    match db::find(&st.db, id).await {
+        Ok(Some(r)) if r.status != "declined" => r.media_id,
+        _ => None,
+    }
+}
+
+/// Rule 14: the import of an auto-approved create, then its events and notification.
+async fn finish_create(st: AppState, n: Added, spec: Option<ImportSpec>) -> Res<Option<i32>> {
+    let auto = spec.is_some();
+    let mut media_id = None;
+    if let Some(spec) = spec {
+        media_id = match ensure_media(&st, spec, (Some(n.user), n.user)).await {
+            Ok(m) => m,
+            Err(e) => match adopted(&st, n.id).await {
+                Some(m) => Some(m),
+                None => {
+                    if let Err(d) = db::delete_claimed(&st.db, n.id, n.user).await {
+                        tracing::warn!("Request #{}: failed import left its row: {d}", n.id);
+                    }
+                    return Err(e);
+                }
+            },
+        };
+        if let Some(m) = media_id {
+            db::link_if_unlinked(&st.db, n.id, m).await?;
+        }
+    }
+    if db::find(&st.db, n.id).await?.is_none() {
+        return Err(not_found(n.id));
+    }
+    let media_type = n.key.media_type;
+    st.hub.emit_domain(DomainEvent::RequestCreated {
+        request_id: i64::from(n.id),
+        media_type,
+        external_ids: n.key.refs(),
+        user_id: Some(i64::from(n.user)),
+        kind: "add".into(),
+        seasons: n.seasons.clone(),
+    });
+    if auto {
+        if let Some(m) = media_id.filter(|_| media_type == MediaKind::Book) {
+            // the book import runs no request hook, which is what asks the acquisition for a video title
+            st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
+                media_ids: vec![i64::from(m)],
+                reason: "request-approved".into(),
+            });
+        }
+        st.hub.emit_domain(DomainEvent::RequestApproved {
+            request_id: i64::from(n.id),
+            media_id: media_id.map(i64::from),
+            media_type,
+            external_ids: n.key.refs(),
+            seasons: n.seasons,
+            approved_by_user_id: Some(i64::from(n.user)),
+        });
+    }
+    let event = if auto {
+        "request.approved"
+    } else {
+        "request.created"
+    };
+    notify(
+        &st,
+        event,
+        json!({"title": n.title, "mediaType": media_type}),
+    );
+    Ok(media_id)
+}
+
 pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Value> {
     if dto.delete {
         return create_delete(st, a, &dto).await;
     }
     let key = dto.key();
     // network first: no lock, no connection held while TMDB answers
-    let candidates = rules::candidates(st, &dto).await?;
+    let candidates = rules::candidates(st, a, &dto).await?;
     let limited = a.user.quotas.limit(dto.media_type) != 0;
     // waiters queue here without a connection, so the lock holder can always get the ones it needs
     let turn = match limited {
@@ -455,57 +541,23 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     tx.commit().await?;
     drop(turn);
 
-    let mut media_id = None;
-    if auto {
-        // the row is committed approved, so `on_media_imported` links it; a failure takes the row back out
-        let spec = ImportSpec {
-            title: key.clone(),
-            quality_profile_id: dto.quality_profile_id,
-            language_profile_id: dto.language_profile_id,
-            library_id: Some(library_id),
-            folder_id: dto.folder_id,
-            seasons: dto.seasons.clone(),
-            wants: dto.wants.clone(),
-        };
-        media_id = match ensure_media(st, spec, Some(a.user.id)).await {
-            Ok(m) => m,
-            Err(e) => {
-                db::delete_claimed(&st.db, id, a.user.id).await?;
-                return Err(e);
-            }
-        };
-        if let Some(m) = media_id {
-            db::link_if_unlinked(&st.db, id, m).await?;
-        }
-    }
-    st.hub.emit_domain(DomainEvent::RequestCreated {
-        request_id: i64::from(id),
-        media_type: dto.media_type,
-        external_ids: key.refs(),
-        user_id: Some(i64::from(a.user.id)),
-        kind: "add".into(),
+    let spec = auto.then(|| ImportSpec {
+        title: key.clone(),
+        quality_profile_id: dto.quality_profile_id,
+        language_profile_id: dto.language_profile_id,
+        library_id: Some(library_id),
+        folder_id: dto.folder_id,
         seasons: dto.seasons.clone(),
+        wants: dto.wants.clone(),
     });
-    if auto {
-        st.hub.emit_domain(DomainEvent::RequestApproved {
-            request_id: i64::from(id),
-            media_id: media_id.map(i64::from),
-            media_type: dto.media_type,
-            external_ids: key.refs(),
-            seasons: dto.seasons.clone(),
-            approved_by_user_id: Some(i64::from(a.user.id)),
-        });
-    }
-    let event = if auto {
-        "request.approved"
-    } else {
-        "request.created"
+    let added = Added {
+        id,
+        user: a.user.id,
+        key: key.clone(),
+        title: dto.title.clone(),
+        seasons: dto.seasons.clone(),
     };
-    notify(
-        st,
-        event,
-        json!({"title": dto.title, "mediaType": dto.media_type}),
-    );
+    let media_id = settled(tokio::spawn(finish_create(st.clone(), added, spec))).await?;
 
     let art = art_wait(st, id, key).await;
     let mut row = row_json(st, id).await?;
@@ -700,6 +752,12 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     if row.kind == "delete" {
         return approve_delete(st, a, &row).await;
     }
+    settled(tokio::spawn(approve_add(st.clone(), a.user.id, id, row))).await
+}
+
+/// Rule 23 steps 5-11, in a task so a client that leaves cannot strand the claimed row.
+async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value> {
+    let st = &st;
     let key = row.key();
     let mut lock = st.db.begin().await?;
     db::lock_title(&mut lock, &key).await?;
@@ -707,7 +765,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     if existing.is_none() {
         services::assert_import_target(st, row.media_type, row.library_id).await?;
     }
-    if !db::claim_approval(&st.db, id, a.user.id, None).await? {
+    if !db::claim_approval(&st.db, id, by, None).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
     let spec = ImportSpec {
@@ -719,13 +777,21 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         seasons: row.seasons.as_ref().map(|s| s.0.clone()),
         wants: row.wants.as_ref().map(|w| w.0.clone()),
     };
-    let media = match ensure_media(st, spec, row.user_id).await {
+    let media = match ensure_media(st, spec, (row.user_id, by)).await {
         Ok(m) => m,
-        Err(e) => {
-            db::rollback_to_pending(&st.db, id, a.user.id).await?;
-            return Err(e);
-        }
+        Err(e) => match adopted(st, id).await {
+            Some(m) => Some(m),
+            None => {
+                if let Err(d) = db::rollback_to_pending(&st.db, id, by).await {
+                    tracing::warn!("Request #{id}: failed approval left its row: {d}");
+                }
+                return Err(e);
+            }
+        },
     };
+    if db::find(&st.db, id).await?.is_none() {
+        return Err(not_found(id));
+    }
     if let Some(m) = media {
         db::link_if_unlinked(&st.db, id, m).await?;
         st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
@@ -739,7 +805,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         media_type: row.media_type,
         external_ids: key.refs(),
         seasons: row.seasons.map(|s| s.0),
-        approved_by_user_id: Some(i64::from(a.user.id)),
+        approved_by_user_id: Some(i64::from(by)),
     });
     notify(st, "request.approved", json!({"title": row.title}));
     Ok(Value::Object(row_json(st, id).await?))

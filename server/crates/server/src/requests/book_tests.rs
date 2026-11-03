@@ -334,7 +334,7 @@ async fn concurrent_approvals_of_one_work_keep_every_edition_wished(pool: PgPool
                 "OL6W",
                 &[w],
                 (Some(1), None),
-                (Some(2), None),
+                (Some(2), &[1]),
             )
             .await
             .map_err(|e| e.status())
@@ -517,4 +517,71 @@ async fn a_book_request_refuses_a_request_level_profile_patch(pool: PgPool) {
             .0,
         200
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_lock_timeout_answers_busy_not_500(pool: PgPool) {
+    use super::{TitleKey, db, flow::lock_err};
+    use fliks_domain::media::kind::MediaKind;
+    let key = TitleKey::tmdb(MediaKind::Movie, 1);
+    let mut holder = pool.begin().await.unwrap();
+    db::lock_title(&mut holder, &key).await.unwrap();
+    db::lock_user_quota(&mut holder, 2).await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SET LOCAL lock_timeout = '100ms'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let e = db::lock_title(&mut tx, &key).await.unwrap_err();
+    assert_eq!(lock_err(e, true).status().as_u16(), 409);
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SET LOCAL lock_timeout = '100ms'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let e = db::lock_user_quota(&mut tx, 2).await.unwrap_err();
+    assert_eq!(lock_err(e, false).status().as_u16(), 503);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_approved_request_without_media_returns_to_pending_after_an_hour(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", None)]))
+        .await;
+    let id = r["id"].as_i64().unwrap() as i32;
+    let age = async |hours: i32| {
+        sqlx::query(
+            "UPDATE requests SET status = 'approved', \"approvedById\" = 3, \"mediaId\" = NULL WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+        sqlx::query("ALTER TABLE requests DISABLE TRIGGER set_updated_at")
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE requests SET \"updatedAt\" = now() - make_interval(hours => $2) WHERE id = $1",
+        )
+        .bind(id)
+        .bind(hours)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+        sqlx::query("ALTER TABLE requests ENABLE TRIGGER set_updated_at")
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        super::db::reset_orphans(&c.pool).await.unwrap()
+    };
+    assert_eq!(age(0).await, 0, "an import may still be running");
+    assert_eq!(age(2).await, 1);
+    let status: String = sqlx::query_scalar("SELECT status::text FROM requests WHERE id = $1")
+        .bind(id)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "pending");
 }

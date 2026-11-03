@@ -474,6 +474,18 @@ pub async fn delete_claimed(db: &PgPool, id: i32, by: i32) -> sqlx::Result<()> {
     Ok(())
 }
 
+/// Gives back the approved ADD rows that never got a media within the hour: an import cut short by a restart.
+pub async fn reset_orphans(db: &PgPool) -> sqlx::Result<u64> {
+    sqlx::query(
+        r#"UPDATE requests SET status = 'pending', "approvedById" = NULL
+           WHERE kind = 'add' AND status = 'approved' AND "mediaId" IS NULL
+             AND "updatedAt" < now() - interval '1 hour'"#,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
 /// Links the media of an approval that imported nothing itself (rule 23 step 8).
 pub async fn link_if_unlinked(db: &PgPool, id: i32, media_id: i32) -> sqlx::Result<()> {
     sqlx::query!(

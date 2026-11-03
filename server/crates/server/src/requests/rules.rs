@@ -106,8 +106,22 @@ pub struct Candidates {
     facts: Option<TitleFacts>,
 }
 
-pub async fn candidates(st: &AppState, dto: &CreateRequest) -> Res<Candidates> {
-    let rules = db::rules_enabled(&st.db).await?;
+/// A rule that names another user or role, or another media type, cannot match this create.
+fn could_match(c: &Value, a: &Authed, media_type: MediaKind) -> bool {
+    let (users, roles) = (ints(c, "userIds"), ints(c, "roleIds"));
+    (users.is_empty() && roles.is_empty()
+        || users.contains(&i64::from(a.user.id))
+        || a.user
+            .role_id
+            .is_some_and(|r| roles.contains(&i64::from(r))))
+        && c["mediaType"]
+            .as_str()
+            .is_none_or(|m| m == media_type.as_str())
+}
+
+pub async fn candidates(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Candidates> {
+    let mut rules = db::rules_enabled(&st.db).await?;
+    rules.retain(|r| could_match(&r.criteria.0, a, dto.media_type));
     let scoped = dto.seasons.as_deref().is_some_and(|s| !s.is_empty());
     let facts = if let Some(tmdb_id) = dto.key.tmdb_id()
         && rules.iter().any(|r| reads_metadata(&r.criteria.0, scoped))

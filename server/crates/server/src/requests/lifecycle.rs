@@ -166,6 +166,13 @@ impl Lifecycle {
 
     /// Rule 43: `on_import_complete` over every media with an open request, for events that never arrived.
     pub async fn reconcile(&self) {
+        match db::reset_orphans(&self.st.db).await {
+            Ok(0) => {}
+            Ok(n) => tracing::warn!(
+                "request reconcile: {n} approved request(s) without media back to pending"
+            ),
+            Err(e) => tracing::warn!("request reconcile failed to reset orphans: {e}"),
+        }
         let ids = match db::media_with_open_adds(&self.st.db).await {
             Ok(ids) => ids,
             Err(e) => return tracing::warn!("request reconcile failed: {e}"),

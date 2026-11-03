@@ -463,25 +463,32 @@ async fn auto_approval_by_user_role_and_library_imports_before_inserting(pool: P
         (Some(MOVIES), r["userId"].as_i64().map(|u| u as i32)),
         "the persisted destination and the requester as importer"
     );
+    // the import adopts the committed row and asks the acquisition before the request's own events
     let ev: Vec<DomainEvent> = domain(&mut c)
         .into_iter()
         .filter(|e| {
             matches!(
                 e,
-                DomainEvent::RequestCreated { .. } | DomainEvent::RequestApproved { .. }
+                DomainEvent::RequestCreated { .. }
+                    | DomainEvent::RequestApproved { .. }
+                    | DomainEvent::MediaAcquisitionRequested { .. }
             )
         })
         .collect();
-    assert!(matches!(
-        &ev[..],
-        [
-            DomainEvent::RequestCreated { .. },
-            DomainEvent::RequestApproved {
-                media_id: Some(_),
-                ..
-            }
-        ]
-    ));
+    assert!(
+        matches!(
+            &ev[..],
+            [
+                DomainEvent::MediaAcquisitionRequested { reason, .. },
+                DomainEvent::RequestCreated { .. },
+                DomainEvent::RequestApproved {
+                    media_id: Some(_),
+                    ..
+                }
+            ] if reason == "media-imported"
+        ),
+        "{ev:?}"
+    );
     assert_eq!(c.notified("request.approved").await.len(), 1);
 }
 

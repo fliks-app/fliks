@@ -179,24 +179,16 @@ pub async fn assert_import_target(
         .map_err(port)
 }
 
-/// The libraries the requester reaches; `None` when the request has no requester.
-async fn requester_libraries(
-    st: &AppState,
-    user: Option<i32>,
-) -> Result<Option<Vec<i32>>, sqlx::Error> {
-    let Some(user) = user.filter(|u| *u != 0) else {
-        return Ok(None);
-    };
+/// The libraries a user reaches: the requester's, or the approver's when the request has no requester.
+async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, sqlx::Error> {
     let Some((row, role)) = load_users(&st.db, Some(user), false).await?.pop() else {
-        return Ok(Some(vec![]));
+        return Ok(vec![]);
     };
     let perms = Permissions::from(
         role.as_ref().map_or(&[][..], |r| &r.permissions),
         row.is_admin,
     );
-    library_ids_of(&st.db, user, perms.can(Action::Manage, &Subject::All))
-        .await
-        .map(Some)
+    library_ids_of(&st.db, user, perms.can(Action::Manage, &Subject::All)).await
 }
 
 /// `importFromTmdb`, or the book import of a book request (it calls `Lifecycle::on_media_imported` itself
@@ -204,10 +196,10 @@ async fn requester_libraries(
 pub async fn import_title(
     st: &AppState,
     spec: ImportSpec,
-    added_by: Option<i32>,
+    (added_by, approver): (Option<i32>, i32),
 ) -> Result<i32, PortError> {
     if spec.title.media_type == MediaKind::Book {
-        let readable = requester_libraries(st, added_by)
+        let readable = libraries_of(st, added_by.filter(|u| *u != 0).unwrap_or(approver))
             .await
             .map_err(|e| port(e.into()))?;
         return import_book_for_request(
@@ -215,7 +207,7 @@ pub async fn import_title(
             &spec.title.external_id,
             spec.wants.as_deref().unwrap_or_default(),
             (spec.library_id, spec.folder_id),
-            (added_by, readable.as_deref()),
+            (added_by, &readable),
         )
         .await
         .map_err(port);
