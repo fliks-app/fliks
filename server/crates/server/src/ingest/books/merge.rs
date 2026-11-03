@@ -42,44 +42,42 @@ pub struct Part {
     pub info: Option<MediaInfo>,
 }
 
-/// The version to merge: in the first audio edition with an m4b-less multi-file version, the first
-/// such version, probed, in one folder and one work directory. A version never spans editions.
-pub fn pick(rows: &[Part]) -> Option<Vec<Part>> {
-    let edition = rows.iter().map(|r| r.edition).find(|e| {
-        let of: Vec<&Part> = rows.iter().filter(|r| r.edition == *e).collect();
-        of.iter().all(|r| r.quality != "m4b")
-            && of
-                .iter()
-                .any(|r| of.iter().filter(|o| o.version == r.version).count() > 1)
-    })?;
-    let rows: Vec<&Part> = rows.iter().filter(|r| r.edition == edition).collect();
-    let v = rows
-        .iter()
-        .map(|r| r.version)
-        .find(|v| rows.iter().filter(|r| r.version == *v).count() > 1)?;
-    let parts: Vec<Part> = rows
-        .into_iter()
-        .filter(|r| r.version == v)
-        .cloned()
-        .collect();
-    // What the engine would answer 400 to: too many parts, no duration, control characters.
-    if parts.len() > MAX_PARTS {
-        return None;
-    }
-    let dir = |p: &Part| work_dir(&p.rel.replace('\\', "/"));
-    parts
-        .iter()
-        .all(|p| {
-            p.folder_id == parts[0].folder_id
-                && dir(p) == dir(&parts[0])
-                && !p.rel.chars().any(char::is_control)
-                && p.info
-                    .as_ref()
-                    .and_then(|i| i.duration_seconds)
-                    .is_some_and(|d| d.is_finite() && d > 0.0)
-                && p.probe_version == Some(PROBE_VERSION)
-        })
-        .then_some(parts)
+/// The version to merge: in the first audio edition with no `m4b`, a version of several files, the
+/// first such version, probed, in one folder and one work directory, and not the one `failed`
+/// (a recorded fingerprint) names. A version never spans editions.
+pub fn pick(rows: &[Part], failed: Option<&str>) -> Option<Vec<Part>> {
+    let mut editions: Vec<i32> = rows.iter().map(|r| r.edition).collect();
+    editions.dedup();
+    editions.into_iter().find_map(|e| {
+        let of: Vec<&Part> = rows.iter().filter(|r| r.edition == e).collect();
+        if of.iter().any(|r| r.quality == "m4b") {
+            return None;
+        }
+        let v = of
+            .iter()
+            .map(|r| r.version)
+            .find(|v| of.iter().filter(|r| r.version == *v).count() > 1)?;
+        let parts: Vec<Part> = of.into_iter().filter(|r| r.version == v).cloned().collect();
+        // What the engine would answer 400 to: too many parts, no duration, control characters.
+        if parts.len() > MAX_PARTS {
+            return None;
+        }
+        let dir = |p: &Part| work_dir(&p.rel.replace('\\', "/"));
+        parts
+            .iter()
+            .all(|p| {
+                p.folder_id == parts[0].folder_id
+                    && dir(p) == dir(&parts[0])
+                    && !p.rel.chars().any(char::is_control)
+                    && p.info
+                        .as_ref()
+                        .and_then(|i| i.duration_seconds)
+                        .is_some_and(|d| d.is_finite() && d > 0.0)
+                    && p.probe_version == Some(PROBE_VERSION)
+            })
+            .then_some(parts)
+            .filter(|parts| failed != Some(fingerprint(parts).as_str()))
+    })
 }
 
 /// What a recorded failure is tied to: the merged version's files as the database knows them.
@@ -124,9 +122,9 @@ fn file_stem(title: &str) -> Option<String> {
     (!s.is_empty()).then_some(s)
 }
 
-/// `<work folder>/<name>.m4b` beside the parts, disc folders off; the name is the nearest folder
+/// `<work folder>/<name>[ (<language>)].m4b` beside the parts, disc folders off; the name is the nearest folder
 /// that is not a format name, else the title.
-pub fn output_rel(first: &str, title: &str) -> Option<String> {
+pub fn output_rel(first: &str, title: &str, language: Option<&str>) -> Option<String> {
     let dir = work_dir(&first.replace('\\', "/"));
     if dir.is_empty() {
         return None;
@@ -136,7 +134,8 @@ pub fn output_rel(first: &str, title: &str) -> Option<String> {
         .find(|s| !GENERIC.contains(&s.to_lowercase().as_str()))
         .map(str::to_owned)
         .or_else(|| file_stem(title))?;
-    Some(format!("{dir}/{name}.m4b"))
+    let lang = language.map(|l| format!(" ({l})")).unwrap_or_default();
+    Some(format!("{dir}/{name}{lang}.m4b"))
 }
 
 /// What a job result must match in the probe of the file before it is registered.
@@ -499,11 +498,15 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
     let _one = st.ingest.merging.lock(media).await;
     let _slot = st.ingest.merge_slot.lock().await;
     let rows = load(st, media).await.map_err(|e| e.to_string())?;
-    let Some(parts) = pick(&rows) else {
+    let prior = row(st, media).await.map_err(|e| e.to_string())?;
+    let failed_fp = prior
+        .as_ref()
+        .filter(|p| p.state == "failed")
+        .map(|p| p.fingerprint.as_str());
+    let Some(parts) = pick(&rows, failed_fp) else {
         return Ok(());
     };
     let fp = fingerprint(&parts);
-    let prior = row(st, media).await.map_err(|e| e.to_string())?;
     if prior.as_ref().is_some_and(|p| {
         p.fingerprint == fp && (p.state == "failed" || (p.state == "retry" && p.waiting))
     }) {
@@ -513,7 +516,8 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
         .fetch_one(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    let mut out_rel = output_rel(&parts[0].rel, &title).ok_or("no folder to write the m4b in")?;
+    let mut out_rel = output_rel(&parts[0].rel, &title, parts[0].language.as_deref())
+        .ok_or("no folder to write the m4b in")?;
     if let Some((p, job)) = prior
         .as_ref()
         .and_then(|p| p.job_id.as_deref().map(|j| (p, j)))
@@ -837,10 +841,10 @@ mod tests {
             part(2, 0, "T/b.mp3", "mp3"),
             part(3, 1, "T/c.flac", "flac"),
         ];
-        assert_eq!(pick(&mp3).unwrap().len(), 2);
-        assert!(pick(&mp3[..1]).is_none());
+        assert_eq!(pick(&mp3, None).unwrap().len(), 2);
+        assert!(pick(&mp3[..1], None).is_none());
         let both = [&mp3[..2], &[part(9, 1, "T/T.m4b", "m4b")]].concat();
-        assert!(pick(&both).is_none());
+        assert!(pick(&both, None).is_none());
     }
 
     #[test]
@@ -851,11 +855,23 @@ mod tests {
             p.language = Some("fr".into());
         });
         let en = [part(1, 0, "T/a.mp3", "mp3"), part(2, 0, "T/b.mp3", "mp3")];
-        let got = pick(&[&en[..], &fr[..]].concat()).unwrap();
+        let got = pick(&[&en[..], &fr[..]].concat(), None).unwrap();
         assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [1, 2]);
         let m4b = [part(9, 0, "T/T.m4b", "m4b")];
-        let got = pick(&[&m4b[..], &fr[..]].concat()).unwrap();
+        let got = pick(&[&m4b[..], &fr[..]].concat(), None).unwrap();
         assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [3, 4]);
+    }
+
+    #[test]
+    fn an_edition_with_a_recorded_failure_does_not_block_the_next() {
+        let en = [part(1, 0, "T/a.mp3", "mp3"), part(2, 0, "T/b.mp3", "mp3")];
+        let mut fr = [part(3, 0, "T/c.mp3", "mp3"), part(4, 0, "T/d.mp3", "mp3")];
+        fr.iter_mut().for_each(|p| p.edition = 2);
+        let rows = [&en[..], &fr[..]].concat();
+        let failed = fingerprint(&en);
+        let got = pick(&rows, Some(&failed)).unwrap();
+        assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [3, 4]);
+        assert!(pick(&en, Some(&failed)).is_none());
     }
 
     #[test]
@@ -865,14 +881,14 @@ mod tests {
                 .map(|i| part(i as i32, 0, &format!("T/{i}.mp3"), "mp3"))
                 .collect()
         };
-        assert!(pick(&rows(MAX_PARTS)).is_some());
-        assert!(pick(&rows(MAX_PARTS + 1)).is_none());
+        assert!(pick(&rows(MAX_PARTS), None).is_some());
+        assert!(pick(&rows(MAX_PARTS + 1), None).is_none());
         let mut r = rows(2);
         r[1].rel = "T/b\u{7}.mp3".into();
-        assert!(pick(&r).is_none());
+        assert!(pick(&r, None).is_none());
         let mut r = rows(2);
         r[1].info.as_mut().unwrap().duration_seconds = Some(0.0);
-        assert!(pick(&r).is_none());
+        assert!(pick(&r, None).is_none());
     }
 
     #[test]
@@ -884,25 +900,29 @@ mod tests {
     #[test]
     fn parts_must_share_a_directory_and_be_probed_and_the_fingerprint_follows_them() {
         let mut rows = vec![part(1, 0, "T/a.mp3", "mp3"), part(2, 0, "T/b.mp3", "mp3")];
-        assert!(pick(&rows).is_some());
+        assert!(pick(&rows, None).is_some());
         let before = fingerprint(&rows);
         rows[1].size = 2;
         assert_ne!(fingerprint(&rows), before);
         rows[1].rel = "T/Sub/b.mp3".into();
-        assert!(pick(&rows).is_none());
+        assert!(pick(&rows, None).is_none());
         rows[1].rel = "T/b.mp3".into();
         rows[1].probe_version = Some(0);
-        assert!(pick(&rows).is_none());
+        assert!(pick(&rows, None).is_none());
     }
 
     #[test]
     fn the_output_sits_in_the_work_folder_named_after_it() {
-        let rel = |p: &str| output_rel(p, "A/Title");
+        let rel = |p: &str| output_rel(p, "A/Title", None);
         assert_eq!(rel("A/T/CD1/01.mp3").as_deref(), Some("A/T/T.m4b"));
         assert_eq!(rel("T/01.mp3").as_deref(), Some("T/T.m4b"));
         assert_eq!(rel("Book/MP3/01.mp3").as_deref(), Some("Book/MP3/Book.m4b"));
         assert_eq!(rel("MP3/01.mp3").as_deref(), Some("MP3/A_Title.m4b"));
         assert_eq!(rel("01.mp3"), None);
+        assert_eq!(
+            output_rel("T/01.mp3", "A/Title", Some("fr")).as_deref(),
+            Some("T/T (fr).m4b")
+        );
     }
 
     #[test]

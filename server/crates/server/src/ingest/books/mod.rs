@@ -220,7 +220,7 @@ async fn known_paths(db: &PgPool, media: i32) -> sqlx::Result<Vec<String>> {
     .collect())
 }
 
-/// The files of the media's own work: the one of its linked files, else of the first book file of `new`.
+/// The files of the media's own work: the works of its linked files (one per language), else of the first book file of `new`.
 fn own_paths(known: &[String], new: &[String]) -> HashSet<String> {
     let all: Vec<String> = known.iter().chain(new).cloned().collect();
     let works = group::group(&all);
@@ -228,14 +228,16 @@ fn own_paths(known: &[String], new: &[String]) -> HashSet<String> {
         w.versions.iter().flat_map(|v| v.files.clone()).collect()
     };
     let first = new.iter().find(|p| classify(p).is_some());
+    let linked: Vec<&group::Work> = works
+        .iter()
+        .filter(|w| files_of(w).iter().any(|p| known.contains(p)))
+        .collect();
+    if !linked.is_empty() {
+        return linked.into_iter().flat_map(files_of).collect();
+    }
     works
         .iter()
-        .find(|w| files_of(w).iter().any(|p| known.contains(p)))
-        .or_else(|| {
-            works
-                .iter()
-                .find(|w| first.is_some_and(|f| files_of(w).contains(f)))
-        })
+        .find(|w| first.is_some_and(|f| files_of(w).contains(f)))
         .map(files_of)
         .unwrap_or_default()
 }
@@ -283,7 +285,8 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
     register_language(st, media, files, None).await
 }
 
-/// `register` with the new files joining the edition of `language` (rule 7).
+/// `register` with the new files joining the edition of `language` (rule 7); a request with a
+/// language skips the anchored checks, its names are the host's own.
 pub async fn register_language(
     st: &AppState,
     media: i32,
@@ -292,9 +295,10 @@ pub async fn register_language(
 ) -> Result<Registration, String> {
     let mut out = vec![];
     let mut conflicts = vec![];
-    let mut facts: Vec<(Family, Facts)> = vec![];
+    let mut facts: Vec<(Family, String, Facts)> = vec![];
     let mut cover = None;
-    let anchored = anchored(&st.db, media).await.map_err(|e| e.to_string())?;
+    let anchored =
+        language.is_none() && anchored(&st.db, media).await.map_err(|e| e.to_string())?;
     let files: Vec<&Placed> = if anchored {
         own_work(&st.db, media, files, &mut conflicts)
             .await
@@ -366,7 +370,7 @@ pub async fn register_language(
             conflicts.push(format!("{name}: file already linked to another media"));
             continue;
         };
-        facts.extend(found.map(|f| (family, f)));
+        facts.extend(found.map(|x| (family, f.rel.replace('\\', "/"), x)));
         cover = cover.or(found_cover);
         if family == Family::Text {
             store_hash(&st.db, id, &f.abs).await;
@@ -410,9 +414,43 @@ struct Known {
     info: Option<Value>,
 }
 
-/// The edition of `family` a new file joins, and its ungrouped item. With a `language`: the edition
-/// of that language, else an empty edition with none, else a new one. Without: the one of `hint`
-/// (the language the file says), else the first one.
+/// Where a new file goes among the editions of its family: one of them (`stamp` = the language it
+/// takes) or a new one with that language.
+#[derive(Debug, PartialEq)]
+enum Pick {
+    Use(i32, Option<String>),
+    New(Option<String>),
+}
+
+/// `editions` = (id, language, empty: no part, publisher or external id), by id. With a `language`:
+/// its edition, else an empty one without language, else a new one. Without: the edition of `hint`
+/// (the language the file says), else an empty one without language, else a new one when `hint` is
+/// set and every edition has another language, else the first (no language first).
+fn choose(
+    editions: &[(i32, Option<String>, bool)],
+    language: Option<&str>,
+    hint: Option<&str>,
+) -> Pick {
+    let want = language.or(hint);
+    let blank = || editions.iter().find(|e| e.1.is_none() && e.2);
+    if let Some(w) = want
+        && let Some(e) = editions.iter().find(|e| e.1.as_deref() == Some(w))
+    {
+        return Pick::Use(e.0, None);
+    }
+    if let (Some(w), Some(e)) = (want, blank()) {
+        return Pick::Use(e.0, Some(w.to_owned()));
+    }
+    if language.is_some() || (hint.is_some() && editions.iter().all(|e| e.1.is_some())) {
+        return Pick::New(want.map(str::to_owned));
+    }
+    match editions.iter().find(|e| e.1.is_none()).or(editions.first()) {
+        Some(e) => Pick::Use(e.0, None),
+        None => Pick::New(None),
+    }
+}
+
+/// The edition of `family` a new file joins, and its ungrouped item (see [`choose`]).
 async fn ensure(
     c: &mut PgConnection,
     media: i32,
@@ -420,40 +458,36 @@ async fn ensure(
     language: Option<&str>,
     hint: Option<&str>,
 ) -> sqlx::Result<(i32, i32)> {
-    let found: Option<i32> = sqlx::query_scalar(
-        r#"SELECT e.id FROM editions e WHERE e."mediaId" = $1 AND e.family = $2
-             AND ($3::text IS NULL OR e.language = $3
-                  OR (e.language IS NULL AND e.publisher IS NULL
-                      AND NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
-                      AND NOT EXISTS (SELECT 1 FROM items i JOIN item_parts p ON p."itemId" = i.id
-                                       WHERE i."editionId" = e.id)))
-           ORDER BY ($3::text IS NULL AND e.language IS NOT DISTINCT FROM $4) DESC,
-                    (e.language IS NOT DISTINCT FROM $3) DESC, e.language IS NOT NULL, e.id LIMIT 1"#,
+    let editions: Vec<(i32, Option<String>, bool)> = sqlx::query_as(
+        r#"SELECT e.id, e.language,
+             (e.publisher IS NULL
+              AND NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
+              AND NOT EXISTS (SELECT 1 FROM items i JOIN item_parts p ON p."itemId" = i.id
+                               WHERE i."editionId" = e.id))
+           FROM editions e WHERE e."mediaId" = $1 AND e.family = $2 ORDER BY e.id"#,
     )
     .bind(media)
     .bind(family.as_str())
-    .bind(language)
-    .bind(hint)
-    .fetch_optional(&mut *c)
+    .fetch_all(&mut *c)
     .await?;
-    let edition = match found {
-        Some(e) => {
-            if language.is_some() {
+    let edition = match choose(&editions, language, hint) {
+        Pick::Use(e, stamp) => {
+            if stamp.is_some() {
                 sqlx::query(r#"UPDATE editions SET language = $2 WHERE id = $1 AND language IS NULL"#)
                     .bind(e)
-                    .bind(language)
+                    .bind(stamp)
                     .execute(&mut *c)
                     .await?;
             }
             e
         }
-        None => {
+        Pick::New(l) => {
             sqlx::query_scalar(
                 r#"INSERT INTO editions ("mediaId", family, language) VALUES ($1, $2, $3) RETURNING id"#,
             )
             .bind(media)
             .bind(family.as_str())
-            .bind(language)
+            .bind(l)
             .fetch_one(&mut *c)
             .await?
         }
@@ -491,7 +525,7 @@ async fn lay_out(
     db: &PgPool,
     media: i32,
     anchored: bool,
-    facts: &[(Family, Facts)],
+    facts: &[(Family, String, Facts)],
     language: Option<&str>,
 ) -> Result<(), String> {
     let rows = sqlx::query_as!(
@@ -502,22 +536,33 @@ async fn lay_out(
     .fetch_all(db)
     .await
     .map_err(|e| e.to_string())?;
-    let paths: Vec<String> = rows.iter().map(|r| r.rel.replace('\\', "/")).collect();
-    if anchored && group::group(&paths).len() > 1 {
-        return Err(format!("media #{media}: its folder holds several works"));
-    }
-    lay_out_tx(db, media, &rows, facts, language)
+    lay_out_tx(db, media, anchored, &rows, facts, language)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| match e {
+            LayError::Db(e) => e.to_string(),
+            LayError::Works(m) => m,
+        })
+}
+
+enum LayError {
+    Db(sqlx::Error),
+    Works(String),
+}
+
+impl From<sqlx::Error> for LayError {
+    fn from(e: sqlx::Error) -> Self {
+        Self::Db(e)
+    }
 }
 
 async fn lay_out_tx(
     db: &PgPool,
     media: i32,
+    anchored: bool,
     rows: &[Known],
-    facts: &[(Family, Facts)],
+    facts: &[(Family, String, Facts)],
     language: Option<&str>,
-) -> sqlx::Result<()> {
+) -> Result<(), LayError> {
     let mut tx = db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media).await?;
     let placed: HashMap<i32, i32> = sqlx::query_as::<_, (i32, i32)>(
@@ -544,13 +589,27 @@ async fn lay_out_tx(
                 None => new.push(path),
             }
         }
-        let first = facts.iter().find(|(f, _)| *f == family).map(|(_, f)| f);
-        let mut target = None;
-        if !new.is_empty() {
-            let hint = first.and_then(|f| f.language.as_deref());
-            let (e, _) = ensure(&mut tx, media, family, language, hint).await?;
-            by_edition.entry(e).or_default().extend(new);
-            target = Some(e);
+        // Each new file joins the edition of its own language hint (tags or OPF, else its name).
+        let fact = |p: &str| {
+            facts
+                .iter()
+                .find(|(f, r, _)| *f == family && r == p)
+                .map(|(_, _, f)| f)
+        };
+        let mut firsts: HashMap<i32, &Facts> = HashMap::new();
+        let mut by_hint: BTreeMap<Option<String>, Vec<String>> = BTreeMap::new();
+        for p in new {
+            let hint = fact(&p)
+                .and_then(|f| f.language.clone())
+                .or_else(|| group::name_language(&p));
+            by_hint.entry(hint).or_default().push(p);
+        }
+        for (hint, paths) in by_hint {
+            let (e, _) = ensure(&mut tx, media, family, language, hint.as_deref()).await?;
+            if let Some(f) = paths.iter().find_map(|p| fact(p)) {
+                firsts.entry(e).or_insert(f);
+            }
+            by_edition.entry(e).or_default().extend(paths);
         }
         for (edition, paths) in by_edition {
             let mine: Vec<group::Version> = group::group(&paths)
@@ -560,6 +619,11 @@ async fn lay_out_tx(
                 .collect();
             if mine.is_empty() {
                 continue;
+            }
+            if anchored && group::group(&paths).len() > 1 {
+                return Err(LayError::Works(format!(
+                    "media #{media}: its folder holds several works"
+                )));
             }
             let item = item_of(&mut tx, media, edition).await?;
             let by_path = |p: &str| rows.iter().find(|r| r.rel.replace('\\', "/") == p);
@@ -589,7 +653,7 @@ async fn lay_out_tx(
                 .flatten()
                 .map(|d| d.round() as i32)
                 .filter(|d| *d > 0);
-            let first = first.filter(|_| target == Some(edition));
+            let first = firsts.get(&edition);
             sqlx::query!(
                 r#"UPDATE editions SET format = COALESCE(format, $2), "durationSeconds" = COALESCE("durationSeconds", $3),
                  language = COALESCE(language, $4), publisher = COALESCE(publisher, $5)
@@ -604,7 +668,7 @@ async fn lay_out_tx(
             .await?;
         }
     }
-    tx.commit().await
+    Ok(tx.commit().await?)
 }
 
 /// A row of the media as the rescan knows it.
@@ -793,5 +857,35 @@ pub async fn settled(st: &AppState, media: i32) {
     }
     if let Err(e) = merge::run(st, media).await {
         tracing::warn!("Post-import[book #{media}]: m4b merge: {e}");
+    }
+}
+
+#[cfg(test)]
+mod choose_tests {
+    use super::*;
+
+    #[test]
+    fn a_file_joins_the_edition_of_its_language_or_makes_one() {
+        let fr = (1, Some("fr".to_owned()), false);
+        let blank = (2, None, true);
+        let held = (3, None, false);
+        let l = |s: &str| Some(s.to_owned());
+        assert_eq!(choose(&[], None, None), Pick::New(None));
+        assert_eq!(choose(&[], None, Some("fr")), Pick::New(l("fr")));
+        assert_eq!(choose(&[fr.clone()], None, Some("de")), Pick::New(l("de")));
+        assert_eq!(choose(&[fr.clone()], None, Some("fr")), Pick::Use(1, None));
+        assert_eq!(
+            choose(&[fr.clone(), blank.clone()], Some("de"), None),
+            Pick::Use(2, l("de"))
+        );
+        assert_eq!(
+            choose(&[fr.clone(), held.clone()], Some("de"), None),
+            Pick::New(l("de"))
+        );
+        assert_eq!(
+            choose(&[fr.clone(), held.clone()], None, Some("de")),
+            Pick::Use(3, None)
+        );
+        assert_eq!(choose(&[fr, held], None, None), Pick::Use(3, None));
     }
 }

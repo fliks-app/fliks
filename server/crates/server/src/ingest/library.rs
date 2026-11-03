@@ -429,6 +429,7 @@ impl Ctx<'_> {
             &BookNameTokens {
                 title: m.title.clone(),
                 year: m.year.map(i64::from),
+                language: self.req.language.clone(),
                 ..Default::default()
             },
         );
@@ -477,6 +478,7 @@ impl Ctx<'_> {
                 )));
             }
             if let Some(rel) = fsx::rel_under(self.root.path(), &dest)
+                && self.req.language.is_none()
                 && !books::is_own_work(&self.st.db, m.id, pending, &rel)
                     .await
                     .map_err(|e| e.to_string())?

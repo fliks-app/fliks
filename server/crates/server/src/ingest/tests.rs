@@ -1636,7 +1636,7 @@ mod book_ingest {
     /// A `running` row for the parts as registered, written before the files it concerns.
     async fn running_row(c: &Ctx, m: i32) {
         let rows = books::merge::load(&c.st, m).await.unwrap();
-        let fp = books::merge::fingerprint(&books::merge::pick(&rows).unwrap());
+        let fp = books::merge::fingerprint(&books::merge::pick(&rows, None).unwrap());
         sqlx::query(
             r#"INSERT INTO book_merges ("mediaId", fingerprint, state, "folderId", output)
                VALUES ($1, $2, 'running', 1, 'Orfaline/Orfaline.m4b')"#,
@@ -1943,42 +1943,114 @@ mod book_ingest {
         assert!(inbox.join("01.mp3").exists());
     }
 
+    /// Copies `src` into the book `m` as a file of `language`; the errors of the ingest.
+    async fn ingest_as(c: &Ctx, m: i32, src: PathBuf, language: Option<&str>) -> Vec<String> {
+        let guard = c.st.ingest.media.lock(m).await;
+        let req = Request {
+            media_id: m,
+            files: vec![File {
+                path: src,
+                episode_id: None,
+            }],
+            transfer: Method::Copy,
+            fallback_quality: None,
+            release_name: None,
+            force: false,
+            uniquify_on_collision: false,
+            replace_existing: false,
+            language: language.map(str::to_owned),
+        };
+        library::ingest(&c.st, &guard, req).await.unwrap().errors
+    }
+
+    async fn names(c: &Ctx, m: i32) -> Vec<String> {
+        let mut got: Vec<String> = parts(c, m).await.into_iter().map(|p| p.0).collect();
+        got.sort();
+        got
+    }
+
     #[sqlx::test(migrations = false)]
     async fn a_requested_language_is_in_the_file_name(pool: PgPool) {
         let c = ctx(pool).await;
         let m = book(&c, "Orfaline").await;
-        let inbox = c.dir.join("inbox/Orfaline");
         for (dir, language) in [("a", Some("fr")), ("b", Some("en")), ("c", None)] {
-            let src = inbox.join(dir).join("x.epub");
+            let src = c.dir.join("inbox/Orfaline").join(dir).join("x.epub");
             touch(&src, dir.as_bytes());
-            let guard = c.st.ingest.media.lock(m).await;
-            let req = Request {
-                media_id: m,
-                files: vec![File {
-                    path: src,
-                    episode_id: None,
-                }],
-                transfer: Method::Copy,
-                fallback_quality: None,
-                release_name: None,
-                force: false,
-                uniquify_on_collision: false,
-                replace_existing: false,
-                language: language.map(str::to_owned),
-            };
-            let out = library::ingest(&c.st, &guard, req).await.unwrap();
-            assert_eq!(out.errors.len(), 0, "{:?}", out.errors);
+            assert_eq!(ingest_as(&c, m, src, language).await.len(), 0);
         }
-        let mut got: Vec<String> = parts(&c, m).await.into_iter().map(|p| p.0).collect();
-        got.sort();
         assert_eq!(
-            got,
+            names(&c, m).await,
             [
                 "Orfaline/Orfaline (en).epub",
                 "Orfaline/Orfaline (fr).epub",
                 "Orfaline/Orfaline.epub"
             ]
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_language_token_in_the_format_keeps_two_languages_apart(pool: PgPool) {
+        let c = ctx(pool).await;
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ('naming_book_format', '{Title} {Language}')")
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let m = book(&c, "Orfaline").await;
+        for (dir, language) in [("a", "fr"), ("b", "en")] {
+            let src = c.dir.join("inbox/Orfaline").join(dir).join("x.epub");
+            touch(&src, dir.as_bytes());
+            assert_eq!(ingest_as(&c, m, src, Some(language)).await.len(), 0);
+        }
+        assert_eq!(
+            names(&c, m).await,
+            ["Orfaline/Orfaline en.epub", "Orfaline/Orfaline fr.epub"]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_language_joins_a_book_linked_under_another_name(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = book(&c, "Orfaline").await;
+        let linked = "Orfaline/Olympe Faucheval - Orfaline.epub";
+        touch(&c.dir.join("books").join(linked), b"x");
+        books::register(&c.st, m, &placed(&c, &[linked]))
+            .await
+            .unwrap();
+        let src = c.dir.join("inbox/Orfaline/x.epub");
+        touch(&src, b"fr");
+        assert_eq!(ingest_as(&c, m, src, Some("fr")).await.len(), 0);
+        books::relay(&c.st, m).await.unwrap();
+        assert_eq!(
+            names(&c, m).await,
+            [
+                "Orfaline/Olympe Faucheval - Orfaline.epub",
+                "Orfaline/Orfaline (fr).epub"
+            ]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn untagged_files_of_two_languages_land_in_two_editions(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = book(&c, "Orfaline").await;
+        let all = ["Orfaline (fr).epub", "Orfaline (de).epub"];
+        for r in all {
+            touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
+        }
+        let both: Vec<String> = all.iter().map(|r| format!("Orfaline/{r}")).collect();
+        let files = placed(&c, &both.iter().map(String::as_str).collect::<Vec<_>>());
+        books::register(&c.st, m, &files).await.unwrap();
+        let got: Vec<(Option<String>, String)> = sqlx::query_as(
+            r#"SELECT e.language, f."relativePath" FROM editions e
+               JOIN items i ON i."editionId" = e.id JOIN item_parts p ON p."itemId" = i.id
+               JOIN media_files f ON f.id = p."mediaFileId" WHERE e."mediaId" = $1 ORDER BY f."relativePath""#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(got.len(), 2);
+        assert_ne!(got[0].0, got[1].0, "{got:?}");
     }
 
     #[sqlx::test(migrations = false)]
