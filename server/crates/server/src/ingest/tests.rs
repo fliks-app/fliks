@@ -1760,7 +1760,7 @@ mod book_import {
         },
     };
     use fliks_domain::{
-        external_id::ExternalProvider,
+        external_id::Namespace,
         media::kind::MediaKind,
         metadata::{
             language::Resolved,
@@ -1814,8 +1814,8 @@ mod book_import {
     }
 
     impl MetadataProvider for Stubbed {
-        fn id(&self) -> ExternalProvider {
-            ExternalProvider::OpenLibrary
+        fn id(&self) -> Namespace {
+            Namespace::OPENLIBRARY
         }
         fn supports(&self, kind: MediaKind) -> bool {
             kind == MediaKind::Book
@@ -1900,7 +1900,7 @@ mod book_import {
         }
         fn find_by<'a>(
             &'a self,
-            _: ExternalProvider,
+            _: Namespace,
             _: &'a str,
             _: &'a Resolved,
             _: Priority,

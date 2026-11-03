@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"preferredProvider\" = CASE WHEN $2 THEN $3\n             WHEN \"preferredProvider\" LIKE '%:%' THEN NULL ELSE \"preferredProvider\" END\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8c10c32a64f84bb54fedcfc1578b9155e05a444414124eec4f15e027741bc135"
+}

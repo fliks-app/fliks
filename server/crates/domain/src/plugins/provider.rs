@@ -1,4 +1,5 @@
 //! The `provider` manifest block and plugin id namespaces (`docs/spec/provider-plugins.md`).
+use crate::{external_id::Namespace, metadata::field::Field};
 use regex::{Regex, RegexBuilder};
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
@@ -277,6 +278,82 @@ impl IdRule {
     }
 }
 
+/// Rule 14: at most this many namespaces under a record's `ids`, and values under one of them.
+pub const MAX_IDS_NAMESPACES: usize = 32;
+pub const MAX_IDS_PER_NAMESPACE: usize = 16;
+
+/// The arrays of a record whose elements are records too.
+const NESTED: [&str; 4] = ["cast", "crew", "seasons", "episodes"];
+
+/// Rules 14, 26 and 28 on a record and its nested records: `ids` keeps the namespaces the provider
+/// may write, normalised; a third-party one writes no core id (`tmdbId`, `tvdbId`, `imdbId`, collection keys).
+pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) -> usize {
+    let mut dropped = 0;
+    if !official {
+        let core = Field::Ids
+            .keys()
+            .iter()
+            .chain(Field::Collection.keys())
+            .copied();
+        dropped += core.filter(|k| rec.remove(*k).is_some()).count();
+    }
+    for key in NESTED {
+        if let Some(Value::Array(items)) = rec.get_mut(key) {
+            for item in items.iter_mut().filter_map(Value::as_object_mut) {
+                dropped += sanitize_ids(item, official, own);
+            }
+        }
+    }
+    let Some(ids) = rec.remove("ids") else {
+        return dropped;
+    };
+    let Value::Object(ids) = ids else {
+        return dropped + 1;
+    };
+    dropped += ids.len().saturating_sub(MAX_IDS_NAMESPACES);
+    let mut kept = Map::new();
+    for (name, v) in ids.into_iter().take(MAX_IDS_NAMESPACES) {
+        let ns = Namespace::parse(&name).filter(|n| official || own.contains(&n.as_str()));
+        let Some(ns) = ns else {
+            dropped += 1;
+            continue;
+        };
+        let raw: Vec<&Value> = match &v {
+            Value::Array(a) => a.iter().take(MAX_IDS_PER_NAMESPACE).collect(),
+            one => vec![one],
+        };
+        let ok: Vec<Value> = raw
+            .into_iter()
+            .filter_map(|x| ns.normalize(x.as_str()?).map(Value::String))
+            .collect();
+        dropped += usize::from(ok.is_empty());
+        if !ok.is_empty() {
+            kept.insert(
+                name,
+                if v.is_array() {
+                    Value::Array(ok)
+                } else {
+                    ok[0].clone()
+                },
+            );
+        }
+    }
+    rec.insert("ids".into(), Value::Object(kept));
+    dropped
+}
+
+/// An id a provider answers (`find-by`) in `ns`, as stored: OpenLibrary keys may be paths and
+/// are works only; Audible and Audnexus answer ASINs.
+pub fn answered_id(ns: Namespace, value: &str) -> Option<String> {
+    match ns {
+        Namespace::OPENLIBRARY => ns
+            .normalize(value.trim().rsplit('/').next()?)
+            .filter(|v| v.ends_with('W')),
+        Namespace::AUDIBLE | Namespace::AUDNEXUS => Namespace::ASIN.normalize(value),
+        _ => ns.normalize(value),
+    }
+}
+
 /// Registration checks of the declared namespaces, in manifest order: the reason of the first
 /// failure. `is_core` tells whether a bare name is a core namespace, `official` whether the
 /// package is signed by a compiled-in key.
@@ -310,6 +387,49 @@ pub fn check_namespaces(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn ids_of_a_third_party_record_keep_only_its_own_and_non_unique_namespaces() {
+        Namespace::declare("org.ids.t:aid", "T", "^[1-9][0-9]*$", "preserve").unwrap();
+        let rec = |v: Value| v.as_object().unwrap().clone();
+        let input = json!({"tmdbId": 5, "title": "t", "tmdbCollectionId": 9, "tmdbCollectionName": "c",
+            "tvdbId": 3, "imdbId": "tt2",
+            "cast": [{"externalId": 1, "tmdbId": 2, "imdbId": "nm1", "ids": {"tmdb": "1", "imdb": "nm1"}}], "ids": {
+            "tmdb": "603", "imdb": "tt1", "org.ids.t:aid": ["7", "x"], "org.ids.t:nope": "1",
+            "tvdb": "012", "openlibrary": "OL1W"}});
+        let mut third = rec(input.clone());
+        assert_eq!(sanitize_ids(&mut third, false, &["org.ids.t:aid"]), 14);
+        assert_eq!(third["ids"], json!({"org.ids.t:aid": ["7"]}));
+        assert!(!third.contains_key("tmdbId") && third.contains_key("title"));
+        assert!(
+            !third.contains_key("tmdbCollectionId") && !third.contains_key("tmdbCollectionName")
+        );
+        assert_eq!(third["cast"], json!([{"externalId": 1, "ids": {}}]));
+        let mut official = rec(input);
+        sanitize_ids(&mut official, true, &[]);
+        assert_eq!(official["ids"]["tmdb"], "603");
+        assert!(official.contains_key("tmdbId") && official.contains_key("tmdbCollectionId"));
+        let many: Map<String, Value> = (0..40).map(|i| (format!("n{i:02}"), json!("1"))).collect();
+        let mut over = rec(json!({"ids": many}));
+        assert_eq!(sanitize_ids(&mut over, false, &[]), 40);
+        let mut bad = rec(json!({"ids": ["x"]}));
+        assert_eq!(sanitize_ids(&mut bad, false, &[]), 1);
+        assert!(!bad.contains_key("ids"));
+    }
+
+    #[test]
+    fn answered_ids_are_normalised_by_their_namespace() {
+        let ol = |v| answered_id(Namespace::OPENLIBRARY, v);
+        assert_eq!(ol("OL45883W").as_deref(), Some("OL45883W"));
+        assert_eq!(ol(" /works/OL45883W ").as_deref(), Some("OL45883W"));
+        assert_eq!(ol("ol45883w"), None);
+        assert_eq!(ol("OL1M"), None, "a work only");
+        for ns in [Namespace::AUDIBLE, Namespace::AUDNEXUS] {
+            assert_eq!(answered_id(ns, "B002V0QK4C").as_deref(), Some("B002V0QK4C"));
+            assert_eq!(answered_id(ns, "b002v0qk4c"), None);
+        }
+        assert_eq!(answered_id(Namespace::TMDB, "603").as_deref(), Some("603"));
+    }
 
     #[test]
     fn classes() {

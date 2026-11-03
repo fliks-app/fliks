@@ -77,9 +77,11 @@ fn address_class() {
 
 #[test]
 fn provider_namespace() {
-    use fliks_domain::external_id::ExternalProvider;
-    use fliks_domain::plugins::provider::{Class, IdRule, check_namespaces, classify};
-    replay("provider-namespace", 97, |i| {
+    use fliks_domain::external_id::{ExternalProvider, Namespace};
+    use fliks_domain::plugins::provider::{
+        Class, IdRule, check_namespaces, classify, sanitize_ids,
+    };
+    replay("provider-namespace", 102, |i| {
         let s = |k: &str| i[k].as_str().unwrap_or_default();
         match s("kind") {
             "classify" => match classify(s("name")) {
@@ -96,6 +98,18 @@ fn provider_namespace() {
                     Ok(()) => json!({"ok": true}),
                     Err(reason) => json!({"reason": reason}),
                 }
+            }
+            "sanitize" => {
+                Namespace::declare("org.example.anime:aid", "Aid", "^[1-9][0-9]*$", "preserve");
+                let own: Vec<&str> = i["own"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect();
+                let mut rec = i["record"].as_object().unwrap().clone();
+                let dropped = sanitize_ids(&mut rec, i["official"] == true, &own);
+                json!({"record": rec, "dropped": dropped})
             }
             _ => {
                 json!({"id": IdRule::new(s("idPattern"), s("case")).and_then(|r| r.normalize(s("value")))})

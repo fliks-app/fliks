@@ -1,5 +1,8 @@
 //! Where artwork lives: one table for the serving routes and the store.
-use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use fliks_domain::{
+    external_id::{ExternalProvider, Namespace},
+    media::kind::MediaKind,
+};
 use std::{
     fmt,
     path::{Path, PathBuf},
@@ -174,10 +177,12 @@ impl Target {
     /// that cannot name a directory.
     pub fn request(
         kind: MediaKind,
-        provider: ExternalProvider,
+        provider: Namespace,
         value: &str,
         variant: Variant,
     ) -> Option<Self> {
+        // a plugin namespace holds `:` and `.`: it names no art directory
+        let provider = provider.core()?;
         art_id(value).then(|| {
             Self::new(
                 Kind::Request,
@@ -248,13 +253,7 @@ mod tests {
         assert!(!Target::media(-1, Variant::Poster).is_valid());
         assert!(!Target::person(-5).is_valid());
         assert!(
-            Target::request(
-                MediaKind::Movie,
-                ExternalProvider::Tmdb,
-                "-603",
-                Variant::Poster
-            )
-            .is_none()
+            Target::request(MediaKind::Movie, Namespace::TMDB, "-603", Variant::Poster).is_none()
         );
         assert!(Target::person(5).is_valid());
     }
@@ -365,13 +364,7 @@ mod tests {
         );
         assert_eq!(t.sidecar(d), Path::new("/d/media/7/fanart-3.src.json"));
         assert_eq!(t.api_path(), "/api/images/media/7/fanart-3");
-        let r = Target::request(
-            MediaKind::Movie,
-            ExternalProvider::Tmdb,
-            "603",
-            Variant::Poster,
-        )
-        .unwrap();
+        let r = Target::request(MediaKind::Movie, Namespace::TMDB, "603", Variant::Poster).unwrap();
         assert_eq!(
             r.sidecar(d),
             Path::new("/d/requests/movie-tmdb-603/poster.src.json")

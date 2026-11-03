@@ -1,7 +1,7 @@
 //! `/api/metadata/*` and `/api/persons/*` (`docs/spec/metadata.md`, `persons.md`) through the real router, a loopback
 //! stub for TMDB, TVDB and the image host, and a fresh database.
 use axum::{Router, body::Body, extract::State, http::Request, http::Uri, response::IntoResponse};
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use fliks_server::{app, config::Config, images::ImageStore, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -935,9 +935,16 @@ async fn persisting_credits_does_not_fetch_person_details(pool: PgPool) {
         "cast": [{"externalId": 5, "name": "A", "character": "X", "order": 0}],
         "crew": [{"externalId": 6, "name": "B", "job": "Director", "department": "Directing"}],
     }));
-    fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &d, &[])
-        .await
-        .unwrap();
+    fliks_server::metadata::service::persist_credits(
+        &c.st,
+        1,
+        MediaKind::Movie,
+        Namespace::TMDB,
+        &d,
+        &[],
+    )
+    .await
+    .unwrap();
     let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM persons")
         .fetch_one(&pool)
         .await
@@ -957,14 +964,28 @@ async fn persisting_details_writes_the_table_of_the_kind(pool: PgPool) {
         "voteCount": 3, "keywords": ["a"]}),
     );
     for (id, kind) in [(1, MediaKind::Movie), (2, MediaKind::Series)] {
-        fliks_server::metadata::service::persist_credits(&c.st, id, kind, &first, &[])
-            .await
-            .unwrap();
-    }
-    let again = d(json!({"provider": "tmdb", "title": "T", "voteCount": 4}));
-    fliks_server::metadata::service::persist_credits(&c.st, 2, MediaKind::Series, &again, &[])
+        fliks_server::metadata::service::persist_credits(
+            &c.st,
+            id,
+            kind,
+            Namespace::TMDB,
+            &first,
+            &[],
+        )
         .await
         .unwrap();
+    }
+    let again = d(json!({"provider": "tmdb", "title": "T", "voteCount": 4}));
+    fliks_server::metadata::service::persist_credits(
+        &c.st,
+        2,
+        MediaKind::Series,
+        Namespace::TMDB,
+        &again,
+        &[],
+    )
+    .await
+    .unwrap();
     let movie: (Option<i64>, Option<String>) =
         sqlx::query_as(r#"SELECT budget, tagline FROM movie_details WHERE "mediaId" = 1"#)
             .fetch_one(&pool)
@@ -1011,8 +1032,22 @@ async fn concurrent_credit_persists_make_one_person_per_id(pool: PgPool) {
     };
     let (a, b) = (cast(1), cast(2));
     let (ra, rb) = tokio::join!(
-        fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &a, &[]),
-        fliks_server::metadata::service::persist_credits(&c.st, 2, MediaKind::Movie, &b, &[])
+        fliks_server::metadata::service::persist_credits(
+            &c.st,
+            1,
+            MediaKind::Movie,
+            Namespace::TMDB,
+            &a,
+            &[]
+        ),
+        fliks_server::metadata::service::persist_credits(
+            &c.st,
+            2,
+            MediaKind::Movie,
+            Namespace::TMDB,
+            &b,
+            &[]
+        )
     );
     ra.unwrap();
     rb.unwrap();
@@ -1060,9 +1095,16 @@ async fn persisting_credits_skips_person_ids_the_table_refuses(pool: PgPool) {
             {"externalId": -3, "name": "Neg", "character": "X", "order": 3}
         ],
     }));
-    fliks_server::metadata::service::persist_credits(&c.st, 1, MediaKind::Movie, &d, &[])
-        .await
-        .unwrap();
+    fliks_server::metadata::service::persist_credits(
+        &c.st,
+        1,
+        MediaKind::Movie,
+        Namespace::TMDB,
+        &d,
+        &[],
+    )
+    .await
+    .unwrap();
     let (persons, credits): (i64, i64) = sqlx::query_as(
         "SELECT (SELECT COUNT(*) FROM persons), (SELECT COUNT(*) FROM media_credits)",
     )

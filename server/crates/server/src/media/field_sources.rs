@@ -1,5 +1,5 @@
 //! Where each field of a media came from, and which are locked (`metadata-orchestrator.md` rules 34-37).
-use fliks_domain::{external_id::ExternalProvider, metadata::field::Field};
+use fliks_domain::{external_id::Namespace, metadata::field::Field};
 use sqlx::{PgConnection, PgExecutor};
 
 /// The fields locked on `media`.
@@ -17,7 +17,7 @@ pub async fn locked_fields(c: impl PgExecutor<'_>, media: i32) -> sqlx::Result<V
 pub async fn set_field_sources(
     c: &mut PgConnection,
     media: i32,
-    provenance: &[(Field, ExternalProvider)],
+    provenance: &[(Field, Namespace)],
 ) -> sqlx::Result<()> {
     sqlx::query!(
         r#"DELETE FROM media_field_sources WHERE "mediaId" = $1 AND NOT locked"#,

@@ -14,7 +14,7 @@ use crate::{
 };
 use fliks_domain::{
     acl::{Action, Permissions, Subject},
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -28,7 +28,7 @@ fn port(e: AppError) -> PortError {
 }
 
 async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Result<Value, String> {
-    if !st.metadata.available(ExternalProvider::Tmdb) {
+    if !st.metadata.available(Namespace::TMDB) {
         return Err("TMDB API key is not configured".into());
     }
     let lang = st
@@ -38,7 +38,7 @@ async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Res
         .await
         .map_err(|e| e.to_string())?;
     st.metadata
-        .of(ExternalProvider::Tmdb)
+        .of(Namespace::TMDB)
         .fetch_work(
             media_type,
             &tmdb_id.to_string(),

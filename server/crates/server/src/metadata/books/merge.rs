@@ -5,7 +5,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{family::Family, kind::MediaKind},
     metadata::{
         field::Field,
@@ -16,7 +16,7 @@ use fliks_domain::{
 };
 use serde_json::{Map, Value};
 
-pub type Records = Vec<(ExternalProvider, Map<String, Value>)>;
+pub type Records = Vec<(Namespace, Map<String, Value>)>;
 
 /// The fields the work merge writes to the work.
 pub const WORK_FIELDS: [Field; 9] = [
@@ -47,7 +47,7 @@ pub const EDITION_FIELDS: [Field; 9] = [
 pub type Merged = (Map<String, Value>, Provenance);
 
 /// The providers that support books and have their key, in the default order.
-pub fn providers(m: &Metadata) -> Vec<ExternalProvider> {
+pub fn providers(m: &Metadata) -> Vec<Namespace> {
     FieldOrder::book(Family::Text, &[])
         .providers()
         .iter()
@@ -60,7 +60,7 @@ pub fn providers(m: &Metadata) -> Vec<ExternalProvider> {
 /// know the ref is skipped.
 pub async fn edition_records(
     st: &AppState,
-    refs: &[(ExternalProvider, String)],
+    refs: &[(Namespace, String)],
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Records, MetaError> {

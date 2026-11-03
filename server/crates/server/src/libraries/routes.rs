@@ -93,6 +93,17 @@ fn max_len(field: &str, v: Option<&str>, max: usize) -> Result<(), AppError> {
     }
 }
 
+/// An empty name clears the preference; any other is a namespace a provider serves, or the value
+/// already stored (a form sends it back as it got it).
+fn check_preferred(v: Option<&str>, stored: Option<&str>) -> Result<(), AppError> {
+    match v.filter(|p| !p.is_empty()) {
+        Some(p) if Some(p) != stored && crate::media::external_ids::preferred(p).is_none() => {
+            Err(bad("preferredProvider must be a provider namespace"))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn check_media_types(v: &[String]) -> Result<(), AppError> {
     if v.iter().all(|t| MediaKind::parse(t).is_some()) {
         Ok(())
@@ -180,6 +191,7 @@ pub async fn create(
 ) -> Result<Response, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     let dto: CreateDto = body(req).await?;
+    check_preferred(dto.preferred_provider.as_deref(), None)?;
     max_len("icon", dto.icon.as_deref(), 48)?;
     max_len("color", dto.color.as_deref(), 32)?;
     max_len("metadataLanguage", dto.metadata_language.as_deref(), 8)?;
@@ -269,6 +281,15 @@ pub async fn update(
     if !exists {
         return Err(not_found(id));
     }
+    let stored: Option<String> =
+        sqlx::query_scalar(r#"SELECT "preferredProvider" FROM libraries WHERE id = $1"#)
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+    check_preferred(
+        dto.preferred_provider.clone().flatten().as_deref(),
+        stored.as_deref(),
+    )?;
     patch(&mut tx, id, &dto).await.map_err(db::constraint)?;
     if let Some(Some(p)) = &dto.path {
         path::assign(&mut tx, id, p).await?;

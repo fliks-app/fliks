@@ -3,7 +3,7 @@ mod common;
 
 use common::replay;
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::family::Family,
     metadata::{
         field::Field,
@@ -12,8 +12,8 @@ use fliks_domain::{
 };
 use serde_json::{Value, json};
 
-fn provider(v: &Value) -> ExternalProvider {
-    ExternalProvider::parse(v.as_str().unwrap()).unwrap()
+fn provider(v: &Value) -> Namespace {
+    Namespace::parse(v.as_str().unwrap()).unwrap()
 }
 
 #[test]

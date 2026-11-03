@@ -6,7 +6,7 @@ use super::{
     types::{Credits, PersonDetails},
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, query::js_parse_int},
     metadata::{
         language::Resolved,
@@ -442,8 +442,8 @@ impl Tvdb {
 }
 
 impl MetadataProvider for Tvdb {
-    fn id(&self) -> ExternalProvider {
-        ExternalProvider::Tvdb
+    fn id(&self) -> Namespace {
+        Namespace::TVDB
     }
 
     fn supports(&self, kind: MediaKind) -> bool {
@@ -504,13 +504,13 @@ impl MetadataProvider for Tvdb {
     /// The remote-id lookup is used for IMDb ids only.
     fn find_by<'a>(
         &'a self,
-        source: ExternalProvider,
+        source: Namespace,
         id: &'a str,
         _lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Option<(String, MediaKind)>> {
         Box::pin(async move {
-            if source != ExternalProvider::Imdb {
+            if source != Namespace::IMDB {
                 return Ok(None);
             }
             let found = self.find_by_external_id(id, p).await?;

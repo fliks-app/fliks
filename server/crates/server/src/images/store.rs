@@ -521,7 +521,7 @@ mod tests {
         response::{IntoResponse, Redirect},
         routing::get,
     };
-    use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+    use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::{collections::HashMap, sync::Mutex};
 
@@ -882,13 +882,7 @@ mod tests {
                 Some(780),
             ),
             (
-                Target::request(
-                    MediaKind::Movie,
-                    ExternalProvider::Tmdb,
-                    "603",
-                    Variant::Poster,
-                )
-                .unwrap(),
+                Target::request(MediaKind::Movie, Namespace::TMDB, "603", Variant::Poster).unwrap(),
                 "requests/movie-tmdb-603/poster",
                 Some(185),
                 Some(500),
@@ -897,13 +891,7 @@ mod tests {
             (Target::episode(6), "episodes/6", Some(300), Some(780)),
             (Target::season(7), "seasons/7", Some(185), Some(500)),
             (
-                Target::request(
-                    MediaKind::Series,
-                    ExternalProvider::Tvdb,
-                    "9",
-                    Variant::Logo,
-                )
-                .unwrap(),
+                Target::request(MediaKind::Series, Namespace::TVDB, "9", Variant::Logo).unwrap(),
                 "requests/series-tvdb-9/logo",
                 None,
                 None,
@@ -1081,13 +1069,7 @@ mod tests {
     #[tokio::test]
     async fn has_image_checks_the_full_file() {
         let f = fx().await;
-        let t = Target::request(
-            MediaKind::Movie,
-            ExternalProvider::Tmdb,
-            "603",
-            Variant::Poster,
-        )
-        .unwrap();
+        let t = Target::request(MediaKind::Movie, Namespace::TMDB, "603", Variant::Poster).unwrap();
         assert!(!f.store.has_image(&t));
         let url = f.serve("poster.jpg", jpeg(300, 450));
         f.store.download_and_store(&url, &t).await.unwrap();

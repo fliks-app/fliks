@@ -8,12 +8,13 @@ use crate::metadata::{
     Call, Credits, EditionRef, Metadata, MetadataProvider, PersonDetails, Search, Upstream,
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::{
         language::Resolved,
         limiter::{Limits, Priority},
     },
+    plugins::provider,
 };
 use futures_util::{FutureExt, future::BoxFuture};
 use serde_json::Value;
@@ -25,10 +26,14 @@ use std::time::Duration;
 const READY_WAIT: Duration = Duration::from_secs(30);
 /// Rule 14.
 const MAX_RECORD: usize = 16 << 20;
+/// Rule 14: elements of a list answer.
+const MAX_LIST: usize = 10_000;
 
 /// What the manifest's `provider` block says, read once.
 struct Block {
     namespaces: Vec<String>,
+    /// Declares a core namespace: registration allows that only to an `official` package.
+    official: bool,
     kinds: Vec<(MediaKind, Vec<String>)>,
     find_by: Vec<String>,
     edition: Vec<String>,
@@ -40,6 +45,10 @@ struct Block {
 }
 
 impl Block {
+    fn own(&self) -> Vec<&str> {
+        self.namespaces.iter().map(String::as_str).collect()
+    }
+
     fn parse(b: &Value) -> Self {
         let strs = |v: &Value| -> Vec<String> {
             v.as_array()
@@ -49,7 +58,16 @@ impl Block {
                 .collect()
         };
         let l = &b["limits"];
+        let namespaces: Vec<String> = b["namespaces"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|n| n["name"].as_str().map(str::to_owned))
+            .collect();
         Block {
+            official: namespaces
+                .iter()
+                .any(|n| matches!(provider::classify(n), Some(provider::Class::Core(_)))),
             namespaces: b["namespaces"]
                 .as_array()
                 .into_iter()
@@ -88,7 +106,7 @@ impl Block {
 
 pub struct PluginProvider {
     rt: Arc<PluginRt>,
-    key: ExternalProvider,
+    key: Namespace,
     block: Block,
     /// The configured built-in of the same key: it answers what the plugin does not declare.
     shadow: Option<Arc<dyn MetadataProvider>>,
@@ -123,6 +141,7 @@ fn parse(json: &str, array: bool) -> Result<Value, Upstream> {
 
 fn parse_list(json: &str) -> Result<Vec<Value>, Upstream> {
     match parse(json, true)? {
+        Value::Array(a) if a.len() > MAX_LIST => Err(bad("too many elements")),
         Value::Array(a) if a.iter().all(Value::is_object) => Ok(a),
         Value::Array(_) => Err(bad("an element is not an object")),
         _ => unreachable!("checked"),
@@ -151,11 +170,11 @@ fn call_error(e: CallError) -> Upstream {
 }
 
 impl PluginProvider {
-    /// The provider of a plugin whose first namespace is a core one; later namespaces are PV.10.
+    /// The provider of a plugin, keyed by its first declared namespace; `None` when it has none.
     pub fn new(rt: Arc<PluginRt>, md: &Metadata) -> Option<Self> {
         let b = rt.manifest.get("provider")?;
         let block = Block::parse(b);
-        let key = ExternalProvider::parse(block.namespaces.first()?)?;
+        let key = Namespace::parse(block.namespaces.first()?)?;
         Some(Self {
             rt,
             key,
@@ -195,12 +214,33 @@ impl PluginProvider {
         r
     }
 
+    /// Rules 14, 26 and 28 on one record; a dropped id is warned by namespace count, never value.
+    fn sanitized(&self, mut v: Value) -> Value {
+        if let Value::Object(o) = &mut v {
+            let n = provider::sanitize_ids(o, self.block.official, &self.block.own());
+            if n > 0 {
+                tracing::warn!(
+                    "plugin \"{}\": {n} id(s) of a record dropped",
+                    self.rt.sh.id
+                );
+            }
+        }
+        v
+    }
+
     fn record(&self, json: &str, array: bool) -> Result<Value, Upstream> {
-        self.checked(parse(json, array))
+        self.checked(parse(json, array)).map(|v| self.sanitized(v))
+    }
+
+    /// `record` for an answer that may be absent (`fetch-edition`, `fetch-chapters`).
+    fn optional_record(&self, json: Option<String>) -> Result<Option<Value>, Upstream> {
+        let parsed = self.checked(json.map(|j| parse(&j, false)).transpose())?;
+        Ok(parsed.map(|v| self.sanitized(v)))
     }
 
     fn array(&self, json: &str) -> Result<Vec<Value>, Upstream> {
-        self.checked(parse_list(json))
+        let list = self.checked(parse_list(json))?;
+        Ok(list.into_iter().map(|v| self.sanitized(v)).collect())
     }
 
     fn own(&self, value: &str) -> ExternalId {
@@ -267,7 +307,7 @@ impl PluginProvider {
 }
 
 impl MetadataProvider for PluginProvider {
-    fn id(&self) -> ExternalProvider {
+    fn id(&self) -> Namespace {
         self.key
     }
 
@@ -420,7 +460,7 @@ impl MetadataProvider for PluginProvider {
 
     fn find_by<'a>(
         &'a self,
-        source: ExternalProvider,
+        source: Namespace,
         id: &'a str,
         lang: &'a Resolved,
         p: Priority,
@@ -452,9 +492,10 @@ impl MetadataProvider for PluginProvider {
                 })
                 .await?;
             Ok(found.and_then(|(id, kind)| {
-                (id.provider == self.key.as_str())
-                    .then(|| MediaKind::parse(&kind).map(|k| (id.value, k)))
-                    .flatten()
+                let value = (id.provider == self.key.as_str())
+                    .then(|| provider::answered_id(self.key, &id.value))
+                    .flatten()?;
+                Some((value, MediaKind::parse(&kind)?))
             }))
         }
         .boxed()
@@ -596,7 +637,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.checked(json.map(|j| parse(&j, false)).transpose())
+            self.optional_record(json)
         }
         .boxed()
     }
@@ -611,7 +652,7 @@ impl MetadataProvider for PluginProvider {
             if let Some(b) = self.built_in(None, "chapters") {
                 return b.fetch_chapters(asin, lang, p).await;
             }
-            let ns = ExternalProvider::Asin.as_str();
+            let ns = Namespace::ASIN.as_str();
             if !self.declares(None, "chapters") || !self.block.chapters.iter().any(|n| n == ns) {
                 return Ok(None);
             }
@@ -628,7 +669,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.checked(json.map(|j| parse(&j, false)).transpose())
+            self.optional_record(json)
         }
         .boxed()
     }
@@ -667,7 +708,9 @@ impl Plugins {
                     app.metadata.add_plugin(Arc::new(provider));
                 }
                 None => {
-                    tracing::info!("provider \"{id}\" has no core first namespace: not registered")
+                    tracing::info!(
+                        "provider \"{id}\" has no declared first namespace: not registered"
+                    )
                 }
             }
         }

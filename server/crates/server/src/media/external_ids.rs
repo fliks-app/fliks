@@ -1,12 +1,30 @@
 //! The ids a media has in outside systems (`docs/spec/external-ids.md`).
 use crate::events::ExternalId;
-use fliks_domain::{external_id::ExternalProvider, media::kind::MediaKind};
+use fliks_domain::{
+    external_id::{ExternalProvider, Namespace},
+    media::kind::MediaKind,
+};
 use sqlx::{PgConnection, PgExecutor};
 
 /// Provider names as the queries bind them.
 pub const TMDB: &str = ExternalProvider::Tmdb.as_str();
 pub const TVDB: &str = ExternalProvider::Tvdb.as_str();
 pub const IMDB: &str = ExternalProvider::Imdb.as_str();
+
+/// A `preferredProvider` value: a namespace a provider serves, so not `imdb`, `isbn`, `asin` or `file`.
+pub fn preferred(name: &str) -> Option<Namespace> {
+    Namespace::parse(name).filter(|n| {
+        !matches!(
+            n.core(),
+            Some(
+                ExternalProvider::Imdb
+                    | ExternalProvider::Isbn
+                    | ExternalProvider::Asin
+                    | ExternalProvider::File
+            )
+        )
+    })
+}
 
 /// The join giving a query the `ids.tmdb`, `ids.tvdb` and `ids.imdb` of media `alias`, for queries
 /// built at run time (the checked ones inline the same text with bound provider names).
@@ -23,7 +41,7 @@ pub fn ids_join(alias: &str) -> String {
 pub async fn find(
     db: impl PgExecutor<'_>,
     kind: MediaKind,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: &str,
 ) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar!(
@@ -55,7 +73,7 @@ pub async fn refs(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<Ex
 pub async fn find_numeric(
     db: impl PgExecutor<'_>,
     kind: MediaKind,
-    provider: ExternalProvider,
+    provider: Namespace,
     id: i32,
 ) -> sqlx::Result<Option<i32>> {
     find(db, kind, provider, &id.to_string()).await
@@ -83,14 +101,14 @@ pub async fn link(
     c: &mut PgConnection,
     media_id: i32,
     kind: MediaKind,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: &str,
 ) -> sqlx::Result<Link> {
     let Some(value) = provider.normalize(value) else {
         return Ok(Link::Linked);
     };
     // `CK_media_external_ids_openlibrary` takes work ids only
-    if provider == ExternalProvider::OpenLibrary && !value.ends_with('W') {
+    if provider == Namespace::OPENLIBRARY && !value.ends_with('W') {
         return Ok(Link::Linked);
     }
     let done = sqlx::query!(
@@ -117,11 +135,7 @@ pub async fn link(
     }
 }
 
-pub async fn unlink(
-    c: &mut PgConnection,
-    media_id: i32,
-    provider: ExternalProvider,
-) -> sqlx::Result<()> {
+pub async fn unlink(c: &mut PgConnection, media_id: i32, provider: Namespace) -> sqlx::Result<()> {
     sqlx::query!(
         r#"DELETE FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2"#,
         media_id,
@@ -133,20 +147,25 @@ pub async fn unlink(
 }
 
 /// The id namespaces an edition holds (`edition_external_ids` checks them).
-pub const EDITION_NAMESPACES: [ExternalProvider; 5] = [
-    ExternalProvider::Isbn,
-    ExternalProvider::Asin,
-    ExternalProvider::OpenLibrary,
-    ExternalProvider::GoogleBooks,
-    ExternalProvider::Bnf,
+pub const EDITION_NAMESPACES: [Namespace; 5] = [
+    Namespace::ISBN,
+    Namespace::ASIN,
+    Namespace::OPENLIBRARY,
+    Namespace::GOOGLEBOOKS,
+    Namespace::BNF,
 ];
 
 /// `value` as an edition id of `provider`, or `None` when the provider names no edition by it
 /// (an OpenLibrary work or author id is not one).
-pub fn edition_id(provider: ExternalProvider, value: &str) -> Option<String> {
+pub fn edition_id(provider: Namespace, value: &str) -> Option<String> {
     let v = provider.normalize(value)?;
-    let edition = EDITION_NAMESPACES.contains(&provider)
-        && (provider != ExternalProvider::OpenLibrary || v.ends_with('M'));
+    let edition = match provider {
+        Namespace::Core(_) => {
+            EDITION_NAMESPACES.contains(&provider)
+                && (provider != Namespace::OPENLIBRARY || v.ends_with('M'))
+        }
+        Namespace::Plugin(_) => true,
+    };
     edition.then_some(v)
 }
 
@@ -156,7 +175,7 @@ pub async fn link_edition(
     c: &mut PgConnection,
     edition: i32,
     media: i32,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: &str,
 ) -> sqlx::Result<bool> {
     let Some(value) = edition_id(provider, value) else {
@@ -183,7 +202,7 @@ pub async fn link_edition(
 pub async fn unlink_edition(
     c: &mut PgConnection,
     edition: i32,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: Option<&str>,
 ) -> sqlx::Result<()> {
     sqlx::query!(
@@ -201,7 +220,7 @@ pub async fn unlink_edition(
 /// The edition holding `value` for `provider`; the lowest id when several do.
 pub async fn find_edition(
     db: impl PgExecutor<'_>,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: &str,
 ) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar!(
@@ -218,7 +237,7 @@ pub async fn find_edition(
 pub async fn edition_ids(
     db: impl PgExecutor<'_>,
     edition: i32,
-) -> sqlx::Result<Vec<(ExternalProvider, String)>> {
+) -> sqlx::Result<Vec<(Namespace, String)>> {
     let rows = sqlx::query!(
         r#"SELECT provider, value FROM edition_external_ids WHERE "editionId" = $1 ORDER BY provider, value"#,
         edition
@@ -227,7 +246,7 @@ pub async fn edition_ids(
     .await?;
     Ok(rows
         .into_iter()
-        .filter_map(|r| Some((ExternalProvider::parse(&r.provider)?, r.value)))
+        .filter_map(|r| Some((Namespace::parse(&r.provider)?, r.value)))
         .collect())
 }
 
@@ -236,7 +255,7 @@ pub async fn set(
     c: &mut PgConnection,
     media_id: i32,
     kind: MediaKind,
-    provider: ExternalProvider,
+    provider: Namespace,
     value: Option<&str>,
 ) -> sqlx::Result<Link> {
     match value.and_then(|v| provider.normalize(v)) {
@@ -257,17 +276,17 @@ pub struct Ids {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Written {
     /// The unique providers whose id another media of the kind holds.
-    pub taken: Vec<ExternalProvider>,
+    pub taken: Vec<Namespace>,
     /// The media no longer exists; the remaining ids were not written.
     pub gone: bool,
 }
 
 impl Ids {
-    pub fn entries(&self) -> [(ExternalProvider, Option<String>); 3] {
+    pub fn entries(&self) -> [(Namespace, Option<String>); 3] {
         [
-            (ExternalProvider::Tmdb, self.tmdb.map(|v| v.to_string())),
-            (ExternalProvider::Tvdb, self.tvdb.map(|v| v.to_string())),
-            (ExternalProvider::Imdb, self.imdb.clone()),
+            (Namespace::TMDB, self.tmdb.map(|v| v.to_string())),
+            (Namespace::TVDB, self.tvdb.map(|v| v.to_string())),
+            (Namespace::IMDB, self.imdb.clone()),
         ]
     }
 
@@ -319,6 +338,16 @@ impl Ids {
 mod tests {
     use super::*;
 
+    #[test]
+    fn preferred_is_a_namespace_a_provider_serves() {
+        for ok in ["tmdb", "tvdb", "openlibrary", "audible"] {
+            assert!(preferred(ok).is_some(), "{ok}");
+        }
+        for no in ["imdb", "isbn", "asin", "file", "nope", "org.x:aid"] {
+            assert!(preferred(no).is_none(), "{no}");
+        }
+    }
+
     async fn media(db: &sqlx::PgPool, kind: MediaKind) -> i32 {
         sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('t', $1) RETURNING id"#)
             .bind(kind.as_str())
@@ -348,7 +377,7 @@ mod tests {
             media(&db, MediaKind::Movie).await,
             media(&db, MediaKind::Series).await,
         );
-        let (tmdb, tvdb) = (ExternalProvider::Tmdb, ExternalProvider::Tvdb);
+        let (tmdb, tvdb) = (Namespace::TMDB, Namespace::TVDB);
         let link =
             async |c: &mut PgConnection, m, k, p, v: &str| link(c, m, k, p, v).await.unwrap();
         assert_eq!(
@@ -427,7 +456,7 @@ mod tests {
             media(&db, MediaKind::Movie).await,
             media(&db, MediaKind::Series).await,
         );
-        let tmdb = ExternalProvider::Tmdb;
+        let tmdb = Namespace::TMDB;
         link(&mut c, movie, MediaKind::Movie, tmdb, "5")
             .await
             .unwrap();
@@ -496,7 +525,7 @@ mod tests {
 
     #[sqlx::test(migrations = false)]
     async fn an_edition_keeps_several_ids_and_a_lookup_takes_the_lowest(db: sqlx::PgPool) {
-        use ExternalProvider::{Isbn, OpenLibrary};
+        let (isbn, openlibrary) = (Namespace::ISBN, Namespace::OPENLIBRARY);
         crate::db::migrate(&db).await.unwrap();
         let mut c = db.acquire().await.unwrap();
         let m = media(&db, MediaKind::Book).await;
@@ -513,49 +542,49 @@ mod tests {
         }
         let (a, b) = (ids[0], ids[1]);
         assert!(
-            link_edition(&mut c, a, m, Isbn, "0-306-40615-2")
+            link_edition(&mut c, a, m, isbn, "0-306-40615-2")
                 .await
                 .unwrap()
         );
         assert!(
-            link_edition(&mut c, a, m, Isbn, "9780306406157")
+            link_edition(&mut c, a, m, isbn, "9780306406157")
                 .await
                 .unwrap()
         );
         assert!(
-            link_edition(&mut c, b, m, Isbn, "9780306406157")
+            link_edition(&mut c, b, m, isbn, "9780306406157")
                 .await
                 .unwrap()
         );
         assert!(
-            link_edition(&mut c, a, m, OpenLibrary, "OL5M")
+            link_edition(&mut c, a, m, openlibrary, "OL5M")
                 .await
                 .unwrap()
         );
         assert!(
-            !link_edition(&mut c, a, m, OpenLibrary, "OL1W")
+            !link_edition(&mut c, a, m, openlibrary, "OL1W")
                 .await
                 .unwrap()
         );
         assert!(
-            !link_edition(&mut c, a, m, ExternalProvider::Tmdb, "5")
+            !link_edition(&mut c, a, m, Namespace::TMDB, "5")
                 .await
                 .unwrap()
         );
         assert_eq!(
-            find_edition(&mut *c, Isbn, "9780306406157").await.unwrap(),
+            find_edition(&mut *c, isbn, "9780306406157").await.unwrap(),
             Some(a)
         );
         assert_eq!(
             edition_ids(&mut *c, a).await.unwrap(),
             [
-                (Isbn, "9780306406157".to_owned()),
-                (OpenLibrary, "OL5M".to_owned())
+                (isbn, "9780306406157".to_owned()),
+                (openlibrary, "OL5M".to_owned())
             ]
         );
-        unlink_edition(&mut c, a, Isbn, None).await.unwrap();
+        unlink_edition(&mut c, a, isbn, None).await.unwrap();
         assert_eq!(
-            find_edition(&mut *c, Isbn, "9780306406157").await.unwrap(),
+            find_edition(&mut *c, isbn, "9780306406157").await.unwrap(),
             Some(b)
         );
         assert_eq!(edition_ids(&mut *c, a).await.unwrap().len(), 1);

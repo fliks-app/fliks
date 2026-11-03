@@ -118,6 +118,19 @@ impl Body {
         )
     }
 
+    /// A provider namespace: one the core knows or a plugin declared (`external_ids::preferred`).
+    pub fn namespace(&self, k: &str) -> Result<Field<String>, AppError> {
+        self.get(
+            k,
+            |v| {
+                v.as_str()
+                    .filter(|s| crate::media::external_ids::preferred(s).is_some())
+                    .map(str::to_owned)
+            },
+            "must be a provider namespace",
+        )
+    }
+
     /// The kind of an optional field.
     pub fn kind(&self, k: &str) -> Result<Field<MediaKind>, AppError> {
         self.get(

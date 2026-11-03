@@ -2,7 +2,7 @@
 use super::TitleKey;
 use crate::media::external_ids;
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, wants::WantSpec},
 };
 use serde_json::Value;
@@ -22,7 +22,7 @@ pub struct Req {
     pub user_id: Option<i32>,
     pub media_type: MediaKind,
     pub kind: String,
-    pub provider: ExternalProvider,
+    pub provider: Namespace,
     pub external_id: String,
     pub title: String,
     pub status: String,
@@ -63,7 +63,7 @@ impl TryFrom<RawReq> for Req {
             user_id: r.user_id,
             media_type: crate::db::kind(&r.media_type)?,
             kind: r.kind,
-            provider: ExternalProvider::parse(&r.provider).ok_or_else(|| {
+            provider: Namespace::stored(&r.provider).ok_or_else(|| {
                 sqlx::Error::Decode(format!("unknown provider {}", r.provider).into())
             })?,
             external_id: r.external_id,
@@ -299,15 +299,34 @@ pub async fn library_refusing(
         .await
 }
 
+fn lock_name(t: &TitleKey) -> String {
+    format!("requests:{}:{}:{}", t.media_type, t.provider, t.external_id)
+}
+
 /// Serialises the duplicate check and the insert of one title's ADD requests until the transaction ends.
 pub async fn lock_title(tx: &mut PgConnection, t: &TitleKey) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(format!(
-            "requests:{}:{}:{}",
-            t.media_type, t.provider, t.external_id
-        ))
+        .bind(lock_name(t))
         .execute(tx)
         .await?;
+    Ok(())
+}
+
+/// `lock_title` of several titles, taken in the order of the `hashtext` value so two callers cannot deadlock.
+pub async fn lock_titles(tx: &mut PgConnection, titles: &[TitleKey]) -> sqlx::Result<()> {
+    let names: Vec<String> = titles.iter().map(lock_name).collect();
+    let keys: Vec<i32> = sqlx::query_scalar(
+        "SELECT DISTINCT hashtext(n) AS k FROM unnest($1::text[]) AS n ORDER BY k",
+    )
+    .bind(&names)
+    .fetch_all(&mut *tx)
+    .await?;
+    for k in keys {
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(i64::from(k))
+            .execute(&mut *tx)
+            .await?;
+    }
     Ok(())
 }
 

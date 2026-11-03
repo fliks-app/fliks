@@ -118,6 +118,10 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let state = AppState::new(pool, cfg, &secret);
     // The plugin host keeps the state for the process lifetime (a cycle only `serve` may create).
     state.plugins.attach(&state);
+    // Before any task that reads stored ids, settings or requests.
+    if let Err(e) = plugins::namespaces::load(&state.db).await {
+        tracing::warn!("provider namespaces not loaded: {e}");
+    }
     presence::spawn(
         state.presence.clone(),
         state.engine.clone(),

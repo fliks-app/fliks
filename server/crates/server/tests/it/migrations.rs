@@ -2727,3 +2727,67 @@ async fn a_refused_adoption_leaves_the_4x_database_as_it_was(pool: PgPool) {
     assert!(newest < PREFLIGHT, "no 6.0.0 migration committed");
     assert_eq!(count(&pool, "media_files").await, 3);
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1789000510_opens_provider_namespaces_and_keeps_every_id(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_510).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie'), (2, 'b', 'book');
+           INSERT INTO media_external_ids VALUES (1, 'movie', 'tmdb', '603'), (1, 'movie', 'imdb', 'tt0133093'),
+             (2, 'book', 'openlibrary', 'OL45883W')"#,
+    )
+    .await;
+    apply_only(&pool, 1_789_000_000_510).await;
+    let kept: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media_external_ids")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(kept, 3);
+    sql(
+        &pool,
+        r#"INSERT INTO media_external_ids VALUES (2, 'book', 'org.example.anime:aid', 'AB-12');
+           INSERT INTO media_external_ids VALUES (2, 'book', 'googlebooks', 'x')"#,
+    )
+    .await;
+    for bad in [
+        r#"INSERT INTO media_external_ids VALUES (1, 'movie', 'Org.example:aid', '1')"#,
+        r#"INSERT INTO media_external_ids VALUES (1, 'movie', 'org.example:Aid', '1')"#,
+        r#"INSERT INTO media_external_ids VALUES (1, 'movie', 'a', '1')"#,
+        r#"INSERT INTO media_external_ids VALUES (1, 'movie', 'org.example:aid', '')"#,
+        r#"INSERT INTO media_external_ids VALUES (1, 'movie', 'org.example:aid', repeat('x', 129))"#,
+        r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+           VALUES ('org.a:x', 'org.b', '^.+$', 'preserve', 'X')"#,
+        r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+           VALUES ('tmdb', 'tmdb', '^.+$', 'preserve', 'X')"#,
+    ] {
+        assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1789000000510_clears_preferred_providers_no_provider_serves(pool: PgPool) {
+    apply_until(&pool, 1789000000510).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, "preferredProvider")
+             VALUES (1, 'a', 'imdb'), (2, 'b', 'tmdb'), (3, 'c', 'org.x:aid');
+           INSERT INTO media (id, title, type, "preferredProvider")
+             VALUES (1, 'm', 'movie', 'asin'), (2, 'n', 'movie', 'tvdb');
+           INSERT INTO item_groups ("mediaId", "number", "preferredProvider")
+             VALUES (1, 1, 'file'), (1, 2, 'tvdb');"#,
+    )
+    .await;
+    apply_only(&pool, 1789000000510).await;
+    let pins = |t: &'static str| format!(r#"SELECT "preferredProvider" FROM {t} ORDER BY id"#);
+    for (t, want) in [
+        ("libraries", vec![None, Some("tmdb"), Some("org.x:aid")]),
+        ("media", vec![None, Some("tvdb")]),
+        ("item_groups", vec![None, Some("tvdb")]),
+    ] {
+        let got: Vec<(Option<String>,)> = rows(&pool, &pins(t)).await;
+        let want: Vec<(Option<String>,)> =
+            want.into_iter().map(|w| (w.map(str::to_owned),)).collect();
+        assert_eq!(got, want, "{t}");
+    }
+}

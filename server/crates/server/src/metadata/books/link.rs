@@ -17,7 +17,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     language::normalize_language_code,
     media::{family::Family, kind::MediaKind, release::ReleaseKind},
     metadata::{
@@ -77,7 +77,7 @@ pub async fn attach_with(
         None => vec![],
     };
     let mut records = merge::edition_records(st, &refs, &lang, prio).await?;
-    records.extend(file.map(|f| (ExternalProvider::File, f.clone())));
+    records.extend(file.map(|f| (Namespace::FILE, f.clone())));
     let mut ids = refs;
     for id in discovered(&records) {
         if !ids.contains(&id) {
@@ -267,7 +267,7 @@ pub async fn stored(
 
 struct Ctx {
     title: String,
-    first: Vec<ExternalProvider>,
+    first: Vec<Namespace>,
     over: Override,
 }
 
@@ -287,7 +287,7 @@ async fn context(st: &AppState, media: i32) -> sqlx::Result<Option<Ctx>> {
         first: [r.pref, r.lib]
             .into_iter()
             .flatten()
-            .filter_map(|p| ExternalProvider::parse(&p))
+            .filter_map(|p| Namespace::parse(&p))
             .collect(),
         over: Override {
             language: r.lang,
@@ -297,7 +297,7 @@ async fn context(st: &AppState, media: i32) -> sqlx::Result<Option<Ctx>> {
 }
 
 /// The refs of a match an edition can be looked up by, normalised and deduplicated.
-fn edition_refs(given: &[(ExternalProvider, String)]) -> Vec<(ExternalProvider, String)> {
+fn edition_refs(given: &[(Namespace, String)]) -> Vec<(Namespace, String)> {
     let mut out = vec![];
     for (ns, v) in given {
         if let Some(v) = edition_id(*ns, v)
@@ -310,7 +310,7 @@ fn edition_refs(given: &[(ExternalProvider, String)]) -> Vec<(ExternalProvider, 
 }
 
 /// The edition ids the records carry (`isbn13`, `asin`, and `externalId` in the record's own namespace).
-fn discovered(records: &Records) -> Vec<(ExternalProvider, String)> {
+fn discovered(records: &Records) -> Vec<(Namespace, String)> {
     let mut out = vec![];
     for (p, r) in records {
         let own = text(r, "externalId").map(|v| (*p, v));
@@ -318,10 +318,8 @@ fn discovered(records: &Records) -> Vec<(ExternalProvider, String)> {
             Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
             _ => vec![],
         };
-        let listed = isbns
-            .into_iter()
-            .map(|v| (ExternalProvider::Isbn, v.to_owned()));
-        let asin = text(r, "asin").map(|v| (ExternalProvider::Asin, v));
+        let listed = isbns.into_iter().map(|v| (Namespace::ISBN, v.to_owned()));
+        let asin = text(r, "asin").map(|v| (Namespace::ASIN, v));
         out.extend(edition_refs(
             &own.into_iter()
                 .chain(listed)
@@ -332,7 +330,7 @@ fn discovered(records: &Records) -> Vec<(ExternalProvider, String)> {
     out
 }
 
-fn provider_of(prov: &Provenance, field: Field) -> Option<ExternalProvider> {
+fn provider_of(prov: &Provenance, field: Field) -> Option<Namespace> {
     prov.iter().find(|(f, _)| *f == field).map(|(_, p)| *p)
 }
 
@@ -358,16 +356,16 @@ fn full_date(s: &str) -> Option<String> {
 }
 
 /// The id of `provider` for a person, in the namespace `person_external_ids` keeps it under.
-fn person_id(provider: ExternalProvider, id: &str) -> Option<(&'static str, String)> {
+fn person_id(provider: Namespace, id: &str) -> Option<(&'static str, String)> {
     match provider {
-        ExternalProvider::OpenLibrary => ANCHOR
+        Namespace::OPENLIBRARY => ANCHOR
             .normalize(id)
             .filter(|v| v.ends_with('A'))
             .map(|v| ("openlibrary", v)),
-        ExternalProvider::Audible | ExternalProvider::Audnexus => {
-            ExternalProvider::Asin.normalize(id).map(|v| ("asin", v))
+        Namespace::AUDIBLE | Namespace::AUDNEXUS => {
+            Namespace::ASIN.normalize(id).map(|v| ("asin", v))
         }
-        ExternalProvider::Bnf => (6..=12)
+        Namespace::BNF => (6..=12)
             .contains(&id.len())
             .then_some(id)
             .filter(|v| v.bytes().all(|b| b.is_ascii_digit()))
@@ -380,7 +378,7 @@ fn person_id(provider: ExternalProvider, id: &str) -> Option<(&'static str, Stri
 /// sort name are added.
 async fn person(
     c: &mut PgConnection,
-    provider: Option<ExternalProvider>,
+    provider: Option<Namespace>,
     name: &str,
     id: Option<&str>,
 ) -> sqlx::Result<i32> {
@@ -449,7 +447,7 @@ async fn replace_credits(
     media: i32,
     edition: Option<i32>,
     role: &str,
-    provider: Option<ExternalProvider>,
+    provider: Option<Namespace>,
     list: &[(String, Option<String>)],
 ) -> sqlx::Result<()> {
     if list.is_empty() {
@@ -500,7 +498,7 @@ async fn set_series(
     c: &mut PgConnection,
     media: i32,
     merged: &Map<String, Value>,
-    provider: Option<ExternalProvider>,
+    provider: Option<Namespace>,
 ) -> sqlx::Result<()> {
     let Some(Value::Array(entries)) = merged.get("series") else {
         return Ok(());
@@ -521,12 +519,10 @@ async fn set_series(
             _ => (None, None),
         };
         let ext = match (provider, e.get("id").and_then(Value::as_str)) {
-            (Some(ExternalProvider::Audible), Some(i)) => {
-                ExternalProvider::Asin.normalize(i).map(|v| ("asin", v))
+            (Some(Namespace::AUDIBLE), Some(i)) => {
+                Namespace::ASIN.normalize(i).map(|v| ("asin", v))
             }
-            (Some(ExternalProvider::Bnf), Some(i)) => {
-                ExternalProvider::Bnf.normalize(i).map(|v| ("bnf", v))
-            }
+            (Some(Namespace::BNF), Some(i)) => Namespace::BNF.normalize(i).map(|v| ("bnf", v)),
             _ => None,
         };
         let id = collection(c, media, name, ext.as_ref()).await?;

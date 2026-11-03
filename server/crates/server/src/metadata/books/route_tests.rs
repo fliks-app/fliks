@@ -2,7 +2,7 @@
 use super::tests::{Fake, ISBN, anchor, state};
 use crate::{media, state::AppState};
 use axum::{Router, body::Body, http::Request};
-use fliks_domain::external_id::ExternalProvider::GoogleBooks;
+use fliks_domain::external_id::Namespace;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -164,7 +164,7 @@ async fn search_hides_a_work_held_in_an_unreadable_library(pool: PgPool) {
 
 #[sqlx::test(migrations = false)]
 async fn search_validates_and_falls_back(pool: PgPool) {
-    let mut gb = Fake::new(GoogleBooks);
+    let mut gb = Fake::new(Namespace::GOOGLEBOOKS);
     gb.found = vec![json!({"externalId": "gb1", "title": "Gamma", "authors": ["Sol"]})];
     let mut ol = full_anchor();
     ol.found = vec![];

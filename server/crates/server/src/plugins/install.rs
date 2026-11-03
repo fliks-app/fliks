@@ -313,6 +313,23 @@ impl Plugins {
             }
             manifest::check_files(i)
                 .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
+            if let Some(block) = m.get("provider")
+                && let Err(name) = super::namespaces::check_install(
+                    &self.db,
+                    i.signed_by.as_deref(),
+                    &super::namespaces::declared(block),
+                )
+                .await
+                .map_err(internal)?
+            {
+                return Err(ie(
+                    StatusCode::CONFLICT,
+                    "PLUGIN_NAMESPACE_SIGNER",
+                    format!(
+                        "namespace \"{name}\" belongs to another signer: uninstall the plugin with data deletion first"
+                    ),
+                ));
+            }
             if m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true) {
                 let kept = super::db::kept(&self.db, id).await.map_err(internal)?;
                 if !super::db::may_adopt(&kept, i.signed_by.as_deref()) {
@@ -432,6 +449,7 @@ impl Plugins {
         let Some(pkg) = packages::find(&self.db, id).await? else {
             if delete_data && fliks_domain::plugins::legal_plugin_id(id) {
                 super::db::deprovision(&self.db, id).await?;
+                super::namespaces::delete_data(&self.db, id).await?;
                 let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
             }
             return Ok(());
@@ -456,6 +474,7 @@ impl Plugins {
         if pkg.is_process() {
             if delete_data {
                 super::db::deprovision(&self.db, id).await?;
+                super::namespaces::delete_data(&self.db, id).await?;
             } else {
                 super::db::orphan(&self.db, id, pkg.verified_by_key_id.as_deref()).await?;
             }

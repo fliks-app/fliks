@@ -1,7 +1,7 @@
 //! The provider plugin as a `MetadataProvider` (`provider-plugins.md` rules 14, 15, 41-43, 48).
 use super::harness::*;
 use fliks_domain::{
-    external_id::ExternalProvider as Ns,
+    external_id::Namespace as Ns,
     media::kind::MediaKind,
     metadata::{language::Resolved, limiter::Priority},
 };
@@ -45,7 +45,7 @@ async fn until(mut ok: impl FnMut() -> bool) {
 }
 
 async fn work(h: &H, kind: MediaKind, id: &str, lang: &Resolved) -> Result<Value, Upstream> {
-    let p = h.st.metadata.of(Ns::Tmdb);
+    let p = h.st.metadata.of(Ns::TMDB);
     p.fetch_work(kind, id, lang, GO).await
 }
 
@@ -55,9 +55,9 @@ async fn a_provider_plugin_answers_through_the_trait() {
         return;
     };
     let md = &h.st.metadata;
-    let p = md.of(Ns::Tmdb);
+    let p = md.of(Ns::TMDB);
     assert!(
-        md.available(Ns::Tmdb),
+        md.available(Ns::TMDB),
         "the plugin shadows the keyless built-in"
     );
     assert!(p.supports(MediaKind::Series) && !p.supports(MediaKind::Movie));
@@ -80,17 +80,17 @@ async fn a_provider_plugin_answers_through_the_trait() {
     assert_eq!(kids.len(), 1);
     let by = |source, id| p.find_by(source, id, &lang, GO);
     assert_eq!(
-        by(Ns::Imdb, "tt1").await.unwrap(),
+        by(Ns::IMDB, "tt1").await.unwrap(),
         Some(("1".into(), MediaKind::Series))
     );
-    assert_eq!(by(Ns::Imdb, "tt2").await.unwrap(), None);
+    assert_eq!(by(Ns::IMDB, "tt2").await.unwrap(), None);
     assert_eq!(
-        by(Ns::Isbn, "tt1").await.unwrap(),
+        by(Ns::ISBN, "tt1").await.unwrap(),
         None,
         "not a declared input"
     );
     assert_eq!(
-        by(Ns::Imdb, "tt3").await.unwrap(),
+        by(Ns::IMDB, "tt3").await.unwrap(),
         None,
         "an id of another namespace than the key"
     );
@@ -99,10 +99,10 @@ async fn a_provider_plugin_answers_through_the_trait() {
     assert_eq!(e.status, Some(502), "a list of non-objects");
     let e = p.fetch_person("1", &lang, GO).await.unwrap_err();
     assert_eq!(e.status, Some(404), "undeclared call");
-    assert_eq!(md.resolve(None, MediaKind::Series), Some(Ns::Tmdb));
-    assert_eq!(md.resolve(Some("tvdb"), MediaKind::Series), Some(Ns::Tmdb));
+    assert_eq!(md.resolve(None, MediaKind::Series), Some(Ns::TMDB));
+    assert_eq!(md.resolve(Some("tvdb"), MediaKind::Series), Some(Ns::TMDB));
     assert_eq!(md.resolve(None, MediaKind::Movie), None);
-    assert_eq!(md.fallback(Ns::Tmdb, MediaKind::Series), None);
+    assert_eq!(md.fallback(Ns::TMDB, MediaKind::Series), None);
     h.finish().await;
     s.finish().await;
 }
@@ -138,9 +138,9 @@ async fn unauthorized_withdraws_the_provider_until_its_settings_change() {
         .await
         .unwrap_err();
     assert_eq!(e.status, Some(401));
-    assert!(!h.st.metadata.available(Ns::Tmdb));
+    assert!(!h.st.metadata.available(Ns::TMDB));
     h.set(&format!("plugin.{ID}.token"), "new").await;
-    until(|| h.st.metadata.available(Ns::Tmdb)).await;
+    until(|| h.st.metadata.available(Ns::TMDB)).await;
     h.finish().await;
     s.finish().await;
 }
@@ -153,11 +153,11 @@ async fn a_provider_is_available_once_its_required_keys_resolve() {
     };
     let md = &h.st.metadata;
     let key = format!("plugin.{ID}.apiKey");
-    assert!(!md.available(Ns::Tmdb));
+    assert!(!md.available(Ns::TMDB));
     h.set(&key, "k").await;
-    until(|| md.available(Ns::Tmdb)).await;
+    until(|| md.available(Ns::TMDB)).await;
     h.set(&key, "").await;
-    until(|| !md.available(Ns::Tmdb)).await;
+    until(|| !md.available(Ns::TMDB)).await;
     h.finish().await;
     s.finish().await;
 }
@@ -169,14 +169,14 @@ async fn the_order_setting_picks_the_providers_of_a_kind() {
     };
     let md = &h.st.metadata;
     let series = MediaKind::Series;
-    assert_eq!(md.order(series), [Ns::Tmdb, Ns::Tvdb]);
+    assert_eq!(md.order(series), [Ns::TMDB, Ns::TVDB]);
     h.set(
         "metadata.provider_order.series",
         r#"["tvdb","nope","tmdb","tvdb"]"#,
     )
     .await;
-    assert_eq!(md.order(series), [Ns::Tvdb, Ns::Tmdb]);
-    assert_eq!(md.resolve(None, series), Some(Ns::Tmdb), "tvdb has no key");
+    assert_eq!(md.order(series), [Ns::TVDB, Ns::TMDB]);
+    assert_eq!(md.resolve(None, series), Some(Ns::TMDB), "tvdb has no key");
     h.set("metadata.provider_order.series", r#"["tvdb"]"#).await;
     assert_eq!(
         md.resolve(None, series),
@@ -215,12 +215,12 @@ async fn a_bundled_provider_registers_again_after_the_breaker() {
         rt.crash(&rt.core, "test");
     }
     assert_eq!(rt.state(), State::Failed);
-    assert!(!h.st.metadata.available(Ns::Tmdb));
+    assert!(!h.st.metadata.available(Ns::TMDB));
     until(|| {
         h.st.plugins
             .rt(ID)
             .is_some_and(|r| !Arc::ptr_eq(&r, &rt) && r.state() == State::Ready)
-            && h.st.metadata.available(Ns::Tmdb)
+            && h.st.metadata.available(Ns::TMDB)
     })
     .await;
     h.finish().await;
@@ -233,7 +233,7 @@ async fn a_stale_unauthorized_does_not_withdraw_the_provider_after_new_settings(
         return;
     };
     let md = &h.st.metadata;
-    let p = md.of(Ns::Tmdb);
+    let p = md.of(Ns::TMDB);
     let call = {
         let lang = lang.clone();
         tokio::spawn(async move {
@@ -245,12 +245,12 @@ async fn a_stale_unauthorized_does_not_withdraw_the_provider_after_new_settings(
     h.set(&format!("plugin.{ID}.token"), "new").await;
     let e = call.await.unwrap().unwrap_err();
     assert_eq!(e.status, Some(401));
-    assert!(md.available(Ns::Tmdb), "the 401 answered the old key");
+    assert!(md.available(Ns::TMDB), "the 401 answered the old key");
     let e = work(&h, MediaKind::Series, "unauthorized", &lang)
         .await
         .unwrap_err();
     assert_eq!(e.status, Some(401));
-    assert!(!md.available(Ns::Tmdb), "a 401 under the new key counts");
+    assert!(!md.available(Ns::TMDB), "a 401 under the new key counts");
     h.finish().await;
     s.finish().await;
 }
@@ -261,15 +261,15 @@ async fn id_reads_stay_in_the_named_namespace() {
         return;
     };
     let md = &h.st.metadata;
-    assert_eq!(md.named(None), Ns::Tmdb);
-    assert_eq!(md.named(Some("tvdb")), Ns::Tmdb, "tvdb has no key");
+    assert_eq!(md.named(None), Ns::TMDB);
+    assert_eq!(md.named(Some("tvdb")), Ns::TMDB, "tvdb has no key");
     let e = work(&h, MediaKind::Series, "unauthorized", &lang)
         .await
         .unwrap_err();
     assert_eq!(e.status, Some(401));
     assert_eq!(
         md.named(None),
-        Ns::Tmdb,
+        Ns::TMDB,
         "an unavailable TMDB is not swapped for another namespace"
     );
     h.finish().await;
@@ -282,8 +282,8 @@ async fn an_undeclared_find_by_answers_none() {
     let Some((s, h, lang)) = up("pvnofind", |_| {}, edit).await else {
         return;
     };
-    let p = h.st.metadata.of(Ns::Tmdb);
-    assert_eq!(p.find_by(Ns::Imdb, "tt1", &lang, GO).await.unwrap(), None);
+    let p = h.st.metadata.of(Ns::TMDB);
+    assert_eq!(p.find_by(Ns::IMDB, "tt1", &lang, GO).await.unwrap(), None);
     h.finish().await;
     s.finish().await;
 }
@@ -293,7 +293,7 @@ async fn background_calls_leave_an_instance_to_an_interactive_one() {
     let Some((s, h, lang)) = up("pvbg", |_| {}, |_| {}).await else {
         return;
     };
-    let p = h.st.metadata.of(Ns::Tmdb);
+    let p = h.st.metadata.of(Ns::TMDB);
     let bg: Vec<_> = (0..8)
         .map(|_| {
             let (p, lang) = (p.clone(), lang.clone());
@@ -336,7 +336,7 @@ async fn lists_go_through_the_plugin_and_are_validated() {
         let lang = lang.clone();
         async move { md.list(kind, name, &params, &lang, GO).await }
     };
-    assert_eq!(md.lister(tv), Ns::Tmdb);
+    assert_eq!(md.lister(tv), Ns::TMDB);
     let got = list(tv, "trending", &[("window", "day")]).await.unwrap();
     assert_eq!(got[0]["title"], format!("series:day:{}", lang.tmdb_locale));
     let got = list(tv, "discover", &[("genres", "28,12"), ("yearGte", "1999")])
@@ -351,7 +351,7 @@ async fn lists_go_through_the_plugin_and_are_validated() {
         let (id, e) = list(tv, name, &[]).await.unwrap_err();
         assert_eq!(
             (id, e.status),
-            (Ns::Tmdb, Some(502)),
+            (Ns::TMDB, Some(502)),
             "{name}: a malformed list"
         );
     }

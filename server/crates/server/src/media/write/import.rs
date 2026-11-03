@@ -19,7 +19,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
     metadata::limiter::Priority,
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
@@ -124,9 +124,9 @@ async fn duplicate(
     id: i32,
 ) -> Result<(), AppError> {
     let p = if tvdb {
-        ExternalProvider::Tvdb
+        Namespace::TVDB
     } else {
-        ExternalProvider::Tmdb
+        Namespace::TMDB
     };
     let hit = external_ids::find_numeric(&st.db, media_type, p, id).await?;
     match hit {
@@ -144,6 +144,8 @@ pub struct Import {
     pub language_profile_id: Option<i32>,
     pub added_by: Option<i32>,
     pub monitored_seasons: Option<Vec<i32>>,
+    /// Ids linked to the new media before it is announced.
+    pub links: Vec<(Namespace, String)>,
 }
 
 /// `importFromTmdb` / `importMedia` after validation (rules 11-17, 21-22), also the request
@@ -155,6 +157,7 @@ pub async fn import_title(
     imp: Import,
     prio: Priority,
 ) -> Result<i32, AppError> {
+    let lookup = (st.metadata.named(provider.as_deref()), external_id.clone());
     let found = service::import(
         st,
         Lookup {
@@ -176,7 +179,7 @@ pub async fn import_title(
     if let Some(f) = imp.folder_id {
         crate::libraries::assert_folder_in_library(&mut *tx, imp.library_id, f).await?;
     }
-    let (id, free) = insert_media(&mut tx, &imp, &found, &folder)
+    let (id, free) = insert_media(&mut tx, &imp, &found, &lookup, &folder)
         .await
         .map_err(|e| {
             if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
@@ -235,9 +238,11 @@ pub async fn import_title(
         library_id: Some(i64::from(imp.library_id)),
         added_by_user_id: imp.added_by.map(i64::from),
     });
-    let (st2, details) = (st.clone(), d.clone());
+    let (st2, details, provider) = (st.clone(), d.clone(), found.provider.0);
     tokio::spawn(async move {
-        if let Err(e) = service::persist_credits(&st2, id, imp.media_type, &details, &[]).await {
+        if let Err(e) =
+            service::persist_credits(&st2, id, imp.media_type, provider, &details, &[]).await
+        {
             tracing::warn!("cast/metadata persist of media #{id} failed: {e}");
         }
     });
@@ -326,6 +331,7 @@ async fn insert_media(
     tx: &mut PgConnection,
     imp: &Import,
     found: &Found,
+    (lookup, lookup_id): &(Namespace, String),
     folder: &str,
 ) -> Result<(i32, bool), sqlx::Error> {
     let d = &found.details;
@@ -382,6 +388,24 @@ async fn insert_media(
         imdb: d.imdb_id.clone(),
     };
     let free = ids.fill(tx, id, imp.media_type).await?.taken.is_empty();
+    // A plugin's id is not one of the three of `Ids`: link the one the title was looked up by and
+    // the one that served it, and pin the media to the plugin when it served the lookup.
+    let (served, served_id) = &found.provider;
+    for (ns, v) in [(lookup, lookup_id), (served, served_id)] {
+        if ns.core().is_none() {
+            external_ids::link(tx, id, imp.media_type, *ns, v).await?;
+        }
+    }
+    for (ns, v) in imp.links.iter().filter(|(n, _)| n != lookup && n != served) {
+        external_ids::link(tx, id, imp.media_type, *ns, v).await?;
+    }
+    if lookup.core().is_none() && served == lookup {
+        sqlx::query(r#"UPDATE media SET "preferredProvider" = $2 WHERE id = $1"#)
+            .bind(id)
+            .bind(lookup.as_str())
+            .execute(&mut *tx)
+            .await?;
+    }
     set_field_sources(tx, id, &found.provenance).await?;
     Ok((id, free))
 }
@@ -445,6 +469,7 @@ async fn prepare(
             .await?,
         added_by: Some(a.user.id),
         monitored_seasons: seasons,
+        links: vec![],
     })
 }
 
@@ -460,14 +485,42 @@ pub async fn import_for_request(
     media_type: MediaKind,
     tmdb_id: i32,
     profiles: (Option<i32>, Option<i32>),
-    (library_id, folder_id): (Option<i32>, Option<i32>),
+    target: (Option<i32>, Option<i32>),
     added_by: Option<i32>,
     seasons: Option<Vec<i32>>,
 ) -> Result<i32, AppError> {
-    if !st.metadata.available(ExternalProvider::Tmdb) {
-        return Err(AppError::bad_request("TMDB API key is not configured"));
+    import_in(
+        st,
+        media_type,
+        (Namespace::TMDB, &tmdb_id.to_string()),
+        profiles,
+        target,
+        added_by,
+        (seasons, vec![]),
+    )
+    .await
+}
+
+/// `import_for_request` for an id of any namespace a provider serves.
+pub async fn import_in(
+    st: &AppState,
+    media_type: MediaKind,
+    (ns, value): (Namespace, &str),
+    profiles: (Option<i32>, Option<i32>),
+    (library_id, folder_id): (Option<i32>, Option<i32>),
+    added_by: Option<i32>,
+    (seasons, links): (Option<Vec<i32>>, Vec<(Namespace, String)>),
+) -> Result<i32, AppError> {
+    if ns == Namespace::TMDB {
+        if !st.metadata.available(ns) {
+            return Err(AppError::bad_request("TMDB API key is not configured"));
+        }
+        if let Ok(tmdb) = value.parse() {
+            duplicate(st, media_type, false, tmdb).await?;
+        }
+    } else if !st.metadata.available(ns) {
+        return Err(AppError::bad_request("the provider is not available"));
     }
-    duplicate(st, media_type, false, tmdb_id).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
     let imp = Import {
@@ -480,11 +533,12 @@ pub async fn import_for_request(
             .await?,
         added_by,
         monitored_seasons: seasons,
+        links,
     };
     import_title(
         st,
-        Some("tmdb".into()),
-        tmdb_id.to_string(),
+        Some(ns.as_str().into()),
+        value.to_owned(),
         imp,
         Priority::Interactive,
     )
@@ -502,7 +556,7 @@ pub async fn import_tmdb(
     let b = Body::new(v, &TMDB_FIELDS)?;
     let c = common(&b)?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
-    if !st.metadata.available(ExternalProvider::Tmdb) {
+    if !st.metadata.available(Namespace::TMDB) {
         return Err(AppError::bad_request("TMDB API key is not configured"));
     }
     duplicate(&st, c.media_type, false, tmdb).await?;

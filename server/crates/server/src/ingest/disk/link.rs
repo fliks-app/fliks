@@ -2,7 +2,7 @@
 use super::*;
 use crate::ingest::books;
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::family::Family,
     naming::{BookNameTokens, apply_book_format},
 };
@@ -456,9 +456,9 @@ pub(super) async fn find_or_import(
     let tvdb = d.provider.as_deref() == Some("tvdb");
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
         let p = if tvdb {
-            ExternalProvider::Tvdb
+            Namespace::TVDB
         } else {
-            ExternalProvider::Tmdb
+            Namespace::TMDB
         };
         let id = crate::media::external_ids::find_numeric(&st.db, d.media_type, p, n).await?;
         Ok(match id {
@@ -493,6 +493,7 @@ pub(super) async fn find_or_import(
             .await?,
             added_by: Some(a.user.id),
             monitored_seasons: None,
+            links: vec![],
         };
         mw::import_title(st, provider, ext.clone(), imp, d.priority).await
     }

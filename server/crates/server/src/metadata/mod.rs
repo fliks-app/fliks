@@ -24,9 +24,7 @@ pub use types::{Credits, MetaError, PersonDetails};
 
 use crate::config::MetadataConfig;
 use crate::sync::RwLockExt;
-use fliks_domain::{
-    external_id::ExternalProvider, media::kind::MediaKind, metadata::merge::FieldOrder,
-};
+use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::merge::FieldOrder};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
@@ -46,10 +44,10 @@ struct Entry {
 /// The providers of provider plugins and the admin's order per kind.
 #[derive(Default)]
 struct Dynamic {
-    providers: HashMap<ExternalProvider, Arc<dyn MetadataProvider>>,
+    providers: HashMap<Namespace, Arc<dyn MetadataProvider>>,
     /// Plugin keys in registration order: they follow the default order of their kinds.
-    added: Vec<ExternalProvider>,
-    orders: HashMap<MediaKind, Vec<ExternalProvider>>,
+    added: Vec<Namespace>,
+    orders: HashMap<MediaKind, Vec<Namespace>>,
 }
 
 /// The providers by registry key (`metadata-orchestrator.md` rules 8-10).
@@ -57,7 +55,7 @@ pub struct Metadata {
     pub lang: LanguageCache,
     /// The concrete client for what the trait does not carry (seasons).
     pub tmdb: Arc<tmdb::Tmdb>,
-    builtin: HashMap<ExternalProvider, Entry>,
+    builtin: HashMap<Namespace, Entry>,
     dynamic: RwLock<Dynamic>,
     db: sqlx::PgPool,
     flights: orchestrator::Flights,
@@ -81,11 +79,8 @@ impl Metadata {
             flights: Default::default(),
             stale: Mutex::default(),
             builtin: HashMap::from([
-                (
-                    ExternalProvider::Tmdb,
-                    entry(!c.tmdb_key.is_empty(), tmdb.clone()),
-                ),
-                (ExternalProvider::Tvdb, entry(!c.tvdb_key.is_empty(), tvdb)),
+                (Namespace::TMDB, entry(!c.tmdb_key.is_empty(), tmdb.clone())),
+                (Namespace::TVDB, entry(!c.tvdb_key.is_empty(), tvdb)),
             ]),
             dynamic: RwLock::default(),
             tmdb,
@@ -110,7 +105,7 @@ impl Metadata {
     }
 
     /// The built-in of `id` when its key is configured: what a plugin of the same key falls back on.
-    pub fn configured_builtin(&self, id: ExternalProvider) -> Option<Arc<dyn MetadataProvider>> {
+    pub fn configured_builtin(&self, id: Namespace) -> Option<Arc<dyn MetadataProvider>> {
         self.builtin
             .get(&id)
             .filter(|e| e.on)
@@ -119,7 +114,7 @@ impl Metadata {
 
     /// The provider that answers for `id` and whether it is available: a plugin's while it is, else
     /// the built-in, else a plugin's that went away (its calls fail 503).
-    fn slot(&self, id: ExternalProvider) -> Option<(bool, Arc<dyn MetadataProvider>)> {
+    fn slot(&self, id: Namespace) -> Option<(bool, Arc<dyn MetadataProvider>)> {
         let plugin = self.dynamic.read_clean().providers.get(&id).cloned();
         match (plugin, self.builtin.get(&id)) {
             (Some(p), _) if p.available() => Some((true, p)),
@@ -129,21 +124,21 @@ impl Metadata {
     }
 
     /// The provider registered under `id`, available or not.
-    pub fn get(&self, id: ExternalProvider) -> Option<Arc<dyn MetadataProvider>> {
+    pub fn get(&self, id: Namespace) -> Option<Arc<dyn MetadataProvider>> {
         self.slot(id).map(|(_, p)| p)
     }
 
     /// A provider `resolve` or `fallback` returned.
-    pub fn of(&self, id: ExternalProvider) -> Arc<dyn MetadataProvider> {
+    pub fn of(&self, id: Namespace) -> Arc<dyn MetadataProvider> {
         self.get(id).expect("a registered provider")
     }
 
-    pub fn available(&self, id: ExternalProvider) -> bool {
+    pub fn available(&self, id: Namespace) -> bool {
         self.slot(id).is_some_and(|(on, _)| on)
     }
 
     /// The providers of `kind`, first to last: the admin's setting, else the default order then the plugins.
-    pub fn order(&self, kind: MediaKind) -> Vec<ExternalProvider> {
+    pub fn order(&self, kind: MediaKind) -> Vec<Namespace> {
         let d = self.dynamic.read_clean();
         if let Some(o) = d.orders.get(&kind) {
             return o.clone();
@@ -163,17 +158,17 @@ impl Metadata {
     fn pick(
         &self,
         name: Option<&str>,
-        order: Vec<ExternalProvider>,
+        order: Vec<Namespace>,
         wanted: impl Fn(&dyn MetadataProvider) -> bool,
-    ) -> Option<ExternalProvider> {
-        let usable = |p: &ExternalProvider| self.available(*p) && wanted(&*self.of(*p));
-        name.and_then(ExternalProvider::parse)
+    ) -> Option<Namespace> {
+        let usable = |p: &Namespace| self.available(*p) && wanted(&*self.of(*p));
+        name.and_then(Namespace::parse)
             .filter(usable)
             .or_else(|| order.into_iter().find(usable))
     }
 
     /// The providers that may describe people: every kind's order, each provider once.
-    fn person_order(&self) -> Vec<ExternalProvider> {
+    fn person_order(&self) -> Vec<Namespace> {
         let mut all = vec![];
         for p in MediaKind::ALL.into_iter().flat_map(|k| self.order(k)) {
             if !all.contains(&p) {
@@ -184,19 +179,19 @@ impl Metadata {
     }
 
     /// The named provider iff it is available and supports `kind`, else the first of the kind's order.
-    pub fn resolve(&self, name: Option<&str>, kind: MediaKind) -> Option<ExternalProvider> {
+    pub fn resolve(&self, name: Option<&str>, kind: MediaKind) -> Option<Namespace> {
         self.pick(name, self.order(kind), |p| p.supports(kind))
     }
 
     /// The named provider iff it is available, else TMDB: an id is read in one namespace only.
-    pub fn named(&self, name: Option<&str>) -> ExternalProvider {
-        name.and_then(ExternalProvider::parse)
+    pub fn named(&self, name: Option<&str>) -> Namespace {
+        name.and_then(Namespace::parse)
             .filter(|p| self.available(*p))
-            .unwrap_or(ExternalProvider::Tmdb)
+            .unwrap_or(Namespace::TMDB)
     }
 
     /// The first other provider of the kind's order that is available and supports `kind`.
-    pub fn fallback(&self, id: ExternalProvider, kind: MediaKind) -> Option<ExternalProvider> {
+    pub fn fallback(&self, id: Namespace, kind: MediaKind) -> Option<Namespace> {
         let order = self.order(kind);
         self.pick(
             None,
@@ -206,7 +201,7 @@ impl Metadata {
     }
 
     /// The first other provider, over the orders of every kind, that is available and describes people.
-    pub fn person_fallback(&self, id: ExternalProvider) -> Option<ExternalProvider> {
+    pub fn person_fallback(&self, id: Namespace) -> Option<Namespace> {
         let order = self.person_order();
         self.pick(
             None,
@@ -228,8 +223,8 @@ impl Metadata {
             .filter_map(|(k, v)| {
                 let kind = MediaKind::parse(k.strip_prefix(ORDER_PREFIX)?)?;
                 let names: Vec<String> = serde_json::from_str(&v?).ok()?;
-                let mut order: Vec<ExternalProvider> = vec![];
-                for p in names.iter().filter_map(|n| ExternalProvider::parse(n)) {
+                let mut order: Vec<Namespace> = vec![];
+                for p in names.iter().filter_map(|n| Namespace::parse(n)) {
                     if !order.contains(&p) {
                         order.push(p);
                     }

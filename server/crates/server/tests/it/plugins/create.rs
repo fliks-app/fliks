@@ -209,7 +209,9 @@ async fn concurrent_creates_of_one_title_make_one_media() {
     let mut rx = st.hub.subscribe();
     let calls = (0..5).map(|_| {
         let st = st.clone();
-        tokio::spawn(async move { resolve_or_create(&st, "movie", &tmdb("603"), None, None).await })
+        tokio::spawn(async move {
+            resolve_or_create(&st, "org.fake", "movie", &tmdb("603"), None, None).await
+        })
     });
     let ids: Vec<u32> = futures_util::future::join_all(calls)
         .await
@@ -247,12 +249,12 @@ async fn concurrent_creates_of_one_title_make_one_media() {
         serde_json::to_value(&imported[0].0).unwrap(),
         json!([{"provider": "tmdb", "value": "603"}])
     );
-    let again = resolve_or_create(&st, "movie", &tmdb("603"), None, None).await;
+    let again = resolve_or_create(&st, "org.fake", "movie", &tmdb("603"), None, None).await;
     assert_eq!(again.unwrap(), ids[0], "a later call finds it");
     assert_eq!(media_count(&s.pool).await, 1);
-    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(99), None).await;
+    let e = resolve_or_create(&st, "org.fake", "movie", &tmdb("604"), Some(99), None).await;
     assert_eq!(e.unwrap_err().code, "ERR_NOT_FOUND", "unknown library");
-    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(1), Some(999)).await;
+    let e = resolve_or_create(&st, "org.fake", "movie", &tmdb("604"), Some(1), Some(999)).await;
     assert_eq!(
         e.unwrap_err().code,
         "ERR_VALIDATION",
@@ -297,7 +299,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
         app.oneshot(req).await.unwrap().status().as_u16()
     };
     let ids = tmdb("603");
-    let plugin = resolve_or_create(&st, "movie", &ids, None, None);
+    let plugin = resolve_or_create(&st, "org.fake", "movie", &ids, None, None);
     let (status, created) = tokio::join!(request, plugin);
     assert_eq!(status, 201);
     let id = created.unwrap();
@@ -316,5 +318,386 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
             .await
             .unwrap();
     assert_eq!(linked, ("approved".into(), Some(id as i32)));
+    s.finish().await;
+}
+
+/// A third-party provider of a declared namespace, counting its work reads; `extra` is merged into its record.
+struct Fake(Arc<AtomicUsize>, &'static str, Value);
+
+impl fliks_server::metadata::MetadataProvider for Fake {
+    fn id(&self) -> fliks_domain::external_id::Namespace {
+        fliks_domain::external_id::Namespace::parse(self.1).unwrap()
+    }
+    fn supports(&self, kind: fliks_domain::media::kind::MediaKind) -> bool {
+        kind == fliks_domain::media::kind::MediaKind::Movie
+    }
+    fn has_persons(&self) -> bool {
+        false
+    }
+    fn limits(&self) -> fliks_domain::metadata::limiter::Limits {
+        fliks_domain::metadata::limiter::Limits::new(100.0, 100)
+    }
+    fn search<'a>(
+        &'a self,
+        _: &'a fliks_server::metadata::Search<'a>,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Vec<Value>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn fetch_work<'a>(
+        &'a self,
+        _: fliks_domain::media::kind::MediaKind,
+        id: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Value> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        let mut rec = json!({"title": format!("Fake {id}"), "status": "Released", "year": 2020});
+        rec.as_object_mut()
+            .unwrap()
+            .extend(self.2.as_object().unwrap().clone());
+        Box::pin(async move { Ok(rec) })
+    }
+    fn fetch_children<'a>(
+        &'a self,
+        _: fliks_domain::media::kind::MediaKind,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Vec<Value>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn child_stubs<'a>(
+        &'a self,
+        _: fliks_domain::media::kind::MediaKind,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Vec<Value>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn find_by<'a>(
+        &'a self,
+        _: fliks_domain::external_id::Namespace,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, Option<(String, fliks_domain::media::kind::MediaKind)>>
+    {
+        Box::pin(async { Ok(None) })
+    }
+    fn fetch_person<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, fliks_server::metadata::PersonDetails> {
+        Box::pin(async { Err(fliks_server::metadata::Upstream::new(Some(404), "none")) })
+    }
+    fn person_credits<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a fliks_domain::metadata::language::Resolved,
+        _: fliks_domain::metadata::limiter::Priority,
+    ) -> fliks_server::metadata::Call<'a, fliks_server::metadata::Credits> {
+        Box::pin(async { Err(fliks_server::metadata::Upstream::new(Some(404), "none")) })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_namespace_resolves_to_one_media_that_refreshes() {
+    use fliks_domain::{external_id::Namespace, metadata::limiter::Priority};
+    let Some(s) = Scratch::create("create_plugin_ns").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let (st, _) = state_with_tmdb(&s).await;
+    let ns = Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    let reads = Arc::new(AtomicUsize::new(0));
+    st.metadata
+        .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:aid", json!({}))));
+    let ids = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "7".into(),
+    }];
+    let first = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
+        .await
+        .unwrap();
+    let second = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
+        .await
+        .unwrap();
+    assert_eq!(first, second, "the second call finds the media");
+    assert_eq!(media_count(&s.pool).await, 1);
+    assert_eq!(reads.load(Ordering::SeqCst), 1, "one import");
+    let row: (String, Option<String>) = sqlx::query_as(
+        r#"SELECT e.value, m."preferredProvider" FROM media m
+           JOIN media_external_ids e ON e."mediaId" = m.id AND e.provider = 'org.fake:aid'"#,
+    )
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(row, ("7".into(), Some("org.fake:aid".into())));
+    let found =
+        fliks_server::metadata::service::for_media(&st, first as i32, Priority::Interactive)
+            .await
+            .unwrap();
+    assert_eq!(
+        found.provider,
+        (ns, "7".into()),
+        "a refresh reads the plugin"
+    );
+    assert_eq!(found.details.title, "Fake 7");
+    s.finish().await;
+}
+
+/// TMDB is registered but unconfigured: the plugin entry creates the media (`plugins.md` rule 57).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
+    use fliks_domain::external_id::Namespace;
+    let Some(s) = Scratch::create("create_second_entry").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let mut st = AppState::new(s.pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let data = std::env::temp_dir().join(format!(
+        "fliks-create-{}",
+        fliks_server::config::random_hex(6)
+    ));
+    st.images = Arc::new(ImageStore::with_root(data, "http://127.0.0.1:1/img"));
+    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    st.metadata
+        .add_plugin(Arc::new(Fake(Arc::default(), "org.fake:aid", json!({}))));
+    let both = vec![
+        ExternalId {
+            provider: "tmdb".into(),
+            value: "603".into(),
+        },
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "7".into(),
+        },
+    ];
+    let id = resolve_or_create(&st, "org.fake", "movie", &both, None, None)
+        .await
+        .unwrap();
+    let provider: String =
+        sqlx::query_scalar(r#"SELECT provider FROM media_external_ids WHERE "mediaId" = $1"#)
+            .bind(id as i32)
+            .fetch_one(&s.pool)
+            .await
+            .unwrap();
+    assert_eq!(provider, "org.fake:aid");
+    s.finish().await;
+}
+
+/// A plugin record with a `tvdbId` is not looked up on TMDB: no `tmdb` link, no 409 on a held one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
+    use fliks_domain::external_id::Namespace;
+    let Some(s) = Scratch::create("create_plugin_tvdb").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let (st, _) = state_with_tmdb(&s).await;
+    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    st.metadata.add_plugin(Arc::new(Fake(
+        Arc::default(),
+        "org.fake:aid",
+        json!({"tvdbId": 81189, "imdbId": "tt0000002", "ids": {"tvdb": "81189", "imdb": "tt0000002"}}),
+    )));
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, type) VALUES (900, 'Held', 'movie');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (900, 'movie', 'tmdb', '1396');"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let ids = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "7".into(),
+    }];
+    let id = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
+        .await
+        .unwrap();
+    let held: Vec<(String,)> = sqlx::query_as(
+        r#"SELECT provider FROM media_external_ids WHERE "mediaId" = $1 ORDER BY provider"#,
+    )
+    .bind(id as i32)
+    .fetch_all(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        held,
+        [("org.fake:aid".to_owned(),)],
+        "a plugin record writes no core id"
+    );
+    // A library preferring TMDB does not look the plugin's imdbId or tvdbId up there either.
+    sqlx::query(r#"UPDATE libraries SET "preferredProvider" = 'tmdb' WHERE id = 1"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    st.metadata.add_plugin(Arc::new(Fake(
+        Arc::default(),
+        "org.fake:aid",
+        json!({"tvdbId": 81189, "imdbId": "tt0000001"}),
+    )));
+    let ids = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "8".into(),
+    }];
+    let id = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
+        .await
+        .unwrap();
+    let tmdb_links: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'tmdb'"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(tmdb_links, 0);
+    // The found path changes nothing, and a plugin creates only through its own namespaces.
+    let mixed = vec![
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "8".into(),
+        },
+        ExternalId {
+            provider: "tvdb".into(),
+            value: "999999".into(),
+        },
+    ];
+    assert_eq!(
+        resolve_or_create(&st, "org.fake", "movie", &mixed, None, None)
+            .await
+            .unwrap(),
+        id
+    );
+    let held: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = $1 AND value = '999999'"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(held, 0, "the found path links nothing");
+    let other = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "9".into(),
+    }];
+    let e = resolve_or_create(&st, "org.other", "movie", &other, None, None)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "namespace-not-owned");
+    // `org.fake.x` is not `org.fake`, and one id per namespace counts.
+    Namespace::declare("org.fake.x:aid", "X", "^[1-9][0-9]*$", "preserve").unwrap();
+    st.metadata
+        .add_plugin(Arc::new(Fake(Arc::default(), "org.fake.x:aid", json!({}))));
+    let x = vec![ExternalId {
+        provider: "org.fake.x:aid".into(),
+        value: "5".into(),
+    }];
+    let e = resolve_or_create(&st, "org.fake", "movie", &x, None, None)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "namespace-not-owned");
+    let twice = vec![
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "11".into(),
+        },
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "12".into(),
+        },
+    ];
+    let id = resolve_or_create(&st, "org.fake", "movie", &twice, None, None)
+        .await
+        .unwrap();
+    let aid: String = sqlx::query_scalar(
+        r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'org.fake:aid'"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(aid, "11");
+    s.finish().await;
+}
+
+/// An `idPattern` with letters imports and refreshes, and every served non-unique entry is linked.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lettered_namespace_refreshes_and_all_entries_are_linked() {
+    use fliks_domain::{external_id::Namespace, metadata::limiter::Priority};
+    let Some(s) = Scratch::create("create_lettered").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let (st, _) = state_with_tmdb(&s).await;
+    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    let slug = Namespace::declare("org.fake:slug", "Slug", "^[a-z0-9-]+$", "preserve").unwrap();
+    let reads = Arc::new(AtomicUsize::new(0));
+    st.metadata
+        .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:slug", json!({}))));
+    st.metadata
+        .add_plugin(Arc::new(Fake(Arc::default(), "org.fake:aid", json!({}))));
+    let entry = |p: &str, v: &str| ExternalId {
+        provider: p.into(),
+        value: v.into(),
+    };
+    let both = vec![
+        entry("org.fake:slug", "cowboy-bebop"),
+        entry("org.fake:aid", "7"),
+    ];
+    let first = resolve_or_create(&st, "org.fake", "movie", &both, None, None)
+        .await
+        .unwrap();
+    for one in &both {
+        let again = resolve_or_create(
+            &st,
+            "org.fake",
+            "movie",
+            std::slice::from_ref(one),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(again, first, "{}", one.provider);
+    }
+    assert_eq!(media_count(&s.pool).await, 1);
+    let found =
+        fliks_server::metadata::service::for_media(&st, first as i32, Priority::Interactive)
+            .await
+            .unwrap();
+    assert_eq!(found.provider, (slug, "cowboy-bebop".into()));
+    s.finish().await;
+}
+
+/// A pin to a plugin that is gone falls through to the next provider (rule 27).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_pin_to_a_gone_plugin_falls_through() {
+    use fliks_domain::{external_id::Namespace, metadata::limiter::Priority};
+    let Some(s) = Scratch::create("create_pin_gone").await else {
+        return;
+    };
+    sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
+    let (st, _) = state_with_tmdb(&s).await;
+    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, type, "libraryId", "preferredProvider")
+             VALUES (900, 'Pinned', 'movie', 1, 'org.fake:aid');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (900, 'movie', 'org.fake:aid', '7'), (900, 'movie', 'tmdb', '603');"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let found = fliks_server::metadata::service::for_media(&st, 900, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(found.provider.0, Namespace::TMDB, "no plugin registered");
     s.finish().await;
 }

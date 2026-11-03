@@ -13,7 +13,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::ExternalProvider::{self, Asin, Audible, GoogleBooks, Isbn, OpenLibrary},
+    external_id::Namespace,
     media::{family::Family, kind::MediaKind},
     metadata::{
         language::Resolved,
@@ -33,11 +33,11 @@ const P: Priority = Priority::Interactive;
 
 #[derive(Default)]
 pub(crate) struct Fake {
-    id: Option<ExternalProvider>,
+    id: Option<Namespace>,
     pub(crate) works: HashMap<String, Value>,
     pub(crate) children: HashMap<String, Vec<Value>>,
-    editions: HashMap<(ExternalProvider, String), Value>,
-    finds: HashMap<(ExternalProvider, String), String>,
+    editions: HashMap<(Namespace, String), Value>,
+    finds: HashMap<(Namespace, String), String>,
     pub(crate) found: Vec<Value>,
     pub(crate) broken: bool,
     pub(crate) delay: std::time::Duration,
@@ -45,14 +45,14 @@ pub(crate) struct Fake {
 }
 
 impl Fake {
-    pub(crate) fn new(id: ExternalProvider) -> Self {
+    pub(crate) fn new(id: Namespace) -> Self {
         Self {
             id: Some(id),
             ..Self::default()
         }
     }
 
-    pub(crate) fn edition(mut self, ns: ExternalProvider, v: &str, record: Value) -> Self {
+    pub(crate) fn edition(mut self, ns: Namespace, v: &str, record: Value) -> Self {
         self.editions.insert((ns, v.into()), record);
         self
     }
@@ -67,7 +67,7 @@ fn down<T: Send + 'static>() -> Call<'static, T> {
 }
 
 impl MetadataProvider for Fake {
-    fn id(&self) -> ExternalProvider {
+    fn id(&self) -> Namespace {
         self.id.unwrap()
     }
     fn supports(&self, kind: MediaKind) -> bool {
@@ -128,7 +128,7 @@ impl MetadataProvider for Fake {
     }
     fn find_by<'a>(
         &'a self,
-        s: ExternalProvider,
+        s: Namespace,
         id: &'a str,
         _: &'a Resolved,
         _: Priority,
@@ -184,7 +184,7 @@ pub(crate) fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
 }
 
 pub(crate) fn anchor() -> Fake {
-    let mut f = Fake::new(OpenLibrary);
+    let mut f = Fake::new(Namespace::OPENLIBRARY);
     f.works.insert(
         "OL1W".into(),
         json!({"title": "Alpha", "overview": "OL text", "year": 1999, "subjects": ["Novel"],
@@ -196,13 +196,13 @@ pub(crate) fn anchor() -> Fake {
 
 fn text_edition_records() -> (Fake, Fake) {
     let ol = anchor().edition(
-        Isbn,
+        Namespace::ISBN,
         ISBN,
         json!({"externalId": "OL5M", "title": "Alpha", "publisher": "Pub", "pageCount": 320,
                "language": "fre", "releaseDate": "2001-05", "isbn13": [ISBN]}),
     );
-    let gb = Fake::new(GoogleBooks).edition(
-        Isbn,
+    let gb = Fake::new(Namespace::GOOGLEBOOKS).edition(
+        Namespace::ISBN,
         ISBN,
         json!({"externalId": "gb1", "overview": "Long text", "subtitle": "A subtitle"}),
     );
@@ -227,7 +227,7 @@ async fn edition(db: &PgPool, media: i32, family: &str) -> i32 {
         .unwrap()
 }
 
-fn matched(edition: &[(ExternalProvider, &str)]) -> BookMatch {
+fn matched(edition: &[(Namespace, &str)]) -> BookMatch {
     BookMatch {
         work: "OL1W".into(),
         edition: edition.iter().map(|(p, v)| (*p, (*v).to_owned())).collect(),
@@ -250,9 +250,15 @@ async fn a_text_edition_is_linked_merged_and_written(db: PgPool) {
     let st = state(&db, vec![ol, gb]);
     let media = book(&db).await;
     let ed = edition(&db, media, "text").await;
-    attach(&st, media, Some(ed), &matched(&[(Isbn, ISBN)]), P)
-        .await
-        .unwrap();
+    attach(
+        &st,
+        media,
+        Some(ed),
+        &matched(&[(Namespace::ISBN, ISBN)]),
+        P,
+    )
+    .await
+    .unwrap();
 
     let row: (String, Option<String>, Option<i32>) =
         sqlx::query_as(r#"SELECT title, overview, year FROM media WHERE id = $1"#)
@@ -333,7 +339,7 @@ async fn attaching_twice_changes_nothing_more(db: PgPool) {
     let st = state(&db, vec![ol, gb]);
     let media = book(&db).await;
     let ed = edition(&db, media, "text").await;
-    let m = matched(&[(Isbn, ISBN)]);
+    let m = matched(&[(Namespace::ISBN, ISBN)]);
     attach(&st, media, Some(ed), &m, P).await.unwrap();
     attach(&st, media, Some(ed), &m, P).await.unwrap();
     for (sql, id, n) in [
@@ -361,8 +367,8 @@ async fn attaching_twice_changes_nothing_more(db: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn an_audio_edition_takes_its_series_and_the_file_narrator(db: PgPool) {
     crate::db::migrate(&db).await.unwrap();
-    let audible = Fake::new(Audible).edition(
-        Asin,
+    let audible = Fake::new(Namespace::AUDIBLE).edition(
+        Namespace::ASIN,
         "B000000002",
         json!({"externalId": "B000000002", "asin": "B000000002", "format": "audio", "durationSeconds": 3600,
                "language": "fr", "narrators": [{"name": "Voice B", "id": "B000000003"}],
@@ -377,7 +383,7 @@ async fn an_audio_edition_takes_its_series_and_the_file_narrator(db: PgPool) {
         &st,
         media,
         Some(ed),
-        &matched(&[(Asin, "B000000002")]),
+        &matched(&[(Namespace::ASIN, "B000000002")]),
         Some(file),
         P,
     )
@@ -412,12 +418,22 @@ async fn an_audio_edition_takes_its_series_and_the_file_narrator(db: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn an_asin_is_stored_on_an_edition_only(db: PgPool) {
     crate::db::migrate(&db).await.unwrap();
-    let audible = Fake::new(Audible).edition(Asin, "B000000002", json!({"title": "Alpha (audio)"}));
+    let audible = Fake::new(Namespace::AUDIBLE).edition(
+        Namespace::ASIN,
+        "B000000002",
+        json!({"title": "Alpha (audio)"}),
+    );
     let st = state(&db, vec![anchor(), audible]);
     let media = book(&db).await;
-    attach(&st, media, None, &matched(&[(Asin, "B000000002")]), P)
-        .await
-        .unwrap();
+    attach(
+        &st,
+        media,
+        None,
+        &matched(&[(Namespace::ASIN, "B000000002")]),
+        P,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         strings(
             &db,
@@ -451,9 +467,15 @@ async fn locked_fields_and_failing_providers_do_not_stop_the_attach(db: PgPool) 
         .unwrap();
     sqlx::query(r#"INSERT INTO edition_field_sources ("editionId", field, provider, locked) VALUES ($1, 'publisher', NULL, true)"#)
         .bind(ed).execute(&db).await.unwrap();
-    attach(&st, media, Some(ed), &matched(&[(Isbn, ISBN)]), P)
-        .await
-        .unwrap();
+    attach(
+        &st,
+        media,
+        Some(ed),
+        &matched(&[(Namespace::ISBN, ISBN)]),
+        P,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         strings(&db, "SELECT overview FROM media WHERE id = $1", media).await,
         ["mine"]
@@ -517,7 +539,8 @@ fn search_hit(title: &str, author: &str, work: &str) -> Value {
 async fn identify_by_isbn_then_by_a_search_above_the_threshold(db: PgPool) {
     crate::db::migrate(&db).await.unwrap();
     let mut ol = anchor();
-    ol.finds.insert((Isbn, ISBN.into()), "OL1W".into());
+    ol.finds
+        .insert((Namespace::ISBN, ISBN.into()), "OL1W".into());
     ol.found = vec![
         search_hit("Alpha Two", "Una Roe", "OL2W"),
         search_hit("Alpha", "Una Roe", "OL1W"),
@@ -533,7 +556,7 @@ async fn identify_by_isbn_then_by_a_search_above_the_threshold(db: PgPool) {
     let m = identify(&st, &strong, P).await.unwrap().unwrap();
     assert_eq!(
         (m.work.as_str(), m.confidence, m.edition),
-        ("OL1W", 100, vec![(Isbn, ISBN.to_owned())])
+        ("OL1W", 100, vec![(Namespace::ISBN, ISBN.to_owned())])
     );
 
     let m = identify(&st, &hints(), P).await.unwrap().unwrap();
@@ -557,8 +580,8 @@ async fn identify_reads_the_title_of_an_asin_and_needs_the_anchor(db: PgPool) {
     crate::db::migrate(&db).await.unwrap();
     let mut ol = anchor();
     ol.found = vec![search_hit("Alpha", "Una Roe", "OL1W")];
-    let audible = Fake::new(Audible).edition(
-        Asin,
+    let audible = Fake::new(Namespace::AUDIBLE).edition(
+        Namespace::ASIN,
         "B000000002",
         json!({"title": "Alpha", "authors": [{"name": "Una Roe", "id": null}]}),
     );
@@ -573,13 +596,13 @@ async fn identify_reads_the_title_of_an_asin_and_needs_the_anchor(db: PgPool) {
     let m = identify(&st, &h, P).await.unwrap().unwrap();
     assert_eq!(
         (m.work.as_str(), m.edition),
-        ("OL1W", vec![(Asin, "B000000002".to_owned())])
+        ("OL1W", vec![(Namespace::ASIN, "B000000002".to_owned())])
     );
 
-    let st = state(&db, vec![Fake::new(Audible)]);
+    let st = state(&db, vec![Fake::new(Namespace::AUDIBLE)]);
     assert!(matches!(
         identify(&st, &hints(), P).await,
         Err(MetaError::Upstream(_))
     ));
-    assert_eq!(ANCHOR, OpenLibrary);
+    assert_eq!(ANCHOR, Namespace::OPENLIBRARY);
 }

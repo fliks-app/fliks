@@ -95,5 +95,10 @@
 {"input":{"kind":"normalize","idPattern":"^.+$","case":"preserve","value":"a\u200bb"},"expected":{"id":null}},
 {"input":{"kind":"normalize","idPattern":"^.+$","case":"preserve","value":"a b"},"expected":{"id":null}},
 {"input":{"kind":"normalize","idPattern":"^.+$","case":"preserve","value":"a\u2028b"},"expected":{"id":null}},
-{"input":{"kind":"normalize","idPattern":"^.+$","case":"preserve","value":"\u2028a\u2028"},"expected":{"id":"a"}}
+{"input":{"kind":"normalize","idPattern":"^.+$","case":"preserve","value":"\u2028a\u2028"},"expected":{"id":"a"}},
+{"input":{"kind":"sanitize","official":false,"own":["org.example.anime:aid"],"record":{"tmdbId":5,"tmdbCollectionId":9,"tmdbCollectionName":"c","title":"t","ids":{"tmdb":"603","imdb":"tt1","tvdb":"012","org.example.anime:aid":["7","x"]}}},"expected":{"record":{"title":"t","ids":{"org.example.anime:aid":["7"]}},"dropped":6}},
+{"input":{"kind":"sanitize","official":true,"own":["org.example.anime:aid"],"record":{"tmdbId":5,"tmdbCollectionId":9,"tmdbCollectionName":"c","title":"t","ids":{"tmdb":"603","imdb":"tt1","tvdb":"012","org.example.anime:aid":["7","x"]}}},"expected":{"record":{"tmdbId":5,"tmdbCollectionId":9,"tmdbCollectionName":"c","title":"t","ids":{"tmdb":"603","imdb":"tt1","org.example.anime:aid":["7"]}},"dropped":1}},
+{"input":{"kind":"sanitize","official":false,"own":[],"record":{"cast":[{"externalId":1,"tmdbId":2,"ids":{"tmdb":"1","imdb":"nm1"}}]}},"expected":{"record":{"cast":[{"externalId":1,"ids":{}}]},"dropped":3}},
+{"input":{"kind":"sanitize","official":false,"own":[],"record":{"ids":{"n01":"1","n02":"1","n03":"1","n04":"1","n05":"1","n06":"1","n07":"1","n08":"1","n09":"1","n10":"1","n11":"1","n12":"1","n13":"1","n14":"1","n15":"1","n16":"1","n17":"1","n18":"1","n19":"1","n20":"1","n21":"1","n22":"1","n23":"1","n24":"1","n25":"1","n26":"1","n27":"1","n28":"1","n29":"1","n30":"1","n31":"1","n32":"1","n33":"1","n34":"1"}}},"expected":{"record":{"ids":{}},"dropped":34}},
+{"input":{"kind":"sanitize","official":false,"own":[],"record":{"ids":["x"]}},"expected":{"record":{},"dropped":1}}
 ]}

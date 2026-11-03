@@ -26,7 +26,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
 };
 use serde_json::{Value, json};
@@ -108,10 +108,7 @@ impl BodyIds {
     ) -> Result<Link, sqlx::Error> {
         let tmdb = self.tmdb.as_ref().map(|t| t.map(|t| t.to_string()));
         let imdb = self.imdb.as_ref();
-        for (p, v) in [
-            (ExternalProvider::Tmdb, tmdb),
-            (ExternalProvider::Imdb, imdb.cloned()),
-        ] {
+        for (p, v) in [(Namespace::TMDB, tmdb), (Namespace::IMDB, imdb.cloned())] {
             let Some(v) = v else { continue };
             match external_ids::set(c, id, kind, p, v.as_deref()).await? {
                 Link::Linked => {}
@@ -161,11 +158,10 @@ fn columns(b: &Body) -> Result<Columns, AppError> {
     if b.has("preferredProvider") {
         let v = match b.0.get("preferredProvider") {
             Some(Value::Null) => None,
-            Some(Value::String(s)) if s == "tmdb" || s == "tvdb" => Some(s.clone()),
+            Some(Value::String(s)) if external_ids::preferred(s).is_some() => Some(s.clone()),
             _ => {
                 return Err(AppError::bad_request(vec![
-                    "preferredProvider must be one of the following values: tmdb, tvdb, "
-                        .to_owned(),
+                    "preferredProvider must be a provider namespace".to_owned(),
                 ]));
             }
         };
@@ -856,10 +852,10 @@ pub async fn patch_season(
     let provider = match b.0.get("preferredProvider") {
         None => None,
         Some(Value::Null) => Some(None),
-        Some(Value::String(s)) if s == "tmdb" || s == "tvdb" => Some(Some(s.clone())),
+        Some(Value::String(s)) if external_ids::preferred(s).is_some() => Some(Some(s.clone())),
         _ => {
             return Err(AppError::bad_request(vec![
-                "preferredProvider must be one of the following values: tmdb, tvdb, ".to_owned(),
+                "preferredProvider must be a provider namespace".to_owned(),
             ]));
         }
     };

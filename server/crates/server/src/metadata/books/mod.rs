@@ -8,11 +8,11 @@ pub mod routes;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use fliks_domain::external_id::ExternalProvider;
+use fliks_domain::external_id::Namespace;
 use serde_json::{Map, Value};
 
 /// The namespace of a work id (`books.md` rule 11): the one provider `fetch_work` and `search` answer works for.
-pub const ANCHOR: ExternalProvider = ExternalProvider::OpenLibrary;
+pub const ANCHOR: Namespace = Namespace::OPENLIBRARY;
 
 /// `v` as a work id of the anchor.
 pub(crate) fn work_id(v: &str) -> Option<String> {

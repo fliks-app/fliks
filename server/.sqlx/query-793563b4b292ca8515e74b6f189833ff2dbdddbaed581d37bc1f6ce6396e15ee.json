@@ -17,7 +17,7 @@
       {
         "ordinal": 1,
         "name": "pref!",
-        "type_info": "Varchar",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "item_groups",

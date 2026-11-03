@@ -1,7 +1,15 @@
 //! The id namespaces an entity is known by outside Fliks, as stored in `media_external_ids.provider`.
-use std::fmt;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::{Arc, LazyLock, RwLock},
+};
 
-use crate::{books::isbn, js::rx};
+use crate::{
+    books::isbn,
+    js::rx,
+    plugins::provider::{Class, IdRule, classify},
+};
 
 /// The largest id of a numeric provider: nine digits, as `media_external_ids` checks.
 pub const MAX_NUMERIC_ID: i32 = 999_999_999;
@@ -105,6 +113,169 @@ impl ExternalProvider {
     }
 }
 
+/// A plugin's `<pluginId>:<name>`, interned when its manifest or `provider_namespaces` row declares it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PluginNamespace(&'static str);
+
+/// What a declared plugin namespace is stored with.
+#[derive(Clone)]
+struct Declared {
+    rule: Arc<IdRule>,
+    label: Arc<str>,
+}
+
+/// The id namespaces of declared plugins; names are leaked once, bounded by what manifests declare.
+static PLUGIN: LazyLock<RwLock<HashMap<&'static str, Declared>>> = LazyLock::new(Default::default);
+
+/// Names a stored row still carries after its namespace was deleted; they parse nowhere.
+static RETIRED: LazyLock<RwLock<HashSet<&'static str>>> = LazyLock::new(Default::default);
+
+/// An id namespace: one the core knows, or one a plugin declared (`provider-plugins.md` rule 23).
+/// `Copy`, so registry keys and orders carry it as they carried `ExternalProvider`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Namespace {
+    Core(ExternalProvider),
+    Plugin(PluginNamespace),
+}
+
+impl Namespace {
+    pub const TMDB: Self = Self::Core(ExternalProvider::Tmdb);
+    pub const TVDB: Self = Self::Core(ExternalProvider::Tvdb);
+    pub const IMDB: Self = Self::Core(ExternalProvider::Imdb);
+    pub const OPENLIBRARY: Self = Self::Core(ExternalProvider::OpenLibrary);
+    pub const GOOGLEBOOKS: Self = Self::Core(ExternalProvider::GoogleBooks);
+    pub const BNF: Self = Self::Core(ExternalProvider::Bnf);
+    pub const AUDIBLE: Self = Self::Core(ExternalProvider::Audible);
+    pub const AUDNEXUS: Self = Self::Core(ExternalProvider::Audnexus);
+    pub const ISBN: Self = Self::Core(ExternalProvider::Isbn);
+    pub const ASIN: Self = Self::Core(ExternalProvider::Asin);
+    pub const FILE: Self = Self::Core(ExternalProvider::File);
+
+    /// Declares a plugin namespace (or refreshes its label and pattern); `None` for a name that is no
+    /// plugin namespace or a pattern `IdRule` refuses.
+    pub fn declare(name: &str, label: &str, id_pattern: &str, case: &str) -> Option<Self> {
+        let Some(Class::Plugin { .. }) = classify(name) else {
+            return None;
+        };
+        let rule = Arc::new(IdRule::new(id_pattern, case)?);
+        let mut map = PLUGIN.write().unwrap_or_else(|e| e.into_inner());
+        let retired = RETIRED.read().unwrap_or_else(|e| e.into_inner());
+        let key = match (map.get_key_value(name), retired.get(name)) {
+            (Some((k, _)), _) | (None, Some(k)) => *k,
+            (None, None) => Box::leak(name.to_owned().into_boxed_str()),
+        };
+        drop(retired);
+        map.insert(
+            key,
+            Declared {
+                rule,
+                label: label.into(),
+            },
+        );
+        Some(Self::Plugin(PluginNamespace(key)))
+    }
+
+    /// A core name, or a plugin namespace already declared.
+    pub fn parse(s: &str) -> Option<Self> {
+        if let Some(p) = ExternalProvider::parse(s) {
+            return Some(Self::Core(p));
+        }
+        let map = PLUGIN.read().unwrap_or_else(|e| e.into_inner());
+        map.get_key_value(s)
+            .map(|(k, _)| Self::Plugin(PluginNamespace(k)))
+    }
+
+    /// The namespace of a stored row: `parse`, else a plugin namespace deleted since (it has no rule,
+    /// so no id of it normalises and `parse` still refuses it). `None` for a name of no namespace.
+    pub fn stored(s: &str) -> Option<Self> {
+        if let Some(n) = Self::parse(s) {
+            return Some(n);
+        }
+        let Some(Class::Plugin { .. }) = classify(s) else {
+            return None;
+        };
+        let mut set = RETIRED.write().unwrap_or_else(|e| e.into_inner());
+        let key = match set.get(s) {
+            Some(k) => *k,
+            None => {
+                let k: &'static str = Box::leak(s.to_owned().into_boxed_str());
+                set.insert(k);
+                k
+            }
+        };
+        Some(Self::Plugin(PluginNamespace(key)))
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Core(p) => p.as_str(),
+            Self::Plugin(p) => p.0,
+        }
+    }
+
+    /// The namespace as messages name it: a plugin's stored `label`.
+    pub fn label(self) -> String {
+        match self {
+            Self::Core(p) => p.label().to_owned(),
+            Self::Plugin(p) => {
+                let map = PLUGIN.read().unwrap_or_else(|e| e.into_inner());
+                map.get(p.0)
+                    .map_or_else(|| p.0.to_owned(), |d| d.label.to_string())
+            }
+        }
+    }
+
+    /// Forgets a plugin namespace (its data is deleted); a core one stays.
+    pub fn forget(name: &str) {
+        PLUGIN
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(name);
+    }
+
+    pub const fn core(self) -> Option<ExternalProvider> {
+        match self {
+            Self::Core(p) => Some(p),
+            Self::Plugin(_) => None,
+        }
+    }
+
+    /// A plugin namespace is never unique (`provider-plugins.md` rule 25).
+    pub const fn is_unique(self) -> bool {
+        match self {
+            Self::Core(p) => p.is_unique(),
+            Self::Plugin(_) => false,
+        }
+    }
+
+    /// `value` as stored: the core's rule, or the plugin's `idPattern` (`provider-plugins.md` rule 28).
+    pub fn normalize(self, value: &str) -> Option<String> {
+        match self {
+            Self::Core(p) => p.normalize(value),
+            Self::Plugin(p) => {
+                let d = PLUGIN
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .get(p.0)
+                    .cloned()?;
+                d.rule.normalize(value)
+            }
+        }
+    }
+}
+
+impl From<ExternalProvider> for Namespace {
+    fn from(p: ExternalProvider) -> Self {
+        Self::Core(p)
+    }
+}
+
+impl fmt::Display for Namespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl fmt::Display for ExternalProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
@@ -114,6 +285,39 @@ impl fmt::Display for ExternalProvider {
 #[cfg(test)]
 mod tests {
     use super::ExternalProvider as P;
+
+    #[test]
+    fn plugin_namespaces_parse_once_declared_and_are_never_unique() {
+        use super::Namespace as N;
+        assert_eq!(N::parse("tmdb"), Some(N::TMDB));
+        assert_eq!(N::parse("org.ns.test:aid"), None);
+        let ns = N::declare(
+            "org.ns.test:aid",
+            "Test aid",
+            "^[1-9][0-9]{0,8}$",
+            "preserve",
+        )
+        .unwrap();
+        assert_eq!(N::parse("org.ns.test:aid"), Some(ns));
+        assert!(!ns.is_unique());
+        assert_eq!(ns.normalize(" 42 ").as_deref(), Some("42"));
+        assert_eq!(ns.normalize("042"), None);
+        assert_eq!(N::declare("tmdb", "T", "^.+$", "preserve"), None);
+        assert_eq!(
+            N::declare("org.ns.test:bad", "Bad", "no anchors", "preserve"),
+            None
+        );
+        assert_eq!(ns.label(), "Test aid");
+        let gone = N::stored("org.ns.test:gone").unwrap();
+        assert_eq!(
+            (N::parse("org.ns.test:gone"), gone.normalize("1")),
+            (None, None)
+        );
+        assert_eq!(gone.label(), "org.ns.test:gone");
+        assert_eq!(N::stored("nope"), None);
+        assert_eq!(N::TMDB.label(), "TMDB");
+        assert_eq!(N::TMDB.normalize("603").as_deref(), Some("603"));
+    }
 
     #[test]
     fn names_round_trip() {

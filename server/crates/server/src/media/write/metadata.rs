@@ -364,7 +364,7 @@ pub async fn refresh_metadata(
         );
     }
     download_media_images(st, id, d, &found.locked).await;
-    service::persist_credits(st, id, media.media_type, d, &found.locked).await?;
+    service::persist_credits(st, id, media.media_type, found.provider.0, d, &found.locked).await?;
     if media.has_seasons() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {
@@ -458,7 +458,7 @@ pub async fn identify(
     let b = Body::new(v, &["tmdbId", "tvdbId", "imdbId", "preferredProvider"])?;
     let (tmdb, tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
     let imdb = b.str("imdbId")?.flatten();
-    let provider = b.one_of("preferredProvider", &["tmdb", "tvdb"])?;
+    let provider = b.namespace("preferredProvider")?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -529,6 +529,27 @@ async fn apply_identity(
             )));
         }
     }
+    // A new identity: the plugin pins go, and the id of the media pin's namespace with them, unless
+    // an explicit pin names it.
+    let keep = provider.clone().flatten();
+    sqlx::query(
+        r#"DELETE FROM media_external_ids
+           WHERE "mediaId" = $1 AND provider LIKE '%:%' AND provider IS DISTINCT FROM $2
+             AND provider = (SELECT "preferredProvider" FROM media WHERE id = $1)"#,
+    )
+    .bind(media.id)
+    .bind(&keep)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"UPDATE item_groups SET "preferredProvider" = NULL
+           WHERE "mediaId" = $1 AND "preferredProvider" LIKE '%:%'
+             AND "preferredProvider" IS DISTINCT FROM $2"#,
+    )
+    .bind(media.id)
+    .bind(&keep)
+    .execute(&mut *tx)
+    .await?;
     let written = ids.replace(&mut tx, media.id, media.media_type).await?;
     if written.gone {
         return Err(crate::libraries::media_not_found(media.id));
@@ -540,7 +561,8 @@ async fn apply_identity(
         )));
     }
     sqlx::query!(
-        r#"UPDATE media SET "preferredProvider" = CASE WHEN $2 THEN $3 ELSE "preferredProvider" END
+        r#"UPDATE media SET "preferredProvider" = CASE WHEN $2 THEN $3
+             WHEN "preferredProvider" LIKE '%:%' THEN NULL ELSE "preferredProvider" END
            WHERE id = $1"#,
         media.id,
         provider.is_some(),

@@ -9,7 +9,7 @@ use super::{
     types::{Credits, PersonDetails},
 };
 use fliks_domain::{
-    external_id::ExternalProvider,
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::{
         discover::{self, Options},
@@ -529,14 +529,14 @@ impl Tmdb {
 
     pub async fn find_by_external_id(
         &self,
-        source: ExternalProvider,
+        source: Namespace,
         id: &str,
         lang: &Resolved,
         p: Priority,
     ) -> Result<Option<(String, bool)>, Upstream> {
         let external = match source {
-            ExternalProvider::Imdb => "imdb_id",
-            ExternalProvider::Tvdb => "tvdb_id",
+            Namespace::IMDB => "imdb_id",
+            Namespace::TVDB => "tvdb_id",
             _ => return Ok(None),
         };
         let d = self
@@ -635,8 +635,8 @@ impl Tmdb {
 }
 
 impl MetadataProvider for Tmdb {
-    fn id(&self) -> ExternalProvider {
-        ExternalProvider::Tmdb
+    fn id(&self) -> Namespace {
+        Namespace::TMDB
     }
 
     fn supports(&self, kind: MediaKind) -> bool {
@@ -738,7 +738,7 @@ impl MetadataProvider for Tmdb {
 
     fn find_by<'a>(
         &'a self,
-        source: ExternalProvider,
+        source: Namespace,
         id: &'a str,
         lang: &'a Resolved,
         p: Priority,
