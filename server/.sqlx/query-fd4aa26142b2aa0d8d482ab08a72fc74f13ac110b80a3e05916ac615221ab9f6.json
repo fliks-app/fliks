@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mergeM4bBackfill\" FROM libraries WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mergeM4bBackfill",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mergeM4bBackfill"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fd4aa26142b2aa0d8d482ab08a72fc74f13ac110b80a3e05916ac615221ab9f6"
+}

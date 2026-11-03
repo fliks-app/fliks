@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE book_merges SET state = 'done', error = NULL, \"jobId\" = NULL, \"nextAttemptAt\" = NULL\n           WHERE \"editionId\" = $1 AND state <> 'replace'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89019864cb4eb5577c631321f4fcf4b1317308798379bdf2b9ce3bcd05e37b1d"
+}

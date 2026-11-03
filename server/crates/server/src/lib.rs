@@ -133,6 +133,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
     jobs::book_import::resume(&state).await;
+    ingest::books::merge::resume_backfills(&state).await;
     party::boot(&state).await?;
     party::spawn(&state);
     requests::spawn(&state);

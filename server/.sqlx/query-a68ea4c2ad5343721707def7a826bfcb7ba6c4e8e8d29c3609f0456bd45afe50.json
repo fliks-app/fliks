@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE libraries SET \"mergeM4bBackfill\" = 0\n                       WHERE id = $1 AND \"mergeM4bBackfill\" = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a68ea4c2ad5343721707def7a826bfcb7ba6c4e8e8d29c3609f0456bd45afe50"
+}
