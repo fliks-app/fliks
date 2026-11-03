@@ -668,7 +668,7 @@ async fn route_calls_take_the_interactive_rate() {
     let Some(w) = wasm("fixture_provider") else {
         return;
     };
-    let Some(s) = Scratch::create("route-rate").await else {
+    let Some(s) = Scratch::create("routerate").await else {
         return;
     };
     let (port, _) = hold_stub().await;
@@ -679,7 +679,7 @@ async fn route_calls_take_the_interactive_rate() {
     );
     let h = harness_with(
         &s,
-        "route-rate",
+        "routerate",
         Arc::new(|c| c.deadlines.http = Duration::from_secs(30)),
         move |o| o.fetch.net = net.clone(),
     )
