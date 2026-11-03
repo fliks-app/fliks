@@ -5,7 +5,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
 import { NetworkService } from '../services/network.service';
 import { SseService } from '../services/sse.service';
-import { translatedServerMessage } from '../utils/server-message';
+import { pluginErrorMessage, translatedServerMessage } from '../utils/server-message';
 
 /** Set on a request whose failure the caller reports itself. For a batch: one summary beats N
  *  toasts, none of which could say which row they came from. */
@@ -90,16 +90,10 @@ function extractMessage(
     if (message) return message;
   }
 
-  // A plugin route answers `{error:{key,detail}}`; its keys are merged into the catalogue on
-  // install. A status sentence would contradict the reason the plugin already named.
+  // A status sentence would contradict the reason the plugin already named.
   const pluginKey = body?.error?.key;
   if (typeof pluginKey === 'string' && pluginKey) {
-    const translated = translate.instant(pluginKey, { detail: body.error.detail });
-    if (translated !== pluginKey) return translated;
-    const detail = body.error.detail;
-    return typeof detail === 'string' && detail
-      ? detail
-      : translate.instant('errors.unknown', { code: err.status });
+    return pluginErrorMessage(body, translate) ?? translate.instant('errors.unknown', { code: err.status });
   }
 
   const key = `errors.${err.status}`;

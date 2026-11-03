@@ -37,4 +37,14 @@ describe('serverMessage', () => {
     expect(serverMessage({ error: {} }, translate, 'fallback.key')).toBe('Fallback');
     expect(serverMessage(null, translate, 'fallback.key')).toBe('Fallback');
   });
+
+  it("reads a plugin route's {error:{key,detail}} body", () => {
+    expect(serverMessage({ error: { error: { key: 'errors.plugin_timeout' } } }, translate, 'fallback.key')).toBe(
+      'The plugin took too long',
+    );
+    expect(
+      serverMessage({ error: { error: { key: 'plugin.unknown', detail: 'scoring timed out' } } }, translate, 'fallback.key'),
+    ).toBe('scoring timed out');
+    expect(serverMessage({ error: { error: { key: 'plugin.unknown' } } }, translate, 'fallback.key')).toBe('Fallback');
+  });
 });

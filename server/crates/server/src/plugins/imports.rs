@@ -11,6 +11,11 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
 
+/// A failure on the host's side, which the plugin cannot explain; contract answers stay silent.
+fn host_fault(code: &str) -> bool {
+    matches!(code, "ERR" | "ERR_TIMEOUT" | UNAVAILABLE)
+}
+
 pub fn host_err(code: &str, message: impl Into<String>) -> HostError {
     HostError {
         code: code.into(),
@@ -114,12 +119,28 @@ impl Ctx {
         })
     }
 
-    fn track<T>(&mut self, started: Instant, r: Result<T, HostError>) -> Result<T, HostError> {
+    fn track<T>(
+        &mut self,
+        method: &str,
+        started: Instant,
+        r: Result<T, HostError>,
+    ) -> Result<T, HostError> {
         self.sh.stats.record(started, r.is_ok());
-        if r.as_ref()
-            .err()
-            .is_some_and(|e| e.code == super::db::UNAVAILABLE)
+        if let Err(e) = &r
+            && host_fault(&e.code)
         {
+            self.sh.env.logs.push(
+                &self.sh.id,
+                Level::Warn,
+                &format!(
+                    "host method \"{method}\" failed after {}ms: {} ({})",
+                    started.elapsed().as_millis(),
+                    e.message,
+                    e.code
+                ),
+            );
+        }
+        if r.as_ref().err().is_some_and(|e| e.code == UNAVAILABLE) {
             self.db_unavailable = true;
         }
         r
@@ -145,7 +166,7 @@ macro_rules! call {
             }
         }
         .await;
-        $self.track(started, r)
+        $self.track($method, started, r)
     }};
 }
 
