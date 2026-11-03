@@ -231,6 +231,7 @@ async fn sync_round_trip_sends_changes_removals_and_survives_a_lost_answer(pool:
     let e = &first.body[0]["NewEntitlement"];
     let dl = &e["BookMetadata"]["DownloadUrls"][0];
     assert_eq!(dl["Format"], "EPUB3");
+    assert_eq!(e["BookMetadata"]["DownloadUrls"][1]["Format"], "EPUB");
     assert_eq!(dl["Size"], 111);
     assert_eq!(
         dl["Url"],
@@ -646,4 +647,285 @@ async fn the_store_proxy_is_off_by_default_and_unknown_paths_get_stubs(pool: PgP
             .status,
         401
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn only_shelves_made_of_readable_books_are_exposed_and_never_wiped(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO playlists (id, name, "ownerId") VALUES (60, 'Movies', 1), (61, 'Mixed', 1), (62, 'Hidden', 1);
+        INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (60, 2, 0), (61, 1, 0), (61, 2, 1), (62, 3, 0);
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let list = c.call("GET", "/v1/library/tags", None).await;
+    let names: Vec<_> = list
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["Name"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        names,
+        ["Mixed"],
+        "a playlist of other items, or of none the device can read, is no shelf"
+    );
+    assert_eq!(list.body[0]["Items"].as_array().unwrap().len(), 1);
+    let mixed = format!("f11c5a60-0000-4000-8000-{:012x}", 61);
+    let r = c
+        .call(
+            "PUT",
+            &format!("/v1/library/tags/{mixed}"),
+            Some(json!({"Name": "Renamed"})),
+        )
+        .await;
+    assert_eq!(r.status, 409);
+    assert_eq!(
+        c.call("DELETE", &format!("/v1/library/tags/{mixed}"), None)
+            .await
+            .status,
+        200
+    );
+    let left: Vec<i32> =
+        sqlx::query_scalar(r#"SELECT "itemId" FROM playlist_items WHERE "playlistId" = 61"#)
+            .fetch_all(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(left, [2], "only the books left the playlist");
+    let name: String = sqlx::query_scalar("SELECT name FROM playlists WHERE id = 61")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(name, "Mixed");
+    let r = c
+        .call(
+            "POST",
+            "/v1/library/tags",
+            Some(json!({"Name": "Movies", "Items": []})),
+        )
+        .await;
+    assert_ne!(
+        r.body.as_str().unwrap(),
+        format!("f11c5a60-0000-4000-8000-{:012x}", 60),
+        "a mixed playlist is not reused"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_web_edit_before_a_device_rename_is_not_lost(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let made = c
+        .call(
+            "POST",
+            "/v1/library/tags",
+            Some(json!({"Name": "S", "Items": [{"RevisionId": book(1)}]})),
+        )
+        .await;
+    let tag = made.body.as_str().unwrap().to_owned();
+    let t = c.sync(None).await;
+    let t = c.sync(t.sync_token.as_deref()).await.sync_token.unwrap();
+    sqlx::query(r#"UPDATE playlists SET name = 'Web' WHERE "ownerId" = 1"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    c.call(
+        "PUT",
+        &format!("/v1/library/tags/{tag}"),
+        Some(json!({"Name": "Dev"})),
+    )
+    .await;
+    let r = c.sync(Some(&t)).await;
+    assert_eq!(
+        ids(&r).len(),
+        1,
+        "the shelf is still sent: the device had missed the web edit"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn initialization_carries_the_native_resources_under_ours(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let res = c.call("GET", "/v1/initialization", None).await.body["Resources"].clone();
+    assert!(
+        res["account_page"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://www.kobo.com")
+    );
+    assert!(res.as_object().unwrap().len() > 100);
+    assert!(
+        res["library_sync"]
+            .as_str()
+            .unwrap()
+            .contains("kobo.example/kobo/")
+    );
+    assert!(
+        res["reading_state"]
+            .as_str()
+            .unwrap()
+            .ends_with("/v1/library/{Ids}/state")
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_change_of_the_edition_or_the_credits_changes_the_entitlement(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let t = c.sync(None).await.sync_token.unwrap();
+    let t = c.sync(Some(&t)).await.sync_token.unwrap();
+    sqlx::query("UPDATE editions SET publisher = 'P' WHERE id = 1")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let r = c.sync(Some(&t)).await;
+    assert_eq!(ids(&r), ["ChangedEntitlement 1"]);
+    let t = c.sync(r.sync_token.as_deref()).await.sync_token.unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO persons (id, name) VALUES (900, 'Ann');
+           INSERT INTO media_credits ("mediaId", "personId", role) VALUES (10, 900, 'author');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let r = c.sync(Some(&t)).await;
+    assert_eq!(ids(&r), ["ChangedEntitlement 1"]);
+    let m = &r.body[0]["ChangedEntitlement"]["BookMetadata"];
+    assert_eq!(
+        m["ContributorRoles"][0],
+        json!({"Name": "Ann", "Role": "Author"})
+    );
+    assert_eq!(m["DownloadUrls"].as_array().unwrap().len(), 2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_sync_token_naming_too_many_ids_is_no_token(pool: PgPool) {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let (c, _) = ctx(pool).await;
+    let t = c.sync(None).await.sync_token.unwrap();
+    c.sync(Some(&t)).await;
+    let big =
+        STANDARD.encode(json!({"v": 1, "t": 0, "b": (1..=101).collect::<Vec<i32>>()}).to_string());
+    assert_eq!(
+        ids(&c.sync(Some(&big)).await),
+        ["NewEntitlement 1", "NewEntitlement 4"]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn reading_state_edge_cases(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let path = format!("/v1/library/{}/state", book(1));
+    c.call("PUT", &path, Some(state_put(1, 40.0, "Reading", "a")))
+        .await;
+    let mut unread = state_put(1, 0.0, "ReadyToRead", "a");
+    unread["ReadingStates"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("CurrentBookmark");
+    c.call("PUT", &path, Some(unread)).await;
+    let p: Option<f64> =
+        sqlx::query_scalar(r#"SELECT progression FROM playback_states WHERE "itemId" = 1"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(p, Some(0.0), "ready to read with no bookmark is unread");
+
+    let t = c.sync(None).await.sync_token.unwrap();
+    let t = c.sync(Some(&t)).await.sync_token.unwrap();
+    let mut big = state_put(1, 60.0, "Reading", "b");
+    big["ReadingStates"][0]["Statistics"] = json!({"Pad": "x".repeat(20_000)});
+    assert_eq!(c.call("PUT", &path, Some(big)).await.status, 200);
+    assert!(
+        ids(&c.sync(Some(&t)).await).is_empty(),
+        "an oversized state is not echoed back"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn last_used_is_stamped_at_most_once_a_minute(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    sqlx::query(r#"UPDATE device_tokens SET "lastUsedAt" = now() - interval '10 seconds' WHERE kind = 'kobo' AND "userId" = 1"#).execute(&c.pool).await.unwrap();
+    let before: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar(r#"SELECT "lastUsedAt" FROM device_tokens WHERE "userId" = 1"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    c.call("GET", "/v1/initialization", None).await;
+    let after: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar(r#"SELECT "lastUsedAt" FROM device_tokens WHERE "userId" = 1"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(before, after);
+}
+
+#[sqlx::test(migrations = false)]
+async fn unknown_paths_and_methods_are_a_json_404(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    for (m, p) in [
+        ("GET", format!("/v1/library/{}", book(1))),
+        ("POST", "/v1/library/sync".to_owned()),
+        ("GET", "/other".to_owned()),
+        ("GET", String::new()),
+    ] {
+        let r = c.call(m, &p, None).await;
+        assert_eq!(
+            (r.status, r.body["message"].as_str()),
+            (404, Some("Not found")),
+            "{m} {p}"
+        );
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn store_books_are_proxied_or_refused_by_the_setting(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let store = "0b6ee1c2-aaaa-4bbb-8ccc-123456789abc";
+    let r = c
+        .call("GET", &format!("/{store}/100/200/false/image.jpg"), None)
+        .await;
+    assert_eq!(r.status, 404, "off: no redirect");
+    sqlx::query("INSERT INTO app_settings (key, value) VALUES ('kobo_store_proxy', 'true')")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let res = c
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/kobo/{}/{store}/100/200/false/image.jpg", c.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 307);
+    assert_eq!(
+        res.headers()["location"],
+        format!("https://cdn.kobo.com/book-images/{store}/100/200/false/image.jpg")
+    );
+    let ours = c
+        .call(
+            "GET",
+            &format!("/{}/100/200/false/image.jpg", book(2)),
+            None,
+        )
+        .await;
+    assert_eq!(
+        ours.status, 404,
+        "an unreadable book of ours is never sent to the store"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_auth_stub_echoes_the_user_key(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let r = c
+        .call("POST", "/v1/auth/device", Some(json!({"UserKey": "abc"})))
+        .await;
+    assert_eq!(r.body["UserKey"], "abc");
 }

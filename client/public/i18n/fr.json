@@ -309,7 +309,7 @@
     "kind_opds": "Catalogue (OPDS)",
     "kind_kosync": "Synchronisation de la progression (KOReader)",
     "kind_kobo": "Synchro liseuse Kobo (expérimental)",
-    "kobo_hint": "Ajoutez cette ligne sous [OneStoreServices] dans .kobo/Kobo/Kobo eReader.conf sur la liseuse, puis lancez une synchro. Le lien contient le jeton : renouvelez-le s'il fuite.",
+    "kobo_hint": "Ajoutez cette ligne sous [OneStoreServices] dans .kobo/Kobo/Kobo eReader.conf sur la liseuse, puis lancez une synchro. Le lien contient le jeton : renouvelez-le s'il fuite. Utilisez un jeton par liseuse.",
     "kobo_endpoint_label": "Point d'accès Kobo pour {{name}}",
     "create": "Créer",
     "col_name": "Nom",

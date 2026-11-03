@@ -10,6 +10,7 @@ import {
   IssuedDeviceToken,
 } from '../../core/services/api/device-tokens-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 
 /** Tokens for e-readers and reading apps; the plaintext is shown once, at creation or renewal. */
@@ -22,6 +23,7 @@ export class AccountDevicesComponent implements OnInit {
   private readonly api = inject(DeviceTokensApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly serverConfig = inject(ServerConfigService);
   private readonly translate = inject(TranslateService);
 
   readonly kinds: DeviceTokenKind[] = ['opds', 'kosync', 'kobo'];
@@ -95,7 +97,7 @@ export class AccountDevicesComponent implements OnInit {
 
   /** The line to put in `.kobo/Kobo/Kobo eReader.conf`. */
   koboEndpoint(token: string): string {
-    return `api_endpoint=${window.location.origin}/kobo/${token}`;
+    return `api_endpoint=${new URL(this.serverConfig.resolveUrl(`/kobo/${token}`), location.origin).href}`;
   }
 
   async copy(token: string): Promise<void> {

@@ -97,6 +97,17 @@ async fn preflight_204(req: Request, next: Next) -> Response {
     res
 }
 
+/// The path without the credential of `/kobo/<token>/` and `/cred/<token>/` URLs.
+fn redact(path: &str) -> std::borrow::Cow<'_, str> {
+    for prefix in ["/kobo/", "/cred/"] {
+        if let Some(rest) = path.strip_prefix(prefix) {
+            let tail = rest.find('/').map_or("", |i| &rest[i..]);
+            return format!("{prefix}<token>{tail}").into();
+        }
+    }
+    path.into()
+}
+
 pub fn apply(
     router: Router,
     cors_origin: Option<String>,
@@ -129,7 +140,7 @@ pub fn apply(
         .layer(from_fn(preflight_204))
         .layer(CompressionLayer::new().compress_when(compress))
         .layer(TraceLayer::new_for_http().make_span_with(|r: &axum::http::Request<_>| {
-            tracing::debug_span!("request", method = %r.method(), path = r.uri().path())
+            tracing::debug_span!("request", method = %r.method(), path = %redact(r.uri().path()))
         }))
 }
 
@@ -154,6 +165,20 @@ mod tests {
                 post(|body: String| async move { body.len().to_string() }),
             );
         apply(r, cors.map(str::to_owned), 100 * 1024, |_| false)
+    }
+
+    #[test]
+    fn device_tokens_never_reach_the_logs() {
+        assert_eq!(
+            redact("/kobo/fkd_x/v1/library/sync"),
+            "/kobo/<token>/v1/library/sync"
+        );
+        assert_eq!(
+            redact("/cred/fkd_x/api/stream/3"),
+            "/cred/<token>/api/stream/3"
+        );
+        assert_eq!(redact("/kobo/fkd_x"), "/kobo/<token>");
+        assert_eq!(redact("/api/items"), "/api/items");
     }
 
     #[tokio::test]

@@ -118,8 +118,12 @@ pub async fn resolve(
         file,
         device,
     } = caller;
-    // A device token reads files only: a live viewer names no file and no owner of its own.
-    if device && request.purpose == ResolvePurpose::Live {
+    // A device token opens the purposes of its kind only: a live viewer names no file and no owner.
+    if device.is_some_and(|k| !k.opens(request.purpose)) {
+        return Ok(Json(deny()));
+    }
+    // A Kobo reads text editions only: its token travels in URLs.
+    if device == Some(device_tokens::Kind::Kobo) && !text_file(&st, &request.media_id).await? {
         return Ok(Json(deny()));
     }
     // A live token opens its own viewer's data plane only; a bare denial ends nobody's viewer.
@@ -134,11 +138,11 @@ pub async fn resolve(
         Ok(found) => Ok(Json(ResolveResponse {
             allow: true,
             owner_id: Some(user.id.to_string()),
-            ttl_s: Some(
-                found
-                    .ttl_s
-                    .unwrap_or(if device { DEVICE_TTL_S } else { TTL_S }),
-            ),
+            ttl_s: Some(found.ttl_s.unwrap_or(if device.is_some() {
+                DEVICE_TTL_S
+            } else {
+                TTL_S
+            })),
             ..found
         })),
         Err(Fail::Denied) => Ok(Json(denied_for(&request, user.id))),
@@ -265,7 +269,7 @@ struct Caller {
     raw: Vec<String>,
     live: Option<String>,
     file: Option<u32>,
-    device: bool,
+    device: Option<device_tokens::Kind>,
 }
 
 impl Caller {
@@ -284,7 +288,7 @@ impl Caller {
             raw,
             live,
             file,
-            device: false,
+            device: None,
         }
     }
 }
@@ -304,6 +308,20 @@ async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>,
         .map(|(user, role)| Caller::of(user, role, live, file)))
 }
 
+/// Whether the file is the part of an item of a `text` edition.
+async fn text_file(st: &AppState, id: &ResolveMediaId) -> Result<bool, AppError> {
+    let ResolveMediaId::File(id) = id else {
+        return Ok(false);
+    };
+    Ok(sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM item_parts ip JOIN items i ON i.id = ip."itemId"
+             JOIN editions e ON e.id = i."editionId" WHERE ip."mediaFileId" = $1 AND e.family = 'text')"#,
+    )
+    .bind(*id as i32)
+    .fetch_one(&st.db)
+    .await?)
+}
+
 /// The owner of a device token (`device-tokens.md` rules 7-12).
 async fn device_user(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>, AppError> {
     let Some(source) = req.credential_source.filter(|s| device_tokens::accepts(*s)) else {
@@ -316,13 +334,13 @@ async fn device_user(st: &AppState, req: &ResolveRequest) -> Result<Option<Calle
     let Some(secret) = secret.filter(|s| device_tokens::well_formed(s)) else {
         return Ok(None);
     };
-    let Some(owner) = device_tokens::lookup(&st.db, &secret, source).await? else {
+    let Some((owner, kind)) = device_tokens::lookup(&st.db, &secret, source).await? else {
         return Ok(None);
     };
     Ok(load_enabled(&st.db, owner)
         .await?
         .map(|(user, role)| Caller {
-            device: true,
+            device: Some(kind),
             ..Caller::of(user, role, None, None)
         }))
 }

@@ -38,7 +38,7 @@ fn parse_token(v: &HeaderValue) -> Option<Token> {
     let raw = STANDARD.decode(v.as_bytes()).ok()?;
     serde_json::from_slice::<Token>(&raw)
         .ok()
-        .filter(|t| t.v == 1)
+        .filter(|t| t.v == 1 && [&t.b, &t.g, &t.s, &t.sg].iter().all(|a| a.len() <= LIMIT))
 }
 
 async fn ack_kind(
@@ -124,9 +124,8 @@ pub async fn library_sync(
     let mut out: Vec<Value> = vec![];
     let mut more = false;
 
-    // ponytail: the whole readable library is read per call; a cursor if libraries pass tens of thousands.
-    let books = books::fetch(db, &k.acl, None).await?;
-    let visible: HashSet<i32> = books.iter().map(|b| b.item).collect();
+    let index = books::index(db, &k.acl, None).await?;
+    let visible: HashSet<i32> = index.iter().map(|b| b.item).collect();
     let have = rows(db, tid, "item").await?;
 
     let mut purge = vec![];
@@ -146,7 +145,7 @@ pub async fn library_sync(
     }
     forget(db, tid, "item", &purge).await?;
 
-    let ids: Vec<i32> = books.iter().map(|b| b.item).collect();
+    let ids: Vec<i32> = index.iter().map(|b| b.item).collect();
     let touched: HashMap<i32, DateTime<Utc>> = sqlx::query_as::<_, (i32, DateTime<Utc>)>(
         r#"SELECT "itemId", "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = ANY($2)"#,
     )
@@ -156,8 +155,8 @@ pub async fn library_sync(
     .await?
     .into_iter()
     .collect();
-    let mut page: Vec<(&Book, Change)> = vec![];
-    for b in &books {
+    let mut page: Vec<(&books::Index, Change)> = vec![];
+    for b in &index {
         let change = match have.get(&b.item) {
             None => Change::New,
             Some((_, _, true)) => continue,
@@ -173,7 +172,16 @@ pub async fn library_sync(
     }
     let wanted: Vec<_> = page.iter().map(|(b, _)| (b.item, b.created)).collect();
     let states = state::read(db, user, tid, &wanted).await?;
+    let sent: Vec<i32> = page.iter().map(|(b, _)| b.item).collect();
+    let full: HashMap<i32, Book> = books::fetch(db, &k.acl, Some(&sent))
+        .await?
+        .into_iter()
+        .map(|b| (b.item, b))
+        .collect();
     for (b, change) in page {
+        let Some(book) = full.get(&b.item) else {
+            continue;
+        };
         let rs = states[&b.item].clone();
         out.push(match change {
             Change::State => json!({"ChangedReadingState": {"ReadingState": rs}}),
@@ -183,8 +191,8 @@ pub async fn library_sync(
                 } else {
                     "ChangedEntitlement"
                 };
-                json!({key: {"BookEntitlement": books::book_entitlement(b),
-                    "BookMetadata": books::book_metadata(&k, b), "ReadingState": rs}})
+                json!({key: {"BookEntitlement": books::book_entitlement(book),
+                    "BookMetadata": books::book_metadata(&k, book), "ReadingState": rs}})
             }
         });
         tok.b.push(b.item);

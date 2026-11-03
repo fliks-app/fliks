@@ -1,27 +1,24 @@
 //! Emulated Kobo store API (`docs/spec/kobo.md`), authenticated by a `kobo` device token in the path.
 mod books;
 mod proxy;
+mod resources;
 mod shelves;
 mod state;
 mod sync;
 
 use crate::{
     auth::client_ip,
-    device_tokens,
+    device_tokens::{self, Reject},
     http::{AppError, auth::Authed, cookies::is_secure},
     libraries::accessible_library_ids,
     state::AppState,
 };
 use axum::{
     Json, Router,
-    extract::{ConnectInfo, FromRequestParts, State},
-    http::{
-        HeaderMap, HeaderValue, StatusCode,
-        header::{CACHE_CONTROL, RETRY_AFTER},
-        request::Parts,
-    },
+    extract::{ConnectInfo, FromRequestParts, OriginalUri, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header::CACHE_CONTROL, request::Parts},
     response::{IntoResponse, Response},
-    routing::{any, get, post, put},
+    routing::{MethodRouter, any, delete, get, post, put},
 };
 use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
@@ -33,46 +30,51 @@ const SHELF_PREFIX: &str = "f11c5a60";
 const THROTTLE_KEY: &str = "\0kobo";
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/kobo/{token}/v1/initialization", get(initialization))
-        .route("/kobo/{token}/v1/library/sync", get(sync::library_sync))
+    // Every other method or path under /kobo is a JSON 404, never the app's index page.
+    let only = |m: MethodRouter<AppState>| m.fallback(unknown);
+    let inner = Router::new()
+        .route("/{token}/v1/initialization", only(get(initialization)))
+        .route("/{token}/v1/library/sync", only(get(sync::library_sync)))
         .route(
-            "/kobo/{token}/v1/library/tags",
-            get(shelves::list).post(shelves::create),
+            "/{token}/v1/library/tags",
+            only(get(shelves::list).post(shelves::create)),
         )
         .route(
-            "/kobo/{token}/v1/library/tags/{tag}",
-            put(shelves::rename).delete(shelves::remove),
+            "/{token}/v1/library/tags/{tag}",
+            only(put(shelves::rename).delete(shelves::remove)),
         )
         .route(
-            "/kobo/{token}/v1/library/tags/{tag}/items",
-            post(shelves::add_items),
+            "/{token}/v1/library/tags/{tag}/items",
+            only(post(shelves::add_items)),
         )
         .route(
-            "/kobo/{token}/v1/library/tags/{tag}/items/delete",
-            post(shelves::remove_items),
+            "/{token}/v1/library/tags/{tag}/items/delete",
+            only(post(shelves::remove_items)),
         )
         .route(
-            "/kobo/{token}/v1/library/{uuid}/metadata",
-            get(books::metadata),
+            "/{token}/v1/library/{uuid}/metadata",
+            only(get(books::metadata)),
         )
         .route(
-            "/kobo/{token}/v1/library/{uuid}/state",
-            get(state::get).put(state::put),
+            "/{token}/v1/library/{uuid}/state",
+            only(get(state::get).put(state::put)),
+        )
+        .route("/{token}/v1/library/{uuid}", only(delete(sync::archive)))
+        .route(
+            "/{token}/{uuid}/{w}/{h}/{grey}/image.jpg",
+            only(get(books::cover)),
         )
         .route(
-            "/kobo/{token}/v1/library/{uuid}",
-            axum::routing::delete(sync::archive),
+            "/{token}/{uuid}/{w}/{h}/{quality}/{grey}/image.jpg",
+            only(get(books::cover_quality)),
         )
-        .route(
-            "/kobo/{token}/{uuid}/{w}/{h}/{grey}/image.jpg",
-            get(books::cover),
-        )
-        .route(
-            "/kobo/{token}/{uuid}/{w}/{h}/{quality}/{grey}/image.jpg",
-            get(books::cover_quality),
-        )
-        .route("/kobo/{token}/v1/{*rest}", any(proxy::fallback))
+        .route("/{token}/v1/{*rest}", any(proxy::fallback))
+        .fallback(unknown);
+    Router::new().nest("/kobo", inner)
+}
+
+async fn unknown() -> Response {
+    json_response(StatusCode::NOT_FOUND, json!({"message": "Not found"}))
 }
 
 /// The authenticated caller: the enabled owner of the path token and the libraries they read.
@@ -84,32 +86,12 @@ pub struct Kobo {
     pub acl: Vec<i32>,
 }
 
-pub enum Reject {
-    Unauthorized,
-    Throttled,
-    Forbidden,
-    Fault(AppError),
-}
-
-impl From<sqlx::Error> for Reject {
-    fn from(e: sqlx::Error) -> Self {
-        Self::Fault(e.into())
-    }
-}
-
-impl IntoResponse for Reject {
-    fn into_response(self) -> Response {
-        match self {
-            Self::Unauthorized => StatusCode::UNAUTHORIZED.into_response(),
-            Self::Throttled => (
-                StatusCode::TOO_MANY_REQUESTS,
-                [(RETRY_AFTER, HeaderValue::from_static("900"))],
-            )
-                .into_response(),
-            Self::Forbidden => StatusCode::FORBIDDEN.into_response(),
-            Self::Fault(e) => e.into_response(),
-        }
-    }
+/// The path as the device sent it: the router strips the `/kobo` it is nested under.
+pub fn original_path(p: &Parts) -> String {
+    p.extensions
+        .get::<OriginalUri>()
+        .map_or_else(|| p.uri.path(), |o| o.0.path())
+        .to_owned()
 }
 
 /// `http(s)://host` of the request as the device reached it.
@@ -131,20 +113,12 @@ impl FromRequestParts<AppState> for Kobo {
             .get::<ConnectInfo<SocketAddr>>()
             .map(|c| &c.0);
         let ip = client_ip(&parts.headers, peer);
-        let token = parts
-            .uri
-            .path()
+        let token = original_path(parts)
             .strip_prefix("/kobo/")
             .and_then(|p| p.split('/').next())
             .unwrap_or_default()
             .to_owned();
-        let fail = || {
-            if st.login_throttle.attempt(ip, THROTTLE_KEY) {
-                Reject::Unauthorized
-            } else {
-                Reject::Throttled
-            }
-        };
+        let fail = || Reject::failed(&st.login_throttle, ip, THROTTLE_KEY, false);
         if !device_tokens::well_formed(&token) {
             return Err(fail());
         }
@@ -153,7 +127,7 @@ impl FromRequestParts<AppState> for Kobo {
             .ok_or_else(fail)?;
         let a = Authed::load(&st.db, owner)
             .await?
-            .ok_or(Reject::Unauthorized)?;
+            .ok_or(Reject::Unauthorized { challenge: false })?;
         a.require(Action::Read, Subject::Media)
             .map_err(|_| Reject::Forbidden)?;
         let acl = accessible_library_ids(&st.db, &a).await?;
@@ -210,19 +184,25 @@ async fn initialization(
         "image_url_quality_template": format!("{root}/{{ImageId}}/{{Width}}/{{Height}}/{{Quality}}/{{IsGreyscale}}/image.jpg"),
         "library_sync": format!("{root}/v1/library/sync"),
         "library_metadata": format!("{root}/v1/library/{{Ids}}/metadata"),
+        "reading_state": format!("{root}/v1/library/{{Ids}}/state"),
+        "delete_entitlement": format!("{root}/v1/library/{{Ids}}"),
         "tags": format!("{root}/v1/library/tags"),
+        "delete_tag": format!("{root}/v1/library/tags/{{TagId}}"),
+        "rename_tag": format!("{root}/v1/library/tags/{{TagId}}"),
+        "tag_items": format!("{root}/v1/library/tags/{{TagId}}/items"),
+        "delete_tag_items": format!("{root}/v1/library/tags/{{TagId}}/items/delete"),
         "user_profile": format!("{root}/v1/user/profile"),
         "user_loyalty_benefits": format!("{root}/v1/user/loyalty/benefits"),
-        "kobo_audiobooks_enabled": "False",
-        "kobo_nativeborrow_enabled": "False",
-        "kobo_subscriptions_enabled": "False",
-        "kobo_superpoints_enabled": "False",
+        "get_tests_request": format!("{root}/v1/analytics/gettests"),
     });
-    let mut resources = if proxy::enabled(&st).await? {
-        proxy::store_resources(&headers).await.unwrap_or_default()
-    } else {
-        serde_json::Map::new()
-    };
+    // The native map, or the store's own when the proxy is on, then ours on top.
+    let mut resources: serde_json::Map<String, Value> = resources::NATIVE
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), Value::from(*v)))
+        .collect();
+    if proxy::enabled(&st).await? {
+        resources.extend(proxy::store_resources(&headers).await.unwrap_or_default());
+    }
     resources.extend(ours.as_object().cloned().unwrap_or_default());
     let mut res = json_response(StatusCode::OK, json!({ "Resources": resources }));
     res.headers_mut()

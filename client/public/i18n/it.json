@@ -309,7 +309,7 @@
     "kind_opds": "Catalogo (OPDS)",
     "kind_kosync": "Sincronizzazione dei progressi di lettura (KOReader)",
     "kind_kobo": "Sincronizzazione lettore Kobo (sperimentale)",
-    "kobo_hint": "Aggiungi questa riga sotto [OneStoreServices] in .kobo/Kobo/Kobo eReader.conf sul lettore, poi sincronizza. Il link contiene il token: rinnovalo se viene divulgato.",
+    "kobo_hint": "Aggiungi questa riga sotto [OneStoreServices] in .kobo/Kobo/Kobo eReader.conf sul lettore, poi sincronizza. Il link contiene il token: rinnovalo se viene divulgato. Usa un token per lettore.",
     "kobo_endpoint_label": "Endpoint Kobo per {{name}}",
     "create": "Crea",
     "col_name": "Nome",

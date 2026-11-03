@@ -135,16 +135,24 @@ pub async fn put(
     }) else {
         return Ok(invalid());
     };
+    let status = s["StatusInfo"]["Status"].as_str();
     let percent = s["CurrentBookmark"]["ProgressPercent"]
         .as_f64()
         .filter(|p| p.is_finite());
-    let progression = match s["StatusInfo"]["Status"].as_str() {
+    let progression = match status {
         Some("Finished") => Some(1.0),
-        _ => percent.map(|p| (p / 100.0).clamp(0.0, 1.0)),
+        _ => percent
+            .map(|p| (p / 100.0).clamp(0.0, 1.0))
+            .or((status == Some("ReadyToRead")).then_some(0.0)),
     };
     let user = k.a.user.id;
-    let mut at = None;
     if let Some(p) = progression {
+        // One write per (user, book) at a time: the beat, the read-back and the row go together.
+        let mut tx = st.db.begin().await?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind((i64::from(user) << 32) | i64::from(b.item))
+            .execute(&mut *tx)
+            .await?;
         let (family, last_chapter_start) = finish_context(&st.db, b.item, b.file).await?;
         let watch = Watch {
             position: 0.0,
@@ -160,20 +168,20 @@ pub async fn put(
             clear_locator: true,
         };
         record_watch(&st.db, user, b.media, &watch).await?;
-        at = sqlx::query_scalar::<_, DateTime<Utc>>(
+        let at: Option<DateTime<Utc>> = sqlx::query_scalar(
             r#"SELECT "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = $2"#,
         )
         .bind(user)
         .bind(b.item)
-        .fetch_optional(&st.db)
+        .fetch_optional(&mut *tx)
         .await?;
-    }
-    if let Some(at) = at {
-        let kept = json!({
-            "at": at.timestamp_micros(), "StatusInfo": s["StatusInfo"],
-            "Statistics": s["Statistics"], "CurrentBookmark": s["CurrentBookmark"],
-        });
-        if kept.to_string().len() <= MAX_STATE {
+        if let Some(at) = at {
+            let kept = json!({
+                "at": at.timestamp_micros(), "StatusInfo": s["StatusInfo"],
+                "Statistics": s["Statistics"], "CurrentBookmark": s["CurrentBookmark"],
+            });
+            // Too big to keep: the position still counts as known, so it is not echoed back.
+            let kept = (kept.to_string().len() <= MAX_STATE).then_some(kept);
             sqlx::query(
                 r#"INSERT INTO kobo_sync_items ("tokenId", kind, "refId", "syncedAt", "stateAt", "state")
                    VALUES ($1, 'item', $2, 'epoch', $3, $4)
@@ -183,9 +191,10 @@ pub async fn put(
             .bind(b.item)
             .bind(at)
             .bind(kept)
-            .execute(&st.db)
+            .execute(&mut *tx)
             .await?;
         }
+        tx.commit().await?;
     }
     let ok = json!({"Result": "Success"});
     Ok(json_response(

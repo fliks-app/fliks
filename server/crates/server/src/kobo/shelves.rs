@@ -11,16 +11,24 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 use std::collections::{HashMap, HashSet};
 
 type Playlist = (i32, String, DateTime<Utc>, DateTime<Utc>);
 
-async fn owned(db: &PgPool, user: i32) -> sqlx::Result<Vec<Playlist>> {
+/// The shelves of the owner: playlists holding a readable book, or already known to this token.
+async fn owned(db: &PgPool, k: &Kobo, visible: &[i32]) -> sqlx::Result<Vec<Playlist>> {
     sqlx::query_as(
-        r#"SELECT id, name, "createdAt", "updatedAt" FROM playlists WHERE "ownerId" = $1 ORDER BY id"#,
+        r#"SELECT p.id, p.name, p."createdAt", p."updatedAt" FROM playlists p
+           WHERE p."ownerId" = $1
+             AND (EXISTS (SELECT 1 FROM playlist_items pi WHERE pi."playlistId" = p.id AND pi."itemId" = ANY($2))
+               OR EXISTS (SELECT 1 FROM kobo_sync_items s
+                          WHERE s."tokenId" = $3 AND s.kind = 'shelf' AND s."refId" = p.id))
+           ORDER BY p.id"#,
     )
-    .bind(user)
+    .bind(k.a.user.id)
+    .bind(visible)
+    .bind(k.token_id)
     .fetch_all(db)
     .await
 }
@@ -53,8 +61,8 @@ fn tag(p: &Playlist, items: &[i32]) -> Value {
     })
 }
 
-async fn visible(db: &PgPool, k: &Kobo) -> sqlx::Result<HashSet<i32>> {
-    Ok(books::fetch(db, &k.acl, None)
+async fn visible(db: &PgPool, k: &Kobo) -> sqlx::Result<Vec<i32>> {
+    Ok(books::index(db, &k.acl, None)
         .await?
         .into_iter()
         .map(|b| b.item)
@@ -73,7 +81,7 @@ pub async fn sync(
     gone: &mut Vec<i32>,
     limit: usize,
 ) -> sqlx::Result<bool> {
-    let lists = owned(db, k.a.user.id).await?;
+    let lists = owned(db, k, &visible.iter().copied().collect::<Vec<_>>()).await?;
     let have: HashMap<i32, DateTime<Utc>> = sqlx::query_as::<_, (i32, DateTime<Utc>)>(
         r#"SELECT "refId", "syncedAt" FROM kobo_sync_items WHERE "tokenId" = $1 AND kind = 'shelf'"#,
     )
@@ -121,9 +129,10 @@ pub async fn sync(
 }
 
 pub async fn list(State(st): State<AppState>, k: Kobo) -> Result<Response, AppError> {
-    let lists = owned(&st.db, k.a.user.id).await?;
+    let visible = visible(&st.db, &k).await?;
+    let lists = owned(&st.db, &k, &visible).await?;
     let ids: Vec<i32> = lists.iter().map(|p| p.0).collect();
-    let items = contents(&st.db, &ids, &visible(&st.db, &k).await?).await?;
+    let items = contents(&st.db, &ids, &visible.into_iter().collect()).await?;
     let tags: Vec<Value> = lists
         .iter()
         .map(|p| tag(p, items.get(&p.0).map_or(&[][..], Vec::as_slice)))
@@ -145,19 +154,80 @@ fn revisions(body: &Value) -> Vec<i32> {
         .collect()
 }
 
-/// Adds the readable books among `wanted`, then stamps the playlist and tells the token it knows the change.
-async fn touch(
-    db: &PgPool,
-    k: &Kobo,
-    id: i32,
-    add: &[i32],
-    remove: &[i32],
-) -> Result<(), AppError> {
-    let readable: Vec<i32> = books::fetch(db, &k.acl, Some(add))
-        .await?
-        .into_iter()
-        .map(|b| b.item)
-        .collect();
+enum Edit<'a> {
+    Add(&'a [i32]),
+    Remove(&'a [i32]),
+    Rename(&'a str),
+}
+
+/// A playlist that holds anything but books this token may read is not only a shelf.
+async fn mixed(db: &PgPool, k: &Kobo, id: i32) -> sqlx::Result<bool> {
+    let held: Vec<i32> =
+        sqlx::query_scalar(r#"SELECT "itemId" FROM playlist_items WHERE "playlistId" = $1"#)
+            .bind(id)
+            .fetch_all(db)
+            .await?;
+    Ok(books::index(db, &k.acl, Some(&held)).await?.len() != held.len())
+}
+
+/// One edit of a shelf in one transaction on the locked playlist; `false` when a rename is refused.
+async fn edit(db: &PgPool, k: &Kobo, id: i32, e: Edit<'_>) -> Result<bool, AppError> {
+    if matches!(e, Edit::Rename(_)) && mixed(db, k, id).await? {
+        return Ok(false);
+    }
+    let readable: Vec<i32> = match e {
+        Edit::Add(w) => books::index(db, &k.acl, Some(w))
+            .await?
+            .into_iter()
+            .map(|b| b.item)
+            .collect(),
+        _ => vec![],
+    };
+    let mut tx = db.begin().await?;
+    let before: (DateTime<Utc>, Option<DateTime<Utc>>) = sqlx::query_as(
+        r#"SELECT p."updatedAt", (SELECT s."syncedAt" FROM kobo_sync_items s
+                                  WHERE s."tokenId" = $3 AND s.kind = 'shelf' AND s."refId" = p.id)
+           FROM playlists p WHERE p.id = $1 AND p."ownerId" = $2 FOR UPDATE"#,
+    )
+    .bind(id)
+    .bind(k.a.user.id)
+    .bind(k.token_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    match e {
+        Edit::Add(_) => add(&mut tx, id, k.a.user.id, &readable).await?,
+        Edit::Remove(w) => {
+            sqlx::query(
+                r#"DELETE FROM playlist_items WHERE "playlistId" = $1 AND "itemId" = ANY($2)"#,
+            )
+            .bind(id)
+            .bind(w)
+            .execute(&mut *tx)
+            .await?;
+        }
+        Edit::Rename(n) => {
+            sqlx::query("UPDATE playlists SET name = $2 WHERE id = $1")
+                .bind(id)
+                .bind(n)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    let at: DateTime<Utc> = sqlx::query_scalar(
+        r#"UPDATE playlists SET "updatedAt" = now() WHERE id = $1 RETURNING "updatedAt""#,
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    // The device knows its own change only when it was up to date before it.
+    if before.1.is_some_and(|synced| synced >= before.0) {
+        known(&mut tx, k.token_id, id, at).await?;
+    }
+    tx.commit().await?;
+    Ok(true)
+}
+
+async fn add(tx: &mut PgConnection, id: i32, user: i32, items: &[i32]) -> sqlx::Result<()> {
     sqlx::query(
         r#"INSERT INTO playlist_items ("playlistId", "itemId", position, "addedById")
            SELECT $1, u.id, COALESCE((SELECT max(position) FROM playlist_items WHERE "playlistId" = $1), -1)
@@ -166,35 +236,24 @@ async fn touch(
            ON CONFLICT ("playlistId", "itemId") DO NOTHING"#,
     )
     .bind(id)
-    .bind(&readable)
-    .bind(k.a.user.id)
-    .execute(db)
-    .await?;
-    sqlx::query(r#"DELETE FROM playlist_items WHERE "playlistId" = $1 AND "itemId" = ANY($2)"#)
-        .bind(id)
-        .bind(remove)
-        .execute(db)
-        .await?;
-    let at: DateTime<Utc> = sqlx::query_scalar(
-        r#"UPDATE playlists SET "updatedAt" = now() WHERE id = $1 RETURNING "updatedAt""#,
-    )
-    .bind(id)
-    .fetch_one(db)
-    .await?;
-    known(db, k, id, at).await
+    .bind(items)
+    .bind(user)
+    .execute(tx)
+    .await
+    .map(drop)
 }
 
-async fn known(db: &PgPool, k: &Kobo, id: i32, at: DateTime<Utc>) -> Result<(), AppError> {
+async fn known(tx: &mut PgConnection, token: i32, id: i32, at: DateTime<Utc>) -> sqlx::Result<()> {
     sqlx::query(
         r#"INSERT INTO kobo_sync_items ("tokenId", kind, "refId", "syncedAt", "stateAt") VALUES ($1, 'shelf', $2, $3, $3)
            ON CONFLICT ("tokenId", kind, "refId") DO UPDATE SET "syncedAt" = EXCLUDED."syncedAt""#,
     )
-    .bind(k.token_id)
+    .bind(token)
     .bind(id)
     .bind(at)
-    .execute(db)
-    .await?;
-    Ok(())
+    .execute(tx)
+    .await
+    .map(drop)
 }
 
 async fn mine(db: &PgPool, k: &Kobo, tag: &str) -> Result<Option<i32>, sqlx::Error> {
@@ -223,13 +282,27 @@ pub async fn create(
     let Some(name) = name_of(&body) else {
         return Ok(bad());
     };
-    let db = &st.db;
+    let wanted = revisions(&body);
+    let readable: Vec<i32> = books::index(&st.db, &k.acl, Some(&wanted))
+        .await?
+        .into_iter()
+        .map(|b| b.item)
+        .collect();
+    let mut tx = st.db.begin().await?;
+    // One create at a time per user, so two requests for one name make one shelf.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('kobo-shelf'), $1)")
+        .bind(k.a.user.id)
+        .execute(&mut *tx)
+        .await?;
     let found: Option<i32> = sqlx::query_scalar(
-        r#"SELECT id FROM playlists WHERE "ownerId" = $1 AND name = $2 ORDER BY id LIMIT 1"#,
+        r#"SELECT p.id FROM playlists p WHERE p."ownerId" = $1 AND p.name = $2
+             AND NOT EXISTS (SELECT 1 FROM playlist_items pi WHERE pi."playlistId" = p.id AND pi."itemId" <> ALL($3))
+           ORDER BY p.id LIMIT 1"#,
     )
     .bind(k.a.user.id)
     .bind(&name)
-    .fetch_optional(db)
+    .bind(&visible(&st.db, &k).await?)
+    .fetch_optional(&mut *tx)
     .await?;
     let id = match found {
         Some(id) => id,
@@ -239,11 +312,19 @@ pub async fn create(
             )
             .bind(&name)
             .bind(k.a.user.id)
-            .fetch_one(db)
+            .fetch_one(&mut *tx)
             .await?
         }
     };
-    touch(db, &k, id, &revisions(&body), &[]).await?;
+    add(&mut tx, id, k.a.user.id, &readable).await?;
+    let at: DateTime<Utc> = sqlx::query_scalar(
+        r#"UPDATE playlists SET "updatedAt" = now() WHERE id = $1 RETURNING "updatedAt""#,
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    known(&mut tx, k.token_id, id, at).await?;
+    tx.commit().await?;
     Ok(json_response(
         StatusCode::CREATED,
         json!(uuid(SHELF_PREFIX, id)),
@@ -262,15 +343,16 @@ pub async fn rename(
     let Some(name) = name_of(&body) else {
         return Ok(bad());
     };
-    sqlx::query("UPDATE playlists SET name = $2 WHERE id = $1")
-        .bind(id)
-        .bind(name)
-        .execute(&st.db)
-        .await?;
-    touch(&st.db, &k, id, &[], &[]).await?;
+    if !edit(&st.db, &k, id, Edit::Rename(&name)).await? {
+        return Ok(json_response(
+            StatusCode::CONFLICT,
+            json!({"message": "The shelf holds more than books"}),
+        ));
+    }
     Ok(StatusCode::OK.into_response())
 }
 
+/// Deletes the playlist, or only its books when it holds anything else.
 pub async fn remove(
     State(st): State<AppState>,
     k: Kobo,
@@ -279,10 +361,23 @@ pub async fn remove(
     let Some(id) = mine(&st.db, &k, &tag).await? else {
         return Ok(books::not_found());
     };
-    sqlx::query("DELETE FROM playlists WHERE id = $1")
-        .bind(id)
-        .execute(&st.db)
-        .await?;
+    if mixed(&st.db, &k, id).await? {
+        let books: Vec<i32> = visible(&st.db, &k).await?;
+        sqlx::query(r#"DELETE FROM playlist_items WHERE "playlistId" = $1 AND "itemId" = ANY($2)"#)
+            .bind(id)
+            .bind(&books)
+            .execute(&st.db)
+            .await?;
+        sqlx::query(r#"UPDATE playlists SET "updatedAt" = now() WHERE id = $1"#)
+            .bind(id)
+            .execute(&st.db)
+            .await?;
+    } else {
+        sqlx::query("DELETE FROM playlists WHERE id = $1")
+            .bind(id)
+            .execute(&st.db)
+            .await?;
+    }
     sqlx::query(
         r#"DELETE FROM kobo_sync_items WHERE "tokenId" = $1 AND kind = 'shelf' AND "refId" = $2"#,
     )
@@ -302,7 +397,7 @@ pub async fn add_items(
     let Some(id) = mine(&st.db, &k, &tag).await? else {
         return Ok(books::not_found());
     };
-    touch(&st.db, &k, id, &revisions(&body), &[]).await?;
+    edit(&st.db, &k, id, Edit::Add(&revisions(&body))).await?;
     Ok(StatusCode::CREATED.into_response())
 }
 
@@ -315,6 +410,6 @@ pub async fn remove_items(
     let Some(id) = mine(&st.db, &k, &tag).await? else {
         return Ok(books::not_found());
     };
-    touch(&st.db, &k, id, &[], &revisions(&body)).await?;
+    edit(&st.db, &k, id, Edit::Remove(&revisions(&body))).await?;
     Ok(StatusCode::OK.into_response())
 }

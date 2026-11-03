@@ -1,11 +1,13 @@
 //! Device tokens (`docs/spec/device-tokens.md`): credentials of readers and sync apps, stored as a hash.
+mod reject;
 mod routes;
 
-use fliks_engine_core::api::ResolveCredentialSource as Source;
+use fliks_engine_core::api::{ResolveCredentialSource as Source, ResolvePurpose as Purpose};
 use md5::{Digest as _, Md5};
 use sha2::Sha256;
 use sqlx::PgPool;
 
+pub use reject::Reject;
 pub use routes::*;
 
 const PREFIX: &str = "fkd_";
@@ -42,6 +44,15 @@ impl Kind {
         }
     }
 
+    /// The file purposes this kind resolves: a Kobo reads book downloads only (`kobo.md` rule 2).
+    pub fn opens(self, purpose: Purpose) -> bool {
+        match self {
+            Self::Opds => purpose != Purpose::Live,
+            Self::Kosync => false,
+            Self::Kobo => purpose == Purpose::Download,
+        }
+    }
+
     /// What is hashed: a kosync client sends MD5(password), the password being the token.
     fn secret(self, token: &str) -> String {
         match self {
@@ -75,21 +86,26 @@ pub fn well_formed(s: &str) -> bool {
         })
 }
 
-/// The owner of the token `secret` when its kind opens the data plane through `source`; a hit stamps `lastUsedAt`.
-pub async fn lookup(db: &PgPool, secret: &str, source: Source) -> Result<Option<i32>, sqlx::Error> {
+/// The owner and kind of the token `secret` when its kind opens the data plane through `source`; a hit stamps `lastUsedAt`.
+pub async fn lookup(
+    db: &PgPool,
+    secret: &str,
+    source: Source,
+) -> Result<Option<(i32, Kind)>, sqlx::Error> {
     let kinds: Vec<&str> = Kind::ALL
         .into_iter()
         .filter(|k| k.sources().contains(&source))
         .map(Kind::as_str)
         .collect();
-    sqlx::query_scalar!(
+    let row: Option<(i32, String)> = sqlx::query_as(
         r#"UPDATE device_tokens SET "lastUsedAt" = now()
-           WHERE "hash" = $1 AND "kind"::text = ANY($2) RETURNING "userId""#,
-        hash(secret),
-        &kinds as &[&str]
+           WHERE "hash" = $1 AND "kind"::text = ANY($2) RETURNING "userId", "kind"::text"#,
     )
+    .bind(hash(secret))
+    .bind(&kinds)
     .fetch_optional(db)
-    .await
+    .await?;
+    Ok(row.and_then(|(owner, k)| Some((owner, Kind::parse(&k)?))))
 }
 
 /// The owner of the `kosync` row whose token has the MD5 `key` (`kosync.md` rule 3); a hit stamps `lastUsedAt`.
@@ -103,15 +119,25 @@ pub async fn kosync_owner(db: &PgPool, key: &str) -> Result<Option<i32>, sqlx::E
     .await
 }
 
-/// `(row id, owner)` of the `kobo` token `token` (`kobo.md` rule 1); a hit stamps `lastUsedAt`.
+/// `(row id, owner)` of the `kobo` token `token` (`kobo.md` rule 1); `lastUsedAt` is stamped at most once a minute.
 pub async fn kobo_owner(db: &PgPool, token: &str) -> Result<Option<(i32, i32)>, sqlx::Error> {
-    sqlx::query_as(
-        r#"UPDATE device_tokens SET "lastUsedAt" = now()
-           WHERE "hash" = $1 AND "kind" = 'kobo' RETURNING id, "userId""#,
+    let row: Option<(i32, i32, bool)> = sqlx::query_as(
+        r#"SELECT id, "userId", ("lastUsedAt" IS NULL OR "lastUsedAt" < now() - interval '1 minute')
+           FROM device_tokens WHERE "hash" = $1 AND "kind" = 'kobo'"#,
     )
     .bind(hash(token))
     .fetch_optional(db)
-    .await
+    .await?;
+    let Some((id, owner, stale)) = row else {
+        return Ok(None);
+    };
+    if stale {
+        sqlx::query(r#"UPDATE device_tokens SET "lastUsedAt" = now() WHERE id = $1"#)
+            .bind(id)
+            .execute(db)
+            .await?;
+    }
+    Ok(Some((id, owner)))
 }
 
 /// Whether some kind opens the data plane through `source`.

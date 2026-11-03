@@ -1,13 +1,14 @@
 //! The Kobo books of a caller (`kobo.md` rules 7-9): which items count, their JSON, covers.
-use super::{BOOK_PREFIX, Kobo, iso, json_response, parse_uuid, uuid};
+use super::{BOOK_PREFIX, Kobo, iso, json_response, parse_uuid, proxy, uuid};
 use crate::{
     http::AppError,
     images::paths::{Size, Target, Variant},
     libraries::HIDDEN_FILES_FROM,
     paths::data_dir,
+    state::AppState,
 };
 use axum::{
-    extract::Path,
+    extract::{Path, Request, State},
     http::{
         HeaderValue, StatusCode,
         header::{CACHE_CONTROL, CONTENT_TYPE},
@@ -34,20 +35,13 @@ pub struct Book {
     pub authors: Vec<String>,
 }
 
+const UPDATED: &str = r#"GREATEST(i."updatedAt", m."updatedAt", f."updatedAt", e."updatedAt",
+  (SELECT max(c."updatedAt") FROM media_credits c WHERE c."mediaId" = m.id))"#;
+
 /// The EPUB items `$1` (library ids) lets the caller read; `$2` narrows to item ids (NULL: all).
-pub async fn fetch(
-    db: &PgPool,
-    acl: &[i32],
-    only: Option<&[i32]>,
-) -> Result<Vec<Book>, sqlx::Error> {
-    sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"SELECT i.id AS item, m.id AS media, f.id AS file, f.size, m.title, m.overview, m.year,
-  e.language, e.publisher, m."createdAt" AS created,
-  GREATEST(i."updatedAt", m."updatedAt", f."updatedAt") AS updated,
-  ARRAY(SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId"
-        WHERE c."mediaId" = m.id AND c.role = 'author' AND c."editionId" IS NULL
-        ORDER BY c.position, c.id) AS authors
-FROM items i
+fn from_where() -> String {
+    format!(
+        r#"FROM items i
 JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
 JOIN media m ON m.id = i."mediaId" AND m.type = 'book'
 JOIN LATERAL (
@@ -62,6 +56,25 @@ WHERE i."groupId" IS NULL
   AND m."libraryId" = ANY($1) AND COALESCE(e."libraryId", m."libraryId") = ANY($1)
   AND ($2::int[] IS NULL OR i.id = ANY($2))
 ORDER BY i.id"#
+    )
+}
+
+/// A readable book's id and dates: what a sync compares before it reads any metadata.
+#[derive(sqlx::FromRow)]
+pub struct Index {
+    pub item: i32,
+    pub created: DateTime<Utc>,
+    pub updated: DateTime<Utc>,
+}
+
+pub async fn index(
+    db: &PgPool,
+    acl: &[i32],
+    only: Option<&[i32]>,
+) -> Result<Vec<Index>, sqlx::Error> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT i.id AS item, m."createdAt" AS created, {UPDATED} AS updated {}"#,
+        from_where()
     )))
     .bind(acl)
     .bind(only)
@@ -69,14 +82,35 @@ ORDER BY i.id"#
     .await
 }
 
-/// The one place that chooses the format and URL of a book's file (the KEPUB hook of item 6.2).
-fn download(k: &Kobo, b: &Book) -> Value {
-    json!({
-        "Format": "EPUB3",
-        "Size": b.size,
-        "Url": format!("{}/cred/{}/api/stream/{}?download=1", k.base, k.token, b.file),
-        "Platform": "Generic",
-    })
+pub async fn fetch(
+    db: &PgPool,
+    acl: &[i32],
+    only: Option<&[i32]>,
+) -> Result<Vec<Book>, sqlx::Error> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT i.id AS item, m.id AS media, f.id AS file, f.size, m.title, m.overview, m.year,
+  e.language, e.publisher, m."createdAt" AS created, {UPDATED} AS updated,
+  ARRAY(SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId"
+        WHERE c."mediaId" = m.id AND c.role = 'author' AND c."editionId" IS NULL
+        ORDER BY c.position, c.id) AS authors
+{}"#,
+        from_where()
+    )))
+    .bind(acl)
+    .bind(only)
+    .fetch_all(db)
+    .await
+}
+
+/// The one place that chooses the formats and URLs of a book's file (the KEPUB hook of item 6.2).
+fn downloads(k: &Kobo, b: &Book) -> Value {
+    let url = format!(
+        "{}/cred/{}/api/stream/{}?download=1",
+        k.base, k.token, b.file
+    );
+    let of =
+        |format: &str| json!({"Format": format, "Size": b.size, "Url": url, "Platform": "Generic"});
+    json!([of("EPUB3"), of("EPUB")])
 }
 
 pub fn entitlement(
@@ -115,7 +149,8 @@ pub fn book_metadata(k: &Kobo, b: &Book) -> Value {
         "CrossRevisionId": id,
         "CurrentDisplayPrice": {"CurrencyCode": "USD", "TotalAmount": 0},
         "CurrentLoveDisplayPrice": {"TotalAmount": 0},
-        "DownloadUrls": [download(k, b)],
+        "DownloadUrls": downloads(k, b),
+        "ContributorRoles": b.authors.iter().map(|a| json!({"Name": a, "Role": "Author"})).collect::<Vec<_>>(),
         "EntitlementId": id,
         "ExternalIds": [],
         "Genre": "00000000-0000-0000-0000-000000000001",
@@ -158,10 +193,14 @@ pub async fn find(db: &PgPool, k: &Kobo, id: &str) -> Result<Option<Book>, sqlx:
 }
 
 pub async fn metadata(
-    axum::extract::State(st): axum::extract::State<crate::state::AppState>,
+    State(st): State<AppState>,
     k: Kobo,
     Path((_, id)): Path<(String, String)>,
+    req: Request,
 ) -> Result<Response, AppError> {
+    if proxy::store_book(&st, &id).await? {
+        return Ok(proxy::forward(req).await);
+    }
     Ok(match find(&st.db, &k, &id).await? {
         Some(b) => json_response(StatusCode::OK, json!([book_metadata(&k, &b)])),
         None => not_found(),
@@ -169,23 +208,32 @@ pub async fn metadata(
 }
 
 pub async fn cover(
-    st: axum::extract::State<crate::state::AppState>,
+    State(st): State<AppState>,
     k: Kobo,
-    Path((_, id, w, _h, _grey)): Path<(String, String, String, String, String)>,
+    Path((_, id, w, h, _grey)): Path<(String, String, String, String, String)>,
 ) -> Result<Response, AppError> {
-    serve_cover(&st.db, &k, &id, &w).await
+    serve_cover(&st, &k, &id, &w, &h).await
 }
 
 pub async fn cover_quality(
-    st: axum::extract::State<crate::state::AppState>,
+    State(st): State<AppState>,
     k: Kobo,
-    Path((_, id, w, _h, _q, _grey)): Path<(String, String, String, String, String, String)>,
+    Path((_, id, w, h, _q, _grey)): Path<(String, String, String, String, String, String)>,
 ) -> Result<Response, AppError> {
-    serve_cover(&st.db, &k, &id, &w).await
+    serve_cover(&st, &k, &id, &w, &h).await
 }
 
-async fn serve_cover(db: &PgPool, k: &Kobo, id: &str, width: &str) -> Result<Response, AppError> {
-    let Some(b) = find(db, k, id).await? else {
+async fn serve_cover(
+    st: &AppState,
+    k: &Kobo,
+    id: &str,
+    width: &str,
+    height: &str,
+) -> Result<Response, AppError> {
+    if proxy::store_book(st, id).await? {
+        return Ok(proxy::store_cover(id, width, height));
+    }
+    let Some(b) = find(&st.db, k, id).await? else {
         return Ok(not_found());
     };
     let t = Target::media(b.media, Variant::Poster);

@@ -309,7 +309,7 @@
     "kind_opds": "Catalogue (OPDS)",
     "kind_kosync": "Reading progress sync (KOReader)",
     "kind_kobo": "Kobo e-reader sync (experimental)",
-    "kobo_hint": "Add this line under [OneStoreServices] in .kobo/Kobo/Kobo eReader.conf on the e-reader, then sync. The link contains the token: renew it if it leaks.",
+    "kobo_hint": "Add this line under [OneStoreServices] in .kobo/Kobo/Kobo eReader.conf on the e-reader, then sync. The link contains the token: renew it if it leaks. Use one token per e-reader.",
     "kobo_endpoint_label": "Kobo endpoint for {{name}}",
     "create": "Create",
     "col_name": "Name",

@@ -73,6 +73,7 @@ impl Ctx {
         device_tokens::lookup(&self.pool, token, Basic)
             .await
             .unwrap()
+            .map(|(owner, _)| owner)
     }
 }
 

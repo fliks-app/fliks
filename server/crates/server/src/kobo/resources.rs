@@ -1,0 +1,390 @@
+//! The static resources of the Kobo store API, as the public reimplementations list them (`kobo.md` rule 5).
+
+/// `(key, value)`; the value is what the real store answers, URLs with `{Placeholders}` kept.
+pub const NATIVE: &[(&str, &str)] = &[
+    ("account_page", "https://www.kobo.com/account/settings"),
+    ("account_page_rakuten", "https://my.rakuten.co.jp/"),
+    (
+        "add_device",
+        "https://storeapi.mobile.kobo.com/v1/user/add-device",
+    ),
+    (
+        "add_entitlement",
+        "https://storeapi.mobile.kobo.com/v1/library/{RevisionIds}",
+    ),
+    (
+        "affiliaterequest",
+        "https://storeapi.mobile.kobo.com/v1/affiliate",
+    ),
+    ("assets", "https://storeapi.mobile.kobo.com/v1/assets"),
+    (
+        "audiobook",
+        "https://storeapi.mobile.kobo.com/v1/products/audiobooks/{ProductId}",
+    ),
+    (
+        "audiobook_detail_page",
+        "https://www.kobo.com/{region}/{language}/audiobook/{slug}",
+    ),
+    (
+        "audiobook_landing_page",
+        "https://www.kobo.com/{region}/{language}/audiobooks",
+    ),
+    (
+        "audiobook_preview",
+        "https://storeapi.mobile.kobo.com/v1/products/audiobooks/{Id}/preview",
+    ),
+    (
+        "audiobook_purchase_withcredit",
+        "https://storeapi.mobile.kobo.com/v1/store/audiobook/{ProductId}",
+    ),
+    (
+        "authorproduct_recommendations",
+        "https://storeapi.mobile.kobo.com/v1/products/books/authors/recommendations",
+    ),
+    (
+        "autocomplete",
+        "https://storeapi.mobile.kobo.com/v1/products/autocomplete",
+    ),
+    ("blackstone_header", ""),
+    (
+        "book",
+        "https://storeapi.mobile.kobo.com/v1/products/books/{ProductId}",
+    ),
+    (
+        "book_detail_page",
+        "https://www.kobo.com/{region}/{language}/ebook/{slug}",
+    ),
+    (
+        "book_detail_page_rakuten",
+        "https://books.rakuten.co.jp/rk/{crossrevisionid}",
+    ),
+    ("book_landing_page", "https://www.kobo.com/ebooks"),
+    (
+        "book_subscription",
+        "https://storeapi.mobile.kobo.com/v1/products/books/subscriptions",
+    ),
+    (
+        "categories",
+        "https://storeapi.mobile.kobo.com/v1/categories",
+    ),
+    ("categories_page", "https://www.kobo.com/ebooks/categories"),
+    (
+        "category",
+        "https://storeapi.mobile.kobo.com/v1/categories/{CategoryId}",
+    ),
+    (
+        "category_featured_lists",
+        "https://storeapi.mobile.kobo.com/v1/categories/{CategoryId}/featuredlists",
+    ),
+    (
+        "category_products",
+        "https://storeapi.mobile.kobo.com/v1/categories/{CategoryId}/products",
+    ),
+    (
+        "checkout_borrowed_book",
+        "https://storeapi.mobile.kobo.com/v1/library/borrow",
+    ),
+    (
+        "configuration_data",
+        "https://storeapi.mobile.kobo.com/v1/configuration",
+    ),
+    (
+        "content_access_book",
+        "https://storeapi.mobile.kobo.com/v1/products/books/{ProductId}/access",
+    ),
+    (
+        "customer_care_live_chat",
+        "https://v2.zopim.com/widget/livechat.html?key=Y6gwUmnu4OATxN3Tli4Av9bYN319BTdO",
+    ),
+    (
+        "daily_deal",
+        "https://storeapi.mobile.kobo.com/v1/products/dailydeal",
+    ),
+    ("deals", "https://storeapi.mobile.kobo.com/v1/deals"),
+    (
+        "delete_entitlement",
+        "https://storeapi.mobile.kobo.com/v1/library/{Ids}",
+    ),
+    (
+        "delete_tag",
+        "https://storeapi.mobile.kobo.com/v1/library/tags/{TagId}",
+    ),
+    (
+        "delete_tag_items",
+        "https://storeapi.mobile.kobo.com/v1/library/tags/{TagId}/items/delete",
+    ),
+    (
+        "device_auth",
+        "https://storeapi.mobile.kobo.com/v1/auth/device",
+    ),
+    (
+        "device_refresh",
+        "https://storeapi.mobile.kobo.com/v1/auth/refresh",
+    ),
+    ("dictionary_host", "https://ereaderfiles.kobo.com"),
+    ("discovery_host", "https://discovery.kobobooks.com"),
+    (
+        "eula_page",
+        "https://www.kobo.com/termsofuse?style=onestore",
+    ),
+    (
+        "exchange_auth",
+        "https://storeapi.mobile.kobo.com/v1/auth/exchange",
+    ),
+    (
+        "external_book",
+        "https://storeapi.mobile.kobo.com/v1/products/books/external/{Ids}",
+    ),
+    (
+        "facebook_sso_page",
+        "https://authorize.kobo.com/signin/provider/Facebook/login?returnUrl=http://kobo.com/",
+    ),
+    (
+        "featured_list",
+        "https://storeapi.mobile.kobo.com/v1/products/featured/{FeaturedListId}",
+    ),
+    (
+        "featured_lists",
+        "https://storeapi.mobile.kobo.com/v1/products/featured",
+    ),
+    ("free_books_page", ""),
+    (
+        "fte_feedback",
+        "https://storeapi.mobile.kobo.com/v1/products/ftefeedback",
+    ),
+    (
+        "get_tests_request",
+        "https://storeapi.mobile.kobo.com/v1/analytics/gettests",
+    ),
+    (
+        "giftcard_epd_redeem_url",
+        "https://www.kobo.com/{storefront}/{language}/redeem-ereader",
+    ),
+    (
+        "giftcard_redeem_url",
+        "https://www.kobo.com/{storefront}/{language}/redeem",
+    ),
+    ("help_page", "http://www.kobo.com/help"),
+    ("kobo_audiobooks_enabled", "False"),
+    ("kobo_audiobooks_orange_deal_enabled", "False"),
+    ("kobo_audiobooks_subscriptions_enabled", "False"),
+    ("kobo_nativeborrow_enabled", "False"),
+    ("kobo_onestorelibrary_enabled", "False"),
+    ("kobo_redeem_enabled", "True"),
+    ("kobo_shelfie_enabled", "False"),
+    ("kobo_subscriptions_enabled", "False"),
+    ("kobo_superpoints_enabled", "False"),
+    ("kobo_wishlist_enabled", "True"),
+    (
+        "library_book",
+        "https://storeapi.mobile.kobo.com/v1/user/library/books/{LibraryItemId}",
+    ),
+    (
+        "library_items",
+        "https://storeapi.mobile.kobo.com/v1/user/library",
+    ),
+    (
+        "library_metadata",
+        "https://storeapi.mobile.kobo.com/v1/library/{Ids}/metadata",
+    ),
+    (
+        "library_prices",
+        "https://storeapi.mobile.kobo.com/v1/user/library/previews/prices",
+    ),
+    (
+        "library_search",
+        "https://storeapi.mobile.kobo.com/v1/library/search",
+    ),
+    (
+        "library_sync",
+        "https://storeapi.mobile.kobo.com/v1/library/sync",
+    ),
+    (
+        "love_dashboard_page",
+        "https://www.kobo.com/{region}/{language}/kobosuperpoints",
+    ),
+    (
+        "love_points_redemption_page",
+        "https://www.kobo.com/{region}/{language}/KoboSuperPointsRedemption?productId={ProductId}",
+    ),
+    ("magazine_landing_page", "https://www.kobo.com/emagazines"),
+    (
+        "more_sign_in_options",
+        "https://authorize.kobo.com/signin?returnUrl=http://kobo.com/#allProviders",
+    ),
+    (
+        "notebooks",
+        "https://storeapi.mobile.kobo.com/api/internal/notebooks",
+    ),
+    (
+        "notifications_registration_issue",
+        "https://storeapi.mobile.kobo.com/v1/notifications/registration",
+    ),
+    ("oauth_host", "https://oauth.kobo.com"),
+    (
+        "password_retrieval_page",
+        "https://www.kobo.com/passwordretrieval.html",
+    ),
+    (
+        "personalizedrecommendations",
+        "https://storeapi.mobile.kobo.com/v2/users/personalizedrecommendations",
+    ),
+    (
+        "pocket_link_account_start",
+        "https://authorize.kobo.com/{region}/{language}/linkpocket",
+    ),
+    (
+        "post_analytics_event",
+        "https://storeapi.mobile.kobo.com/v1/analytics/event",
+    ),
+    (
+        "ppx_purchasing_url",
+        "https://storeapi.mobile.kobo.com/v1/store/purchase/{ProductId}",
+    ),
+    (
+        "privacy_page",
+        "https://www.kobo.com/privacypolicy?style=onestore",
+    ),
+    (
+        "product_nextread",
+        "https://storeapi.mobile.kobo.com/v1/products/{ProductIds}/nextread",
+    ),
+    (
+        "product_prices",
+        "https://storeapi.mobile.kobo.com/v1/products/{ProductIds}/prices",
+    ),
+    (
+        "product_recommendations",
+        "https://storeapi.mobile.kobo.com/v1/products/{ProductId}/recommendations",
+    ),
+    (
+        "product_reviews",
+        "https://storeapi.mobile.kobo.com/v1/products/{ProductIds}/reviews",
+    ),
+    ("products", "https://storeapi.mobile.kobo.com/v1/products"),
+    ("productsv2", "https://storeapi.mobile.kobo.com/v2/products"),
+    (
+        "provider_external_sign_in_page",
+        "https://authorize.kobo.com/ExternalSignIn/{providerName}?returnUrl=http://kobo.com/",
+    ),
+    (
+        "quickbuy_checkout",
+        "https://storeapi.mobile.kobo.com/v1/store/quickbuy/{PurchaseId}/checkout",
+    ),
+    (
+        "quickbuy_create",
+        "https://storeapi.mobile.kobo.com/v1/store/quickbuy/purchase",
+    ),
+    (
+        "rakuten_token_exchange",
+        "https://storeapi.mobile.kobo.com/v1/auth/rakuten_token_exchange",
+    ),
+    (
+        "rating",
+        "https://storeapi.mobile.kobo.com/v1/products/{ProductId}/rating/{Rating}",
+    ),
+    ("reading_services_host", "https://readingservices.kobo.com"),
+    (
+        "reading_state",
+        "https://storeapi.mobile.kobo.com/v1/library/{Ids}/state",
+    ),
+    ("redeem_interstitial_page", "https://www.kobo.com"),
+    (
+        "registration_page",
+        "https://authorize.kobo.com/signup?returnUrl=http://kobo.com/",
+    ),
+    (
+        "related_items",
+        "https://storeapi.mobile.kobo.com/v1/products/{Id}/related",
+    ),
+    (
+        "remaining_book_series",
+        "https://storeapi.mobile.kobo.com/v1/products/books/series/{SeriesId}",
+    ),
+    (
+        "rename_tag",
+        "https://storeapi.mobile.kobo.com/v1/library/tags/{TagId}",
+    ),
+    (
+        "review",
+        "https://storeapi.mobile.kobo.com/v1/products/reviews/{ReviewId}",
+    ),
+    (
+        "review_sentiment",
+        "https://storeapi.mobile.kobo.com/v1/products/reviews/{ReviewId}/sentiment/{Sentiment}",
+    ),
+    (
+        "shelfie_recommendations",
+        "https://storeapi.mobile.kobo.com/v1/user/recommendations/shelfie",
+    ),
+    (
+        "sign_in_page",
+        "https://authorize.kobo.com/signin?returnUrl=http://kobo.com/",
+    ),
+    (
+        "social_authorization_host",
+        "https://social.kobobooks.com:8443",
+    ),
+    ("social_host", "https://social.kobobooks.com"),
+    ("store_home", "www.kobo.com/{region}/{language}"),
+    ("store_host", "www.kobo.com"),
+    (
+        "store_newreleases",
+        "https://www.kobo.com/{region}/{language}/List/new-releases/961XUjtsU0qxkFItWOutGA",
+    ),
+    (
+        "store_search",
+        "https://www.kobo.com/{region}/{language}/Search?Query={query}",
+    ),
+    (
+        "store_top50",
+        "https://www.kobo.com/{region}/{language}/ebooks/Top",
+    ),
+    (
+        "tag_items",
+        "https://storeapi.mobile.kobo.com/v1/library/tags/{TagId}/Items",
+    ),
+    ("tags", "https://storeapi.mobile.kobo.com/v1/library/tags"),
+    (
+        "taste_profile",
+        "https://storeapi.mobile.kobo.com/v1/products/tasteprofile",
+    ),
+    (
+        "update_accessibility_to_preview",
+        "https://storeapi.mobile.kobo.com/v1/library/{EntitlementIds}/preview",
+    ),
+    ("use_one_store", "True"),
+    (
+        "user_loyalty_benefits",
+        "https://storeapi.mobile.kobo.com/v1/user/loyalty/benefits",
+    ),
+    (
+        "user_platform",
+        "https://storeapi.mobile.kobo.com/v1/user/platform",
+    ),
+    (
+        "user_profile",
+        "https://storeapi.mobile.kobo.com/v1/user/profile",
+    ),
+    (
+        "user_ratings",
+        "https://storeapi.mobile.kobo.com/v1/user/ratings",
+    ),
+    (
+        "user_recommendations",
+        "https://storeapi.mobile.kobo.com/v1/user/recommendations",
+    ),
+    (
+        "user_reviews",
+        "https://storeapi.mobile.kobo.com/v1/user/reviews",
+    ),
+    (
+        "user_wishlist",
+        "https://storeapi.mobile.kobo.com/v1/user/wishlist",
+    ),
+    ("userguide_host", "https://ereaderfiles.kobo.com"),
+    (
+        "wishlist_page",
+        "https://www.kobo.com/{region}/{language}/account/wishlist",
+    ),
+];
