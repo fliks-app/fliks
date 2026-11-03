@@ -42,7 +42,7 @@ pub fn parse_text_release(title: &str) -> TextRelease {
     let t = title.replace(['.', '_'], " ").to_lowercase();
     let format = [
         (rx!(r"\bepub\b"), "epub"),
-        (rx!(r"\b(azw3|azw|kf8)\b"), "azw3"),
+        (rx!(r"\b(azw3|kf8)\b"), "azw3"),
         (rx!(r"\bmobi\b"), "mobi"),
         (rx!(r"\bpdf\b"), "pdf"),
     ]
@@ -58,5 +58,24 @@ pub fn parse_text_release(title: &str) -> TextRelease {
         retail: rx!(r"\bretail\b").is_match(&t) && !rx!(r"\bnon[ -]?retail\b").is_match(&t),
         language: parse_book_language(title),
         names: parse_book_release_name(title),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::media::TEXT_EXTS;
+
+    #[test]
+    fn every_tabled_format_is_ingested() {
+        for q in &TEXT_QUALITIES[1..] {
+            assert!(TEXT_EXTS.contains(&format!(".{}", q.source).as_str()));
+            assert_eq!(
+                parse_text_release(&format!("T {}", q.source)).format,
+                Some(q.source)
+            );
+        }
+        assert_eq!(parse_text_release("T azw").format, None);
+        assert_eq!(parse_text_release("T djvu").format, None);
     }
 }

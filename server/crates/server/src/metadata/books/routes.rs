@@ -30,14 +30,13 @@ use axum::{
 use fliks_domain::{
     acl::{Action, Subject},
     external_id::Namespace,
-    media::kind::MediaKind,
+    media::{AUDIO_EXTS, kind::MediaKind},
     metadata::limiter::Priority,
 };
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;
 
 const GO: Priority = Priority::Interactive;
-const AUDIO_FORMATS: [&str; 8] = ["m4b", "m4a", "mp3", "flac", "ogg", "opus", "aac", "wav"];
 
 pub fn routes(r: Router<AppState>) -> Router<AppState> {
     r.route("/api/metadata/search/book", get(search_book))
@@ -264,7 +263,7 @@ fn edition_entry(p: Namespace, r: &Value) -> Option<Value> {
     let audio = duration.is_some()
         || format
             .as_deref()
-            .is_some_and(|f| AUDIO_FORMATS.contains(&f));
+            .is_some_and(|f| AUDIO_EXTS.iter().any(|e| e[1..] == *f));
     let isbns = match r.get("isbn13") {
         Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
         _ => vec![],

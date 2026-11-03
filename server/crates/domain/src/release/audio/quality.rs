@@ -60,8 +60,6 @@ pub struct AudioRelease {
 fn format_of(t: &str) -> Option<(&'static str, &'static str)> {
     [
         (rx!(r"\bflac\b"), "flac", "lossless"),
-        (rx!(r"\balac\b"), "alac", "lossless"),
-        (rx!(r"\bwav\b"), "wav", "lossless"),
         (rx!(r"\bopus\b"), "opus", "opus"),
         (rx!(r"\bm4b\b"), "m4b", "aac"),
         (rx!(r"\bm4a\b"), "m4a", "aac"),
@@ -138,5 +136,22 @@ pub fn parse_audio_release(title: &str) -> AudioRelease {
         bit_depth,
         language: parse_book_language(title),
         names: parse_book_release_name(title),
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+    use crate::media::AUDIO_EXTS;
+
+    #[test]
+    fn every_parsed_format_is_ingested() {
+        for f in AUDIO_EXTS.iter().map(|e| &e[1..]) {
+            let r = parse_audio_release(&format!("Title {f}"));
+            assert_eq!(r.format, Some(f));
+        }
+        for f in ["wav", "alac", "wma"] {
+            assert_eq!(parse_audio_release(&format!("Title {f}")).format, None);
+        }
     }
 }
