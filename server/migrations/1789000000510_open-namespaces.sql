@@ -66,9 +66,17 @@ ALTER TABLE "edition_external_ids" DROP CONSTRAINT "CK_edition_external_ids_prov
 ALTER TABLE "media" ALTER COLUMN "preferredProvider" TYPE text;
 ALTER TABLE "item_groups" ALTER COLUMN "preferredProvider" TYPE text;
 
--- A library preference is a namespace a provider serves: drop what the form could not send back.
+-- A preferred provider is a namespace a provider serves: drop what the forms could not send back.
 ALTER TABLE "libraries" DISABLE TRIGGER set_updated_at;
+ALTER TABLE "media" DISABLE TRIGGER set_updated_at;
 UPDATE "libraries" SET "preferredProvider" = NULL
 WHERE "preferredProvider" NOT IN ('tmdb', 'tvdb', 'openlibrary', 'googlebooks', 'bnf', 'audible', 'audnexus')
   AND "preferredProvider" !~ '^[a-z][a-z0-9]*(\.[a-z0-9]+)*:[a-z][a-z0-9-]{0,31}$';
+UPDATE "media" SET "preferredProvider" = NULL
+WHERE "preferredProvider" NOT IN ('tmdb', 'tvdb', 'openlibrary', 'googlebooks', 'bnf', 'audible', 'audnexus')
+  AND "preferredProvider" !~ '^[a-z][a-z0-9]*(\.[a-z0-9]+)*:[a-z][a-z0-9-]{0,31}$';
+UPDATE "item_groups" SET "preferredProvider" = NULL
+WHERE "preferredProvider" NOT IN ('tmdb', 'tvdb', 'openlibrary', 'googlebooks', 'bnf', 'audible', 'audnexus')
+  AND "preferredProvider" !~ '^[a-z][a-z0-9]*(\.[a-z0-9]+)*:[a-z][a-z0-9-]{0,31}$';
+ALTER TABLE "media" ENABLE TRIGGER set_updated_at;
 ALTER TABLE "libraries" ENABLE TRIGGER set_updated_at;

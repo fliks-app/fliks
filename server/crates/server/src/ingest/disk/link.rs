@@ -493,6 +493,7 @@ pub(super) async fn find_or_import(
             .await?,
             added_by: Some(a.user.id),
             monitored_seasons: None,
+            links: vec![],
         };
         mw::import_title(st, provider, ext.clone(), imp, d.priority).await
     }

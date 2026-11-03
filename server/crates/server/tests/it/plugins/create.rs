@@ -209,7 +209,9 @@ async fn concurrent_creates_of_one_title_make_one_media() {
     let mut rx = st.hub.subscribe();
     let calls = (0..5).map(|_| {
         let st = st.clone();
-        tokio::spawn(async move { resolve_or_create(&st, "movie", &tmdb("603"), None, None).await })
+        tokio::spawn(async move {
+            resolve_or_create(&st, "org.fake", "movie", &tmdb("603"), None, None).await
+        })
     });
     let ids: Vec<u32> = futures_util::future::join_all(calls)
         .await
@@ -247,12 +249,12 @@ async fn concurrent_creates_of_one_title_make_one_media() {
         serde_json::to_value(&imported[0].0).unwrap(),
         json!([{"provider": "tmdb", "value": "603"}])
     );
-    let again = resolve_or_create(&st, "movie", &tmdb("603"), None, None).await;
+    let again = resolve_or_create(&st, "org.fake", "movie", &tmdb("603"), None, None).await;
     assert_eq!(again.unwrap(), ids[0], "a later call finds it");
     assert_eq!(media_count(&s.pool).await, 1);
-    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(99), None).await;
+    let e = resolve_or_create(&st, "org.fake", "movie", &tmdb("604"), Some(99), None).await;
     assert_eq!(e.unwrap_err().code, "ERR_NOT_FOUND", "unknown library");
-    let e = resolve_or_create(&st, "movie", &tmdb("604"), Some(1), Some(999)).await;
+    let e = resolve_or_create(&st, "org.fake", "movie", &tmdb("604"), Some(1), Some(999)).await;
     assert_eq!(
         e.unwrap_err().code,
         "ERR_VALIDATION",
@@ -297,7 +299,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
         app.oneshot(req).await.unwrap().status().as_u16()
     };
     let ids = tmdb("603");
-    let plugin = resolve_or_create(&st, "movie", &ids, None, None);
+    let plugin = resolve_or_create(&st, "org.fake", "movie", &ids, None, None);
     let (status, created) = tokio::join!(request, plugin);
     assert_eq!(status, 201);
     let id = created.unwrap();
@@ -419,10 +421,10 @@ async fn a_plugin_namespace_resolves_to_one_media_that_refreshes() {
         provider: "org.fake:aid".into(),
         value: "7".into(),
     }];
-    let first = resolve_or_create(&st, "movie", &ids, None, None)
+    let first = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
         .await
         .unwrap();
-    let second = resolve_or_create(&st, "movie", &ids, None, None)
+    let second = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
         .await
         .unwrap();
     assert_eq!(first, second, "the second call finds the media");
@@ -476,7 +478,7 @@ async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
             value: "7".into(),
         },
     ];
-    let id = resolve_or_create(&st, "movie", &both, None, None)
+    let id = resolve_or_create(&st, "org.fake", "movie", &both, None, None)
         .await
         .unwrap();
     let provider: String =
@@ -516,7 +518,7 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
         provider: "org.fake:aid".into(),
         value: "7".into(),
     }];
-    let id = resolve_or_create(&st, "movie", &ids, None, None)
+    let id = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
         .await
         .unwrap();
     let held: Vec<(String,)> = sqlx::query_as(
@@ -531,6 +533,64 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
         [("org.fake:aid".to_owned(),), ("tvdb".to_owned(),)],
         "no tmdb link"
     );
+    // A library preferring TMDB does not look the plugin's imdbId or tvdbId up there either.
+    sqlx::query(r#"UPDATE libraries SET "preferredProvider" = 'tmdb' WHERE id = 1"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    st.metadata.add_plugin(Arc::new(Fake(
+        Arc::default(),
+        "org.fake:aid",
+        json!({"tvdbId": 81189, "imdbId": "tt0000001"}),
+    )));
+    let ids = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "8".into(),
+    }];
+    let id = resolve_or_create(&st, "org.fake", "movie", &ids, None, None)
+        .await
+        .unwrap();
+    let tmdb_links: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'tmdb'"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(tmdb_links, 0);
+    // The found path changes nothing, and a plugin creates only through its own namespaces.
+    let mixed = vec![
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "8".into(),
+        },
+        ExternalId {
+            provider: "tvdb".into(),
+            value: "999999".into(),
+        },
+    ];
+    assert_eq!(
+        resolve_or_create(&st, "org.fake", "movie", &mixed, None, None)
+            .await
+            .unwrap(),
+        id
+    );
+    let held: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = $1 AND value = '999999'"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(held, 0, "the found path links nothing");
+    let other = vec![ExternalId {
+        provider: "org.fake:aid".into(),
+        value: "9".into(),
+    }];
+    let e = resolve_or_create(&st, "org.other", "movie", &other, None, None)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "unsupported-provider");
     s.finish().await;
 }
 
@@ -558,13 +618,20 @@ async fn a_lettered_namespace_refreshes_and_all_entries_are_linked() {
         entry("org.fake:slug", "cowboy-bebop"),
         entry("org.fake:aid", "7"),
     ];
-    let first = resolve_or_create(&st, "movie", &both, None, None)
+    let first = resolve_or_create(&st, "org.fake", "movie", &both, None, None)
         .await
         .unwrap();
     for one in &both {
-        let again = resolve_or_create(&st, "movie", std::slice::from_ref(one), None, None)
-            .await
-            .unwrap();
+        let again = resolve_or_create(
+            &st,
+            "org.fake",
+            "movie",
+            std::slice::from_ref(one),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(again, first, "{}", one.provider);
     }
     assert_eq!(media_count(&s.pool).await, 1);

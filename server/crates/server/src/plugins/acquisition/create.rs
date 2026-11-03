@@ -9,6 +9,7 @@ use fliks_domain::external_id::Namespace;
 /// The media of the work `ids` name, imported when the library has none.
 pub async fn resolve_or_create(
     st: &AppState,
+    plugin_id: &str,
     kind: &str,
     ids: &[t::ExternalId],
     library_id: Option<u32>,
@@ -52,23 +53,28 @@ pub async fn resolve_or_create(
     let id = match found {
         Some(id) => id,
         None => {
-            // Rule 57: created by the first entry whose provider is available.
-            let Some((ns, value)) = entries.iter().find(|(ns, _)| st.metadata.available(*ns))
+            // Rule 31: created through a core entry or one of the caller's own namespaces, which
+            // also links the caller's other own entries; the found path changes nothing.
+            let own = |ns: &Namespace| {
+                ns.core().is_some() || ns.as_str().split(':').next() == Some(plugin_id)
+            };
+            let Some((ns, value)) = entries
+                .iter()
+                .find(|(ns, _)| own(ns) && st.metadata.available(*ns))
             else {
                 return Err(host_err(
                     "unsupported-provider",
                     "the provider is not available",
                 ));
             };
-            create(st, kind, (*ns, value), (library, folder)).await?
+            let links = entries
+                .iter()
+                .filter(|(n, v)| n.core().is_none() && own(n) && (n, v) != (ns, value))
+                .cloned()
+                .collect();
+            create(st, kind, (*ns, value), (library, folder), links).await?
         }
     };
-    // Rule 31: a later call by any one of the entries finds this media.
-    for (ns, value) in entries.iter().filter(|(ns, _)| !ns.is_unique()) {
-        external_ids::link_if_absent(&mut tx, id, kind, *ns, value)
-            .await
-            .map_err(db_err)?;
-    }
     tx.commit().await.map_err(db_err)?;
     Ok(id as u32)
 }
@@ -86,6 +92,7 @@ async fn create(
     kind: MediaKind,
     (ns, value): (Namespace, &str),
     (library, folder): (Option<i32>, Option<i32>),
+    links: Vec<(Namespace, String)>,
 ) -> Result<i32, HostError> {
     match import_in(
         st,
@@ -95,6 +102,7 @@ async fn create(
         (library, folder),
         None,
         None,
+        links,
     )
     .await
     {

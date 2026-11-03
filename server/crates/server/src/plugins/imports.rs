@@ -279,6 +279,7 @@ impl host::Host for Ctx {
         folder_id: Option<u32>,
     ) -> Result<u32, HostError> {
         let app = self.app();
+        let plugin_id = self.sh.id.to_string();
         call!(
             self,
             "media.resolveOrCreate",
@@ -290,6 +291,7 @@ impl host::Host for Ctx {
                 tokio::spawn(async move {
                     super::acquisition::resolve_or_create(
                         &app,
+                        &plugin_id,
                         &kind,
                         &external_ids,
                         library_id,

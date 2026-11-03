@@ -196,7 +196,8 @@ fn ext_i64(external_id: &str) -> Result<i64, AppError> {
         .map_err(|_| AppError::bad_request("externalId must be a numeric string"))
 }
 
-/// `external_id` as `p` stores it: numeric for a core namespace, its `idPattern` for a plugin's.
+/// A caller's `external_id` as `p` stores it: numeric for a core namespace, its `idPattern` for a
+/// plugin's. Ids read from storage are not revalidated (`provider-plugins.md` rule 28).
 fn checked_id(p: Namespace, external_id: &str) -> Result<String, AppError> {
     if p.core().is_some() {
         ext_i64(external_id)?;
@@ -245,10 +246,12 @@ async fn read_record(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Map<String, Value>, AppError> {
-    let external_id = checked_id(p, external_id)?;
+    if p.core().is_some() {
+        ext_i64(external_id)?;
+    }
     let v = st
         .metadata
-        .work(p, kind, &external_id, lang, prio)
+        .work(p, kind, external_id, lang, prio)
         .await
         .map_err(|e| fail_meta(p, e))?;
     Ok(match v {
@@ -276,10 +279,12 @@ async fn read_seasons(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Vec<SeasonDetails>, AppError> {
-    let external_id = checked_id(p, external_id)?;
+    if p.core().is_some() {
+        ext_i64(external_id)?;
+    }
     let v = st
         .metadata
-        .children(p, MediaKind::Series, &external_id, lang, prio)
+        .children(p, MediaKind::Series, external_id, lang, prio)
         .await
         .map_err(|e| fail_meta(p, e))?;
     Ok(v.iter().map(SeasonDetails::from_value).collect())
@@ -338,9 +343,11 @@ async fn read_for_library(
         let (d, p) = merged(kind, &[(found, record)], found, &[]);
         (found, external_id.clone(), d, p)
     };
+    // Rule 26: a plugin's ids never reach a core provider, so a plugin's record is not re-read there.
     let Some(pref) = lib
         .and_then(|l| l.preferred.as_deref())
         .filter(|p| !p.is_empty())
+        .filter(|_| found.core().is_some())
     else {
         return Ok(keep(record));
     };
@@ -394,12 +401,13 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
     let lang = language(st, lib.as_ref()).await?;
     let (p, id, mut details, provenance) =
         read_for_library(st, kind, finder, &l.external_id, lib.as_ref(), &lang, prio).await?;
+    let core_found = finder.core().is_some() && p.core().is_some();
     let seasons = if kind.has_seasons() {
         read_seasons(st, p, &id, &lang, prio).await?
     } else {
         vec![]
     };
-    if p.core().is_some()
+    if core_found
         && details.tmdb_id.is_none_or(|t| t == 0)
         && st.metadata.available(Namespace::TMDB)
         && let Some(tvdb) = details.tvdb_id.filter(|t| *t != 0)
@@ -573,7 +581,7 @@ async fn external_id_for(
 
 /// A plugin's namespace, declared or not: its override is soft, the plugin may be gone.
 fn is_plugin(pref: &str) -> bool {
-    Namespace::stored(pref).is_some_and(|n| n.core().is_none())
+    pref.contains(':')
 }
 
 async fn try_preferred(

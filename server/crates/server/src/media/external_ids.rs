@@ -26,27 +26,6 @@ pub fn preferred(name: &str) -> Option<Namespace> {
     })
 }
 
-/// `link` for a non-unique namespace the media holds no id of yet.
-pub async fn link_if_absent(
-    c: &mut PgConnection,
-    media_id: i32,
-    kind: MediaKind,
-    provider: Namespace,
-    value: &str,
-) -> sqlx::Result<()> {
-    let held: bool = sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2)"#,
-    )
-    .bind(media_id)
-    .bind(provider.as_str())
-    .fetch_one(&mut *c)
-    .await?;
-    if !held {
-        link(c, media_id, kind, provider, value).await?;
-    }
-    Ok(())
-}
-
 /// The join giving a query the `ids.tmdb`, `ids.tvdb` and `ids.imdb` of media `alias`, for queries
 /// built at run time (the checked ones inline the same text with bound provider names).
 pub fn ids_join(alias: &str) -> String {

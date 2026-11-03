@@ -529,6 +529,22 @@ async fn apply_identity(
             )));
         }
     }
+    // A new identity: the ids and pins of plugin namespaces go, but the one an explicit pin names.
+    sqlx::query(
+        r#"DELETE FROM media_external_ids
+           WHERE "mediaId" = $1 AND provider LIKE '%:%' AND provider IS DISTINCT FROM $2"#,
+    )
+    .bind(media.id)
+    .bind(provider.clone().flatten())
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"UPDATE item_groups SET "preferredProvider" = NULL
+           WHERE "mediaId" = $1 AND "preferredProvider" LIKE '%:%'"#,
+    )
+    .bind(media.id)
+    .execute(&mut *tx)
+    .await?;
     let written = ids.replace(&mut tx, media.id, media.media_type).await?;
     if written.gone {
         return Err(crate::libraries::media_not_found(media.id));

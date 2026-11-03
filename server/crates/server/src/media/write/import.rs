@@ -144,6 +144,8 @@ pub struct Import {
     pub language_profile_id: Option<i32>,
     pub added_by: Option<i32>,
     pub monitored_seasons: Option<Vec<i32>>,
+    /// Ids linked to the new media before it is announced.
+    pub links: Vec<(Namespace, String)>,
 }
 
 /// `importFromTmdb` / `importMedia` after validation (rules 11-17, 21-22), also the request
@@ -394,6 +396,9 @@ async fn insert_media(
             external_ids::link(tx, id, imp.media_type, *ns, v).await?;
         }
     }
+    for (ns, v) in &imp.links {
+        external_ids::link(tx, id, imp.media_type, *ns, v).await?;
+    }
     if lookup.core().is_none() && served == lookup {
         sqlx::query(r#"UPDATE media SET "preferredProvider" = $2 WHERE id = $1"#)
             .bind(id)
@@ -464,6 +469,7 @@ async fn prepare(
             .await?,
         added_by: Some(a.user.id),
         monitored_seasons: seasons,
+        links: vec![],
     })
 }
 
@@ -491,6 +497,7 @@ pub async fn import_for_request(
         target,
         added_by,
         seasons,
+        vec![],
     )
     .await
 }
@@ -504,6 +511,7 @@ pub async fn import_in(
     (library_id, folder_id): (Option<i32>, Option<i32>),
     added_by: Option<i32>,
     seasons: Option<Vec<i32>>,
+    links: Vec<(Namespace, String)>,
 ) -> Result<i32, AppError> {
     if ns == Namespace::TMDB {
         if !st.metadata.available(ns) {
@@ -527,6 +535,7 @@ pub async fn import_in(
             .await?,
         added_by,
         monitored_seasons: seasons,
+        links,
     };
     import_title(
         st,
