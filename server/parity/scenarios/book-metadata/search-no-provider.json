@@ -17,7 +17,7 @@
       "expect": {
         "body": {
           "error": "Service Unavailable",
-          "message": "No book metadata provider is available",
+          "message": "Metadata search failed on audnexus: the provider does not declare this call",
           "statusCode": 503
         },
         "status": 503
@@ -55,11 +55,11 @@
       "as": "user",
       "expect": {
         "body": {
-          "error": "Bad Request",
-          "message": "Unknown provider: openlibrary",
-          "statusCode": 400
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
         },
-        "status": 400
+        "status": 404
       },
       "method": "GET",
       "path": "/api/metadata/openlibrary/book/OL1W"

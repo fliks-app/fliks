@@ -6,6 +6,7 @@
       "as": "admin",
       "expect": {
         "body": {
+          "metadata.env_keys_imported": "true",
           "parity_flag": "on",
           "parity_json": "{\"a\":1}",
           "parity_null": null

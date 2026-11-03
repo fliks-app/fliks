@@ -15,10 +15,8 @@
             "name": "PostgreSQL",
             "ok": true
           },
-          "installedPlugins": 0,
-          "restartSupervisor": null,
-          "runningPlugins": 0,
-          "version": "4.5.0"
+          "installedPlugins": 7,
+          "runningPlugins": 7
         },
         "status": 200
       },

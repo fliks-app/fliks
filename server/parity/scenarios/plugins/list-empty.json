@@ -1,11 +1,113 @@
 {
+  "ignore": [
+    "$..version"
+  ],
   "name": "plugins-list-empty",
   "seed": "base",
   "steps": [
     {
       "as": "admin",
       "expect": {
-        "body": [],
+        "body": [
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "TMDB",
+            "origin": "bundled",
+            "pluginId": "fliks.tmdb",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "TheTVDB",
+            "origin": "bundled",
+            "pluginId": "fliks.tvdb",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "OpenLibrary",
+            "origin": "bundled",
+            "pluginId": "fliks.openlibrary",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "BnF",
+            "origin": "bundled",
+            "pluginId": "fliks.bnf",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "Google Books",
+            "origin": "bundled",
+            "pluginId": "fliks.googlebooks",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "Audible",
+            "origin": "bundled",
+            "pluginId": "fliks.audible",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "Audnexus",
+            "origin": "bundled",
+            "pluginId": "fliks.audnexus",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026",
+            "version": "0.2.0"
+          }
+        ],
         "status": 200
       },
       "method": "GET",

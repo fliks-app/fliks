@@ -1,11 +1,204 @@
 {
+  "ignore": [
+    "$..version"
+  ],
   "name": "plugins-ui-empty",
   "seed": "base",
   "steps": [
     {
       "as": "admin",
       "expect": {
-        "body": [],
+        "body": [
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "Audible",
+            "pluginId": "fliks.audible",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "audible"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "Audnexus",
+            "pluginId": "fliks.audnexus",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "audnexus"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "BnF",
+            "pluginId": "fliks.bnf",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "bnf"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "Google Books",
+            "pluginId": "fliks.googlebooks",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "googlebooks"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "OpenLibrary",
+            "pluginId": "fliks.openlibrary",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "openlibrary"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "tmdb.config.apiKey_hint",
+                    "key": "apiKey",
+                    "labelKey": "tmdb.config.apiKey",
+                    "requiredByProvider": true,
+                    "secret": true,
+                    "type": "text"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "tmdb.config.title",
+                "subtitleKey": "tmdb.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.tmdb/general"
+                },
+                "id": "fliks-tmdb.settings.general",
+                "labelKey": "tmdb.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "tmdb.config.apiKey": "API key",
+                "tmdb.config.apiKey_hint": "Your own TMDB API key. Leave it empty to use the key Fliks ships with.",
+                "tmdb.config.subtitle": "Movie and series metadata from The Movie Database.",
+                "tmdb.config.title": "TMDB"
+              },
+              "fr": {
+                "tmdb.config.apiKey": "Clé d'API",
+                "tmdb.config.apiKey_hint": "Votre propre clé d'API TMDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
+                "tmdb.config.subtitle": "Métadonnées de films et de séries de The Movie Database.",
+                "tmdb.config.title": "TMDB"
+              }
+            },
+            "name": "TMDB",
+            "pluginId": "fliks.tmdb",
+            "provider": {
+              "kinds": [
+                "movie",
+                "series"
+              ],
+              "namespaces": [
+                "tmdb"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "tvdb.config.apiKey_hint",
+                    "key": "apiKey",
+                    "labelKey": "tvdb.config.apiKey",
+                    "requiredByProvider": true,
+                    "secret": true,
+                    "type": "text"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "tvdb.config.title",
+                "subtitleKey": "tvdb.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.tvdb/general"
+                },
+                "id": "fliks-tvdb.settings.general",
+                "labelKey": "tvdb.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "tvdb.config.apiKey": "API key",
+                "tvdb.config.apiKey_hint": "Your own TheTVDB API key. Leave it empty to use the key Fliks ships with.",
+                "tvdb.config.subtitle": "Movie and series metadata from TheTVDB.",
+                "tvdb.config.title": "TheTVDB"
+              },
+              "fr": {
+                "tvdb.config.apiKey": "Clé d'API",
+                "tvdb.config.apiKey_hint": "Votre propre clé d'API TheTVDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
+                "tvdb.config.subtitle": "Métadonnées de films et de séries de TheTVDB.",
+                "tvdb.config.title": "TheTVDB"
+              }
+            },
+            "name": "TheTVDB",
+            "pluginId": "fliks.tvdb",
+            "provider": {
+              "kinds": [
+                "movie",
+                "series"
+              ],
+              "namespaces": [
+                "tvdb"
+              ]
+            }
+          }
+        ],
         "status": 200
       },
       "method": "GET",
@@ -14,7 +207,197 @@
     {
       "as": "user",
       "expect": {
-        "body": [],
+        "body": [
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "Audible",
+            "pluginId": "fliks.audible",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "audible"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "Audnexus",
+            "pluginId": "fliks.audnexus",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "audnexus"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "BnF",
+            "pluginId": "fliks.bnf",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "bnf"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "Google Books",
+            "pluginId": "fliks.googlebooks",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "googlebooks"
+              ]
+            }
+          },
+          {
+            "configPages": [],
+            "contributions": [],
+            "i18n": {},
+            "name": "OpenLibrary",
+            "pluginId": "fliks.openlibrary",
+            "provider": {
+              "kinds": [
+                "book"
+              ],
+              "namespaces": [
+                "openlibrary"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "tmdb.config.apiKey_hint",
+                    "key": "apiKey",
+                    "labelKey": "tmdb.config.apiKey",
+                    "requiredByProvider": true,
+                    "secret": true,
+                    "type": "text"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "tmdb.config.title",
+                "subtitleKey": "tmdb.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.tmdb/general"
+                },
+                "id": "fliks-tmdb.settings.general",
+                "labelKey": "tmdb.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "tmdb.config.apiKey": "API key",
+                "tmdb.config.apiKey_hint": "Your own TMDB API key. Leave it empty to use the key Fliks ships with.",
+                "tmdb.config.subtitle": "Movie and series metadata from The Movie Database.",
+                "tmdb.config.title": "TMDB"
+              },
+              "fr": {
+                "tmdb.config.apiKey": "Clé d'API",
+                "tmdb.config.apiKey_hint": "Votre propre clé d'API TMDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
+                "tmdb.config.subtitle": "Métadonnées de films et de séries de The Movie Database.",
+                "tmdb.config.title": "TMDB"
+              }
+            },
+            "name": "TMDB",
+            "pluginId": "fliks.tmdb",
+            "provider": {
+              "kinds": [
+                "movie",
+                "series"
+              ],
+              "namespaces": [
+                "tmdb"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "tvdb.config.apiKey_hint",
+                    "key": "apiKey",
+                    "labelKey": "tvdb.config.apiKey",
+                    "requiredByProvider": true,
+                    "secret": true,
+                    "type": "text"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "tvdb.config.title",
+                "subtitleKey": "tvdb.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.tvdb/general"
+                },
+                "id": "fliks-tvdb.settings.general",
+                "labelKey": "tvdb.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "tvdb.config.apiKey": "API key",
+                "tvdb.config.apiKey_hint": "Your own TheTVDB API key. Leave it empty to use the key Fliks ships with.",
+                "tvdb.config.subtitle": "Movie and series metadata from TheTVDB.",
+                "tvdb.config.title": "TheTVDB"
+              },
+              "fr": {
+                "tvdb.config.apiKey": "Clé d'API",
+                "tvdb.config.apiKey_hint": "Votre propre clé d'API TheTVDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
+                "tvdb.config.subtitle": "Métadonnées de films et de séries de TheTVDB.",
+                "tvdb.config.title": "TheTVDB"
+              }
+            },
+            "name": "TheTVDB",
+            "pluginId": "fliks.tvdb",
+            "provider": {
+              "kinds": [
+                "movie",
+                "series"
+              ],
+              "namespaces": [
+                "tvdb"
+              ]
+            }
+          }
+        ],
         "status": 200
       },
       "method": "GET",
