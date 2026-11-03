@@ -22,6 +22,7 @@ function setup(canSend = true) {
     list: vi.fn(async () => ({ enabled: true, canSend, maxBytes: 1, devices: [device(1)] })),
     sends: vi.fn(async () => []),
     create: vi.fn(async () => device(2)),
+    update: vi.fn(async () => device(1)),
     remove: vi.fn(async () => undefined),
   };
   TestBed.configureTestingModule({
@@ -47,9 +48,39 @@ describe('AccountEmailDevicesComponent', () => {
     await vi.waitFor(() => expect(cmp.devices().length).toBe(1));
     cmp.name.set('  Kitchen  ');
     cmp.address.set(' me@kindle.com ');
-    await cmp.create();
-    expect(api.create).toHaveBeenCalledWith({ name: 'Kitchen', kind: 'kindle', address: 'me@kindle.com' });
+    await cmp.save();
+    expect(api.create).toHaveBeenCalledWith({
+      name: 'Kitchen',
+      kind: 'kindle',
+      address: 'me@kindle.com',
+      formats: ['epub', 'pdf'],
+    });
     expect(cmp.name()).toBe('');
+  });
+
+  it('edits a device with its formats and goes back to the add form', async () => {
+    const { api, cmp } = setup();
+    await vi.waitFor(() => expect(cmp.devices().length).toBe(1));
+    cmp.edit(device(1));
+    cmp.formats.set(['epub', 'mobi', 'azw3']);
+    await cmp.save();
+    expect(api.update).toHaveBeenCalledWith(1, {
+      name: 'reader 1',
+      kind: 'kindle',
+      address: 'me@kindle.com',
+      formats: ['epub', 'mobi', 'azw3'],
+    });
+    expect(cmp.editing()).toBeNull();
+    expect(cmp.formats()).toEqual(['epub', 'pdf']);
+  });
+
+  it('refuses an empty format list', async () => {
+    const { api, cmp } = setup();
+    cmp.name.set('Kitchen');
+    cmp.address.set('me@kindle.com');
+    cmp.formats.set([]);
+    await cmp.save();
+    expect(api.create).not.toHaveBeenCalled();
   });
 
   it('offers the other kind only to who manages settings', () => {
