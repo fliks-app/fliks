@@ -437,7 +437,7 @@ async fn an_auto_approved_import_holds_no_lock_while_the_provider_answers(pool: 
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_failed_auto_approved_import_leaves_the_request_pending(pool: PgPool) {
+async fn a_failed_auto_approved_import_inserts_nothing(pool: PgPool) {
     let c = ctx(pool).await;
     let rule = json!({"name": "r", "criteria": {"mediaType": "book"}});
     c.call(&c.admin, "POST", "/api/auto-approval-rules", rule)
@@ -446,13 +446,12 @@ async fn a_failed_auto_approved_import_leaves_the_request_pending(pool: PgPool) 
         .request(&c.user, "OL404W", json!([want("text", None)]))
         .await;
     assert!(s >= 400, "{s}");
-    let (status, approver): (String, Option<i32>) = sqlx::query_as(
-        "SELECT status::text, \"approvedById\" FROM requests WHERE \"externalId\" = 'OL404W'",
-    )
-    .fetch_one(&c.pool)
-    .await
-    .unwrap();
-    assert_eq!((status.as_str(), approver), ("pending", None));
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM requests WHERE \"externalId\" = 'OL404W'")
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 0);
 }
 
 #[sqlx::test(migrations = false)]

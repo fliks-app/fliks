@@ -462,6 +462,18 @@ pub async fn rollback_to_pending(db: &PgPool, id: i32, by: i32) -> sqlx::Result<
     Ok(())
 }
 
+/// Takes back an auto-approved row whose import failed: only while `by` still holds its approval.
+pub async fn delete_claimed(db: &PgPool, id: i32, by: i32) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"DELETE FROM requests WHERE id = $1 AND status = 'approved' AND "approvedById" = $2 AND "mediaId" IS NULL"#,
+    )
+    .bind(id)
+    .bind(by)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Links the media of an approval that imported nothing itself (rule 23 step 8).
 pub async fn link_if_unlinked(db: &PgPool, id: i32, media_id: i32) -> sqlx::Result<()> {
     sqlx::query!(

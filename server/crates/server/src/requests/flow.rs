@@ -455,17 +455,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     tx.commit().await?;
     drop(turn);
 
-    st.hub.emit_domain(DomainEvent::RequestCreated {
-        request_id: i64::from(id),
-        media_type: dto.media_type,
-        external_ids: key.refs(),
-        user_id: Some(i64::from(a.user.id)),
-        kind: "add".into(),
-        seasons: dto.seasons.clone(),
-    });
     let mut media_id = None;
     if auto {
-        // the row is committed approved, so `on_media_imported` links it; a failure gives it back, as `approve`
+        // the row is committed approved, so `on_media_imported` links it; a failure takes the row back out
         let spec = ImportSpec {
             title: key.clone(),
             quality_profile_id: dto.quality_profile_id,
@@ -478,18 +470,23 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         media_id = match ensure_media(st, spec, Some(a.user.id)).await {
             Ok(m) => m,
             Err(e) => {
-                db::rollback_to_pending(&st.db, id, a.user.id).await?;
-                notify(
-                    st,
-                    "request.created",
-                    json!({"title": dto.title, "mediaType": dto.media_type}),
-                );
+                db::delete_claimed(&st.db, id, a.user.id).await?;
                 return Err(e);
             }
         };
         if let Some(m) = media_id {
             db::link_if_unlinked(&st.db, id, m).await?;
         }
+    }
+    st.hub.emit_domain(DomainEvent::RequestCreated {
+        request_id: i64::from(id),
+        media_type: dto.media_type,
+        external_ids: key.refs(),
+        user_id: Some(i64::from(a.user.id)),
+        kind: "add".into(),
+        seasons: dto.seasons.clone(),
+    });
+    if auto {
         st.hub.emit_domain(DomainEvent::RequestApproved {
             request_id: i64::from(id),
             media_id: media_id.map(i64::from),
