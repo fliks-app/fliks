@@ -134,8 +134,8 @@ jobs:
           # applies the actual tags.
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
-            TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
-            TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
+            FLIKS_DEFAULT_TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+            FLIKS_DEFAULT_TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
             ${{ github.event.inputs.engine_image && format('ENGINE_IMAGE={0}', github.event.inputs.engine_image) || '' }}
           # In the registry, not `gha`: the layers (compiled Rust dependencies included) would
           # take half the repository's 10 GB Actions cache. Ad-hoc builds read it, never replace it.

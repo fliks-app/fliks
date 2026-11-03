@@ -560,14 +560,7 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             Value::Array(events)
         }
         _ => {
-            // the stub stands in for both image hosts (`stub.py` `local_images`)
-            let stub = env("PARITY_STUB", "http://127.0.0.1:4964");
-            let text = r
-                .text()
-                .await
-                .map_err(|e| e.to_string())?
-                .replace(&format!("{stub}/img/t/p"), "https://image.tmdb.org/t/p")
-                .replace(&format!("{stub}/tvdb-art"), "https://artworks.thetvdb.com");
+            let text = r.text().await.map_err(|e| e.to_string())?;
             if text.is_empty() {
                 Value::Null
             } else {

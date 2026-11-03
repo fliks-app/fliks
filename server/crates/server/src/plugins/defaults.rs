@@ -18,6 +18,64 @@ pub const DEFAULTS: &Table = &[
     ),
 ];
 
+const IMPORTED: &str = "metadata.env_keys_imported";
+const ENV_KEYS: [(&str, ExternalProvider, &str); 2] = [
+    (
+        "TMDB_API_KEY",
+        ExternalProvider::Tmdb,
+        "plugin.fliks.tmdb.apiKey",
+    ),
+    (
+        "TVDB_API_KEY",
+        ExternalProvider::Tvdb,
+        "plugin.fliks.tvdb.apiKey",
+    ),
+];
+
+/// Rule 40: the keys of `TMDB_API_KEY` and `TVDB_API_KEY`, once; a failure warns and the boot goes on.
+pub async fn import_env(pool: &sqlx::PgPool) {
+    if let Err(e) = import_with(pool, DEFAULTS, |k| std::env::var(k).ok()).await {
+        tracing::warn!("provider keys not imported from the environment: {e}");
+    }
+}
+
+async fn import_with(
+    pool: &sqlx::PgPool,
+    defaults: &Table,
+    get: impl Fn(&str) -> Option<String>,
+) -> sqlx::Result<()> {
+    let set = |var: &str| {
+        get(var)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    if crate::settings::setting_value(pool, IMPORTED)
+        .await?
+        .as_deref()
+        == Some("true")
+    {
+        for (var, ..) in ENV_KEYS.iter().filter(|(v, ..)| set(v).is_some()) {
+            tracing::warn!("{var} is ignored: set the key in the plugin settings");
+        }
+        return Ok(());
+    }
+    let mut tx = pool.begin().await?;
+    for (var, p, key) in ENV_KEYS {
+        let compiled = defaults.iter().find(|(d, n, _)| *d == p && *n == "apiKey");
+        let kept = crate::settings::setting_value(pool, key)
+            .await?
+            .is_some_and(|v| !v.is_empty());
+        if let Some(v) = set(var)
+            .filter(|v| compiled.and_then(|c| c.2) != Some(v.as_str()))
+            .filter(|_| !kept)
+        {
+            crate::settings::set_in(&mut tx, key, Some(&v)).await?;
+        }
+    }
+    crate::settings::set_in(&mut tx, IMPORTED, Some("true")).await?;
+    tx.commit().await
+}
+
 /// Every form field of the config pages, groups flattened.
 fn fields(manifest: &Value) -> impl Iterator<Item = &Value> {
     manifest["ui"]["configPages"]
@@ -153,5 +211,86 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |k| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| (*v).to_owned())
+        }
+    }
+
+    async fn stored(pool: &sqlx::PgPool, key: &str) -> Option<String> {
+        crate::settings::setting_value(pool, key).await.unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_key_that_differs_from_the_default_is_imported_once(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("built-in"))];
+        import_with(
+            &pool,
+            d,
+            env(&[("TMDB_API_KEY", " mine "), ("TVDB_API_KEY", "t")]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            stored(&pool, "plugin.fliks.tmdb.apiKey").await.as_deref(),
+            Some("mine")
+        );
+        assert_eq!(
+            stored(&pool, "plugin.fliks.tvdb.apiKey").await.as_deref(),
+            Some("t")
+        );
+        assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_admin_value_is_kept_when_the_env_key_differs(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'admin')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        import_with(&pool, &[], env(&[("TMDB_API_KEY", "env")]))
+            .await
+            .unwrap();
+        assert_eq!(
+            stored(&pool, "plugin.fliks.tmdb.apiKey").await.as_deref(),
+            Some("admin")
+        );
+        assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_compiled_default_is_not_imported(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("built-in"))];
+        import_with(&pool, d, env(&[("TMDB_API_KEY", "built-in")]))
+            .await
+            .unwrap();
+        assert_eq!(stored(&pool, "plugin.fliks.tmdb.apiKey").await, None);
+        assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_marker_blocks_a_second_import_after_a_reset(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        import_with(&pool, &[], env(&[("TMDB_API_KEY", "a")]))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE app_settings SET value = NULL WHERE key = 'plugin.fliks.tmdb.apiKey'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        import_with(&pool, &[], env(&[("TMDB_API_KEY", "b")]))
+            .await
+            .unwrap();
+        assert_eq!(stored(&pool, "plugin.fliks.tmdb.apiKey").await, None);
     }
 }

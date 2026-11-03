@@ -69,10 +69,6 @@ services:
       # STREAM_TOKEN_TTL: 6h
       # Signing key. Generated into /app/conf on first start when unset.
       # JWT_SECRET: ''
-      # Metadata providers. Baked into the published image — set your own only
-      # if you build the image yourself.
-      # TMDB_API_KEY: ''
-      # TVDB_API_KEY: ''
       # Skip the GitHub release check.
       # FLIKS_DISABLE_UPDATE_CHECK: '1'
       # Skip the database dump taken before pending migrations (data/backups/pre-migration, last 3 kept).

@@ -13,9 +13,9 @@ use std::{
 };
 
 fn sample() -> Value {
-    json!({"id": 603, "title": "Sample Film", "overview": "Plot", "release_date": "1999-03-30",
-           "status": "Released", "tagline": "t", "genres": [{"id": 28, "name": "Action"}],
-           "credits": {"cast": [{"id": 9, "name": "N", "character": "C", "order": 0}], "crew": []}})
+    json!({"tmdbId": 603, "title": "Sample Film", "overview": "Plot", "releaseDate": "1999-03-30",
+           "status": "released", "tagline": "t", "genres": ["Action"],
+           "cast": [{"externalId": 9, "name": "N", "character": "C", "order": 0}], "crew": []})
 }
 
 async fn refresh(c: &Ctx, id: i32) {
@@ -42,10 +42,10 @@ async fn sources(pool: &PgPool, fields: &str) -> Vec<Source> {
 async fn a_refresh_calls_the_provider_each_time_and_records_provenance(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     media(&pool, 1, "movie", Some(603), None, 1).await;
-    c.stub.json("/tmdb/3/movie/603", 200, sample());
+    c.stub.ok("work/movie/603", sample());
     refresh(&c, 1).await;
     refresh(&c, 1).await;
-    assert_eq!(c.stub.seen("/tmdb/3/movie/603").len(), 2);
+    assert_eq!(c.stub.seen("work/movie/603").len(), 2);
     let snaps: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM metadata_snapshots")
         .fetch_one(&pool)
         .await
@@ -83,7 +83,7 @@ async fn a_locked_field_survives_a_refresh(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    c.stub.json("/tmdb/3/movie/603", 200, sample());
+    c.stub.ok("work/movie/603", sample());
     refresh(&c, 1).await;
     let (title, overview, genres, status): (String, String, Value, String) =
         sqlx::query_as(r#"SELECT title, overview, genres, status::text FROM media WHERE id = 1"#)

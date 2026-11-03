@@ -70,8 +70,6 @@ services:
       CARGO_BUILD_JOBS: 4
       CARGO_TARGET_DIR: /cargo-target
       SQLX_OFFLINE: 'true'
-      # TMDB_API_KEY: ''
-      # TVDB_API_KEY: ''
       FLIKS_DATA_DIR: /src/data
     volumes:
       - ./server:/src/server

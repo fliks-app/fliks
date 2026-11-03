@@ -542,6 +542,19 @@ impl Override {
         Self::default()
     }
 
+    /// `rewrite` for a `reqwest` URL.
+    pub(crate) fn rewrite_url(&self, url: &mut reqwest::Url) -> bool {
+        let mut uri: http::Uri = match url.as_str().parse() {
+            Ok(u) => u,
+            Err(_) => return false,
+        };
+        let hit = self.rewrite(&mut uri);
+        if hit && let Ok(u) = reqwest::Url::parse(&uri.to_string()) {
+            *url = u;
+        }
+        hit
+    }
+
     /// Points `uri` at the target of its host; true when it did.
     fn rewrite(&self, uri: &mut http::Uri) -> bool {
         let Some(t) = uri.host().and_then(|h| self.0.get(&h.to_ascii_lowercase())) else {

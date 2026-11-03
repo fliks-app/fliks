@@ -5,7 +5,7 @@ use super::runtime::{
 };
 use super::{Plugins, packages};
 use crate::metadata::{
-    Call, Credits, EditionRef, Metadata, MetadataProvider, PersonDetails, Search, Upstream,
+    Call, Credits, EditionRef, MetadataProvider, PersonDetails, Search, Upstream,
 };
 use fliks_domain::{
     external_id::Namespace,
@@ -108,8 +108,6 @@ pub struct PluginProvider {
     rt: Arc<PluginRt>,
     key: Namespace,
     block: Block,
-    /// The configured built-in of the same key: it answers what the plugin does not declare.
-    shadow: Option<Arc<dyn MetadataProvider>>,
 }
 
 fn bad(why: &str) -> Upstream {
@@ -171,16 +169,11 @@ fn call_error(e: CallError) -> Upstream {
 
 impl PluginProvider {
     /// The provider of a plugin, keyed by its first declared namespace; `None` when it has none.
-    pub fn new(rt: Arc<PluginRt>, md: &Metadata) -> Option<Self> {
+    pub fn new(rt: Arc<PluginRt>) -> Option<Self> {
         let b = rt.manifest.get("provider")?;
         let block = Block::parse(b);
         let key = Namespace::parse(block.namespaces.first()?)?;
-        Some(Self {
-            rt,
-            key,
-            block,
-            shadow: md.configured_builtin(key),
-        })
+        Some(Self { rt, key, block })
     }
 
     /// `provider.imageHosts`: where the core may download this provider's images from.
@@ -199,11 +192,6 @@ impl PluginProvider {
         self.declares(kind, cap)
             .then_some(())
             .ok_or_else(undeclared)
-    }
-
-    /// The built-in that answers a call the plugin does not declare, if there is one.
-    fn built_in(&self, kind: Option<MediaKind>, cap: &str) -> Option<&Arc<dyn MetadataProvider>> {
-        self.shadow.as_ref().filter(|_| !self.declares(kind, cap))
     }
 
     /// Rule 14, for the breaker: every record the plugin answered is counted once.
@@ -313,11 +301,10 @@ impl MetadataProvider for PluginProvider {
 
     fn supports(&self, kind: MediaKind) -> bool {
         self.block.kinds.iter().any(|(k, _)| *k == kind)
-            || self.shadow.as_ref().is_some_and(|b| b.supports(kind))
     }
 
     fn has_persons(&self) -> bool {
-        self.declares(None, "person") || self.shadow.as_ref().is_some_and(|b| b.has_persons())
+        self.declares(None, "person")
     }
 
     fn limits(&self) -> Limits {
@@ -347,9 +334,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
         async move {
-            if let Some(b) = self.built_in(Some(q.kind), "search") {
-                return b.search(q, lang, p).await;
-            }
             self.has(Some(q.kind), "search")?;
             let wq = wit::SearchQuery {
                 kind: q.kind.as_str().to_owned(),
@@ -385,9 +369,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Value> {
         async move {
-            if let Some(b) = self.built_in(Some(kind), "work") {
-                return b.fetch_work(kind, id, lang, p).await;
-            }
             self.has(Some(kind), "work")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -412,9 +393,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
         async move {
-            if let Some(b) = self.built_in(Some(kind), "children") {
-                return b.fetch_children(kind, id, lang, p).await;
-            }
             self.has(Some(kind), "children")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -439,9 +417,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
         async move {
-            if let Some(b) = self.built_in(Some(kind), "childStubs") {
-                return b.child_stubs(kind, id, lang, p).await;
-            }
             self.has(Some(kind), "childStubs")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -466,9 +441,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Option<(String, MediaKind)>> {
         async move {
-            if let Some(b) = self.built_in(None, "findBy") {
-                return b.find_by(source, id, lang, p).await;
-            }
             if !self.declares(None, "findBy")
                 || !self
                     .block
@@ -508,9 +480,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, PersonDetails> {
         async move {
-            if let Some(b) = self.built_in(None, "person") {
-                return b.fetch_person(id, lang, p).await;
-            }
             self.has(None, "person")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -543,9 +512,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Credits> {
         async move {
-            if let Some(b) = self.built_in(None, "credits") {
-                return b.person_credits(id, lang, p).await;
-            }
             self.has(None, "credits")?;
             let (id, lang) = (self.own(id), lang_of(lang));
             let json = self
@@ -572,9 +538,12 @@ impl MetadataProvider for PluginProvider {
         .boxed()
     }
 
+    fn has_search(&self, kind: MediaKind) -> bool {
+        self.declares(Some(kind), "search")
+    }
+
     fn has_lists(&self, kind: MediaKind) -> bool {
         self.declares(Some(kind), "lists")
-            || self.shadow.as_ref().is_some_and(|b| b.has_lists(kind))
     }
 
     fn list<'a>(
@@ -586,9 +555,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Value> {
         async move {
-            if let Some(b) = self.built_in(Some(kind), "lists") {
-                return b.list(kind, name, params, lang, p).await;
-            }
             self.has(Some(kind), "lists")?;
             let (name, params, lang) = (name.to_owned(), params.to_vec(), lang_of(lang));
             let json = self
@@ -612,9 +578,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Option<Value>> {
         async move {
-            if let Some(b) = self.built_in(None, "edition") {
-                return b.fetch_edition(e, lang, p).await;
-            }
             if !self.declares(None, "edition")
                 || !self
                     .block
@@ -649,9 +612,6 @@ impl MetadataProvider for PluginProvider {
         p: Priority,
     ) -> Call<'a, Option<Value>> {
         async move {
-            if let Some(b) = self.built_in(None, "chapters") {
-                return b.fetch_chapters(asin, lang, p).await;
-            }
             let ns = Namespace::ASIN.as_str();
             if !self.declares(None, "chapters") || !self.block.chapters.iter().any(|n| n == ns) {
                 return Ok(None);
@@ -702,9 +662,10 @@ impl Plugins {
             return;
         }
         if let Some(app) = self.app() {
-            match PluginProvider::new(rt.clone(), &app.metadata) {
+            match PluginProvider::new(rt.clone()) {
                 Some(provider) => {
-                    app.images.allow_hosts(id, provider.image_hosts().to_vec());
+                    app.images
+                        .allow_hosts(id, provider.image_hosts().to_vec(), bundled);
                     app.metadata.add_plugin(Arc::new(provider));
                 }
                 None => {

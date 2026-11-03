@@ -56,10 +56,7 @@ async fn a_provider_plugin_answers_through_the_trait() {
     };
     let md = &h.st.metadata;
     let p = md.of(Ns::TMDB);
-    assert!(
-        md.available(Ns::TMDB),
-        "the plugin shadows the keyless built-in"
-    );
+    assert!(md.available(Ns::TMDB), "the plugin registers its namespace");
     assert!(p.supports(MediaKind::Series) && !p.supports(MediaKind::Movie));
     assert!(!p.has_persons());
     assert_eq!(p.limits().burst, 2);

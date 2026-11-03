@@ -1,6 +1,6 @@
 # Spec: books in the catalogue
 
-Scope: what the `book` kind adds to the data model: the kind and its families, the editions of a work and their facts, the ids of editions and works, `book_details`, series as collections, sort keys, the watched rule. The HTTP shapes are in `books-api.md`, the metadata seams in `book-metadata.md`, the ingest seams in `book-ingest.md`, the file parsers in `books-files.md`, the provider parsers in `book-providers.md`. The plan is `plans/phase1-contracts.md`; the migration is `1789000000200_books.sql`. After the contract PR this file belongs to the data and API track.
+Scope: what the `book` kind adds to the data model: the kind and its families, the editions of a work and their facts, the ids of editions and works, `book_details`, series as collections, sort keys, the watched rule. The HTTP shapes are in `books-api.md`, the metadata seams in `book-metadata.md`, the ingest seams in `book-ingest.md`, the file parsers in `books-files.md`, the provider parsers in the plugins repository. The plan is `plans/phase1-contracts.md`; the migration is `1789000000200_books.sql`. After the contract PR this file belongs to the data and API track.
 
 ## Kind and families
 

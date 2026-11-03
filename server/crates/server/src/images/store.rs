@@ -2,6 +2,7 @@
 use super::paths::{Kind, Size, Target, Variant};
 use crate::ingest::KeyedLocks;
 use crate::net::guard::{self, Net};
+use crate::plugins::outbound::Override;
 use crate::sync::RwLockExt;
 use crate::{atomic_file::write_atomic, paths::data_dir};
 use image::{
@@ -25,15 +26,6 @@ const MAX_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15);
 const NETWORK_SLOTS: usize = 3;
 const MAX_REDIRECTS: usize = 3;
-/// Image CDNs of the built-in providers; a name matches itself and its subdomains.
-const BUILT_IN_HOSTS: &[&str] = &[
-    "image.tmdb.org",
-    "artworks.thetvdb.com",
-    "covers.openlibrary.org",
-    "archive.org",
-    "books.google.com",
-    "m.media-amazon.com",
-];
 const JPEG_QUALITY: u8 = 90;
 /// Largest source decoded: 160 MB as RGBA, far above any artwork.
 const MAX_PIXELS: u64 = 40_000_000;
@@ -41,12 +33,10 @@ const MAX_PIXELS: u64 = 40_000_000;
 pub struct ImageStore {
     /// `None` is the shared data directory, resolved on first use.
     root: Option<PathBuf>,
-    /// `<image base>/`: the prefix of the TMDB URLs whose size segment is rewritten.
-    tmdb_prefix: String,
-    /// Authorities dialled as given: the configured image base, which is admin-set (`image-store.md` rule 26).
-    trusted: Vec<(String, u16)>,
-    /// `imageHosts` per provider plugin key (`provider-plugins.md` rule 32).
-    plugin_hosts: RwLock<HashMap<String, Vec<String>>>,
+    /// `imageHosts` per provider plugin key; a bundled plugin's host also covers its subdomains (`provider-plugins.md` rule 32).
+    plugin_hosts: RwLock<HashMap<String, (bool, Vec<String>)>>,
+    /// `FLIKS_PLUGIN_UPSTREAM_OVERRIDE`, empty outside the `parity` feature (`image-store.md` rule 26).
+    over: Override,
     dns: Arc<dyn Net>,
     net: Semaphore,
     cpu: Semaphore,
@@ -190,13 +180,19 @@ fn resized_all(bytes: &[u8], widths: &[u32], png: bool) -> Vec<Option<Vec<u8>>> 
     }
 }
 
+impl Default for ImageStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImageStore {
-    pub fn new(tmdb_image_base: &str) -> Self {
-        Self::build(None, tmdb_image_base)
+    pub fn new() -> Self {
+        Self::build(None)
     }
 
-    pub fn with_root(root: PathBuf, tmdb_image_base: &str) -> Self {
-        Self::build(Some(root), tmdb_image_base)
+    pub fn with_root(root: PathBuf) -> Self {
+        Self::build(Some(root))
     }
 
     fn root(&self) -> &Path {
@@ -214,36 +210,29 @@ impl ImageStore {
         self.plugin_hosts.write_clean().remove(plugin);
     }
 
-    /// The hosts `plugin`'s manifest declares as its image CDNs; replaces its earlier list.
-    pub fn allow_hosts(&self, plugin: &str, hosts: Vec<String>) {
+    /// The hosts `plugin`'s manifest declares as its image CDNs, with their subdomains when `bundled`;
+    /// replaces its earlier list.
+    pub fn allow_hosts(&self, plugin: &str, hosts: Vec<String>, bundled: bool) {
         self.plugin_hosts
             .write_clean()
-            .insert(plugin.to_owned(), hosts);
+            .insert(plugin.to_owned(), (bundled, hosts));
     }
 
     fn listed(&self, host: &str) -> bool {
-        BUILT_IN_HOSTS
-            .iter()
-            .any(|h| host == *h || host.strip_suffix(h).is_some_and(|p| p.ends_with('.')))
-            || self
-                .plugin_hosts
-                .read_clean()
-                .values()
-                .flatten()
-                .any(|h| h == host)
+        let sub = |h: &String| {
+            host.strip_suffix(h.as_str())
+                .is_some_and(|p| p.ends_with('.'))
+        };
+        let all = self.plugin_hosts.read_clean();
+        all.values()
+            .any(|(bundled, hs)| hs.iter().any(|h| host == h || (*bundled && sub(h))))
     }
 
-    fn build(root: Option<PathBuf>, tmdb_image_base: &str) -> Self {
-        let trusted: Vec<(String, u16)> = reqwest::Url::parse(tmdb_image_base)
-            .ok()
-            .and_then(|u| Some((u.host_str()?.to_owned(), u.port_or_known_default()?)))
-            .into_iter()
-            .collect();
+    fn build(root: Option<PathBuf>) -> Self {
         Self {
             root,
-            tmdb_prefix: format!("{}/", tmdb_image_base.trim_end_matches('/')),
-            trusted,
             plugin_hosts: RwLock::default(),
+            over: Override::from_env(),
             dns: guard::system(),
             net: Semaphore::new(NETWORK_SLOTS),
             cpu: Semaphore::new(1),
@@ -251,21 +240,33 @@ impl ImageStore {
         }
     }
 
-    /// TMDB URLs of the `<size>/<file>` shape are fetched at `original` (rule 5).
+    /// `image.tmdb.org/t/p/<size>/<file>` is fetched at `original` (rule 5).
     fn fetch_url(&self, url: &str) -> String {
-        if let Some((_, file)) = url
-            .strip_prefix(&self.tmdb_prefix)
-            .and_then(|rest| rest.split_once('/'))
-            .filter(|(size, file)| !size.is_empty() && !file.is_empty())
+        let Ok(mut u) = reqwest::Url::parse(url) else {
+            return url.to_owned();
+        };
+        let rest = u
+            .path()
+            .strip_prefix("/t/p/")
+            .and_then(|r| r.split_once('/'));
+        if u.host_str() == Some("image.tmdb.org")
+            && let Some((_, file)) = rest.filter(|(s, f)| !s.is_empty() && !f.is_empty())
         {
-            return format!("{}original/{file}", self.tmdb_prefix);
+            let path = format!("/t/p/original/{file}");
+            u.set_path(&path);
+            return u.into();
         }
         url.to_owned()
     }
 
     /// A client for one hop: the host is listed (a Live TV logo is not held to a list), every address
     /// of its one lookup is vetted, and the connection is pinned to them.
-    async fn client(&self, url: &reqwest::Url, live: bool) -> Result<reqwest::Client, String> {
+    async fn client(
+        &self,
+        url: &reqwest::Url,
+        live: bool,
+        over: bool,
+    ) -> Result<reqwest::Client, String> {
         let host = url
             .host_str()
             .unwrap_or_default()
@@ -274,18 +275,17 @@ impl ImageStore {
             .to_owned();
         let port = url.port_or_known_default().unwrap_or(80);
         let b = guard::client_builder().redirect(reqwest::redirect::Policy::none());
-        if self.trusted.contains(&(host.clone(), port)) {
-            return Ok(b.build().expect("reqwest client"));
-        }
-        if !live && !self.listed(&host) {
+        let internal = live || over;
+        if !internal && !self.listed(&host) {
             return Err("host not allowed".into());
         }
-        let addrs = guard::vet(&*self.dns, &host, port, live)
+        let addrs = guard::vet(&*self.dns, &host, port, internal)
             .await
             .map_err(|e| format!("address refused: {e:?}"))?;
-        if addrs
-            .iter()
-            .any(|a| fliks_domain::net::is_loopback_or_metadata(a.ip()))
+        if !over
+            && addrs
+                .iter()
+                .any(|a| fliks_domain::net::is_loopback_or_metadata(a.ip()))
         {
             return Err("address refused: loopback or metadata".into());
         }
@@ -309,8 +309,9 @@ impl ImageStore {
             if !matches!(url.scheme(), "http" | "https") {
                 return Err("unsupported scheme".into());
             }
+            let over = self.over.rewrite_url(&mut url);
             let resp = self
-                .client(&url, live)
+                .client(&url, live, over)
                 .await?
                 .get(url.clone())
                 .send()
@@ -652,34 +653,50 @@ mod tests {
         store: ImageStore,
         root: PathBuf,
         mock: Mock,
+        /// The mock under a listed public name: `http://cdn.test:<port>`.
         base: String,
+        addr: std::net::SocketAddr,
     }
 
     async fn fx() -> Fx {
-        let (mock, base) = mock().await;
+        let (mock, real) = mock().await;
         let root = temp_root();
-        let store = ImageStore::with_root(root.clone(), &format!("{base}/t/p"));
-        Fx {
-            store,
+        let addr: std::net::SocketAddr = real.trim_start_matches("http://").parse().unwrap();
+        let base = format!("http://cdn.test:{}", addr.port());
+        let mut f = Fx {
+            store: ImageStore::with_root(root.clone()),
             root,
             mock,
             base,
-        }
+            addr,
+        };
+        f.store = f.with_names(&[]);
+        f
     }
 
     impl Fx {
-        /// A store on the same root whose resolver answers `names`.
-        fn with_names(&self, names: &[(&str, &str)]) -> ImageStore {
+        /// A store on the same root whose resolver answers `names` and `cdn.test`, with no host listed.
+        fn bare(&self, names: &[(&str, &str)]) -> ImageStore {
             let dns = Dns {
                 names: names
                     .iter()
+                    .chain(&[
+                        ("cdn.test", "93.184.216.34"),
+                        ("image.tmdb.org", "93.184.216.36"),
+                    ])
                     .map(|(n, ip)| ((*n).to_owned(), ip.parse().unwrap()))
                     .collect(),
-                mock: self.base.trim_start_matches("http://").parse().unwrap(),
+                mock: self.addr,
                 tls: guard::SystemNet::new(),
             };
-            ImageStore::with_root(self.root.clone(), &format!("{}/t/p", self.base))
-                .with_net(Arc::new(dns))
+            ImageStore::with_root(self.root.clone()).with_net(Arc::new(dns))
+        }
+
+        /// `bare`, with `cdn.test` and `image.tmdb.org` listed.
+        fn with_names(&self, names: &[(&str, &str)]) -> ImageStore {
+            let s = self.bare(names);
+            s.allow_hosts("t", vec!["cdn.test".into(), "image.tmdb.org".into()], false);
+            s
         }
 
         fn port(&self) -> &str {
@@ -990,7 +1007,8 @@ mod tests {
         let f = fx().await;
         f.serve("abc.jpg", jpeg(600, 900));
         let t = Target::media(1, Variant::Poster);
-        let url = format!("{}/t/p/w500/abc.jpg", f.base);
+        let tmdb = format!("http://image.tmdb.org:{}", f.port());
+        let url = format!("{tmdb}/t/p/w500/abc.jpg");
         let got = f.store.download_and_store(&url, &t).await.unwrap();
         assert!(got.contains("?v="));
         assert_eq!(
@@ -1012,8 +1030,8 @@ mod tests {
                 .unwrap();
         assert_eq!(side.url, url);
         assert_eq!(
-            f.store.fetch_url(&format!("{}/t/p/w500", f.base)),
-            format!("{}/t/p/w500", f.base)
+            f.store.fetch_url(&format!("{tmdb}/t/p/w500")),
+            format!("{tmdb}/t/p/w500")
         );
     }
 
@@ -1135,8 +1153,7 @@ mod tests {
     async fn artwork_comes_from_listed_hosts_at_public_addresses() {
         let f = fx().await;
         f.serve("poster.jpg", jpeg(300, 450));
-        let s = f.with_names(&[
-            ("cdn.test", "93.184.216.34"),
+        let s = f.bare(&[
             ("other.test", "93.184.216.35"),
             ("lan.test", "192.168.1.50"),
         ]);
@@ -1146,14 +1163,22 @@ mod tests {
             s.download(&cdn, false).await.unwrap_err(),
             "host not allowed"
         );
-        s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
+        s.allow_hosts(
+            "org.example",
+            vec!["cdn.test".into(), "lan.test".into()],
+            false,
+        );
         assert!(s.download(&cdn, false).await.is_ok());
         s.forget_hosts("org.example");
         assert_eq!(
             s.download(&cdn, false).await.unwrap_err(),
             "host not allowed"
         );
-        s.allow_hosts("org.example", vec!["cdn.test".into(), "lan.test".into()]);
+        s.allow_hosts(
+            "org.example",
+            vec!["cdn.test".into(), "lan.test".into()],
+            false,
+        );
         let lan = format!("http://lan.test:{port}/f/poster.jpg");
         assert_eq!(
             s.download(&lan, false).await.unwrap_err(),
@@ -1165,14 +1190,13 @@ mod tests {
             s.download(&hop, false).await.unwrap_err(),
             "host not allowed"
         );
-        for host in [
-            "covers.openlibrary.org",
-            "ia800.us.archive.org",
-            "image.tmdb.org",
-        ] {
+        s.allow_hosts("org.example", vec!["archive.org".into()], false);
+        assert!(s.listed("archive.org") && !s.listed("ia800.us.archive.org"));
+        s.allow_hosts("fliks.openlibrary", vec!["archive.org".into()], true);
+        for host in ["archive.org", "ia800.us.archive.org"] {
             assert!(s.listed(host), "{host}");
         }
-        for host in ["notarchive.org", "evil.org", "image.tmdb.org.evil.org"] {
+        for host in ["notarchive.org", "evil.org", "archive.org.evil.org"] {
             assert!(!s.listed(host), "{host}");
         }
     }

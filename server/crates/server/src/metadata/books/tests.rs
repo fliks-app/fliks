@@ -7,8 +7,7 @@ use super::{
 use crate::{
     config::Config,
     metadata::{
-        EditionRef, MetaError, Metadata, MetadataProvider, PersonDetails, Search, Upstream,
-        provider::Call,
+        EditionRef, MetaError, MetadataProvider, PersonDetails, Search, Upstream, provider::Call,
     },
     state::AppState,
 };
@@ -175,10 +174,9 @@ impl MetadataProvider for Fake {
 }
 
 pub(crate) fn state(db: &PgPool, fakes: Vec<Fake>) -> AppState {
-    let mut st = AppState::new(db.clone(), Config::from_lookup(|_| None), SECRET);
-    let m: &mut Metadata = Arc::get_mut(&mut st.metadata).unwrap();
+    let st = AppState::new(db.clone(), Config::from_lookup(|_| None), SECRET);
     for f in fakes {
-        m.register(Arc::new(f));
+        st.metadata.add_plugin(Arc::new(f));
     }
     st
 }

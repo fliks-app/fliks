@@ -218,14 +218,11 @@ async fn ctx_hello(
     ];
     let cfg = Config::from_lookup(|k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()));
     let dir = tmp();
-    let images =
-        crate::images::ImageStore::with_root(dir.join("data"), &cfg.metadata.tmdb_image_url);
+    let images = crate::images::ImageStore::with_root(dir.join("data"));
     let mut st = AppState::new(pool.clone(), cfg, SECRET);
     st.images = std::sync::Arc::new(images);
     if let Some(p) = provider {
-        std::sync::Arc::get_mut(&mut st.metadata)
-            .unwrap()
-            .register(p);
+        st.metadata.add_plugin(p);
     }
     st.engine.start_with(Some(pool.clone()), 4849).await;
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
@@ -2968,9 +2965,9 @@ mod book_import {
     use crate::{
         jobs::book_import,
         metadata::{
-            Call, EditionRef, Guarded, MetadataProvider, PersonDetails, Search, Upstream,
-            stub::serve,
+            Call, EditionRef, MetadataProvider, PersonDetails, Search, Upstream, stub::serve,
         },
+        plugins::outbound::{Done, Gate, Reply},
     };
     use fliks_domain::{
         external_id::Namespace,
@@ -2985,10 +2982,11 @@ mod book_import {
         time::{Duration, Instant},
     };
 
-    /// OpenLibrary stand-in behind a real `Guarded`: a title answers a hit when its number is not a
+    /// OpenLibrary stand-in behind a real `Gate`: a title answers a hit when its number is not a
     /// multiple of three, and every call is recorded with its priority.
     struct Stubbed {
-        g: Guarded,
+        g: Gate,
+        url: String,
         limits: Limits,
         priorities: Mutex<Vec<Priority>>,
         busy: Mutex<(u32, u32)>,
@@ -3009,6 +3007,32 @@ mod book_import {
     }
 
     impl Stubbed {
+        async fn get_json(&self, path: &str, p: Priority) -> Result<Value, Upstream> {
+            let url = format!("{}{path}", self.url);
+            let attempt = || async {
+                let r = reqwest::get(&url)
+                    .await
+                    .map_err(|e| Upstream::outage(e.to_string()))?;
+                let status = r.status().as_u16();
+                let inner = r.json::<Value>().await.unwrap_or_default();
+                Ok::<_, Upstream>(Reply {
+                    status,
+                    retry_after_ms: None,
+                    inner,
+                })
+            };
+            match self
+                .g
+                .run(p, Duration::from_secs(5), attempt, || true)
+                .await
+            {
+                Done::Reply(r) if r.status < 300 => Ok(r.inner),
+                Done::Reply(r) => Err(Upstream::new(Some(r.status), "status")),
+                Done::Failed(e) => Err(e),
+                Done::Refused(_) => Err(Upstream::outage("refused")),
+            }
+        }
+
         async fn call(&self, path: String, p: Priority) -> Result<Value, Upstream> {
             self.priorities.lock().unwrap().push(p);
             {
@@ -3016,7 +3040,7 @@ mod book_import {
                 b.0 += 1;
                 b.1 = b.1.max(b.0);
             }
-            let r = self.g.get_json(&path, &[], p).await;
+            let r = self.get_json(&path, p).await;
             self.busy.lock().unwrap().0 -= 1;
             r
         }
@@ -3158,9 +3182,10 @@ mod book_import {
             (200, None, json!({"hit": hit}).to_string())
         })
         .await;
-        let g = Guarded::new("stub", &url, Duration::from_secs(5), vec![], limits);
+        let g = Gate::new("stub", limits, Duration::from_secs(5));
         let p = Stubbed {
             g,
+            url,
             limits,
             priorities: Mutex::default(),
             busy: Mutex::default(),

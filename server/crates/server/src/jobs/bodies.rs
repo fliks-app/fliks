@@ -8,9 +8,7 @@ use crate::{
     system::backup,
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use fliks_domain::{
-    external_id::Namespace, media::kind::MediaKind, metadata::limiter::Priority, refresh,
-};
+use fliks_domain::{media::kind::MediaKind, metadata::limiter::Priority, refresh};
 use fliks_engine_core::api::JobPriority;
 use sqlx::{FromRow, PgPool};
 
@@ -59,10 +57,12 @@ async fn backup_job(st: &AppState) -> Outcome {
     Ok(())
 }
 
-fn tmdb_configured(st: &AppState, job: &str) -> bool {
-    let set = st.metadata.available(Namespace::TMDB);
+fn provider_available(st: &AppState, job: &str) -> bool {
+    let set = MediaKind::ALL
+        .into_iter()
+        .any(|k| st.metadata.resolve(None, k).is_some());
     if !set {
-        tracing::warn!("{job}: TMDB_API_KEY not configured");
+        tracing::warn!("{job}: no metadata provider available");
     }
     set
 }
@@ -120,7 +120,7 @@ async fn refresh_metadata(st: &AppState) -> Outcome {
     if let Err(e) = crate::metadata::prune_snapshots(&st.db).await {
         tracing::warn!("{JOB}: snapshot cleanup failed: {e}");
     }
-    if !tmdb_configured(st, JOB) {
+    if !provider_available(st, JOB) {
         return Ok(());
     }
     let (identified, total) = identified_media(&st.db).await.map_err(|e| e.to_string())?;
@@ -158,7 +158,7 @@ async fn refresh_metadata(st: &AppState) -> Outcome {
 
 async fn refresh_missing(st: &AppState) -> Outcome {
     const JOB: &str = "RefreshMissingMetadata";
-    if !tmdb_configured(st, JOB) {
+    if !provider_available(st, JOB) {
         return Ok(());
     }
     let months =
@@ -194,6 +194,17 @@ async fn refresh_loop(
     chatty: bool,
 ) -> Result<u32, String> {
     let _row = ActivityRows::new(&st.hub, [job.to_owned()]);
+    let served: Vec<&&MediaRow> = rows
+        .iter()
+        .filter(|m| st.metadata.resolve(None, m.kind).is_some())
+        .collect();
+    if served.len() < rows.len() {
+        tracing::info!(
+            "{job}: {} title(s) skipped, no metadata provider for their kind",
+            rows.len() - served.len()
+        );
+    }
+    let rows: Vec<&MediaRow> = served.into_iter().copied().collect();
     let total = rows.len();
     let mut updated = 0;
     for (i, m) in rows.iter().enumerate() {

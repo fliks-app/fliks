@@ -151,12 +151,30 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_CAST_DIR="$ROOT/server/public" RUST_LOG=info
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
-  # provider hosts are the stub in every mode, so a keyless run never leaves loopback
-  penv+=(FLIKS_TMDB_API_URL=http://127.0.0.1:$P_PROV/tmdb/3 FLIKS_TVDB_API_URL=http://127.0.0.1:$P_PROV/tvdb/v4
-    FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV)
-  [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity)
+  # provider hosts are the stub in every mode, so a keyless run never leaves loopback (rule 59)
+  local S=http://127.0.0.1:$P_PROV over
+  over=api.themoviedb.org=$S/tmdb,api4.thetvdb.com=$S/tvdb,image.tmdb.org=$S/img,artworks.thetvdb.com=$S/tvdb-art
+  for h in openlibrary.org covers.openlibrary.org archive.org www.googleapis.com books.google.com catalogue.bnf.fr \
+    api.audnex.us m.media-amazon.com images-na.ssl-images-amazon.com api.audible.com api.audible.fr api.audible.de api.audible.co.uk \
+    api.audible.it api.audible.es api.audible.ca api.audible.com.au api.audible.co.jp api.audible.in; do over+=,$h=$S/books; done
+  penv+=(FLIKS_PLUGIN_UPSTREAM_OVERRIDE=$over FLIKS_SUBTITLE_PROVIDERS_URL=$S)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
-  start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
+  # the bundled providers require fliks 6.0.0; the row sits far from the sequence so seeded ids stay put
+  psql_admin -d "$DB" -c "INSERT INTO app_settings (id, key, value) VALUES (1000, 'plugins.skip_compatibility_check', 'true')"
+  [ "$prov" = 1 ] && psql_admin -d "$DB" -c "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'tmdb-parity'), ('plugin.fliks.tvdb.apiKey', 'tvdb-parity')"
+  # The runner recreates the database from a template, so the template holds what a first boot writes
+  # (bundled installs, registrations) and the keys: one boot, then the database becomes the template.
+  local tenv=(env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN")
+  start "prime-$1-$2" "$d" "${tenv[@]}"
+  local prime=${PIDS[-1]}
+  wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90 || { log "priming boot failed, see $RUN/prime-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|prime"); FAILED=1; stop_all_but_stubs; return; }
+  kill -TERM -- "-$prime" 2>/dev/null; sleep 2; kill -KILL -- "-$prime" 2>/dev/null
+  unset 'PIDS[-1]'
+  # the import marker is not part of the seeded state: drop it and give its id back to the sequence
+  psql_admin -d "$DB" -c "DELETE FROM app_settings WHERE key = 'metadata.env_keys_imported'" -c "SELECT setval(pg_get_serial_sequence('app_settings', 'id'), (SELECT max(id) FROM app_settings WHERE id < 1000))" >/dev/null
+  local PTPL=${DBPFX}tplp
+  psql_admin -d postgres -c "DROP DATABASE IF EXISTS $PTPL WITH (FORCE)" -c "CREATE DATABASE $PTPL TEMPLATE $DB" -c "DROP DATABASE $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $PTPL"
+  start "target-$1-$2" "$d" "${tenv[@]}"
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
     log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|target"); FAILED=1
     stop_all_but_stubs; return
@@ -168,7 +186,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   fi
   local out=$RUN/result-$1-$2.log
   # own group like the stubs: a background job ignores SIGINT, so Ctrl-C alone would orphan it
-  (cd "$SERVER" && exec setsid env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$TPL \
+  (cd "$SERVER" && exec setsid env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$PTPL \
     PARITY_ENGINE=$engine PARITY_PROVIDERS=$prov PARITY_STUB=http://127.0.0.1:$P_PROV PARITY_HOST_TOKEN="$HOST_TOK" \
     PARITY_FRONT=$ENG_URL PARITY_LIVETV=http://127.0.0.1:$P_LIVETV PARITY_FILTER="$filter" \
     "$TESTEXE" parity::parity --ignored --nocapture) >"$out" 2>&1 3>&- </dev/null &

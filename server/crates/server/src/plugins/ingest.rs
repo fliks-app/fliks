@@ -682,7 +682,7 @@ mod tests {
     /// The anchor is linked by identify once an edition exists, not by the ingest itself.
     #[sqlx::test(migrations = false)]
     async fn identify_links_the_anchor_after_an_ingest(db: PgPool) {
-        let mut s = shelf(db).await;
+        let s = shelf(db).await;
         let mut ol = crate::metadata::books::tests::Fake::new(Namespace::OPENLIBRARY);
         ol.works.insert(
             "OL1W".into(),
@@ -691,9 +691,7 @@ mod tests {
         ol.found = vec![
             json!({"externalId": "OL1W", "title": "Mirelune", "authors": [{"name": "Una Roe"}]}),
         ];
-        std::sync::Arc::get_mut(&mut s.st.metadata)
-            .unwrap()
-            .register(std::sync::Arc::new(ol));
+        s.st.metadata.add_plugin(std::sync::Arc::new(ol));
         let req = data_request(&s, "m.epub", t::TransferMode::Move);
         {
             use std::io::Write;
@@ -729,7 +727,7 @@ mod tests {
 
     #[sqlx::test(migrations = false)]
     async fn identify_folds_a_book_into_the_work_that_holds_the_id(db: PgPool) {
-        let mut s = shelf(db).await;
+        let s = shelf(db).await;
         let mut ol = crate::metadata::books::tests::Fake::new(Namespace::OPENLIBRARY);
         ol.works.insert(
             "OL1W".into(),
@@ -738,9 +736,7 @@ mod tests {
         ol.found = vec![
             json!({"externalId": "OL1W", "title": "Mirelune", "authors": [{"name": "Una Roe"}]}),
         ];
-        std::sync::Arc::get_mut(&mut s.st.metadata)
-            .unwrap()
-            .register(std::sync::Arc::new(ol));
+        s.st.metadata.add_plugin(std::sync::Arc::new(ol));
         let req = data_request(&s, "m.epub", t::TransferMode::Move);
         {
             use std::io::Write;

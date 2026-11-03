@@ -29,8 +29,6 @@ internal sealed record ServerEnvironment(ushort Port, ushort DbPort)
             ["FLIKS_TRANSCODE_DIR"] = AppPaths.TranscodeDir,
             ["PATH"] = path,
             ["FLIKS_CAST_DIR"] = AppPaths.CastDir,
-            ["TMDB_API_KEY"] = BuildConfig.TmdbApiKey,
-            ["TVDB_API_KEY"] = BuildConfig.TvdbApiKey,
         };
     }
 }

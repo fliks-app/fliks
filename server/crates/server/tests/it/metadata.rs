@@ -1,118 +1,47 @@
 //! `/api/metadata/*` and `/api/persons/*` (`docs/spec/metadata.md`, `persons.md`) through the real router, a loopback
 //! stub for TMDB, TVDB and the image host, and a fresh database.
-use axum::{Router, body::Body, extract::State, http::Request, http::Uri, response::IntoResponse};
+use crate::fakes::{Images, Scripted};
+use axum::{Router, body::Body, http::Request};
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
-use fliks_server::{app, config::Config, images::ImageStore, state::AppState};
+use fliks_server::{app, config::Config, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{path::PathBuf, sync::Arc};
 use tower::ServiceExt;
 
 mod snapshots;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
-#[derive(Default)]
-struct Stub {
-    routes: Mutex<HashMap<String, (u16, Vec<u8>)>>,
-    log: Mutex<Vec<String>>,
-}
-
-impl Stub {
-    fn json(&self, path: &str, status: u16, body: Value) {
-        self.routes
-            .lock()
-            .unwrap()
-            .insert(path.into(), (status, body.to_string().into_bytes()));
-    }
-
-    fn bytes(&self, path: &str, body: Vec<u8>) {
-        self.routes.lock().unwrap().insert(path.into(), (200, body));
-    }
-
-    fn drop_route(&self, path: &str) {
-        self.routes.lock().unwrap().remove(path);
-    }
-
-    /// Requests whose path and query start with `prefix`.
-    fn seen(&self, prefix: &str) -> Vec<String> {
-        self.log
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|l| l.starts_with(prefix))
-            .cloned()
-            .collect()
-    }
-}
-
-async fn answer(State(s): State<Arc<Stub>>, uri: Uri) -> impl IntoResponse {
-    s.log.lock().unwrap().push(uri.to_string());
-    match s.routes.lock().unwrap().get(uri.path()) {
-        Some((status, body)) => (
-            axum::http::StatusCode::from_u16(*status).unwrap(),
-            [("content-type", "application/json")],
-            body.clone(),
-        )
-            .into_response(),
-        None => (
-            axum::http::StatusCode::NOT_FOUND,
-            json!({"status_message": "not found"}).to_string(),
-        )
-            .into_response(),
-    }
-}
-
 struct Ctx {
     app: Router,
     st: AppState,
-    stub: Arc<Stub>,
+    /// The TMDB provider.
+    stub: Arc<Scripted>,
+    tvdb: Arc<Scripted>,
+    img: Arc<Images>,
     data: PathBuf,
     admin: String,
     reader: String,
 }
 
-fn jpeg() -> Vec<u8> {
-    let img = image::RgbImage::from_fn(300, 450, |x, y| {
-        image::Rgb([(x % 256) as u8, (y % 256) as u8, 7])
-    });
-    let mut out = vec![];
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 80)
-        .encode_image(&img)
-        .unwrap();
-    out
-}
-
-async fn ctx_with(pool: PgPool, tvdb_key: &str) -> Ctx {
+async fn ctx_with(pool: PgPool, tvdb_on: bool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
-    let stub = Arc::new(Stub::default());
-    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", l.local_addr().unwrap());
-    let router = Router::new()
-        .fallback(axum::routing::any(answer))
-        .with_state(stub.clone());
-    tokio::spawn(async { axum::serve(l, router).await.unwrap() });
-    let cfg = Config::from_lookup(|k| match k {
-        "TMDB_API_KEY" => Some("tmdb-secret-key".into()),
-        "TVDB_API_KEY" => Some(tvdb_key.into()),
-        "FLIKS_TMDB_API_URL" => Some(format!("{base}/tmdb/3")),
-        "FLIKS_TVDB_API_URL" => Some(format!("{base}/tvdb/v4")),
-        "FLIKS_TMDB_IMAGE_URL" => Some(format!("{base}/img/t/p")),
-        _ => None,
-    });
-    let mut st = AppState::new(pool.clone(), cfg, SECRET);
+    let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let (stub, tvdb) = (
+        Scripted::new(Namespace::TMDB),
+        Scripted::new(Namespace::TVDB),
+    );
+    tvdb.on.store(tvdb_on, std::sync::atomic::Ordering::SeqCst);
+    st.metadata.add_plugin(stub.clone());
+    st.metadata.add_plugin(tvdb.clone());
+    let img = Images::start(false).await;
+    let mut st = st;
     let data = std::env::temp_dir().join(format!(
         "fliks-meta-{}",
         fliks_server::config::random_hex(6)
     ));
-    st.images = Arc::new(ImageStore::with_root(
-        data.clone(),
-        &format!("{base}/img/t/p"),
-    ));
+    st.images = Arc::new(img.store(data.clone()));
     sqlx::query(r#"INSERT INTO roles (name, permissions) VALUES ('reader', '["media.read"]')"#)
         .execute(&pool)
         .await
@@ -147,6 +76,8 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/tmp/a'), (2, '/tmp/
         app,
         st,
         stub,
+        tvdb,
+        img,
         data,
         reader: tokens.pop().unwrap().1,
         admin: tokens.pop().unwrap().1,
@@ -154,7 +85,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/tmp/a'), (2, '/tmp/
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
-    ctx_with(pool, "tvdb-key").await
+    ctx_with(pool, true).await
 }
 
 async fn call(c: &Ctx, uri: &str, tok: Option<&str>) -> (u16, Value) {
@@ -175,12 +106,8 @@ async fn call(c: &Ctx, uri: &str, tok: Option<&str>) -> (u16, Value) {
     (status, serde_json::from_slice(&b).unwrap_or(Value::Null))
 }
 
-fn page(results: Value) -> Value {
-    json!({"page": 1, "results": results})
-}
-
 fn movie(id: i64) -> Value {
-    json!({"id": id, "title": format!("Movie {id}"), "release_date": "2020-05-01", "poster_path": "/p.jpg", "genre_ids": [1]})
+    json!({"provider": "tmdb", "tmdbId": id, "title": format!("Movie {id}"), "year": 2020, "posterUrl": "https://image.tmdb.org/t/p/w500/p.jpg"})
 }
 
 async fn media(pool: &PgPool, id: i32, kind: &str, tmdb: Option<i32>, tvdb: Option<i32>, lib: i32) {
@@ -202,10 +129,9 @@ async fn search_marks_media_the_caller_can_read(pool: PgPool) {
     media(&pool, 1, "movie", Some(11), None, 1).await;
     media(&pool, 2, "movie", Some(22), None, 2).await;
     media(&pool, 3, "series", Some(33), None, 1).await;
-    c.stub.json(
-        "/tmdb/3/search/movie",
-        200,
-        page(json!([movie(11), movie(22), movie(33), movie(44)])),
+    c.stub.ok(
+        "search/movie",
+        json!([movie(11), movie(22), movie(33), movie(44)]),
     );
     let ids = |v: &Value| -> Vec<Value> {
         v.as_array()
@@ -232,8 +158,7 @@ async fn search_marks_media_the_caller_can_read(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn search_input_rules(pool: PgPool) {
     let c = ctx(pool).await;
-    c.stub
-        .json("/tmdb/3/search/movie", 200, page(json!([movie(11)])));
+    c.stub.ok("search/movie", json!([movie(11)]));
     for q in ["", "?q=", "?q=%20%20"] {
         assert_eq!(
             call(
@@ -246,7 +171,7 @@ async fn search_input_rules(pool: PgPool) {
             "{q:?}"
         );
     }
-    assert!(c.stub.seen("/tmdb/3/search").is_empty());
+    assert!(c.stub.seen("search").is_empty());
     let (s, body) = call(&c, "/api/metadata/search/movie?q=a&q=b", Some(&c.reader)).await;
     assert_eq!(
         (s, body["error"].as_str()),
@@ -270,7 +195,7 @@ async fn search_input_rules(pool: PgPool) {
     )
     .await;
     call(&c, "/api/metadata/search/movie?q=x&year=0", Some(&c.reader)).await;
-    let log = c.stub.seen("/tmdb/3/search/movie");
+    let log = c.stub.seen("search/movie");
     assert!(
         log[0].contains("year=1999")
             && log[0].contains("query=x")
@@ -287,18 +212,14 @@ async fn provider_choice_and_fallback(pool: PgPool) {
         .await
         .unwrap();
     media(&pool, 5, "series", Some(500), Some(81189), 1).await;
-    c.stub.json(
-        "/tmdb/3/search/tv",
-        200,
-        page(json!([{"id": 500, "name": "T", "first_air_date": "2008-01-01"}])),
+    c.stub.ok(
+        "search/series",
+        json!([{"provider": "tmdb", "tmdbId": 500, "title": "T", "year": 2008}]),
     );
-    c.stub.json(
-        "/tvdb/v4/search",
-        200,
-        json!({"data": [{"tvdb_id": "81189", "name": "V", "year": "2008", "remote_ids": []}]}),
+    c.tvdb.ok(
+        "search/series",
+        json!([{"provider": "tvdb", "tvdbId": 81189, "title": "V", "year": 2008}]),
     );
-    c.stub
-        .json("/tvdb/v4/login", 200, json!({"data": {"token": "tok"}}));
     let first = |v: &Value| (v[0]["provider"].clone(), v[0]["existingMediaId"].clone());
     let (_, v) = call(&c, "/api/metadata/search/tv?q=x&mediaId=5", Some(&c.admin)).await;
     assert_eq!(
@@ -329,10 +250,10 @@ async fn provider_choice_and_fallback(pool: PgPool) {
         assert_eq!(first(&v).0, "tmdb", "{q}");
     }
     // an empty TMDB answer asks TVDB, whose results keep their own provider
-    c.stub.json("/tmdb/3/search/tv", 200, page(json!([])));
+    c.stub.ok("search/series", json!([]));
     let (_, v) = call(&c, "/api/metadata/search/tv?q=x", Some(&c.admin)).await;
     assert_eq!(first(&v).0, "tvdb");
-    c.stub.json("/tvdb/v4/search", 200, json!({"data": []}));
+    c.tvdb.ok("search/series", json!([]));
     assert_eq!(
         call(&c, "/api/metadata/search/tv?q=x", Some(&c.admin))
             .await
@@ -344,18 +265,13 @@ async fn provider_choice_and_fallback(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn upstream_failures_are_503_without_the_url(pool: PgPool) {
     let c = ctx(pool).await;
-    c.stub.json(
-        "/tmdb/3/search/movie",
-        500,
-        json!({"status_message": "boom"}),
-    );
+    c.stub.fail("search/movie", 500);
     let (s, b) = call(&c, "/api/metadata/search/movie?q=x", Some(&c.reader)).await;
     assert_eq!((s, b["error"].as_str()), (503, Some("Service Unavailable")));
     let msg = b["message"].as_str().unwrap();
-    assert_eq!(msg, "Metadata search failed on tmdb: HTTP 500 — boom");
-    assert!(!msg.contains("tmdb-secret-key") && !msg.contains("127.0.0.1"));
+    assert_eq!(msg, "Metadata search failed on tmdb: HTTP 500");
     // the same failure on a list with no stale copy is a 503 too
-    c.stub.json("/tmdb/3/genre/tv/list", 500, json!({}));
+    c.stub.fail("list/series/genres", 500);
     let (s, b) = call(&c, "/api/metadata/genres/tv", Some(&c.reader)).await;
     assert_eq!(s, 503);
     assert!(
@@ -370,10 +286,9 @@ async fn upstream_failures_are_503_without_the_url(pool: PgPool) {
 async fn lists_serve_the_last_good_copy(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     media(&pool, 1, "movie", Some(11), None, 1).await;
-    c.stub
-        .json("/tmdb/3/movie/popular", 200, page(json!([movie(11)])));
+    c.stub.ok("list/movie/popular", json!([movie(11)]));
     let (_, live) = call(&c, "/api/metadata/popular/movie", Some(&c.admin)).await;
-    c.stub.json("/tmdb/3/movie/popular", 500, json!({}));
+    c.stub.fail("list/movie/popular", 500);
     let (s, stale) = call(&c, "/api/metadata/popular/movie", Some(&c.admin)).await;
     assert_eq!((s, &stale), (200, &live));
     assert_eq!(stale[0]["existingMediaId"], 1);
@@ -384,37 +299,6 @@ async fn lists_serve_the_last_good_copy(pool: PgPool) {
         .unwrap();
     let (_, again) = call(&c, "/api/metadata/popular/movie", Some(&c.admin)).await;
     assert_eq!(again[0]["existingMediaId"], Value::Null);
-}
-
-#[sqlx::test(migrations = false)]
-async fn the_breaker_stops_sending_after_three_failures(pool: PgPool) {
-    let c = ctx(pool).await;
-    c.stub.json("/tmdb/3/search/movie", 500, json!({}));
-    for _ in 0..5 {
-        assert_eq!(
-            call(&c, "/api/metadata/search/movie?q=x", Some(&c.reader))
-                .await
-                .0,
-            503
-        );
-    }
-    assert_eq!(c.stub.seen("/tmdb/3/search/movie").len(), 3);
-    let (_, b) = call(&c, "/api/metadata/search/movie?q=x", Some(&c.reader)).await;
-    assert!(b["message"].as_str().unwrap().contains("circuit open"));
-}
-
-#[sqlx::test(migrations = false)]
-async fn client_errors_do_not_trip_the_breaker(pool: PgPool) {
-    let c = ctx(pool).await;
-    for _ in 0..5 {
-        assert_eq!(
-            call(&c, "/api/metadata/tmdb/movie/9", Some(&c.reader))
-                .await
-                .0,
-            404
-        );
-    }
-    assert_eq!(c.stub.seen("/tmdb/3/movie/9").len(), 5);
 }
 
 #[sqlx::test(migrations = false)]
@@ -429,99 +313,53 @@ async fn detail_routes_map_input_and_upstream_errors(pool: PgPool) {
     assert_eq!(get("/api/metadata/movie/search").await.0, 400);
     assert_eq!(get("/api/metadata/tmdb/movie/9").await.0, 404);
     assert_eq!(get("/api/metadata/tmdb/tv/9/seasons").await.0, 404);
-    c.stub.json("/tmdb/3/movie/9", 500, json!({}));
+    c.stub.fail("work/movie/9", 500);
     assert_eq!(get("/api/metadata/movie/9").await.0, 503);
-    assert!(c.stub.seen("/tmdb/3/movie/abc").is_empty());
+    assert!(c.stub.seen("work/movie/abc").is_empty());
     assert_eq!(call(&c, "/api/metadata/tmdb/movie/9", None).await.0, 401);
 }
 
 #[sqlx::test(migrations = false)]
-async fn details_seasons_and_stubs(pool: PgPool) {
+async fn details_seasons_and_stubs_pass_the_provider_records_through(pool: PgPool) {
     let c = ctx(pool).await;
-    c.stub.json(
-        "/tmdb/3/movie/603",
-        200,
-        json!({"id": 603, "title": "Sample Film", "release_date": "1999-03-30", "budget": 0, "status": "Released",
-               "genres": [{"id": 28, "name": "Action"}], "poster_path": "/p.jpg", "belongs_to_collection": {"id": 2, "name": "C"}}),
-    );
+    let film = json!({"tmdbId": 603, "title": "Sample Film", "year": 1999, "status": "released", "tmdbCollectionName": "C"});
+    c.stub.ok("work/movie/603", film.clone());
     let (s, d) = call(&c, "/api/metadata/movie/603", Some(&c.reader)).await;
-    assert_eq!(s, 200);
-    assert_eq!(
-        (d["title"].clone(), d["year"].clone(), d["budget"].clone()),
-        (json!("Sample Film"), json!(1999), Value::Null)
+    assert_eq!((s, d), (200, film));
+    c.stub.ok(
+        "stubs/7",
+        json!([{"seasonNumber": 0, "episodeCount": 1}, {"seasonNumber": 1, "episodeCount": 2}]),
     );
-    assert_eq!(d["tmdbCollectionName"], "C");
-    assert_eq!(d["status"], "released");
-    assert!(
-        d["posterUrl"]
-            .as_str()
-            .unwrap()
-            .ends_with("/img/t/p/w500/p.jpg")
-    );
-    c.stub.json(
-        "/tmdb/3/tv/7",
-        200,
-        json!({"seasons": [{"season_number": 0, "episode_count": 1}, {"season_number": 1, "episode_count": 2}, {"season_number": 2}]}),
-    );
-    c.stub.json(
-        "/tmdb/3/tv/7/season/0",
-        200,
-        json!({"season_number": 0, "episodes": [{"episode_number": 1, "name": "S"}]}),
-    );
-    c.stub.json(
-        "/tmdb/3/tv/7/season/1",
-        200,
-        json!({"season_number": 1, "overview": "o", "episodes": []}),
+    c.stub.ok(
+        "children/7",
+        json!([{"seasonNumber": 0, "episodes": [{"episodeNumber": 1}]}, {"seasonNumber": 1, "overview": "o", "episodes": []}]),
     );
     let (_, stubs) = call(&c, "/api/metadata/tmdb/tv/7/season-stubs", Some(&c.reader)).await;
     assert_eq!(
         stubs,
-        json!([{"seasonNumber": 0, "episodeCount": 1}, {"seasonNumber": 1, "episodeCount": 2}, {"seasonNumber": 2, "episodeCount": 0}])
+        json!([{"seasonNumber": 0, "episodeCount": 1}, {"seasonNumber": 1, "episodeCount": 2}])
     );
     let (_, seasons) = call(&c, "/api/metadata/tmdb/tv/7/seasons", Some(&c.reader)).await;
-    let numbers: Vec<_> = seasons
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s["seasonNumber"].clone())
-        .collect();
-    assert_eq!(
-        numbers,
-        [json!(0), json!(1)],
-        "season 2 failed and is dropped, specials kept"
-    );
     assert_eq!(seasons[1]["overview"], "o");
+    assert_eq!(seasons.as_array().unwrap().len(), 2);
 }
 
 #[sqlx::test(migrations = false)]
-async fn discover_and_language(pool: PgPool) {
+async fn discover_params_and_language_reach_the_provider(pool: PgPool) {
     let c = ctx(pool.clone()).await;
-    c.stub.json("/tmdb/3/discover/movie", 200, page(json!([])));
-    c.stub.json("/tmdb/3/discover/tv", 200, page(json!([])));
+    c.stub.ok("list/movie/discover", json!([]));
     call(
         &c,
-        "/api/metadata/discover/movie?genres=28,abc,12&voteGte=7.5&yearGte=1999&yearLte=2003",
+        "/api/metadata/discover/movie?genres=28,12&voteGte=7.5&yearGte=1999&yearLte=2003&sort=popularity.desc&x=1",
         Some(&c.reader),
     )
     .await;
-    let q = &c.stub.seen("/tmdb/3/discover/movie")[0];
-    for want in [
-        "with_genres=28%2C12",
-        "vote_average.gte=7.5",
-        "primary_release_date.gte=1999-01-01",
-        "primary_release_date.lte=2003-12-31",
-        "sort_by=popularity.desc",
-        "include_adult=false",
-    ] {
-        assert!(q.contains(want), "{want} in {q}");
-    }
-    call(
-        &c,
-        "/api/metadata/discover/tv?sort=primary_release_date.desc",
-        Some(&c.reader),
-    )
-    .await;
-    assert!(c.stub.seen("/tmdb/3/discover/tv")[0].contains("sort_by=first_air_date.desc"));
+    assert_eq!(
+        c.stub.seen("list/movie/discover"),
+        [
+            "list/movie/discover?genres=28,12&sort=popularity.desc&voteGte=7.5&yearGte=1999&yearLte=2003"
+        ]
+    );
     sqlx::query(r#"INSERT INTO app_settings ("key", "value") VALUES ('metadata_language', 'fr')"#)
         .execute(&pool)
         .await
@@ -529,9 +367,9 @@ async fn discover_and_language(pool: PgPool) {
     c.st.metadata
         .lang
         .settings_changed(&["metadata_language".into()]);
-    c.stub.json("/tmdb/3/search/movie", 200, page(json!([])));
+    c.stub.ok("search/movie", json!([]));
     call(&c, "/api/metadata/search/movie?q=x", Some(&c.reader)).await;
-    assert!(c.stub.seen("/tmdb/3/search/movie")[0].contains("language=fr-FR"));
+    assert!(c.stub.seen("search/movie")[0].contains("language=fr-FR"));
 }
 
 // ---- persons
@@ -634,9 +472,9 @@ async fn person_search(pool: PgPool) {
     assert_eq!(names(&search("?q=claire").await.1), Vec::<&str>::new());
 }
 
-fn tmdb_person(name: &str, profile: Option<&str>) -> Value {
-    json!({"id": 1, "name": name, "biography": "fresh bio", "birthday": null, "deathday": null, "place_of_birth": "Paris",
-           "profile_path": profile, "known_for_department": "Acting"})
+fn tmdb_person(name: &str, avatar: Option<&str>) -> Value {
+    json!({"name": name, "biography": "fresh bio", "birthday": null, "deathday": null, "placeOfBirth": "Paris",
+           "avatarUrl": avatar.map(|a| format!("http://image.tmdb.org/t/p/w500{a}")), "knownForDepartment": "Acting"})
 }
 
 async fn seed_credits(pool: &PgPool) {
@@ -674,7 +512,7 @@ async fn person_detail_applies_the_library_acl(pool: PgPool) {
     assert!(d["cast"][0]["media"].get("files").is_none());
     assert_eq!(d["crew"].as_array().unwrap().len(), 1);
     assert!(
-        c.stub.seen("/tmdb").is_empty(),
+        c.stub.seen("person").is_empty(),
         "a fresh person is not refreshed"
     );
     let (_, r) = call(&c, "/api/persons/1", Some(&c.reader)).await;
@@ -733,13 +571,10 @@ async fn person_detail_input_errors(pool: PgPool) {
 async fn a_stale_person_is_refreshed_with_its_avatar(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     person(&pool, 1, "tmdb", 5, "Old Name", "8 days").await;
-    c.stub.json(
-        "/tmdb/3/person/5",
-        200,
-        tmdb_person("New Name", Some("/face.jpg")),
-    );
-    let src = jpeg();
-    c.stub.bytes("/img/t/p/original/face.jpg", src.clone());
+    c.stub
+        .ok("person/5", tmdb_person("New Name", Some("/face.jpg")));
+    let src = crate::fakes::jpeg();
+    c.img.put("/t/p/original/face.jpg", src.clone());
     let (s, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(s, 200);
     let p = &d["person"];
@@ -769,16 +604,16 @@ async fn a_stale_person_is_refreshed_with_its_avatar(pool: PgPool) {
     );
     // the second call is inside the 7 days
     call(&c, "/api/persons/1", Some(&c.reader)).await;
-    assert_eq!(c.stub.seen("/tmdb/3/person/5").len(), 1);
+    assert_eq!(c.stub.seen("person/5").len(), 1);
     // the original avatar was asked at `original`
-    assert_eq!(c.stub.seen("/img/").len(), 1);
+    assert_eq!(c.img.seen("/t/p/").len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
 async fn a_failing_refresh_serves_the_stored_row(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     person(&pool, 1, "tmdb", 5, "Stored", "never").await;
-    c.stub.json("/tmdb/3/person/5", 500, json!({}));
+    c.stub.fail("person/5", 500);
     let (s, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(
         (
@@ -789,11 +624,8 @@ async fn a_failing_refresh_serves_the_stored_row(pool: PgPool) {
         (200, Some("Stored"), Value::Null)
     );
     // an unreachable avatar leaves the stored avatar alone but still refreshes the rest
-    c.stub.json(
-        "/tmdb/3/person/5",
-        200,
-        tmdb_person("Stored", Some("/missing.jpg")),
-    );
+    c.stub
+        .ok("person/5", tmdb_person("Stored", Some("/missing.jpg")));
     let (_, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(d["person"]["avatarUrl"], Value::Null);
     assert_eq!(d["person"]["biography"], "fresh bio");
@@ -803,12 +635,9 @@ async fn a_failing_refresh_serves_the_stored_row(pool: PgPool) {
 async fn a_404_asks_the_other_provider_and_pins_the_row(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     person(&pool, 1, "tmdb", 5, "Stored", "8 days").await;
-    c.stub
-        .json("/tvdb/v4/login", 200, json!({"data": {"token": "t"}}));
-    c.stub.json(
-        "/tvdb/v4/people/5/extended",
-        200,
-        json!({"data": {"name": "From Tvdb", "biographies": [{"language": "eng", "biography": "english"}], "characters": [{"peopleType": "Director", "name": "", "movieId": 11, "movie": {"name": "M", "year": "2001"}}]}}),
+    c.tvdb.ok(
+        "person/5",
+        json!({"name": "From Tvdb", "biography": "english", "knownForDepartment": "Directing"}),
     );
     let (_, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(
@@ -832,13 +661,8 @@ async fn a_pin_that_breaks_the_unique_pair_keeps_the_provider(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     person(&pool, 1, "tmdb", 5, "Stored", "8 days").await;
     person(&pool, 2, "tvdb", 5, "Holder", "1 day").await;
-    c.stub
-        .json("/tvdb/v4/login", 200, json!({"data": {"token": "t"}}));
-    c.stub.json(
-        "/tvdb/v4/people/5/extended",
-        200,
-        json!({"data": {"name": "From Tvdb", "biographies": [], "characters": []}}),
-    );
+    c.tvdb.ok("person/5", json!({"name": "From Tvdb"}));
+    c.tvdb.ok("credits/5", json!({"cast": [], "crew": []}));
     let (s, d) = call(&c, "/api/persons/1/provider-credits", Some(&c.reader)).await;
     assert_eq!(
         (s, d["provider"].as_str()),
@@ -851,14 +675,13 @@ async fn a_pin_that_breaks_the_unique_pair_keeps_the_provider(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn without_a_tvdb_key_a_tvdb_person_is_asked_of_tmdb(pool: PgPool) {
-    let c = ctx_with(pool.clone(), "").await;
+async fn with_tvdb_unavailable_a_tvdb_person_is_asked_of_tmdb(pool: PgPool) {
+    let c = ctx_with(pool.clone(), false).await;
     person(&pool, 1, "tvdb", 5, "Stored", "8 days").await;
-    c.stub
-        .json("/tmdb/3/person/5", 200, tmdb_person("Via Tmdb", None));
+    c.stub.ok("person/5", tmdb_person("Via Tmdb", None));
     let (_, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(d["person"]["name"], "Via Tmdb");
-    assert!(c.stub.seen("/tvdb").is_empty());
+    assert!(c.tvdb.seen("person").is_empty());
 }
 
 #[sqlx::test(migrations = false)]
@@ -868,15 +691,14 @@ async fn provider_credits_link_on_type_and_id_for_readable_media(pool: PgPool) {
     media(&pool, 1, "movie", Some(11), None, 1).await;
     media(&pool, 2, "series", Some(11), None, 1).await;
     media(&pool, 3, "movie", Some(33), None, 2).await;
-    c.stub.json(
-        "/tmdb/3/person/5/combined_credits",
-        200,
+    c.stub.ok(
+        "credits/5",
         json!({"cast": [
-            {"id": 11, "media_type": "movie", "title": "M", "character": "X", "poster_path": "/a.jpg", "release_date": "2020-01-01", "vote_average": 5},
-            {"id": 11, "media_type": "tv", "name": "S", "character": "Y", "first_air_date": "2019-01-01"},
-            {"id": 33, "media_type": "movie", "title": "Hidden", "character": "Z"},
-            {"id": 99, "media_type": "movie", "title": "Unowned", "character": "W"}],
-        "crew": [{"id": 11, "media_type": "movie", "title": "M", "job": "Director", "department": "Directing"}]}),
+            {"externalId": 11, "mediaType": "movie", "title": "M", "character": "X", "posterUrl": "https://image.tmdb.org/t/p/w500/a.jpg"},
+            {"externalId": 11, "mediaType": "series", "title": "S", "character": "Y"},
+            {"externalId": 33, "mediaType": "movie", "title": "Hidden", "character": "Z"},
+            {"externalId": 99, "mediaType": "movie", "title": "Unowned", "character": "W"}],
+        "crew": [{"externalId": 11, "mediaType": "movie", "title": "M", "job": "Director", "department": "Directing"}]}),
     );
     let (s, d) = call(&c, "/api/persons/1/provider-credits", Some(&c.reader)).await;
     assert_eq!((s, d["provider"].as_str()), (200, Some("tmdb")));
@@ -897,12 +719,6 @@ async fn provider_credits_link_on_type_and_id_for_readable_media(pool: PgPool) {
     assert_eq!(d["cast"][0]["title"], "M");
     assert_eq!(d["cast"][1]["mediaType"], "series");
     assert_eq!(d["cast"][1]["title"], "S");
-    assert!(
-        d["cast"][0]["posterUrl"]
-            .as_str()
-            .unwrap()
-            .ends_with("/w500/a.jpg")
-    );
     assert!(d["cast"][0].get("job").is_none() && d["crew"][0].get("character").is_none());
     let (_, a) = call(&c, "/api/persons/1/provider-credits", Some(&c.admin)).await;
     assert_eq!(a["cast"][2]["mediaId"], 3);
@@ -913,8 +729,7 @@ async fn provider_credits_link_on_type_and_id_for_readable_media(pool: PgPool) {
             .await
             .unwrap();
     assert!(refreshed.is_some());
-    c.stub
-        .json("/tmdb/3/person/5/combined_credits", 500, json!({}));
+    c.stub.fail("credits/5", 500);
     let (s, b) = call(&c, "/api/persons/1/provider-credits", Some(&c.reader)).await;
     assert_eq!(s, 503);
     assert!(
@@ -923,7 +738,6 @@ async fn provider_credits_link_on_type_and_id_for_readable_media(pool: PgPool) {
             .unwrap()
             .starts_with("Metadata request failed on tmdb")
     );
-    c.stub.drop_route("/tmdb/3/person/5/combined_credits");
 }
 
 #[sqlx::test(migrations = false)]
@@ -950,7 +764,7 @@ async fn persisting_credits_does_not_fetch_person_details(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(rows, 2);
-    assert!(c.stub.seen("/tmdb/3/person/").is_empty());
+    assert!(c.stub.seen("person").is_empty());
 }
 
 #[sqlx::test(migrations = false)]

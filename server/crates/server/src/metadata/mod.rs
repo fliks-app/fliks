@@ -1,45 +1,31 @@
-//! TMDB / TVDB clients and `/api/metadata/*` (`docs/spec/metadata.md`); other domains call `Metadata` in process.
+//! The provider registry and `/api/metadata/*` (`docs/spec/metadata.md`); other domains call `Metadata` in process.
 pub mod books;
 mod credits;
-mod http;
 mod language;
 mod lists;
-mod map;
 mod orchestrator;
 mod provider;
 mod routes;
 pub mod service;
 #[cfg(test)]
 pub(crate) mod stub;
-pub mod tmdb;
-pub mod tvdb;
 mod types;
 
-pub use http::{Guarded, Observed, Upstream};
 pub use language::{LanguageCache, Override};
 pub use orchestrator::{Key, prune_snapshots};
+use provider::Absent;
 pub use provider::{Call, EditionRef, MetadataProvider, Search};
 pub use routes::*;
-pub use types::{Credits, MetaError, PersonDetails};
+pub use types::{Credits, MetaError, PersonDetails, Upstream};
 
-use crate::config::MetadataConfig;
 use crate::sync::RwLockExt;
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::merge::FieldOrder};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
-    time::Duration,
 };
 
-const TMDB_TIMEOUT: Duration = Duration::from_secs(10);
-const TVDB_TIMEOUT: Duration = Duration::from_secs(15);
 const ORDER_PREFIX: &str = "metadata.provider_order.";
-
-struct Entry {
-    /// Its key is configured (`metadata.md` rule 20).
-    on: bool,
-    provider: Arc<dyn MetadataProvider>,
-}
 
 /// The providers of provider plugins and the admin's order per kind.
 #[derive(Default)]
@@ -53,9 +39,6 @@ struct Dynamic {
 /// The providers by registry key (`metadata-orchestrator.md` rules 8-10).
 pub struct Metadata {
     pub lang: LanguageCache,
-    /// The concrete client for what the trait does not carry (seasons).
-    pub tmdb: Arc<tmdb::Tmdb>,
-    builtin: HashMap<Namespace, Entry>,
     dynamic: RwLock<Dynamic>,
     db: sqlx::PgPool,
     flights: orchestrator::Flights,
@@ -64,34 +47,14 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    pub fn new(db: sqlx::PgPool, c: &MetadataConfig) -> Self {
-        let tmdb = Arc::new(tmdb::Tmdb::new(
-            &c.tmdb_url,
-            &c.tmdb_image_url,
-            &c.tmdb_key,
-            TMDB_TIMEOUT,
-        ));
-        let tvdb = Arc::new(tvdb::Tvdb::new(&c.tvdb_url, &c.tvdb_key, TVDB_TIMEOUT));
-        let entry = |on: bool, provider: Arc<dyn MetadataProvider>| Entry { on, provider };
+    pub fn new(db: sqlx::PgPool) -> Self {
         Self {
             lang: LanguageCache::new(db.clone()),
             db,
             flights: Default::default(),
             stale: Mutex::default(),
-            builtin: HashMap::from([
-                (Namespace::TMDB, entry(!c.tmdb_key.is_empty(), tmdb.clone())),
-                (Namespace::TVDB, entry(!c.tvdb_key.is_empty(), tvdb)),
-            ]),
             dynamic: RwLock::default(),
-            tmdb,
         }
-    }
-
-    /// Registers a built-in under its own id, available (tests).
-    #[cfg(test)]
-    pub(crate) fn register(&mut self, provider: Arc<dyn MetadataProvider>) {
-        self.builtin
-            .insert(provider.id(), Entry { on: true, provider });
     }
 
     /// Registers the provider of a plugin that turned `ready`, replacing the one it registered before.
@@ -104,23 +67,10 @@ impl Metadata {
         d.providers.insert(id, provider);
     }
 
-    /// The built-in of `id` when its key is configured: what a plugin of the same key falls back on.
-    pub fn configured_builtin(&self, id: Namespace) -> Option<Arc<dyn MetadataProvider>> {
-        self.builtin
-            .get(&id)
-            .filter(|e| e.on)
-            .map(|e| e.provider.clone())
-    }
-
-    /// The provider that answers for `id` and whether it is available: a plugin's while it is, else
-    /// the built-in, else a plugin's that went away (its calls fail 503).
+    /// The provider of `id` and whether it is available: a plugin that went away stays, its calls fail 503.
     fn slot(&self, id: Namespace) -> Option<(bool, Arc<dyn MetadataProvider>)> {
-        let plugin = self.dynamic.read_clean().providers.get(&id).cloned();
-        match (plugin, self.builtin.get(&id)) {
-            (Some(p), _) if p.available() => Some((true, p)),
-            (_, Some(e)) => Some((e.on && e.provider.available(), e.provider.clone())),
-            (gone, None) => gone.map(|p| (false, p)),
-        }
+        let p = self.dynamic.read_clean().providers.get(&id).cloned()?;
+        Some((p.available(), p))
     }
 
     /// The provider registered under `id`, available or not.
@@ -128,9 +78,9 @@ impl Metadata {
         self.slot(id).map(|(_, p)| p)
     }
 
-    /// A provider `resolve` or `fallback` returned.
+    /// A provider `resolve` or `fallback` returned; one that is not registered answers every call 503.
     pub fn of(&self, id: Namespace) -> Arc<dyn MetadataProvider> {
-        self.get(id).expect("a registered provider")
+        self.get(id).unwrap_or_else(|| Arc::new(Absent(id)))
     }
 
     pub fn available(&self, id: Namespace) -> bool {
