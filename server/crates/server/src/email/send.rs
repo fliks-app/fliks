@@ -1,5 +1,5 @@
 use super::{
-    config::{self, Smtp},
+    config::{self, ConnectError, Smtp},
     devices::FORMATS,
     message,
 };
@@ -16,16 +16,17 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
-use lettre::AsyncTransport;
+use lettre::{AsyncTransport, transport::smtp::client::AsyncSmtpConnection};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 use tokio::{io::AsyncReadExt, sync::Semaphore};
 
 const PER_HOUR: i64 = 20;
 const IN_FLIGHT: i64 = 3;
 const RECENT: i64 = 20;
 const ERROR_MAX: usize = 300;
+const QUIT_WAIT: Duration = Duration::from_secs(5);
 /// A mail holds the file, its base64 body and the wire copy (3-4 times the file), so one at a time.
 static SLOTS: Semaphore = Semaphore::const_new(1);
 
@@ -163,12 +164,11 @@ async fn run(st: AppState, job: Job) {
         return;
     };
     let id = job.id;
-    let result = deliver(&st, job).await;
-    let (status, error) = match result {
-        Ok(()) => ("sent", None),
+    let (status, error, conn) = match deliver(&st, job).await {
+        Ok(conn) => ("sent", None, Some(conn)),
         Err(e) => {
             tracing::warn!(send = id, "book send failed: {}", e.detail);
-            ("failed", Some(e.code))
+            ("failed", Some(e.code), None)
         }
     };
     if let Err(e) = sqlx::query!(
@@ -181,6 +181,10 @@ async fn run(st: AppState, job: Job) {
     .await
     {
         tracing::error!(send = id, "book send: cannot record {status}: {e}");
+    }
+    // The mail is accepted: a QUIT that fails or stalls changes nothing.
+    if let Some(mut conn) = conn {
+        let _ = tokio::time::timeout(QUIT_WAIT, conn.abort()).await;
     }
 }
 
@@ -197,7 +201,8 @@ fn fail(code: &'static str, detail: impl ToString) -> Failure {
     }
 }
 
-async fn deliver(st: &AppState, job: Job) -> Result<(), Failure> {
+/// The open session once the server accepted the message.
+async fn deliver(st: &AppState, job: Job) -> Result<AsyncSmtpConnection, Failure> {
     sqlx::query!(
         r#"UPDATE book_sends SET status = 'sending' WHERE id = $1"#,
         job.id
@@ -233,12 +238,21 @@ async fn deliver(st: &AppState, job: Job) -> Result<(), Failure> {
     .await
     .map_err(|e| fail("internal", e))?
     .map_err(|e| fail("internal", e))?;
-    let transport = smtp.transport().map_err(|e| fail("not_configured", e))?;
-    match tokio::time::timeout(Smtp::budget(raw.len()), transport.send_raw(&envelope, &raw)).await {
+    let session = async {
+        let mut conn = smtp.connect().await?;
+        conn.send(&envelope, &raw)
+            .await
+            .map_err(ConnectError::Smtp)?;
+        Ok(conn)
+    };
+    match tokio::time::timeout(Smtp::budget(raw.len()), session).await {
         Err(_) => Err(fail("timeout", "smtp i/o timed out")),
-        Ok(Ok(_)) => Ok(()),
-        Ok(Err(e)) if e.is_permanent() || e.is_transient() => Err(fail("rejected", e)),
-        Ok(Err(e)) => Err(fail("connection", e)),
+        Ok(Ok(conn)) => Ok(conn),
+        Ok(Err(ConnectError::Config(e))) => Err(fail("not_configured", e)),
+        Ok(Err(ConnectError::Smtp(e))) if e.is_permanent() || e.is_transient() => {
+            Err(fail("rejected", e))
+        }
+        Ok(Err(ConnectError::Smtp(e))) => Err(fail("connection", e)),
     }
 }
 
