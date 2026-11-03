@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 /// One scripted reply; the last of a queue repeats.
@@ -90,6 +90,24 @@ struct S {
     connected_at: Vec<Instant>,
     held: Vec<mpsc::UnboundedSender<Result<Bytes, Infallible>>>,
     order: Vec<String>,
+    pauses: HashMap<String, Pause>,
+}
+
+/// A request held mid-job: the test acts once `reached` returns, then `release`s the answer.
+#[derive(Clone, Default)]
+pub struct Pause {
+    reached: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
+impl Pause {
+    pub async fn reached(&self) {
+        self.reached.notified().await;
+    }
+
+    pub fn release(&self) {
+        self.release.notify_one();
+    }
 }
 
 pub struct Fake {
@@ -135,6 +153,16 @@ impl Fake {
             .lock_clean()
             .answers
             .insert(format!("{method} {path}"), answers.into());
+    }
+
+    /// Holds the next `method path` request before it is answered; later ones pass.
+    pub fn pause(&self, method: &str, path: &str) -> Pause {
+        let p = Pause::default();
+        self.s
+            .lock_clean()
+            .pauses
+            .insert(format!("{method} {path}"), p.clone());
+        p
     }
 
     pub fn connections(&self, conns: Vec<Conn>) {
@@ -215,12 +243,18 @@ async fn handle(State(s): State<Arc<Mutex<S>>>, req: Request) -> Response {
         query: parts.uri.query().unwrap_or_default().to_owned(),
         body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     };
-    let (response, delay_ms) = {
+    let (response, delay_ms, pause) = {
         let mut s = s.lock_clean();
         s.order.push(key.clone());
         s.seen.entry(key.clone()).or_default().push(seen);
-        respond(&mut s, &key, &bytes)
+        let pause = s.pauses.remove(&key);
+        let (response, delay_ms) = respond(&mut s, &key, &bytes);
+        (response, delay_ms, pause)
     };
+    if let Some(p) = pause {
+        p.reached.notify_one();
+        p.release.notified().await;
+    }
     if delay_ms > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
     }

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ($2::int8 - EXTRACT(EPOCH FROM now() - max(f.\"createdAt\"))::int8) AS remaining\n           FROM media_files f WHERE f.\"mediaId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "remaining",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a06b06116c4f332a5c155661245656d9f70d03c39e5c8083bde454e24332885b"
+}

@@ -881,7 +881,7 @@ pub async fn settled(st: &AppState, media: i32) {
             st.ingest.settle.schedule(st, media);
         }
     }
-    if let Err(e) = merge::run(st, media).await {
+    if let Err(e) = merge::settle(st, media).await {
         tracing::warn!("Post-import[book #{media}]: m4b merge: {e}");
     }
 }

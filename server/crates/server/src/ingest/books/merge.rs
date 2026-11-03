@@ -320,10 +320,12 @@ async fn failed(st: &AppState, edition: i32, why: &str) {
     .await;
 }
 
-/// The merge is over: its record goes, but for a replace waiting for the listeners.
+/// The merge is over: its record stays as `done` (so a deleted m4b is not merged again for the
+/// same parts), but for a replace waiting for the listeners.
 async fn forget(st: &AppState, edition: i32) {
     let _ = sqlx::query!(
-        r#"DELETE FROM book_merges WHERE "editionId" = $1 AND state <> 'replace'"#,
+        r#"UPDATE book_merges SET state = 'done', error = NULL, "jobId" = NULL, "nextAttemptAt" = NULL
+           WHERE "editionId" = $1 AND state <> 'replace'"#,
         edition
     )
     .execute(&st.db)
@@ -513,12 +515,12 @@ async fn output_path(
     Ok((out, root))
 }
 
-/// Fingerprints a recorded failure or a retry not yet due keeps from being tried again, and the
+/// Fingerprints a recorded failure, a finished merge or a retry not yet due keeps from being tried again, and the
 /// audio editions whose library asks for the merge.
 async fn skipped(st: &AppState, media: i32) -> sqlx::Result<(Vec<String>, Vec<i32>)> {
     let skip = sqlx::query_scalar!(
         r#"SELECT fingerprint FROM book_merges WHERE "mediaId" = $1
-             AND (state = 'failed' OR (state = 'retry' AND "nextAttemptAt" > now()))"#,
+             AND (state IN ('failed', 'done') OR (state = 'retry' AND "nextAttemptAt" > now()))"#,
         media
     )
     .fetch_all(&st.db)
@@ -698,6 +700,46 @@ async fn try_replace(
     replace_parts(st, media, &parts, &abs, &merge, (output, &out), m4b).await
 }
 
+/// Quiet time after the media's last audio file was imported before a settle merges it.
+const QUIET_SECS: i64 = 600;
+
+/// Seconds left of the quiet period, when the media received an audio file within it.
+async fn quiet_left(st: &AppState, media: i32) -> Result<Option<u64>, String> {
+    let remaining = sqlx::query_scalar!(
+        r#"SELECT ($2::int8 - EXTRACT(EPOCH FROM now() - max(f."createdAt"))::int8) AS remaining
+           FROM media_files f WHERE f."mediaId" = $1"#,
+        media,
+        QUIET_SECS
+    )
+    .fetch_one(&st.db)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(remaining.filter(|l| *l > 0).map(|l| l as u64 + 1))
+}
+
+/// The merge a settle asks for: a book still receiving parts waits until none came for
+/// `QUIET_SECS`.
+pub async fn settle(st: &AppState, media: i32) -> Result<(), String> {
+    let Some(mut left) = quiet_left(st, media).await? else {
+        return run(st, media).await;
+    };
+    let st = st.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(left)).await;
+            match quiet_left(&st, media).await {
+                Ok(Some(l)) => left = l,
+                Ok(None) => break,
+                Err(e) => return tracing::warn!("m4b merge of book #{media}: {e}"),
+            }
+        }
+        if let Err(e) = run(&st, media).await {
+            tracing::warn!("m4b merge of book #{media}: {e}");
+        }
+    });
+    Ok(())
+}
+
 /// Merges `media` one after the other in the background; a failure is logged.
 pub fn spawn(st: &AppState, media: Vec<i32>) {
     let st = st.clone();
@@ -737,7 +779,7 @@ impl Drop for Backfill {
 
 /// Queues the merge of every book of a library whose option was just turned on, one backfill
 /// per library at a time. A call during a backfill makes it go round again once it ends, so the
-/// failures it forgets are retried. A restart drops what is left: the next settle resumes it.
+/// failures it forgets are retried. The library is flagged until it ends: a restart resumes it.
 pub fn spawn_library(st: &AppState, library: i32) {
     {
         let mut running = st.ingest.backfills.lock_clean();
@@ -767,16 +809,41 @@ pub fn spawn_library(st: &AppState, library: i32) {
                     tracing::warn!("m4b merge of book #{m}: {e}");
                 }
             }
-            let mut running = st.ingest.backfills.lock_clean();
-            match running.get_mut(&library) {
-                Some(again) if *again => *again = false,
-                _ => {
-                    running.remove(&library);
-                    break;
+            let finished = {
+                let mut running = st.ingest.backfills.lock_clean();
+                match running.get_mut(&library) {
+                    Some(again) if *again => {
+                        *again = false;
+                        false
+                    }
+                    _ => {
+                        running.remove(&library);
+                        true
+                    }
                 }
+            };
+            if finished {
+                let _ = sqlx::query!(
+                    r#"UPDATE libraries SET "mergeM4bBackfill" = false WHERE id = $1"#,
+                    library
+                )
+                .execute(&st.db)
+                .await;
+                break;
             }
         }
     });
+}
+
+/// Resumes the backfills a restart cut.
+pub async fn resume_backfills(st: &AppState) {
+    let ids = sqlx::query_scalar!(r#"SELECT id FROM libraries WHERE "mergeM4bBackfill""#)
+        .fetch_all(&st.db)
+        .await
+        .unwrap_or_default();
+    for id in ids {
+        spawn_library(st, id);
+    }
 }
 
 /// What went wrong, as far as a retry is concerned.

@@ -1693,7 +1693,7 @@ mod book_ingest {
         books::merge::run(&c.st, m).await.unwrap();
         assert_eq!(parts(&c, m).await.len(), 3);
         assert!(c.fake.seen("POST", "/v1/jobs").is_empty(), "no new job");
-        assert_eq!(merge_state(&c, m).await, None);
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("done"));
     }
 
     #[sqlx::test(migrations = false)]
@@ -1799,6 +1799,121 @@ mod book_ingest {
         b.unwrap();
         assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
         assert_eq!(parts(&c, m).await.len(), 3);
+    }
+
+    /// Runs the merge in the background, paused at the engine's job poll; `during` acts while it waits.
+    async fn merge_during(c: &Ctx, m: i32, during: impl std::future::Future<Output = ()>) -> bool {
+        let pause = c.fake.pause("GET", "/v1/jobs/j1");
+        let st = c.st.clone();
+        let run = tokio::spawn(async move { books::merge::run(&st, m).await });
+        pause.reached().await;
+        during.await;
+        pause.release();
+        run.await.unwrap().is_ok()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_part_moved_while_the_job_runs_discards_the_output(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        let moved = async {
+            fs::rename(
+                c.dir.join("books/Orfaline/02.mp3"),
+                c.dir.join("books/Orfaline/elsewhere.mp3"),
+            )
+            .unwrap();
+        };
+        assert!(!merge_during(&c, m, moved).await);
+        assert!(!c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+        assert_eq!(parts(&c, m).await.len(), 2);
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("retry"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_part_deleted_while_the_job_runs_discards_the_output(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        let deleted = async {
+            fs::remove_file(c.dir.join("books/Orfaline/02.mp3")).unwrap();
+        };
+        assert!(!merge_during(&c, m, deleted).await);
+        assert!(!c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+        assert_eq!(parts(&c, m).await.len(), 2);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_rescan_registering_the_output_while_the_job_runs_keeps_one_row(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        let rescanned = async {
+            rescan(&c, m).await.unwrap();
+        };
+        merge_during(&c, m, rescanned).await;
+        let out = c.dir.join("books/Orfaline/Orfaline.m4b");
+        assert!(out.exists(), "a registered output is not removed");
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM media_files WHERE "relativePath" = 'Orfaline/Orfaline.m4b'"#
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_deleted_m4b_is_not_merged_again_for_the_same_parts(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        sqlx::query(r#"DELETE FROM media_files WHERE quality = 'm4b'"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(parts(&c, m).await.len(), 2);
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_settle_waits_for_a_quiet_period_after_the_last_import(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::settle(&c.st, m).await.unwrap();
+        assert!(
+            c.fake.seen("POST", "/v1/jobs").is_empty(),
+            "parts just arrived"
+        );
+        sqlx::query(r#"UPDATE media_files SET "createdAt" = now() - interval '1 hour'"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        books::merge::settle(&c.st, m).await.unwrap();
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_flagged_backfill_resumes_after_a_restart(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        sqlx::query(r#"UPDATE libraries SET "mergeM4bBackfill" = true"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        books::merge::resume_backfills(&c.st).await;
+        while !c.st.ingest.backfills.lock().unwrap().is_empty() {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
+        assert_eq!(parts(&c, m).await.len(), 3);
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM libraries WHERE "mergeM4bBackfill""#
+            )
+            .await,
+            0
+        );
     }
 
     #[sqlx::test(migrations = false)]
