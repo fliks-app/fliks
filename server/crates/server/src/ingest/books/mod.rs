@@ -872,8 +872,14 @@ mod choose_tests {
         let l = |s: &str| Some(s.to_owned());
         assert_eq!(choose(&[], None, None), Pick::New(None));
         assert_eq!(choose(&[], None, Some("fr")), Pick::New(l("fr")));
-        assert_eq!(choose(&[fr.clone()], None, Some("de")), Pick::New(l("de")));
-        assert_eq!(choose(&[fr.clone()], None, Some("fr")), Pick::Use(1, None));
+        assert_eq!(
+            choose(std::slice::from_ref(&fr), None, Some("de")),
+            Pick::New(l("de"))
+        );
+        assert_eq!(
+            choose(std::slice::from_ref(&fr), None, Some("fr")),
+            Pick::Use(1, None)
+        );
         assert_eq!(
             choose(&[fr.clone(), blank.clone()], Some("de"), None),
             Pick::Use(2, l("de"))
