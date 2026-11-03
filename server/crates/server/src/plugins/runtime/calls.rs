@@ -99,6 +99,8 @@ impl PluginRt {
                 budget,
                 call_fn(move |i| {
                     Box::pin(async move {
+                        // A person waits on a route: it takes the provider limiter's interactive share.
+                        i.store.data_mut().set_priority(Priority::Interactive);
                         i.guest
                             .fliks_plugin_guest()
                             .call_http(&mut i.store, &req)

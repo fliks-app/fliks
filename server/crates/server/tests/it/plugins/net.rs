@@ -662,3 +662,109 @@ async fn guest_outbound_in_flight_cap() {
     h.finish().await;
     s.finish().await;
 }
+
+async fn ok_stub() -> u16 {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut s, _)) = listener.accept().await else {
+                return;
+            };
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf).await;
+                let _ = s
+                    .write_all(
+                        b"HTTP/1.1 200 X\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
+                    )
+                    .await;
+            });
+        }
+    });
+    port
+}
+
+/// A provider plugin whose route fetches `pub.test`, limits `rate`/`burst`.
+async fn route_fetcher(tag: &str, rate: f64, burst: u32) -> Option<(Scratch, H)> {
+    let w = wasm("fixture_provider")?;
+    let mut m = template("fixture-provider");
+    m["provider"]["limits"] = json!({"ratePerSec": rate, "burst": burst});
+    let s = Scratch::create(tag).await?;
+    let net = StubNet::new(
+        ok_stub().await,
+        rustls::RootCertStore::empty(),
+        &[("pub.test", &[&["93.184.216.34"]])],
+    );
+    let h = harness_with(&s, tag, Arc::new(|_| {}), move |o| {
+        o.fetch.net = net.clone()
+    })
+    .await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    Some((s, h))
+}
+
+fn route_fetch() -> HttpRequest {
+    HttpRequest {
+        path: "/fetch".into(),
+        query: vec![("url".into(), "http://pub.test/x".into())],
+        ..fetch("")
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn route_outbound_calls_are_paced_by_the_manifest_rate() {
+    let Some((s, h)) = route_fetcher("routepace", 5.0, 1).await else {
+        return;
+    };
+    let rt = h.st.plugins.rt("org.example.anime").unwrap();
+    let started = std::time::Instant::now();
+    let calls: Vec<_> = (0..4)
+        .map(|_| {
+            let rt = rt.clone();
+            tokio::spawn(async move { rt.http(route_fetch(), false).await })
+        })
+        .collect();
+    for c in calls {
+        let r = c.await.unwrap().unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&r.body).unwrap()["status"],
+            200
+        );
+    }
+    // 4 calls over a burst of 1 at 5/s: at least 3 / 5 s.
+    assert!(
+        started.elapsed() >= Duration::from_millis(550),
+        "{:?}",
+        started.elapsed()
+    );
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_route_call_never_waits_past_the_interactive_budget() {
+    let Some((s, h)) = route_fetcher("routebudget", 0.1, 1).await else {
+        return;
+    };
+    let rt = h.st.plugins.rt("org.example.anime").unwrap();
+    let status = |r: fliks_server::plugins::runtime::HttpResponse| {
+        serde_json::from_slice::<Value>(&r.body).unwrap()["status"].clone()
+    };
+    assert_eq!(status(rt.http(route_fetch(), false).await.unwrap()), 200);
+    let started = std::time::Instant::now();
+    assert_eq!(status(rt.http(route_fetch(), false).await.unwrap()), 429);
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+    h.finish().await;
+    s.finish().await;
+}
