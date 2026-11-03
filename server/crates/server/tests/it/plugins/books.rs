@@ -112,7 +112,11 @@ async fn a_plugin_with_acquisition_grants_only_acquires_a_book() {
         return;
     };
     let r = call(&h, "context", &[("family", "text")]).await;
-    assert_eq!(r["ok"], json!(["book", null, [202, 203, 204, 205]]), "{r}");
+    assert_eq!(
+        r["ok"],
+        json!(["book", null, [202, 203, 204, 205, 206, 207]]),
+        "{r}"
+    );
     let r = call(&h, "context", &[("family", "video")]).await;
     assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
     let title = ("title", "Mirelune.EPUB-GRP");
@@ -169,7 +173,11 @@ async fn a_second_language_is_acquired_through_the_host_calls() {
     let r = call(&h, "candidates", &[text]).await;
     assert_eq!(r["ok"], json!([[1, "fr"]]), "{r}");
     let r = call(&h, "context", &[text, ("language", "fr")]).await;
-    assert_eq!(r["ok"], json!(["book", "fr", [202, 203, 204, 205]]), "{r}");
+    assert_eq!(
+        r["ok"],
+        json!(["book", "fr", [202, 203, 204, 205, 206, 207]]),
+        "{r}"
+    );
     let r = call(&h, "context", &[text, ("language", "de")]).await;
     assert_eq!(r["ok"], Value::Null, "{r}");
     let r = call(&h, "context", &[("family", "video"), ("language", "fr")]).await;

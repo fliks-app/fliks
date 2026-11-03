@@ -169,6 +169,11 @@ async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: s
         provider: Namespace::parse("org.x:a").unwrap(),
         external_id: "7".into(),
     };
+    let wants = [WantSpec {
+        family: Family::Text,
+        language: None,
+        quality_profile_id: None,
+    }];
     let new = |key| super::db::New {
         user_id: 1,
         kind: "add",
@@ -184,7 +189,7 @@ async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: s
         media_id: None,
         poster_url: None,
         fanart_url: None,
-        wants: None,
+        wants: Some(&wants),
     };
     sqlx::query("INSERT INTO users (id, username, \"isAdmin\") VALUES (1, 'u', true)")
         .execute(&pool)

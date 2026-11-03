@@ -143,7 +143,10 @@ mod tests {
 
     #[test]
     fn a_want_without_a_profile_allows_every_known_quality() {
-        assert_eq!(default_allowed(Family::Text), [202, 203, 204, 205]);
+        assert_eq!(
+            default_allowed(Family::Text),
+            [202, 203, 204, 205, 206, 207]
+        );
         assert_eq!(default_allowed(Family::Audio).len(), 14);
         assert!(!default_allowed(Family::Audio).contains(&101));
         assert!(default_allowed(Family::Image).is_empty());
@@ -152,7 +155,7 @@ mod tests {
     #[test]
     fn seeds_one_row_per_quality() {
         assert_eq!(seed_rows(Family::Audio).count(), 15);
-        assert_eq!(seed_rows(Family::Text).count(), 5);
+        assert_eq!(seed_rows(Family::Text).count(), 7);
         assert_eq!(seed_rows(Family::Image).count(), 0);
         let rows: Vec<_> = seed_rows(Family::Video).collect();
         assert_eq!(rows.len(), 24);
@@ -175,6 +178,6 @@ mod tests {
             .into_iter()
             .flat_map(|f| table(f).iter().map(|q| q.id))
             .collect();
-        assert_eq!(ids.len(), 24 + 15 + 5);
+        assert_eq!(ids.len(), 24 + 15 + 7);
     }
 }
