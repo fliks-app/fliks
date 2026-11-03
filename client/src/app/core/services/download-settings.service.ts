@@ -11,6 +11,8 @@ const DEFAULT_MAX_CONCURRENT = 3;
 const QUALITY_KEY = 'downloads.defaultQuality';
 const WIFI_ONLY_KEY = 'downloads.wifiOnly';
 const AUTO_CAP_KEY = 'downloads.autoCapGb';
+const AUTO_NEXT_VOLUME_KEY = 'downloads.autoNextVolume';
+const AUTO_DELETE_BOOKS_KEY = 'downloads.autoDeleteBooks';
 
 /** Empty means each file's best rung; the others are the engine's ladder keys, and a file without one falls to the nearest lower rung. */
 export const DEFAULT_QUALITY_CHOICES = ['', 'original', '2160p', '1080p', '720p', '480p', '360p'] as const;
@@ -30,6 +32,11 @@ export class DownloadSettingsService {
   /** GB that auto downloads may occupy; 0 = no cap. */
   readonly autoCapGb = signal(read(AUTO_CAP_KEY, (r) => Math.max(0, Math.floor(Number(r)) || 0), 0));
 
+  /** Opt-in: keep the next volume of a series on the device once its predecessor is started. */
+  readonly autoNextVolume = signal(read(AUTO_NEXT_VOLUME_KEY, (r) => r === 'true', false));
+  /** Opt-in: remove the offline copy of a book once it is finished. */
+  readonly autoDeleteBooks = signal(read(AUTO_DELETE_BOOKS_KEY, (r) => r === 'true', false));
+
   constructor() {
     // Fires on construction too, so the native queue is capped before the first
     // download rather than after the setting is next touched.
@@ -45,6 +52,16 @@ export class DownloadSettingsService {
   setWifiOnly(value: boolean): void {
     this.wifiOnly.set(value);
     write(WIFI_ONLY_KEY, String(value));
+  }
+
+  setAutoNextVolume(value: boolean): void {
+    this.autoNextVolume.set(value);
+    write(AUTO_NEXT_VOLUME_KEY, String(value));
+  }
+
+  setAutoDeleteBooks(value: boolean): void {
+    this.autoDeleteBooks.set(value);
+    write(AUTO_DELETE_BOOKS_KEY, String(value));
   }
 
   setAutoCapGb(value: number | string): void {

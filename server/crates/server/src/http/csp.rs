@@ -14,13 +14,13 @@ pub const REPORT_PATH: &str = "/api/csp-report";
 
 /// What the client loads: the Cast sender (gstatic, over the page's own scheme: it loads its
 /// framework with a protocol-relative URL), the TMDB art fallback, the YouTube trailer frame and the
-/// reader's blob chapter frames and styles (never blob scripts).
+/// reader's blob chapter frames, styles and fonts (never blob scripts).
 const POLICY: &str = "default-src 'self'; \
 script-src 'self' www.gstatic.com chrome-extension://pkedcjkdefgpdelpbcmbmeomcjbeemfm; \
 style-src 'self' 'unsafe-inline' blob:; \
 img-src 'self' data: blob: https://image.tmdb.org; \
 media-src 'self' blob:; \
-font-src 'self' data:; \
+font-src 'self' data: blob:; \
 connect-src 'self'; \
 frame-src https://www.youtube.com blob:; \
 worker-src 'self' blob:; \

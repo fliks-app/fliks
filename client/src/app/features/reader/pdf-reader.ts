@@ -23,6 +23,7 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 import { pdfPageOf, pdfProgression } from './pdf-position';
 import { ReaderApiService, type ReaderTarget } from './reader-api.service';
+import { OfflineBookStoreService } from '../../core/services/offline-book-store.service';
 import { ReaderProgressService } from './reader-progress.service';
 import {
   READER_THEMES,
@@ -65,6 +66,7 @@ export class PdfReaderComponent implements OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly settingsStore = inject(ReaderSettingsService);
   private readonly progress = inject(ReaderProgressService);
+  private readonly books = inject(OfflineBookStoreService);
   private readonly injector = inject(Injector);
   private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
 
@@ -117,9 +119,10 @@ export class PdfReaderComponent implements OnDestroy {
       pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs/pdf.worker.min.mjs', document.baseURI).href;
       const target = this.target();
       const token = this.auth.accessToken;
+      const local = await this.books.fileUrl({ family: 'text' }, String(target.fileId));
       const task = pdfjs.getDocument({
-        url: new URL(this.serverConfig.resolveUrl(`/api/stream/${target.fileId}`), document.baseURI).href,
-        httpHeaders: this.serverConfig.isNative && token ? { Authorization: `Bearer ${token}` } : undefined,
+        url: local ?? new URL(this.serverConfig.resolveUrl(`/api/stream/${target.fileId}`), document.baseURI).href,
+        httpHeaders: !local && this.serverConfig.isNative && token ? { Authorization: `Bearer ${token}` } : undefined,
         useWasm: false,
         wasmUrl: new URL('pdfjs/wasm/', document.baseURI).href,
         enableXfa: false,

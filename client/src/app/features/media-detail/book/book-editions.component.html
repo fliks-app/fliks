@@ -41,6 +41,25 @@
                 {{ (native ? 'books_work.share' : 'books_work.download') | translate }}
               </button>
             }
+            @if (canOffline(e)) {
+              @if (offlineTask(e); as t) {
+                @if (t.status === 'ready') {
+                  <button type="button" class="btn btn-xs btn-ghost" data-testid="offline" (click)="toggleOffline(e)">
+                    {{ 'books_work.offline_remove' | translate }}
+                  </button>
+                } @else if (t.status === 'failed') {
+                  <button type="button" class="btn btn-xs btn-ghost text-error" data-testid="offline" (click)="toggleOffline(e)">
+                    {{ 'books_work.offline_retry' | translate }}
+                  </button>
+                } @else {
+                  <span class="text-xs tabular-nums" data-testid="offline-state">{{ t.progress }}%</span>
+                }
+              } @else {
+                <button type="button" class="btn btn-xs btn-ghost" data-testid="offline" (click)="toggleOffline(e)">
+                  {{ 'books_work.offline_save' | translate }}
+                </button>
+              }
+            }
             @if (targets(e); as list) {
               @if (list.length) {
                 <select

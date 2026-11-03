@@ -1,15 +1,23 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { describe, expect, it } from 'vitest';
-import { audioEditionFixture, bookDetailFixture } from '../../../core/services/api/books.fixtures';
+import { describe, expect, it, vi } from 'vitest';
+import { audioEditionFixture, bookDetailFixture, textEditionFixture } from '../../../core/services/api/books.fixtures';
 import { DeviceService } from '../../../core/services/device.service';
+import { DownloadManagerService } from '../../../core/services/download-manager.service';
 import { BookEditionsComponent } from './book-editions.component';
 import { bookSpecProviders } from './book-test-setup';
 
 describe('BookEditionsComponent', () => {
+  const tasks = signal<unknown[]>([]);
+  const offline = { tasks, createBookDownload: vi.fn(async () => ({})), deleteDownload: vi.fn(async () => undefined) };
+  const providers = () => bookSpecProviders({ provide: DownloadManagerService, useValue: offline });
+
   function render(editions = bookDetailFixture.editions) {
-    TestBed.configureTestingModule({ providers: bookSpecProviders() });
+    tasks.set([]);
+    TestBed.configureTestingModule({ providers: providers() });
     const fixture = TestBed.createComponent(BookEditionsComponent);
+    fixture.componentRef.setInput('mediaId', 1);
     fixture.componentRef.setInput('editions', editions);
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
@@ -35,17 +43,46 @@ describe('BookEditionsComponent', () => {
   });
 
   it('hides the download on TV', () => {
-    TestBed.configureTestingModule({ providers: bookSpecProviders() });
+    TestBed.configureTestingModule({ providers: providers() });
     TestBed.inject(DeviceService).formFactor.set('tv');
     const fixture = TestBed.createComponent(BookEditionsComponent);
+    fixture.componentRef.setInput('mediaId', 1);
     fixture.componentRef.setInput('editions', [{ ...audioEditionFixture, hasFile: true, fileIds: [3] }]);
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="deliver"]')).toBeNull();
   });
 
-  it('offers the devices that accept the format and mails the single file', async () => {
-    TestBed.configureTestingModule({ providers: bookSpecProviders() });
+  it('keeps an edition offline, shows the progress, and removes a finished copy', async () => {
+    tasks.set([]);
+    TestBed.configureTestingModule({ providers: providers() });
     const fixture = TestBed.createComponent(BookEditionsComponent);
+    fixture.componentRef.setInput('mediaId', 1);
+    fixture.componentRef.setInput('editions', [{ ...audioEditionFixture, hasFile: true, fileIds: [3], itemId: 9 }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const button = () => el.querySelector<HTMLButtonElement>('[data-testid="offline"]');
+    button()!.click();
+    expect(offline.createBookDownload).toHaveBeenCalledWith(expect.objectContaining({ itemId: 9, family: 'audio', mediaId: 1 }));
+    tasks.set([{ id: 1, book: { itemId: 9 }, status: 'downloading', progress: 42 }]);
+    await fixture.whenStable();
+    expect(button()).toBeNull();
+    expect(el.querySelector('[data-testid="offline-state"]')?.textContent).toContain('42%');
+    const done = { id: 1, book: { itemId: 9 }, status: 'ready', progress: 100 };
+    tasks.set([done]);
+    await fixture.whenStable();
+    button()!.click();
+    expect(offline.deleteDownload).toHaveBeenCalledWith(done);
+  });
+
+  it('offers no offline copy of a text format the reader cannot open', () => {
+    const el = render([{ ...textEditionFixture, format: 'azw3' }]);
+    expect(el.querySelector('[data-testid="offline"]')).toBeNull();
+  });
+
+  it('offers the devices that accept the format and mails the single file', async () => {
+    TestBed.configureTestingModule({ providers: providers() });
+    const fixture = TestBed.createComponent(BookEditionsComponent);
+    fixture.componentRef.setInput('mediaId', 1);
     fixture.componentRef.setInput('editions', [
       { ...bookDetailFixture.editions[0], family: 'text', format: 'epub', fileIds: [7] },
     ]);

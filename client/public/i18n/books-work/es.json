@@ -46,6 +46,11 @@
     "send_queued": "Enviando a {{name}}",
     "download": "Descargar",
     "share": "Compartir",
-    "download_failed": "Error en la descarga"
+    "download_failed": "Error en la descarga",
+    "offline_save": "Guardar sin conexión",
+    "offline_remove": "Quitar del dispositivo",
+    "offline_retry": "Reintentar",
+    "offline_audio_unplayable": "Este audiolibro no se puede reproducir tal cual en este dispositivo, así que no se puede guardar sin conexión",
+    "offline_wifi_only": "Las descargas están limitadas a Wi-Fi"
   }
 }

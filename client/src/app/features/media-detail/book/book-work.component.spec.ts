@@ -1,9 +1,10 @@
-import { Component, input } from '@angular/core';
+import { Component, input, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../../core/services/auth.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { DownloadManagerService } from '../../../core/services/download-manager.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { PlaybackQueueService } from '../../../core/services/playback-queue.service';
 import {
@@ -38,6 +39,7 @@ describe('BookWorkComponent', () => {
         { provide: AuthService, useValue: { hasPermission: (p: string) => canEdit && p === 'media.edit' } },
         { provide: AudioPlayerService, useValue: { play } },
         { provide: StreamingApiService, useValue: {} },
+        { provide: DownloadManagerService, useValue: { tasks: signal([]) } },
       ),
     });
     TestBed.overrideComponent(BookWorkComponent, {

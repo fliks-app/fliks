@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { provideTranslateService } from '@ngx-translate/core';
 import { describe, expect, it, vi } from 'vitest';
 import { DownloadsComponent } from './downloads';
@@ -9,6 +9,7 @@ import type { DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadNotificationService } from '../../core/services/download-notification.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 
 const task = (id: number, status: DownloadTask['status'], progress = 0): DownloadTask => ({
@@ -22,6 +23,8 @@ const task = (id: number, status: DownloadTask['status'], progress = 0): Downloa
   media: { id, title: `Movie ${id}`, posterUrl: null, type: 'movie' },
 });
 
+const play = vi.fn();
+
 function setup(initial: DownloadTask[]) {
   const tasks = signal(initial);
   TestBed.configureTestingModule({
@@ -33,6 +36,7 @@ function setup(initial: DownloadTask[]) {
       { provide: DownloadNotificationService, useValue: { getFreeSpace: vi.fn().mockResolvedValue({ freeBytes: 5e9, totalBytes: 1e10 }) } },
       { provide: ConfirmationService, useValue: {} },
       { provide: ToastService, useValue: {} },
+      { provide: AudioPlayerService, useValue: { play } },
       { provide: AutoDownloadService, useValue: { KEEP_OPTIONS: [], enabled: false } },
     ],
   });
@@ -98,5 +102,20 @@ describe('DownloadsComponent', () => {
     tasks.set([task(1, 'ready', 100)]);
     expect(component.items()[0].status).toBe('ready');
     expect(component.pausable()).toEqual([]);
+  });
+
+  it('opens a downloaded book in its reader or its player, and offers no pause on it', () => {
+    const book = (family: 'text' | 'audio'): DownloadTask => ({
+      ...task(5, 'downloading', 10),
+      mediaId: 3,
+      book: { itemId: 30, family, format: null, files: [], artist: 'A' },
+    });
+    const { component } = setup([]);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    component.playOffline(book('text'));
+    expect(navigate).toHaveBeenCalledWith(['/read', 3, 30]);
+    component.playOffline(book('audio'));
+    expect(play).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 3, itemId: 30, artist: 'A' }));
+    expect((component as unknown as { isPausable(t: DownloadTask): boolean }).isPausable(book('audio'))).toBe(false);
   });
 });

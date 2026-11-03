@@ -95,6 +95,32 @@
           (ngModelChange)="onAutoCapChange($event)"
         />
       </div>
+
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="font-medium">{{ 'storage_settings.auto_next_volume' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'storage_settings.auto_next_volume_hint' | translate }}</p>
+        </div>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          [ngModel]="autoNextVolume()"
+          (ngModelChange)="onAutoNextVolumeChange($event)"
+        />
+      </div>
+
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="font-medium">{{ 'storage_settings.auto_delete_books' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'storage_settings.auto_delete_books_hint' | translate }}</p>
+        </div>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          [ngModel]="autoDeleteBooks()"
+          (ngModelChange)="onAutoDeleteBooksChange($event)"
+        />
+      </div>
     }
 
     <div class="divider my-0"></div>

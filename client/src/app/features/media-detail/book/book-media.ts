@@ -1,5 +1,6 @@
 import type { Media } from '../../../core/services/api/media.service';
 import type { BookDetail, BookEdition } from '../../../core/services/api/books.models';
+import type { BookDownloadTarget } from '../../../core/services/download-manager.service';
 
 /** The MD of a book: `book` is absent on other kinds, and a card handoff carries the list shape without editions. */
 export type BookMedia = Media & { book: BookDetail };
@@ -31,4 +32,22 @@ export function editionFileNames(title: string, e: BookEdition): string[] {
 export function editionLabel(e: BookEdition): string {
   const narrators = e.narrators.map((n) => n.name).join(', ');
   return [e.label, narrators, e.format?.toUpperCase(), e.language].filter(Boolean).join(' · ') || `#${e.id}`;
+}
+
+/** An audio item, or a text edition the reader opens, with a file to keep on the device. */
+export const offlinable = (e: BookEdition): boolean =>
+  e.itemId != null && e.hasFile && e.fileIds.length > 0 && (e.family === 'audio' || ['epub', 'pdf'].includes(e.format?.toLowerCase() ?? ''));
+
+export function bookDownloadTarget(work: { mediaId: number; title: string; artist: string }, e: BookEdition): BookDownloadTarget {
+  return {
+    mediaId: work.mediaId,
+    itemId: e.itemId!,
+    family: e.family,
+    format: e.format?.toLowerCase() ?? null,
+    fileIds: e.fileIds,
+    title: work.title,
+    posterUrl: e.coverUrl,
+    artist: work.artist,
+    coverUrl: e.coverUrl,
+  };
 }

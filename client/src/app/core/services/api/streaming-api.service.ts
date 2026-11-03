@@ -612,10 +612,14 @@ export class StreamingApiService {
     );
   }
 
-  getPlaybackState(mediaId: number, episodeId?: number) {
-    const params = episodeId ? `?episodeId=${episodeId}` : '';
+  getPlaybackState(mediaId: number, episodeId?: number, itemId?: number) {
+    const params = new URLSearchParams();
+    if (episodeId) params.set('episodeId', String(episodeId));
+    if (itemId) params.set('itemId', String(itemId));
+    const q = params.toString();
+    const query = q ? `?${q}` : '';
     return firstValueFrom(
-      this.http.get<PlaybackState | null>(`/api/playback/media/${mediaId}/state${params}`),
+      this.http.get<PlaybackState | null>(`/api/playback/media/${mediaId}/state${query}`),
     );
   }
 
@@ -628,6 +632,9 @@ export class StreamingApiService {
       episodeId?: number;
       /** Names an item directly (a book edition); `episodeId` is then not read. */
       itemId?: number;
+      /** A text beat: whole-book progress 0..1 and the locator it stands at. */
+      progression?: number;
+      locator?: Record<string, unknown>;
       /** Epoch ms of an offline replay; the server keeps a newer row over it. */
       playedAt?: number;
       // Live-session heartbeat fields, present once `getPlaybackInfo` returned a `sessionId`; the backend tolerates their absence.

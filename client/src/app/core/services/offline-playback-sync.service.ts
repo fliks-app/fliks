@@ -10,6 +10,10 @@ export interface PendingUpdate {
   mediaId: number;
   mediaFileId: number;
   episodeId?: number;
+  /** A book edition item: two items of one work are two entries. */
+  itemId?: number;
+  /** Fields of a text beat beyond the time (`progression`, `locator`), sent as they are. */
+  extra?: Record<string, unknown>;
   positionSeconds: number;
   durationSeconds: number;
   /** Wall-clock of the last write. Lets a flush drop only what it actually
@@ -23,8 +27,8 @@ const STORAGE_KEY = 'fliks.offline.pendingPlayback';
 const LAST_KNOWN_KEY = 'fliks.offline.lastPlayback';
 const LAST_KNOWN_MAX = 300;
 
-function entryKey(mediaId: number, episodeId?: number): string {
-  return `${mediaId}:${episodeId ?? ''}`;
+function entryKey(mediaId: number, episodeId?: number, itemId?: number): string {
+  return `${mediaId}:${episodeId ?? ''}${itemId != null ? `:${itemId}` : ''}`;
 }
 
 /** Playback positions recorded on this device plus the queue the backend hasn't accepted, doubling as the local read model:
@@ -43,7 +47,7 @@ export class OfflinePlaybackSyncService {
 
   private readonly byKey = computed(() => {
     const map = new Map<string, PendingUpdate>();
-    for (const p of this._pending()) map.set(entryKey(p.mediaId, p.episodeId), p);
+    for (const p of this._pending()) map.set(entryKey(p.mediaId, p.episodeId, p.itemId), p);
     return map;
   });
 
@@ -71,8 +75,8 @@ export class OfflinePlaybackSyncService {
   /** Record a position the server hasn't got, and try to hand it over. */
   queue(update: Omit<PendingUpdate, 'updatedAt'>) {
     const entry = this.record(update);
-    const key = entryKey(entry.mediaId, entry.episodeId);
-    const next = this._pending().filter((p) => entryKey(p.mediaId, p.episodeId) !== key);
+    const key = entryKey(entry.mediaId, entry.episodeId, entry.itemId);
+    const next = this._pending().filter((p) => entryKey(p.mediaId, p.episodeId, p.itemId) !== key);
     next.push(entry);
     this.setPending(next);
 
@@ -86,8 +90,8 @@ export class OfflinePlaybackSyncService {
       episodeId: update.episodeId ?? undefined,
       updatedAt: Date.now(),
     };
-    const key = entryKey(entry.mediaId, entry.episodeId);
-    const kept = this.loadLastKnown().filter((p) => entryKey(p.mediaId, p.episodeId) !== key);
+    const key = entryKey(entry.mediaId, entry.episodeId, entry.itemId);
+    const kept = this.loadLastKnown().filter((p) => entryKey(p.mediaId, p.episodeId, p.itemId) !== key);
     kept.push(entry);
     // Oldest first, so the cap drops the least recently played.
     kept.sort((a, b) => a.updatedAt - b.updatedAt);
@@ -97,8 +101,8 @@ export class OfflinePlaybackSyncService {
 
   /** Position the server has not seen yet, or null. Overlay it on API reads:
    *  by construction it is newer than anything they can return. */
-  queuedPositionFor(mediaId: number, episodeId?: number): PendingUpdate | null {
-    return this.byKey().get(entryKey(mediaId, episodeId ?? undefined)) ?? null;
+  queuedPositionFor(mediaId: number, episodeId?: number, itemId?: number): PendingUpdate | null {
+    return this.byKey().get(entryKey(mediaId, episodeId ?? undefined, itemId)) ?? null;
   }
 
   /** Layer queued positions over a server-sourced progress list. */
@@ -130,11 +134,11 @@ export class OfflinePlaybackSyncService {
 
   /** Best resume point known without the server: the queued position if there
    *  is one, else the last one this device played. */
-  resumePositionFor(mediaId: number, episodeId?: number): PendingUpdate | null {
-    const queued = this.queuedPositionFor(mediaId, episodeId);
+  resumePositionFor(mediaId: number, episodeId?: number, itemId?: number): PendingUpdate | null {
+    const queued = this.queuedPositionFor(mediaId, episodeId, itemId);
     if (queued) return queued;
-    const key = entryKey(mediaId, episodeId ?? undefined);
-    return this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId) === key) ?? null;
+    const key = entryKey(mediaId, episodeId ?? undefined, itemId);
+    return this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId, p.itemId) === key) ?? null;
   }
 
   /** Push the queue; a call during a pass joins it and schedules one more, so mid-flush entries are neither stranded nor sent twice. */
@@ -164,6 +168,8 @@ export class OfflinePlaybackSyncService {
     for (const update of pending) {
       try {
         await this.streamingApi.updatePlaybackState(update.mediaId, {
+          ...update.extra,
+          itemId: update.itemId,
           positionSeconds: update.positionSeconds,
           durationSeconds: update.durationSeconds,
           mediaFileId: update.mediaFileId,
@@ -180,10 +186,10 @@ export class OfflinePlaybackSyncService {
     if (!sent.length) return;
 
     // Filter the live queue, not the snapshot: queue() may have replaced an entry mid-PUT and the newer position must survive.
-    const sentByKey = new Map(sent.map((u) => [entryKey(u.mediaId, u.episodeId), u] as const));
+    const sentByKey = new Map(sent.map((u) => [entryKey(u.mediaId, u.episodeId, u.itemId), u] as const));
     this.setPending(
       this._pending().filter((p) => {
-        const s = sentByKey.get(entryKey(p.mediaId, p.episodeId));
+        const s = sentByKey.get(entryKey(p.mediaId, p.episodeId, p.itemId));
         return !s || p.updatedAt > s.updatedAt;
       }),
     );

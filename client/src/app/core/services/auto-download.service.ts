@@ -1,5 +1,7 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import { Router } from '@angular/router';
+import { AudioPlayerService } from './audio-player/audio-player.service';
 import { AuthService } from './auth.service';
 import { TvService } from './tv.service';
 import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
@@ -12,6 +14,7 @@ import { StorageScopeService } from './storage-scope.service';
 import { MediaService } from './api/media.service';
 import { pickNextEpisodes } from './auto-download-series';
 import { StreamingApiService } from './api/streaming-api.service';
+import { asBookMedia, bookDownloadTarget, offlinable } from '../../features/media-detail/book/book-media';
 import {
   PlaylistsApiService,
   PlaylistItem,
@@ -49,6 +52,8 @@ export class AutoDownloadService {
   private readonly playlistsApi = inject(PlaylistsApiService);
   private readonly scope = inject(StorageScopeService);
   private readonly mediaService = inject(MediaService);
+  private readonly audio = inject(AudioPlayerService);
+  private readonly router = inject(Router);
 
   private running = false;
 
@@ -185,6 +190,8 @@ export class AutoDownloadService {
       }
       this.log(`${targets.size} distinct target(s)`);
 
+      await this.nextVolumes();
+      await this.deleteFinishedBooks();
       await this.deleteWatched();
       await this.downloadMissing([...targets.values()]);
       this.log(`reconcile done (${trigger})`);
@@ -246,9 +253,56 @@ export class AutoDownloadService {
     this.log(`downloaded ${started}, failed ${failed}`);
   }
 
+  /** Opt-in: the next volume of a series whose volume on the device is started, in the same format. */
+  private async nextVolumes(): Promise<void> {
+    if (!this.settings.autoNextVolume()) return;
+    for (const t of this.cache.load().filter((x) => x.book && x.status === 'ready')) {
+      if (autoCapReached(this.cache.load(), this.settings.autoCapGb())) return;
+      try {
+        const work = asBookMedia(await this.mediaService.getOne(t.mediaId, { force: true }));
+        const next = work?.book.series[0]?.next;
+        const progress = work?.book.progress;
+        if (!work || !next || progress?.itemId !== t.book!.itemId || progress.progression <= 0) continue;
+        if (this.cache.load().some((x) => x.mediaId === next.id && x.book && x.status !== 'failed')) continue;
+        const media = asBookMedia(await this.mediaService.getOne(next.id));
+        const edition = media?.book.editions.find((e) => e.family === t.book!.family && offlinable(e));
+        if (!media || !edition) continue;
+        const artist = media.book.authors.map((a) => a.name).join(', ');
+        await this.downloads.createBookDownload(bookDownloadTarget({ mediaId: next.id, title: media.title, artist }, edition), { auto: true });
+        this.log(`next volume ${next.id} of ${t.mediaId} queued`);
+      } catch (err) {
+        this.log(`next volume of ${t.mediaId} failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  /** Opt-in: removes the offline copy of each book item the user finished after saving it, never one that is open. */
+  private async deleteFinishedBooks(): Promise<void> {
+    if (!this.settings.autoDeleteBooks()) return;
+    for (const t of this.cache.load().filter((x) => x.book && x.status === 'ready')) {
+      try {
+        const state = await this.streamingApi.getPlaybackState(t.mediaId, undefined, t.book!.itemId);
+        const finishedSince = state?.completed && Date.parse(state.lastPlayedAt) >= Date.parse(t.createdAt);
+        if (finishedSince && !this.openItemIds().has(t.book!.itemId)) await this.downloads.deleteDownload(t);
+      } catch {
+        /* offline / transient: retry next reconcile */
+      }
+    }
+  }
+
+  /** Items being listened to or read, whose files must stay under the player. */
+  private openItemIds(): Set<number> {
+    const ids = new Set<number>();
+    const playing = this.audio.track()?.itemId;
+    if (playing != null) ids.add(playing);
+    const reading = /^\/read\/\d+\/(\d+)/.exec(this.router.url);
+    if (reading) ids.add(Number(reading[1]));
+    return ids;
+  }
+
   /** Remove auto-managed downloads the user has finished watching. */
   private async deleteWatched(): Promise<void> {
-    const auto = this.cache.load().filter((t) => t.auto);
+    const auto = this.cache.load().filter((t) => t.auto && !t.book);
     if (!auto.length) return;
 
     const movies = auto.filter((t) => t.episodeId == null);
