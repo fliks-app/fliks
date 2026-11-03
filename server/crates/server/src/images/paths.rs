@@ -295,7 +295,7 @@ mod tests {
             "movie-603x",
             "movie-tmdb-",
             "movie-unknown-5",
-            "comic-tmdb-5",
+            "album-tmdb-5",
             "movie-tmdb-6-3",
             "movie-imdb-../x",
             long.as_str(),
