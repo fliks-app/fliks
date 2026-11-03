@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../../core/services/auth.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { PlaybackQueueService } from '../../../core/services/playback-queue.service';
 import {
   bookChaptersFixture, bookDetailFixture, bookSourcesFixture, collectionDetailFixture, personWorksFixture,
@@ -36,6 +37,7 @@ describe('BookWorkComponent', () => {
       providers: bookSpecProviders(
         { provide: AuthService, useValue: { hasPermission: (p: string) => canEdit && p === 'media.edit' } },
         { provide: AudioPlayerService, useValue: { play } },
+        { provide: StreamingApiService, useValue: {} },
       ),
     });
     TestBed.overrideComponent(BookWorkComponent, {

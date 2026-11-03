@@ -43,6 +43,9 @@
     "level_edition": "Edizione",
     "sources_hint": "Collegare un identificativo aggiorna i metadati da quella fonte.",
     "send_to": "Invia a…",
-    "send_queued": "Invio a {{name}}"
+    "send_queued": "Invio a {{name}}",
+    "download": "Scarica",
+    "share": "Condividi",
+    "download_failed": "Download non riuscito"
   }
 }

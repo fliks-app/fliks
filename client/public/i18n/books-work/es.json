@@ -43,6 +43,9 @@
     "level_edition": "Edición",
     "sources_hint": "Vincular un identificador actualiza los metadatos desde esa fuente.",
     "send_to": "Enviar a…",
-    "send_queued": "Enviando a {{name}}"
+    "send_queued": "Enviando a {{name}}",
+    "download": "Descargar",
+    "share": "Compartir",
+    "download_failed": "Error en la descarga"
   }
 }

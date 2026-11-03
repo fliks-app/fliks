@@ -43,6 +43,9 @@
     "level_edition": "Ausgabe",
     "sources_hint": "Das Verknüpfen einer Kennung aktualisiert die Metadaten aus dieser Quelle.",
     "send_to": "Senden an…",
-    "send_queued": "Wird an {{name}} gesendet"
+    "send_queued": "Wird an {{name}} gesendet",
+    "download": "Herunterladen",
+    "share": "Teilen",
+    "download_failed": "Download fehlgeschlagen"
   }
 }
