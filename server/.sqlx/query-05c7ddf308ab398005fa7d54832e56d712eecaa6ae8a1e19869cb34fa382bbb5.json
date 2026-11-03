@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, cutoff,\n        items AS \"items: Json<Value>\", \"upgradeAllowed\" AS upgrade_allowed,\n        \"resolutionUpgradeOnly\" AS resolution_upgrade_only,\n        \"minCustomFormatScore\" AS min_custom_format_score\n        FROM quality_profiles WHERE id = $1",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, family, cutoff,\n        items AS \"items: Json<Value>\", \"upgradeAllowed\" AS upgrade_allowed,\n        \"resolutionUpgradeOnly\" AS resolution_upgrade_only,\n        \"minCustomFormatScore\" AS min_custom_format_score\n        FROM quality_profiles WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "family",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "quality_profiles",
+            "name": "family"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "cutoff",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "items: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "upgrade_allowed",
         "type_info": "Bool",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "resolution_upgrade_only",
         "type_info": "Bool",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "min_custom_format_score",
         "type_info": "Int4",
         "origin": {
@@ -117,8 +128,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "3d1dc14a318141883ee7b09c259fe3331e2abae81c024e7da59c9c22675cc7ad"
+  "hash": "05c7ddf308ab398005fa7d54832e56d712eecaa6ae8a1e19869cb34fa382bbb5"
 }

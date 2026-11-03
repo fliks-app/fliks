@@ -1,0 +1,14 @@
+<div role="tablist" class="tabs tabs-bordered scroll-ring-safe">
+  @for (f of families; track f) {
+    <button
+      type="button"
+      role="tab"
+      class="tab"
+      [class.tab-active]="value() === f"
+      [attr.aria-selected]="value() === f"
+      (click)="valueChange.emit(f)"
+    >
+      {{ 'settings.families.' + f | translate }}
+    </button>
+  }
+</div>

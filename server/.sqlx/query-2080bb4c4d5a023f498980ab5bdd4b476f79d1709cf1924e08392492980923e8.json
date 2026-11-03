@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, cutoff,\n        items AS \"items: Json<Value>\", \"upgradeAllowed\" AS upgrade_allowed,\n        \"resolutionUpgradeOnly\" AS resolution_upgrade_only,\n        \"minCustomFormatScore\" AS min_custom_format_score\n        FROM quality_profiles ORDER BY name ASC, id ASC",
+  "query": "INSERT INTO quality_profiles (name, family, cutoff, items, \"upgradeAllowed\",\n        \"resolutionUpgradeOnly\", \"minCustomFormatScore\")\n        VALUES ($1, $7, $2, $3, COALESCE($4, false), COALESCE($5, false), COALESCE($6, 0))\n        RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, family, cutoff,\n        items AS \"items: Json<Value>\", \"upgradeAllowed\" AS upgrade_allowed,\n        \"resolutionUpgradeOnly\" AS resolution_upgrade_only,\n        \"minCustomFormatScore\" AS min_custom_format_score",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "family",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "quality_profiles",
+            "name": "family"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "cutoff",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "items: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "upgrade_allowed",
         "type_info": "Bool",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "resolution_upgrade_only",
         "type_info": "Bool",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "min_custom_format_score",
         "type_info": "Int4",
         "origin": {
@@ -104,9 +115,18 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Varchar",
+        "Int4",
+        "Jsonb",
+        "Bool",
+        "Bool",
+        "Int4",
+        "Text"
+      ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -118,5 +138,5 @@
       false
     ]
   },
-  "hash": "97db40d691f34aeef502a4e590aa7db630f28825b451a7e0cf207609a667ed4e"
+  "hash": "2080bb4c4d5a023f498980ab5bdd4b476f79d1709cf1924e08392492980923e8"
 }

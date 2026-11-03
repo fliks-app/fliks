@@ -1,5 +1,6 @@
 //! Request bodies (`profiles.md` rules 7, 15, 19, 22, 29): serde types with the global pipe's strictness.
 use crate::http::AppError;
+use fliks_domain::{media::family::Family, profiles::table};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Number, Value, json};
 
@@ -50,6 +51,7 @@ struct QualityItem {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QualityProfile {
     name: String,
+    family: Option<Family>,
     cutoff: Number,
     upgrade_allowed: Option<bool>,
     resolution_upgrade_only: Option<bool>,
@@ -60,6 +62,7 @@ pub struct QualityProfile {
 /// Validated columns; a `None` option is the create default or the update keep.
 pub struct QualityValues {
     pub name: String,
+    pub family: Family,
     pub cutoff: i32,
     pub items: Value,
     pub upgrade_allowed: Option<bool>,
@@ -68,7 +71,28 @@ pub struct QualityValues {
 }
 
 impl QualityProfile {
-    pub fn validate(self) -> Res<QualityValues> {
+    /// `current` is the stored family of an update: it stays, a body naming another is a 400.
+    pub fn validate(self, current: Option<Family>) -> Res<QualityValues> {
+        let family = self.family.or(current).unwrap_or(Family::Video);
+        if current.is_some_and(|c| c != family) {
+            return Err(AppError::bad_request("family cannot be changed"));
+        }
+        if table(family).is_empty() {
+            return Err(AppError::bad_request("family has no quality table"));
+        }
+        if family != Family::Video {
+            for (i, it) in self.items.iter().enumerate() {
+                let id = int4(&format!("items.{i}.qualityId"), &it.quality_id)?;
+                if !table(family)
+                    .iter()
+                    .any(|q| i64::from(q.id) == i64::from(id))
+                {
+                    return Err(AppError::bad_request(vec![format!(
+                        "items.{i}.qualityId is not a {family} quality"
+                    )]));
+                }
+            }
+        }
         let items = self
             .items
             .into_iter()
@@ -89,6 +113,7 @@ impl QualityProfile {
             .collect();
         Ok(QualityValues {
             name: self.name,
+            family,
             cutoff: int4("cutoff", &self.cutoff)?,
             items: Value::Array(items),
             upgrade_allowed: self.upgrade_allowed,

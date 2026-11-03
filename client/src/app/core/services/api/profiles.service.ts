@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import type { Family } from '../../enums/family.enum';
 
 export interface QualityProfile {
   id: number;
@@ -19,6 +20,7 @@ export interface QualityProfile {
 
 export interface CreateQualityProfilePayload {
   name: string;
+  family?: Family;
   cutoff: number;
   upgradeAllowed?: boolean;
   resolutionUpgradeOnly?: boolean;
@@ -66,8 +68,10 @@ export interface CreateLanguageProfilePayload {
 export class ProfilesService {
   private readonly http = inject(HttpClient);
 
-  getQualityProfiles() {
-    return firstValueFrom(this.http.get<QualityProfile[]>('/api/profiles/quality'));
+  getQualityProfiles(family: Family = 'video') {
+    return firstValueFrom(
+      this.http.get<QualityProfile[]>('/api/profiles/quality', { params: { family } }),
+    );
   }
 
   getQualityProfile(id: number) {

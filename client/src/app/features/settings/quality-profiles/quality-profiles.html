@@ -11,6 +11,8 @@
     </button>
   </div>
 
+  <app-family-tabs [value]="family()" (valueChange)="setFamily($event)" />
+
   @if (loading()) {
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>
@@ -99,7 +101,7 @@
           (ngModelChange)="formCutoff.set(+$event)"
         >
           @for (q of definitions(); track q.id) {
-            <option [ngValue]="q.id">{{ q.name }} ({{ q.resolution }}p · {{ q.source }})</option>
+            <option [ngValue]="q.id">{{ q.name }} ({{ qualityDetail(q) }})</option>
           }
         </select>
         <span class="text-sm text-base-content/60 mt-1">{{
@@ -111,7 +113,7 @@
         (valueChange)="formUpgrade.set($event)"
         [label]="'settings.quality_profiles.field_upgrade' | translate"
       />
-      @if (formUpgrade()) {
+      @if (formUpgrade() && family() === 'video') {
         <app-toggle-field
           [value]="formResolutionUpgradeOnly()"
           (valueChange)="formResolutionUpgradeOnly.set($event)"
@@ -151,7 +153,7 @@
                 />
                 <span class="text-sm flex-1">{{ q.name }}</span>
                 <span class="text-sm text-base-content/50 tabular-nums"
-                  >{{ q.resolution }}p · {{ q.source }}</span
+                  >{{ qualityDetail(q) }}</span
                 >
               </div>
             </div>

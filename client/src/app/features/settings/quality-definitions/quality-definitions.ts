@@ -10,14 +10,17 @@ import {
   QualityDefinitionsApiService,
   QualityDefinition,
 } from '../../../core/services/api/quality-definitions-api.service';
+import { FamilyTabsComponent } from '../../../shared/components/family-tabs/family-tabs';
+import type { Family } from '../../../core/enums/family.enum';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 
-const MAX_SLIDER = 60000; // MB/h max for slider
+/** Slider range per family: MB per hour (video, audio) or MB per file (text). */
+const MAX_SLIDERS: Record<string, number> = { video: 60000, audio: 3000, text: 300 };
 
 @Component({
   selector: 'app-quality-definitions',
-  imports: [FormsModule, TranslatePipe],
+  imports: [FormsModule, TranslatePipe, FamilyTabsComponent],
   templateUrl: './quality-definitions.html',
 })
 export class QualityDefinitionsComponent implements OnInit {
@@ -32,7 +35,16 @@ export class QualityDefinitionsComponent implements OnInit {
   readonly dirty = signal(false);
   readonly error = signal('');
 
-  readonly maxSlider = MAX_SLIDER;
+  readonly family = signal<Family>('video');
+
+  get maxSlider(): number {
+    return MAX_SLIDERS[this.family()];
+  }
+
+  setFamily(family: Family) {
+    this.family.set(family);
+    void this.load();
+  }
 
   ngOnInit() {
     this.load();
@@ -42,7 +54,7 @@ export class QualityDefinitionsComponent implements OnInit {
     this.loading.set(true);
     this.error.set('');
     try {
-      this.definitions.set(await this.api.getAll());
+      this.definitions.set(await this.api.getAll(this.family()));
       this.dirty.set(false);
     } catch {
       this.error.set(this.translate.instant('settings.quality_definitions.load_error'));
@@ -84,12 +96,13 @@ export class QualityDefinitionsComponent implements OnInit {
 
   formatSize(mb: number): string {
     if (mb <= 0) return '0';
+    if (this.family() === 'text') return `${Math.round(mb)} MB`;
     if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB/h`;
     return `${Math.round(mb)} MB/h`;
   }
 
   sliderPercent(value: number): number {
-    return Math.min((value / MAX_SLIDER) * 100, 100);
+    return Math.min((value / this.maxSlider) * 100, 100);
   }
 
   async save() {
@@ -103,7 +116,7 @@ export class QualityDefinitionsComponent implements OnInit {
         preferredSize: d.preferredSize,
         maxSize: d.maxSize,
       }));
-      this.definitions.set(await this.api.updateAll(items));
+      this.definitions.set(await this.api.updateAll(this.family(), items));
       this.dirty.set(false);
       this.toast.success(this.translate.instant('common.saved'));
     } catch {
@@ -135,11 +148,11 @@ export class QualityDefinitionsComponent implements OnInit {
   private closestField(point: { clientX: number }, def: QualityDefinition, track: HTMLElement): 'minSize' | 'preferredSize' | 'maxSize' {
     const rect = track.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (point.clientX - rect.left) / rect.width));
-    const value = pct * MAX_SLIDER;
+    const value = pct * this.maxSlider;
     const distances = [
       { field: 'minSize' as const, dist: Math.abs(value - def.minSize) },
       { field: 'preferredSize' as const, dist: Math.abs(value - def.preferredSize) },
-      { field: 'maxSize' as const, dist: Math.abs(value - (def.maxSize || MAX_SLIDER)) },
+      { field: 'maxSize' as const, dist: Math.abs(value - (def.maxSize || this.maxSlider)) },
     ];
     return distances.sort((a, b) => a.dist - b.dist)[0].field;
   }
@@ -147,14 +160,14 @@ export class QualityDefinitionsComponent implements OnInit {
   private dragTo(clientX: number, def: QualityDefinition, field: 'minSize' | 'preferredSize' | 'maxSize', track: HTMLElement) {
     const rect = track.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const value = Math.round(pct * MAX_SLIDER * 2) / 2; // snap to 0.5
+    const value = Math.round(pct * this.maxSlider * 2) / 2; // snap to 0.5
     this.updateField(def, field, value);
   }
 
   async resetDefaults() {
     if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.quality_definitions.confirm_reset'), variant: 'warning' })) return;
     try {
-      const defaults = await this.api.getDefaults();
+      const defaults = await this.api.getDefaults(this.family());
       this.definitions.set(defaults);
       this.dirty.set(true);
     } catch {

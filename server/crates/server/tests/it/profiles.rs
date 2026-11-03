@@ -654,3 +654,136 @@ async fn import_resolution_and_covers(pool: PgPool) {
             .unwrap()
     );
 }
+
+fn audio_profile(extra: Value) -> Value {
+    let mut v = json!({
+        "name": "Audio", "family": "audio", "cutoff": 109, "minCustomFormatScore": 3,
+        "items": [
+            {"qualityId": 109, "qualityName": "AAC-128k", "resolution": 128, "source": "aac",
+             "allowed": true, "sortOrder": 0},
+        ],
+    });
+    for (k, x) in extra.as_object().unwrap() {
+        v[k] = x.clone();
+    }
+    v
+}
+
+#[sqlx::test(migrations = false)]
+async fn audio_profiles_live_beside_video_ones(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, p) = call(
+        &c,
+        "POST",
+        "/api/profiles/quality",
+        &c.admin,
+        audio_profile(json!({})),
+    )
+    .await;
+    assert_eq!((s, p["minCustomFormatScore"].clone()), (201, json!(3)));
+    let id = p["id"].as_i64().unwrap();
+    call(&c, "POST", "/api/profiles/quality", &c.admin, qp(json!({}))).await;
+
+    let names = |v: &Value| -> Vec<String> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let (_, video) = call(&c, "GET", "/api/profiles/quality", &c.user, json!(null)).await;
+    assert_eq!(names(&video), ["HD"]);
+    let (_, audio) = call(
+        &c,
+        "GET",
+        "/api/profiles/quality?family=audio",
+        &c.user,
+        json!(null),
+    )
+    .await;
+    assert_eq!(names(&audio), ["Audio"]);
+
+    let uri = format!("/api/profiles/quality/{id}");
+    let (s, _) = call(
+        &c,
+        "PUT",
+        &uri,
+        &c.admin,
+        audio_profile(json!({"family": "text"})),
+    )
+    .await;
+    assert_eq!(s, 400, "the family of a stored profile does not change");
+    let (s, p) = call(
+        &c,
+        "PUT",
+        &uri,
+        &c.admin,
+        audio_profile(json!({"family": null, "name": "A2"})),
+    )
+    .await;
+    assert_eq!((s, p["name"].clone()), (200, json!("A2")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_profile_only_names_qualities_of_its_family(pool: PgPool) {
+    let c = ctx(pool).await;
+    let bad = audio_profile(json!({"family": "text"}));
+    let (s, _) = call(&c, "POST", "/api/profiles/quality", &c.admin, bad).await;
+    assert_eq!(s, 400);
+    let (s, _) = call(
+        &c,
+        "POST",
+        "/api/profiles/quality",
+        &c.admin,
+        audio_profile(json!({"family": "image"})),
+    )
+    .await;
+    assert_eq!(s, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn definitions_are_read_and_written_per_family(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, text) = call(
+        &c,
+        "GET",
+        "/api/quality-definitions?family=text",
+        &c.admin,
+        json!(null),
+    )
+    .await;
+    assert_eq!(text.as_array().unwrap().len(), 5);
+    let (s, saved) = call(
+        &c,
+        "PUT",
+        "/api/quality-definitions?family=text",
+        &c.admin,
+        json!({"items": [{"qualityId": 205, "minSize": 1.0, "preferredSize": 3.0, "maxSize": 9.0}]}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    let epub = saved
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["qualityId"] == 205)
+        .unwrap();
+    assert_eq!(epub["maxSize"], 9.0);
+    let (_, video) = call(&c, "GET", "/api/quality-definitions", &c.admin, json!(null)).await;
+    assert!(
+        video
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|d| d["qualityId"].as_i64().unwrap() < 100)
+    );
+    let (_, qualities) = call(
+        &c,
+        "GET",
+        "/api/media/qualities?family=audio",
+        &c.admin,
+        json!(null),
+    )
+    .await;
+    assert_eq!(qualities.as_array().unwrap().len(), 15);
+}

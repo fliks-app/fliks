@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import type { Family } from '../../enums/family.enum';
 import { MediaType } from '../../enums/media-type.enum';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
@@ -452,8 +453,10 @@ export class MediaService {
     return firstValueFrom(this.http.get<MediaCrewEntry[]>(`/api/media/${id}/crew`));
   }
 
-  getAppQualities() {
-    return firstValueFrom(this.http.get<AppQualityDef[]>('/api/media/qualities'));
+  getAppQualities(family: Family = 'video') {
+    return firstValueFrom(
+      this.http.get<AppQualityDef[]>('/api/media/qualities', { params: { family } }),
+    );
   }
 
   create(data: Partial<Media>) {
