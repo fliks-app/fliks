@@ -150,7 +150,7 @@
   }
 
   @if (b.editions.length) {
-    <app-book-editions [editions]="b.editions" />
+    <app-book-editions [editions]="b.editions" [title]="m.title" />
     <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
   }
 

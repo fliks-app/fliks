@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it } from 'vitest';
 import { audioEditionFixture, bookDetailFixture } from '../../../core/services/api/books.fixtures';
+import { DeviceService } from '../../../core/services/device.service';
 import { BookEditionsComponent } from './book-editions.component';
 import { bookSpecProviders } from './book-test-setup';
 
@@ -26,6 +27,20 @@ describe('BookEditionsComponent', () => {
   it('marks an edition without a file', () => {
     const rows = render([{ ...audioEditionFixture, hasFile: false }]).querySelectorAll('[data-testid="edition-row"]');
     expect(rows[0].textContent).toContain('books_work.file_no');
+  });
+
+  it('offers a direct download of an edition with a file, except on TV', () => {
+    const el = render([{ ...audioEditionFixture, hasFile: true, fileIds: [3] }, { ...audioEditionFixture, hasFile: false, fileIds: [] }]);
+    expect(el.querySelectorAll('[data-testid="deliver"]')).toHaveLength(1);
+  });
+
+  it('hides the download on TV', () => {
+    TestBed.configureTestingModule({ providers: bookSpecProviders() });
+    TestBed.inject(DeviceService).formFactor.set('tv');
+    const fixture = TestBed.createComponent(BookEditionsComponent);
+    fixture.componentRef.setInput('editions', [{ ...audioEditionFixture, hasFile: true, fileIds: [3] }]);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="deliver"]')).toBeNull();
   });
 
   it('offers the devices that accept the format and mails the single file', async () => {

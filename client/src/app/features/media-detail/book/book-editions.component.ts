@@ -1,9 +1,13 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { BookEdition } from '../../../core/services/api/books.models';
 import { EmailDevice, EmailDevicesApiService } from '../../../core/services/api/email-devices-api.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { formatClock } from './book-media';
+import { deliverFiles } from '../../../core/plugins/save-file.plugin';
+import { editionFileNames, formatClock } from './book-media';
 
 @Component({
   selector: 'app-book-editions',
@@ -16,10 +20,16 @@ export class BookEditionsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
+  private readonly device = inject(DeviceService);
+  private readonly streaming = inject(StreamingApiService);
+
   readonly editions = input.required<BookEdition[]>();
+  readonly title = input('');
   readonly devices = signal<EmailDevice[]>([]);
 
   protected readonly clock = formatClock;
+  protected readonly native = Capacitor.isNativePlatform();
+  protected readonly canDeliver = (e: BookEdition) => !this.device.isTv() && e.hasFile && e.fileIds.length > 0;
 
   async ngOnInit(): Promise<void> {
     try {
@@ -45,6 +55,16 @@ export class BookEditionsComponent implements OnInit {
       this.toast.success(this.translate.instant('books_work.send_queued', { name: device.name }));
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
+    }
+  }
+
+  /** The edition's files straight from the server: browser downloads, or the share sheet on mobile. */
+  async deliver(e: BookEdition): Promise<void> {
+    const names = editionFileNames(this.title(), e);
+    try {
+      await deliverFiles(e.fileIds.map((id, i) => ({ url: this.streaming.getOriginalDownloadUrl(id), name: names[i] })));
+    } catch {
+      this.toast.error(this.translate.instant('books_work.download_failed'));
     }
   }
 }

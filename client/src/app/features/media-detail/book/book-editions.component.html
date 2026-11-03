@@ -35,7 +35,12 @@
           </td>
           <td>{{ e.narrators.map((n) => n.name).join(', ') }}</td>
           <td>{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</td>
-          <td>
+          <td class="whitespace-nowrap">
+            @if (canDeliver(e)) {
+              <button type="button" class="btn btn-xs btn-ghost" data-testid="deliver" (click)="deliver(e)">
+                {{ (native ? 'books_work.share' : 'books_work.download') | translate }}
+              </button>
+            }
             @if (targets(e); as list) {
               @if (list.length) {
                 <select

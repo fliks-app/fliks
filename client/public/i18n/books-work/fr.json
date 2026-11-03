@@ -43,6 +43,9 @@
     "level_edition": "Édition",
     "sources_hint": "Lier un identifiant actualise les métadonnées depuis cette source.",
     "send_to": "Envoyer à…",
-    "send_queued": "Envoi vers {{name}}"
+    "send_queued": "Envoi vers {{name}}",
+    "download": "Télécharger",
+    "share": "Partager",
+    "download_failed": "Échec du téléchargement"
   }
 }

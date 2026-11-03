@@ -43,6 +43,9 @@
     "level_edition": "Edition",
     "sources_hint": "Linking an identifier refreshes the metadata from that source.",
     "send_to": "Send to…",
-    "send_queued": "Sending to {{name}}"
+    "send_queued": "Sending to {{name}}",
+    "download": "Download",
+    "share": "Share",
+    "download_failed": "Download failed"
   }
 }
