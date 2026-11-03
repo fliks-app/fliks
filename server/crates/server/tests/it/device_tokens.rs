@@ -146,8 +146,8 @@ async fn validation_and_the_per_user_cap(pool: PgPool) {
             "name must be shorter than or equal to 80 characters",
         ),
         (
-            json!({"name": "x", "kind": "kobo"}),
-            "kind must be one of the following values: opds, kosync",
+            json!({"name": "x", "kind": "nope"}),
+            "kind must be one of the following values: opds, kosync, kobo",
         ),
     ] {
         let (s, b) = c.call("POST", "/api/device-tokens", &jwt, Some(body)).await;

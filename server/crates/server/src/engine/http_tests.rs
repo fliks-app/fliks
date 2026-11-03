@@ -776,6 +776,7 @@ mod resolve {
         let w = world(pool).await;
         let opds = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
         let kosync = device_token(&w, w.member.0, crate::device_tokens::Kind::Kosync).await;
+        let kobo = device_token(&w, w.member.0, crate::device_tokens::Kind::Kobo).await;
         for (name, credential, source) in [
             ("no source", basic("x", &opds), None),
             ("in the query", opds.clone(), Some("query")),
@@ -787,6 +788,13 @@ mod resolve {
                 Some("cookie"),
             ),
             ("kosync token", basic("x", &kosync), Some("basic")),
+            ("kobo token as basic", basic("x", &kobo), Some("basic")),
+            (
+                "kobo token as bearer",
+                format!("Bearer {kobo}"),
+                Some("bearer"),
+            ),
+            ("kobo token in the query", kobo.clone(), Some("query")),
             (
                 "kosync key",
                 basic("x", &crate::device_tokens::hash(&kosync)),
@@ -809,6 +817,11 @@ mod resolve {
         .await
         .1;
         assert_eq!(live, denied(), "live is out of scope");
+        let b = ask_device(&w, &kobo, Some("path"), "download").await;
+        assert_eq!(
+            b["allow"], true,
+            "a kobo token opens the data plane from the path"
+        );
         let jwt = w.member.1.clone();
         assert_eq!(
             ask_device(&w, &format!("Bearer {jwt}"), Some("basic"), "stream").await,

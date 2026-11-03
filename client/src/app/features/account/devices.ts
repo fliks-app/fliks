@@ -24,7 +24,7 @@ export class AccountDevicesComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  readonly kinds: DeviceTokenKind[] = ['opds', 'kosync'];
+  readonly kinds: DeviceTokenKind[] = ['opds', 'kosync', 'kobo'];
   readonly devices = signal<DeviceToken[]>([]);
   readonly issued = signal<IssuedDeviceToken | null>(null);
   readonly name = signal('');
@@ -91,6 +91,11 @@ export class AccountDevicesComponent implements OnInit {
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
     }
+  }
+
+  /** The line to put in `.kobo/Kobo/Kobo eReader.conf`. */
+  koboEndpoint(token: string): string {
+    return `api_endpoint=${window.location.origin}/kobo/${token}`;
   }
 
   async copy(token: string): Promise<void> {

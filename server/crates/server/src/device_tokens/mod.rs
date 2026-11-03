@@ -15,15 +15,17 @@ const TOKEN_LEN: usize = PREFIX.len() + 64;
 pub enum Kind {
     Opds,
     Kosync,
+    Kobo,
 }
 
 impl Kind {
-    pub const ALL: [Self; 2] = [Self::Opds, Self::Kosync];
+    pub const ALL: [Self; 3] = [Self::Opds, Self::Kosync, Self::Kobo];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Opds => "opds",
             Self::Kosync => "kosync",
+            Self::Kobo => "kobo",
         }
     }
 
@@ -36,6 +38,7 @@ impl Kind {
         match self {
             Self::Opds => &[Source::Basic],
             Self::Kosync => &[],
+            Self::Kobo => &[Source::Path],
         }
     }
 
@@ -43,7 +46,7 @@ impl Kind {
     fn secret(self, token: &str) -> String {
         match self {
             Self::Kosync => hex(&Md5::digest(token)),
-            Self::Opds => token.to_owned(),
+            Self::Opds | Self::Kobo => token.to_owned(),
         }
     }
 }
@@ -100,6 +103,17 @@ pub async fn kosync_owner(db: &PgPool, key: &str) -> Result<Option<i32>, sqlx::E
     .await
 }
 
+/// `(row id, owner)` of the `kobo` token `token` (`kobo.md` rule 1); a hit stamps `lastUsedAt`.
+pub async fn kobo_owner(db: &PgPool, token: &str) -> Result<Option<(i32, i32)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE device_tokens SET "lastUsedAt" = now()
+           WHERE "hash" = $1 AND "kind" = 'kobo' RETURNING id, "userId""#,
+    )
+    .bind(hash(token))
+    .fetch_optional(db)
+    .await
+}
+
 /// Whether some kind opens the data plane through `source`.
 pub fn accepts(source: Source) -> bool {
     Kind::ALL.iter().any(|k| k.sources().contains(&source))
@@ -142,13 +156,15 @@ mod tests {
     }
 
     #[test]
-    fn only_opds_opens_the_data_plane_and_only_through_basic() {
-        assert!(accepts(Source::Basic));
-        for s in [Source::Cookie, Source::Bearer, Source::Query, Source::Path] {
+    fn opds_opens_the_data_plane_through_basic_and_kobo_through_the_path() {
+        assert!(accepts(Source::Basic) && accepts(Source::Path));
+        for s in [Source::Cookie, Source::Bearer, Source::Query] {
             assert!(!accepts(s), "{s:?}");
         }
+        assert_eq!(Kind::Kobo.sources(), &[Source::Path]);
         assert!(Kind::Kosync.sources().is_empty());
         assert_eq!(Kind::parse("opds"), Some(Kind::Opds));
-        assert_eq!(Kind::parse("kobo"), None);
+        assert_eq!(Kind::parse("kobo"), Some(Kind::Kobo));
+        assert_eq!(Kind::parse("nope"), None);
     }
 }

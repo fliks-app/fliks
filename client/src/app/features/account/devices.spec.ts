@@ -83,4 +83,9 @@ describe('AccountDevicesComponent', () => {
     expect(api.renew).toHaveBeenCalledWith(1);
     expect(cmp.issued()?.token).toBe('fkd_renewed');
   });
+
+  it('builds the Kobo endpoint line from the app origin and the token', () => {
+    const { cmp } = setup();
+    expect(cmp.koboEndpoint('fkd_x')).toBe(`api_endpoint=${window.location.origin}/kobo/fkd_x`);
+  });
 });

@@ -19,6 +19,7 @@ pub mod importers;
 pub mod ingest;
 pub mod jobs;
 pub mod jwt_secret;
+pub mod kobo;
 pub mod kosync;
 pub mod libraries;
 pub mod livetv;
