@@ -125,14 +125,16 @@ fn charset(html: &mut Element) {
             let ct = e
                 .attr("http-equiv")
                 .is_some_and(|v| v.eq_ignore_ascii_case("content-type"));
-            if let Some(a) = e.attrs.iter_mut().find(|(k, _)| ct && k == "content") {
-                if let Some(i) = a.1.to_ascii_lowercase().find("charset=") {
-                    let tail = a.1[i + 8..]
-                        .find(';')
-                        .map_or("", |t| &a.1[i + 8 + t..])
-                        .to_string();
-                    a.1 = format!("{}charset=utf-8{tail}", &a.1[..i]);
-                }
+            let content = e.attrs.iter_mut().find(|(k, _)| ct && k == "content");
+            let at = content
+                .as_ref()
+                .and_then(|a| a.1.to_ascii_lowercase().find("charset="));
+            if let (Some(a), Some(i)) = (content, at) {
+                let tail = a.1[i + 8..]
+                    .find(';')
+                    .map_or("", |t| &a.1[i + 8 + t..])
+                    .to_string();
+                a.1 = format!("{}charset=utf-8{tail}", &a.1[..i]);
             }
         }
         for c in &mut e.children {

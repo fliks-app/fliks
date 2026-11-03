@@ -265,14 +265,14 @@ pub fn parse(src: &str, html: bool) -> Result<Vec<Node>, DomError> {
         i += lt;
         let rest = &src[i..];
         let next = rest.as_bytes().get(1).copied().unwrap_or(0);
-        if rest.starts_with("<!--") {
+        if let Some(r) = rest.strip_prefix("<!--") {
             b.flush(&mut text)?;
-            i += rest[4..].find("-->").map_or(rest.len(), |e| 4 + e + 3);
+            i += r.find("-->").map_or(rest.len(), |e| 4 + e + 3);
         } else if rest.starts_with("<![CDATA[") {
             let end = rest.find("]]>").unwrap_or(rest.len());
             text.push_str(&rest[9..end.max(9)]);
             i += (end + 3).min(rest.len());
-        } else if rest.starts_with("<!") {
+        } else if let Some(r) = rest.strip_prefix("<!") {
             b.flush(&mut text)?;
             let (head_end, end) = match (rest.find('['), rest.find('>')) {
                 (Some(l), Some(g)) if l < g => {
@@ -285,8 +285,7 @@ pub fn parse(src: &str, html: bool) -> Result<Vec<Node>, DomError> {
                 _ => (rest.len(), rest.len()),
             };
             if b.stack.is_empty()
-                && rest[2..]
-                    .get(..7)
+                && r.get(..7)
                     .is_some_and(|d| d.eq_ignore_ascii_case("doctype"))
             {
                 // The internal subset is dropped: it is where entity bombs live.
@@ -314,11 +313,10 @@ pub fn parse(src: &str, html: bool) -> Result<Vec<Node>, DomError> {
                 Cow::Borrowed(name)
             };
             let skip = html && matches!(name.as_ref(), "html" | "body");
-            if !skip {
-                if let Some(k) = b.stack.iter().rposition(|e| e.name == name) {
-                    while b.stack.len() > k {
-                        b.pop()?;
-                    }
+            let open = b.stack.iter().rposition(|e| e.name == name);
+            if let Some(k) = open.filter(|_| !skip) {
+                while b.stack.len() > k {
+                    b.pop()?;
                 }
             }
             i += end;
