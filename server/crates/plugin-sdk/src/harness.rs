@@ -222,20 +222,6 @@ fn valid_prefix(p: &str) -> bool {
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
-/// Plugin lines reach the ring directly; sqlx statements from every parallel test would evict them.
-fn log_ring() {
-    use tracing_subscriber::{filter::filter_fn, prelude::*};
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
-        let _ = tracing_subscriber::registry()
-            .with(
-                fliks_server::system::logs::RingLayer
-                    .with_filter(filter_fn(|m| !m.target().starts_with("sqlx"))),
-            )
-            .try_init();
-    });
-}
-
 impl Harness {
     /// A scratch database, the host, then the plugin installed (unsigned allowed) and ready.
     pub async fn start(setup: Setup) -> Option<Harness> {
@@ -280,7 +266,6 @@ impl Harness {
             .expect("no catalog sources");
 
         std::fs::create_dir_all(&dir).expect("the runtime dir");
-        log_ring();
         let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
         let opts = pool.connect_options();
         let fetch = fliks_server::plugins::fetch::Fetcher {
@@ -485,14 +470,7 @@ impl Harness {
 
     /// This plugin's log lines (its `log` import and stdio), oldest first.
     pub fn logs(&self) -> Vec<String> {
-        let ctx = format!("plugin:{}", self.id);
-        let mut l: Vec<String> = fliks_server::system::logs::query("", "", None)
-            .into_iter()
-            .filter(|e| e.context == ctx)
-            .map(|e| e.message)
-            .collect();
-        l.reverse();
-        l
+        self.st.plugins.logs.lines(&self.id)
     }
 
     /// Stops the plugin (`shutdown`); dropping the harness then drops its database and roles.

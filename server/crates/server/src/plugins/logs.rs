@@ -1,7 +1,7 @@
 //! Plugin output: guest `log`, stdout and stderr into one ring, capped per plugin per minute.
 
 use crate::sync::MutexExt;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
@@ -11,6 +11,7 @@ use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 
 pub const CAP_PER_MINUTE: usize = 64 * 1024;
 const TAIL: usize = 4096;
+const OWN_RING: usize = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
@@ -39,6 +40,7 @@ struct Window {
 pub struct Logs {
     windows: Mutex<HashMap<String, Window>>,
     tails: Mutex<HashMap<String, String>>,
+    own: Mutex<VecDeque<(String, String)>>,
 }
 
 impl Logs {
@@ -86,7 +88,28 @@ impl Logs {
             Level::Warn => "warn",
             Level::Error => "error",
         };
-        crate::system::logs::push(level, &line.context, line.text);
+        self.emit(level, &line.context, line.text);
+    }
+
+    /// The system ring, plus this host's own ring that `lines` reads.
+    pub fn emit(&self, level: &'static str, context: &str, text: String) {
+        let mut o = self.own.lock_clean();
+        if o.len() == OWN_RING {
+            o.pop_front();
+        }
+        o.push_back((context.to_owned(), text.clone()));
+        drop(o);
+        crate::system::logs::push(level, context, text);
+    }
+
+    /// The messages this host logged for `plugin`, oldest first.
+    pub fn lines(&self, plugin: &str) -> Vec<String> {
+        let ctx = format!("plugin:{plugin}");
+        let o = self.own.lock_clean();
+        o.iter()
+            .filter(|(c, _)| *c == ctx)
+            .map(|(_, t)| t.clone())
+            .collect()
     }
 
     fn stderr(&self, plugin: &str, text: &str) {
@@ -208,5 +231,14 @@ mod tests {
         assert!(!logs.windows.lock_clean()["acme.quiet"].warned);
         logs.push("acme.quiet", Level::Info, "");
         assert!(logs.windows.lock_clean()["acme.quiet"].warned);
+    }
+
+    #[test]
+    fn each_host_keeps_its_own_lines() {
+        let (a, b) = (Logs::default(), Logs::default());
+        a.push("acme.one", Level::Info, "from a");
+        b.push("acme.one", Level::Info, "from b");
+        assert_eq!(a.lines("acme.one"), ["from a"]);
+        assert!(a.lines("acme.two").is_empty());
     }
 }

@@ -170,6 +170,7 @@ pub struct Plugins {
     pub registry: Registry,
     pub counts: counts::Counts,
     pub staging: staging::Staging,
+    pub logs: Arc<logs::Logs>,
     host: OnceLock<Arc<Host>>,
     locks: KeyedLocks<String>,
     crons: Mutex<HashMap<String, Vec<tokio::task::JoinHandle<()>>>>,
@@ -213,6 +214,7 @@ impl Plugins {
             opts,
             registry: Registry::default(),
             counts: counts::Counts::default(),
+            logs: Arc::default(),
             host: OnceLock::new(),
             locks: KeyedLocks::default(),
             crons: Mutex::default(),
@@ -255,7 +257,7 @@ impl Plugins {
             linker,
             cfg,
             core: self.db.clone(),
-            logs: Arc::default(),
+            logs: self.logs.clone(),
             wake: Notify::new(),
             app: OnceLock::new(),
         });
@@ -559,7 +561,7 @@ impl Plugins {
             }
         };
         for (c, t, r) in &fks {
-            crate::system::logs::push(
+            self.logs.emit(
                 "warn",
                 &format!("plugin:{id}"),
                 format!(
