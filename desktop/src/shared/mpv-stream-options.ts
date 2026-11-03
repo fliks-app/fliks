@@ -31,8 +31,11 @@ export const MPV_STREAM_OPTIONS: readonly (readonly [name: string, value: string
   ['demuxer-max-bytes', '256MiB'],
   ['demuxer-max-back-bytes', '96MiB'],
   ['cache-pause-wait', '1'],
+  // mpv's curl backend has no read timeout and ignores the lavf options below; FFmpeg's http honours them.
+  ['curl-enabled', 'no'],
   // hls: the manifest is demuxer-opened.
   ['demuxer-lavf-o', RECONNECT],
   // Direct play: mpv's stream layer opens the URL, so this is the one that applies.
-  ['stream-lavf-o', RECONNECT],
+  // rw_timeout (µs) fails a read on a connection dropped silently during a long pause, so it reconnects.
+  ['stream-lavf-o', `${RECONNECT},rw_timeout=10000000`],
 ];
