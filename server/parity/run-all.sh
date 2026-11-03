@@ -157,7 +157,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   for h in openlibrary.org covers.openlibrary.org archive.org www.googleapis.com books.google.com catalogue.bnf.fr \
     api.audnex.us m.media-amazon.com images-na.ssl-images-amazon.com api.audible.com api.audible.fr api.audible.de api.audible.co.uk \
     api.audible.it api.audible.es api.audible.ca api.audible.com.au api.audible.co.jp api.audible.in; do over+=,$h=$S/books; done
-  penv+=(FLIKS_PLUGIN_UPSTREAM_OVERRIDE=$over FLIKS_SUBTITLE_PROVIDERS_URL=$S)
+  penv+=(FLIKS_PLUGIN_UPSTREAM_OVERRIDE=$over FLIKS_PLUGIN_HOST_VERSION=6.0.0 FLIKS_SUBTITLE_PROVIDERS_URL=$S)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
   [ "$prov" = 1 ] && psql_admin -d "$DB" -c "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'tmdb-parity'), ('plugin.fliks.tvdb.apiKey', 'tvdb-parity')"
   start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"

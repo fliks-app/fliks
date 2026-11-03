@@ -31,6 +31,15 @@ pub mod staging;
 pub mod trust;
 pub mod ui;
 pub mod units;
+/// The version a plugin's `fliks` range is checked against; `parity` builds may override it.
+fn host_version() -> String {
+    #[cfg(feature = "parity")]
+    if let Ok(v) = std::env::var("FLIKS_PLUGIN_HOST_VERSION") {
+        return v;
+    }
+    env!("CARGO_PKG_VERSION").into()
+}
+
 #[cfg(test)]
 mod vectors;
 pub mod webhooks;
@@ -122,7 +131,7 @@ impl Options {
                 |d| PathBuf::from(d).join("fliks-plugins"),
             );
         Options {
-            version: env!("CARGO_PKG_VERSION").into(),
+            version: host_version(),
             runtime_dir: runtime,
             disabled: std::env::var("FLIKS_PLUGINS_DISABLED").as_deref() == Ok("1"),
             pg: db::PgTarget {
