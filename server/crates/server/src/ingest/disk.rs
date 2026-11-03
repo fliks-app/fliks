@@ -311,18 +311,11 @@ async fn scan_under(
     }
     for g in &mut groups {
         let sample = PathBuf::from(&g.files[0].file_path);
-        g.nfo = nfo::for_video(&sample).await;
-        let ex = guess_from_path(root_p, &sample);
-        g.guess_title = g
-            .nfo
-            .as_ref()
-            .and_then(|n| n.title.clone())
-            .unwrap_or(ex.title);
-        g.guess_year = g
-            .nfo
-            .as_ref()
-            .and_then(|n| n.year)
-            .or(ex.year.map(i64::from));
+        let show_dir = root_p.join(&g.folder_name);
+        g.nfo = group_nfo(g.media_type, &show_dir, &sample, g.folder_name.is_empty()).await;
+        let (title, year) = guess(g.media_type, root_p, &sample, g.nfo.as_ref());
+        g.guess_title = title.unwrap_or_else(|| g.folder_name.clone());
+        g.guess_year = year;
     }
     let works = book_groups(root_p, folder_id, provider, &book_files, linked).await;
     orphan_count += works.iter().map(|g| g.files.len()).sum::<usize>();
@@ -334,6 +327,45 @@ async fn scan_under(
         scanned_files: all.len(),
         orphan_count,
     }
+}
+
+/// The `.nfo` describing a group's work: a series' `tvshow.nfo` (`show_dir` is its folder), a movie
+/// at the scan root its own `<stem>.nfo` only, so the root's other `.nfo` files never name it.
+async fn group_nfo(
+    kind: MediaKind,
+    show_dir: &Path,
+    sample: &Path,
+    at_root: bool,
+) -> Option<NfoData> {
+    match kind {
+        MediaKind::Series => nfo::for_show(show_dir, sample).await,
+        _ if at_root => nfo::file(&sample.with_extension("nfo")).await,
+        _ => nfo::for_video(sample).await,
+    }
+}
+
+/// A group's title and year: the `.nfo`'s, else the path's; `None` title when both are empty.
+fn guess(
+    kind: MediaKind,
+    root: &Path,
+    sample: &Path,
+    nfo: Option<&NfoData>,
+) -> (Option<String>, Option<i64>) {
+    let (title, year) = match kind {
+        MediaKind::Book => {
+            let p = fliks_domain::books::filename::parse_path(&sample.to_string_lossy());
+            (p.title, p.year.map(i64::from))
+        }
+        _ => {
+            let ex = guess_from_path(root, sample);
+            (Some(ex.title), ex.year.map(i64::from))
+        }
+    };
+    let nonempty = |t: Option<String>| t.map(|t| t.trim().to_owned()).filter(|t| !t.is_empty());
+    (
+        nonempty(nfo.and_then(|n| n.title.clone())).or(nonempty(title)),
+        nfo.and_then(|n| n.year).or(year),
+    )
 }
 
 /// The file name's title, unless it has no year and a folder between it and `root` has one
