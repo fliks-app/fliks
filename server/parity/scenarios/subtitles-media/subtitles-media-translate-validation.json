@@ -31,7 +31,7 @@
       },
       "expect": {
         "body": {
-          "id": 4,
+          "id": 1001,
           "key": "subtitle_translation_enabled",
           "value": "true"
         },

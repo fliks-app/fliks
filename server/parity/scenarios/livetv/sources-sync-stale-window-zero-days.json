@@ -16,7 +16,7 @@
       },
       "expect": {
         "body": {
-          "id": 7,
+          "id": 1001,
           "key": "livetv_stale_stream_days",
           "value": "0"
         },
