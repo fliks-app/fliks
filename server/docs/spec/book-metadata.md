@@ -1,6 +1,6 @@
 # Spec: book metadata seams
 
-Scope: how book providers plug into the metadata orchestrator: trait semantics, the one mapping from a parsed record to merge keys, snapshot keys, the identification and linking seams, the wire shapes of the metadata routes. The parsers are `book-providers.md`; the orchestrator is `metadata-orchestrator.md`; the data model is `books.md`. After the contract PR this file belongs to the fusion and linking track, which adds linking levels, field orders, the edition merge, provenance, identify thresholds, the routes and settings as rules 7 onward.
+Scope: how book providers plug into the metadata orchestrator: trait semantics, the one mapping from a parsed record to merge keys, snapshot keys, the identification and linking seams, the wire shapes of the metadata routes. The provider parsers are the official plugins' (plugins repository); the orchestrator is `metadata-orchestrator.md`; the data model is `books.md`. After the contract PR this file belongs to the fusion and linking track, which adds linking levels, field orders, the edition merge, provenance, identify thresholds, the routes and settings as rules 7 onward.
 
 ## Trait semantics
 

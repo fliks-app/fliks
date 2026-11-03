@@ -23,7 +23,6 @@ Media details: [`spec/media-details.md`](spec/media-details.md) (release dates, 
 
 Wants and follows: [`spec/wants-follows.md`](spec/wants-follows.md) (per-work wants, author follows, series watches, the `FollowRefresh` job, the wanted list, the calendar).
 
-Book metadata providers: [`spec/book-providers.md`](spec/book-providers.md) (endpoints, rate limits, identification, field mappings of OpenLibrary, Google Books, BnF, Audible, Audnexus).
 
 Provider plugins: [`spec/provider-plugins.md`](spec/provider-plugins.md) (the `provider` manifest block, the `metadata-provider` WIT interface, open id namespaces, Fliks defaults, bundled providers, the provider lane and its outbound limits).
 
