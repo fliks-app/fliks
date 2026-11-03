@@ -203,9 +203,6 @@ struct ServerEnvironment {
             "PATH": "\(ffmpegBin):\(pgBin):\(systemPath)",
             "FLIKS_CAST_DIR": Paths.effectiveCastDir.path,
         ]
-        // API keys baked at build time via SWIFT_ACTIVE_COMPILATION_CONDITIONS.
-        env["TMDB_API_KEY"] = BuildConfig.tmdbApiKey
-        env["TVDB_API_KEY"] = BuildConfig.tvdbApiKey
         return env
     }
 }

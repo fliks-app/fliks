@@ -22,10 +22,4 @@
     <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
-  <!-- Baked at publish time: `dotnet publish -p:TmdbApiKey=... -p:TvdbApiKey=...` -->
-  <ItemGroup>
-    <AssemblyMetadata Include="TmdbApiKey" Value="$(TmdbApiKey)" />
-    <AssemblyMetadata Include="TvdbApiKey" Value="$(TvdbApiKey)" />
-  </ItemGroup>
-
 </Project>

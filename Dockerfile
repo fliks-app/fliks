@@ -27,6 +27,9 @@ FROM server-chef AS server-build
 COPY --from=server-plan /server/recipe.json .
 RUN cargo chef cook --release --locked -p fliks-server --recipe-path recipe.json
 COPY server/ .
+# Compiled into fliks-server as the default provider keys; empty in a local build.
+ARG FLIKS_DEFAULT_TMDB_API_KEY=""
+ARG FLIKS_DEFAULT_TVDB_API_KEY=""
 RUN SQLX_OFFLINE=true cargo build --release --locked -p fliks-server \
     && cp target/release/fliks-server /usr/local/bin/fliks-server
 
@@ -84,15 +87,6 @@ COPY --from=client-build /app/dist/client/browser ./client
 
 ENV SERVE_STATIC_PATH=/app/client
 ENV FLIKS_TRANSCODE_DIR=/app/transcode
-
-# Provider API keys baked at build time from CI secrets. Empty in local
-# builds unless `--build-arg TMDB_API_KEY=… --build-arg TVDB_API_KEY=…`
-# is passed; the published image carries the keys configured in the
-# repo's GitHub Actions secrets.
-ARG TMDB_API_KEY=""
-ARG TVDB_API_KEY=""
-ENV TMDB_API_KEY=${TMDB_API_KEY}
-ENV TVDB_API_KEY=${TVDB_API_KEY}
 
 # Persistent dirs, group=root + g=u: writable by root, by an arbitrary uid
 # with gid 0, or via `--user <uid> --group-add 0` — no USER directive needed.

@@ -67,8 +67,6 @@ if [ "$SKIP_XCODE" = false ]; then
         -configuration Release \
         -derivedDataPath "$BUILD_DIR" \
         ONLY_ACTIVE_ARCH=YES \
-        TMDB_API_KEY="${TMDB_API_KEY:-}" \
-        TVDB_API_KEY="${TVDB_API_KEY:-}" \
         build 2>&1 | tail -3
 fi
 

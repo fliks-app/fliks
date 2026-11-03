@@ -44,8 +44,6 @@ Write-Host '==> Publishing tray (.NET, self-contained single-file)'
 dotnet publish (Join-Path $winDir 'Fliks.Tray\Fliks.Tray.csproj') `
     -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:TmdbApiKey="$env:TMDB_API_KEY" `
-    -p:TvdbApiKey="$env:TVDB_API_KEY" `
     -o (Join-Path $build 'tray-publish')
 
 # Multi-threaded: the client and pgsql trees are thousands of files.

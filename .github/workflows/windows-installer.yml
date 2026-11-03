@@ -114,8 +114,8 @@ jobs:
       - name: Build bundle
         working-directory: windows
         env:
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+          FLIKS_DEFAULT_TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FLIKS_DEFAULT_TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
         run: .\Scripts\build-app.ps1 -SkipWeb -Version "${{ steps.version.outputs.version }}"
 
       # A delta needs the previous full package next to the new one. The first Velopack

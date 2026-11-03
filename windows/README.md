@@ -37,8 +37,8 @@ cd windows
 .\Scripts\fetch-vendored.ps1
 
 # 2. Build client + fliks-server + tray, fetch fliks-engine, assemble .\build\Bundle
-$env:TMDB_API_KEY = "..."   # optional; baked into the tray
-$env:TVDB_API_KEY = "..."
+$env:FLIKS_DEFAULT_TMDB_API_KEY = "..."   # optional; compiled into fliks-server
+$env:FLIKS_DEFAULT_TVDB_API_KEY = "..."
 .\Scripts\build-app.ps1
 
 # 3. Package the Velopack release (.\build\Releases) and the installer that wraps it

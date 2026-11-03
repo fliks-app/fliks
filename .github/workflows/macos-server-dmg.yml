@@ -115,15 +115,14 @@ jobs:
           password: ${{ secrets.MAC_DEVELOPER_ID_CERT_PASSWORD }}
 
       # ── Build .app + bundle resources + dylibs ──
-      # API keys are baked into Info.plist via Xcode build settings,
-      # then read at runtime by BuildConfig.swift. MAC_SIGN_IDENTITY tells
-      # build-app.sh to Developer ID sign (hardened runtime) instead of ad-hoc;
+      # The provider keys are compiled into fliks-server (FLIKS_DEFAULT_*).
+      # MAC_SIGN_IDENTITY tells build-app.sh to Developer ID sign (hardened runtime) instead of ad-hoc;
       # the single imported cert matches the identity prefix uniquely.
       - name: Build Fliks Server.app
         working-directory: macos
         env:
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+          FLIKS_DEFAULT_TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FLIKS_DEFAULT_TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
           MAC_SIGN_IDENTITY: Developer ID Application
         run: ./Scripts/build-app.sh --skip-web
 
