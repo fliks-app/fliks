@@ -74,7 +74,7 @@ async fn start(
     extra_env: &[(&str, &std::path::Path)],
 ) -> Server {
     let port = free_port();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_fliks-server"));
+    let mut cmd = Command::new(crate::server_bin());
     cmd.envs(db_env(pool))
         .env("PORT", port.to_string())
         .envs(extra_env.iter().copied())
@@ -110,7 +110,7 @@ async fn boot_liveness_healthcheck_and_shutdown(pool: PgPool) {
     );
 
     let hc = |port: &str| {
-        Command::new(env!("CARGO_BIN_EXE_fliks-server"))
+        Command::new(crate::server_bin())
             .arg("healthcheck")
             .env("PORT", port)
             .status()
@@ -165,7 +165,7 @@ fn without_a_database_the_server_exits() {
     let dir = std::env::var("CARGO_TARGET_DIR")
         .map_or_else(|_| std::env::temp_dir(), std::path::PathBuf::from);
     let started = Instant::now();
-    let out = Command::new(env!("CARGO_BIN_EXE_fliks-server"))
+    let out = Command::new(crate::server_bin())
         .env("DB_HOST", "127.0.0.1")
         .env("DB_PORT", free_port().to_string())
         .env("PORT", free_port().to_string())

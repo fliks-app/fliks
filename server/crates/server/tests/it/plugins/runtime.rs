@@ -907,7 +907,7 @@ async fn component_cache_and_compile_child() {
         matches!(err, Err(compile::LoadError::Invalid(_))),
         "a failing child is invalid-component"
     );
-    let real = std::path::PathBuf::from(env!("CARGO_BIN_EXE_fliks-server"));
+    let real = crate::server_bin();
     let bad = compile::compile_in_child(&real, Duration::from_secs(30), b"not wasm").await;
     assert!(
         matches!(bad, Err(compile::LoadError::Invalid(ref m)) if !m.contains('/')),
