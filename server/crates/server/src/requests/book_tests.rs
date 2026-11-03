@@ -649,3 +649,118 @@ async fn an_approval_holds_no_title_lock_while_the_provider_answers(pool: PgPool
     assert!(t.elapsed() < Duration::from_secs(2));
     assert_eq!(slow.await.unwrap(), 201);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_pending_requests_wants_are_edited_before_approval(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
+        .await;
+    let (_, other) = c
+        .request(&c.manager, "OL2W", json!([want("audio", Some("en"))]))
+        .await;
+    let uri = format!("/api/requests/{}", r["id"]);
+    let patch = |wants: Value| json!({ "wants": wants });
+    assert_eq!(
+        c.call(
+            &c.user,
+            "PATCH",
+            &uri,
+            patch(json!([want("audio", Some("en"))]))
+        )
+        .await
+        .0,
+        409,
+        "another active request holds that edition"
+    );
+    assert_eq!(
+        c.call(&c.user, "PATCH", &uri, patch(json!([]))).await.0,
+        400
+    );
+    let (s, r) = c
+        .call(
+            &c.user,
+            "PATCH",
+            &uri,
+            patch(json!([want("text", Some("en"))])),
+        )
+        .await;
+    assert_eq!((s, &r["wants"][0]["language"]), (200, &json!("en")), "{r}");
+    let (s, r) = c
+        .call(
+            &c.manager,
+            "PATCH",
+            &uri,
+            patch(json!([want("text", None)])),
+        )
+        .await;
+    assert_eq!((s, &r["wants"][0]["language"]), (200, &Value::Null), "{r}");
+    let approve = format!("/api/requests/{}/approve", other["id"]);
+    assert_eq!(c.call(&c.manager, "POST", &approve, json!({})).await.0, 201);
+    let approve = format!("/api/requests/{}/approve", r["id"]);
+    assert_eq!(c.call(&c.manager, "POST", &approve, json!({})).await.0, 201);
+    assert_eq!(
+        c.call(&c.user, "PATCH", &uri, patch(json!([want("text", None)])))
+            .await
+            .0,
+        403,
+        "an approved request is no longer editable"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_whose_wants_are_all_satisfied_is_refused(pool: PgPool) {
+    let c = ctx(pool).await;
+    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W"});
+    let (_, m) = c.call(&c.admin, "POST", "/api/media/import", body).await;
+    let media = m["id"].as_i64().unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO editions (id, "mediaId", family, language) VALUES (500, {media}, 'text', 'fr');
+           INSERT INTO items (id, "mediaId", "editionId", monitored) VALUES (600, {media}, 500, true);
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId")
+             VALUES (700, {media}, 'f', 1, 'x', (SELECT id FROM library_folders WHERE "libraryId" = 1));
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES (600, 700, {media}, 0);"#
+    )))
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (s, r) = c
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
+        .await;
+    assert_eq!(s, 409, "{r}");
+    let (s, r) = c
+        .request(
+            &c.user,
+            "OL2W",
+            json!([want("text", Some("fr")), want("audio", Some("fr"))]),
+        )
+        .await;
+    assert_eq!(s, 201, "{r}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn auto_approval_rules_filter_book_requests_by_family_and_language(pool: PgPool) {
+    let c = ctx(pool).await;
+    let rule = json!({"name": "r", "criteria": {"families": ["text"], "languages": ["fr"]}});
+    assert_eq!(
+        c.call(&c.admin, "POST", "/api/auto-approval-rules", rule)
+            .await
+            .0,
+        201
+    );
+    let bad = json!({"name": "r", "criteria": {"families": ["book"]}});
+    assert_eq!(
+        c.call(&c.admin, "POST", "/api/auto-approval-rules", bad)
+            .await
+            .0,
+        400
+    );
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("audio", Some("fr"))]))
+        .await;
+    assert_eq!(r["status"], json!("pending"), "{r}");
+    let (_, r) = c
+        .request(&c.user, "OL3W", json!([want("text", Some("fr"))]))
+        .await;
+    assert_eq!(r["status"], json!("approved"), "{r}");
+}

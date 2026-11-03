@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type { MediaType } from '../../enums/media-type.enum';
+import type { WantFamily } from './wants-api.service';
 
 /** Every set criterion must match and an unset one matches anything (`{}` approves all); `userIds`/`roleIds` are OR'd, as are rules. */
 export interface AutoApprovalCriteria {
@@ -13,6 +14,9 @@ export interface AutoApprovalCriteria {
   maxSeasons?: number;
   yearFrom?: number;
   yearTo?: number;
+  /** Book requests only: every wanted edition must be of one of these families / languages. */
+  families?: WantFamily[];
+  languages?: string[];
 }
 
 export interface AutoApprovalRule {

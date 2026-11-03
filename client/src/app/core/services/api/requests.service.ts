@@ -58,6 +58,8 @@ export interface UpdateRequestBody {
   /** `null` clears the target library (falls back to the type default at
    *  approval); omit to leave it unchanged. */
   libraryId?: number | null;
+  /** Pending book requests only: replaces the wished editions. */
+  wants?: WantSpec[];
 }
 
 export interface RequestMedia {

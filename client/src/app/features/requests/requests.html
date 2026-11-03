@@ -343,10 +343,12 @@
   [qualityProfileId]="edit.qualityProfileId()"
   [languageProfileId]="edit.languageProfileId()"
   [libraryId]="edit.libraryId()"
+  [wants]="edit.wants()"
   [saving]="edit.saving()"
   (qualityProfileIdChange)="edit.qualityProfileId.set($event)"
   (languageProfileIdChange)="edit.languageProfileId.set($event)"
   (libraryIdChange)="edit.libraryId.set($event)"
+  (wantsChange)="edit.wants.set($event)"
   (dismissed)="edit.close()"
   (save)="saveEdit()"
 />

@@ -1,5 +1,6 @@
 import { computed, signal } from '@angular/core';
 import type { FliksRequestRow } from '../../core/services/api/requests.service';
+import type { WantSpec } from '../../core/services/api/wants-api.service';
 import type { LibrarySummary } from '../../core/services/api/libraries-api.service';
 import type { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
 import type { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
@@ -29,6 +30,7 @@ export class RequestEditFlow {
   readonly qualityProfileId = signal<number | null>(null);
   readonly languageProfileId = signal<number | null>(null);
   readonly libraryId = signal<number | null>(null);
+  readonly wants = signal<WantSpec[]>([]);
   readonly saving = signal(false);
 
   /** Libraries the request's media type fits, the set the dialog's picker offers. */
@@ -48,6 +50,7 @@ export class RequestEditFlow {
     this.qualityProfileId.set(row.qualityProfileId);
     this.languageProfileId.set(row.languageProfileId);
     this.libraryId.set(row.libraryId);
+    this.wants.set(row.wants ?? []);
     this.modal()?.showModal();
   }
 
@@ -63,6 +66,7 @@ export class RequestEditFlow {
       qualityProfileId: this.qualityProfileId() ?? undefined,
       languageProfileId: this.languageProfileId() ?? undefined,
       ...(this.libraryId() !== row.libraryId ? { libraryId: this.libraryId() } : {}),
+      ...(row.mediaType === 'book' ? { wants: this.wants() } : {}),
     };
   }
 }
