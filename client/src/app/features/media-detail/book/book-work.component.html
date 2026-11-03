@@ -150,7 +150,12 @@
   }
 
   @if (b.editions.length) {
-    <app-book-editions [editions]="b.editions" [title]="m.title" />
+    <app-book-editions
+      [editions]="b.editions"
+      [mediaId]="m.id"
+      [title]="m.title"
+      [artist]="b.authors.map((a) => a.name).join(', ')"
+    />
     <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
   }
 

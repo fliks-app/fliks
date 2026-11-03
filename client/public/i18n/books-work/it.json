@@ -46,6 +46,9 @@
     "send_queued": "Invio a {{name}}",
     "download": "Scarica",
     "share": "Condividi",
-    "download_failed": "Download non riuscito"
+    "download_failed": "Download non riuscito",
+    "offline_save": "Salva offline",
+    "offline_remove": "Rimuovi dal dispositivo",
+    "offline_retry": "Riprova"
   }
 }

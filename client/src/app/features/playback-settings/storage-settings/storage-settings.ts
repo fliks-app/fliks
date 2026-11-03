@@ -41,6 +41,8 @@ export class StorageSettingsPageComponent {
   readonly defaultQuality = this.downloadSettings.defaultQuality;
   readonly wifiOnly = this.downloadSettings.wifiOnly;
   readonly autoCapGb = this.downloadSettings.autoCapGb;
+  readonly autoNextVolume = this.downloadSettings.autoNextVolume;
+  readonly autoDeleteBooks = this.downloadSettings.autoDeleteBooks;
   readonly showWifiOnly = Capacitor.isNativePlatform();
 
   onDefaultQualityChange(value: string) {
@@ -53,6 +55,16 @@ export class StorageSettingsPageComponent {
 
   onAutoCapChange(value: number | string) {
     this.downloadSettings.setAutoCapGb(value);
+    void this.autoDownload.reconcile('settings');
+  }
+
+  onAutoNextVolumeChange(value: boolean) {
+    this.downloadSettings.setAutoNextVolume(value);
+    void this.autoDownload.reconcile('settings');
+  }
+
+  onAutoDeleteBooksChange(value: boolean) {
+    this.downloadSettings.setAutoDeleteBooks(value);
     void this.autoDownload.reconcile('settings');
   }
 

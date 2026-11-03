@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, afterNextRender, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
+import { DownloadCacheService } from '../../core/services/download-cache.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -28,6 +29,7 @@ export class ReaderPageComponent {
   private readonly navbar = inject(NavbarService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly downloads = inject(DownloadCacheService);
 
   protected readonly opened = signal<Opened | null>(null);
 
@@ -44,7 +46,17 @@ export class ReaderPageComponent {
     const mediaId = param('mediaId');
     const itemId = param('itemId');
     try {
-      const book = asBookMedia(await this.media.getOne(mediaId));
+      const book = asBookMedia(await this.media.getOne(mediaId).catch(() => null));
+      const downloaded = this.downloads.tasks().find((t) => t.book?.family === 'text' && t.book.itemId === itemId && t.status === 'ready');
+      if (!book && downloaded?.book?.format && ['epub', 'pdf'].includes(downloaded.book.format)) {
+        // The work page is out of reach offline: the download carries what the reader needs.
+        this.opened.set({
+          format: downloaded.book.format as Opened['format'],
+          title: downloaded.media?.title ?? '',
+          target: { mediaId, itemId, fileId: downloaded.mediaFileId },
+        });
+        return;
+      }
       const edition = book?.book.editions.find((e) => e.itemId === itemId && e.family === 'text' && e.fileIds.length);
       const format = edition?.format?.toLowerCase();
       if (!book || !edition || (format !== 'epub' && format !== 'pdf')) throw new Error('not readable');

@@ -23,6 +23,18 @@ export interface OfflineSubtitle {
   trackKey?: string;
 }
 
+/** What a book download holds: the stored files in playing order, with what the audio player needs to open them offline. */
+export interface OfflineBook {
+  itemId: number;
+  family: 'text' | 'audio';
+  format: string | null;
+  files: { key: string; offsetS: number; durationS: number }[];
+  chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
+  durationSeconds?: number;
+  artist?: string;
+  coverUrl?: string | null;
+}
+
 export interface DownloadTask {
   id: number;
   mediaId: number;
@@ -55,6 +67,8 @@ export interface DownloadTask {
   offlineEdl?: EdlRange[];
   /** Audio stream info for offline audio track picker. */
   audioStreams?: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number }[];
+  /** Set on a book download: the files sit in the book store, not in an HLS bundle. */
+  book?: OfflineBook;
   media?: {
     id: number;
     title: string;

@@ -628,6 +628,9 @@ export class StreamingApiService {
       episodeId?: number;
       /** Names an item directly (a book edition); `episodeId` is then not read. */
       itemId?: number;
+      /** A text beat: whole-book progress 0..1 and the locator it stands at. */
+      progression?: number;
+      locator?: Record<string, unknown>;
       /** Epoch ms of an offline replay; the server keeps a newer row over it. */
       playedAt?: number;
       // Live-session heartbeat fields, present once `getPlaybackInfo` returned a `sessionId`; the backend tolerates their absence.

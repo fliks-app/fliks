@@ -4,6 +4,10 @@ import { BrowserDeviceProfileService } from '../browser-device-profile.service';
 import { MediaService } from '../api/media.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
 import { PlaybackQueueService } from '../playback-queue.service';
+import { DownloadCacheService } from '../download-cache.service';
+import { NetworkService } from '../network.service';
+import { OfflineBookStoreService } from '../offline-book-store.service';
+import { OfflinePlaybackSyncService } from '../offline-playback-sync.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { asBookMedia } from '../../../features/media-detail/book/book-media';
 import { mediaKeyAction } from '../../../features/player/player-keymap';
@@ -65,6 +69,10 @@ export class AudioPlayerService {
   private readonly queue = inject(PlaybackQueueService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly storage = inject(StorageScopeService);
+  private readonly downloads = inject(DownloadCacheService);
+  private readonly store = inject(OfflineBookStoreService);
+  private readonly network = inject(NetworkService);
+  private readonly sync = inject(OfflinePlaybackSyncService);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -131,13 +139,31 @@ export class AudioPlayerService {
     this._bookmarks.set(this.readBookmarks(req.itemId));
     this.queue.syncTo(req.mediaId);
     try {
-      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), {
-        startAt: req.startAt,
-      });
+      const local = await this.localParts(req.itemId);
+      let opened: PlaybackInfoResponse | null = null;
+      if (!local || this.network.isOnline()) {
+        opened = await this.streaming
+          .getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: req.startAt })
+          .catch((e) => {
+            if (!local) throw e;
+            return null;
+          });
+      }
       if (generation !== this.generation) return;
+      // A downloaded item plays from the device, with the server's session and resume point when it answers.
+      const info = local
+        ? ({
+            startAtSeconds: this.sync.resumePositionFor(req.mediaId, undefined, req.itemId)?.positionSeconds ?? 0,
+            ...opened,
+            mediaFileId: opened?.mediaFileId ?? local.mediaFileId,
+            playMethod: 'DirectPlay',
+            durationSeconds: local.book.durationSeconds,
+            chapters: local.book.chapters,
+          } as PlaybackInfoResponse)
+        : opened!;
       this.info = info;
       this.sessionId = info.sessionId;
-      this.parts = this.partsOf(info);
+      this.parts = local ? local.parts : this.partsOf(info);
       this._duration.set(info.durationSeconds ?? this.parts.reduce((s, p) => s + p.duration, 0));
       this._chapters.set(this.chaptersOf(info));
       this.setupMediaSession(req);
@@ -272,6 +298,20 @@ export class AudioPlayerService {
       el.addEventListener('ended', mine(() => void this.onEnded()));
       el.addEventListener('error', mine(() => this.onError()));
     }
+  }
+
+  /** The downloaded audio of an item as local part URLs, or null when it is not (fully) on the device. */
+  private async localParts(itemId: number) {
+    const task = this.downloads.tasks().find((t) => t.book?.family === 'audio' && t.book.itemId === itemId && t.status === 'ready');
+    const book = task?.book;
+    if (!task || !book) return null;
+    const parts: PlayPart[] = [];
+    for (const f of book.files) {
+      const url = await this.store.fileUrl(book, f.key);
+      if (!url) return null;
+      parts.push({ url, offset: f.offsetS, duration: f.durationS });
+    }
+    return { book, parts, mediaFileId: task.mediaFileId };
   }
 
   private partsOf(info: PlaybackInfoResponse): PlayPart[] {
@@ -440,15 +480,20 @@ export class AudioPlayerService {
     };
   }
 
+  /** A beat the server does not take is kept, and replayed once it answers. */
   private beat(): void {
     const b = this.body();
     if (!b) return;
+    const { positionSeconds, durationSeconds, mediaFileId, itemId } = b.payload;
+    const saved = { mediaId: b.mediaId, mediaFileId, itemId, positionSeconds, durationSeconds };
+    if (!this.network.isOnline()) return void this.sync.queue(saved);
     this.streaming
       .updatePlaybackState(b.mediaId, b.payload)
       .then((r) => {
         if (r?.sessionLost) this.sessionId = undefined;
+        this.sync.record(saved);
       })
-      .catch(() => undefined);
+      .catch(() => this.sync.queue(saved));
   }
 
   private beatOnExit(): void {

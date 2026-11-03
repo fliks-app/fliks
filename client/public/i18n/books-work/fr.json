@@ -46,6 +46,9 @@
     "send_queued": "Envoi vers {{name}}",
     "download": "Télécharger",
     "share": "Partager",
-    "download_failed": "Échec du téléchargement"
+    "download_failed": "Échec du téléchargement",
+    "offline_save": "Garder hors ligne",
+    "offline_remove": "Retirer de l'appareil",
+    "offline_retry": "Réessayer"
   }
 }

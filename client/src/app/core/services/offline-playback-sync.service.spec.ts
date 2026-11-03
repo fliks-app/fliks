@@ -105,4 +105,19 @@ describe('OfflinePlaybackSyncService', () => {
     expect(svc.resumePositionFor(7)?.positionSeconds).toBe(400);
     expect(online()).toBe(true);
   });
+
+  it('keeps one entry per book item and replays a text beat with its locator', async () => {
+    const { svc, online, updatePlaybackState } = setup();
+    const beat = (itemId: number, extra?: Record<string, unknown>) => ({ ...update(0), itemId, extra });
+    svc.queue(beat(1, { progression: 0.4, locator: { href: 'c1' } }));
+    svc.queue(beat(2));
+    svc.queue(beat(1, { progression: 0.5, locator: { href: 'c2' } }));
+    expect(svc.pending().map((p) => p.itemId)).toEqual([2, 1]);
+    expect(svc.resumePositionFor(7, undefined, 1)?.extra).toEqual({ progression: 0.5, locator: { href: 'c2' } });
+    expect(svc.resumePositionFor(7)).toBeNull();
+    online.set(true);
+    await settle();
+    expect(updatePlaybackState).toHaveBeenCalledWith(7, expect.objectContaining({ itemId: 1, progression: 0.5, locator: { href: 'c2' }, positionSeconds: 0 }));
+    expect(svc.pending()).toEqual([]);
+  });
 });

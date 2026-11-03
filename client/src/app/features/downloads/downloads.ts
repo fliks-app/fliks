@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { DownloadTask } from '../../core/services/download-cache.service';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { isPausable, isTransferring } from '../../core/services/download-status';
 import { DownloadNotificationService } from '../../core/services/download-notification.service';
@@ -63,6 +64,7 @@ export class DownloadsComponent {
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly notif = inject(DownloadNotificationService);
+  private readonly audio = inject(AudioPlayerService);
 
   /** Ids being re-queued, so the button can't be double-tapped into two
    *  downloads of the same file. */
@@ -91,7 +93,7 @@ export class DownloadsComponent {
 
   protected readonly auto = inject(AutoDownloadService);
   readonly entries = computed(() => groupDownloads(this.items()));
-  readonly pausable = computed(() => this.items().filter((t) => isPausable(t.status)));
+  readonly pausable = computed(() => this.items().filter((t) => !t.book && isPausable(t.status)));
   readonly paused = computed(() => this.items().filter((t) => t.status === 'paused'));
 
   protected readonly freeBytes = signal<number | null>(null);
@@ -101,7 +103,7 @@ export class DownloadsComponent {
     void this.notif.getFreeSpace().then((s) => this.freeBytes.set(s?.freeBytes ?? null));
   });
 
-  protected readonly isPausable = (task: DownloadTask) => isPausable(task.status);
+  protected readonly isPausable = (task: DownloadTask) => !task.book && isPausable(task.status);
   protected readonly isTransferring = (task: DownloadTask) => isTransferring(task.status);
 
   pauseItem(task: DownloadTask) {
@@ -221,6 +223,21 @@ export class DownloadsComponent {
   }
 
   playOffline(task: DownloadTask) {
+    const { book, media } = task;
+    if (book?.family === 'text') {
+      void this.router.navigate(['/read', task.mediaId, book.itemId]);
+      return;
+    }
+    if (book) {
+      void this.audio.play({
+        mediaId: task.mediaId,
+        itemId: book.itemId,
+        title: media?.title ?? '',
+        artist: book.artist,
+        coverUrl: book.coverUrl ?? media?.posterUrl,
+      });
+      return;
+    }
     void this.router.navigate(['/watch', task.mediaFileId], {
       queryParams: {
         mediaId: task.mediaId,
