@@ -1924,19 +1924,16 @@ mod book_ingest {
             .await
             .unwrap();
         books::merge::resume_backfills(&c.st).await;
-        while !c.st.ingest.backfills.lock().unwrap().is_empty() {
-            tokio::task::yield_now().await;
+        let flagged = r#"SELECT count(*) FROM libraries WHERE "mergeM4bBackfill" > 0"#;
+        for _ in 0..100 {
+            if count(&c, flagged).await == 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
         assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
         assert_eq!(parts(&c, m).await.len(), 3);
-        assert_eq!(
-            count(
-                &c,
-                r#"SELECT count(*) FROM libraries WHERE "mergeM4bBackfill" > 0"#
-            )
-            .await,
-            0
-        );
+        assert_eq!(count(&c, flagged).await, 0);
     }
 
     #[sqlx::test(migrations = false)]
