@@ -146,3 +146,66 @@ fn only_the_criteria_that_need_tmdb_read_metadata() {
         "a requested scope is the count"
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: sqlx::PgPool) {
+    use crate::plugins::namespaces::{Declared, claim, delete_data};
+    use fliks_domain::external_id::Namespace;
+
+    crate::db::migrate(&pool).await.unwrap();
+    let ns = Declared {
+        name: "org.x:a",
+        label: "L",
+        id_pattern: "^.+$",
+        case: "preserve",
+    };
+    claim(&pool, "org.x", Some("k1"), &[ns])
+        .await
+        .unwrap()
+        .unwrap();
+    let key = super::TitleKey {
+        media_type: MediaKind::Book,
+        provider: Namespace::parse("org.x:a").unwrap(),
+        external_id: "7".into(),
+    };
+    let new = |key| super::db::New {
+        user_id: 1,
+        kind: "add",
+        title_key: key,
+        title: "t",
+        seasons: None,
+        status: "pending",
+        approved_by: None,
+        quality_profile_id: None,
+        language_profile_id: None,
+        library_id: None,
+        folder_id: None,
+        media_id: None,
+        poster_url: None,
+        fanart_url: None,
+        wants: None,
+    };
+    sqlx::query("INSERT INTO users (id, username, \"isAdmin\") VALUES (1, 'u', true)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    super::db::insert(&pool, new(&key)).await.unwrap();
+    assert_eq!(super::db::active_adds(&pool, &key).await.unwrap().len(), 1);
+
+    delete_data(&pool, "org.x").await.unwrap();
+    let ns = Declared {
+        name: "org.x:a",
+        label: "L",
+        id_pattern: "^.+$",
+        case: "preserve",
+    };
+    claim(&pool, "org.x", Some("k2"), &[ns])
+        .await
+        .unwrap()
+        .unwrap();
+    let key = super::TitleKey {
+        provider: Namespace::parse("org.x:a").unwrap(),
+        ..key
+    };
+    assert_eq!(super::db::active_adds(&pool, &key).await.unwrap().len(), 0);
+}

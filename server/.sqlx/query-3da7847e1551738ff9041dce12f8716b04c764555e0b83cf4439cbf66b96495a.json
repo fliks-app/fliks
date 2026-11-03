@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\"\n        FROM requests\n        WHERE \"mediaType\" = $1 AND provider = $2 AND \"externalId\" = $3 AND kind = 'add'\n        AND status::text = ANY($4) ORDER BY \"createdAt\" ASC, id ASC",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\"\n        FROM requests\n        WHERE \"mediaType\" = $1 AND provider = $2 AND \"externalId\" = $3 AND kind = 'add'\n        AND \"namespaceGeneration\" IS NOT DISTINCT FROM\n            (SELECT generation FROM provider_namespaces WHERE name = $2)\n        AND status::text = ANY($4) ORDER BY \"createdAt\" ASC, id ASC",
   "describe": {
     "columns": [
       {
@@ -185,5 +185,5 @@
       true
     ]
   },
-  "hash": "e5b2e8d54b4d90ed785b553d1e5dda69d55eaea343d99dd95e9957a339973a6b"
+  "hash": "3da7847e1551738ff9041dce12f8716b04c764555e0b83cf4439cbf66b96495a"
 }
