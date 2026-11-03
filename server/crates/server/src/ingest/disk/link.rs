@@ -677,48 +677,21 @@ pub(super) async fn find_or_create_unmatched(
         MediaKind::Movie | MediaKind::Book => Some(split_ext(&file_name(&sample)).0.to_owned()),
         MediaKind::Series => None,
     };
-    let read_nfo = async || -> Option<NfoData> {
-        match d.media_type {
-            MediaKind::Series => match nfo::file(&art_dir.join("tvshow.nfo")).await {
-                Some(n) => Some(n),
-                None => nfo::for_video(&sample).await,
-            },
-            MediaKind::Movie | MediaKind::Book if root_movie => {
-                let base = art_base.clone().unwrap_or_default();
-                nfo::file(&art_dir.join(format!("{base}.nfo"))).await
-            }
-            MediaKind::Movie | MediaKind::Book => nfo::for_video(&sample).await,
-        }
-    };
-    let guessed = d
+    let nfo = group_nfo(d.media_type, &art_dir, &sample, root_movie).await;
+    let root = d.scan_root.as_deref().map_or_else(
+        || PathBuf::from(&lib.path),
+        |r| PathBuf::from(resolve(&crate::libraries::sanitize_path(r), "/")),
+    );
+    let (guessed_title, guessed_year) = guess(d.media_type, &root, &sample, nfo.as_ref());
+    let title = d
         .title
         .as_deref()
         .map(str::trim)
         .filter(|t| !t.is_empty())
         .map(str::to_owned)
-        .or_else(|| {
-            match d.media_type {
-                MediaKind::Book => {
-                    fliks_domain::books::filename::parse_path(&sample.to_string_lossy()).title
-                }
-                _ => Some(extract_media_title(&file_name(&sample)).title),
-            }
-            .filter(|t| !t.is_empty())
-        })
+        .or(guessed_title)
         .unwrap_or_else(|| d.folder_name.clone());
-    let transfer_nfo = if d.transfer.is_some() {
-        read_nfo().await
-    } else {
-        None
-    };
-    let title = match transfer_nfo.as_ref().and_then(|n| n.title.clone()) {
-        Some(t) if !t.is_empty() && guessed == d.folder_name => t,
-        _ => guessed,
-    };
-    let year = d.year.or(transfer_nfo
-        .as_ref()
-        .and_then(|n| n.year)
-        .and_then(|y| i32::try_from(y).ok()));
+    let year = d.year.or(guessed_year.and_then(|y| i32::try_from(y).ok()));
     let folder = target_folder(st, d, &title, year).await?;
     let key = format!("{}:{}:{folder}", lib.id, d.media_type);
     let _lock = st.ingest.unmatched.lock(key.clone()).await;
@@ -734,14 +707,6 @@ pub(super) async fn find_or_create_unmatched(
                     return Err(outside());
                 }
             }
-            let nfo = match transfer_nfo {
-                Some(mut n) => {
-                    n.title = None;
-                    Some(n)
-                }
-                None if d.transfer.is_some() => None,
-                None => read_nfo().await,
-            };
             let artwork = local_artwork(&art_dir, art_base.as_deref(), root_movie);
             let id = mw::create_unmatched(
                 st,

@@ -663,10 +663,7 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     )
     .await?;
     let nfo = u.nfo.unwrap_or_default();
-    let title = match nfo.title.clone() {
-        Some(t) if !t.is_empty() && (u.title.is_empty() || u.title == u.folder_name) => t,
-        _ => u.title.clone(),
-    };
+    let title = u.title;
     let original = nfo
         .original_title
         .clone()
@@ -682,7 +679,7 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
            RETURNING id"#,
         title,
         original,
-        u.year.or(nfo.year.and_then(|y| i32::try_from(y).ok())),
+        u.year,
         u.media_type.as_str(),
         nfo.plot,
         json!(nfo.genres.clone().unwrap_or_default()),

@@ -2553,6 +2553,61 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn the_orphan_scan_names_a_series_after_its_show_not_its_first_episode(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("tv");
+        let l = library(&c, "T", &lib, r#"["series", "movie"]"#).await;
+        let season = lib.join("Placeholder Show/Season 1");
+        touch(&season.join("Placeholder.Show.S01E01.Pilot.mkv"), b"x");
+        touch(&season.join("Placeholder.Show.S01E01.Pilot.nfo"), b"<episodedetails><title>Pilot</title><uniqueid type='tmdb'>9</uniqueid></episodedetails>");
+        touch(&lib.join("Root Film (2001).mkv"), b"x");
+        touch(
+            &lib.join("movie.nfo"),
+            b"<movie><title>Stray</title></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        let groups = b["groups"].as_array().unwrap();
+        let show = groups.iter().find(|g| g["mediaType"] == "series").unwrap();
+        assert_eq!(
+            (&show["guessTitle"], &show["nfo"]),
+            (&json!("Placeholder Show"), &Value::Null)
+        );
+        let film = groups.iter().find(|g| g["mediaType"] == "movie").unwrap();
+        assert_eq!(
+            (&film["guessTitle"], &film["guessYear"]),
+            (&json!("Root Film"), &json!(2001))
+        );
+        touch(
+            &lib.join("Placeholder Show/tvshow.nfo"),
+            b"<tvshow><title>Show NFO</title></tvshow>",
+        );
+        let (_, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        let show = b["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["mediaType"] == "series")
+            .unwrap()
+            .clone();
+        assert_eq!(show["guessTitle"], "Show NFO");
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_orphan_scan_groups_book_files_into_works(pool: PgPool) {
         let c = ctx(pool).await;
         let lib = c.dir.join("shelf");
