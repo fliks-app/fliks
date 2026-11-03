@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('publisher', cd.publisher, 'startYear', cd.\"startYear\", 'volume', cd.volume,\n  'issues', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n      'itemId', i.id,\n      'mediaFileId', pf.id,\n      'format', CASE WHEN lower(pf.ext) IN ('cbz', 'cb7', 'cbr', 'pdf') THEN lower(pf.ext) END,\n      'number', ci.label, 'sort', ci.\"sortNumber\"::float8, 'annual', ci.annual,\n      'title', i.title, 'releaseDate', i.\"airDate\"::text, 'pageCount', ci.\"pageCount\",\n      'progression', CASE WHEN ps.id IS NULL THEN NULL\n          WHEN ps.completed THEN 1.0::float8\n          WHEN ps.progression IS NOT NULL THEN ps.progression\n          WHEN ps.\"durationSeconds\" > 0 THEN LEAST(1.0, ps.\"positionSeconds\" / ps.\"durationSeconds\")\n          ELSE 0.0::float8 END,\n      'finished', COALESCE(ps.completed, false))\n      ORDER BY ci.annual, ci.\"sortNumber\", i.id)\n    FROM items i JOIN comic_issues ci ON ci.\"itemId\" = i.id JOIN editions e ON e.id = i.\"editionId\"\n    LEFT JOIN LATERAL (SELECT ip.\"mediaFileId\" AS id, substring(f.\"relativePath\" FROM '\\.([A-Za-z0-9]+)$') AS ext FROM item_parts ip\n        JOIN media_files f ON f.id = ip.\"mediaFileId\"\n        WHERE ip.\"itemId\" = i.id AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($3)\n        ORDER BY ip.version DESC, ip.position, ip.\"mediaFileId\" LIMIT 1) pf ON true\n    LEFT JOIN playback_states ps ON ps.\"itemId\" = i.id AND ps.\"userId\" = $2\n    WHERE i.\"mediaId\" = m.id), '[]'::jsonb)) AS \"json!: Value\"\nFROM media m LEFT JOIN comic_details cd ON cd.\"mediaId\" = m.id WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fc39e4d2903900baa53fb0eecdeaa129a60669669a1ae1672bcfb8568def489b"
+}

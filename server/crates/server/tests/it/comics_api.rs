@@ -79,12 +79,13 @@ async fn detail_lists_main_issues_then_annuals_by_decimal_sort(pool: PgPool) {
     );
     assert_eq!(
         c["issues"][1],
-        json!({"itemId": 1, "mediaFileId": 1, "number": "1", "sort": 1.0, "annual": false, "title": "Start",
+        json!({"itemId": 1, "mediaFileId": 1, "format": "cbz", "number": "1", "sort": 1.0, "annual": false, "title": "Start",
                "releaseDate": "2016-03-02", "pageCount": 24, "progression": 1.0, "finished": true})
     );
     assert_eq!(c["issues"][2]["progression"], 0.25);
     assert_eq!(c["issues"][2]["mediaFileId"], Value::Null);
     assert_eq!(c["issues"][0]["progression"], Value::Null);
+    assert_eq!(c["issues"][2]["format"], Value::Null);
     let other = get(&app, &t, "/api/media/12").await;
     assert!(other.get("comic").is_none());
 }
