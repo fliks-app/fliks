@@ -224,7 +224,7 @@ async fn relink_in_place(
             Ok(l) => {
                 linked += 1;
                 *slot |= l.created;
-                st.ingest.queue.enqueue(st, l.file_id);
+                st.ingest.queue.enqueue(st, l.file_id).await;
             }
         }
     }

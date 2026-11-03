@@ -370,7 +370,7 @@ async fn sprite_of(st: &AppState, id: i32, subject: Option<&Subject>, force: boo
 }
 
 /// `buildMediaProgressSubject` for every file, scalar columns only and in chunks of 1 000 ids.
-async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Subject>> {
+pub(crate) async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Subject>> {
     type Row = (
         i32,
         i32,

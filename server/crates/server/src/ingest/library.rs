@@ -250,7 +250,7 @@ pub async fn ingest(
     });
     st.ingest.settle.schedule(st, media.id);
     for i in &out.imported {
-        st.ingest.queue.enqueue(st, i.file_id);
+        st.ingest.queue.enqueue(st, i.file_id).await;
     }
     if !carried.is_empty() {
         let st2 = st.clone();

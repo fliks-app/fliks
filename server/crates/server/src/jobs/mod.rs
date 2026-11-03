@@ -2,6 +2,7 @@
 //! Other domains audit their work through `run_audited`.
 mod audit;
 mod bodies;
+pub(crate) use bodies::file_subjects;
 pub mod book_import;
 mod cron;
 mod names;
