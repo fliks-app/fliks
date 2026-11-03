@@ -562,7 +562,7 @@ async fn a_lettered_namespace_refreshes_and_all_entries_are_linked() {
         .await
         .unwrap();
     for one in &both {
-        let again = resolve_or_create(&st, "movie", &[one.clone()], None, None)
+        let again = resolve_or_create(&st, "movie", std::slice::from_ref(one), None, None)
             .await
             .unwrap();
         assert_eq!(again, first, "{}", one.provider);
