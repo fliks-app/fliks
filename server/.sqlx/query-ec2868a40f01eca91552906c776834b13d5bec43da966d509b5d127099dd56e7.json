@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media t SET \"posterUrl\" = COALESCE(t.\"posterUrl\", d.\"posterUrl\"),\n             overview = COALESCE(t.overview, d.overview), year = COALESCE(t.year, d.year),\n             rating = COALESCE(t.rating, d.rating), \"originalTitle\" = COALESCE(t.\"originalTitle\", d.\"originalTitle\")\n           FROM media d WHERE t.id = $2 AND d.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec2868a40f01eca91552906c776834b13d5bec43da966d509b5d127099dd56e7"
+}

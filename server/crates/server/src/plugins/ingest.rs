@@ -727,6 +727,83 @@ mod tests {
         assert_eq!(anchors().await, ["OL1W"]);
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn identify_folds_a_book_into_the_work_that_holds_the_id(db: PgPool) {
+        let mut s = shelf(db).await;
+        let mut ol = crate::metadata::books::tests::Fake::new(Namespace::OPENLIBRARY);
+        ol.works.insert(
+            "OL1W".into(),
+            json!({"title": "Mirelune", "authors": [{"name": "Una Roe"}]}),
+        );
+        ol.found = vec![
+            json!({"externalId": "OL1W", "title": "Mirelune", "authors": [{"name": "Una Roe"}]}),
+        ];
+        std::sync::Arc::get_mut(&mut s.st.metadata)
+            .unwrap()
+            .register(std::sync::Arc::new(ol));
+        {
+            use std::io::Write;
+            let opf = r#"<package><metadata xmlns:dc="x"><dc:title>Mirelune</dc:title>
+                <dc:creator>Una Roe</dc:creator></metadata><manifest/></package>"#;
+            let mut w = zip::ZipWriter::new(std::fs::File::create(s.data.join("m.epub")).unwrap());
+            let o = zip::write::SimpleFileOptions::default();
+            for (n, b) in [
+                (
+                    "META-INF/container.xml",
+                    r#"<container><rootfiles><rootfile full-path="o.opf"/></rootfiles></container>"#,
+                ),
+                ("o.opf", opf),
+            ] {
+                w.start_file(n, o).unwrap();
+                w.write_all(b.as_bytes()).unwrap();
+            }
+            w.finish().unwrap();
+        }
+        let req = data_request(&s, "m.epub", t::TransferMode::Move);
+        run(&s.st, "p", &s.runtime, req).await.unwrap();
+        let db = s.st.db.clone();
+        let q = |sql: &'static str| {
+            let db = db.clone();
+            async move {
+                sqlx::query(sql).execute(&db).await.unwrap();
+            }
+        };
+        q(r#"INSERT INTO media (id, title, type) VALUES (50, 'Mirelune', 'book')"#).await;
+        q(
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (50, 'book', 'openlibrary', 'OL1W')"#,
+        )
+        .await;
+        q(r#"INSERT INTO editions (id, "mediaId", family, format) VALUES (50, 50, 'audio', 'm4b')"#)
+            .await;
+        q(r#"INSERT INTO items (id, "mediaId", "editionId") VALUES (50, 50, 50)"#).await;
+        q(
+            r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId")
+             SELECT 50, 50, 'held.m4b', 1, 'q', "folderId" FROM media_files LIMIT 1"#,
+        )
+        .await;
+        q(
+            r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version)
+             VALUES (50, 50, 50, 0)"#,
+        )
+        .await;
+        let kept = books::identify_media(&s.st, 1).await.ok().unwrap();
+        assert_eq!(kept, 50);
+        let medias: Vec<i32> = sqlx::query_scalar("SELECT id FROM media")
+            .fetch_all(&s.st.db)
+            .await
+            .unwrap();
+        assert_eq!(medias, [50]);
+        let held: (i64, i64) = sqlx::query_as(
+            r#"SELECT (SELECT count(*) FROM editions WHERE "mediaId" = 50),
+                      (SELECT count(*) FROM item_parts WHERE "mediaId" = 50)"#,
+        )
+        .fetch_one(&s.st.db)
+        .await
+        .unwrap();
+        assert_eq!(held, (2, 2));
+    }
+
     #[cfg(unix)]
     #[test]
     fn the_data_dir_root_refuses_escapes_and_stages_a_copy() {

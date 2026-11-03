@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE likes SET \"mediaId\" = $2 WHERE \"mediaId\" = $1\n             AND (\"groupId\" IS NOT NULL OR \"itemId\" IS NOT NULL OR NOT EXISTS (SELECT 1 FROM likes y\n               WHERE y.\"mediaId\" = $2 AND y.\"groupId\" IS NULL AND y.\"itemId\" IS NULL\n                 AND y.\"userId\" = likes.\"userId\"))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5934734ba7ec3224d251dd973bb06484d4922f7102446b710458a876818fcfca"
+}

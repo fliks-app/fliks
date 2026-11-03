@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE cleanup_exclusions x SET \"mediaId\" = $2 WHERE \"mediaId\" = $1\n             AND NOT EXISTS (SELECT 1 FROM cleanup_exclusions y WHERE y.\"mediaId\" = $2\n               AND y.\"groupId\" IS NOT DISTINCT FROM x.\"groupId\"\n               AND y.\"itemId\" IS NOT DISTINCT FROM x.\"itemId\")",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "05409d7209099e7522ae3758cc409266a42e84875e803535d3b1192c6e770adb"
+}

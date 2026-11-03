@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE wants SET \"mediaId\" = $2 WHERE \"mediaId\" = $1\n             AND NOT EXISTS (SELECT 1 FROM wants y WHERE y.\"mediaId\" = $2 AND y.family = wants.family\n                               AND y.language IS NOT DISTINCT FROM wants.language)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e9e40a153e84d95f94e415272282e51a2b566c84cc6ae304f9bf02bab4ee4034"
+}
