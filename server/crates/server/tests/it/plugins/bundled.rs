@@ -90,7 +90,7 @@ async fn disabled_env_still_loads_bundled() {
     };
     let id: &'static str = Box::leak(m["id"].as_str().unwrap().to_owned().into_boxed_str());
     h.st.plugins
-        .install_archives(&[(id, "1.0.0", leak(pack(&m, "1.0.0", &w, Some(&test_key()))))])
+        .install_archives(&[(id, "0.1.0", leak(pack(&m, "0.1.0", &w, Some(&test_key()))))])
         .await;
     h.st.plugins.boot().await;
     assert_eq!(row(&s, id).await.2, "active");
