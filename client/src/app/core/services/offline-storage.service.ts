@@ -245,7 +245,8 @@ export class OfflineStorageService {
 
   async delete(key: string): Promise<void> {
     if (this.isDesktop) return this.downloader!.remove(await this.desktopId(key));
-    if (this.isNative) return this.deleteNative(key);
+    // Native videos live in the download plugin by task id, removed by the download manager.
+    if (this.isNative) return;
     // Web: remove Shaka offline content
     const mfid = Number(key.replace('download-', ''));
     await this.shakaRemove(mfid);
@@ -356,20 +357,6 @@ export class OfflineStorageService {
     return !!this.getShakaOfflineUri(Number(mfid));
   }
 
-  /** Get the native directory path for progressive downloads (HLS segments). */
-  async getNativeDestDir(key: string): Promise<string | null> {
-    if (!this.isNative) return null;
-    try {
-      const { Filesystem, Directory } = await getFs();
-      const dirPath = `fliks-downloads/${this.scoped(key)}`;
-      await Filesystem.mkdir({ path: dirPath, directory: Directory.Data, recursive: true }).catch(() => {});
-      const uri = await Filesystem.getUri({ path: dirPath, directory: Directory.Data });
-      return uri.uri.replace('file://', '');
-    } catch {
-      return null;
-    }
-  }
-
   // --- Native (Capacitor Filesystem) ---
 
   private async ensureDir(): Promise<void> {
@@ -382,43 +369,4 @@ export class OfflineStorageService {
       });
     } catch { /* Already exists */ }
   }
-
-  private async hasNative(key: string): Promise<boolean> {
-    try {
-      const { Filesystem, Directory } = await getFs();
-      await Filesystem.stat({
-        path: `fliks-downloads/${this.scoped(key)}`,
-        directory: Directory.Data,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async getNativeHlsUrl(key: string): Promise<string | null> {
-    if (!(await this.hasNative(`${key}/index.m3u8`))) return null;
-    try {
-      const { Filesystem, Directory } = await getFs();
-      const result = await Filesystem.getUri({
-        path: `fliks-downloads/${this.scoped(key)}/index.m3u8`,
-        directory: Directory.Data,
-      });
-      return Capacitor.convertFileSrc(result.uri);
-    } catch {
-      return null;
-    }
-  }
-
-  private async deleteNative(key: string): Promise<void> {
-    try {
-      const { Filesystem, Directory } = await getFs();
-      await Filesystem.rmdir({
-        path: `fliks-downloads/${this.scoped(key)}`,
-        directory: Directory.Data,
-        recursive: true,
-      });
-    } catch { /* doesn't exist — fine */ }
-  }
-
 }
