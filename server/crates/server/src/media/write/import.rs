@@ -511,6 +511,9 @@ pub async fn import_in(
     added_by: Option<i32>,
     (seasons, links): (Option<Vec<i32>>, Vec<(Namespace, String)>),
 ) -> Result<i32, AppError> {
+    if matches!(ns, Namespace::TMDB | Namespace::TVDB) && !media_type.is_video() {
+        return Err(AppError::bad_request("the provider describes video only"));
+    }
     if ns == Namespace::TMDB {
         if !st.metadata.available(ns) {
             return Err(AppError::bad_request("TMDB API key is not configured"));

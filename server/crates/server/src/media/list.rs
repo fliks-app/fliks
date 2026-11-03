@@ -338,7 +338,7 @@ pub async fn find_all(
     let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
     attach_watched(db, &mut data, &page_ids, uid).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
-    comics::attach_list_info(db, &mut data, uid).await?;
+    comics::attach_list_info(db, &mut data, uid, ids).await?;
     Ok(Page { data, total })
 }
 
@@ -479,6 +479,6 @@ pub async fn recently_added(
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
     let mut data = hydrate::items_view(db, &page_ids, see_paths, false, Some(ids)).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
-    comics::attach_list_info(db, &mut data, uid).await?;
+    comics::attach_list_info(db, &mut data, uid, ids).await?;
     Ok(data)
 }

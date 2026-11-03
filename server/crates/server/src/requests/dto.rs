@@ -113,6 +113,13 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     let delete = kind.as_deref() == Some("delete");
     let key = match media_type {
         Some(m) if book => book_key(&mut c, &o, m),
+        Some(m) if !m.is_video() => {
+            c.err(
+                "mediaType",
+                "must be one of the following values: movie, series, book",
+            );
+            None
+        }
         Some(m) => tmdb_key(&mut c, &o, m),
         None => {
             tmdb_key(&mut c, &o, MediaKind::Movie);
@@ -555,11 +562,22 @@ mod tests {
     }
 
     #[test]
+    fn a_comic_cannot_be_requested() {
+        let m = msgs(create_request(
+            json!({"mediaType": "comic", "tmdbId": 1, "title": "t"}),
+        ));
+        assert_eq!(
+            m,
+            json!(["mediaType must be one of the following values: movie, series, book"])
+        );
+    }
+
+    #[test]
     fn create_messages_follow_nest() {
         assert_eq!(
             msgs(create_request(json!({}))),
             json!([
-                "mediaType must be one of the following values: movie, series, book",
+                "mediaType must be one of the following values: movie, series, book, comic",
                 "tmdbId must not be less than 1",
                 "tmdbId must be an integer number",
                 "title must be a string"

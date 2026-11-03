@@ -68,14 +68,17 @@ CREATE OR REPLACE FUNCTION media_details_json(media integer) RETURNS jsonb LANGU
   LIMIT 1
 $$;
 
--- Issue facts of an item: items."number" stays an integer for the series paths, so the decimal sort key,
--- the printed label and the annual flag live here
+-- Issue facts of an item: items."number" stays NULL for comics (it is an integer the series paths read), so the
+-- decimal sort key, the printed label and the kind of issue live here
 CREATE TABLE "comic_issues" (
   "itemId" integer NOT NULL,
-  "sortNumber" numeric NOT NULL,
+  "mediaId" integer NOT NULL,
+  "kind" text NOT NULL DEFAULT 'issue' CONSTRAINT "CK_comic_issues_kind" CHECK ("kind" IN ('issue', 'annual', 'special')),
+  "sortNumber" numeric NOT NULL CONSTRAINT "CK_comic_issues_sort" CHECK ("sortNumber" NOT IN ('NaN', 'Infinity', '-Infinity')),
   "label" text NOT NULL CONSTRAINT "CK_comic_issues_label" CHECK ("label" <> ''),
-  "annual" boolean NOT NULL DEFAULT false,
   "pageCount" integer CONSTRAINT "CK_comic_issues_pageCount" CHECK ("pageCount" > 0),
   CONSTRAINT "PK_comic_issues" PRIMARY KEY ("itemId"),
-  CONSTRAINT "FK_comic_issues_item" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE CASCADE
+  CONSTRAINT "UQ_comic_issues_number" UNIQUE ("mediaId", "kind", "sortNumber"),
+  CONSTRAINT "FK_comic_issues_item" FOREIGN KEY ("itemId", "mediaId") REFERENCES "items"("id", "mediaId") ON DELETE CASCADE
 );
+CREATE INDEX "IDX_comic_issues_item_media" ON "comic_issues" ("itemId", "mediaId");

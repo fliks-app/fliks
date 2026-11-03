@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\", jsonb_build_object('publisher', cd.publisher, 'startYear', cd.\"startYear\",\n  'issueCount', (SELECT count(*) FROM items i JOIN comic_issues ci ON ci.\"itemId\" = i.id\n      JOIN editions e ON e.id = i.\"editionId\"\n      WHERE i.\"mediaId\" = m.id AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($3)),\n  'readCount', (SELECT count(*) FROM items i JOIN comic_issues ci ON ci.\"itemId\" = i.id\n      JOIN editions e ON e.id = i.\"editionId\"\n      JOIN playback_states ps ON ps.\"itemId\" = i.id AND ps.\"userId\" = $2 AND ps.completed\n      WHERE i.\"mediaId\" = m.id AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($3))) AS \"json!: Value\"\nFROM media m LEFT JOIN comic_details cd ON cd.\"mediaId\" = m.id WHERE m.id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "c30b7ac330b48e659d7024b5403dd25ef4399352c64eea97532a58e58669927c"
+}

@@ -39,16 +39,27 @@ pub async fn user_stats(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {
     )
     .fetch_all(db)
     .await?;
+    let comics_finished = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
+        "SELECT COUNT(*) FROM media m WHERE m.type = '{}' AND ({})",
+        MediaKind::Comic,
+        crate::media::watched::predicate("$1", "m")
+    )))
+    .bind(id)
+    .fetch_one(db)
+    .await?;
     let mut playback = Map::new();
     playback.insert(
         "totalWatchTimeSeconds".into(),
         p.total_watch_time_seconds.into(),
     );
     for k in MediaKind::ALL {
-        let n = completed
-            .iter()
-            .find(|r| r.kind == k.as_str())
-            .map_or(0, |r| r.count);
+        let n = match k {
+            MediaKind::Comic => comics_finished,
+            _ => completed
+                .iter()
+                .find(|r| r.kind == k.as_str())
+                .map_or(0, |r| r.count),
+        };
         playback.insert(k.completed_stat_key().into(), n.into());
     }
     playback.insert("episodesWatched".into(), p.episodes_watched.into());

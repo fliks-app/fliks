@@ -151,9 +151,10 @@ mod tests {
         "wants",
     ];
     /// Left to cascade: the attach on the holder and the cleanup job derive them again, and a book
-    /// has no movie or series details.
+    /// or a comic has no movie or series details.
     const DROPPED: &[&str] = &[
         "cleanup_candidates",
+        "comic_details",
         "media_field_sources",
         "movie_details",
         "series_details",

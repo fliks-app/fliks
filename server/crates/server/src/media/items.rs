@@ -144,7 +144,7 @@ pub async fn point_wants_at_default_folder(
     Ok(())
 }
 
-/// Gives a new media one want per family of its kind and, but for a book, its `video` edition and, without seasons, its sole item.
+/// Gives a new media one want per family of its kind and, but for a book or a comic, its `video` edition and, without seasons, its sole item.
 pub async fn create_shell(
     c: &mut PgConnection,
     media: i32,
