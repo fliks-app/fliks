@@ -335,3 +335,77 @@ async fn a_kind_without_a_special_case_lists_with_its_watched_state(pool: PgPool
     let (_, list) = c.get(&c.admin, "/api/media").await;
     assert_eq!(find(&list).unwrap()["watched"], true);
 }
+
+/// Identify is a new identity: plugin pins of the media and its seasons go, with the id of the
+/// media pin's namespace, except what an explicit `preferredProvider` names.
+async fn identify_with_pins(pool: PgPool, body: Value) -> Vec<(Option<String>, Vec<String>)> {
+    use fliks_domain::external_id::Namespace;
+    let c = ctx(pool.clone()).await;
+    for n in ["aid", "bid"] {
+        Namespace::declare(&format!("org.idpin:{n}"), n, "^[1-9][0-9]*$", "preserve").unwrap();
+    }
+    sqlx::raw_sql(
+        r#"UPDATE media SET "preferredProvider" = 'org.idpin:aid' WHERE id = 1;
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (1, 'movie', 'org.idpin:aid', '7'), (1, 'movie', 'org.idpin:bid', '8');
+           INSERT INTO item_groups ("mediaId", "number", "preferredProvider", monitored)
+             VALUES (1, 1, 'org.idpin:aid', true), (1, 2, 'org.idpin:bid', true);"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, _) = c
+        .send("POST", &c.admin, "/api/media/1/identify", Some(body))
+        .await;
+    assert_eq!(status, 201);
+    let media: Option<String> =
+        sqlx::query_scalar(r#"SELECT "preferredProvider" FROM media WHERE id = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let ids: Vec<String> = sqlx::query_scalar(
+        r#"SELECT provider FROM media_external_ids WHERE "mediaId" = 1 AND provider LIKE '%:%' ORDER BY provider"#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let seasons: Vec<Option<String>> = sqlx::query_scalar(
+        r#"SELECT "preferredProvider" FROM item_groups WHERE "mediaId" = 1 ORDER BY number"#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let mut out = vec![(media, ids)];
+    out.extend(seasons.into_iter().map(|p| (p, vec![])));
+    out
+}
+
+#[sqlx::test(migrations = false)]
+async fn identify_without_a_provider_clears_plugin_pins(pool: PgPool) {
+    let got = identify_with_pins(pool, json!({"tmdbId": 603})).await;
+    assert_eq!(
+        got,
+        [
+            (None, vec!["org.idpin:bid".into()]),
+            (None, vec![]),
+            (None, vec![])
+        ]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn identify_keeps_the_namespace_an_explicit_provider_names(pool: PgPool) {
+    let got = identify_with_pins(
+        pool,
+        json!({"tmdbId": 603, "preferredProvider": "org.idpin:bid"}),
+    )
+    .await;
+    assert_eq!(
+        got,
+        [
+            (Some("org.idpin:bid".into()), vec!["org.idpin:bid".into()]),
+            (None, vec![]),
+            (Some("org.idpin:bid".into()), vec![])
+        ]
+    );
+}

@@ -396,7 +396,7 @@ async fn insert_media(
             external_ids::link(tx, id, imp.media_type, *ns, v).await?;
         }
     }
-    for (ns, v) in &imp.links {
+    for (ns, v) in imp.links.iter().filter(|(n, _)| n != lookup && n != served) {
         external_ids::link(tx, id, imp.media_type, *ns, v).await?;
     }
     if lookup.core().is_none() && served == lookup {

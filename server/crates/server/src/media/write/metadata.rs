@@ -529,20 +529,25 @@ async fn apply_identity(
             )));
         }
     }
-    // A new identity: the ids and pins of plugin namespaces go, but the one an explicit pin names.
+    // A new identity: the plugin pins go, and the id of the media pin's namespace with them, unless
+    // an explicit pin names it.
+    let keep = provider.clone().flatten();
     sqlx::query(
         r#"DELETE FROM media_external_ids
-           WHERE "mediaId" = $1 AND provider LIKE '%:%' AND provider IS DISTINCT FROM $2"#,
+           WHERE "mediaId" = $1 AND provider LIKE '%:%' AND provider IS DISTINCT FROM $2
+             AND provider = (SELECT "preferredProvider" FROM media WHERE id = $1)"#,
     )
     .bind(media.id)
-    .bind(provider.clone().flatten())
+    .bind(&keep)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
         r#"UPDATE item_groups SET "preferredProvider" = NULL
-           WHERE "mediaId" = $1 AND "preferredProvider" LIKE '%:%'"#,
+           WHERE "mediaId" = $1 AND "preferredProvider" LIKE '%:%'
+             AND "preferredProvider" IS DISTINCT FROM $2"#,
     )
     .bind(media.id)
+    .bind(&keep)
     .execute(&mut *tx)
     .await?;
     let written = ids.replace(&mut tx, media.id, media.media_type).await?;

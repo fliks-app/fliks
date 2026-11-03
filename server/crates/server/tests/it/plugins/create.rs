@@ -504,7 +504,7 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
     st.metadata.add_plugin(Arc::new(Fake(
         Arc::default(),
         "org.fake:aid",
-        json!({"tvdbId": 81189}),
+        json!({"tvdbId": 81189, "imdbId": "tt0000002", "ids": {"tvdb": "81189", "imdb": "tt0000002"}}),
     )));
     sqlx::raw_sql(
         r#"INSERT INTO media (id, title, type) VALUES (900, 'Held', 'movie');
@@ -530,8 +530,8 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
     .unwrap();
     assert_eq!(
         held,
-        [("org.fake:aid".to_owned(),), ("tvdb".to_owned(),)],
-        "no tmdb link"
+        [("org.fake:aid".to_owned(),)],
+        "a plugin record writes no core id"
     );
     // A library preferring TMDB does not look the plugin's imdbId or tvdbId up there either.
     sqlx::query(r#"UPDATE libraries SET "preferredProvider" = 'tmdb' WHERE id = 1"#)
@@ -590,7 +590,40 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
     let e = resolve_or_create(&st, "org.other", "movie", &other, None, None)
         .await
         .unwrap_err();
-    assert_eq!(e.code, "unsupported-provider");
+    assert_eq!(e.code, "namespace-not-owned");
+    // `org.fake.x` is not `org.fake`, and one id per namespace counts.
+    Namespace::declare("org.fake.x:aid", "X", "^[1-9][0-9]*$", "preserve").unwrap();
+    st.metadata
+        .add_plugin(Arc::new(Fake(Arc::default(), "org.fake.x:aid", json!({}))));
+    let x = vec![ExternalId {
+        provider: "org.fake.x:aid".into(),
+        value: "5".into(),
+    }];
+    let e = resolve_or_create(&st, "org.fake", "movie", &x, None, None)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "namespace-not-owned");
+    let twice = vec![
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "11".into(),
+        },
+        ExternalId {
+            provider: "org.fake:aid".into(),
+            value: "12".into(),
+        },
+    ];
+    let id = resolve_or_create(&st, "org.fake", "movie", &twice, None, None)
+        .await
+        .unwrap();
+    let aid: String = sqlx::query_scalar(
+        r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'org.fake:aid'"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(aid, "11");
     s.finish().await;
 }
 

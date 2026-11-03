@@ -285,14 +285,16 @@ pub const MAX_IDS_PER_NAMESPACE: usize = 16;
 /// The arrays of a record whose elements are records too.
 const NESTED: [&str; 4] = ["cast", "crew", "seasons", "episodes"];
 
-/// Rules 14, 26 and 28 on a record and its nested records: `ids` keeps the namespaces the
-/// provider may write, normalised; a third-party one loses `tmdbId` and the TMDB collection keys.
+/// Rules 14, 26 and 28 on a record and its nested records: `ids` keeps the namespaces the provider
+/// may write, normalised; a third-party one writes no core id (`tmdbId`, `tvdbId`, `imdbId`, collection keys).
 pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) -> usize {
     let mut dropped = 0;
     if !official {
-        let core = ["tmdbId"]
-            .into_iter()
-            .chain(Field::Collection.keys().iter().copied());
+        let core = Field::Ids
+            .keys()
+            .iter()
+            .chain(Field::Collection.keys())
+            .copied();
         dropped += core.filter(|k| rec.remove(*k).is_some()).count();
     }
     for key in NESTED {
@@ -311,9 +313,7 @@ pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) 
     dropped += ids.len().saturating_sub(MAX_IDS_NAMESPACES);
     let mut kept = Map::new();
     for (name, v) in ids.into_iter().take(MAX_IDS_NAMESPACES) {
-        let ns = Namespace::parse(&name).filter(|n| {
-            official || own.contains(&n.as_str()) || (n.core().is_some() && !n.is_unique())
-        });
+        let ns = Namespace::parse(&name).filter(|n| official || own.contains(&n.as_str()));
         let Some(ns) = ns else {
             dropped += 1;
             continue;
@@ -393,20 +393,18 @@ mod tests {
         Namespace::declare("org.ids.t:aid", "T", "^[1-9][0-9]*$", "preserve").unwrap();
         let rec = |v: Value| v.as_object().unwrap().clone();
         let input = json!({"tmdbId": 5, "title": "t", "tmdbCollectionId": 9, "tmdbCollectionName": "c",
-            "cast": [{"externalId": 1, "tmdbId": 2, "ids": {"tmdb": "1", "imdb": "nm1"}}], "ids": {
+            "tvdbId": 3, "imdbId": "tt2",
+            "cast": [{"externalId": 1, "tmdbId": 2, "imdbId": "nm1", "ids": {"tmdb": "1", "imdb": "nm1"}}], "ids": {
             "tmdb": "603", "imdb": "tt1", "org.ids.t:aid": ["7", "x"], "org.ids.t:nope": "1",
             "tvdb": "012", "openlibrary": "OL1W"}});
         let mut third = rec(input.clone());
-        assert_eq!(sanitize_ids(&mut third, false, &["org.ids.t:aid"]), 9);
-        assert_eq!(third["ids"], json!({"imdb": "tt1", "org.ids.t:aid": ["7"]}));
+        assert_eq!(sanitize_ids(&mut third, false, &["org.ids.t:aid"]), 14);
+        assert_eq!(third["ids"], json!({"org.ids.t:aid": ["7"]}));
         assert!(!third.contains_key("tmdbId") && third.contains_key("title"));
         assert!(
             !third.contains_key("tmdbCollectionId") && !third.contains_key("tmdbCollectionName")
         );
-        assert_eq!(
-            third["cast"],
-            json!([{"externalId": 1, "ids": {"imdb": "nm1"}}])
-        );
+        assert_eq!(third["cast"], json!([{"externalId": 1, "ids": {}}]));
         let mut official = rec(input);
         sanitize_ids(&mut official, true, &[]);
         assert_eq!(official["ids"]["tmdb"], "603");

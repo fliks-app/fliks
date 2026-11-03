@@ -82,9 +82,10 @@ pub type Provenance = Vec<(Field, Namespace)>;
 
 type Record = (Namespace, Map<String, Value>);
 
-/// A third-party provider owns no TMDB id or collection (`provider-plugins.md` rule 26).
+/// A third-party provider owns no core id or collection (`provider-plugins.md` rule 26).
 fn unowned(p: Namespace, key: &str) -> bool {
-    p.core().is_none() && (key == "tmdbId" || Field::Collection.keys().contains(&key))
+    p.core().is_none()
+        && (Field::Ids.keys().contains(&key) || Field::Collection.keys().contains(&key))
 }
 
 /// Merges `records` key by key: the first provider of the field's order with a non-empty value wins,
@@ -156,10 +157,10 @@ mod tests {
     }
 
     #[test]
-    fn a_third_party_record_gives_no_tmdb_id_or_collection() {
+    fn a_third_party_record_gives_no_core_id_or_collection() {
         let third = Namespace::declare("org.merge.t:aid", "T", "^.+$", "preserve").unwrap();
         let r = rec(
-            json!({"title": "A", "tmdbId": 5, "tmdbCollectionId": 9, "tmdbCollectionName": "c"}),
+            json!({"title": "A", "tmdbId": 5, "tvdbId": 6, "imdbId": "tt1", "tmdbCollectionId": 9, "tmdbCollectionName": "c"}),
         );
         let (m, _) = merge(
             &[(third, r)],

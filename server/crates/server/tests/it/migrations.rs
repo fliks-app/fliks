@@ -2764,3 +2764,30 @@ async fn m1789000510_opens_provider_namespaces_and_keeps_every_id(pool: PgPool) 
         assert!(sqlx::raw_sql(bad).execute(&pool).await.is_err(), "{bad}");
     }
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1789000000510_clears_preferred_providers_no_provider_serves(pool: PgPool) {
+    apply_until(&pool, 1789000000510).await;
+    sql(
+        &pool,
+        r#"INSERT INTO libraries (id, name, "preferredProvider")
+             VALUES (1, 'a', 'imdb'), (2, 'b', 'tmdb'), (3, 'c', 'org.x:aid');
+           INSERT INTO media (id, title, type, "preferredProvider")
+             VALUES (1, 'm', 'movie', 'asin'), (2, 'n', 'movie', 'tvdb');
+           INSERT INTO item_groups ("mediaId", "number", "preferredProvider")
+             VALUES (1, 1, 'file'), (1, 2, 'tvdb');"#,
+    )
+    .await;
+    apply_only(&pool, 1789000000510).await;
+    let pins = |t: &'static str| format!(r#"SELECT "preferredProvider" FROM {t} ORDER BY id"#);
+    for (t, want) in [
+        ("libraries", vec![None, Some("tmdb"), Some("org.x:aid")]),
+        ("media", vec![None, Some("tvdb")]),
+        ("item_groups", vec![None, Some("tvdb")]),
+    ] {
+        let got: Vec<(Option<String>,)> = rows(&pool, &pins(t)).await;
+        let want: Vec<(Option<String>,)> =
+            want.into_iter().map(|w| (w.map(str::to_owned),)).collect();
+        assert_eq!(got, want, "{t}");
+    }
+}

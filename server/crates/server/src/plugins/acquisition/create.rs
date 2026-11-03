@@ -58,6 +58,12 @@ pub async fn resolve_or_create(
             let own = |ns: &Namespace| {
                 ns.core().is_some() || ns.as_str().split(':').next() == Some(plugin_id)
             };
+            if !entries.iter().any(|(ns, _)| own(ns)) {
+                return Err(host_err(
+                    "namespace-not-owned",
+                    "namespace not owned by the caller",
+                ));
+            }
             let Some((ns, value)) = entries
                 .iter()
                 .find(|(ns, _)| own(ns) && st.metadata.available(*ns))
@@ -148,6 +154,9 @@ fn served_entries(
         .filter_map(|(ns, v)| Some((*ns, v.clone()?)))
         .collect();
     known.sort_by_key(|(ns, _)| !ns.is_unique());
+    // One id per namespace: a media holds one of each (`media_external_ids` is unique by it).
+    let mut seen = std::collections::HashSet::new();
+    known.retain(|(ns, _)| seen.insert(*ns));
     if known.is_empty() && !parsed.is_empty() {
         return Err(host_err(
             "ERR_VALIDATION",
