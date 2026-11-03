@@ -16,12 +16,14 @@ const fn q(id: u32, name: &'static str, source: &'static str, rank: u32) -> AppQ
     }
 }
 
-pub static TEXT_QUALITIES: [AppQuality; 5] = [
+pub static TEXT_QUALITIES: [AppQuality; 7] = [
     q(201, "Unknown-text", "unknown", 5),
     q(202, "PDF", "pdf", 10),
     q(203, "MOBI", "mobi", 15),
     q(204, "AZW3", "azw3", 20),
     q(205, "EPUB", "epub", 30),
+    q(206, "FB2", "fb2", 12),
+    q(207, "CBZ", "cbz", 8),
 ];
 
 pub fn text_quality_by_id(id: i64) -> Option<&'static AppQuality> {
@@ -42,9 +44,11 @@ pub fn parse_text_release(title: &str) -> TextRelease {
     let t = title.replace(['.', '_'], " ").to_lowercase();
     let format = [
         (rx!(r"\bepub\b"), "epub"),
-        (rx!(r"\b(azw3|azw|kf8)\b"), "azw3"),
+        (rx!(r"\b(azw3|kf8)\b"), "azw3"),
         (rx!(r"\bmobi\b"), "mobi"),
         (rx!(r"\bpdf\b"), "pdf"),
+        (rx!(r"\bfb2\b"), "fb2"),
+        (rx!(r"\bcbz\b"), "cbz"),
     ]
     .into_iter()
     .find(|(r, _)| r.is_match(&t))
@@ -58,5 +62,25 @@ pub fn parse_text_release(title: &str) -> TextRelease {
         retail: rx!(r"\bretail\b").is_match(&t) && !rx!(r"\bnon[ -]?retail\b").is_match(&t),
         language: parse_book_language(title),
         names: parse_book_release_name(title),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::media::TEXT_EXTS;
+
+    #[test]
+    fn the_quality_table_and_the_ingested_formats_are_the_same_list() {
+        for q in &TEXT_QUALITIES[1..] {
+            assert!(TEXT_EXTS.contains(&format!(".{}", q.source).as_str()));
+        }
+        for e in TEXT_EXTS {
+            let f = &e[1..];
+            assert!(TEXT_QUALITIES.iter().any(|q| q.source == f), "{f}");
+            assert_eq!(parse_text_release(&format!("T {f}")).format, Some(f));
+        }
+        assert_eq!(parse_text_release("T azw").format, None);
+        assert_eq!(parse_text_release("T djvu").format, None);
     }
 }

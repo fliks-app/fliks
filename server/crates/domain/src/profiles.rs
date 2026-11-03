@@ -61,6 +61,7 @@ fn text_sizes(id: u32) -> Sizes {
     match text_quality_by_id(i64::from(id)).map(|q| q.source) {
         Some("pdf") => s(0.0, 8.0, 150.0),
         Some("epub") => s(0.0, 2.0, 80.0),
+        Some("cbz") => s(0.0, 50.0, 500.0),
         _ => s(0.0, 2.0, 50.0),
     }
 }
