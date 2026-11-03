@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM book_merges WHERE \"editionId\" = $1 AND state <> 'replace'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "040bfc3cc6cce764e0e089375969e8020fb61812de0c8f368dda1144968542a7"
+}

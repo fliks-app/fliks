@@ -131,19 +131,21 @@ describe('LibraryDetailState.save', () => {
     expect(updated).toEqual([expect.not.objectContaining({ path: expect.anything() })]);
   });
 
-  it('keeps the book type of a library and sends its m4b merge option', async () => {
+  it('keeps the book type of a library and sends its m4b merge options', async () => {
     const { state, updated } = setup();
     state.hydrate({
       id: 7,
       name: 'Books',
       mediaTypes: ['book'],
       mergeM4b: false,
+      mergeM4bReplace: false,
       userIds: [],
     } as unknown as Library);
     state.libraryId.set(7);
     state.formMergeM4b.set(true);
+    state.formMergeM4bReplace.set(true);
 
     expect(await state.save()).toBe(true);
-    expect(updated).toEqual([expect.objectContaining({ mediaTypes: ['book'], mergeM4b: true })]);
+    expect(updated).toEqual([expect.objectContaining({ mediaTypes: ['book'], mergeM4b: true, mergeM4bReplace: true })]);
   });
 });

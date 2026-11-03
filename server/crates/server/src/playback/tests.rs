@@ -232,3 +232,26 @@ async fn a_beat_without_progression_keeps_the_stored_one(pool: PgPool) {
         (Some(0.5), Some(serde_json::json!({"href": "a"})))
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_naming_a_replaced_file_keeps_the_progress(pool: PgPool) {
+    let ids = seed(&pool).await;
+    let w = watch(&pool, ids, 300.0, None).await;
+    sqlx::query("DELETE FROM media_files WHERE id = $1")
+        .bind(ids.2)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let beat = || record_watch(&pool, ids.0, ids.1, &w);
+    assert!(beat().await.unwrap().is_none(), "a plain deleted file");
+    sqlx::query(
+        r#"INSERT INTO item_version_aliases ("itemId", version, "toVersion") VALUES ($1, 0, 1)"#,
+    )
+    .bind(w.item)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(beat().await.unwrap().is_some());
+    let r = find_state(&pool, ids.0, w.item).await.unwrap().unwrap();
+    assert_eq!((r.position_seconds, r.media_file_id), (300.0, None));
+}

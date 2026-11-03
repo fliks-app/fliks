@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fingerprint FROM book_merges WHERE \"mediaId\" = $1\n             AND (state = 'failed' OR (state = 'retry' AND \"nextAttemptAt\" > now()))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "fingerprint"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "797e27ec306ead3f5317e1162b7d933b20690d6767eae6070441b5d866fe514d"
+}

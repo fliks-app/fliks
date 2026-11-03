@@ -1,5 +1,5 @@
 //! Optional merge of a multi-file audio version into one m4b (`book-ingest.md` rule 18).
-use super::{Placed, group::work_dir, register_language};
+use super::{Placed, group::work_dir, register_to};
 use crate::{
     engine::EngineError,
     ingest::{
@@ -43,9 +43,9 @@ pub struct Part {
 }
 
 /// The version to merge: in the first audio edition with no `m4b`, a version of several files, the
-/// first such version, probed, in one folder and one work directory, and not the one `failed`
-/// (a recorded fingerprint) names. A version never spans editions.
-pub fn pick(rows: &[Part], failed: Option<&str>) -> Option<Vec<Part>> {
+/// first such version, probed, in one folder and one work directory, and not one `skip` (recorded
+/// fingerprints) names. A version never spans editions.
+pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
     let mut editions: Vec<i32> = rows.iter().map(|r| r.edition).collect();
     editions.dedup();
     editions.into_iter().find_map(|e| {
@@ -76,7 +76,7 @@ pub fn pick(rows: &[Part], failed: Option<&str>) -> Option<Vec<Part>> {
                     && p.probe_version == Some(PROBE_VERSION)
             })
             .then_some(parts)
-            .filter(|parts| failed != Some(fingerprint(parts).as_str()))
+            .filter(|parts| !skip.contains(&fingerprint(parts)))
     })
 }
 
@@ -140,6 +140,16 @@ pub fn output_rel(first: &str, title: &str, language: Option<&str>) -> Option<St
 
 /// What a job result must match in the probe of the file before it is registered.
 pub fn verify(meta: &MergeMeta, info: &MediaInfo, bytes: u64) -> Result<(), String> {
+    verify_within(meta, info, bytes, (meta.duration_seconds * 0.01).max(5.0))
+}
+
+/// `verify` with the duration tolerance in seconds.
+fn verify_within(
+    meta: &MergeMeta,
+    info: &MediaInfo,
+    bytes: u64,
+    tolerance: f64,
+) -> Result<(), String> {
     if info.audio.is_empty() {
         return Err("the merged file has no audio".into());
     }
@@ -148,7 +158,7 @@ pub fn verify(meta: &MergeMeta, info: &MediaInfo, bytes: u64) -> Result<(), Stri
     }
     let want = meta.duration_seconds;
     let got = info.duration_seconds.unwrap_or(0.0);
-    if (got - want).abs() > (want * 0.01).max(5.0) {
+    if (got - want).abs() > tolerance {
         return Err(format!("duration {got}s, expected {want}s"));
     }
     let chapters = info.chapters.as_ref().map_or(0, Vec::len);
@@ -191,19 +201,23 @@ pub async fn load(st: &AppState, media: i32) -> sqlx::Result<Vec<Part>> {
         .collect())
 }
 
-/// The option of the library of the media's first audio edition, else its own: the same choice
-/// as `forget_failures` and the backfill.
-async fn enabled(st: &AppState, media: i32) -> sqlx::Result<bool> {
-    Ok(sqlx::query_scalar!(
-        r#"SELECT l."mergeM4b" FROM media m JOIN libraries l ON l.id = COALESCE(
-             (SELECT e."libraryId" FROM editions e
-              WHERE e."mediaId" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1), m."libraryId")
-           WHERE m.id = $1"#,
-        media
+/// The options of the library of an edition, else its media's: `mergeM4b`, and `mergeM4bReplace`
+/// which is off unless the first is on.
+async fn options(st: &AppState, edition: i32) -> sqlx::Result<(bool, bool)> {
+    Ok(sqlx::query!(
+        r#"SELECT l."mergeM4b" AS "merge!", (l."mergeM4b" AND l."mergeM4bReplace") AS "replace!"
+           FROM editions e JOIN media m ON m.id = e."mediaId"
+             JOIN libraries l ON l.id = COALESCE(e."libraryId", m."libraryId")
+           WHERE e.id = $1"#,
+        edition
     )
     .fetch_optional(&st.db)
     .await?
-    .unwrap_or(false))
+    .map_or((false, false), |r| (r.merge, r.replace)))
+}
+
+async fn enabled(st: &AppState, edition: i32) -> sqlx::Result<bool> {
+    options(st, edition).await.map(|o| o.0)
 }
 
 /// Whether a file row holds this path: the output is then not ours to remove.
@@ -266,18 +280,26 @@ async fn unchanged(st: &AppState, media: i32, parts: &[Part], abs: &[PathBuf]) -
     true
 }
 
-async fn record(st: &AppState, media: i32, fp: &str, folder: i32, out: &str) -> sqlx::Result<()> {
+async fn record(
+    st: &AppState,
+    (media, edition): (i32, i32),
+    fp: &str,
+    folder: i32,
+    out: &str,
+) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"INSERT INTO book_merges ("mediaId", fingerprint, state, "folderId", output)
-           VALUES ($1, $2, 'running', $3, $4)
-           ON CONFLICT ("mediaId") DO UPDATE SET state = 'running', "folderId" = EXCLUDED."folderId",
+        r#"INSERT INTO book_merges ("mediaId", "editionId", fingerprint, state, "folderId", output)
+           VALUES ($1, $2, $3, 'running', $4, $5)
+           ON CONFLICT ("editionId") DO UPDATE SET state = 'running', "folderId" = EXCLUDED."folderId",
              output = EXCLUDED.output, error = NULL, "nextAttemptAt" = NULL, "jobId" = NULL,
+             merge = NULL,
              attempts = CASE WHEN book_merges.fingerprint = EXCLUDED.fingerprint
                              THEN book_merges.attempts ELSE 0 END,
              "jobFailures" = CASE WHEN book_merges.fingerprint = EXCLUDED.fingerprint
                                   THEN book_merges."jobFailures" ELSE 0 END,
              fingerprint = EXCLUDED.fingerprint"#,
         media,
+        edition,
         fp,
         folder,
         out
@@ -288,11 +310,21 @@ async fn record(st: &AppState, media: i32, fp: &str, folder: i32, out: &str) -> 
 }
 
 /// A failure the parts explain: no retry until they change.
-async fn failed(st: &AppState, media: i32, why: &str) {
+async fn failed(st: &AppState, edition: i32, why: &str) {
     let _ = sqlx::query!(
-        r#"UPDATE book_merges SET state = 'failed', error = $2 WHERE "mediaId" = $1"#,
-        media,
+        r#"UPDATE book_merges SET state = 'failed', error = $2 WHERE "editionId" = $1"#,
+        edition,
         why
+    )
+    .execute(&st.db)
+    .await;
+}
+
+/// The merge is over: its record goes, but for a replace waiting for the listeners.
+async fn forget(st: &AppState, edition: i32) {
+    let _ = sqlx::query!(
+        r#"DELETE FROM book_merges WHERE "editionId" = $1 AND state <> 'replace'"#,
+        edition
     )
     .execute(&st.db)
     .await;
@@ -308,12 +340,12 @@ fn backoff(n: i32) -> i64 {
 
 /// A failure the parts do not explain (disk, engine, timeout): retried after a growing delay. A
 /// job that failed in ffmpeg twice on the same parts is the parts' fault: it turns sticky.
-async fn retry(st: &AppState, media: i32, why: &str, job_failed: bool) {
+async fn retry(st: &AppState, (media, edition): (i32, i32), why: &str, job_failed: bool) {
     let row = sqlx::query!(
         r#"UPDATE book_merges SET state = 'retry', error = $2, attempts = attempts + 1,
              "jobFailures" = "jobFailures" + $3::int
-           WHERE "mediaId" = $1 RETURNING attempts, "jobFailures" AS job_failures"#,
-        media,
+           WHERE "editionId" = $1 RETURNING attempts, "jobFailures" AS job_failures"#,
+        edition,
         why,
         i32::from(job_failed)
     )
@@ -323,14 +355,14 @@ async fn retry(st: &AppState, media: i32, why: &str, job_failed: bool) {
     .flatten();
     let Some(row) = row else { return };
     if row.job_failures >= 2 {
-        return failed(st, media, why).await;
+        return failed(st, edition, why).await;
     }
     let n = row.attempts;
     let secs = backoff(n);
     let _ = sqlx::query!(
         r#"UPDATE book_merges SET "nextAttemptAt" = now() + make_interval(secs => $2::float8)
-           WHERE "mediaId" = $1"#,
-        media,
+           WHERE "editionId" = $1"#,
+        edition,
         secs as f64
     )
     .execute(&st.db)
@@ -358,15 +390,13 @@ struct Row {
     folder_id: i32,
     output: String,
     job_id: Option<String>,
-    waiting: bool,
 }
 
-async fn row(st: &AppState, media: i32) -> sqlx::Result<Option<Row>> {
+async fn row(st: &AppState, edition: i32) -> sqlx::Result<Option<Row>> {
     Ok(sqlx::query!(
-        r#"SELECT fingerprint, state, "folderId" AS folder_id, output, "jobId" AS job_id,
-                  COALESCE("nextAttemptAt" > now(), false) AS "waiting!"
-           FROM book_merges WHERE "mediaId" = $1"#,
-        media
+        r#"SELECT fingerprint, state, "folderId" AS folder_id, output, "jobId" AS job_id
+           FROM book_merges WHERE "editionId" = $1"#,
+        edition
     )
     .fetch_optional(&st.db)
     .await?
@@ -376,7 +406,6 @@ async fn row(st: &AppState, media: i32) -> sqlx::Result<Option<Row>> {
         folder_id: r.folder_id,
         output: r.output,
         job_id: r.job_id,
-        waiting: r.waiting,
     }))
 }
 
@@ -484,42 +513,62 @@ async fn output_path(
     Ok((out, root))
 }
 
-/// Merges the media's multi-file audio version into a new m4b version when its library asks for
-/// it. The parts stay and the server deletes only an output the engine reported for this run:
-/// the file is registered once verified. A failure the parts explain is not retried until they
-/// change; any other is retried with a growing delay.
+/// Fingerprints a recorded failure or a retry not yet due keeps from being tried again, and the
+/// audio editions whose library asks for the merge.
+async fn skipped(st: &AppState, media: i32) -> sqlx::Result<(Vec<String>, Vec<i32>)> {
+    let skip = sqlx::query_scalar!(
+        r#"SELECT fingerprint FROM book_merges WHERE "mediaId" = $1
+             AND (state = 'failed' OR (state = 'retry' AND "nextAttemptAt" > now()))"#,
+        media
+    )
+    .fetch_all(&st.db)
+    .await?;
+    let on = sqlx::query_scalar!(
+        r#"SELECT e.id FROM editions e JOIN media m ON m.id = e."mediaId"
+             JOIN libraries l ON l.id = COALESCE(e."libraryId", m."libraryId")
+           WHERE e."mediaId" = $1 AND e.family = 'audio' AND l."mergeM4b""#,
+        media
+    )
+    .fetch_all(&st.db)
+    .await?;
+    Ok((skip, on))
+}
+
+/// Merges the media's multi-file audio version into a new m4b version when the library of its
+/// edition asks for it. The parts stay unless the replace option removes them, and the server
+/// deletes only an output the engine reported for this run: the file is registered once verified.
+/// A failure the parts explain is not retried until they change; any other is retried with a
+/// growing delay. Records are per edition.
 pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
-    if !enabled(st, media).await.map_err(|e| e.to_string())?
-        || !st.engine.job_applies("Merge", MediaFamily::Audio).await
-    {
+    if !st.engine.job_applies("Merge", MediaFamily::Audio).await {
         return Ok(());
     }
     // A second run waits, then finds the m4b or the failure record and stops.
     let _one = st.ingest.merging.lock(media).await;
     let _slot = st.ingest.merge_slot.lock().await;
-    let rows = load(st, media).await.map_err(|e| e.to_string())?;
-    let prior = row(st, media).await.map_err(|e| e.to_string())?;
-    let failed_fp = prior
-        .as_ref()
-        .filter(|p| p.state == "failed")
-        .map(|p| p.fingerprint.as_str());
-    let Some(parts) = pick(&rows, failed_fp) else {
-        return Ok(());
-    };
-    let fp = fingerprint(&parts);
-    if prior.as_ref().is_some_and(|p| {
-        p.fingerprint == fp && (p.state == "failed" || (p.state == "retry" && p.waiting))
-    }) {
+    let (skip, on) = skipped(st, media).await.map_err(|e| e.to_string())?;
+    if on.is_empty() {
         return Ok(());
     }
+    resume_replace(st, media).await;
+    let mut rows = load(st, media).await.map_err(|e| e.to_string())?;
+    let all = rows.clone();
+    rows.retain(|r| on.contains(&r.edition));
+    let Some(parts) = pick(&rows, &skip) else {
+        return Ok(());
+    };
+    let edition = parts[0].edition;
+    let id = (media, edition);
+    let prior = row(st, edition).await.map_err(|e| e.to_string())?;
+    let fp = fingerprint(&parts);
     let title = sqlx::query_scalar!(r#"SELECT title FROM media WHERE id = $1"#, media)
         .fetch_one(&st.db)
         .await
         .map_err(|e| e.to_string())?;
     // Only a second audio edition needs a name of its own.
-    let named = rows
+    let named = all
         .iter()
-        .any(|r| r.edition != parts[0].edition)
+        .any(|r| r.edition != edition)
         .then(|| parts[0].language.as_deref())
         .flatten();
     let mut out_rel =
@@ -531,9 +580,7 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
     {
         match recover(st, media, &parts, &fp, p, job).await {
             Ok(Resume::Registered) => {
-                let _ = sqlx::query!(r#"DELETE FROM book_merges WHERE "mediaId" = $1"#, media)
-                    .execute(&st.db)
-                    .await;
+                forget(st, edition).await;
                 return Ok(());
             }
             // The open job writes to the stored output, whatever the title says now.
@@ -541,31 +588,114 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
             Ok(Resume::Submit) => {}
             Err(e) => {
                 tracing::warn!("m4b merge of book #{media}: {e}");
-                retry(st, media, &e, false).await;
+                retry(st, id, &e, false).await;
                 return Err(e);
             }
         }
     }
     let (out, _root) = output_path(st, parts[0].folder_id, &out_rel).await?;
-    record(st, media, &fp, parts[0].folder_id, &out_rel)
+    record(st, id, &fp, parts[0].folder_id, &out_rel)
         .await
         .map_err(|e| e.to_string())?;
     match execute(st, media, &parts, &out_rel, &out).await {
         Ok(()) => {
-            let _ = sqlx::query!(r#"DELETE FROM book_merges WHERE "mediaId" = $1"#, media)
-                .execute(&st.db)
-                .await;
+            forget(st, edition).await;
             Ok(())
         }
         Err((e, Fail::Parts)) => {
-            failed(st, media, &e).await;
+            failed(st, edition, &e).await;
             Err(e)
         }
         Err((e, fail)) => {
-            retry(st, media, &e, fail == Fail::Job).await;
+            retry(st, id, &e, fail == Fail::Job).await;
             Err(e)
         }
     }
+}
+
+/// A replace that had to wait for the listeners is tried again: the m4b is still there, the parts
+/// are the ones the merge read and the option is on. Any other outcome ends the record.
+async fn resume_replace(st: &AppState, media: i32) {
+    let held = sqlx::query!(
+        r#"SELECT "editionId" AS edition, fingerprint, "folderId" AS folder, output, merge
+           FROM book_merges WHERE "mediaId" = $1 AND state = 'replace'"#,
+        media
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    for h in held {
+        let _media = st.ingest.media.lock(media).await;
+        let _moves = st.folder_moves.read().await;
+        match try_replace(
+            st,
+            media,
+            &h.fingerprint,
+            (h.edition, h.folder, &h.output),
+            h.merge,
+        )
+        .await
+        {
+            Err(Skip::Busy) => {
+                later(st, media, LISTENING_SECS as u64);
+                continue;
+            }
+            Err(Skip::Keep(why)) => {
+                tracing::warn!("m4b merge of book #{media}: parts kept: {why}");
+            }
+            Ok(()) => {}
+        }
+        let _ = sqlx::query!(
+            r#"DELETE FROM book_merges WHERE "editionId" = $1"#,
+            h.edition
+        )
+        .execute(&st.db)
+        .await;
+    }
+}
+
+async fn try_replace(
+    st: &AppState,
+    media: i32,
+    fp: &str,
+    (edition, folder, output): (i32, i32, &str),
+    merge: Option<serde_json::Value>,
+) -> Result<(), Skip> {
+    if !options(st, edition).await.map_err(|e| e.to_string())?.1 {
+        return Err("the replace option is off".to_owned().into());
+    }
+    let merge: MergeMeta = merge
+        .and_then(|m| serde_json::from_value(m).ok())
+        .ok_or("no merge result recorded")?;
+    let rows = load(st, media).await.map_err(|e| e.to_string())?;
+    let versions: std::collections::BTreeSet<i32> = rows
+        .iter()
+        .filter(|r| r.edition == edition && r.quality != "m4b")
+        .map(|r| r.version)
+        .collect();
+    let parts = versions
+        .into_iter()
+        .map(|v| {
+            rows.iter()
+                .filter(|r| r.edition == edition && r.version == v)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .find(|parts| fingerprint(parts) == fp)
+        .ok_or("the parts changed")?;
+    let m4b = sqlx::query_scalar!(
+        r#"SELECT id FROM media_files WHERE "mediaId" = $1 AND "folderId" = $2 AND "relativePath" = $3"#,
+        media,
+        folder,
+        output
+    )
+    .fetch_optional(&st.db)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or("the m4b is gone")?;
+    let (abs, _) = part_paths(st, &parts).await.map_err(|e| e.0)?;
+    let (out, _) = output_path(st, folder, output).await?;
+    replace_parts(st, media, &parts, &abs, &merge, (output, &out), m4b).await
 }
 
 /// Merges `media` one after the other in the background; a failure is logged.
@@ -583,10 +713,9 @@ pub fn spawn(st: &AppState, media: Vec<i32>) {
 /// Turning the option on again forgets the library's failed and waiting merges.
 pub async fn forget_failures(st: &AppState, library: i32) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"DELETE FROM book_merges b USING media m
-           WHERE b."mediaId" = m.id AND b.state <> 'running' AND COALESCE(
-             (SELECT e."libraryId" FROM editions e
-              WHERE e."mediaId" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1), m."libraryId") = $1"#,
+        r#"DELETE FROM book_merges b USING editions e JOIN media m ON m.id = e."mediaId"
+           WHERE b."editionId" = e.id AND b.state IN ('failed', 'retry')
+             AND COALESCE(e."libraryId", m."libraryId") = $1"#,
         library
     )
     .execute(&st.db)
@@ -625,10 +754,9 @@ pub fn spawn_library(st: &AppState, library: i32) {
         loop {
             let _ = forget_failures(&st, library).await;
             let ids = sqlx::query_scalar!(
-                r#"SELECT m.id FROM media m WHERE m.type = 'book' AND COALESCE(
-                     (SELECT e."libraryId" FROM editions e
-                      WHERE e."mediaId" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1),
-                     m."libraryId") = $1 ORDER BY m.id"#,
+                r#"SELECT DISTINCT m.id FROM media m JOIN editions e ON e."mediaId" = m.id
+                   WHERE m.type = 'book' AND e.family = 'audio'
+                     AND COALESCE(e."libraryId", m."libraryId") = $1 ORDER BY m.id"#,
                 library
             )
             .fetch_all(&st.db)
@@ -740,8 +868,8 @@ async fn execute(
     // The engine answers an identical open job with its id; the id is kept for a run a restart cuts.
     let job = st.engine.submit_job(&req).await.map_err(engine)?;
     let _ = sqlx::query!(
-        r#"UPDATE book_merges SET "jobId" = $2 WHERE "mediaId" = $1"#,
-        media,
+        r#"UPDATE book_merges SET "jobId" = $2 WHERE "editionId" = $1"#,
+        parts[0].edition,
         job
     )
     .execute(&st.db)
@@ -772,24 +900,237 @@ async fn publish(
     out: &Path,
 ) -> Result<(), Failure> {
     let sticky = |e: String| (e, Fail::Parts);
-    if !enabled(st, media)
+    if !enabled(st, parts[0].edition)
         .await
         .map_err(|e| (e.to_string(), Fail::Transient))?
     {
         return Err(("the library option was turned off".into(), Fail::Transient));
     }
-    check(st, media, parts, abs, merge, out).await?;
+    check(st, media, parts, abs, merge, (out_rel, out)).await?;
     let placed = Placed {
         folder_id: parts[0].folder_id,
         rel: out_rel.to_owned(),
         abs: out.to_owned(),
     };
-    let done = register_language(st, media, &[placed], parts[0].language.as_deref())
+    let done = register_to(st, media, &[placed], None, Some(parts[0].edition))
         .await
         .map_err(sticky)?;
     if done.files.len() != 1 {
         return Err(sticky(done.conflicts.join("; ")));
     }
+    // The m4b is committed: whatever happens to the parts no longer fails the merge.
+    if options(st, parts[0].edition).await.is_ok_and(|o| o.1) {
+        match replace_parts(
+            st,
+            media,
+            parts,
+            abs,
+            merge,
+            (out_rel, out),
+            done.files[0].file_id,
+        )
+        .await
+        {
+            Ok(()) => {}
+            Err(Skip::Busy) => {
+                hold(st, parts[0].edition, merge).await;
+                later(st, media, LISTENING_SECS as u64);
+            }
+            Err(Skip::Keep(why)) => {
+                tracing::warn!("m4b merge of book #{media}: parts kept: {why}");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Why the parts were not replaced: someone is listening (tried again later) or a proof failed.
+enum Skip {
+    Busy,
+    Keep(String),
+}
+
+impl From<String> for Skip {
+    fn from(why: String) -> Self {
+        Self::Keep(why)
+    }
+}
+
+impl From<&str> for Skip {
+    fn from(why: &str) -> Self {
+        Self::Keep(why.to_owned())
+    }
+}
+
+/// Keeps the merge result of an edition whose replace waits for the listeners.
+async fn hold(st: &AppState, edition: i32, merge: &MergeMeta) {
+    let _ = sqlx::query!(
+        r#"UPDATE book_merges SET state = 'replace', "jobId" = NULL, merge = $2
+           WHERE "editionId" = $1"#,
+        edition,
+        serde_json::to_value(merge).ok()
+    )
+    .execute(&st.db)
+    .await;
+}
+
+/// The parts and the output are still at the paths the merge used: a library folder re-pointed
+/// meanwhile moves no file, so the rows would name files that are not there.
+async fn same_place(
+    st: &AppState,
+    parts: &[Part],
+    abs: &[PathBuf],
+    out_rel: &str,
+    out: &Path,
+) -> Result<(), Failure> {
+    let (now, _) = part_paths(st, parts).await?;
+    let (now_out, _) = output_path(st, parts[0].folder_id, out_rel)
+        .await
+        .map_err(|e| (e, Fail::Transient))?;
+    if now != abs || now_out != out {
+        return Err((
+            "the library folder was re-pointed during the merge".into(),
+            Fail::Transient,
+        ));
+    }
+    Ok(())
+}
+
+/// Seconds since the last save of a playback state under which someone is taken to be listening.
+const LISTENING_SECS: f64 = 600.0;
+
+/// Whether a live session or a recent playback state names an item of these files.
+async fn listening(st: &AppState, ids: &[i32]) -> sqlx::Result<bool> {
+    let items: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT DISTINCT "itemId" FROM item_parts WHERE "mediaFileId" = ANY($1)"#,
+    )
+    .bind(ids)
+    .fetch_all(&st.db)
+    .await?;
+    if st.presence.list().iter().any(|s| {
+        s.item_id.is_some_and(|i| items.contains(&i))
+            || ids.iter().any(|f| *f as u32 == s.media_file_id)
+    }) {
+        return Ok(true);
+    }
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM playback_states WHERE "itemId" = ANY($1)
+             AND "lastPlayedAt" > now() - make_interval(secs => $2))"#,
+    )
+    .bind(&items)
+    .bind(LISTENING_SECS)
+    .fetch_one(&st.db)
+    .await
+}
+
+/// Under the media and `folder_moves` locks, once the m4b `m4b` is registered: the file is probed
+/// again, every part must still be what the merge read, then their rows go in one transaction with
+/// the aliases and the playback move, and the files are unlinked after. All or none, since a
+/// version cut short would play a wrong timeline.
+async fn replace_parts(
+    st: &AppState,
+    media: i32,
+    parts: &[Part],
+    abs: &[PathBuf],
+    merge: &MergeMeta,
+    (out_rel, out): (&str, &Path),
+    m4b: i32,
+) -> Result<(), Skip> {
+    same_place(st, parts, abs, out_rel, out)
+        .await
+        .map_err(|e| e.0)?;
+    let bytes = tokio::fs::metadata(out)
+        .await
+        .map_err(|e| e.to_string())?
+        .len();
+    // Tighter than the registration check, and not relative: a missing minute must not cost the originals.
+    let tolerance = 2.0 + 0.1 * parts.len() as f64;
+    verify_within(merge, &probe(st, out, false).await?.info, bytes, tolerance)?;
+    if parts.iter().any(|p| p.mtime_ms.is_none()) || !unchanged(st, media, parts, abs).await {
+        return Err("a part is not what the merge read".into());
+    }
+    for (p, path) in parts.iter().zip(abs) {
+        let regular = tokio::fs::symlink_metadata(path)
+            .await
+            .is_ok_and(|m| m.is_file());
+        let direct = dunce::canonicalize(path).is_ok_and(|c| c == *path);
+        if !regular || !direct || fsx::safe_rel(&p.rel).is_none() {
+            return Err(format!("part #{} is not a plain file of its folder", p.id).into());
+        }
+    }
+    let ids: Vec<i32> = parts.iter().map(|p| p.id).collect();
+    if listening(st, &ids).await.map_err(|e| e.to_string())? {
+        return Err(Skip::Busy);
+    }
+    let mut tx = st.db.begin().await.map_err(|e| e.to_string())?;
+    crate::media::items::lock_versions(&mut tx, media)
+        .await
+        .map_err(|e| e.to_string())?;
+    // Each part belongs to one item only, which the m4b belongs to as well.
+    let links = sqlx::query!(
+        r#"SELECT p."mediaFileId" AS file, p."itemId" AS item, p.version, m."version" AS "to?"
+           FROM item_parts p
+           LEFT JOIN item_parts m ON m."itemId" = p."itemId" AND m."mediaFileId" = $2
+           WHERE p."mediaFileId" = ANY($1)"#,
+        &ids,
+        m4b
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    let linked = links.len() == parts.len()
+        && links.iter().all(|l| {
+            l.to.is_some_and(|t| t != l.version)
+                && parts
+                    .iter()
+                    .any(|p| p.id == l.file && p.version == l.version)
+        });
+    if !linked {
+        return Err("a part is linked to another item or version".into());
+    }
+    for l in &links {
+        sqlx::query!(
+            r#"INSERT INTO item_version_aliases ("itemId", version, "toVersion") VALUES ($1, $2, $3)
+               ON CONFLICT ("itemId", version) DO UPDATE SET "toVersion" = EXCLUDED."toVersion""#,
+            l.item,
+            l.version,
+            l.to
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        // The `playback_states_version` trigger moves the saved version along with the file.
+        sqlx::query!(
+            r#"UPDATE playback_states SET "mediaFileId" = $3
+               WHERE "itemId" = $1 AND ("mediaFileId" = $2 OR version = $4)"#,
+            l.item,
+            l.file,
+            m4b,
+            l.version
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    sqlx::query("DELETE FROM media_files WHERE id = ANY($1)")
+        .bind(&ids)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    // The rows are gone: a file that stays is an orphan, never a loss.
+    let (_, root) = output_path(st, parts[0].folder_id, out_rel).await?;
+    for (p, path) in parts.iter().zip(abs) {
+        if let Err(e) = fsx::unlink_contained(&root, path) {
+            tracing::warn!(
+                "m4b merge of book #{media}: part #{} kept on disk: {e}",
+                p.id
+            );
+        }
+        crate::ingest::drop_thumbnails(st, p.id);
+    }
+    crate::media_servers::dispatch_detached(st, "file.deleted");
+    tracing::info!("m4b merge of book #{media}: {} parts replaced", parts.len());
     Ok(())
 }
 
@@ -799,8 +1140,9 @@ async fn check(
     parts: &[Part],
     abs: &[PathBuf],
     merge: &MergeMeta,
-    out: &Path,
+    (out_rel, out): (&str, &Path),
 ) -> Result<(), Failure> {
+    same_place(st, parts, abs, out_rel, out).await?;
     if !unchanged(st, media, parts, abs).await {
         return Err(("a part changed during the merge".into(), Fail::Transient));
     }
@@ -847,10 +1189,10 @@ mod tests {
             part(2, 0, "T/b.mp3", "mp3"),
             part(3, 1, "T/c.flac", "flac"),
         ];
-        assert_eq!(pick(&mp3, None).unwrap().len(), 2);
-        assert!(pick(&mp3[..1], None).is_none());
+        assert_eq!(pick(&mp3, &[]).unwrap().len(), 2);
+        assert!(pick(&mp3[..1], &[]).is_none());
         let both = [&mp3[..2], &[part(9, 1, "T/T.m4b", "m4b")]].concat();
-        assert!(pick(&both, None).is_none());
+        assert!(pick(&both, &[]).is_none());
     }
 
     #[test]
@@ -861,10 +1203,10 @@ mod tests {
             p.language = Some("fr".into());
         });
         let en = [part(1, 0, "T/a.mp3", "mp3"), part(2, 0, "T/b.mp3", "mp3")];
-        let got = pick(&[&en[..], &fr[..]].concat(), None).unwrap();
+        let got = pick(&[&en[..], &fr[..]].concat(), &[]).unwrap();
         assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [1, 2]);
         let m4b = [part(9, 0, "T/T.m4b", "m4b")];
-        let got = pick(&[&m4b[..], &fr[..]].concat(), None).unwrap();
+        let got = pick(&[&m4b[..], &fr[..]].concat(), &[]).unwrap();
         assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [3, 4]);
     }
 
@@ -875,9 +1217,9 @@ mod tests {
         fr.iter_mut().for_each(|p| p.edition = 2);
         let rows = [&en[..], &fr[..]].concat();
         let failed = fingerprint(&en);
-        let got = pick(&rows, Some(&failed)).unwrap();
+        let got = pick(&rows, std::slice::from_ref(&failed)).unwrap();
         assert_eq!(got.iter().map(|p| p.id).collect::<Vec<_>>(), [3, 4]);
-        assert!(pick(&en, Some(&failed)).is_none());
+        assert!(pick(&en, &[failed]).is_none());
     }
 
     #[test]
@@ -887,14 +1229,14 @@ mod tests {
                 .map(|i| part(i as i32, 0, &format!("T/{i}.mp3"), "mp3"))
                 .collect()
         };
-        assert!(pick(&rows(MAX_PARTS), None).is_some());
-        assert!(pick(&rows(MAX_PARTS + 1), None).is_none());
+        assert!(pick(&rows(MAX_PARTS), &[]).is_some());
+        assert!(pick(&rows(MAX_PARTS + 1), &[]).is_none());
         let mut r = rows(2);
         r[1].rel = "T/b\u{7}.mp3".into();
-        assert!(pick(&r, None).is_none());
+        assert!(pick(&r, &[]).is_none());
         let mut r = rows(2);
         r[1].info.as_mut().unwrap().duration_seconds = Some(0.0);
-        assert!(pick(&r, None).is_none());
+        assert!(pick(&r, &[]).is_none());
     }
 
     #[test]
@@ -906,15 +1248,15 @@ mod tests {
     #[test]
     fn parts_must_share_a_directory_and_be_probed_and_the_fingerprint_follows_them() {
         let mut rows = vec![part(1, 0, "T/a.mp3", "mp3"), part(2, 0, "T/b.mp3", "mp3")];
-        assert!(pick(&rows, None).is_some());
+        assert!(pick(&rows, &[]).is_some());
         let before = fingerprint(&rows);
         rows[1].size = 2;
         assert_ne!(fingerprint(&rows), before);
         rows[1].rel = "T/Sub/b.mp3".into();
-        assert!(pick(&rows, None).is_none());
+        assert!(pick(&rows, &[]).is_none());
         rows[1].rel = "T/b.mp3".into();
         rows[1].probe_version = Some(0);
-        assert!(pick(&rows, None).is_none());
+        assert!(pick(&rows, &[]).is_none());
     }
 
     #[test]

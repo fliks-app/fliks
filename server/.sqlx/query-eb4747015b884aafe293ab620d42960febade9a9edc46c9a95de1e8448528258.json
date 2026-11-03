@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id FROM media m WHERE m.type = 'book' AND COALESCE(\n                     (SELECT e.\"libraryId\" FROM editions e\n                      WHERE e.\"mediaId\" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1),\n                     m.\"libraryId\") = $1 ORDER BY m.id",
+  "query": "SELECT DISTINCT m.id FROM media m JOIN editions e ON e.\"mediaId\" = m.id\n                   WHERE m.type = 'book' AND e.family = 'audio'\n                     AND COALESCE(e.\"libraryId\", m.\"libraryId\") = $1 ORDER BY m.id",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "f4267ad1760a60cca662cb3d7cefd08843d2957ddac03bc3a41115234935b915"
+  "hash": "eb4747015b884aafe293ab620d42960febade9a9edc46c9a95de1e8448528258"
 }

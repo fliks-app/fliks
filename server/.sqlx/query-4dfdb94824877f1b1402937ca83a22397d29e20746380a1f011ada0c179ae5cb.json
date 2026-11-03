@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE book_merges SET state = 'retry', error = $2, attempts = attempts + 1,\n             \"jobFailures\" = \"jobFailures\" + $3::int\n           WHERE \"mediaId\" = $1 RETURNING attempts, \"jobFailures\" AS job_failures",
+  "query": "UPDATE book_merges SET state = 'retry', error = $2, attempts = attempts + 1,\n             \"jobFailures\" = \"jobFailures\" + $3::int\n           WHERE \"editionId\" = $1 RETURNING attempts, \"jobFailures\" AS job_failures",
   "describe": {
     "columns": [
       {
@@ -38,5 +38,5 @@
       false
     ]
   },
-  "hash": "7c555cc30bdcf4154339f1a6ae9d92d5b2ae6ce219f509a7e656a51e90b52845"
+  "hash": "4dfdb94824877f1b1402937ca83a22397d29e20746380a1f011ada0c179ae5cb"
 }

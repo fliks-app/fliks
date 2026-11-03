@@ -326,6 +326,7 @@ async fn write_state(
     db: &PgPool,
     user: i32,
     w: &Watch,
+    file: Option<i32>,
     at: DateTime<Utc>,
     completed: bool,
     watched: bool,
@@ -348,7 +349,7 @@ async fn write_state(
     )
     .bind(user)
     .bind(w.item)
-    .bind(w.file)
+    .bind(file)
     .bind(w.position)
     .bind(w.duration)
     .bind(completed)
@@ -388,6 +389,14 @@ async fn complete_covered(db: &PgPool, user: i32, w: &Watch) -> sqlx::Result<Vec
     .await
 }
 
+/// Whether a merge replaced files of the item.
+async fn replaced(db: &PgPool, item: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(r#"SELECT EXISTS (SELECT 1 FROM item_version_aliases WHERE "itemId" = $1)"#)
+        .bind(item)
+        .fetch_one(db)
+        .await
+}
+
 /// Upserts the viewer's row for the item the beat names and returns it as `repo.save` did,
 /// `None` after an FK violation (file gone mid-session).
 pub async fn record_watch(
@@ -410,18 +419,25 @@ pub async fn record_watch(
     };
     let completed = finish::finished(w.family, &standing) || (replay.is_some() && was_completed);
     let watched = w.position >= 5.0 || w.progression.is_some_and(|p| p > 0.0);
-    let saved = if stale {
-        Ok(())
-    } else if let Some(at) = replay {
-        write_state(db, user, w, at, completed, w.position >= 5.0).await
-    } else {
-        write_state(db, user, w, Utc::now(), completed, watched).await
+    let write = |file: Option<i32>| async move {
+        if stale {
+            Ok(())
+        } else if let Some(at) = replay {
+            write_state(db, user, w, file, at, completed, w.position >= 5.0).await
+        } else {
+            write_state(db, user, w, file, Utc::now(), completed, watched).await
+        }
     };
-    match saved {
-        Ok(()) => {}
-        Err(sqlx::Error::Database(d)) if d.code().as_deref() == Some("23503") => return Ok(None),
-        Err(e) => return Err(e.into()),
+    let is_fk = |r: &sqlx::Result<()>| matches!(r, Err(sqlx::Error::Database(d)) if d.code().as_deref() == Some("23503"));
+    let mut saved = write(Some(w.file)).await;
+    // A merge replaced the item's files meanwhile: keep the progress, name no file.
+    if is_fk(&saved) && replaced(db, w.item).await? {
+        saved = write(None).await;
     }
+    if is_fk(&saved) {
+        return Ok(None);
+    }
+    saved?;
     if completed && !was_completed && !stale {
         log_play(db, user, w.item).await?;
         let mut done = vec![w.item];

@@ -41,6 +41,7 @@ export class LibraryDetailState {
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
   readonly formMergeM4b = signal(false);
+  readonly formMergeM4bReplace = signal(false);
   /** First folder: only the creation wizard edits it, a saved library's folders have their own routes. */
   readonly formPath = signal('');
   /** Further folders of a library being created, added once it exists. */
@@ -61,6 +62,7 @@ export class LibraryDetailState {
     this.formQualityProfileId.set(lib.defaultQualityProfileId);
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
     this.formMergeM4b.set(lib.mergeM4b);
+    this.formMergeM4bReplace.set(lib.mergeM4bReplace);
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
   }
@@ -165,6 +167,7 @@ export class LibraryDetailState {
       defaultQualityProfileId: this.formQualityProfileId(),
       defaultLanguageProfileId: this.formLanguageProfileId(),
       mergeM4b: this.formMergeM4b(),
+      mergeM4bReplace: this.formMergeM4bReplace(),
     };
   }
 }

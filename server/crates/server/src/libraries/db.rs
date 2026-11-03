@@ -25,6 +25,7 @@ pub struct Library {
     pub default_quality_profile_id: Option<i32>,
     pub default_language_profile_id: Option<i32>,
     pub merge_m4b: bool,
+    pub merge_m4b_replace: bool,
     pub path: Option<String>,
     pub label: Option<String>,
 }
@@ -116,6 +117,7 @@ pub async fn list(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Library>> {
         "metadataLanguage" AS metadata_language, "metadataRegion" AS metadata_region,
         "defaultQualityProfileId" AS default_quality_profile_id,
         "defaultLanguageProfileId" AS default_language_profile_id, l."mergeM4b" AS merge_m4b,
+        l."mergeM4bReplace" AS merge_m4b_replace,
         df.path AS "path?", NULL::text AS label
         FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id
         WHERE l.id = ANY($1) ORDER BY name COLLATE "C", l.id"#,

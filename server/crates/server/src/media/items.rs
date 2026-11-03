@@ -23,6 +23,24 @@ pub(crate) async fn lock_versions(c: &mut PgConnection, media: i32) -> sqlx::Res
         .map(drop)
 }
 
+/// The version that took the place of `version` of `item` when a merge replaced its files, if it
+/// still exists.
+pub(crate) async fn aliased(
+    db: &sqlx::PgPool,
+    item: i32,
+    version: i32,
+) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar!(
+        r#"SELECT a."toVersion" FROM item_version_aliases a
+           WHERE a."itemId" = $1 AND a.version = $2
+             AND EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = a."itemId" AND p.version = a."toVersion")"#,
+        item,
+        version
+    )
+    .fetch_optional(db)
+    .await
+}
+
 /// Refuses to guess among several ungrouped items: a writer that names none must not pick the first.
 async fn refuse_several_ungrouped(c: &mut PgConnection, media: i32) -> sqlx::Result<()> {
     let n: i64 = sqlx::query_scalar!(
