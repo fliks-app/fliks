@@ -1,8 +1,9 @@
 //! A lenient markup tree: XHTML, HTML4 and malformed documents parse without error.
+use crate::entities::ENTITIES;
 use std::borrow::Cow;
 
 pub const MAX_DEPTH: usize = 256;
-const MAX_NODES: usize = 2_000_000;
+pub const MAX_NODES: usize = 500_000;
 
 #[derive(Debug)]
 pub enum Node {
@@ -94,51 +95,9 @@ pub fn is_void(name: &str) -> bool {
     VOID.contains(&name)
 }
 
-const LATIN1: &str = "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml";
-const EXTRA: &[(&str, u32)] = &[
-    ("ensp", 8194),
-    ("emsp", 8195),
-    ("thinsp", 8201),
-    ("zwnj", 8204),
-    ("zwj", 8205),
-    ("ndash", 8211),
-    ("mdash", 8212),
-    ("lsquo", 8216),
-    ("rsquo", 8217),
-    ("sbquo", 8218),
-    ("ldquo", 8220),
-    ("rdquo", 8221),
-    ("bdquo", 8222),
-    ("dagger", 8224),
-    ("Dagger", 8225),
-    ("bull", 8226),
-    ("hellip", 8230),
-    ("permil", 8240),
-    ("prime", 8242),
-    ("Prime", 8243),
-    ("lsaquo", 8249),
-    ("rsaquo", 8250),
-    ("euro", 8364),
-    ("trade", 8482),
-    ("oelig", 339),
-    ("OElig", 338),
-    ("larr", 8592),
-    ("rarr", 8594),
-];
-
 fn named_entity(name: &str) -> Option<char> {
-    let code = match name {
-        "amp" => 38,
-        "lt" => 60,
-        "gt" => 62,
-        "quot" => 34,
-        "apos" => 39,
-        _ => match LATIN1.split(' ').position(|n| n == name) {
-            Some(i) => 160 + i as u32,
-            None => EXTRA.iter().find(|(n, _)| *n == name)?.1,
-        },
-    };
-    char::from_u32(code)
+    let i = ENTITIES.binary_search_by(|(n, _)| (*n).cmp(name)).ok()?;
+    char::from_u32(ENTITIES[i].1)
 }
 
 /// Unknown or oversized references stay literal text.
@@ -187,8 +146,14 @@ fn name_char(b: u8) -> bool {
 fn valid_name(n: &str) -> bool {
     n.bytes()
         .next()
-        .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_' || b == b':')
+        .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
         && n.bytes().all(name_char)
+        && n.matches(':').count() <= 1
+        && !n.ends_with(':')
+}
+
+fn tag_name_len(s: &str) -> usize {
+    s.bytes().skip(1).take_while(|b| name_char(*b)).count()
 }
 
 struct Builder {
@@ -274,22 +239,27 @@ pub fn parse(src: &str, html: bool) -> Result<Vec<Node>, DomError> {
             i += (end + 3).min(rest.len());
         } else if let Some(r) = rest.strip_prefix("<!") {
             b.flush(&mut text)?;
-            let (head_end, end) = match (rest.find('['), rest.find('>')) {
-                (Some(l), Some(g)) if l < g => {
-                    let close = rest[l..]
-                        .find(']')
-                        .and_then(|r| rest[l + r..].find('>').map(|g| l + r + g + 1));
-                    (l, close.unwrap_or(rest.len()))
-                }
-                (_, Some(g)) => (g, g + 1),
-                _ => (rest.len(), rest.len()),
+            let (head_end, end) = match rest.find('>') {
+                None => (rest.len(), rest.len()),
+                Some(g) => match rest[..g].find('[') {
+                    Some(l) => {
+                        let close = rest[l..]
+                            .find(']')
+                            .and_then(|r| rest[l + r..].find('>').map(|g| l + r + g + 1));
+                        (l, close.unwrap_or(rest.len()))
+                    }
+                    None => (g, g + 1),
+                },
             };
             if b.stack.is_empty()
                 && r.get(..7)
                     .is_some_and(|d| d.eq_ignore_ascii_case("doctype"))
             {
                 // The internal subset is dropped: it is where entity bombs live.
-                b.push_node(Node::Raw(format!("{}>", rest[..head_end].trim_end())))?;
+                b.push_node(Node::Raw(format!(
+                    "<!DOCTYPE{}>",
+                    rest[9..head_end].trim_end()
+                )))?;
             }
             i += end;
         } else if rest.starts_with("<?") {
@@ -313,14 +283,17 @@ pub fn parse(src: &str, html: bool) -> Result<Vec<Node>, DomError> {
                 Cow::Borrowed(name)
             };
             let skip = html && matches!(name.as_ref(), "html" | "body");
-            let open = b.stack.iter().rposition(|e| e.name == name);
+            let open = b
+                .stack
+                .iter()
+                .rposition(|e| e.name.eq_ignore_ascii_case(&name));
             if let Some(k) = open.filter(|_| !skip) {
                 while b.stack.len() > k {
                     b.pop()?;
                 }
             }
             i += end;
-        } else if next.is_ascii_alphabetic() {
+        } else if next.is_ascii_alphabetic() && valid_name(&rest[1..1 + tag_name_len(rest)]) {
             b.flush(&mut text)?;
             i += start_tag(&mut b, &src[i..])?;
             let raw_el = b
@@ -370,11 +343,9 @@ fn start_tag(b: &mut Builder, s: &str) -> Result<usize, DomError> {
         i += 1;
     }
     let raw = &s[1..i];
-    let in_foreign = b.stack.iter().any(|e| e.name == "svg" || e.name == "math");
-    let fold = b.html
-        && !in_foreign
-        && !raw.eq_ignore_ascii_case("svg")
-        && !raw.eq_ignore_ascii_case("math");
+    let foreign =
+        |n: &str| local(n).eq_ignore_ascii_case("svg") || local(n).eq_ignore_ascii_case("math");
+    let fold = b.html && !b.stack.iter().any(|e| foreign(&e.name)) && !foreign(raw);
     let name = if fold {
         raw.to_ascii_lowercase()
     } else {
@@ -494,7 +465,7 @@ pub fn serialize(nodes: &[Node], html: bool) -> String {
 fn write_node(n: &Node, html: bool, out: &mut String) {
     match n {
         Node::Text(t) => escape(t, false, out),
-        Node::Raw(r) => out.push_str(r),
+        Node::Raw(r) => out.extend(r.chars().filter(|c| xml_char(*c))),
         Node::Element(e) => {
             out.push('<');
             out.push_str(&e.name);

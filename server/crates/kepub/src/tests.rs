@@ -21,13 +21,17 @@ fn epub(entries: &[(&str, &[u8])]) -> Vec<u8> {
 }
 
 fn book(chapter: &str, spine_first: &str) -> Vec<u8> {
+    book_bytes(chapter.as_bytes(), spine_first)
+}
+
+fn book_bytes(chapter: &[u8], spine_first: &str) -> Vec<u8> {
     epub(&[
         ("mimetype", b"application/epub+zip"),
         ("META-INF/container.xml", CONTAINER.as_bytes()),
         ("OEBPS/content.opf", opf(spine_first, "").as_bytes()),
-        (&format!("OEBPS/{spine_first}"), chapter.as_bytes()),
+        (&format!("OEBPS/{spine_first}"), chapter),
         ("OEBPS/cover.png", b"\x89PNG"),
-        ("OEBPS/.DS_STORE", b"x"),
+        ("OEBPS/.DS_Store", b"x"),
         ("__MACOSX/junk", b"x"),
     ])
 }
@@ -42,7 +46,7 @@ fn read(kepub: &[u8], name: &str) -> Option<String> {
 fn names(kepub: &[u8]) -> Vec<String> {
     let mut z = ZipArchive::new(Cursor::new(kepub)).unwrap();
     (0..z.len())
-        .map(|i| z.by_index(i).unwrap().name().unwrap().into_owned())
+        .map(|i| z.by_index_raw(i).unwrap().name().unwrap().into_owned())
         .collect()
 }
 
@@ -348,4 +352,185 @@ fn random_markup_never_panics() {
         let _ = crate::content::transform(s.as_bytes());
         let _ = crate::dom::parse(&s, false);
     }
+}
+
+fn chapter_of(kepub_in: &[u8]) -> String {
+    read(&convert_ok(kepub_in), "OEBPS/ch1.xhtml").unwrap()
+}
+
+#[test]
+fn latin1_chapter_keeps_its_characters() {
+    let latin1: Vec<u8> = CHAPTER
+        .replace("Title here.", "Titl\u{e9} here.")
+        .chars()
+        .map(|c| c as u8)
+        .collect();
+    assert!(latin1.contains(&0xE9));
+    let c = chapter_of(&book_bytes(&latin1, "ch1.xhtml"));
+    assert!(c.contains("Titl\u{e9} here."), "{c}");
+}
+
+#[test]
+fn undeclared_non_utf8_falls_back_to_windows_1252() {
+    let c = chapter_of(&book_bytes(
+        b"<html><body><p>\x80 5 \xE9t\xE9</p></body></html>",
+        "ch1.xhtml",
+    ));
+    assert!(c.contains("\u{20ac} 5 \u{e9}t\u{e9}"), "{c}");
+}
+
+#[test]
+fn full_xhtml_entity_table() {
+    let c = chapter_of(&book(
+        "<p>&minus;&alpha;&hearts;&lrm;&scaron;&circ;&apos;</p>",
+        "ch1.xhtml",
+    ));
+    assert!(
+        c.contains("\u{2212}\u{3b1}\u{2665}\u{200e}\u{161}\u{2c6}'"),
+        "{c}"
+    );
+    assert_eq!(crate::entities::ENTITIES.len(), 253);
+}
+
+#[test]
+fn bang_sections_parse_in_linear_time() {
+    let src = "<!a>".repeat(400_000) + "[";
+    let t = std::time::Instant::now();
+    let _ = crate::dom::parse(&src, true);
+    assert!(t.elapsed().as_secs() < 3);
+}
+
+#[test]
+fn spans_count_against_the_node_budget() {
+    let ch = format!("<div>{}</div>", "a. ".repeat(600_000));
+    assert!(matches!(
+        convert_bytes(&book(&ch, "ch1.xhtml"), &Limits::default()),
+        Err(Error::Malformed(_))
+    ));
+}
+
+#[test]
+fn stray_content_around_html_joins_the_body() {
+    let c = chapter_of(&book(
+        "<p>junk</p><html><head></head><body><p>b</p></body></html><p>tail</p>",
+        "ch1.xhtml",
+    ));
+    assert_eq!(c.matches("<html").count(), 1, "{c}");
+    let inner = c.split("id=\"book-inner\">").nth(1).unwrap();
+    assert!(inner.contains("junk") && inner.contains("tail"));
+}
+
+#[test]
+fn doctype_is_uppercased() {
+    let c = chapter_of(&book(
+        "<!doctype html><html><body><p>x</p></body></html>",
+        "ch1.xhtml",
+    ));
+    assert!(c.starts_with("<!DOCTYPE html>"), "{c}");
+}
+
+#[test]
+fn package_path_case_mismatch_still_transforms() {
+    let b = epub(&[
+        ("META-INF/container.xml", CONTAINER.as_bytes()),
+        ("oebps/content.opf", opf("ch1.xhtml", "").as_bytes()),
+        ("oebps/ch1.xhtml", b"<html><body><p>Hi</p></body></html>"),
+    ]);
+    let out = convert_ok(&b);
+    let o = read(&out, "oebps/content.opf").unwrap();
+    assert!(o.contains("kepubify-titlepage-dummy"), "{o}");
+    assert!(read(&out, "oebps/kepubify-titlepage-dummy.xhtml").is_some());
+    assert!(read(&out, "oebps/ch1.xhtml").unwrap().contains("koboSpan"));
+}
+
+/// Rewrites the compression method of one entry in its local and central headers.
+fn set_method(z: &mut [u8], name: &str, method: u16) {
+    for i in 0..z.len().saturating_sub(46) {
+        let (sig, mo, lo, no) = match &z[i..i + 4] {
+            b"PK\x03\x04" => (true, 8, 26, 30),
+            b"PK\x01\x02" => (true, 10, 28, 46),
+            _ => (false, 0, 0, 0),
+        };
+        if sig {
+            let len = u16::from_le_bytes([z[i + lo], z[i + lo + 1]]) as usize;
+            if &z[i + no..i + no + len] == name.as_bytes() {
+                z[i + mo..i + mo + 2].copy_from_slice(&method.to_le_bytes());
+            }
+        }
+    }
+}
+
+#[test]
+fn unsupported_compression_on_junk_does_not_abort() {
+    let mut z = book("<html><body><p>x</p></body></html>", "ch1.xhtml");
+    set_method(&mut z, "__MACOSX/junk", 12);
+    set_method(&mut z, "OEBPS/cover.png", 14);
+    let out = convert_ok(&z);
+    assert!(!names(&out).iter().any(|n| n.contains("MACOSX")));
+    assert!(names(&out).contains(&"OEBPS/cover.png".to_string()));
+}
+
+#[test]
+fn raw_xml_chars_and_case_insensitive_junk() {
+    let c = chapter_of(&book(
+        "<html><head><style>p{}\u{1}</style></head><body><p>x</p></body></html>",
+        "ch1.xhtml",
+    ));
+    assert!(c.contains("p{}</style>"), "{c}");
+    assert!(
+        !names(&convert_ok(&book("<p>x</p>", "ch1.xhtml")))
+            .iter()
+            .any(|n| n.to_lowercase().contains(".ds_store"))
+    );
+}
+
+#[test]
+fn namespaced_svg_keeps_its_case() {
+    let c = chapter_of(&book(
+        r#"<body><svg:svg viewBox="0 0 1 1"><svg:linearGradient id="g"/></svg:svg><p>x</p></body>"#,
+        "ch1.xhtml",
+    ));
+    assert!(c.contains(r#"<svg:svg viewBox="0 0 1 1"><svg:linearGradient id="g"></svg:linearGradient></svg:svg>"#), "{c}");
+}
+
+#[test]
+fn malformed_qualified_names_are_not_markup() {
+    let c = chapter_of(&book(
+        r#"<body><p :d="1" a:b:c="2" ok="3">x</p><a:b:c>y</a:b:c></body>"#,
+        "ch1.xhtml",
+    ));
+    assert!(
+        c.contains(r#"<p ok="3">"#) && c.contains("&lt;a:b:c&gt;"),
+        "{c}"
+    );
+}
+
+#[test]
+fn existing_dummy_page_is_left_alone() {
+    let package = opf("ch1.xhtml", "");
+    let e = [
+        ("META-INF/container.xml", CONTAINER.as_bytes()),
+        ("OEBPS/content.opf", package.as_bytes()),
+        (
+            "OEBPS/ch1.xhtml",
+            b"<html><body><p>Hi</p></body></html>" as &[u8],
+        ),
+        (
+            "OEBPS/kepubify-titlepage-dummy.xhtml",
+            b"<html><body/></html>",
+        ),
+    ];
+    let out = convert_ok(&epub(&e));
+    assert_eq!(
+        names(&out)
+            .iter()
+            .filter(|n| n.contains("titlepage-dummy"))
+            .count(),
+        1
+    );
+    assert!(
+        !read(&out, "OEBPS/content.opf")
+            .unwrap()
+            .contains("itemref idref=\"kepubify")
+    );
 }

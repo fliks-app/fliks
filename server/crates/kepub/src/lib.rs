@@ -2,6 +2,7 @@
 //! (https://github.com/pgaskin/kepubify, MIT).
 mod content;
 mod dom;
+mod entities;
 mod opf;
 
 use dom::Node;
@@ -26,7 +27,7 @@ impl Default for Limits {
             max_entries: 20_000,
             max_entry_bytes: 512 << 20,
             max_total_bytes: 2 << 30,
-            max_document_bytes: 32 << 20,
+            max_document_bytes: 8 << 20,
         }
     }
 }
@@ -89,13 +90,10 @@ fn filtered(name: &str) -> bool {
     let base = name.rsplit('/').next().unwrap_or(name);
     matches!(
         base,
-        "calibre_bookmarks.txt"
-            | "iTunesMetadata.plist"
-            | "iTunesArtwork.plist"
-            | ".DS_STORE"
-            | "thumbs.db"
-            | "Thumbs.db"
-    ) || name.starts_with("__MACOSX/")
+        "calibre_bookmarks.txt" | "iTunesMetadata.plist" | "iTunesArtwork.plist"
+    ) || base.eq_ignore_ascii_case(".ds_store")
+        || base.eq_ignore_ascii_case("thumbs.db")
+        || name.starts_with("__MACOSX/")
 }
 
 fn read_capped<R: Read>(r: R, cap: u64) -> Result<Vec<u8>, Error> {
@@ -107,6 +105,7 @@ fn read_capped<R: Read>(r: R, cap: u64) -> Result<Vec<u8>, Error> {
     Ok(buf)
 }
 
+/// The entries that are kept: safe name, not a directory, not filtered, first of its name.
 struct Index {
     exact: HashMap<String, usize>,
     lower: HashMap<String, usize>,
@@ -135,7 +134,7 @@ fn read_by_name<R: Read + Seek>(
 
 /// What the second pass needs: the rewritten package, the dummy page, the documents to transform.
 struct Plan {
-    opf_path: String,
+    opf_i: usize,
     opf: Vec<u8>,
     dummy: Option<(String, &'static str)>,
     docs: HashSet<usize>,
@@ -169,10 +168,13 @@ fn plan<R: Read + Seek>(zip: &mut ZipArchive<R>, idx: &Index, lim: &Limits) -> R
         })
         .flatten()
         .ok_or(Error::NoPackage)?;
-    let opf_path = opf::resolve("", &rootfile)
-        .filter(|p| safe_name(p))
-        .ok_or(Error::NoPackage)?;
+    let opf_path = opf::resolve("", &rootfile).ok_or(Error::NoPackage)?;
     let opf_i = idx.find(&opf_path).ok_or(Error::NoPackage)?;
+    // Hrefs resolve against the entry's real name, which may differ in case from the container's.
+    let opf_path = zip
+        .name_for_index(opf_i)
+        .ok_or(Error::NoPackage)??
+        .into_owned();
     let raw = read_capped(zip.by_index(opf_i)?, lim.max_document_bytes)?;
     let mut nodes = dom::parse(&content::decode(&raw), false)?;
     let pkg = opf::root(&mut nodes).ok_or(Error::NoPackage)?;
@@ -190,12 +192,15 @@ fn plan<R: Read + Seek>(zip: &mut ZipArchive<R>, idx: &Index, lim: &Limits) -> R
         if needed {
             // The package was already transformed: add_titlepage works on the same tree.
             let pkg = opf::root(&mut nodes).ok_or(Error::NoPackage)?;
-            dummy = opf::add_titlepage(pkg, &opf_path).map(|p| (p, opf::DUMMY_BODY));
+            let path = opf::resolve(&opf_path, opf::DUMMY_HREF).filter(|p| idx.find(p).is_none());
+            dummy = path
+                .filter(|_| opf::add_titlepage(pkg))
+                .map(|p| (p, opf::DUMMY_BODY));
         }
     }
     let opf = dom::serialize(&nodes, false).into_bytes();
     Ok(Plan {
-        opf_path,
+        opf_i,
         opf,
         dummy,
         docs,
@@ -216,16 +221,28 @@ pub fn convert<R: Read + Seek, W: Write + Seek>(
         exact: HashMap::new(),
         lower: HashMap::new(),
     };
-    for i in 0..zip.len() {
+    let (mut declared, mut names) = (0u64, vec![String::new(); zip.len()]);
+    for (i, name) in names.iter_mut().enumerate() {
         let f = zip.by_index_raw(i)?;
-        let Ok(name) = f.name().map(|n| n.into_owned()) else {
+        let Ok(n) = f.name().map(|n| n.into_owned()) else {
             continue;
         };
-        if f.is_dir() || !safe_name(&name) {
+        if f.is_dir() || !safe_name(&n) || n == "mimetype" || filtered(&n) {
             continue;
         }
-        idx.lower.entry(name.to_lowercase()).or_insert(i);
-        idx.exact.entry(name).or_insert(i);
+        if idx.exact.contains_key(&n) {
+            continue;
+        }
+        if f.size() > lim.max_entry_bytes {
+            return Err(Error::TooLarge);
+        }
+        declared = declared.saturating_add(f.size());
+        if declared > lim.max_total_bytes {
+            return Err(Error::TooLarge);
+        }
+        idx.lower.entry(n.to_lowercase()).or_insert(i);
+        idx.exact.insert(n.clone(), i);
+        *name = n;
     }
     let plan = plan(&mut zip, &idx, lim)?;
 
@@ -234,55 +251,24 @@ pub fn convert<R: Read + Seek, W: Write + Seek>(
     out.start_file("mimetype", stored)?;
     out.write_all(b"application/epub+zip")?;
 
-    let (mut total, mut seen) = (0u64, HashSet::new());
-    for i in 0..zip.len() {
-        let f = zip.by_index(i)?;
-        let Ok(name) = f.name().map(|n| n.into_owned()) else {
-            continue;
-        };
-        if f.is_dir()
-            || !safe_name(&name)
-            || name == "mimetype"
-            || filtered(&name)
-            || idx.exact.get(&name) != Some(&i)
-            || !seen.insert(name.clone())
-        {
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    for (i, name) in names.iter().enumerate() {
+        if name.is_empty() {
             continue;
         }
-        if f.size() > 1 << 20 && f.compressed_size() > 0 && f.size() / f.compressed_size() > 1100 {
-            return Err(Error::TooLarge);
-        }
-        let method = if f.compression() == CompressionMethod::Stored {
-            CompressionMethod::Stored
-        } else {
-            CompressionMethod::Deflated
-        };
-        out.start_file(
-            &name,
-            SimpleFileOptions::default().compression_method(method),
-        )?;
-        if name == plan.opf_path {
+        if i == plan.opf_i {
+            out.start_file(name, deflated)?;
             out.write_all(&plan.opf)?;
         } else if plan.docs.contains(&i) {
-            let raw = read_capped(f, lim.max_document_bytes)?;
-            total += raw.len() as u64;
+            let raw = read_capped(zip.by_index(i)?, lim.max_document_bytes)?;
+            out.start_file(name, deflated)?;
             out.write_all(&content::transform(&raw)?)?;
         } else {
-            let n = io::copy(&mut f.take(lim.max_entry_bytes + 1), &mut out)?;
-            if n > lim.max_entry_bytes {
-                return Err(Error::TooLarge);
-            }
-            total += n;
-        }
-        if total > lim.max_total_bytes {
-            return Err(Error::TooLarge);
+            out.raw_copy_file(zip.by_index_raw(i)?)?;
         }
     }
-    if let Some((name, body)) = plan.dummy.filter(|(n, _)| !seen.contains(n)) {
-        out.start_file(
-            name,
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-        )?;
+    if let Some((name, body)) = plan.dummy {
+        out.start_file(name, deflated)?;
         out.write_all(body.as_bytes())?;
     }
     out.finish()?;

@@ -4,7 +4,8 @@ use crate::dom::{self, DomError, Element, Node};
 const STYLE_CLASS: &str = "kobostylehacks";
 const STYLE_CSS: &str = "div#book-inner { margin-top: 0; margin-bottom: 0;}";
 
-/// Bytes to text: UTF-16 by BOM, else UTF-8 (invalid bytes become U+FFFD, which the cleanup drops).
+/// Bytes to text: BOM first, then valid UTF-8, else the declared charset (windows-1252 when
+/// undeclared, unknown or claiming UTF-8 over bytes that are not).
 pub fn decode(b: &[u8]) -> String {
     if let Some(r) = b.strip_prefix(&[0xFF, 0xFE]) {
         return encoding_rs::UTF_16LE
@@ -18,7 +19,29 @@ pub fn decode(b: &[u8]) -> String {
             .0
             .into_owned();
     }
-    String::from_utf8_lossy(b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(b)).into_owned()
+    let b = b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(b);
+    if let Ok(s) = std::str::from_utf8(b) {
+        return s.to_string();
+    }
+    let enc = declared_charset(b)
+        .filter(|e| *e != encoding_rs::UTF_8)
+        .unwrap_or(encoding_rs::WINDOWS_1252);
+    enc.decode_without_bom_handling(b).0.into_owned()
+}
+
+/// The `encoding="..."` of the XML declaration or the `charset=...` of a meta, in the first KiB.
+fn declared_charset(b: &[u8]) -> Option<&'static encoding_rs::Encoding> {
+    let head = String::from_utf8_lossy(&b[..b.len().min(1024)]).to_ascii_lowercase();
+    let at = head
+        .find("encoding=")
+        .map(|i| i + 9)
+        .or_else(|| head.find("charset=").map(|i| i + 8))?;
+    let label: String = head[at..]
+        .trim_start_matches(['"', '\''])
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '.'))
+        .collect();
+    encoding_rs::Encoding::for_label(label.as_bytes())
 }
 
 pub fn parse_doc(b: &[u8]) -> Result<Vec<Node>, DomError> {
@@ -35,7 +58,12 @@ pub fn transform(b: &[u8]) -> Result<Vec<u8>, DomError> {
     wrap_divs(body);
     if !has_class(&body.children, "koboSpan") {
         let children = std::mem::take(&mut body.children);
-        body.children = spans(children, false, &mut State::default());
+        let left = dom::MAX_NODES.saturating_sub(count(&children));
+        let mut st = State {
+            left,
+            ..State::default()
+        };
+        body.children = spans(children, false, &mut st)?;
     }
     head_mut(html)
         .children
@@ -50,24 +78,18 @@ fn style_node(class: &str, css: &str) -> Node {
     Node::Element(e)
 }
 
-/// Guarantees html > head + body, so every later step can index them.
+/// Guarantees one html > head + body; anything outside the first `html` goes into the body.
 fn normalize(nodes: &mut Vec<Node>) {
-    let pos = nodes
-        .iter()
-        .position(|n| matches!(n, Node::Element(e) if e.name == "html"));
-    let mut html = match pos {
-        Some(p) => match nodes.remove(p) {
-            Node::Element(e) => e,
-            _ => unreachable!(),
-        },
-        None => {
-            let (raw, rest): (Vec<_>, Vec<_>) = std::mem::take(nodes)
-                .into_iter()
-                .partition(|n| matches!(n, Node::Raw(_)));
-            *nodes = raw;
-            Element::new("html", &[], rest)
+    let (mut raws, mut html, mut before, mut after) = (vec![], None, vec![], vec![]);
+    for n in std::mem::take(nodes) {
+        match n {
+            Node::Raw(_) => raws.push(n),
+            Node::Element(e) if html.is_none() && e.name == "html" => html = Some(e),
+            other if html.is_none() => before.push(other),
+            other => after.push(other),
         }
-    };
+    }
+    let mut html = html.unwrap_or_else(|| Element::new("html", &[], std::mem::take(&mut before)));
     let is = |n: &Node, name: &str| matches!(n, Node::Element(e) if e.name == name);
     if !html.children.iter().any(|n| is(n, "head")) {
         html.children
@@ -85,6 +107,10 @@ fn normalize(nodes: &mut Vec<Node>) {
         html.attrs
             .insert(0, ("xmlns".into(), "http://www.w3.org/1999/xhtml".into()));
     }
+    let body = child_mut(&mut html, "body");
+    body.children.splice(0..0, before);
+    body.children.extend(after);
+    *nodes = raws;
     nodes.push(Node::Element(html));
 }
 
@@ -178,6 +204,25 @@ struct State {
     para: u32,
     seg: u32,
     inc_next: bool,
+    /// Nodes the spans may still add, from the same budget as the parser.
+    left: usize,
+}
+
+impl State {
+    fn spend(&mut self, n: usize) -> Result<(), DomError> {
+        self.left = self.left.checked_sub(n).ok_or(DomError::TooComplex)?;
+        Ok(())
+    }
+}
+
+fn count(nodes: &[Node]) -> usize {
+    nodes
+        .iter()
+        .map(|n| match n {
+            Node::Element(e) => 1 + count(&e.children),
+            _ => 1,
+        })
+        .sum()
 }
 
 fn span(para: u32, seg: u32, children: Vec<Node>) -> Node {
@@ -189,13 +234,14 @@ fn span(para: u32, seg: u32, children: Vec<Node>) -> Node {
     ))
 }
 
-fn spans(children: Vec<Node>, parent_is_p: bool, st: &mut State) -> Vec<Node> {
+fn spans(children: Vec<Node>, parent_is_p: bool, st: &mut State) -> Result<Vec<Node>, DomError> {
     let mut out = Vec::with_capacity(children.len());
     for n in children {
         match n {
             Node::Text(t) => {
                 for s in split_sentences(&t) {
                     if is_space(s) && !parent_is_p {
+                        st.spend(1)?;
                         out.push(Node::Text(s.into()));
                         continue;
                     }
@@ -205,6 +251,7 @@ fn spans(children: Vec<Node>, parent_is_p: bool, st: &mut State) -> Vec<Node> {
                         st.inc_next = false;
                     }
                     st.seg += 1;
+                    st.spend(2)?;
                     out.push(span(st.para, st.seg, vec![Node::Text(s.into())]));
                 }
             }
@@ -213,9 +260,11 @@ fn spans(children: Vec<Node>, parent_is_p: bool, st: &mut State) -> Vec<Node> {
                     st.para += 1;
                     st.seg = 1;
                     st.inc_next = false;
+                    st.spend(1)?;
                     out.push(span(st.para, st.seg, vec![Node::Element(e)]));
                 }
-                "script" | "style" | "pre" | "audio" | "video" | "svg" | "math" => {
+                "script" | "style" | "pre" | "audio" | "video" => out.push(Node::Element(e)),
+                _ if matches!(e.local().to_ascii_lowercase().as_str(), "svg" | "math") => {
                     out.push(Node::Element(e))
                 }
                 name => {
@@ -226,14 +275,14 @@ fn spans(children: Vec<Node>, parent_is_p: bool, st: &mut State) -> Vec<Node> {
                         st.inc_next = true;
                     }
                     let is_p = name == "p";
-                    e.children = spans(std::mem::take(&mut e.children), is_p, st);
+                    e.children = spans(std::mem::take(&mut e.children), is_p, st)?;
                     out.push(Node::Element(e));
                 }
             },
             raw => out.push(raw),
         }
     }
-    out
+    Ok(out)
 }
 
 fn is_space(s: &str) -> bool {

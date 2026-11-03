@@ -2,6 +2,7 @@
 use crate::dom::{Element, Node, local};
 use percent_encoding::percent_decode_str;
 
+pub const DUMMY_HREF: &str = "kepubify-titlepage-dummy.xhtml";
 pub const DUMMY_ID: &str = "kepubify-titlepage-dummy";
 pub const DUMMY_BODY: &str = r#"<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><title></title></head><body><p style="text-align: center; margin: 4em 0; font-size: .7em; font-style: italic;">Page intentionally left blank by kepubify.</p></body></html>"#;
 
@@ -145,9 +146,11 @@ pub fn first_spine_doc(pkg: &Element, opf_path: &str) -> Option<String> {
     resolve(opf_path, href)
 }
 
-/// Kobo treats the first spine entry as a full-screen cover; adds the blank page, returns its path.
-pub fn add_titlepage(pkg: &mut Element, opf_path: &str) -> Option<String> {
-    let href = format!("{DUMMY_ID}.xhtml");
+/// Kobo treats the first spine entry as a full-screen cover; adds a blank page unless the id is taken.
+pub fn add_titlepage(pkg: &mut Element) -> bool {
+    if items(pkg).any(|i| i.attr("id") == Some(DUMMY_ID)) {
+        return false;
+    }
     let prefix = |e: &Element| {
         e.name
             .rsplit_once(':')
@@ -161,7 +164,7 @@ pub fn add_titlepage(pkg: &mut Element, opf_path: &str) -> Option<String> {
             "manifest" => {
                 let attrs = [
                     ("id", DUMMY_ID),
-                    ("href", href.as_str()),
+                    ("href", DUMMY_HREF),
                     ("media-type", "application/xhtml+xml"),
                 ];
                 e.children.push(Node::Element(Element::new(
@@ -183,5 +186,5 @@ pub fn add_titlepage(pkg: &mut Element, opf_path: &str) -> Option<String> {
             _ => {}
         }
     }
-    added.then(|| resolve(opf_path, &href)).flatten()
+    added
 }
