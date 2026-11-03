@@ -634,10 +634,16 @@ mod kind_tests {
     use super::*;
 
     #[test]
-    fn an_unserved_family_is_named_in_the_refusal() {
-        let family = served(w::Family::Audio).unwrap_err();
+    fn only_image_is_refused_and_named() {
+        let family = served(w::Family::Image).unwrap_err();
         assert_eq!(family.code, "unsupported-family");
-        assert_eq!(family.message, "family \"audio\" is not served");
-        assert_eq!(served(w::Family::Video).unwrap(), Family::Video);
+        assert_eq!(family.message, "family \"image\" is not served");
+        for (wit, f) in [
+            (w::Family::Video, Family::Video),
+            (w::Family::Audio, Family::Audio),
+            (w::Family::Text, Family::Text),
+        ] {
+            assert_eq!(served(wit).unwrap(), f);
+        }
     }
 }
