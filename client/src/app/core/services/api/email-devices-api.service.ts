@@ -50,6 +50,10 @@ export class EmailDevicesApiService {
     return firstValueFrom(this.http.post<EmailDevice>('/api/email-devices', body));
   }
 
+  update(id: number, body: EmailDeviceBody) {
+    return firstValueFrom(this.http.put<EmailDevice>(`/api/email-devices/${id}`, body));
+  }
+
   remove(id: number) {
     return firstValueFrom(this.http.delete<void>(`/api/email-devices/${id}`));
   }

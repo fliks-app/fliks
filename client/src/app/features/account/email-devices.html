@@ -13,7 +13,9 @@
   } @else {
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
-      <h2 class="card-title text-base">{{ 'email_devices.add' | translate }}</h2>
+      <h2 class="card-title text-base">
+        {{ (editing() === null ? 'email_devices.add' : 'email_devices.edit_title') | translate }}
+      </h2>
       <p class="text-sm text-base-content/60">{{ 'email_devices.amazon_hint' | translate }}</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <app-input-field
@@ -42,18 +44,27 @@
           type="email"
           size="sm"
         />
+        <div class="sm:col-span-2 flex flex-col gap-1">
+          <span class="text-sm">{{ 'email_devices.formats' | translate }}</span>
+          <app-multi-select [options]="formatOptions" [value]="formats()" (valueChange)="formats.set($event)" [maxChips]="6" />
+        </div>
       </div>
       <div class="card-actions justify-end">
+        @if (editing() !== null) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelEdit()">
+            {{ 'email_devices.cancel' | translate }}
+          </button>
+        }
         <button
           type="button"
           class="btn btn-primary btn-sm"
-          [disabled]="busy() || !name().trim() || !address().trim()"
-          (click)="create()"
+          [disabled]="busy() || !name().trim() || !address().trim() || !formats().length"
+          (click)="save()"
         >
           @if (busy()) {
             <span class="loading loading-spinner loading-xs"></span>
           }
-          {{ 'email_devices.create' | translate }}
+          {{ (editing() === null ? 'email_devices.create' : 'email_devices.save') | translate }}
         </button>
       </div>
     </div>
@@ -78,6 +89,11 @@
               <td class="truncate max-w-56 text-base-content/60">{{ d.address }}</td>
               <td class="uppercase text-base-content/60">{{ d.formats.join(', ') }}</td>
               <td class="text-right whitespace-nowrap">
+                @if (canSend()) {
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="edit(d)">
+                    {{ 'email_devices.edit' | translate }}
+                  </button>
+                }
                 <button type="button" class="btn btn-ghost btn-sm text-error" (click)="remove(d)">
                   {{ 'email_devices.remove' | translate }}
                 </button>
