@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { DownloadNotificationService } from './download-notification.service';
 import { DownloadCacheService } from './download-cache.service';
 import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
+import { scopeHash } from '../utils/scope-hash';
 
 const CACHE_NAME = 'offline-media';
 
@@ -50,6 +51,11 @@ export class OfflineStorageService {
     if (!task) return mfid;
     const items = await this.downloader!.list();
     return items.some((i) => i.id === mfid) ? mfid : String(task.id);
+  }
+
+  /** Sidecar and directory names are prefixed by the (server, user) scope so two servers' file ids never meet. */
+  private scoped(key: string): string {
+    return `${scopeHash(this.cache.scopeSuffix())}-${key}`;
   }
 
   /** Per (server, user) key for the Shaka offline URI map. */
@@ -239,7 +245,8 @@ export class OfflineStorageService {
 
   async delete(key: string): Promise<void> {
     if (this.isDesktop) return this.downloader!.remove(await this.desktopId(key));
-    if (this.isNative) return this.deleteNative(key);
+    // Native videos live in the download plugin by task id, removed by the download manager.
+    if (this.isNative) return;
     // Web: remove Shaka offline content
     const mfid = Number(key.replace('download-', ''));
     await this.shakaRemove(mfid);
@@ -247,7 +254,7 @@ export class OfflineStorageService {
 
   /** Downloads a small text file (VTT); true only when written, so callers never record a subtitle entry for a failed file. */
   async downloadSmallFile(url: string, key: string): Promise<boolean> {
-    if (this.isDesktop) return this.downloader!.saveFile(key, url);
+    if (this.isDesktop) return this.downloader!.saveFile(this.scoped(key), url);
     try {
       // Downloads can finish hours after the 1h access token was minted: send the file-bound stream token the URL carries.
       const token =
@@ -263,14 +270,14 @@ export class OfflineStorageService {
         const { Filesystem, Directory } = await getFs();
         await this.ensureDir();
         await Filesystem.writeFile({
-          path: `fliks-downloads/${key}`,
+          path: `fliks-downloads/${this.scoped(key)}`,
           data: text,
           directory: Directory.Data,
           encoding: 'utf8' as any,
         });
       } else {
         const cache = await caches.open(CACHE_NAME);
-        await cache.put(key, new Response(text, { headers: { 'Content-Type': 'text/vtt' } }));
+        await cache.put(this.scoped(key), new Response(text, { headers: { 'Content-Type': 'text/vtt' } }));
       }
       return true;
     } catch {
@@ -280,66 +287,63 @@ export class OfflineStorageService {
 
   /** Remove a stored VTT subtitle (counterpart to {@link downloadSmallFile}). */
   async deleteSmallFile(key: string): Promise<void> {
-    if (this.isDesktop) return this.downloader!.deleteFile(key);
+    if (this.isDesktop) return this.downloader!.deleteFile(this.scoped(key));
     try {
       if (this.isNative) {
         const { Filesystem, Directory } = await getFs();
         await Filesystem.deleteFile({
-          path: `fliks-downloads/${key}`,
+          path: `fliks-downloads/${this.scoped(key)}`,
           directory: Directory.Data,
         });
       } else {
         const cache = await caches.open(CACHE_NAME);
-        await cache.delete(key);
+        await cache.delete(this.scoped(key));
       }
     } catch { /* already gone — fine */ }
   }
 
   /** Get small file content as text (for VTT). */
   async getSmallFileUrl(key: string): Promise<string | null> {
-    if (this.isDesktop) return this.downloader!.fileUrl(key);
+    if (this.isDesktop) return (await this.downloader!.fileUrl(this.scoped(key))) ?? this.downloader!.fileUrl(key);
     if (this.isNative) {
-      try {
-        const { Filesystem, Directory } = await getFs();
-        const result = await Filesystem.readFile({
-          path: `fliks-downloads/${key}`,
-          directory: Directory.Data,
-          encoding: 'utf8' as any,
-        });
-        const blob = new Blob([result.data as string], { type: 'text/vtt' });
-        return URL.createObjectURL(blob);
-      } catch {
-        return null;
+      const { Filesystem, Directory } = await getFs();
+      // Unscoped name: files written before names carried the scope.
+      for (const name of [this.scoped(key), key]) {
+        try {
+          const result = await Filesystem.readFile({
+            path: `fliks-downloads/${name}`,
+            directory: Directory.Data,
+            encoding: 'utf8' as any,
+          });
+          return URL.createObjectURL(new Blob([result.data as string], { type: 'text/vtt' }));
+        } catch { /* try the next name */ }
       }
-    } else {
-      try {
-        const cache = await caches.open(CACHE_NAME);
-        const resp = await cache.match(key);
-        if (!resp) return null;
-        const blob = await resp.blob();
-        return URL.createObjectURL(blob);
-      } catch {
-        return null;
-      }
+      return null;
+    }
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const resp = (await cache.match(this.scoped(key))) ?? (await cache.match(key));
+      if (!resp) return null;
+      return URL.createObjectURL(await resp.blob());
+    } catch {
+      return null;
     }
   }
 
   /** Get native file URI for a small file (for ExoPlayer / mpv — not a blob URL). */
   async getSmallFileNativeUri(key: string): Promise<string | null> {
-    if (this.isDesktop) return this.downloader!.fileUrl(key);
+    if (this.isDesktop) return (await this.downloader!.fileUrl(this.scoped(key))) ?? this.downloader!.fileUrl(key);
     if (!this.isNative) return this.getSmallFileUrl(key);
-    try {
-      const { Filesystem, Directory } = await getFs();
-      // getUri only builds a path; confirm the file exists or the native player attaches a dead subtitle track.
-      await Filesystem.stat({ path: `fliks-downloads/${key}`, directory: Directory.Data });
-      const result = await Filesystem.getUri({
-        path: `fliks-downloads/${key}`,
-        directory: Directory.Data,
-      });
-      return result.uri; // file:///data/... — ExoPlayer can read this
-    } catch {
-      return null;
+    const { Filesystem, Directory } = await getFs();
+    for (const name of [this.scoped(key), key]) {
+      try {
+        // getUri only builds a path; confirm the file exists or the native player attaches a dead subtitle track.
+        const path = `fliks-downloads/${name}`;
+        await Filesystem.stat({ path, directory: Directory.Data });
+        return (await Filesystem.getUri({ path, directory: Directory.Data })).uri;
+      } catch { /* try the next name */ }
     }
+    return null;
   }
 
   async has(key: string): Promise<boolean> {
@@ -351,20 +355,6 @@ export class OfflineStorageService {
     // Web: check Shaka offline URI
     const mfid = key.replace('download-', '');
     return !!this.getShakaOfflineUri(Number(mfid));
-  }
-
-  /** Get the native directory path for progressive downloads (HLS segments). */
-  async getNativeDestDir(key: string): Promise<string | null> {
-    if (!this.isNative) return null;
-    try {
-      const { Filesystem, Directory } = await getFs();
-      const dirPath = `fliks-downloads/${key}`;
-      await Filesystem.mkdir({ path: dirPath, directory: Directory.Data, recursive: true }).catch(() => {});
-      const uri = await Filesystem.getUri({ path: dirPath, directory: Directory.Data });
-      return uri.uri.replace('file://', '');
-    } catch {
-      return null;
-    }
   }
 
   // --- Native (Capacitor Filesystem) ---
@@ -379,43 +369,4 @@ export class OfflineStorageService {
       });
     } catch { /* Already exists */ }
   }
-
-  private async hasNative(key: string): Promise<boolean> {
-    try {
-      const { Filesystem, Directory } = await getFs();
-      await Filesystem.stat({
-        path: `fliks-downloads/${key}`,
-        directory: Directory.Data,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async getNativeHlsUrl(key: string): Promise<string | null> {
-    if (!(await this.hasNative(`${key}/index.m3u8`))) return null;
-    try {
-      const { Filesystem, Directory } = await getFs();
-      const result = await Filesystem.getUri({
-        path: `fliks-downloads/${key}/index.m3u8`,
-        directory: Directory.Data,
-      });
-      return Capacitor.convertFileSrc(result.uri);
-    } catch {
-      return null;
-    }
-  }
-
-  private async deleteNative(key: string): Promise<void> {
-    try {
-      const { Filesystem, Directory } = await getFs();
-      await Filesystem.rmdir({
-        path: `fliks-downloads/${key}`,
-        directory: Directory.Data,
-        recursive: true,
-      });
-    } catch { /* doesn't exist — fine */ }
-  }
-
 }
