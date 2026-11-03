@@ -41,6 +41,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tvos-publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-publish:
     # Pre-releases never go to a store, and App Store Connect refuses a suffixed version.
