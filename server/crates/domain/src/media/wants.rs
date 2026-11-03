@@ -5,7 +5,7 @@ use serde_json::Value;
 use unicode_normalization::UnicodeNormalization;
 
 use super::{family::Family, kind::MediaKind};
-use crate::language::normalize_language_code;
+use crate::language::parse_language_code;
 
 /// The most wants a media or a follow holds.
 pub const MAX_WANTS: usize = 8;
@@ -49,11 +49,8 @@ pub fn parse_wants(v: &Value, kind: MediaKind) -> Result<Vec<WantSpec>, String> 
             return Err(format!("{kind} has no {} want", w.family));
         }
         if let Some(l) = w.language.take().filter(|l| !l.trim().is_empty()) {
-            let code = normalize_language_code(Some(&l));
-            if code == "und" || code.len() > 8 || !code.chars().all(|c| c.is_ascii_alphanumeric()) {
-                return Err(format!("{l} is not a language code"));
-            }
-            w.language = Some(code);
+            w.language =
+                Some(parse_language_code(&l).ok_or_else(|| format!("{l} is not a language code"))?);
         }
         if w.family == Family::Video && w.language.is_some() {
             return Err("a video want has no language".into());

@@ -5,7 +5,7 @@ use crate::events::event::{Download, DownloadState};
 use crate::events::{DomainEvent, Num, SseEvent};
 use crate::state::AppState;
 use crate::sync::MutexExt;
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -181,21 +181,45 @@ pub fn progress_gates() -> &'static Progress {
     P.get_or_init(Progress::default)
 }
 
-/// The season and episode of an event's unit, once its family is served.
+/// The season and episode of an event's unit, once its family is served; a book has no unit.
 fn event_unit(
     family: t::Family,
     unit: Option<&t::UnitRef>,
 ) -> Result<(Option<u32>, Option<u32>), HostError> {
-    super::served(family)?;
-    units::video(unit)
+    match super::served(family)? {
+        Family::Video => units::video(unit),
+        other if unit.is_some() => Err(super::imports::host_err(
+            "ERR_VALIDATION",
+            format!("a \"{other}\" event has no unit"),
+        )),
+        _ => Ok((None, None)),
+    }
+}
+
+/// An existing media must be wished in the event's family.
+async fn check_family(st: &AppState, media_id: u32, family: t::Family) -> Result<(), HostError> {
+    let family = Family::from(family);
+    match media_row(st, media_id as i32).await {
+        Some((_, kind)) if !kind.families().contains(&family) => Err(super::imports::host_err(
+            "ERR_VALIDATION",
+            format!("a {kind} is not wished in family \"{family}\""),
+        )),
+        _ => Ok(()),
+    }
 }
 
 /// Rule 33, in order; an event naming a family or unit the host cannot serve refuses the whole call.
 pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<(), HostError> {
     for e in &events {
         match e {
-            t::AcquisitionEvent::Grabbed(g) => drop(event_unit(g.family, g.unit.as_ref())?),
-            t::AcquisitionEvent::Imported(i) => drop(event_unit(i.family, i.unit.as_ref())?),
+            t::AcquisitionEvent::Grabbed(g) => {
+                event_unit(g.family, g.unit.as_ref())?;
+                check_family(st, g.media_id, g.family).await?;
+            }
+            t::AcquisitionEvent::Imported(i) => {
+                event_unit(i.family, i.unit.as_ref())?;
+                check_family(st, i.media_id, i.family).await?;
+            }
             _ => {}
         }
     }
@@ -212,11 +236,14 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<
                 });
                 let mut set = st.hub.progress_current(g.media_id.into());
                 set.push(Download {
-                    r#ref: format!(
-                        "pending:{}:{}",
-                        season.map(|s| s.to_string()).unwrap_or_default(),
-                        episode.map(|s| s.to_string()).unwrap_or_default()
-                    ),
+                    r#ref: match Family::from(g.family) {
+                        Family::Video => format!(
+                            "pending:{}:{}",
+                            season.map(|s| s.to_string()).unwrap_or_default(),
+                            episode.map(|s| s.to_string()).unwrap_or_default()
+                        ),
+                        other => format!("pending:{other}"),
+                    },
                     season_number: season,
                     episode_number: episode,
                     progress: Num(0.0),

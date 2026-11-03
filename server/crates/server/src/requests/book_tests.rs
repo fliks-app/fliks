@@ -290,6 +290,34 @@ async fn a_request_is_available_once_every_want_has_a_part(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_grab_starts_only_the_requests_wishing_its_family(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
+        .await;
+    let id = r["id"].as_i64().unwrap() as i32;
+    let uri = format!("/api/requests/{id}/approve");
+    let (_, r) = c.call(&c.manager, "POST", &uri, json!({})).await;
+    let media = r["mediaId"].as_i64().unwrap() as i32;
+    let status = async || -> String {
+        sqlx::query_scalar("SELECT status::text FROM requests WHERE id = $1")
+            .bind(id)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap()
+    };
+    let lc = Lifecycle::of(&c.st);
+    lc.mark_in_progress(media, None, Family::Audio)
+        .await
+        .unwrap();
+    assert_eq!(status().await, "approved");
+    lc.mark_in_progress(media, None, Family::Text)
+        .await
+        .unwrap();
+    assert_eq!(status().await, "processing");
+}
+
+#[sqlx::test(migrations = false)]
 async fn auto_approval_reads_the_book_kind_and_fails_closed_on_tmdb_facts(pool: PgPool) {
     let c = ctx(pool).await;
     let rule = async |criteria: Value| {

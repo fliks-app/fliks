@@ -1,4 +1,6 @@
 //! The acquisition reads of `plugins.md` rule 31, built on the S5 release domain.
+use super::imports::{db_err, host_err};
+use super::runtime::HostError;
 use super::runtime::fliks::plugin::types as t;
 use crate::profiles::db as profiles;
 use crate::state::AppState;
@@ -342,9 +344,52 @@ async fn files_for(
         .collect())
 }
 
+/// An error unless `kind` is wished in `family`.
+fn wished(kind: MediaKind, family: Option<Family>) -> Result<(), HostError> {
+    match family {
+        Some(f) if !kind.families().contains(&f) => Err(host_err(
+            "ERR_VALIDATION",
+            format!("a {kind} is not wished in family \"{f}\""),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// `releases.score` of any kind: a book by its family (the first want's when none), else the video score.
+pub async fn score_any(
+    st: &AppState,
+    media_id: u32,
+    family: Option<Family>,
+    unit: Option<t::UnitRef>,
+    releases: Vec<t::CandidateRelease>,
+) -> Result<Vec<t::ScoredRelease>, HostError> {
+    let Some(m) = media(&st.db, media_id as i32).await.map_err(db_err)? else {
+        return Ok(vec![]);
+    };
+    wished(m.kind, family)?;
+    if m.kind != MediaKind::Book {
+        let (season, episode) = super::units::video(unit.as_ref())?;
+        return release::score_of(st, &m, season, episode, releases)
+            .await
+            .map_err(db_err);
+    }
+    if unit.is_some() {
+        return Err(host_err("ERR_VALIDATION", "a book has no units"));
+    }
+    let family = match family {
+        Some(f) => f,
+        None => book::first_family(&st.db, m.id).await.map_err(db_err)?,
+    };
+    book::score(st, media_id, family, releases)
+        .await
+        .map_err(db_err)
+}
+
+mod book;
 mod candidates;
 mod create;
 mod release;
+pub use book::score as score_book;
 pub use candidates::*;
 pub use create::*;
 pub use release::*;
@@ -352,6 +397,39 @@ pub use release::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn a_book_at_the_end_of_a_full_batch_leaves_a_cursor(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'B', '["book"]');
+               INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b');
+               INSERT INTO media (id, title, type, "libraryId", monitored)
+                 SELECT n, 'b' || n, 'book', 1, true FROM generate_series(3, 102) n"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut c = db.acquire().await.unwrap();
+        crate::media::items::create_shell(&mut c, 102, MediaKind::Book, Default::default())
+            .await
+            .unwrap();
+        drop(c);
+        let on = NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
+        let q = |cursor| t::CandidatesQuery {
+            kind: Some("book".into()),
+            family: None,
+            media_ids: None,
+            available_on: "2030-01-01".into(),
+            limit: 1,
+            cursor,
+        };
+        let page = candidates(&db, q(None), on).await.unwrap();
+        assert_eq!(page.items.len(), 2);
+        assert_eq!(page.cursor.as_deref(), Some("102.0.0"));
+        let next = candidates(&db, q(page.cursor), on).await.unwrap();
+        assert!(next.items.is_empty() && next.cursor.is_none());
+    }
 
     #[sqlx::test(migrations = false)]
     async fn candidates_page_by_keyset_across_media_batches(db: PgPool) {
@@ -422,7 +500,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             "0123456789abcdef0123456789abcdef",
         );
         assert!(
-            context(&st, 1, None, Some(item as u32))
+            context(&st, 1, None, None, Some(item as u32))
                 .await
                 .unwrap()
                 .is_none()
@@ -482,7 +560,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             crate::config::Config::from_lookup(|_| None),
             "0123456789abcdef0123456789abcdef",
         );
-        let whole = context(&st, 1, None, None).await.unwrap().unwrap();
+        let whole = context(&st, 1, None, None, None).await.unwrap().unwrap();
         assert!(whole.scope.is_empty() && whole.want.is_none());
         assert_eq!((whole.family, whole.language), (t::Family::Video, None));
         let ids: Vec<_> = whole
@@ -491,7 +569,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             .map(|e| (&*e.provider, &*e.value))
             .collect();
         assert_eq!(ids, [("tmdb", "5"), ("tvdb", "7")]);
-        let pack = context(&st, 1, Some(group as u32), None)
+        let pack = context(&st, 1, None, Some(group as u32), None)
             .await
             .unwrap()
             .unwrap();
@@ -503,7 +581,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             (u.group_id, u.item_id, u.unit_count),
             (Some(group as u32), None, Some(3))
         );
-        let ep = context(&st, 1, None, Some(items[1] as u32))
+        let ep = context(&st, 1, None, None, Some(items[1] as u32))
             .await
             .unwrap()
             .unwrap();

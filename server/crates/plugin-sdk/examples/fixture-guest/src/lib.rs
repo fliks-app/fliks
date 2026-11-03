@@ -199,6 +199,15 @@ static ROUTES: LazyLock<Router> = LazyLock::new(|| {
         .route("POST", "/test/*rest", test_route)
 });
 
+/// The `family` query of a route: `video`, `audio` or `text`.
+fn family_of(req: &Request) -> Option<t::Family> {
+    match req.query("family")? {
+        "audio" => Some(t::Family::Audio),
+        "text" => Some(t::Family::Text),
+        _ => Some(t::Family::Video),
+    }
+}
+
 fn test_route(req: &Request) -> Result<Response, String> {
     let rest = req.param("rest").unwrap_or_default();
     match rest.as_str() {
@@ -409,6 +418,51 @@ fn test_route(req: &Request) -> Result<Response, String> {
             let kind = req.query("kind").unwrap_or("movie");
             host_result(host::media_resolve_or_create(kind, &ids, library, folder))
         }
+        "context" => {
+            let media = req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1);
+            host_result(
+                host::media_acquisition_context(media, family_of(req), None, None).map(|c| {
+                    c.map(|c| (c.kind, c.language, c.want.map(|w| w.allowed_quality_ids)))
+                }),
+            )
+        }
+        "score" => {
+            let media = req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1);
+            let title = req.query("title").unwrap_or("x").to_owned();
+            let release = t::CandidateRelease {
+                id: "r".into(),
+                title,
+                size: 2_000_000,
+                seeders: 5,
+                leechers: 0,
+                publish_date: "2026-01-01T00:00:00Z".into(),
+                flags: None,
+                freeleech: None,
+                download_volume_factor: None,
+                source_ref: "fixture".into(),
+                min_seeders: None,
+                unknown_language_iso_code: None,
+                blocked: false,
+            };
+            host_result(
+                host::releases_score(media, family_of(req), None, &[release]).map(|v| {
+                    v.into_iter()
+                        .map(|s| (s.quality_id, s.allowed))
+                        .collect::<Vec<_>>()
+                }),
+            )
+        }
+        "grabbed" => {
+            let media = req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1);
+            let family = family_of(req).unwrap_or(t::Family::Video);
+            host_result(host::events_publish(&[t::AcquisitionEvent::Grabbed(
+                t::Grabbed {
+                    media_id: media,
+                    family,
+                    unit: None,
+                },
+            )]))
+        }
         "ingest" => {
             let paths: Vec<String> = req.query("path").map(str::to_owned).into_iter().collect();
             host_result(
@@ -419,8 +473,8 @@ fn test_route(req: &Request) -> Result<Response, String> {
                         .map(str::to_owned)
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(1),
-                    family: t::Family::Video,
-                    language: None,
+                    family: family_of(req).unwrap_or(t::Family::Video),
+                    language: req.query("language").map(str::to_owned),
                     paths,
                     transfer: t::TransferMode::Copy,
                     fallback_quality: None,

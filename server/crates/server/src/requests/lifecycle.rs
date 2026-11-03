@@ -6,7 +6,7 @@ use crate::{
     profiles,
     state::AppState,
 };
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::json;
 use sqlx::PgConnection;
 use std::collections::BTreeSet;
@@ -109,8 +109,19 @@ impl Lifecycle {
     }
 
     /// `acquisition.grabbed`: approved requests of the media start processing (rule 37).
-    pub async fn mark_in_progress(&self, media_id: i32, season: Option<i32>) -> Res<()> {
+    pub async fn mark_in_progress(
+        &self,
+        media_id: i32,
+        season: Option<i32>,
+        family: Family,
+    ) -> Res<()> {
         for r in db::linked(&self.st.db, media_id, None, &["approved"]).await? {
+            if r.wants
+                .as_ref()
+                .is_some_and(|w| !w.0.iter().any(|s| s.family == family))
+            {
+                continue;
+            }
             if let Some(s) = season
                 && r.scope()
                     .is_some_and(|scope| !scope.contains(&i64::from(s)))
@@ -305,15 +316,17 @@ pub fn spawn(st: &AppState) {
                 }
                 Bus::Domain(DomainEvent::AcquisitionGrabbed {
                     media_id,
+                    family,
                     season_number,
                     ..
                 }) => {
+                    let family = *family;
                     let Ok(id) = i32::try_from(*media_id) else {
                         continue;
                     };
                     let season = season_number.and_then(|s| i32::try_from(s).ok());
                     tokio::spawn(async move {
-                        if let Err(e) = lc.mark_in_progress(id, season).await {
+                        if let Err(e) = lc.mark_in_progress(id, season, family).await {
                             tracing::warn!("markInProgress failed for media#{id}: {e:?}");
                         }
                     });

@@ -171,10 +171,8 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                family.map(super::served).transpose()?;
-                super::acquisition::context(&app, media_id, group_id, item_id)
-                    .await
-                    .map_err(db_err)
+                let family = family.map(super::served).transpose()?;
+                super::acquisition::context(&app, media_id, family, group_id, item_id).await
             }
         )
     }
@@ -234,11 +232,8 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                family.map(super::served).transpose()?;
-                let (season, episode) = units::video(unit.as_ref())?;
-                super::acquisition::score(&app, media_id, season, episode, releases)
-                    .await
-                    .map_err(db_err)
+                let family = family.map(super::served).transpose()?;
+                super::acquisition::score_any(&app, media_id, family, unit, releases).await
             }
         )
     }
