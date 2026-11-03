@@ -139,6 +139,13 @@ impl Options {
 
 /// `new` (under the data dir), after moving over the plugin files the temp dir held before.
 /// Left in place when the move fails (another filesystem), so no plugin loses its `/data`.
+/// Old runtime layouts and the staged copies of an ingest a crash or a cancelled call cut short.
+fn clear_leftovers(dir: &Path) {
+    for old in ["installed", "fliks-rt", "ingest-staging"] {
+        let _ = std::fs::remove_dir_all(dir.join(old));
+    }
+}
+
 fn default_runtime_dir(legacy: &Path, new: PathBuf) -> PathBuf {
     let (old_data, new_data) = (legacy.join("data"), new.join("data"));
     if old_data.is_dir() && !new_data.exists() {
@@ -383,9 +390,7 @@ impl Plugins {
     /// Boot (rule 23): every enabled package concurrently, at most the boot wait before serving.
     pub async fn boot(self: &Arc<Self>) {
         let dir = &self.opts.runtime_dir;
-        for old in ["installed", "fliks-rt"] {
-            let _ = std::fs::remove_dir_all(dir.join(old));
-        }
+        clear_leftovers(dir);
         let Ok(pkgs) = packages::all(&self.db).await else {
             return;
         };
@@ -606,6 +611,18 @@ impl Plugins {
 
 #[cfg(test)]
 mod runtime_dir_tests {
+    #[test]
+    fn boot_clears_the_staged_copies_of_an_interrupted_ingest() {
+        let dir = std::env::temp_dir().join(format!("fliks-boot-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("ingest-staging/a/0")).unwrap();
+        std::fs::write(dir.join("ingest-staging/a/0/x.epub"), b"x").unwrap();
+        std::fs::create_dir_all(dir.join("data/p")).unwrap();
+        super::clear_leftovers(&dir);
+        assert!(!dir.join("ingest-staging").exists());
+        assert!(dir.join("data/p").exists(), "a plugin's data stays");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     use super::default_runtime_dir;
 
     #[test]

@@ -66,12 +66,23 @@ fn stage_from_data(raw: &str, data: &Path, dest: &Path) -> Result<(PathBuf, Stri
     if dir.symlink_metadata(rel).map_err(io)?.is_symlink() {
         return Err(denied());
     }
-    let mut src = dir.open(rel).map_err(io)?;
+    let mut src = dir.open(rel).map_err(io)?.into_std();
     if !src.metadata().map_err(io)?.is_file() {
         return Err(host_err(
             "ERR_VALIDATION",
             format!("library.ingest: \"{raw}\" is not a regular file"),
         ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let m = src.metadata().map_err(io)?;
+        if m.blocks() * 512 < m.len() / 8 {
+            return Err(host_err(
+                "ERR_VALIDATION",
+                format!("library.ingest: \"{raw}\" is a sparse file"),
+            ));
+        }
     }
     std::fs::create_dir_all(dest).map_err(io)?;
     let out = dest.join(rel.rsplit('/').next().unwrap_or(rel));
@@ -131,7 +142,7 @@ pub async fn run(
             .join(crate::config::random_hex(8)),
     );
     let mut files = vec![];
-    let mut sources = vec![];
+    let mut sources: Vec<(PathBuf, String)> = vec![];
     for (i, p) in r.paths.iter().enumerate() {
         let path = match contained(p, &roots) {
             Ok(path) => path,
@@ -141,7 +152,7 @@ pub async fn run(
                     tokio::task::spawn_blocking(move || stage_from_data(&raw, &data, &dest))
                         .await
                         .map_err(|e| host_err("ERR", e.to_string()))??;
-                sources.push(rel);
+                sources.push((copy.clone(), rel));
                 copy
             }
             Err(e) => return Err(e),
@@ -216,7 +227,7 @@ pub async fn run(
     }
     drop(guard);
     if r.transfer == t::TransferMode::Move {
-        remove_sources(&data, &sources);
+        remove_sources(&data, &ingested(&sources, &out));
     }
     let mut items = placed(st, &out.imported).await?;
     if let Some(first) = out.imported.first() {
@@ -265,6 +276,18 @@ pub async fn run(
         already_present: out.already_present.clone(),
         unit: single.and_then(|i| units::unit_ref(i.season_number, i.episode_number)),
     })
+}
+
+/// The `/data` files whose staged copy the ingest took or already held; a rejected one stays.
+fn ingested(sources: &[(PathBuf, String)], out: &library::Outcome) -> Vec<String> {
+    sources
+        .iter()
+        .filter(|(staged, _)| {
+            out.imported.iter().any(|i| i.source_path == *staged)
+                || out.already_present.iter().any(|p| Path::new(p) == staged)
+        })
+        .map(|(_, rel)| rel.clone())
+        .collect()
 }
 
 /// A `move` empties the plugin's scratch of what was ingested (beneath the dir, never following out).
@@ -752,6 +775,43 @@ mod tests {
         assert_eq!(code("/data/nope.epub"), "ERR_NOT_FOUND");
         assert_eq!(code("/data/sub"), "ERR_VALIDATION", "a directory");
         let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_sparse_file_is_not_staged() {
+        let base = std::env::temp_dir().join(format!("fliks-ingest-sparse-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::File::create(base.join("big.epub"))
+            .unwrap()
+            .set_len(1 << 30)
+            .unwrap();
+        let e = stage_from_data("/data/big.epub", &base, &base.join("dest")).unwrap_err();
+        assert_eq!(e.code, "ERR_VALIDATION");
+        assert!(!base.join("dest").exists(), "nothing was copied");
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn only_the_sources_the_ingest_took_are_unlinked() {
+        let p = |n: &str| PathBuf::from(format!("/stage/{n}"));
+        let imported = |n: &str| library::Imported {
+            file_id: 1,
+            relative_path: n.into(),
+            quality: "epub".into(),
+            episode_id: None,
+            season_number: None,
+            episode_number: None,
+            episode_end: None,
+            source_path: p(n),
+        };
+        let sources: Vec<_> = ["a", "b", "c"].map(|n| (p(n), format!("{n}.epub"))).into();
+        let out = library::Outcome {
+            imported: vec![imported("a")],
+            already_present: vec![p("b").to_string_lossy().into_owned()],
+            errors: vec!["c.epub: not a book file".into()],
+        };
+        assert_eq!(ingested(&sources, &out), ["a.epub", "b.epub"]);
     }
 
     #[test]
