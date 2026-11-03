@@ -96,12 +96,12 @@ describe('DownloadManagerService, book downloads', () => {
     await settled();
     expect(streaming.stopSession).toHaveBeenCalledWith('sid');
     expect(books.storeFile.mock.calls.map((c) => [c[1], c[2]])).toEqual([
-      ['40-0', '/api/stream/400/parts/0?token=t'],
-      ['40-1', '/api/stream/400/parts/1?token=t'],
+      [`${saved()[0].id}-40-0`, '/api/stream/400/parts/0?token=t'],
+      [`${saved()[0].id}-40-1`, '/api/stream/400/parts/1?token=t'],
     ]);
     expect(saved()[0].book).toMatchObject({
       durationSeconds: 30,
-      files: [{ key: '40-0', offsetS: 0, durationS: 10 }, { key: '40-1', offsetS: 10, durationS: 20 }],
+      files: [{ key: `${saved()[0].id}-40-0`, offsetS: 0, durationS: 10 }, { key: `${saved()[0].id}-40-1`, offsetS: 10, durationS: 20 }],
     });
     expect(saved()[0]).toMatchObject({ status: 'ready', sizeBytes: 100, mediaFileId: 400 });
   });
@@ -160,5 +160,25 @@ describe('DownloadManagerService, book downloads', () => {
     await settled();
     expect(saved()).toEqual([]);
     expect(books.remove).toHaveBeenCalledTimes(2);
+  });
+
+  it('a deleted run that ends late never removes the files of a newer task for the same item', async () => {
+    const { service, books, saved, settled } = setup();
+    const audio = { ...text, itemId: 40, family: 'audio' as const, format: 'm4b', fileIds: [400] };
+    let late!: () => void;
+    books.storeFile.mockImplementationOnce(() => new Promise<number>((_, reject) => (late = () => reject(new Error('ended')))));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const first = await service.createBookDownload(audio);
+    await settled();
+    await service.deleteDownload(first);
+    const second = await service.createBookDownload(audio);
+    await settled();
+    books.remove.mockClear();
+    late();
+    await settled();
+    const removed = books.remove.mock.calls.flatMap((c) => (c[0] as { files: { key: string }[] }).files.map((f) => f.key));
+    expect(removed.every((k) => k.startsWith(`${first.id}-`))).toBe(true);
+    expect(removed.length).toBeGreaterThan(0);
+    expect(saved().find((t) => t.id === second.id)?.book?.files[0].key).toBe(`${second.id}-40-0`);
   });
 });

@@ -616,7 +616,8 @@ export class StreamingApiService {
     const params = new URLSearchParams();
     if (episodeId) params.set('episodeId', String(episodeId));
     if (itemId) params.set('itemId', String(itemId));
-    const query = params.size ? `?${params}` : '';
+    const q = params.toString();
+    const query = q ? `?${q}` : '';
     return firstValueFrom(
       this.http.get<PlaybackState | null>(`/api/playback/media/${mediaId}/state${query}`),
     );

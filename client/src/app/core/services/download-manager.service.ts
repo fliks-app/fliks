@@ -455,9 +455,13 @@ export class DownloadManagerService {
     if (this.isNative && this.downloadSettings.wifiOnly() && this.network.connectionType() === 'cellular') {
       throw new BookDownloadRefused(this.translate.instant('books_work.offline_wifi_only'));
     }
-    const { book, mediaFileId, urls } = await this.describeBook(t);
+    const described = await this.describeBook(t);
+    const { mediaFileId, urls } = described;
+    const id = this.nextLocalId++;
+    // Files are keyed by task, so a run that outlives its deletion never touches a newer task's files.
+    const book = { ...described.book, files: described.book.files.map((f) => ({ ...f, key: `${id}-${f.key}` })) };
     const task: DownloadTask = {
-      id: this.nextLocalId++,
+      id,
       mediaId: t.mediaId,
       mediaFileId,
       quality: t.format ?? 'file',
@@ -532,7 +536,10 @@ export class DownloadManagerService {
       this.updateTaskStatus(task.id, 'ready', 100);
       this.prefetchArtwork(task.media?.posterUrl, null, null);
     } catch (err) {
-      await this.books.remove(book);
+      // An EPUB's resources are keyed by item, not task: a dead run leaves them to a live task of the same item.
+      const epub = book.family === 'text' && book.format === 'epub';
+      const heir = signal.aborted && this.cache.load().some((x) => x.id !== task.id && x.book?.itemId === book.itemId && x.status !== 'failed');
+      if (!(epub && heir)) await this.books.remove(book);
       if (!signal.aborted) {
         console.error('[DL] book download failed:', err);
         this.updateTaskStatus(task.id, 'failed', 0);
