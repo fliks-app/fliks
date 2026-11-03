@@ -2055,6 +2055,17 @@
           "media"
         ],
         "operationId": "quality_table",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "query",
+            "description": "`video` (default), `audio` or `text`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -4431,6 +4442,17 @@
           "profiles"
         ],
         "operationId": "quality_list",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "query",
+            "description": "`video` (default), `audio` or `text`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -4490,6 +4512,17 @@
           "profiles"
         ],
         "operationId": "definitions_list",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "query",
+            "description": "`video` (default), `audio` or `text`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -4501,6 +4534,17 @@
           "profiles"
         ],
         "operationId": "definitions_update",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "query",
+            "description": "`video` (default), `audio` or `text`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -4515,6 +4559,17 @@
         ],
         "summary": "Computes the defaults only; the client saves them with `PUT` (rule 28).",
         "operationId": "definitions_reset",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "query",
+            "description": "`video` (default), `audio` or `text`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "201": {
             "description": ""

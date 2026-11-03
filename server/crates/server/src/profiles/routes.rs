@@ -28,8 +28,11 @@ use serde_json::{Value, json};
 
 type Res<T> = Result<T, AppError>;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct FamilyQuery {
+    /// `video` (default), `audio` or `text`.
+    #[param(value_type = Option<String>)]
     family: Option<Family>,
 }
 
@@ -54,7 +57,7 @@ fn created<T: serde::Serialize>(v: T) -> (StatusCode, Json<T>) {
     (StatusCode::CREATED, Json(v))
 }
 
-#[utoipa::path(get, path = "/api/profiles/quality", responses((status = 200)))]
+#[utoipa::path(get, path = "/api/profiles/quality", params(FamilyQuery), responses((status = 200)))]
 pub async fn quality_list(
     State(st): State<AppState>,
     a: Authed,
@@ -274,7 +277,7 @@ pub async fn format_delete(
     Ok(StatusCode::OK)
 }
 
-#[utoipa::path(get, path = "/api/quality-definitions", responses((status = 200)))]
+#[utoipa::path(get, path = "/api/quality-definitions", params(FamilyQuery), responses((status = 200)))]
 pub async fn definitions_list(
     State(st): State<AppState>,
     a: Authed,
@@ -287,7 +290,7 @@ pub async fn definitions_list(
 }
 
 /// Computes the defaults only; the client saves them with `PUT` (rule 28).
-#[utoipa::path(post, path = "/api/quality-definitions/reset", responses((status = 201)))]
+#[utoipa::path(post, path = "/api/quality-definitions/reset", params(FamilyQuery), responses((status = 201)))]
 pub async fn definitions_reset(
     State(st): State<AppState>,
     a: Authed,
@@ -304,7 +307,7 @@ pub async fn definitions_reset(
     Ok(created(rows))
 }
 
-#[utoipa::path(put, path = "/api/quality-definitions", responses((status = 200)))]
+#[utoipa::path(put, path = "/api/quality-definitions", params(FamilyQuery), responses((status = 200)))]
 pub async fn definitions_update(
     State(st): State<AppState>,
     a: Authed,
