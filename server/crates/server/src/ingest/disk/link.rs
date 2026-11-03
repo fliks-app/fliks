@@ -373,6 +373,7 @@ async fn ingest_files(
             force: false,
             uniquify_on_collision: uniquify,
             replace_existing: false,
+            language: None,
         },
     )
     .await

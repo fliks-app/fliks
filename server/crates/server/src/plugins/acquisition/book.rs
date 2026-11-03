@@ -71,10 +71,17 @@ async fn wants(db: &PgPool, media: i32, families: &[Family]) -> sqlx::Result<Vec
         .await
 }
 
-/// The family of the first want of a book, text when it has none.
-pub async fn first_family(db: &PgPool, media: i32) -> sqlx::Result<Family> {
+/// The want of `language` among `wanted` (the first one without a language).
+fn pick(wanted: Vec<WantRow>, language: Option<&str>) -> Option<WantRow> {
+    wanted
+        .into_iter()
+        .find(|w| language.is_none_or(|l| w.language.as_deref() == Some(l)))
+}
+
+/// The family of the first want of a book (of `language` when given), text when it has none.
+pub async fn first_family(db: &PgPool, media: i32, language: Option<&str>) -> sqlx::Result<Family> {
     let wanted = wants(db, media, MediaKind::Book.families()).await?;
-    Ok(wanted.first().map_or(Family::Text, WantRow::family))
+    Ok(pick(wanted, language).map_or(Family::Text, |w| w.family()))
 }
 
 /// What a target adds to its media row, read once for a batch of media.
@@ -184,11 +191,12 @@ fn target(m: &MediaRow, w: &WantRow, x: &Extras) -> Option<t::Target> {
     })
 }
 
-/// `media.acquisitionContext` of a book: its want of `family` (any), null for a group or a foreign item.
+/// `media.acquisitionContext` of a book: its want of `family` and `language` (any), null for a group or a foreign item.
 pub(super) async fn context(
     db: &PgPool,
     m: &MediaRow,
     family: Option<Family>,
+    language: Option<&str>,
     group_id: Option<u32>,
     item_id: Option<u32>,
 ) -> sqlx::Result<Option<t::Target>> {
@@ -214,14 +222,14 @@ pub(super) async fn context(
         family = Some(of_item);
     }
     let families = family.map_or_else(|| MediaKind::Book.families().to_vec(), |f| vec![f]);
-    match wants(db, m.id, &families).await?.first() {
-        Some(w) => Ok(target(m, w, &extras(db, &[m.id]).await?)),
+    match pick(wants(db, m.id, &families).await?, language) {
+        Some(w) => Ok(target(m, &w, &extras(db, &[m.id]).await?)),
         None => Ok(None),
     }
 }
 
-/// The monitored books among `ids` whose release date has come, one target per family: its first
-/// want, when unsatisfied, as `context`, `score` and the ingest serve it.
+/// The monitored books among `ids` whose release date has come, one target per unsatisfied want,
+/// which `context`, `score` and the ingest serve by (family, language).
 pub(super) async fn targets(
     db: &PgPool,
     ids: &[i32],
@@ -237,10 +245,16 @@ pub(super) async fn targets(
     .bind(on)
     .fetch_all(db)
     .await?;
-    let mut seen = BTreeSet::new();
+    // A language-less want is the fallback of a family with no language want.
     let first: Vec<&WantRow> = rows
         .iter()
-        .filter(|w| seen.insert((w.media_id, w.family.clone())) && !w.satisfied)
+        .filter(|w| {
+            !w.satisfied
+                && !(w.language.is_none()
+                    && rows.iter().any(|o| {
+                        o.media_id == w.media_id && o.family == w.family && o.language.is_some()
+                    }))
+        })
         .collect();
     let wanted: Vec<i32> = first.iter().map(|w| w.media_id).collect();
     let books: HashMap<i32, MediaRow> = sqlx::query_as::<_, MediaRow>(sqlx::AssertSqlSafe(
@@ -344,18 +358,22 @@ async fn sizes(db: &PgPool, family: Family) -> sqlx::Result<BTreeMap<u32, SizeLi
     Ok(out)
 }
 
-/// `releases.score` of `audio` or `text`, `[]` for an unknown media.
+/// `releases.score` of `audio` or `text` by the want of `language` (the first when none), `[]` for an unknown media.
 pub async fn score(
     st: &AppState,
     media_id: u32,
     family: Family,
+    language: Option<&str>,
     releases: Vec<t::CandidateRelease>,
 ) -> sqlx::Result<Vec<t::ScoredRelease>> {
     let db = &st.db;
     let Some(m) = media(db, media_id as i32).await? else {
         return Ok(vec![]);
     };
-    let want = wants(db, m.id, &[family]).await?.into_iter().next();
+    let want = pick(wants(db, m.id, &[family]).await?, language);
+    if language.is_some() && want.is_none() {
+        return Ok(vec![]);
+    }
     let formats = custom_formats(db).await?;
     let inp = Inputs::of(releases);
     let opts = BookScoreOptions {
@@ -480,7 +498,7 @@ mod tests {
         .await
         .unwrap();
         let st = state(&db);
-        let ctx = |family| context(&st, 1, family, None, None);
+        let ctx = |family| context(&st, 1, family, None, None, None);
         let first = ctx(None).await.unwrap().unwrap();
         assert_eq!(
             (first.kind.as_str(), first.family),
@@ -505,29 +523,34 @@ mod tests {
             .fetch_one(&db)
             .await
             .unwrap();
-        let by_item = context(&st, 1, None, None, Some(item as u32))
+        let by_item = context(&st, 1, None, None, None, Some(item as u32))
             .await
             .unwrap()
             .unwrap();
         assert_eq!(by_item.family, t::Family::Audio);
-        let mismatch = context(&st, 1, Some(Family::Text), None, Some(item as u32)).await;
+        let mismatch = context(&st, 1, Some(Family::Text), None, None, Some(item as u32)).await;
         assert!(mismatch.unwrap().is_none());
         assert!(
-            context(&st, 1, None, Some(1), None)
+            context(&st, 1, None, None, Some(1), None)
                 .await
                 .unwrap()
                 .is_none()
         );
         assert!(
-            context(&st, 1, None, None, Some(9999))
+            context(&st, 1, None, None, None, Some(9999))
                 .await
                 .unwrap()
                 .is_none()
         );
-        assert!(context(&st, 99, None, None, None).await.unwrap().is_none());
-        let err = context(&st, 1, Some(Family::Video), None, None).await;
+        assert!(
+            context(&st, 99, None, None, None, None)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let err = context(&st, 1, Some(Family::Video), None, None, None).await;
         assert_eq!(err.unwrap_err().code, "ERR_VALIDATION");
-        assert_eq!(first_family(&db, 1).await.unwrap(), Family::Text);
+        assert_eq!(first_family(&db, 1, None).await.unwrap(), Family::Text);
     }
 
     #[sqlx::test(migrations = false)]
@@ -603,17 +626,19 @@ mod tests {
             ("mp3", "Mirelune.FR.MP3.128kbps"),
         ];
         let releases = names.map(|(id, t)| release(id, t, 2_000_000)).to_vec();
-        let scored = score(&st, 1, Family::Text, releases.clone()).await.unwrap();
+        let scored = score(&st, 1, Family::Text, None, releases.clone())
+            .await
+            .unwrap();
         let by = |id: &str| scored.iter().find(|s| s.id == id).unwrap();
         assert_eq!((by("epub").quality_id, by("epub").allowed), (205, true));
         assert!(by("epub").language_allowed && !by("epub").whole_group);
         assert!(by("pdf").allowed && !by("en").language_allowed);
         assert!(!by("mp3").allowed, "an audio release has no text quality");
-        let audio = score(&st, 1, Family::Audio, releases).await.unwrap();
+        let audio = score(&st, 1, Family::Audio, None, releases).await.unwrap();
         let mp3 = audio.iter().find(|s| s.id == "mp3").unwrap();
         assert_eq!((mp3.quality_id, mp3.allowed), (103, true));
         assert!(
-            score(&st, 99, Family::Text, vec![release("x", "x", 1)])
+            score(&st, 99, Family::Text, None, vec![release("x", "x", 1)])
                 .await
                 .unwrap()
                 .is_empty()
@@ -663,13 +688,11 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn a_second_language_of_a_family_is_no_target_while_its_first_want_is_satisfied(
-        db: PgPool,
-    ) {
+    async fn an_unsatisfied_second_language_is_a_target_that_context_and_score_select(db: PgPool) {
         books(&db).await;
         sqlx::raw_sql(
             r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'text', 'fr');
-               WITH e AS (INSERT INTO editions ("mediaId", family) VALUES (1, 'text') RETURNING id),
+               WITH e AS (INSERT INTO editions ("mediaId", family, language) VALUES (1, 'text', 'en') RETURNING id),
                     i AS (INSERT INTO items ("mediaId", "editionId", monitored) SELECT 1, id, true FROM e RETURNING id),
                     f AS (INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId")
                           VALUES ('a.epub', 1, 'epub', 1, (SELECT min(id) FROM library_folders)) RETURNING id)
@@ -681,15 +704,48 @@ mod tests {
         .unwrap();
         let on = NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
         let got = targets(&db, &[1], Some(Family::Text), on).await.unwrap();
-        assert!(
-            got.is_empty(),
-            "the text/NULL want is satisfied, text/fr is not served"
+        let wanted = |g: &[t::Target]| -> Vec<(t::Family, Option<String>)> {
+            g.iter().map(|g| (g.family, g.language.clone())).collect()
+        };
+        assert_eq!(
+            wanted(&got),
+            [(t::Family::Text, Some("fr".to_owned()))],
+            "text/NULL is satisfied by the English edition, text/fr is not"
         );
         let got = targets(&db, &[1], None, on).await.unwrap();
         assert_eq!(
-            got.iter().map(|g| g.family).collect::<Vec<_>>(),
-            [t::Family::Audio]
+            wanted(&got),
+            [
+                (t::Family::Text, Some("fr".to_owned())),
+                (t::Family::Audio, None)
+            ]
         );
+        let st = state(&db);
+        let ctx = |language: Option<&str>| {
+            context(
+                &st,
+                1,
+                Some(Family::Text),
+                language.map(str::to_owned),
+                None,
+                None,
+            )
+        };
+        let fr = ctx(Some("fr")).await.unwrap().unwrap();
+        assert_eq!(fr.language.as_deref(), Some("fr"));
+        assert_eq!(fr.want.unwrap().decision, t::WantDecision::Missing);
+        let first = ctx(None).await.unwrap().unwrap();
+        assert_eq!(first.language, None);
+        assert_eq!(first.want.unwrap().decision, t::WantDecision::Skip);
+        assert!(ctx(Some("de")).await.unwrap().is_none());
+        assert_eq!(ctx(Some("zz zz")).await.unwrap_err().code, "ERR_VALIDATION");
+        let plain = vec![release("x", "Mirelune.EPUB", 2_000_000)];
+        let fr = score(&st, 1, Family::Text, Some("fr"), plain.clone())
+            .await
+            .unwrap();
+        assert!(!fr[0].language_allowed, "scored against the want of fr");
+        let any = score(&st, 1, Family::Text, None, plain).await.unwrap();
+        assert!(any[0].language_allowed, "scored against the first want");
     }
 
     #[sqlx::test(migrations = false)]

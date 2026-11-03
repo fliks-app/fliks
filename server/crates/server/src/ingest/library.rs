@@ -40,6 +40,8 @@ pub struct Request {
     pub force: bool,
     pub uniquify_on_collision: bool,
     pub replace_existing: bool,
+    /// A book file's language: the new files join the edition of that language (`book-ingest.md` rule 7).
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -133,9 +135,11 @@ pub async fn ingest(
         // A book's files go to the folder of their family (`book-ingest.md` rule 8).
         let target = if book {
             match books::classify(&file_name(&f.path)) {
-                Some((family, _)) => books::folder_for(&st.db, media.id, family)
-                    .await
-                    .map_err(|e| e.to_string())?,
+                Some((family, _)) => {
+                    books::folder_for(&st.db, media.id, family, req.language.as_deref())
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
                 None => None,
             }
             .filter(|t| t.id != folder.id)
@@ -205,7 +209,7 @@ pub async fn ingest(
                 abs: p.abs.clone(),
             })
             .collect();
-        let reg = books::register(st, media.id, &files).await?;
+        let reg = books::register_language(st, media.id, &files, req.language.as_deref()).await?;
         out.errors.extend(reg.conflicts);
         for r in reg.files {
             let Some((_, source)) = placed.iter().find(|(p, _)| p.rel == r.rel) else {
@@ -425,9 +429,19 @@ impl Ctx<'_> {
             &BookNameTokens {
                 title: m.title.clone(),
                 year: m.year.map(i64::from),
+                language: self.req.language.clone(),
                 ..Default::default()
             },
         );
+        // The language is in the name so two languages of one format never collide (as `.fr` for a subtitle).
+        if let Some(l) = self
+            .req
+            .language
+            .as_deref()
+            .filter(|_| !self.formats.book.contains("{Language}"))
+        {
+            base = format!("{base} ({l})");
+        }
         if let Some((i, _)) = part.filter(|(_, n)| *n > 1) {
             base = format!("{base} - {:02}", i + 1);
         }
@@ -464,6 +478,7 @@ impl Ctx<'_> {
                 )));
             }
             if let Some(rel) = fsx::rel_under(self.root.path(), &dest)
+                && self.req.language.is_none()
                 && !books::is_own_work(&self.st.db, m.id, pending, &rel)
                     .await
                     .map_err(|e| e.to_string())?

@@ -609,11 +609,15 @@ async fn a_file_goes_to_the_folder_of_a_language_specific_want(pool: PgPool) {
         .execute(&c.pool)
         .await
         .unwrap();
-    let f =
-        crate::ingest::books::folder_for(&c.pool, id, fliks_domain::media::family::Family::Text)
-            .await
-            .unwrap()
-            .unwrap();
+    let f = crate::ingest::books::folder_for(
+        &c.pool,
+        id,
+        fliks_domain::media::family::Family::Text,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(f.id, extra);
 }
 

@@ -215,15 +215,16 @@ interface host {
     json, kind, external-id,
   };
 
-  /// `family` none is the media's only want.
+  /// `family` none is the media's first want; `language` picks among the wants of a book's family.
   media-acquisition-context: func(
-    media-id: u32, family: option<family>, group-id: option<u32>, item-id: option<u32>,
+    media-id: u32, family: option<family>, language: option<string>,
+    group-id: option<u32>, item-id: option<u32>,
   ) -> result<option<target>, host-error>;
   acquisition-candidates: func(query: candidates-query) -> result<candidates-page, host-error>;
   releases-match: func(titles: list<release-title>, min-age-minutes: option<u32>)
     -> result<list<release-match>, host-error>;
   releases-score: func(
-    media-id: u32, family: option<family>, unit: option<unit-ref>,
+    media-id: u32, family: option<family>, language: option<string>, unit: option<unit-ref>,
     releases: list<candidate-release>,
   ) -> result<list<scored-release>, host-error>;
   media-resolve: func(query: resolve-query) -> result<list<tuple<string, resolved-media>>, host-error>;

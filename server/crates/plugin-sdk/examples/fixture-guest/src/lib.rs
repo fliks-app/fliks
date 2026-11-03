@@ -208,6 +208,10 @@ fn family_of(req: &Request) -> Option<t::Family> {
     }
 }
 
+fn language_of(req: &Request) -> Option<&str> {
+    req.query("language")
+}
+
 fn test_route(req: &Request) -> Result<Response, String> {
     let rest = req.param("rest").unwrap_or_default();
     match rest.as_str() {
@@ -421,9 +425,14 @@ fn test_route(req: &Request) -> Result<Response, String> {
         "context" => {
             let media = req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1);
             host_result(
-                host::media_acquisition_context(media, family_of(req), None, None).map(|c| {
-                    c.map(|c| (c.kind, c.language, c.want.map(|w| w.allowed_quality_ids)))
-                }),
+                host::media_acquisition_context(
+                    media,
+                    family_of(req),
+                    language_of(req),
+                    None,
+                    None,
+                )
+                .map(|c| c.map(|c| (c.kind, c.language, c.want.map(|w| w.allowed_quality_ids)))),
             )
         }
         "score" => {
@@ -445,13 +454,30 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 blocked: false,
             };
             host_result(
-                host::releases_score(media, family_of(req), None, &[release]).map(|v| {
-                    v.into_iter()
-                        .map(|s| (s.quality_id, s.allowed))
-                        .collect::<Vec<_>>()
-                }),
+                host::releases_score(media, family_of(req), language_of(req), None, &[release])
+                    .map(|v| {
+                        v.into_iter()
+                            .map(|s| (s.quality_id, s.allowed, s.language_allowed))
+                            .collect::<Vec<_>>()
+                    }),
             )
         }
+        "candidates" => host_result(
+            host::acquisition_candidates(&t::CandidatesQuery {
+                kind: Some("book".into()),
+                family: family_of(req),
+                media_ids: None,
+                available_on: "2030-01-01".into(),
+                limit: 50,
+                cursor: None,
+            })
+            .map(|p| {
+                p.items
+                    .into_iter()
+                    .map(|c| (c.media_id, c.language))
+                    .collect::<Vec<_>>()
+            }),
+        ),
         "grabbed" => {
             let media = req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1);
             let family = family_of(req).unwrap_or(t::Family::Video);
@@ -474,7 +500,7 @@ fn test_route(req: &Request) -> Result<Response, String> {
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(1),
                     family: family_of(req).unwrap_or(t::Family::Video),
-                    language: req.query("language").map(str::to_owned),
+                    language: language_of(req).map(str::to_owned),
                     paths,
                     transfer: t::TransferMode::Copy,
                     fallback_quality: None,

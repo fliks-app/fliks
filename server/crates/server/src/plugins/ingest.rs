@@ -117,25 +117,6 @@ pub async fn run(
         None
     };
     let guard = st.ingest.media.lock(media_id).await;
-    if let Some(l) = &language {
-        let held: Option<String> = sqlx::query_scalar(
-            r#"SELECT language FROM editions WHERE "mediaId" = $1 AND family = $2 ORDER BY id LIMIT 1"#,
-        )
-        .bind(media_id)
-        .bind(family.as_str())
-        .fetch_optional(&st.db)
-        .await
-        .map_err(db_err)?
-        .flatten();
-        if let Some(held) = held.filter(|h| h != l) {
-            return Err(host_err(
-                "ERR_VALIDATION",
-                format!(
-                    "library.ingest: the {family} edition of media #{media_id} is in \"{held}\", one language per family is acquired"
-                ),
-            ));
-        }
-    }
     let out = library::ingest(
         st,
         &guard,
@@ -151,24 +132,13 @@ pub async fn run(
             force: false,
             uniquify_on_collision: false,
             replace_existing: true,
+            language: language.clone(),
         },
     )
     .await
     .map_err(|e| host_err("ERR", e))?;
     if out.imported.is_empty() && !out.errors.is_empty() {
         return Err(host_err("ERR", out.errors.join("; ")));
-    }
-    if let Some(l) = &language {
-        sqlx::query(
-            r#"UPDATE editions SET language = $3 WHERE language IS NULL AND id = (
-                 SELECT id FROM editions WHERE "mediaId" = $1 AND family = $2 ORDER BY id LIMIT 1)"#,
-        )
-        .bind(media_id)
-        .bind(family.as_str())
-        .bind(l)
-        .execute(&st.db)
-        .await
-        .map_err(db_err)?;
     }
     drop(guard);
     let mut items = placed(st, &out.imported).await?;
@@ -362,25 +332,66 @@ mod tests {
         );
     }
 
+    async fn editions(s: &Shelf, family: &str) -> Vec<(Option<String>, i64)> {
+        sqlx::query_as(
+            r#"SELECT e.language, count(p."mediaFileId") FROM editions e LEFT JOIN items i ON i."editionId" = e.id
+               LEFT JOIN item_parts p ON p."itemId" = i.id WHERE e.family = $1 GROUP BY e.id ORDER BY e.id"#,
+        )
+        .bind(family)
+        .fetch_all(&s.st.db)
+        .await
+        .unwrap()
+    }
+
+    async fn satisfied(s: &Shelf) -> Vec<(String, Option<String>, bool)> {
+        let wants = crate::media::wants::list(&s.st.db, 1).await.unwrap();
+        wants
+            .into_iter()
+            .map(|w| (w.family, w.language, w.satisfied))
+            .collect()
+    }
+
     #[sqlx::test(migrations = false)]
-    async fn a_retry_with_a_language_satisfies_the_want_and_another_language_is_refused(
-        db: PgPool,
-    ) {
+    async fn a_second_language_of_a_family_lands_in_its_own_edition(db: PgPool) {
         let s = shelf(db).await;
         run(&s.st, "p", request(&s, t::Family::Text, None, "dl.epub"))
             .await
             .unwrap();
-        async fn language(s: &Shelf) -> Option<String> {
-            sqlx::query_scalar("SELECT language FROM editions WHERE family = 'text'")
-                .fetch_one(&s.st.db)
-                .await
-                .unwrap()
-        }
-        assert_eq!(language(&s).await, None);
-        sqlx::query(r#"UPDATE wants SET language = 'fr' WHERE family = 'text'"#)
+        sqlx::query(r#"INSERT INTO wants ("mediaId", family, language) VALUES (1, 'text', 'fr')"#)
             .execute(&s.st.db)
             .await
             .unwrap();
+        let text = |l: Option<&str>, sat| ("text".to_owned(), l.map(str::to_owned), sat);
+        assert_eq!(
+            satisfied(&s).await[1..],
+            [text(None, true), text(Some("fr"), false)]
+        );
+        let fr = run(
+            &s.st,
+            "p",
+            request(&s, t::Family::Text, Some("fr"), "dl.epub"),
+        )
+        .await
+        .unwrap();
+        let [file] = &fr.imported[..] else {
+            panic!("one file: {fr:?}")
+        };
+        assert_eq!(
+            editions(&s, "text").await,
+            [(None, 1), (Some("fr".into()), 1)],
+            "the first edition is untouched"
+        );
+        let held: Option<String> =
+            sqlx::query_scalar("SELECT language FROM editions WHERE id = $1")
+                .bind(file.edition_id as i32)
+                .fetch_one(&s.st.db)
+                .await
+                .unwrap();
+        assert_eq!(held.as_deref(), Some("fr"));
+        assert_eq!(
+            satisfied(&s).await[1..],
+            [text(None, true), text(Some("fr"), true)]
+        );
         let again = run(
             &s.st,
             "p",
@@ -389,17 +400,14 @@ mod tests {
         .await
         .unwrap();
         assert!(again.imported.is_empty() && again.already_present.len() == 1);
-        assert_eq!(language(&s).await.as_deref(), Some("fr"));
-        let wants = crate::media::wants::list(&s.st.db, 1).await.unwrap();
-        assert!(wants.iter().any(|w| w.family == "text" && w.satisfied));
-        let other = request(&s, t::Family::Text, Some("de"), "de.epub");
-        let err = run(&s.st, "p", other).await.unwrap_err();
-        assert_eq!(err.code, "ERR_VALIDATION");
         let files: i64 = sqlx::query_scalar("SELECT count(*) FROM media_files")
             .fetch_one(&s.st.db)
             .await
             .unwrap();
-        assert_eq!(files, 1, "a refused language imports nothing");
+        assert_eq!(
+            files, 2,
+            "a retry imports nothing, the other language kept its file"
+        );
     }
 
     #[sqlx::test(migrations = false)]
