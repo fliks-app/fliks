@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.id, p.version, f.\"folderId\" AS folder_id, f.\"relativePath\" AS rel, f.size,\n                  f.\"mtimeMs\" AS mtime_ms, f.quality, f.\"probeVersion\" AS probe_version,\n                  f.\"streamInfo\" AS info\n           FROM item_parts p JOIN items i ON i.id = p.\"itemId\"\n             JOIN editions e ON e.id = i.\"editionId\" JOIN media_files f ON f.id = p.\"mediaFileId\"\n           WHERE p.\"mediaId\" = $1 AND e.family = 'audio' ORDER BY p.version, p.position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "folderId"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rel",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "mtime_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mtimeMs"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "quality",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "quality"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "probe_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "probeVersion"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "info",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "7b50006bd3207afc9923d8e3f358b0e793018018804bac643e04b9b69bc20839"
+}

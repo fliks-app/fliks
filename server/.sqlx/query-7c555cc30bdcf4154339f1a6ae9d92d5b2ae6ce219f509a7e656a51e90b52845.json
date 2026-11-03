@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE book_merges SET state = 'retry', error = $2, attempts = attempts + 1,\n             \"jobFailures\" = \"jobFailures\" + $3::int\n           WHERE \"mediaId\" = $1 RETURNING attempts, \"jobFailures\" AS job_failures",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "job_failures",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "book_merges",
+            "name": "jobFailures"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7c555cc30bdcf4154339f1a6ae9d92d5b2ae6ce219f509a7e656a51e90b52845"
+}

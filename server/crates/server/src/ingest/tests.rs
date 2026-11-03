@@ -200,9 +200,17 @@ async fn ctx_with(
     pool: PgPool,
     provider: Option<std::sync::Arc<dyn crate::metadata::MetadataProvider>>,
 ) -> Ctx {
+    ctx_hello(pool, provider, hello_body(&RUNTIME, "x")).await
+}
+
+async fn ctx_hello(
+    pool: PgPool,
+    provider: Option<std::sync::Arc<dyn crate::metadata::MetadataProvider>>,
+    hello: Value,
+) -> Ctx {
     crate::db::migrate(&pool).await.unwrap();
     let fake = Fake::start().await;
-    fake.hello(Some(hello_body(&RUNTIME, "x")));
+    fake.hello(Some(hello));
     fake.script("POST", "/v1/probe", vec![ok(probe_ok())]);
     let env = [
         ("FLIKS_ENGINE_URL", fake.url.clone()),
@@ -1316,6 +1324,380 @@ mod book_ingest {
         touch(&c.dir.join("books/Orfaline/clip.mkv"), b"v");
         assert_eq!(rescan(&c, m).await.unwrap().added, 0);
         assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 4);
+    }
+
+    /// Two mp3 parts registered in a library whose merge option is `on`, the engine ready to
+    /// answer a `Merge` job with `chapters` chapters; the m4b is already on disk.
+    async fn merging_ctx(pool: PgPool) -> Ctx {
+        let mut hello = hello_body(&RUNTIME, "x");
+        hello["jobFamilies"] = json!([{"kind": "Merge", "families": ["audio"]}]);
+        ctx_hello(pool, None, hello).await
+    }
+
+    /// A file whose mtime is after any submit time: the fake engine cannot write mid-job.
+    fn written_by_the_job(path: &std::path::Path, bytes: &[u8]) {
+        touch(path, bytes);
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600))
+            .unwrap();
+    }
+
+    async fn merge_setup(c: &Ctx, on: bool, chapters: usize) -> i32 {
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(c, "Orfaline").await;
+        sqlx::query(r#"UPDATE libraries SET "mergeM4b" = $1"#)
+            .bind(on)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        for r in ["01.mp3", "02.mp3"] {
+            touch(&c.dir.join("books/Orfaline").join(r), r.as_bytes());
+        }
+        books::register(
+            &c.st,
+            m,
+            &placed(c, &["Orfaline/01.mp3", "Orfaline/02.mp3"]),
+        )
+        .await
+        .unwrap();
+        written_by_the_job(&c.dir.join("books/Orfaline/Orfaline.m4b"), b"merged");
+        let chapter = json!({"startSeconds": 0.0, "endSeconds": 60.0, "title": "One"});
+        c.fake
+            .script("POST", "/v1/jobs", vec![ok(json!({"jobId": "j1"}))]);
+        c.fake.script(
+            "GET",
+            "/v1/jobs/j1",
+            vec![ok(json!({
+                "jobId": "j1", "kind": "Merge", "mediaFileId": 1, "priority": "low",
+                "state": "done", "pct": 100, "createdMs": 1,
+                "result": {"type": "Merge", "merge": {
+                    "path": c.dir.join("books/Orfaline/Orfaline.m4b"), "bytes": 6.0,
+                    "durationSeconds": 60.0, "chapters": vec![chapter; chapters],
+                    "reencoded": false}},
+            }))],
+        );
+        m
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_verified_merge_is_a_new_version_and_the_parts_stay(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(
+            parts(&c, m).await,
+            [
+                ("Orfaline/01.mp3".to_owned(), 0, 0),
+                ("Orfaline/02.mp3".to_owned(), 0, 1),
+                ("Orfaline/Orfaline.m4b".to_owned(), 1, 0)
+            ]
+        );
+        assert!(c.dir.join("books/Orfaline/01.mp3").exists());
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1, "an m4b ends it");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_merge_the_probe_does_not_confirm_is_removed_and_nothing_is_registered(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 2).await;
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert!(!c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+        assert!(c.dir.join("books/Orfaline/02.mp3").exists());
+        assert_eq!(parts(&c, m).await.len(), 2);
+    }
+
+    async fn merge_state(c: &Ctx, m: i32) -> Option<String> {
+        sqlx::query_scalar(r#"SELECT state FROM book_merges WHERE "mediaId" = $1"#)
+            .bind(m)
+            .fetch_optional(&c.st.db)
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_part_moved_or_changed_during_the_merge_discards_the_output(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        fs::rename(
+            c.dir.join("books/Orfaline/02.mp3"),
+            c.dir.join("books/Orfaline/elsewhere.mp3"),
+        )
+        .unwrap();
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert!(!c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+        assert!(c.dir.join("books/Orfaline/elsewhere.mp3").exists());
+        assert_eq!(parts(&c, m).await.len(), 2);
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("retry"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_failed_merge_waits_for_the_parts_to_change(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 2).await;
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1, "no second run");
+        touch(&c.dir.join("books/Orfaline/02.mp3"), b"longer part");
+        rescan(&c, m).await.unwrap();
+        touch(&c.dir.join("books/Orfaline/Orfaline.m4b"), b"merged");
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(
+            c.fake.seen("POST", "/v1/jobs").len(),
+            2,
+            "the parts changed"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_output_a_row_already_holds_is_not_removed_by_a_failed_check(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 2).await;
+        sqlx::query(
+            r#"INSERT INTO media_files ("folderId", "relativePath", size, quality)
+               VALUES (1, 'Orfaline/Orfaline.m4b', 6, 'm4b')"#,
+        )
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert!(c.dir.join("books/Orfaline/Orfaline.m4b").exists());
+    }
+
+    /// A `running` row for the parts as registered, written before the files it concerns.
+    async fn running_row(c: &Ctx, m: i32) {
+        let rows = books::merge::load(&c.st, m).await.unwrap();
+        let fp = books::merge::fingerprint(&books::merge::pick(&rows).unwrap());
+        sqlx::query(
+            r#"INSERT INTO book_merges ("mediaId", fingerprint, state, "folderId", output)
+               VALUES ($1, $2, 'running', 1, 'Orfaline/Orfaline.m4b')"#,
+        )
+        .bind(m)
+        .bind(fp)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        sqlx::query(r#"UPDATE book_merges SET "jobId" = 'j1' WHERE "mediaId" = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+    }
+
+    fn job_answer(c: &Ctx, state: &str, bytes: f64, error: &str) -> Value {
+        let chapter = json!({"startSeconds": 0.0, "endSeconds": 60.0, "title": "One"});
+        json!({
+            "jobId": "j1", "kind": "Merge", "mediaFileId": 1, "priority": "low",
+            "state": state, "pct": 100, "createdMs": 1, "error": error,
+            "result": {"type": "Merge", "merge": {
+                "path": c.dir.join("books/Orfaline/Orfaline.m4b"), "bytes": bytes,
+                "durationSeconds": 60.0, "chapters": [chapter], "reencoded": false}},
+        })
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_cut_run_whose_job_does_not_match_the_file_deletes_nothing(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        running_row(&c, m).await;
+        c.fake.script(
+            "GET",
+            "/v1/jobs/j1",
+            vec![ok(job_answer(&c, "done", 99.0, ""))],
+        );
+        let out = c.dir.join("books/Orfaline/Orfaline.m4b");
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(
+            fs::read(&out).unwrap(),
+            b"merged",
+            "not the job's file: left"
+        );
+        assert_ne!(merge_state(&c, m).await.as_deref(), Some("running"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_cut_run_whose_done_job_matches_the_file_is_registered(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        running_row(&c, m).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 3);
+        assert!(c.fake.seen("POST", "/v1/jobs").is_empty(), "no new job");
+        assert_eq!(merge_state(&c, m).await, None);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_transient_failure_then_one_ffmpeg_failure_is_not_sticky(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        let script = |what: &str| {
+            c.fake.script(
+                "GET",
+                "/v1/jobs/j1",
+                vec![ok(job_answer(&c, "failed", 0.0, what))],
+            )
+        };
+        script("output exists");
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        sqlx::query(r#"UPDATE book_merges SET "nextAttemptAt" = now()"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        script("ffmpeg exited with Some(1): bad");
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("retry"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_verify_failure_leaves_a_file_the_engine_did_not_just_write(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 2).await;
+        let out = c.dir.join("books/Orfaline/Orfaline.m4b");
+        touch(&out, b"merged");
+        std::fs::File::options()
+            .write(true)
+            .open(&out)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(3600))
+            .unwrap();
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert!(out.exists(), "older than the submit: not the job's");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_job_that_fails_twice_on_the_same_parts_turns_sticky(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        c.fake.script(
+            "GET",
+            "/v1/jobs/j1",
+            vec![ok(job_answer(
+                &c,
+                "failed",
+                0.0,
+                "ffmpeg exited with Some(1): bad",
+            ))],
+        );
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("retry"));
+        sqlx::query(r#"UPDATE book_merges SET "nextAttemptAt" = now()"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("failed"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_users_file_at_the_output_survives_a_refusing_engine_and_changed_parts(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        let out = c.dir.join("books/Orfaline/Orfaline.m4b");
+        touch(&out, b"mine");
+        c.fake.script(
+            "GET",
+            "/v1/jobs/j1",
+            vec![ok(json!({
+                "jobId": "j1", "kind": "Merge", "mediaFileId": 1, "priority": "low",
+                "state": "failed", "pct": 0, "createdMs": 1, "error": "output exists"}))],
+        );
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(
+            merge_state(&c, m).await.as_deref(),
+            Some("retry"),
+            "not sticky"
+        );
+        fs::rename(&out, c.dir.join("mine.bin")).unwrap();
+        touch(&c.dir.join("books/Orfaline/02.mp3"), b"longer part");
+        rescan(&c, m).await.unwrap();
+        fs::rename(c.dir.join("mine.bin"), &out).unwrap();
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(fs::read(&out).unwrap(), b"mine");
+        assert_eq!(
+            c.fake.seen("POST", "/v1/jobs").len(),
+            2,
+            "the parts changed"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn two_concurrent_runs_of_one_media_merge_once(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        let (a, b) = tokio::join!(books::merge::run(&c.st, m), books::merge::run(&c.st, m));
+        a.unwrap();
+        b.unwrap();
+        assert_eq!(c.fake.seen("POST", "/v1/jobs").len(), 1);
+        assert_eq!(parts(&c, m).await.len(), 3);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_repeated_toggle_starts_one_backfill_and_failures_are_forgotten(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 2).await;
+        assert!(books::merge::run(&c.st, m).await.is_err());
+        assert_eq!(merge_state(&c, m).await.as_deref(), Some("failed"));
+        let lib: i32 = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+            .bind(m)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        books::merge::forget_failures(&c.st, lib).await.unwrap();
+        assert_eq!(merge_state(&c, m).await, None);
+        books::merge::spawn_library(&c.st, lib);
+        books::merge::spawn_library(&c.st, lib);
+        assert_eq!(c.st.ingest.backfills.lock().unwrap().len(), 1);
+        while !c.st.ingest.backfills.lock().unwrap().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn chapters_follow_the_version_played_and_default_to_the_merged_one(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        let (user, lib, edition): (i32, i32, i32) = sqlx::query_as(
+            r#"SELECT (SELECT min(id) FROM users), m."libraryId",
+                      (SELECT id FROM editions WHERE "mediaId" = m.id AND family = 'audio')
+               FROM media m WHERE m.id = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        let n = |v: Option<i32>| {
+            let db = c.st.db.clone();
+            async move {
+                crate::media::books::chapters(&db, user, m, edition, v, &[lib])
+                    .await
+                    .unwrap()
+                    .len()
+            }
+        };
+        assert_eq!(
+            (n(None).await, n(Some(1)).await, n(Some(0)).await),
+            (1, 1, 2)
+        );
+        let missing =
+            crate::media::books::chapters(&c.st.db, user, m, edition, Some(7), &[lib]).await;
+        assert_eq!(
+            missing.unwrap_err().status(),
+            axum::http::StatusCode::NOT_FOUND
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn nothing_merges_while_the_library_option_is_off(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, false, 1).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        assert!(c.fake.seen("POST", "/v1/jobs").is_empty());
+        assert_eq!(parts(&c, m).await.len(), 2);
     }
 
     #[sqlx::test(migrations = false)]

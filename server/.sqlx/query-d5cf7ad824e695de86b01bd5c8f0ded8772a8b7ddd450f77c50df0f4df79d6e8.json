@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n        l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n        \"metadataLanguage\" AS metadata_language, \"metadataRegion\" AS metadata_region,\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id,\n        df.path AS \"path?\", NULL::text AS label\n        FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n        WHERE l.id = ANY($1) ORDER BY name COLLATE \"C\", l.id",
+  "query": "SELECT l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n        l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n        \"metadataLanguage\" AS metadata_language, \"metadataRegion\" AS metadata_region,\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id, l.\"mergeM4b\" AS merge_m4b,\n        df.path AS \"path?\", NULL::text AS label\n        FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n        WHERE l.id = ANY($1) ORDER BY name COLLATE \"C\", l.id",
   "describe": {
     "columns": [
       {
@@ -137,6 +137,17 @@
       },
       {
         "ordinal": 12,
+        "name": "merge_m4b",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mergeM4b"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
         "name": "path?",
         "type_info": "Text",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "label",
         "type_info": "Text",
         "origin": "Expression"
@@ -171,9 +182,10 @@
       true,
       true,
       true,
+      false,
       true,
       null
     ]
   },
-  "hash": "16754401f5cc03ff1e7da62f17dbcc11b4134402cffa4beb5756072ec0467eae"
+  "hash": "d5cf7ad824e695de86b01bd5c8f0ded8772a8b7ddd450f77c50df0f4df79d6e8"
 }

@@ -45,7 +45,7 @@ fn is_disc(seg: &str) -> bool {
 }
 
 /// The folder of a file, the disc folders off.
-fn work_dir(path: &str) -> String {
+pub(super) fn work_dir(path: &str) -> String {
     let mut segs: Vec<&str> = path.split('/').collect();
     segs.pop();
     while segs.last().is_some_and(|s| is_disc(s)) {

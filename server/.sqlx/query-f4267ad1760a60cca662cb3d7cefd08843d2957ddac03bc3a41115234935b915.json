@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id FROM media m WHERE m.type = 'book' AND COALESCE(\n                     (SELECT e.\"libraryId\" FROM editions e\n                      WHERE e.\"mediaId\" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1),\n                     m.\"libraryId\") = $1 ORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f4267ad1760a60cca662cb3d7cefd08843d2957ddac03bc3a41115234935b915"
+}

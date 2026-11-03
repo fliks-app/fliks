@@ -2,6 +2,7 @@
 //! identification. Metadata is written by `metadata::books::link::attach`, never here.
 pub mod archive;
 pub mod group;
+pub mod merge;
 pub mod parts;
 pub mod plan;
 pub mod tags;
@@ -704,5 +705,8 @@ pub async fn settled(st: &AppState, media: i32) {
         if e.retry {
             st.ingest.settle.schedule(st, media);
         }
+    }
+    if let Err(e) = merge::run(st, media).await {
+        tracing::warn!("Post-import[book #{media}]: m4b merge: {e}");
     }
 }

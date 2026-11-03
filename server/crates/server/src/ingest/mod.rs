@@ -55,6 +55,11 @@ pub struct Shared {
     pub media: KeyedLocks<i32>,
     pub unmatched: KeyedLocks<String>,
     pub covers: KeyedLocks<i32>,
+    pub merging: KeyedLocks<i32>,
+    /// One m4b merge at a time, whatever triggered it.
+    pub merge_slot: AsyncMutex<()>,
+    /// Libraries whose merge backfill is running, and whether another round was asked for.
+    pub backfills: Mutex<HashMap<i32, bool>>,
     pub unmatched_holders: Mutex<HashMap<i32, usize>>,
     pub queue: post_import::Queue,
     pub settle: post_import::Settle,

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM book_merges WHERE \"mediaId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "74b6a5c5dea390a9c5c45c36380fa979dae8d5f2fcc8d6a96147ae32422ba498"
+}

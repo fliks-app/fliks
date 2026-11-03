@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.\"mergeM4b\" FROM media m JOIN libraries l ON l.id = COALESCE(\n             (SELECT e.\"libraryId\" FROM editions e\n              WHERE e.\"mediaId\" = m.id AND e.family = 'audio' ORDER BY e.id LIMIT 1), m.\"libraryId\")\n           WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mergeM4b",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "mergeM4b"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ed7927c8152f49ffd3c1492fd63a2e08ec4201d06b1377d17f3e56026a4f8115"
+}

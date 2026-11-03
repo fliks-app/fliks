@@ -38,6 +38,7 @@ struct CreateDto {
     metadata_region: Option<String>,
     default_quality_profile_id: Option<i32>,
     default_language_profile_id: Option<i32>,
+    merge_m4b: Option<bool>,
     path: Option<String>,
     user_ids: Option<Vec<i32>>,
 }
@@ -72,6 +73,7 @@ struct UpdateDto {
     default_quality_profile_id: Patch<i32>,
     #[serde(default, deserialize_with = "present")]
     default_language_profile_id: Patch<i32>,
+    merge_m4b: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -207,8 +209,8 @@ pub async fn create(
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO libraries (name, icon, color, "mediaTypes", "preferredProvider", "metadataLanguage",
-        "metadataRegion", "defaultQualityProfileId", "defaultLanguageProfileId")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"#,
+        "metadataRegion", "defaultQualityProfileId", "defaultLanguageProfileId", "mergeM4b")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id"#,
         dto.name,
         dto.icon,
         dto.color,
@@ -218,6 +220,7 @@ pub async fn create(
         or_null(dto.metadata_region.as_deref()),
         profile(dto.default_quality_profile_id),
         profile(dto.default_language_profile_id),
+        dto.merge_m4b.unwrap_or(false),
     )
     .fetch_one(&mut *tx)
     .await
@@ -272,15 +275,19 @@ pub async fn update(
         None => None,
     };
     let mut tx = st.db.begin().await?;
-    let exists = sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM libraries WHERE id = $1) AS "e!""#,
+    // Same order as `folders::add` and `path::assign`: the folders lock before the library row.
+    if dto.path.is_some() {
+        super::folders::lock(&mut tx).await?;
+    }
+    let Some(was_merging) = sqlx::query_scalar!(
+        r#"SELECT "mergeM4b" FROM libraries WHERE id = $1 FOR NO KEY UPDATE"#,
         id
     )
-    .fetch_one(&mut *tx)
-    .await?;
-    if !exists {
+    .fetch_optional(&mut *tx)
+    .await?
+    else {
         return Err(not_found(id));
-    }
+    };
     let stored: Option<String> =
         sqlx::query_scalar(r#"SELECT "preferredProvider" FROM libraries WHERE id = $1"#)
             .bind(id)
@@ -295,6 +302,9 @@ pub async fn update(
         path::assign(&mut tx, id, p).await?;
     }
     tx.commit().await?;
+    if dto.merge_m4b == Some(true) && !was_merging {
+        crate::ingest::books::merge::spawn_library(&st, id);
+    }
     Ok(Json(one(&st.db, &a, id).await?))
 }
 
@@ -338,6 +348,7 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         "defaultLanguageProfileId",
         dto.default_language_profile_id.map(profile)
     );
+    set!("mergeM4b", dto.merge_m4b);
     let given = dto.name.is_some()
         || dto.icon.is_some()
         || dto.color.is_some()
@@ -346,7 +357,8 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         || dto.metadata_language.is_some()
         || dto.metadata_region.is_some()
         || dto.default_quality_profile_id.is_some()
-        || dto.default_language_profile_id.is_some();
+        || dto.default_language_profile_id.is_some()
+        || dto.merge_m4b.is_some();
     if !given {
         return Ok(());
     }
