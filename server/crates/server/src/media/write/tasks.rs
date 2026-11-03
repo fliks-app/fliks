@@ -1,5 +1,5 @@
 //! `POST /api/media/:id/rescan` and `/analyze` (rules 59-61): detached work, answered at once.
-use super::{already_running, gate, subject};
+use super::{already_running, gate};
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{
@@ -34,7 +34,7 @@ pub async fn rescan(
         },
     );
     let key = format!("Rescan:{id}");
-    let subj = subject(id, &media.title, media.media_type);
+    let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));
     if !st
         .hub
         .activity()

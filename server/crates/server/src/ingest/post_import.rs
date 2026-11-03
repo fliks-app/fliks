@@ -40,10 +40,7 @@ fn progress(st: &AppState, done: u64, total: u64, subject: Option<Subject>) {
         command: KIND.into(),
         current: Num(done as f64),
         total: Num(total as f64),
-        message: subject
-            .as_ref()
-            .map(|s| s.title.clone())
-            .unwrap_or_default(),
+        message: subject.as_ref().map(Subject::format).unwrap_or_default(),
         subject,
     });
 }
@@ -53,7 +50,12 @@ impl Queue {
         self.q.lock_clean()
     }
 
-    pub fn enqueue(&self, st: &AppState, file_id: i32) {
+    pub async fn enqueue(&self, st: &AppState, file_id: i32) {
+        if self.lock().known.contains(&file_id) {
+            return;
+        }
+        let subject = file_subject(st, file_id).await;
+        let act = st.hub.activity();
         let (start, done, total) = {
             let mut q = self.lock();
             if !q.known.insert(file_id) {
@@ -63,15 +65,15 @@ impl Queue {
             q.total += 1;
             let start = !q.active;
             q.active = true;
+            // Under the queue lock: a drain that pops this file next must find the row already pending.
+            act.upsert_pending(
+                &format!("{KIND}:{file_id}"),
+                KIND,
+                subject,
+                Some(QUEUE_PARENT.into()),
+            );
             (start, q.done, q.total)
         };
-        let act = st.hub.activity();
-        act.upsert_pending(
-            &format!("{KIND}:{file_id}"),
-            KIND,
-            None,
-            Some(QUEUE_PARENT.into()),
-        );
         act.upsert_running(
             QUEUE_PARENT,
             KIND,
@@ -120,10 +122,7 @@ impl Queue {
                 return;
             };
             let key = format!("{KIND}:{id}");
-            let subject = enrich_subject(st, id).await.unwrap_or_else(|e| {
-                tracing::warn!("Post-import subject of file #{id} failed: {e}");
-                None
-            });
+            let subject = file_subject(st, id).await;
             st.hub.activity().upsert_running(
                 &key,
                 KIND,
@@ -174,26 +173,13 @@ impl Queue {
     }
 }
 
-async fn enrich_subject(st: &AppState, id: i32) -> sqlx::Result<Option<Subject>> {
-    let Some(r) = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type AS "media_type!" FROM media_files f JOIN media m ON m.id = f."mediaId"
-           WHERE f.id = $1"#,
-        id
-    )
-    .fetch_optional(&st.db)
-    .await?
-    else {
-        return Ok(None);
-    };
-    Ok(Some(Subject {
-        title: r.title,
-        media_id: Some(i64::from(r.id)),
-        media_type: Some(crate::db::kind(&r.media_type)?),
-        season_number: None,
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
-    }))
+async fn file_subject(st: &AppState, id: i32) -> Option<Subject> {
+    crate::events::subject::for_file(&st.db, id)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Post-import subject of file #{id} failed: {e}");
+            None
+        })
 }
 
 /// The absolute path of a file row, contained in its library root; `None` when it cannot be.

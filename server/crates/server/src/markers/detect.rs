@@ -308,13 +308,8 @@ async fn detect_all(
 
 fn subject(info: &SeasonInfo) -> Subject {
     Subject {
-        title: info.media_title.clone(),
-        media_id: Some(i64::from(info.media_id)),
-        media_type: Some(MediaKind::Series),
         season_number: Some(i64::from(info.season_number)),
-        episode_number: None,
-        episode_title: None,
-        episode_id: None,
+        ..Subject::media(info.media_id, &info.media_title, Some(MediaKind::Series))
     }
 }
 

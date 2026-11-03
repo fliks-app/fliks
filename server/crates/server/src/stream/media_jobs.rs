@@ -12,7 +12,9 @@ pub async fn sprite_file(
 ) -> Result<Option<SpriteMeta>, AppError> {
     let file = resolve_file(st, None, i64::from(id)).await?;
     let title = file.media_title.clone().unwrap_or_default();
-    let subject = subject_of(st, &file, &title).await?;
+    let subject = crate::events::subject::for_file(&st.db, file.id)
+        .await?
+        .unwrap_or_else(|| Subject::titled(&title));
     let st = st.clone();
     Ok(tokio::spawn(async move {
         sprite::generate(
@@ -43,39 +45,4 @@ pub async fn scan_file(st: &AppState, id: i32, priority: JobPriority) -> Result<
     })
     .await;
     Ok(())
-}
-
-/// `buildMediaProgressSubject`: the media, plus the episode when the file is one.
-async fn subject_of(
-    st: &AppState,
-    file: &super::ResolvedFile,
-    title: &str,
-) -> Result<Subject, AppError> {
-    let ep = match file.episode_id {
-        Some(id) => {
-            sqlx::query!(
-                r#"SELECT e.title AS "title?", e."number" AS "number?", s."number" AS "season?"
-                   FROM items e LEFT JOIN item_groups s ON s.id = e."groupId" WHERE e.id = $1"#,
-                id
-            )
-            .fetch_optional(&st.db)
-            .await?
-        }
-        None => None,
-    };
-    // Without a season number the subject stays the media's, like the TS builder.
-    let ep = ep.filter(|e| e.season.is_some());
-    let numbered = ep.as_ref().is_some_and(|e| e.number.is_some());
-    Ok(Subject {
-        title: title.to_owned(),
-        media_id: file.media_id.map(i64::from),
-        media_type: file.media_type,
-        season_number: ep.as_ref().and_then(|e| e.season).map(i64::from),
-        episode_number: ep.as_ref().and_then(|e| e.number).map(i64::from),
-        episode_title: ep
-            .as_ref()
-            .filter(|_| numbered)
-            .and_then(|e| e.title.clone()),
-        episode_id: file.episode_id.filter(|_| numbered).map(i64::from),
-    })
 }

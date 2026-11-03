@@ -405,7 +405,7 @@ pub async fn register_to(
         store_cover(st, media, &c).await;
     }
     for r in &out {
-        st.ingest.queue.enqueue(st, r.file_id);
+        st.ingest.queue.enqueue(st, r.file_id).await;
     }
     st.ingest.settle.schedule(st, media);
     Ok(Registration {

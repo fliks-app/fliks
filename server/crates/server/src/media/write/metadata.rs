@@ -1,5 +1,5 @@
 //! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
-use super::{already_running, body::Body, entity_or_404, gate, subject};
+use super::{already_running, body::Body, entity_or_404, gate};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
     field_sources::set_field_sources,
@@ -463,7 +463,7 @@ pub async fn identify(
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let key = format!("Identify:{id}");
-    let subj = subject(id, &media.title, media.media_type);
+    let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));
     if !st
         .hub
         .activity()
@@ -590,7 +590,7 @@ pub async fn refresh(
         title: media.title.clone(),
     });
     let key = format!("RefreshMetadata:{id}");
-    let subj = subject(id, &media.title, media.media_type);
+    let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));
     if !st
         .hub
         .activity()
@@ -633,7 +633,7 @@ pub async fn refresh_episode(
         title: media.title.clone(),
     });
     let key = format!("RefreshEpisodeMetadata:{episode}");
-    let subj = subject(id, &media.title, media.media_type);
+    let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));
     if !st
         .hub
         .activity()

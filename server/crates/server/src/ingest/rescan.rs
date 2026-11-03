@@ -1008,7 +1008,7 @@ pub async fn enrich_from_disk(st: &AppState, file_id: i32) -> Result<(), AppErro
     )
     .execute(&st.db)
     .await?;
-    st.ingest.queue.enqueue(st, file_id);
+    st.ingest.queue.enqueue(st, file_id).await;
     let m = sqlx::query!(
         r#"SELECT m.id FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE f.id = $1"#,
         file_id
