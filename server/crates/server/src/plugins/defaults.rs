@@ -220,8 +220,9 @@ mod tests {
         crate::settings::setting_value(pool, key).await.unwrap()
     }
 
-    #[sqlx::test]
+    #[sqlx::test(migrations = false)]
     async fn a_key_that_differs_from_the_default_is_imported_once(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
         let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("built-in"))];
         import_with(
             &pool,
@@ -241,8 +242,9 @@ mod tests {
         assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
     }
 
-    #[sqlx::test]
+    #[sqlx::test(migrations = false)]
     async fn the_compiled_default_is_not_imported(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
         let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("built-in"))];
         import_with(&pool, d, env(&[("TMDB_API_KEY", "built-in")]))
             .await
@@ -251,8 +253,9 @@ mod tests {
         assert_eq!(stored(&pool, IMPORTED).await.as_deref(), Some("true"));
     }
 
-    #[sqlx::test]
+    #[sqlx::test(migrations = false)]
     async fn the_marker_blocks_a_second_import_after_a_reset(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
         import_with(&pool, &[], env(&[("TMDB_API_KEY", "a")]))
             .await
             .unwrap();

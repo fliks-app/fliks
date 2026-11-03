@@ -152,7 +152,8 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
   # provider hosts are the stub in every mode, so a keyless run never leaves loopback (rule 59)
-  local S=http://127.0.0.1:$P_PROV over=api.themoviedb.org=$S/tmdb,api4.thetvdb.com=$S/tvdb,image.tmdb.org=$S/img,artworks.thetvdb.com=$S/tvdb-art
+  local S=http://127.0.0.1:$P_PROV over
+  over=api.themoviedb.org=$S/tmdb,api4.thetvdb.com=$S/tvdb,image.tmdb.org=$S/img,artworks.thetvdb.com=$S/tvdb-art
   for h in openlibrary.org covers.openlibrary.org archive.org www.googleapis.com books.google.com catalogue.bnf.fr \
     api.audnex.us m.media-amazon.com images-na.ssl-images-amazon.com api.audible.com api.audible.fr api.audible.de api.audible.co.uk \
     api.audible.it api.audible.es api.audible.ca api.audible.com.au api.audible.co.jp api.audible.in; do over+=,$h=$S/books; done

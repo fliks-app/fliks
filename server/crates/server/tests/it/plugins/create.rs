@@ -111,6 +111,9 @@ async fn resolve_or_create_refuses_what_it_does_not_serve_and_finds_what_exists(
         h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
         "active"
     );
+    let tmdb = Scripted::new(Namespace::TMDB);
+    tmdb.on.store(false, Ordering::SeqCst);
+    h.st.metadata.add_plugin(tmdb);
     sqlx::raw_sql(
         r#"INSERT INTO media (id, title, type) VALUES (7, 'Held', 'movie');
            INSERT INTO media_external_ids ("mediaId", kind, provider, value)
@@ -154,7 +157,7 @@ async fn state_with_tmdb(s: &Scratch) -> (AppState, Arc<AtomicUsize>) {
     let h = hits.clone();
     fake.otherwise(move |k| {
         let mut p = k.split('/');
-        let (kind, id) = (p.next()?, p.last()?.parse::<i32>().ok()?);
+        let (kind, id) = (p.next()?, p.next_back()?.parse::<i32>().ok()?);
         match kind {
             "work" => {
                 h.fetch_add(1, Ordering::SeqCst);

@@ -474,7 +474,7 @@ async fn person_search(pool: PgPool) {
 
 fn tmdb_person(name: &str, avatar: Option<&str>) -> Value {
     json!({"name": name, "biography": "fresh bio", "birthday": null, "deathday": null, "placeOfBirth": "Paris",
-           "avatarUrl": avatar.map(|a| format!("https://image.tmdb.org/t/p/w500{a}")), "knownForDepartment": "Acting"})
+           "avatarUrl": avatar.map(|a| format!("http://image.tmdb.org/t/p/w500{a}")), "knownForDepartment": "Acting"})
 }
 
 async fn seed_credits(pool: &PgPool) {

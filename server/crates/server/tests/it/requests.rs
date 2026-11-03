@@ -58,7 +58,7 @@ impl Tmdb {
         let series = parts[1] == "series";
         let mut body = json!({
             "tmdbId": id, "overview": "o", "genres": facts.genre_ids.iter().map(|g| format!("g{g}")).collect::<Vec<_>>(),
-            "genreIds": facts.genre_ids, "posterUrl": "https://image.tmdb.org/t/p/w500/p.jpg",
+            "genreIds": facts.genre_ids, "posterUrl": "http://image.tmdb.org/t/p/w500/p.jpg",
             "status": "released", "runtime": 100, "year": facts.year.unwrap_or(2020),
             "title": format!("{} {id}", if series { "Series" } else { "Movie" }),
         });
