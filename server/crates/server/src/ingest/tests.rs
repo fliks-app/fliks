@@ -2692,6 +2692,36 @@ mod book_ingest {
         assert_eq!(b["orphanCount"], 3);
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn the_orphan_scan_suggests_a_book_provider_for_a_book_group(pool: PgPool) {
+        let p = std::sync::Arc::new(crate::metadata::books::tests::anchor());
+        let c = ctx_with(pool, Some(p)).await;
+        let lib = c.dir.join("mixed");
+        let l = library(&c, "X", &lib, r#"["movie", "book"]"#).await;
+        sqlx::query(r#"UPDATE libraries SET "preferredProvider" = 'tmdb' WHERE id = $1"#)
+            .bind(l)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        touch(&lib.join("Placeholder Film (2001).mkv"), b"x");
+        touch(
+            &lib.join("Placeholder Author - Placeholder Book.epub"),
+            b"x",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        let groups = b["groups"].as_array().unwrap();
+        let book = groups.iter().find(|g| g["mediaType"] == "book").unwrap();
+        assert_eq!(book["suggestedProvider"], "openlibrary");
+    }
+
     async fn shelf(c: &Ctx) -> i32 {
         library(c, "B", &c.dir.join("books"), r#"["book"]"#).await
     }

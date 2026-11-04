@@ -205,6 +205,14 @@ struct Scanned {
     orphan_count: usize,
 }
 
+/// The provider that serves `kind` for the library's preference, else the raw preference.
+fn suggested(st: &AppState, provider: &str, kind: MediaKind) -> String {
+    st.metadata
+        .resolve(Some(provider), kind)
+        .map_or(provider, |n| n.as_str())
+        .to_owned()
+}
+
 /// `scanOrphansUnder` (rules 62-66): reads only; `folder_id` tags the groups of a library folder.
 async fn scan_under(
     st: &AppState,
@@ -298,11 +306,7 @@ async fn scan_under(
                     guess_title: folder,
                     guess_year: None,
                     nfo: None,
-                    suggested_provider: st
-                        .metadata
-                        .resolve(Some(provider), media_type)
-                        .map_or(provider, |n| n.as_str())
-                        .to_owned(),
+                    suggested_provider: suggested(st, provider, media_type),
                     files: vec![entry],
                 });
             }
@@ -316,10 +320,24 @@ async fn scan_under(
         g.guess_title = title.unwrap_or_else(|| g.folder_name.clone());
         g.guess_year = year;
     }
-    let works = book_groups(root_p, folder_id, provider, &book_files, linked).await;
+    let works = book_groups(
+        root_p,
+        folder_id,
+        &suggested(st, provider, MediaKind::Book),
+        &book_files,
+        linked,
+    )
+    .await;
     orphan_count += works.iter().map(|g| g.files.len()).sum::<usize>();
     groups.extend(works);
-    let volumes = comic_groups(root_p, folder_id, provider, &comic_files, linked).await;
+    let volumes = comic_groups(
+        root_p,
+        folder_id,
+        &suggested(st, provider, MediaKind::Comic),
+        &comic_files,
+        linked,
+    )
+    .await;
     orphan_count += volumes.iter().map(|g| g.files.len()).sum::<usize>();
     groups.extend(volumes);
     progress(st, &key, root, total, total);
