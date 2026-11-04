@@ -536,7 +536,7 @@ async fn a_work_held_by_another_media_is_left_unlinked_and_unwritten(db: PgPool)
 }
 
 async fn library(db: &PgPool, id: i32) {
-    sqlx::query("INSERT INTO libraries (id, name) VALUES ($1, 'L')")
+    sqlx::query("INSERT INTO libraries (id, name) VALUES ($1, 'L' || $1::text)")
         .bind(id)
         .execute(db)
         .await
