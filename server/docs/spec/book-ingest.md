@@ -55,3 +55,5 @@ Scope: how book files enter the library: grouping files into editions, archive r
 ## Tests
 
 Golden: `fixtures/books-grouping` (a folder of parts, `CD1`/`CD2`, mixed formats, a single `m4b`, an ebook and an audiobook side by side, several ebooks in one folder, a nested work), `fixtures/books-tags` (the `info.tags` an `m4b`, an `mp3` and a `flac` carry), all synthetic. The EPUB reader runs on real zips built in the test (EPUB 2 and 3, a zip bomb, no OPF, no zip). `ingest/tests.rs` (`book_ingest`) runs a transfer, a link in place, a rescan and an identification against a throwaway database and a fake engine. It also covers the delete that keeps a loose book's files and the ones it does not own, the second work refused before its move, the positions closing up after a part goes, the rescan beside other books, an `Author/Title` anchor (rescan, delete), the scan anchors and the cover lock.
+
+18. Hints are the file record's `title`, `authors`, `narrators`, `language`, `series`, `year`, `isbn13` and `asin` read back (`BookHints::of_record`): no parser fills a hints structure of its own.

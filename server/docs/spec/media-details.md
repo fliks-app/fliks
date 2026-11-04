@@ -50,3 +50,5 @@ What a media carries beyond the columns every kind shares: its release dates, th
 22. `1789000000180_item-versions.sql` replaces the primary key of `collection_entries` by an `id` serial (existing rows are numbered), adds `"itemId"`, `"positionEnd"` and `"positionLabel"` (all `NULL` for the TMDB entries the table holds) and the unique key above. Readers join on `"collectionId"` and `"mediaId"` and ignore the new columns; `set_tmdb_collection` writes and deletes only the media entries (`"itemId" IS NULL`), and every reader that lists media through `collection_entries` filters `"itemId" IS NULL`, so an item entry never duplicates a media in a collection list.
 
 Edition release dates: a `media_release_dates` row with an `"editionId"` is the date of one edition of a book; every read and write of a work's dates filters `"editionId" IS NULL` (`books.md` rule 9). Series of books are collections (`books.md` rule 13).
+
+23. The detail of every kind carries `providers` and `fieldSources` (`metadata-orchestrator.md` rule 42); the client shows one attribution from `providers` (a plugin or Comic Vine link, the "unofficial" notice of a book provider).

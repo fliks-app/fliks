@@ -199,6 +199,9 @@ Parity scenarios (`server/parity/scenarios/media-write/`, seed `ingest` and the 
 
 Creating or importing a book: `book-metadata.md` (import with `type: 'book'`, `attach`) and `books.md` rule 3 (`create_shell` makes no edition and no item).
 
+108. `createUnmatched` makes a shell: `media` with `title`, `year`, `status = 'released'`, `monitored = false`, the library, the folder and the profiles, then the merge of the file record alone (`metadata-orchestrator.md` rules 39-41) writes `originalTitle`, `overview`, `genres`, `runtime`, `rating` and `releaseDate`; rule 19 describes the same values. The nfo is read by the merge, not passed in.
+109. `refreshMetadata` and `POST /api/media/:id/refresh` of a movie or series with no provider id merge its file record (rule 108) and answer 201; the 400 `No provider ID available for this media` is gone. `refreshMetadata` merges the provider record and the file record: a field the provider leaves empty comes from the file.
+
 ## Open questions
 
 None.

@@ -249,6 +249,9 @@ Parity scenarios: 14 files in `server/parity/scenarios/ingest/`, seed `ingest` =
 
 Book files: `book-ingest.md`.
 
+105. A scan group carries `fileIds`, `[{provider, externalId}]`, read from its sample file's record (`metadata-orchestrator.md` rule 39): a video's nfo ids (`tmdb`, `tvdb`, `imdb`), a book's ISBN-13 (`isbn`) and ASIN (`asin`); the field `nfo` is gone. `guessTitle` and `guessYear` are the record's `title` and `year` (the name of the file when the format has none). `findOrCreateUnmatched` reads the same record, so rules 64 and 79 take their nfo and guess from it.
+106. A comic volume's `title`, `overview`, `year`, `publisher` and `volume` are not written by `register`: the settle merges the lowest issue's `ComicInfo.xml` (`comics.md` rule 45).
+
 ## Open questions
 
 None.
