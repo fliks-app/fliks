@@ -70,6 +70,7 @@ pub async fn bibliography(
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     Ok(Json(service::bibliography(&st, &a, id?.0).await?))
 }
 

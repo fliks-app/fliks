@@ -4,8 +4,8 @@ use crate::{
     libraries::{accessible_library_ids, paths_visible},
     media::{books, hydrate},
     metadata::{
-        Credits, Metadata, Search, Upstream,
-        books::{ANCHOR, routes::hit as book_hit},
+        Credits, Metadata, Upstream,
+        books::{ANCHOR, author_works, routes::hit as book_hit},
         mark_existing, unavailable,
     },
     state::AppState,
@@ -360,8 +360,6 @@ pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Valu
     Ok(json!({"provider": p.provider, "cast": cast, "crew": crew}))
 }
 
-const BIBLIOGRAPHY_PAGES: u32 = 3;
-
 /// `GET /api/persons/:id/bibliography` (`persons.md` rule 23).
 pub async fn bibliography(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
     let p = find(&st.db, id).await?;
@@ -372,38 +370,20 @@ pub async fn bibliography(st: &AppState, a: &Authed, id: i32) -> Result<Value, A
     .fetch_optional(&st.db)
     .await?;
     let md = &st.metadata;
-    let (Some(olid), true) = (olid, md.available(ANCHOR)) else {
+    let (Some(olid), true) = (
+        olid,
+        md.available(ANCHOR) && md.of(ANCHOR).has_search(MediaKind::Book),
+    ) else {
         return Ok(json!([]));
     };
     let lang = md.lang.resolve(None).await?;
-    let mut hits: Vec<Value> = vec![];
-    for page in 1..=BIBLIOGRAPHY_PAGES {
-        let search = Search {
-            kind: MediaKind::Book,
-            query: &p.name,
-            year: None,
-            title: None,
-            author: Some(&p.name),
-            author_id: Some(&olid),
-            isbn: None,
-            language: None,
-            page,
-        };
-        let found = md
-            .of(ANCHOR)
-            .search(&search, &lang, Priority::Interactive)
-            .await
-            .map_err(|e| unavailable("request", ANCHOR, &e))?;
-        let before = hits.len();
-        for h in found.iter().filter_map(|v| book_hit(ANCHOR, v)) {
-            if !hits.iter().any(|x| x["externalId"] == h["externalId"]) {
-                hits.push(h);
-            }
-        }
-        if hits.len() == before {
-            break;
-        }
-    }
+    let works = author_works(st, &lang, &p.name, Some(&olid), Priority::Interactive)
+        .await
+        .map_err(|e| unavailable("search", ANCHOR, &e))?;
+    let mut hits: Vec<Value> = works
+        .into_iter()
+        .filter_map(|r| book_hit(ANCHOR, &Value::Object(r)))
+        .collect();
     mark_existing(&st.db, a, MediaKind::Book, &mut hits).await?;
     Ok(Value::Array(hits))
 }

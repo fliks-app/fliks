@@ -3128,6 +3128,17 @@
         }
       }
     },
+    "/api/persons/{id}/bibliography": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "bibliography",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/persons/{id}/follow": {
       "get": {
         "tags": [

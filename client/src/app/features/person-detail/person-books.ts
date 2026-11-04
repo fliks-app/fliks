@@ -38,12 +38,13 @@ export class PersonBooksComponent {
 
   private async load(id: number, role: 'author' | 'narrator') {
     this.loading.set(true);
+    this.credits.set([]);
     try {
-      const [works, credits] = await Promise.all([this.api.personWorks(id, role), this.api.personBibliography(id)]);
-      this.works.set(works);
-      this.credits.set(credits);
+      this.works.set(await this.api.personWorks(id, role));
     } finally {
       this.loading.set(false);
     }
+    // The bibliography lists an author's works: a narrator view has none.
+    if (role === 'author') this.credits.set(await this.api.personBibliography(id));
   }
 }
