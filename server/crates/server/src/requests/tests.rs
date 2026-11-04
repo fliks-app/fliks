@@ -150,17 +150,18 @@ fn only_the_criteria_that_need_tmdb_read_metadata() {
 
 #[sqlx::test(migrations = false)]
 async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: sqlx::PgPool) {
-    use crate::plugins::namespaces::{Declared, claim, delete_data};
+    use crate::plugins::namespaces::{Declared, Known, claim, delete_data};
     use fliks_domain::external_id::Namespace;
 
     crate::db::migrate(&pool).await.unwrap();
+    let known = Known::default();
     let ns = Declared {
         name: "org.x:a",
         label: "L",
         id_pattern: "^.+$",
         case: "preserve",
     };
-    claim(&pool, "org.x", Some("k1"), &[ns])
+    claim(&pool, &known, "org.x", Some("k1"), &[ns])
         .await
         .unwrap()
         .unwrap();
@@ -198,14 +199,14 @@ async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: s
     super::db::insert(&pool, new(&key)).await.unwrap();
     assert_eq!(super::db::active_adds(&pool, &key).await.unwrap().len(), 1);
 
-    delete_data(&pool, "org.x").await.unwrap();
+    delete_data(&pool, &known, "org.x").await.unwrap();
     let ns = Declared {
         name: "org.x:a",
         label: "L",
         id_pattern: "^.+$",
         case: "preserve",
     };
-    claim(&pool, "org.x", Some("k2"), &[ns])
+    claim(&pool, &known, "org.x", Some("k2"), &[ns])
         .await
         .unwrap()
         .unwrap();

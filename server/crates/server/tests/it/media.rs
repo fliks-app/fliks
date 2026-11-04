@@ -8,6 +8,7 @@ use tower::ServiceExt;
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 struct Ctx {
+    st: AppState,
     app: Router,
     admin: String,
     plain: String,
@@ -42,7 +43,8 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m/one'), (2, '/m/tw
     Ctx {
         admin: st.jwt.sign_access(1, "admin").unwrap().token,
         plain: st.jwt.sign_access(2, "plain").unwrap().token,
-        app: media::router().with_state(st),
+        app: media::router().with_state(st.clone()),
+        st,
     }
 }
 
@@ -336,13 +338,43 @@ async fn a_kind_without_a_special_case_lists_with_its_watched_state(pool: PgPool
     assert_eq!(find(&list).unwrap()["watched"], true);
 }
 
+#[sqlx::test(migrations = false)]
+async fn external_ids_list_declared_plugin_namespaces_only(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+             VALUES ('org.live:a', 'org.live', '^[0-9]+$', 'preserve', 'A');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (1, 'movie', 'org.live:a', '7'), (1, 'movie', 'org.gone:a', '8');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (s, m) = c.get(&c.admin, "/api/media/1").await;
+    assert_eq!(s, 200, "{m}");
+    assert_eq!(
+        m["externalIds"],
+        json!([{"provider": "org.live:a", "value": "7"}])
+    );
+}
+
 /// Identify is a new identity: plugin pins of the media and its seasons go, with the id of the
 /// media pin's namespace, except what an explicit `preferredProvider` names.
 async fn identify_with_pins(pool: PgPool, body: Value) -> Vec<(Option<String>, Vec<String>)> {
-    use fliks_domain::external_id::Namespace;
     let c = ctx(pool.clone()).await;
     for n in ["aid", "bid"] {
-        Namespace::declare(&format!("org.idpin:{n}"), n, "^[1-9][0-9]*$", "preserve").unwrap();
+        let name = format!("org.idpin:{n}");
+        let d = fliks_server::plugins::namespaces::Declared {
+            name: &name,
+            label: n,
+            id_pattern: "^[1-9][0-9]*$",
+            case: "preserve",
+        };
+        let known = &c.st.plugins.namespaces;
+        fliks_server::plugins::namespaces::claim(&pool, known, "org.idpin", None, &[d])
+            .await
+            .unwrap()
+            .unwrap();
     }
     sqlx::raw_sql(
         r#"UPDATE media SET "preferredProvider" = 'org.idpin:aid' WHERE id = 1;

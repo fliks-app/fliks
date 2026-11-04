@@ -266,10 +266,11 @@ async fn linked(st: &AppState, media: i32) -> Result<Option<(Namespace, String)>
     .fetch_all(&st.db)
     .await?;
     let order = st.metadata.order(MediaKind::Comic);
+    let known = st.namespaces();
     let mut held: Vec<(usize, Namespace, String)> = ids
         .into_iter()
         .filter_map(|(p, v)| {
-            let ns = Namespace::parse(&p).filter(|n| n.core().is_none())?;
+            let ns = known.parse(&p).filter(|n| n.core().is_none())?;
             let rank = if pin.as_deref() == Some(p.as_str()) {
                 0
             } else {

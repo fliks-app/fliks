@@ -304,6 +304,7 @@ impl Plugins {
         if let Some(block) = m.get("provider") {
             namespaces::claim(
                 &self.db,
+                &self.namespaces,
                 id,
                 pkg.verified_by_key_id.as_deref(),
                 &namespaces::declared(block),

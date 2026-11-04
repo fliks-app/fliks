@@ -57,7 +57,9 @@ pub(super) async fn import_book(
     let b = Body::new(v, &FIELDS)?;
     let bad = |m: &str| AppError::bad_request(vec![m.to_owned()]);
     let provider = b.required(b.str("provider")?, "provider", "must be a string")?;
-    let ns = Namespace::parse(&provider)
+    let known = st.namespaces();
+    let ns = known
+        .parse(&provider)
         .filter(|n| *n == ANCHOR || st.metadata.serves(*n, MediaKind::Book))
         .ok_or_else(|| {
             let others = st.metadata.serving(MediaKind::Book);
@@ -77,8 +79,8 @@ pub(super) async fn import_book(
         ANCHOR => {
             work_id(&external).ok_or_else(|| bad("externalId must be an Open Library work id"))?
         }
-        _ => ns
-            .normalize(&external)
+        _ => known
+            .normalize(ns, &external)
             .ok_or_else(|| bad(&format!("externalId is not a {provider} id")))?,
     };
     let (library, folder) = (b.id("libraryId")?.flatten(), b.id("folderId")?.flatten());
@@ -305,7 +307,8 @@ async fn create_from_edition(
     join: Option<&[i32]>,
 ) -> Result<(i32, bool), AppError> {
     let (ns, value) = c.id;
-    let pick = edition_id(ns, value)
+    let known = st.namespaces();
+    let pick = edition_id(&known, ns, value)
         .ok_or_else(|| AppError::bad_request(format!("{ns} names no book edition")))?;
     let lang = crate::metadata::library_language(st, c.target.id).await?;
     let mut ids = vec![(ns, pick)];
@@ -317,7 +320,7 @@ async fn create_from_edition(
             "the provider does not know this edition",
         ));
     };
-    for id in discovered(&records) {
+    for id in discovered(&known, &records) {
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -345,7 +348,7 @@ async fn create_from_edition(
         (Some(work), None) => create_book(st, &new_book(c, work)).await?,
         (None, None) => insert_unanchored(st, c, record, *from, c.links.clone()).await?,
     };
-    let edition = match add_edition(&st.db, id, family, &ids).await {
+    let edition = match add_edition(st, id, family, &ids).await {
         Ok(e) => e,
         Err(e) => {
             if held.is_none() {
@@ -389,12 +392,13 @@ async fn same_library(
 
 /// The edition an import makes before any file exists, holding the ids the provider gave.
 async fn add_edition(
-    db: &sqlx::PgPool,
+    st: &AppState,
     media: i32,
     family: Family,
     ids: &[(Namespace, String)],
 ) -> Result<i32, AppError> {
-    let mut tx = db.begin().await?;
+    let known = st.namespaces();
+    let mut tx = st.db.begin().await?;
     let edition: i32 = sqlx::query_scalar(
         r#"INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id"#,
     )
@@ -403,7 +407,7 @@ async fn add_edition(
     .fetch_one(&mut *tx)
     .await?;
     for (ns, value) in ids {
-        external_ids::link_edition(&mut tx, edition, media, *ns, value).await?;
+        external_ids::link_edition(&mut tx, &known, edition, media, *ns, value).await?;
     }
     tx.commit().await?;
     Ok(edition)

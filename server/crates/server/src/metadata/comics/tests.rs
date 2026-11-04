@@ -27,7 +27,7 @@ use tower::ServiceExt;
 pub(crate) const NS: &str = "org.test.comic:vol";
 
 pub(crate) fn ns() -> Namespace {
-    Namespace::declare(NS, "Test Comics", "^[0-9]{1,9}$", "preserve").unwrap()
+    Namespace::parse(NS).unwrap()
 }
 
 #[derive(Default)]
@@ -184,7 +184,7 @@ async fn ctx_with(pool: PgPool, provider: Option<Arc<Fake>>, registered: bool) -
         INSERT INTO library_folders ("libraryId", path) VALUES (1, '/c/one'), (2, '/c/two');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
-          VALUES ('org.test.comic:vol', 'org.test.comic', '^[0-9]+$', 'preserve', 'Test Comics');
+          VALUES ('org.test.comic:vol', 'org.test.comic', '^[0-9]{1,9}$', 'preserve', 'Test Comics');
         INSERT INTO plugin_packages ("pluginId", version, archive, origin, signature, manifest)
           VALUES ('org.test.comic', '1.0.0', '\x00', 'manual', 'sig',
                   '{"id": "org.test.comic", "homepage": "https://cv.test"}');
@@ -193,6 +193,9 @@ async fn ctx_with(pool: PgPool, provider: Option<Arc<Fake>>, registered: bool) -
     .execute(&pool)
     .await
     .unwrap();
+    crate::plugins::namespaces::load(&pool, &st.plugins.namespaces)
+        .await
+        .unwrap();
     Ctx {
         admin: st.jwt.sign_access(1, "admin").unwrap().token,
         reader: st.jwt.sign_access(2, "reader").unwrap().token,

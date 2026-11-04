@@ -77,7 +77,7 @@ fn address_class() {
 
 #[test]
 fn provider_namespace() {
-    use fliks_domain::external_id::{ExternalProvider, Namespace};
+    use fliks_domain::external_id::{ExternalProvider, Namespaces};
     use fliks_domain::plugins::provider::{
         Class, IdRule, check_namespaces, classify, sanitize_ids,
     };
@@ -100,7 +100,8 @@ fn provider_namespace() {
                 }
             }
             "sanitize" => {
-                Namespace::declare("org.example.anime:aid", "Aid", "^[1-9][0-9]*$", "preserve");
+                let mut known = Namespaces::default();
+                known.declare("org.example.anime:aid", "Aid", "^[1-9][0-9]*$", "preserve");
                 let own: Vec<&str> = i["own"]
                     .as_array()
                     .unwrap()
@@ -108,7 +109,7 @@ fn provider_namespace() {
                     .filter_map(Value::as_str)
                     .collect();
                 let mut rec = i["record"].as_object().unwrap().clone();
-                let dropped = sanitize_ids(&mut rec, i["official"] == true, &own);
+                let dropped = sanitize_ids(&mut rec, i["official"] == true, &own, &known);
                 json!({"record": rec, "dropped": dropped})
             }
             _ => {

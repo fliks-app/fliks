@@ -82,6 +82,7 @@ pub async fn items_view(
   || COALESCE((SELECT jsonb_build_object('externalIds', jsonb_agg(
        jsonb_build_object('provider', x.provider, 'value', x.value) ORDER BY x.provider))
      FROM media_external_ids x WHERE x."mediaId" = media.id AND x.provider LIKE '%:%'
+       AND EXISTS (SELECT 1 FROM provider_namespaces n WHERE n.name = x.provider)
        AND media.type <> 'book' HAVING count(*) > 0), '{{}}'::jsonb)) AS json
 FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
@@ -138,16 +139,6 @@ WHERE media.id = ANY($1)"#
             {
                 if let Some(info) = f.get_mut("streamInfo") {
                     track_markers::annotate(info);
-                }
-            }
-            if let Some(ids) = obj.get_mut("externalIds").and_then(Value::as_array_mut) {
-                ids.retain(|e| {
-                    e["provider"]
-                        .as_str()
-                        .is_some_and(|p| fliks_domain::external_id::Namespace::parse(p).is_some())
-                });
-                if ids.is_empty() {
-                    obj.remove("externalIds");
                 }
             }
             if see_paths {

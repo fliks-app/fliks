@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH declared AS (SELECT 1 FROM provider_namespaces WHERE name = $3 FOR KEY SHARE),\n           ns AS (SELECT $3::text NOT LIKE '%:%' OR EXISTS (SELECT 1 FROM declared) AS live),\n           ins AS (\n             INSERT INTO media_external_ids (\"mediaId\", kind, provider, value)\n             SELECT $1::int4, $2::text, $3::text, $4::text FROM ns\n             WHERE ns.live AND NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids\n                                     WHERE kind = $2 AND provider = $3 AND value = $4 AND \"mediaId\" <> $1))\n             ON CONFLICT (\"mediaId\", provider) DO UPDATE SET value = EXCLUDED.value\n             RETURNING 1)\n           SELECT CASE WHEN (SELECT live FROM ns) THEN EXISTS (SELECT 1 FROM ins) END AS \"linked\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "linked",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "39a994dff4f21ac6cfe7ea920cddcae249bd8c743297cdda786da0628e0eb29d"
+}

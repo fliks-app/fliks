@@ -96,6 +96,7 @@ impl Block {
 
 pub struct PluginProvider {
     rt: Arc<PluginRt>,
+    known: Arc<super::namespaces::Known>,
     key: Namespace,
     block: Block,
     gate: Arc<super::outbound::Gate>,
@@ -160,13 +161,14 @@ fn call_error(e: CallError) -> Upstream {
 
 impl PluginProvider {
     /// The provider of a plugin, keyed by its first declared namespace; `None` when it has none.
-    pub fn new(rt: Arc<PluginRt>) -> Option<Self> {
+    pub fn new(rt: Arc<PluginRt>, known: Arc<super::namespaces::Known>) -> Option<Self> {
         let b = rt.manifest.get("provider")?;
         let block = Block::parse(b);
-        let key = Namespace::parse(block.namespaces.first()?)?;
+        let key = known.get().parse(block.namespaces.first()?)?;
         let gate = rt.sh.gate.clone()?;
         Some(Self {
             rt,
+            known,
             key,
             block,
             gate,
@@ -202,7 +204,12 @@ impl PluginProvider {
     /// Rules 14, 26 and 28 on one record; a dropped id is warned by namespace count, never value.
     fn sanitized(&self, mut v: Value) -> Value {
         if let Value::Object(o) = &mut v {
-            let n = provider::sanitize_ids(o, self.block.official, &self.block.own());
+            let n = provider::sanitize_ids(
+                o,
+                self.block.official,
+                &self.block.own(),
+                &self.known.get(),
+            );
             if n > 0 {
                 tracing::warn!(
                     "plugin \"{}\": {n} id(s) of a record dropped",
@@ -496,7 +503,7 @@ impl MetadataProvider for PluginProvider {
                 .await?;
             Ok(found.and_then(|(id, kind)| {
                 let value = (id.provider == self.key.as_str())
-                    .then(|| provider::answered_id(self.key, &id.value))
+                    .then(|| provider::answered_id(&self.known.get(), self.key, &id.value))
                     .flatten()?;
                 Some((value, MediaKind::parse(&kind)?))
             }))
@@ -754,7 +761,7 @@ impl Plugins {
             return;
         }
         if let Some(app) = self.app() {
-            match PluginProvider::new(rt.clone()) {
+            match PluginProvider::new(rt.clone(), self.namespaces.clone()) {
                 Some(provider) => {
                     app.images
                         .allow_hosts(id, provider.image_hosts().to_vec(), bundled);

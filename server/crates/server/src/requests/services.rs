@@ -28,7 +28,7 @@ fn port(e: AppError) -> PortError {
 
 async fn details_of(st: &AppState, key: &TitleKey) -> Result<Value, String> {
     st.metadata
-        .require(Some(key.provider.as_str()))
+        .require(&st.namespaces(), Some(key.provider.as_str()))
         .map_err(|e| e.text())?;
     let lang = st
         .metadata

@@ -77,10 +77,11 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
     }
     st.plugins.settings_changed(keys, origin);
     st.metadata.lang.settings_changed(keys);
+    let known = st.namespaces();
     tokio::join!(
         st.engine.settings_changed(keys),
         st.qoe.settings_changed(keys),
-        st.metadata.settings_changed(keys)
+        st.metadata.settings_changed(&known, keys)
     );
     for key in keys {
         st.hub

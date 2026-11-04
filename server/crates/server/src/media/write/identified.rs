@@ -123,7 +123,7 @@ pub(super) async fn insert_row(
     .bind(row.overview)
     .bind(target.id)
     .bind(row.folder)
-    .bind(row.provider.map(Namespace::as_str))
+    .bind(row.provider.as_ref().map(Namespace::as_str))
     .bind(row.refreshed)
     .bind(user)
     .fetch_one(&mut *tx)
@@ -133,8 +133,9 @@ pub(super) async fn insert_row(
         folder_id: target.folder_id,
     };
     items::create_shell(&mut tx, id, row.kind, want).await?;
+    let known = st.namespaces();
     for (ns, value) in links {
-        external_ids::link(&mut tx, id, row.kind, *ns, value).await?;
+        external_ids::link(&mut tx, &known, id, row.kind, *ns, value).await?;
     }
     if let Some(w) = wants {
         wants::replace(&mut tx, id, w)

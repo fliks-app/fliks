@@ -3,7 +3,6 @@ use super::{Fetched, describe, fetch};
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
     metadata::{
-        Metadata,
         books::routes::unknown_provider,
         routes::{Ids, Res, lang},
         {hit_core, mark_existing},
@@ -13,7 +12,7 @@ use crate::{
 use axum::{Json, Router, extract::State, routing::get};
 use fliks_domain::{
     comics::provider::{self, Work},
-    external_id::Namespace,
+    external_id::{Namespace, Namespaces},
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -29,9 +28,14 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
 }
 
 /// A registered provider that supports comics.
-pub(crate) fn comic_provider(md: &Metadata, name: &str) -> Result<Namespace, AppError> {
-    Namespace::parse(name)
-        .filter(|p| md.get(*p).is_some_and(|x| x.supports(MediaKind::Comic)))
+pub(crate) fn comic_provider(st: &AppState, name: &str) -> Result<Namespace, AppError> {
+    st.namespaces()
+        .parse(name)
+        .filter(|p| {
+            st.metadata
+                .get(*p)
+                .is_some_and(|x| x.supports(MediaKind::Comic))
+        })
         .ok_or_else(|| unknown_provider(name))
 }
 
@@ -58,9 +62,9 @@ fn card(p: Namespace, w: &Work) -> Value {
 }
 
 /// A hit as a card; `None` for one with no id or title, or an id the namespace refuses.
-pub(crate) fn hit(p: Namespace, v: &Value) -> Option<Value> {
+pub(crate) fn hit(known: &Namespaces, p: Namespace, v: &Value) -> Option<Value> {
     let mut w = provider::work(v).ok()?;
-    w.external_id = p.normalize(&w.external_id)?;
+    w.external_id = known.normalize(p, &w.external_id)?;
     Some(card(p, &w))
 }
 
@@ -68,9 +72,10 @@ pub(crate) fn hit(p: Namespace, v: &Value) -> Option<Value> {
 #[utoipa::path(get, path = "/api/metadata/{provider}/comic/{externalId}", responses((status = 200)))]
 pub async fn preview_comic(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
     let PathParams((name, id)) = ids?;
-    let ns = comic_provider(&st.metadata, &name)?;
-    let id = ns
-        .normalize(&id)
+    let ns = comic_provider(&st, &name)?;
+    let known = st.namespaces();
+    let id = known
+        .normalize(ns, &id)
         .ok_or_else(|| AppError::bad_request(format!("Invalid id for provider: {name}")))?;
     let lang = lang(&st).await?;
     let Fetched { work, issues } = fetch(&st, ns, &id, &lang, GO).await?;
@@ -93,7 +98,7 @@ pub async fn preview_comic(State(st): State<AppState>, a: Authed, ids: Ids) -> R
         .await?
         .into_iter()
         .next()
-        .unwrap_or_else(|| json!({"provider": ns.as_str(), "name": ns.label(), "url": null}));
+        .unwrap_or_else(|| json!({"provider": ns.as_str(), "name": known.label(ns), "url": null}));
     let mut one = [out];
     mark_existing(&st.db, &a, MediaKind::Comic, &mut one).await?;
     let [out] = one;
@@ -102,8 +107,9 @@ pub async fn preview_comic(State(st): State<AppState>, a: Authed, ids: Ids) -> R
 
 /// `serving.comic` of `GET /api/metadata/providers` (rule 38).
 pub async fn serving(st: &AppState) -> Result<Vec<Value>, sqlx::Error> {
-    let md = &st.metadata;
-    let names: Vec<String> = md
+    let known = st.namespaces();
+    let names: Vec<String> = st
+        .metadata
         .serving(MediaKind::Comic)
         .into_iter()
         .map(|p| p.as_str().to_owned())
@@ -114,7 +120,7 @@ pub async fn serving(st: &AppState) -> Result<Vec<Value>, sqlx::Error> {
         .map(|n| {
             let d = described.iter().find(|d| d["provider"] == *n);
             json!({"provider": n,
-                   "label": d.map_or_else(|| Namespace::parse(n).map(|p| p.label()).unwrap_or_default(), |d| d["name"].as_str().unwrap_or_default().to_owned()),
+                   "label": d.map_or_else(|| known.parse(n).map(|p| known.label(p)).unwrap_or_default(), |d| d["name"].as_str().unwrap_or_default().to_owned()),
                    "url": d.map_or(Value::Null, |d| d["url"].clone())})
         })
         .collect())

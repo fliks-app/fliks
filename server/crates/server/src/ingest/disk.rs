@@ -211,8 +211,7 @@ struct Scanned {
 fn suggested(st: &AppState, provider: &str, kind: MediaKind) -> String {
     st.metadata
         .resolve(Some(provider), kind)
-        .map_or(provider, |n| n.as_str())
-        .to_owned()
+        .map_or_else(|| provider.to_owned(), |n| n.as_str().to_owned())
 }
 
 /// `scanOrphansUnder` (rules 62-66): reads only; `folder_id` tags the groups of a library folder.

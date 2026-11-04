@@ -1,7 +1,7 @@
 //! The ids a media has in outside systems (`docs/spec/external-ids.md`).
 use crate::events::ExternalId;
 use fliks_domain::{
-    external_id::{ExternalProvider, Namespace},
+    external_id::{ExternalProvider, Namespace, Namespaces},
     media::kind::MediaKind,
 };
 use sqlx::{PgConnection, PgExecutor};
@@ -12,8 +12,8 @@ pub const TVDB: &str = ExternalProvider::Tvdb.as_str();
 pub const IMDB: &str = ExternalProvider::Imdb.as_str();
 
 /// A `preferredProvider` value: a namespace a provider serves, so not `imdb`, `isbn`, `asin` or `file`.
-pub fn preferred(name: &str) -> Option<Namespace> {
-    Namespace::parse(name).filter(|n| {
+pub fn preferred(known: &Namespaces, name: &str) -> Option<Namespace> {
+    known.parse(name).filter(|n| {
         !matches!(
             n.core(),
             Some(
@@ -161,35 +161,43 @@ fn db_code(e: &sqlx::Error) -> Option<String> {
 /// `Gone` and a `Taken` lost to a race abort a transaction: a caller inside one stops there.
 pub async fn link(
     c: &mut PgConnection,
+    known: &Namespaces,
     media_id: i32,
     kind: MediaKind,
     provider: Namespace,
     value: &str,
 ) -> sqlx::Result<Link> {
-    let Some(value) = provider.normalize(value) else {
+    let Some(value) = known.normalize(provider, value) else {
         return Ok(Link::Linked);
     };
     // `CK_media_external_ids_openlibrary` takes work ids only
     if provider == Namespace::OPENLIBRARY && !value.ends_with('W') {
         return Ok(Link::Linked);
     }
-    let done = sqlx::query!(
-        r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
-           SELECT $1::int4, $2::text, $3::text, $4::text
-           WHERE NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids
+    // The key share holds `delete_data` (which locks the rows first) off until this commits.
+    let done = sqlx::query_scalar!(
+        r#"WITH declared AS (SELECT 1 FROM provider_namespaces WHERE name = $3 FOR KEY SHARE),
+           ns AS (SELECT $3::text NOT LIKE '%:%' OR EXISTS (SELECT 1 FROM declared) AS live),
+           ins AS (
+             INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             SELECT $1::int4, $2::text, $3::text, $4::text FROM ns
+             WHERE ns.live AND NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids
                                      WHERE kind = $2 AND provider = $3 AND value = $4 AND "mediaId" <> $1))
-           ON CONFLICT ("mediaId", provider) DO UPDATE SET value = EXCLUDED.value"#,
+             ON CONFLICT ("mediaId", provider) DO UPDATE SET value = EXCLUDED.value
+             RETURNING 1)
+           SELECT CASE WHEN (SELECT live FROM ns) THEN EXISTS (SELECT 1 FROM ins) END AS "linked""#,
         media_id,
         kind.as_str(),
         provider.as_str(),
         value,
         provider.is_unique()
     )
-    .execute(c)
+    .fetch_one(c)
     .await;
     match done {
-        Ok(r) if r.rows_affected() > 0 => Ok(Link::Linked),
-        Ok(_) => Ok(Link::Taken),
+        // `None`: the plugin namespace was deleted meanwhile, nothing is stored.
+        Ok(None) | Ok(Some(true)) => Ok(Link::Linked),
+        Ok(Some(false)) => Ok(Link::Taken),
         // The foreign key: the media is gone. The tmdb unique index: a concurrent writer took the id.
         Err(e) if db_code(&e).as_deref() == Some("23503") => Ok(Link::Gone),
         Err(e) if db_code(&e).as_deref() == Some("23505") => Ok(Link::Taken),
@@ -219,8 +227,8 @@ pub const EDITION_NAMESPACES: [Namespace; 5] = [
 
 /// `value` as an edition id of `provider`, or `None` when the provider names no edition by it
 /// (an OpenLibrary work or author id is not one).
-pub fn edition_id(provider: Namespace, value: &str) -> Option<String> {
-    let v = provider.normalize(value)?;
+pub fn edition_id(known: &Namespaces, provider: Namespace, value: &str) -> Option<String> {
+    let v = known.normalize(provider, value)?;
     let edition = match provider {
         Namespace::Core(_) => {
             EDITION_NAMESPACES.contains(&provider)
@@ -235,12 +243,13 @@ pub fn edition_id(provider: Namespace, value: &str) -> Option<String> {
 /// provider or the edition is gone.
 pub async fn link_edition(
     c: &mut PgConnection,
+    known: &Namespaces,
     edition: i32,
     media: i32,
     provider: Namespace,
     value: &str,
 ) -> sqlx::Result<bool> {
-    let Some(value) = edition_id(provider, value) else {
+    let Some(value) = edition_id(known, provider, value) else {
         return Ok(false);
     };
     let done = sqlx::query!(
@@ -315,13 +324,14 @@ pub async fn edition_ids(
 /// `link`, or `unlink` when there is no id to set.
 pub async fn set(
     c: &mut PgConnection,
+    known: &Namespaces,
     media_id: i32,
     kind: MediaKind,
     provider: Namespace,
     value: Option<&str>,
 ) -> sqlx::Result<Link> {
-    match value.and_then(|v| provider.normalize(v)) {
-        Some(v) => link(c, media_id, kind, provider, &v).await,
+    match value.and_then(|v| known.normalize(provider, v)) {
+        Some(v) => link(c, known, media_id, kind, provider, &v).await,
         None => unlink(c, media_id, provider).await.map(|()| Link::Linked),
     }
 }
@@ -362,7 +372,7 @@ impl Ids {
         let mut out = Written::default();
         for (p, v) in self.entries() {
             let Some(v) = v else { continue };
-            match link(c, media_id, kind, p, &v).await? {
+            match link(c, &Namespaces::default(), media_id, kind, p, &v).await? {
                 Link::Linked => {}
                 Link::Taken => out.taken.push(p),
                 Link::Gone => {
@@ -383,7 +393,7 @@ impl Ids {
     ) -> sqlx::Result<Written> {
         let mut out = Written::default();
         for (p, v) in self.entries() {
-            match set(c, media_id, kind, p, v.as_deref()).await? {
+            match set(c, &Namespaces::default(), media_id, kind, p, v.as_deref()).await? {
                 Link::Linked => {}
                 Link::Taken => out.taken.push(p),
                 Link::Gone => {
@@ -402,12 +412,15 @@ mod tests {
 
     #[test]
     fn preferred_is_a_namespace_a_provider_serves() {
+        let mut known = Namespaces::default();
         for ok in ["tmdb", "tvdb", "openlibrary", "audible"] {
-            assert!(preferred(ok).is_some(), "{ok}");
+            assert!(preferred(&known, ok).is_some(), "{ok}");
         }
         for no in ["imdb", "isbn", "asin", "file", "nope", "org.x:aid"] {
-            assert!(preferred(no).is_none(), "{no}");
+            assert!(preferred(&known, no).is_none(), "{no}");
         }
+        known.declare("org.x:aid", "Aid", "^[0-9]+$", "preserve");
+        assert!(preferred(&known, "org.x:aid").is_some());
     }
 
     async fn media(db: &sqlx::PgPool, kind: MediaKind) -> i32 {
@@ -440,8 +453,9 @@ mod tests {
             media(&db, MediaKind::Series).await,
         );
         let (tmdb, tvdb) = (Namespace::TMDB, Namespace::TVDB);
-        let link =
-            async |c: &mut PgConnection, m, k, p, v: &str| link(c, m, k, p, v).await.unwrap();
+        let link = async |c: &mut PgConnection, m, k, p, v: &str| {
+            link(c, &Namespaces::default(), m, k, p, v).await.unwrap()
+        };
         assert_eq!(
             link(&mut c, movie, MediaKind::Movie, tmdb, "603").await,
             Link::Linked
@@ -511,6 +525,40 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_link_stores_nothing_for_a_namespace_deleted_meanwhile(db: sqlx::PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let movie = media(&db, MediaKind::Movie).await;
+        // a snapshot taken before `delete_data` removed the row
+        let mut stale = Namespaces::default();
+        let ns = stale
+            .declare("org.del:a", "A", "^[0-9]+$", "preserve")
+            .unwrap();
+        let l = link(&mut c, &stale, movie, MediaKind::Movie, ns, "7").await;
+        assert_eq!(l.unwrap(), Link::Linked);
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media_external_ids")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(n, 0);
+        sqlx::query(
+            r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+               VALUES ('org.del:a', 'org.del', '^[0-9]+$', 'preserve', 'A')"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let l = link(&mut c, &stale, movie, MediaKind::Movie, ns, "7").await;
+        assert_eq!(l.unwrap(), Link::Linked);
+        let held: Vec<(String, String)> =
+            sqlx::query_as("SELECT provider::text, value FROM media_external_ids")
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        assert_eq!(held, [("org.del:a".to_owned(), "7".to_owned())]);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_type_change_moves_the_ids_and_can_clash(db: sqlx::PgPool) {
         crate::db::migrate(&db).await.unwrap();
         let mut c = db.acquire().await.unwrap();
@@ -519,12 +567,26 @@ mod tests {
             media(&db, MediaKind::Series).await,
         );
         let tmdb = Namespace::TMDB;
-        link(&mut c, movie, MediaKind::Movie, tmdb, "5")
-            .await
-            .unwrap();
-        link(&mut c, show, MediaKind::Series, tmdb, "5")
-            .await
-            .unwrap();
+        link(
+            &mut c,
+            &Namespaces::default(),
+            movie,
+            MediaKind::Movie,
+            tmdb,
+            "5",
+        )
+        .await
+        .unwrap();
+        link(
+            &mut c,
+            &Namespaces::default(),
+            show,
+            MediaKind::Series,
+            tmdb,
+            "5",
+        )
+        .await
+        .unwrap();
         let retype = sqlx::query("UPDATE media SET type = 'series' WHERE id = $1")
             .bind(movie)
             .execute(&mut *c)
@@ -604,32 +666,32 @@ mod tests {
         }
         let (a, b) = (ids[0], ids[1]);
         assert!(
-            link_edition(&mut c, a, m, isbn, "0-306-40615-2")
+            link_edition(&mut c, &Namespaces::default(), a, m, isbn, "0-306-40615-2")
                 .await
                 .unwrap()
         );
         assert!(
-            link_edition(&mut c, a, m, isbn, "9780306406157")
+            link_edition(&mut c, &Namespaces::default(), a, m, isbn, "9780306406157")
                 .await
                 .unwrap()
         );
         assert!(
-            link_edition(&mut c, b, m, isbn, "9780306406157")
+            link_edition(&mut c, &Namespaces::default(), b, m, isbn, "9780306406157")
                 .await
                 .unwrap()
         );
         assert!(
-            link_edition(&mut c, a, m, openlibrary, "OL5M")
+            link_edition(&mut c, &Namespaces::default(), a, m, openlibrary, "OL5M")
                 .await
                 .unwrap()
         );
         assert!(
-            !link_edition(&mut c, a, m, openlibrary, "OL1W")
+            !link_edition(&mut c, &Namespaces::default(), a, m, openlibrary, "OL1W")
                 .await
                 .unwrap()
         );
         assert!(
-            !link_edition(&mut c, a, m, Namespace::TMDB, "5")
+            !link_edition(&mut c, &Namespaces::default(), a, m, Namespace::TMDB, "5")
                 .await
                 .unwrap()
         );

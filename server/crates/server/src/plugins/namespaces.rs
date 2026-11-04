@@ -1,8 +1,25 @@
 //! `provider_namespaces`: who owns a plugin namespace, and what goes with it (`provider-plugins.md` 5.1).
-use fliks_domain::external_id::Namespace;
+use crate::sync::RwLockExt;
+use fliks_domain::external_id::{Namespace, Namespaces};
 use futures_util::TryStreamExt;
 use serde_json::Value;
 use sqlx::PgPool;
+use std::sync::{Arc, RwLock};
+
+/// The plugin namespaces this process knows, as `provider_namespaces` holds them; a reader takes a
+/// snapshot, the rare writer copies it.
+#[derive(Default)]
+pub struct Known(RwLock<Arc<Namespaces>>);
+
+impl Known {
+    pub fn get(&self) -> Arc<Namespaces> {
+        self.0.read_clean().clone()
+    }
+
+    pub fn edit<R>(&self, f: impl FnOnce(&mut Namespaces) -> R) -> R {
+        f(Arc::make_mut(&mut self.0.write_clean()))
+    }
+}
 
 /// A namespace a manifest declares, as stored.
 pub struct Declared<'a> {
@@ -54,6 +71,7 @@ pub async fn check_install(
 /// `Err(name)` when another signer holds `name` (nothing is written).
 pub async fn claim(
     db: &PgPool,
+    known: &Known,
     plugin_id: &str,
     signer: Option<&str>,
     list: &[Declared<'_>],
@@ -93,19 +111,22 @@ pub async fn claim(
         }
     }
     tx.commit().await?;
-    for n in list {
-        if Namespace::declare(n.name, n.label, n.id_pattern, n.case).is_none() {
-            tracing::error!(
-                "provider namespace \"{}\" was stored but the core refuses it",
-                n.name
-            );
+    known.edit(|k| {
+        for n in list {
+            if k.declare(n.name, n.label, n.id_pattern, n.case).is_none() {
+                tracing::error!(
+                    "provider namespace \"{}\" was stored but the core refuses it",
+                    n.name
+                );
+            }
         }
-    }
+    });
+    let known = known.get();
     for name in changed {
-        let Some(ns) = Namespace::parse(name) else {
+        let Some(ns) = known.parse(name) else {
             continue;
         };
-        match stale(db, ns).await {
+        match stale(db, &known, ns).await {
             Ok(0) => {}
             Ok(n) => tracing::warn!(
                 "provider namespace \"{name}\": {n} stored id(s) no longer match its idPattern"
@@ -117,7 +138,7 @@ pub async fn claim(
 }
 
 /// How many stored ids under `ns` its rule no longer accepts as they are.
-pub async fn stale(db: &PgPool, ns: Namespace) -> sqlx::Result<usize> {
+pub async fn stale(db: &PgPool, known: &Namespaces, ns: Namespace) -> sqlx::Result<usize> {
     let mut rows = sqlx::query_as::<_, (String, i64)>(
         r#"SELECT value, count(*) FROM (
              SELECT value FROM media_external_ids WHERE provider = $1
@@ -130,7 +151,7 @@ pub async fn stale(db: &PgPool, ns: Namespace) -> sqlx::Result<usize> {
     .fetch(db);
     let mut n = 0;
     while let Some((v, c)) = rows.try_next().await? {
-        if ns.normalize(&v).as_deref() != Some(v.as_str()) {
+        if known.normalize(ns, &v).as_deref() != Some(v.as_str()) {
             n += c as usize;
         }
     }
@@ -138,28 +159,31 @@ pub async fn stale(db: &PgPool, ns: Namespace) -> sqlx::Result<usize> {
 }
 
 /// Declares every stored namespace (kept ones included) so stored ids and settings parse at boot.
-pub async fn load(db: &PgPool) -> sqlx::Result<()> {
+pub async fn load(db: &PgPool, known: &Known) -> sqlx::Result<()> {
     let rows: Vec<(String, String, String, String)> =
         sqlx::query_as(r#"SELECT name, label, "idPattern", "case" FROM provider_namespaces"#)
             .fetch_all(db)
             .await?;
-    for (name, label, pattern, case) in rows {
-        if Namespace::declare(&name, &label, &pattern, &case).is_none() {
-            tracing::warn!("provider namespace \"{name}\" has a pattern the core refuses");
+    known.edit(|k| {
+        for (name, label, pattern, case) in rows {
+            if k.declare(&name, &label, &pattern, &case).is_none() {
+                tracing::warn!("provider namespace \"{name}\" has a pattern the core refuses");
+            }
         }
-    }
+    });
     Ok(())
 }
 
 /// `DELETE /api/plugins/:id?deleteData=true`: the plugin's namespaces and every id, snapshot and
 /// source under them, in one transaction; the process forgets them once it commits.
-pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
+pub async fn delete_data(db: &PgPool, known: &Known, plugin_id: &str) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
-    let names: Vec<String> =
-        sqlx::query_scalar(r#"SELECT name FROM provider_namespaces WHERE "pluginId" = $1"#)
-            .bind(plugin_id)
-            .fetch_all(&mut *tx)
-            .await?;
+    let names: Vec<String> = sqlx::query_scalar(
+        r#"SELECT name FROM provider_namespaces WHERE "pluginId" = $1 FOR UPDATE"#,
+    )
+    .bind(plugin_id)
+    .fetch_all(&mut *tx)
+    .await?;
     if names.is_empty() {
         return tx.commit().await;
     }
@@ -193,8 +217,6 @@ pub async fn delete_data(db: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
             .await?;
     }
     tx.commit().await?;
-    for name in &names {
-        Namespace::forget(name);
-    }
+    known.edit(|k| names.iter().for_each(|n| k.forget(n)));
     Ok(())
 }

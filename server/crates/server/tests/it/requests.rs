@@ -355,6 +355,7 @@ async fn a_media_link_skips_an_openlibrary_edition_or_author_id(pool: PgPool) {
     for (id, stored) in [("OL12M", 0), ("OL12A", 0), ("OL12W", 1)] {
         let l = fliks_server::media::external_ids::link(
             &mut conn,
+            &Default::default(),
             1,
             MediaKind::Book,
             fliks_domain::external_id::Namespace::OPENLIBRARY,

@@ -3653,6 +3653,9 @@ mod relink_identified {
         .execute(&c.st.db)
         .await
         .unwrap();
+        crate::plugins::namespaces::load(&c.st.db, &c.st.plugins.namespaces)
+            .await
+            .unwrap();
         let l = library(&c, "C", &c.dir.join("comics"), r#"["comic"]"#).await;
         let file = c.dir.join("comics/Alpha Run/Alpha Run 001.cbz");
         touch(&file, b"a");

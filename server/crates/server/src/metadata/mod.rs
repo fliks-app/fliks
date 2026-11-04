@@ -24,7 +24,11 @@ pub use types::{Credits, MetaError, PersonDetails, Upstream};
 
 use crate::{http::AppError, sync::RwLockExt};
 use axum::http::StatusCode;
-use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::merge::FieldOrder};
+use fliks_domain::{
+    external_id::{Namespace, Namespaces},
+    media::kind::MediaKind,
+    metadata::merge::FieldOrder,
+};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
@@ -183,9 +187,10 @@ impl Metadata {
     }
 
     /// The named provider (TMDB when unnamed): 400 when unknown, 503 naming it when not available.
-    pub fn require(&self, name: Option<&str>) -> Result<Namespace, AppError> {
+    pub fn require(&self, known: &Namespaces, name: Option<&str>) -> Result<Namespace, AppError> {
         let name = name.unwrap_or(Namespace::TMDB.as_str());
-        let ns = Namespace::parse(name)
+        let ns = known
+            .parse(name)
             .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {name}")))?;
         match self.answers(ns) {
             true => Ok(ns),
@@ -207,7 +212,7 @@ impl Metadata {
     }
 
     /// Reads `metadata.provider_order.<kind>` of every kind; an entry that names no known provider is skipped.
-    pub async fn load_orders(&self) -> sqlx::Result<()> {
+    pub async fn load_orders(&self, known: &Namespaces) -> sqlx::Result<()> {
         let rows: Vec<(String, Option<String>)> = sqlx::query_as(
             r#"SELECT "key"::text, "value" FROM app_settings WHERE starts_with("key", $1)"#,
         )
@@ -220,7 +225,7 @@ impl Metadata {
                 let kind = MediaKind::parse(k.strip_prefix(ORDER_PREFIX)?)?;
                 let names: Vec<String> = serde_json::from_str(&v?).ok()?;
                 let mut order: Vec<Namespace> = vec![];
-                for p in names.iter().filter_map(|n| Namespace::parse(n)) {
+                for p in names.iter().filter_map(|n| known.parse(n)) {
                     if !order.contains(&p) {
                         order.push(p);
                     }
@@ -232,9 +237,9 @@ impl Metadata {
         Ok(())
     }
 
-    pub async fn settings_changed(&self, keys: &[String]) {
+    pub async fn settings_changed(&self, known: &Namespaces, keys: &[String]) {
         if keys.iter().any(|k| k.starts_with(ORDER_PREFIX))
-            && let Err(e) = self.load_orders().await
+            && let Err(e) = self.load_orders(known).await
         {
             tracing::warn!("metadata provider order not reloaded: {e}");
         }

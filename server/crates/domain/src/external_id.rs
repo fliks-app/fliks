@@ -1,14 +1,13 @@
 //! The id namespaces an entity is known by outside Fliks, as stored in `media_external_ids.provider`.
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-    sync::{Arc, LazyLock, RwLock},
-};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use crate::{
     books::isbn,
     js::rx,
-    plugins::provider::{Class, IdRule, classify},
+    plugins::{
+        MAX_PLUGIN_ID,
+        provider::{Class, IdRule, MAX_NAMESPACE_NAME, classify},
+    },
 };
 
 /// The largest id of a numeric provider: nine digits, as `media_external_ids` checks.
@@ -113,25 +112,43 @@ impl ExternalProvider {
     }
 }
 
-/// A plugin's `<pluginId>:<name>`, interned when its manifest or `provider_namespaces` row declares it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PluginNamespace(&'static str);
+/// The longest `<pluginId>:<name>`.
+const PLUGIN_NAME_MAX: usize = MAX_PLUGIN_ID + 1 + MAX_NAMESPACE_NAME;
+const _: () = assert!(PLUGIN_NAME_MAX <= u8::MAX as usize);
 
-/// What a declared plugin namespace is stored with.
-#[derive(Clone)]
-struct Declared {
-    rule: Arc<IdRule>,
-    label: Arc<str>,
+/// A plugin's `<pluginId>:<name>`, as `classify` accepts it; stored inline so `Namespace` stays `Copy`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PluginNamespace {
+    len: u8,
+    buf: [u8; PLUGIN_NAME_MAX],
 }
 
-/// The id namespaces of declared plugins; names are leaked once, bounded by what manifests declare.
-static PLUGIN: LazyLock<RwLock<HashMap<&'static str, Declared>>> = LazyLock::new(Default::default);
+impl PluginNamespace {
+    fn new(name: &str) -> Option<Self> {
+        let Some(Class::Plugin { .. }) = classify(name) else {
+            return None;
+        };
+        let mut buf = [0; PLUGIN_NAME_MAX];
+        buf.get_mut(..name.len())?.copy_from_slice(name.as_bytes());
+        Some(Self {
+            len: name.len() as u8,
+            buf,
+        })
+    }
 
-/// Names a stored row still carries after its namespace was deleted; they parse nowhere.
-static RETIRED: LazyLock<RwLock<HashSet<&'static str>>> = LazyLock::new(Default::default);
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.buf[..self.len as usize]).unwrap_or_default()
+    }
+}
 
-/// An id namespace: one the core knows, or one a plugin declared (`provider-plugins.md` rule 23).
-/// `Copy`, so registry keys and orders carry it as they carried `ExternalProvider`.
+impl fmt::Debug for PluginNamespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+/// An id namespace: one the core knows, or a plugin's (`provider-plugins.md` rule 23). Parsing is
+/// syntactic; whether a plugin namespace is declared, and its label and rule, are `Namespaces`'.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Namespace {
     Core(ExternalProvider),
@@ -151,30 +168,6 @@ impl Namespace {
     pub const ASIN: Self = Self::Core(ExternalProvider::Asin);
     pub const FILE: Self = Self::Core(ExternalProvider::File);
 
-    /// Declares a plugin namespace (or refreshes its label and pattern); `None` for a name that is no
-    /// plugin namespace or a pattern `IdRule` refuses.
-    pub fn declare(name: &str, label: &str, id_pattern: &str, case: &str) -> Option<Self> {
-        let Some(Class::Plugin { .. }) = classify(name) else {
-            return None;
-        };
-        let rule = Arc::new(IdRule::new(id_pattern, case)?);
-        let mut map = PLUGIN.write().unwrap_or_else(|e| e.into_inner());
-        let retired = RETIRED.read().unwrap_or_else(|e| e.into_inner());
-        let key = match (map.get_key_value(name), retired.get(name)) {
-            (Some((k, _)), _) | (None, Some(k)) => *k,
-            (None, None) => Box::leak(name.to_owned().into_boxed_str()),
-        };
-        drop(retired);
-        map.insert(
-            key,
-            Declared {
-                rule,
-                label: label.into(),
-            },
-        );
-        Some(Self::Plugin(PluginNamespace(key)))
-    }
-
     /// The namespace the ids this provider answers are stored in: Audible and Audnexus answer ASINs.
     pub fn id_namespace(self) -> Self {
         match self {
@@ -183,62 +176,19 @@ impl Namespace {
         }
     }
 
-    /// A core name, or a plugin namespace already declared.
+    /// A core name, or a well-formed plugin namespace, declared or not.
     pub fn parse(s: &str) -> Option<Self> {
-        if let Some(p) = ExternalProvider::parse(s) {
-            return Some(Self::Core(p));
+        match ExternalProvider::parse(s) {
+            Some(p) => Some(Self::Core(p)),
+            None => PluginNamespace::new(s).map(Self::Plugin),
         }
-        let map = PLUGIN.read().unwrap_or_else(|e| e.into_inner());
-        map.get_key_value(s)
-            .map(|(k, _)| Self::Plugin(PluginNamespace(k)))
     }
 
-    /// The namespace of a stored row: `parse`, else a plugin namespace deleted since (it has no rule,
-    /// so no id of it normalises and `parse` still refuses it). `None` for a name of no namespace.
-    pub fn stored(s: &str) -> Option<Self> {
-        if let Some(n) = Self::parse(s) {
-            return Some(n);
-        }
-        let Some(Class::Plugin { .. }) = classify(s) else {
-            return None;
-        };
-        let mut set = RETIRED.write().unwrap_or_else(|e| e.into_inner());
-        let key = match set.get(s) {
-            Some(k) => *k,
-            None => {
-                let k: &'static str = Box::leak(s.to_owned().into_boxed_str());
-                set.insert(k);
-                k
-            }
-        };
-        Some(Self::Plugin(PluginNamespace(key)))
-    }
-
-    pub const fn as_str(self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Core(p) => p.as_str(),
-            Self::Plugin(p) => p.0,
+            Self::Plugin(p) => p.as_str(),
         }
-    }
-
-    /// The namespace as messages name it: a plugin's stored `label`.
-    pub fn label(self) -> String {
-        match self {
-            Self::Core(p) => p.label().to_owned(),
-            Self::Plugin(p) => {
-                let map = PLUGIN.read().unwrap_or_else(|e| e.into_inner());
-                map.get(p.0)
-                    .map_or_else(|| p.0.to_owned(), |d| d.label.to_string())
-            }
-        }
-    }
-
-    /// Forgets a plugin namespace (its data is deleted); a core one stays.
-    pub fn forget(name: &str) {
-        PLUGIN
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(name);
     }
 
     pub const fn core(self) -> Option<ExternalProvider> {
@@ -255,19 +205,73 @@ impl Namespace {
             Self::Plugin(_) => false,
         }
     }
+}
+
+/// What a declared plugin namespace is stored with.
+#[derive(Clone)]
+struct Declared {
+    rule: Arc<IdRule>,
+    label: String,
+}
+
+/// The plugin namespaces declared by a manifest or a `provider_namespaces` row, with their label
+/// and `idPattern`. One that is not declared (deleted since) has no rule: no id of it normalises.
+#[derive(Clone, Default)]
+pub struct Namespaces(HashMap<PluginNamespace, Declared>);
+
+impl Namespaces {
+    /// Declares a plugin namespace (or refreshes its label and pattern); `None` for a name that is no
+    /// plugin namespace or a pattern `IdRule` refuses.
+    pub fn declare(
+        &mut self,
+        name: &str,
+        label: &str,
+        id_pattern: &str,
+        case: &str,
+    ) -> Option<Namespace> {
+        let ns = PluginNamespace::new(name)?;
+        let rule = Arc::new(IdRule::new(id_pattern, case)?);
+        self.0.insert(
+            ns,
+            Declared {
+                rule,
+                label: label.to_owned(),
+            },
+        );
+        Some(Namespace::Plugin(ns))
+    }
+
+    /// Forgets a plugin namespace (its data is deleted); a core one stays.
+    pub fn forget(&mut self, name: &str) {
+        if let Some(ns) = PluginNamespace::new(name) {
+            self.0.remove(&ns);
+        }
+    }
+
+    /// A core name, or a plugin namespace declared here.
+    pub fn parse(&self, s: &str) -> Option<Namespace> {
+        Namespace::parse(s).filter(|n| match n {
+            Namespace::Core(_) => true,
+            Namespace::Plugin(p) => self.0.contains_key(p),
+        })
+    }
+
+    /// The namespace as messages name it: a plugin's stored `label`, its name once deleted.
+    pub fn label(&self, ns: Namespace) -> String {
+        match ns {
+            Namespace::Core(p) => p.label().to_owned(),
+            Namespace::Plugin(p) => self
+                .0
+                .get(&p)
+                .map_or_else(|| p.as_str().to_owned(), |d| d.label.clone()),
+        }
+    }
 
     /// `value` as stored: the core's rule, or the plugin's `idPattern` (`provider-plugins.md` rule 28).
-    pub fn normalize(self, value: &str) -> Option<String> {
-        match self {
-            Self::Core(p) => p.normalize(value),
-            Self::Plugin(p) => {
-                let d = PLUGIN
-                    .read()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .get(p.0)
-                    .cloned()?;
-                d.rule.normalize(value)
-            }
+    pub fn normalize(&self, ns: Namespace, value: &str) -> Option<String> {
+        match ns {
+            Namespace::Core(p) => p.normalize(value),
+            Namespace::Plugin(p) => self.0.get(&p)?.rule.normalize(value),
         }
     }
 }
@@ -295,36 +299,55 @@ mod tests {
     use super::ExternalProvider as P;
 
     #[test]
-    fn plugin_namespaces_parse_once_declared_and_are_never_unique() {
-        use super::Namespace as N;
-        assert_eq!(N::parse("tmdb"), Some(N::TMDB));
-        assert_eq!(N::parse("org.ns.test:aid"), None);
-        let ns = N::declare(
-            "org.ns.test:aid",
-            "Test aid",
-            "^[1-9][0-9]{0,8}$",
-            "preserve",
-        )
-        .unwrap();
+    fn plugin_namespaces_parse_by_shape_and_declared_ones_carry_rule_and_label() {
+        use super::{MAX_NAMESPACE_NAME, MAX_PLUGIN_ID, Namespace as N, Namespaces};
+        let mut known = Namespaces::default();
+        assert_eq!(known.parse("tmdb"), Some(N::TMDB));
+        assert_eq!(known.parse("org.ns.test:aid"), None);
+        let ns = known
+            .declare(
+                "org.ns.test:aid",
+                "Test aid",
+                "^[1-9][0-9]{0,8}$",
+                "preserve",
+            )
+            .unwrap();
+        assert_eq!(known.parse("org.ns.test:aid"), Some(ns));
         assert_eq!(N::parse("org.ns.test:aid"), Some(ns));
+        assert_eq!(ns.as_str(), "org.ns.test:aid");
         assert!(!ns.is_unique());
-        assert_eq!(ns.normalize(" 42 ").as_deref(), Some("42"));
-        assert_eq!(ns.normalize("042"), None);
-        assert_eq!(N::declare("tmdb", "T", "^.+$", "preserve"), None);
+        assert_eq!(known.normalize(ns, " 42 ").as_deref(), Some("42"));
+        assert_eq!(known.normalize(ns, "042"), None);
+        assert_eq!(known.declare("tmdb", "T", "^.+$", "preserve"), None);
         assert_eq!(
-            N::declare("org.ns.test:bad", "Bad", "no anchors", "preserve"),
+            known.declare("org.ns.test:bad", "Bad", "no anchors", "preserve"),
             None
         );
-        assert_eq!(ns.label(), "Test aid");
-        let gone = N::stored("org.ns.test:gone").unwrap();
+        assert_eq!(known.label(ns), "Test aid");
+        let gone = N::parse("org.ns.test:gone").unwrap();
         assert_eq!(
-            (N::parse("org.ns.test:gone"), gone.normalize("1")),
+            (known.parse("org.ns.test:gone"), known.normalize(gone, "1")),
             (None, None)
         );
-        assert_eq!(gone.label(), "org.ns.test:gone");
-        assert_eq!(N::stored("nope"), None);
-        assert_eq!(N::TMDB.label(), "TMDB");
-        assert_eq!(N::TMDB.normalize("603").as_deref(), Some("603"));
+        assert_eq!(known.label(gone), "org.ns.test:gone");
+        known.forget("org.ns.test:aid");
+        assert_eq!(
+            (known.parse("org.ns.test:aid"), known.normalize(ns, "42")),
+            (None, None)
+        );
+        assert_eq!(N::parse("nope"), None);
+        assert_eq!(N::parse("org.ns.test:Bad"), None);
+        let longest = format!(
+            "{}:{}",
+            "a".repeat(MAX_PLUGIN_ID),
+            "b".repeat(MAX_NAMESPACE_NAME)
+        );
+        assert_eq!(
+            N::parse(&longest).map(|n| n.as_str().to_owned()),
+            Some(longest)
+        );
+        assert_eq!(known.label(N::TMDB), "TMDB");
+        assert_eq!(known.normalize(N::TMDB, "603").as_deref(), Some("603"));
     }
 
     #[test]

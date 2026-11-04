@@ -78,8 +78,9 @@ pub async fn identify(
         .iter()
         .map(|i| (Namespace::ISBN, i.as_str()))
         .chain(h.asin.as_deref().map(|a| (Namespace::ASIN, a)));
+    let known = st.namespaces();
     for (ns, v) in hinted {
-        if let Some(v) = edition_id(ns, v)
+        if let Some(v) = edition_id(&known, ns, v)
             && !edition.contains(&(ns, v.clone()))
         {
             edition.push((ns, v));
