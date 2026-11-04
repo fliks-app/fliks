@@ -1,4 +1,4 @@
-//! The works a bulk import takes (`docs/spec/book-import.md` rules 1-3). Pure.
+//! The works of a scan, one per folder or file (`docs/spec/ingest.md`). Pure.
 use super::group::{self, Work};
 use fliks_domain::books::filename::parse_path;
 

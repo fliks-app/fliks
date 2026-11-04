@@ -680,8 +680,24 @@ async fn a_held_book_is_named_only_to_a_reader_of_its_library(pool: PgPool) {
         .await
         .unwrap();
     let held = |readable: &'static [i32]| {
-        crate::media::write::book_import::held_book_in(&c.pool, Namespace::OPENLIBRARY, "OL1W", readable)
+        crate::media::write::book_import::held_book_in(
+            &c.pool,
+            Namespace::OPENLIBRARY,
+            "OL1W",
+            readable,
+        )
     };
     assert_eq!(held(&[1]).await.unwrap(), None);
     assert_eq!(held(&[1, 2]).await.unwrap(), Some(hidden));
+}
+
+#[sqlx::test(migrations = false)]
+async fn search_goes_on_to_the_next_provider_when_every_hit_is_dropped(pool: PgPool) {
+    let mut ol = anchor();
+    ol.found = vec![json!({"title": "no id"})];
+    let mut gb = Fake::new(Namespace::GOOGLEBOOKS);
+    gb.found = vec![json!({"externalId": "gb1", "title": "Gamma", "authors": ["Sol"]})];
+    let (c, _) = ctx(pool, vec![ol, gb]).await;
+    let (_, v) = c.get("/api/metadata/search/book?q=a").await;
+    assert_eq!(v[0]["provider"], "googlebooks");
 }

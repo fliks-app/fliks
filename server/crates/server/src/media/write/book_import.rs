@@ -2,7 +2,7 @@
 use super::{
     body::Body,
     identified::{Creation, create_identified},
-    import::{Target, folder_format, resolve_target},
+    import::{Target, creation_folder, resolve_target},
 };
 use crate::{
     events::DomainEvent,
@@ -16,7 +16,7 @@ use crate::{
         wants,
     },
     metadata::{
-        Override, Upstream,
+        Upstream,
         books::{
             ANCHOR,
             identify::{BookMatch, work_of},
@@ -37,7 +37,6 @@ use fliks_domain::{
         wants::{MAX_WANTS, WantSpec, parse_wants},
     },
     metadata::limiter::Priority,
-    naming::{self, BookNameTokens, validate_folder_path},
 };
 use serde_json::Value;
 
@@ -147,20 +146,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         discovered,
         links,
     } = *new;
-    let over = sqlx::query!(
-        r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
-        target.id
-    )
-    .fetch_one(&st.db)
-    .await?;
-    let lang = st
-        .metadata
-        .lang
-        .resolve(Some(&Override {
-            language: over.language,
-            region: over.region,
-        }))
-        .await?;
+    let lang = crate::metadata::library_language(st, target.id).await?;
     let meta_fail = |e| match e {
         crate::metadata::MetaError::Upstream(e) => fail(ANCHOR, &e, true),
         crate::metadata::MetaError::Db(e) => e.into(),
@@ -195,18 +181,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         .get("year")
         .and_then(Value::as_i64)
         .filter(|y| (1..=9999).contains(y));
-    let format = folder_format(&st.db, MediaKind::Book).await?;
-    let name = naming::apply_book_format(
-        &format,
-        &BookNameTokens {
-            title: title.clone(),
-            year,
-            ..Default::default()
-        },
-    );
-    let name = validate_folder_path(&name)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-        .to_owned();
+    let name = creation_folder(st, MediaKind::Book, &title, year).await?;
 
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
@@ -303,10 +278,8 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
     Ok(id)
 }
 
-/// A book from the record of its provider id: a work of the anchor goes through `create_book`; an edition
-/// of a core provider is imported under the anchor work its ISBN or ASIN names, else unmatched; a plugin's
-/// work makes the media from that provider's record, with no anchor id (the plugin's ids and the
-/// caller's own links are the only ones written) and the wants of every family.
+/// A book from a provider id: an anchor work, an edition under the work its ISBN or ASIN names (else
+/// unmatched), or a plugin work with no anchor id.
 pub(crate) async fn create_book_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
     Ok(book_from(st, c, false).await?.0)
 }
@@ -330,7 +303,7 @@ async fn book_from(st: &AppState, c: &Creation<'_>, join: bool) -> Result<(i32, 
     if matches!(ns, Namespace::Core(_)) {
         return create_from_edition(st, c, join).await;
     }
-    let lang = library_language(st, c.target.id).await?;
+    let lang = crate::metadata::library_language(st, c.target.id).await?;
     let Value::Object(record) = st
         .metadata
         .work(ns, MediaKind::Book, value, &lang, c.prio)
@@ -369,26 +342,6 @@ fn meta_error(ns: Namespace, e: crate::metadata::MetaError) -> AppError {
     }
 }
 
-async fn library_language(
-    st: &AppState,
-    library: i32,
-) -> Result<fliks_domain::metadata::language::Resolved, AppError> {
-    let over = sqlx::query!(
-        r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
-        library
-    )
-    .fetch_one(&st.db)
-    .await?;
-    Ok(st
-        .metadata
-        .lang
-        .resolve(Some(&Override {
-            language: over.language,
-            region: over.region,
-        }))
-        .await?)
-}
-
 /// An edition of a core provider (Google Books, BnF, ...): the book of the anchor work its ISBN or ASIN
 /// names, else an unmatched book that settle identifies from the files; the edition keeps its ids.
 async fn create_from_edition(
@@ -399,7 +352,7 @@ async fn create_from_edition(
     let (ns, value) = c.id;
     let pick = edition_id(ns, value)
         .ok_or_else(|| AppError::bad_request(format!("{ns} names no book edition")))?;
-    let lang = library_language(st, c.target.id).await?;
+    let lang = crate::metadata::library_language(st, c.target.id).await?;
     let mut ids = vec![(ns, pick)];
     let records = merge::edition_records(st, &ids, &lang, c.prio)
         .await
@@ -510,18 +463,7 @@ async fn insert_unanchored(
         .or_else(|| text(record, "releaseDate")?.get(..4)?.parse().ok())
         .filter(|y| (1..=9999).contains(y))
         .map(|y| y as i32);
-    let format = folder_format(&st.db, MediaKind::Book).await?;
-    let name = naming::apply_book_format(
-        &format,
-        &BookNameTokens {
-            title: title.clone(),
-            year: year.map(i64::from),
-            ..Default::default()
-        },
-    );
-    let name = validate_folder_path(&name)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-        .to_owned();
+    let name = creation_folder(st, MediaKind::Book, &title, year.map(i64::from)).await?;
     let mut tx = st.db.begin().await?;
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, overview,

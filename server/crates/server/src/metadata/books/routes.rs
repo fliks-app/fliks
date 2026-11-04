@@ -398,7 +398,15 @@ pub(crate) async fn identify_to(
     provider: Namespace,
     value: &str,
 ) -> Result<(), AppError> {
-    let lang = st.metadata.lang.resolve(None).await?;
+    let library: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(media)
+        .fetch_optional(&st.db)
+        .await?
+        .flatten();
+    let lang = match library {
+        Some(l) => crate::metadata::library_language(st, l).await?,
+        None => st.metadata.lang.resolve(None).await?,
+    };
     let (work, edition) = if provider == ANCHOR {
         let w = work_id(value)
             .ok_or_else(|| AppError::bad_request("value must be an Open Library work id"))?;
@@ -426,7 +434,10 @@ pub(crate) async fn identify_to(
             .await
             .map_err(|e| meta_fail(ANCHOR, e))?;
         // A concurrent identify may have linked the work first: attach then wrote nothing.
-        if stored(&st.db, media, None).await?.is_none_or(|s| s.work != work) {
+        if stored(&st.db, media, None)
+            .await?
+            .is_none_or(|s| s.work != work)
+        {
             return Err(taken());
         }
     }

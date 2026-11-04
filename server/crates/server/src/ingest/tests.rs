@@ -3028,10 +3028,18 @@ mod book_ingest {
         books::register(&c.st, m, &placed(&c, &["Solo/Mirelune.epub"]))
             .await
             .unwrap();
-        let row = crate::ingest::load_media(&c.st.db, m).await.unwrap().unwrap();
-        let e = crate::media::write::refresh_any(&c.st, &row, false)
+        let row = crate::ingest::load_media(&c.st.db, m)
             .await
-            .unwrap_err();
+            .unwrap()
+            .unwrap();
+        let e = crate::media::write::refresh_any(
+            &c.st,
+            &row,
+            false,
+            fliks_domain::metadata::limiter::Priority::Interactive,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(e.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
     }
 

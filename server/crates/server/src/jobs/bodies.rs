@@ -224,7 +224,14 @@ async fn refresh_loop(
         if chatty {
             tracing::info!("{job}: refreshing \"{}\" ({}/{total})", m.title, i + 1);
         }
-        match crate::media::write::refresh_metadata(st, m.id, false, Priority::Background).await {
+        let refreshed = match crate::ingest::load_media(&st.db, m.id).await {
+            Ok(Some(full)) => {
+                crate::media::write::refresh_any(st, &full, false, Priority::Background).await
+            }
+            Ok(None) => continue,
+            Err(e) => Err(e.into()),
+        };
+        match refreshed {
             Ok(_) => updated += 1,
             Err(e) => tracing::warn!("{job}: failed for \"{}\": {e}", m.title),
         }

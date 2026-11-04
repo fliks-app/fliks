@@ -184,7 +184,8 @@ pub async fn merge_unmatched(st: &AppState, media: i32) -> sqlx::Result<bool> {
         .fetch_optional(&mut *tx)
         .await?;
     // A comic that holds an id still takes what its new files fill; the merge spares provider fields.
-    let held_id = kind != MediaKind::Comic && crate::media::external_ids::any(&mut *tx, media).await?;
+    let held_id =
+        kind != MediaKind::Comic && crate::media::external_ids::any(&mut *tx, media).await?;
     if live.is_none() || held_id {
         return Ok(false);
     }

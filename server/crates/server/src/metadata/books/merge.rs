@@ -96,11 +96,16 @@ pub async fn plugin_works(
     .await?;
     let mut out = vec![];
     for (p, value) in held {
-        let Some(ns) = Namespace::parse(&p).filter(|n| n.core().is_none() && st.metadata.serves(*n, MediaKind::Book))
+        let Some(ns) = Namespace::parse(&p)
+            .filter(|n| n.core().is_none() && st.metadata.serves(*n, MediaKind::Book))
         else {
             continue;
         };
-        match st.metadata.work(ns, MediaKind::Book, &value, lang, prio).await {
+        match st
+            .metadata
+            .work(ns, MediaKind::Book, &value, lang, prio)
+            .await
+        {
             Ok(Value::Object(r)) => out.push((ns, r)),
             Ok(_) => {}
             Err(MetaError::Upstream(e)) => tracing::warn!("{ns} work {value} skipped: {e}"),

@@ -5,7 +5,6 @@ pub mod routes;
 #[cfg(test)]
 pub(crate) mod tests;
 
-pub(crate) use apply::language_of_library;
 pub(crate) use apply::set_details;
 pub use apply::{refresh, write};
 

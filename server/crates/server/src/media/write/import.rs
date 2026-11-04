@@ -643,6 +643,27 @@ pub async fn import_media(
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
 }
 
+/// The folder a book or comic created from a provider record gets, by the naming layout of its kind.
+pub(super) async fn creation_folder(
+    st: &AppState,
+    kind: MediaKind,
+    title: &str,
+    year: Option<i64>,
+) -> Result<String, AppError> {
+    let format = folder_format(&st.db, kind).await?;
+    let name = naming::apply_book_format(
+        &format,
+        &naming::BookNameTokens {
+            title: title.to_owned(),
+            year,
+            ..Default::default()
+        },
+    );
+    naming::validate_folder_path(&name)
+        .map(str::to_owned)
+        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))
+}
+
 /// `createUnmatched` input (rule 19): a title found on disk with no provider id.
 pub struct Unmatched {
     pub title: String,

@@ -2,7 +2,7 @@
 use super::{
     body::Body,
     identified::Creation,
-    import::{folder_format, resolve_target},
+    import::{creation_folder, resolve_target},
 };
 use crate::{
     events::DomainEvent,
@@ -18,11 +18,7 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, http::StatusCode};
-use fliks_domain::{
-    media::kind::MediaKind,
-    metadata::limiter::Priority,
-    naming::{self, BookNameTokens, validate_folder_path},
-};
+use fliks_domain::{media::kind::MediaKind, metadata::limiter::Priority};
 use serde_json::Value;
 
 const FIELDS: [&str; 5] = ["type", "provider", "externalId", "libraryId", "folderId"];
@@ -74,21 +70,16 @@ pub(super) async fn import_comic(
 /// Creates the comic volume from its provider record; a failure after the row exists deletes it.
 pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
     let (ns, id) = c.id;
-    let lang = crate::metadata::comics::language_of_library(st, c.target.id).await?;
+    let lang = crate::metadata::library_language(st, c.target.id).await?;
     let fetched = fetch(st, ns, id, &lang, c.prio).await?;
     let title = fetched.work.title.clone();
-    let format = folder_format(&st.db, MediaKind::Comic).await?;
-    let folder_name = naming::apply_book_format(
-        &format,
-        &BookNameTokens {
-            title: title.clone(),
-            year: fetched.work.year.map(i64::from),
-            ..Default::default()
-        },
-    );
-    let folder_name = validate_folder_path(&folder_name)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-        .to_owned();
+    let folder_name = creation_folder(
+        st,
+        MediaKind::Comic,
+        &title,
+        fetched.work.year.map(i64::from),
+    )
+    .await?;
     let user = c.user;
     let same: Option<i32> = sqlx::query_scalar(
         r#"SELECT id FROM media WHERE type = 'comic' AND "libraryId" = $1 AND "folderName" = $2 LIMIT 1"#,

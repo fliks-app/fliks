@@ -240,3 +240,24 @@ impl Metadata {
         }
     }
 }
+
+/// The metadata language of a library.
+pub(crate) async fn library_language(
+    st: &crate::state::AppState,
+    library: i32,
+) -> Result<fliks_domain::metadata::language::Resolved, AppError> {
+    let over: (Option<String>, Option<String>) = sqlx::query_as(
+        r#"SELECT "metadataLanguage", "metadataRegion" FROM libraries WHERE id = $1"#,
+    )
+    .bind(library)
+    .fetch_one(&st.db)
+    .await?;
+    Ok(st
+        .metadata
+        .lang
+        .resolve(Some(&Override {
+            language: over.0,
+            region: over.1,
+        }))
+        .await?)
+}

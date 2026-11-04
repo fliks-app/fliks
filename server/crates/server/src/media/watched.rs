@@ -54,7 +54,8 @@ pub(crate) fn progress(uid: impl Display, m: &str) -> String {
     let watched = predicate(&uid, m);
     format!(
         r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 WHEN {m}.type IN ('{book}', '{comic}') AND ({watched}) THEN 100 ELSE COALESCE((
-    SELECT ROUND(LEAST(1, COALESCE(ps.progression, ps."positionSeconds" / NULLIF(ps."durationSeconds", 0))) * 100)::int
+    SELECT ROUND(CASE WHEN ps.progression IS NULL THEN ps."positionSeconds" / NULLIF(ps."durationSeconds", 0)
+                 ELSE LEAST(1, ps.progression) END * 100)::int
     FROM playback_states ps JOIN items i ON i.id = ps."itemId"
     WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND i."groupId" IS NULL
       AND ps.completed = false AND (ps."durationSeconds" > 0 OR ps.progression IS NOT NULL)
@@ -75,7 +76,7 @@ mod tests {
         assert!(
             p.contains("type IN ('book', 'comic') AND (CASE WHEN") && p.contains("THEN 100 ELSE")
         );
-        assert!(p.contains("COALESCE(ps.progression"));
+        assert!(p.contains("LEAST(1, ps.progression)"));
         assert!(!p.contains("'movie'") && !predicate(1, "m").contains("'movie'"));
     }
 }

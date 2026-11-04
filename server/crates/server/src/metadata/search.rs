@@ -282,13 +282,15 @@ pub async fn search_hits(
         page,
     };
     let lang = lang(&st).await?;
-    let (mut found, mut answered, mut failed) = (None, false, None);
+    let (mut hits, mut answered, mut failed) = (vec![], false, None);
     for p in order {
         match md.of(p).search(&search, &lang, Priority::Interactive).await {
-            Ok(r) if r.is_empty() => answered = true,
             Ok(r) => {
-                found = Some((p, r));
-                break;
+                hits = r.iter().filter_map(|v| hit(kind, p, v)).collect();
+                if !hits.is_empty() {
+                    break;
+                }
+                answered = true;
             }
             Err(e) => {
                 tracing::warn!("{p} {kind} search skipped: {e}");
@@ -296,11 +298,9 @@ pub async fn search_hits(
             }
         }
     }
-    let mut hits: Vec<Value> = match (found, failed) {
-        (Some((p, r)), _) => r.iter().filter_map(|v| hit(kind, p, v)).collect(),
-        (None, Some((p, e))) if !answered => return Err(unavailable("search", p, &e)),
-        _ => vec![],
-    };
+    if let (true, false, Some((p, e))) = (hits.is_empty(), answered, failed) {
+        return Err(unavailable("search", p, &e));
+    }
     mark_existing(&st.db, &a, kind, &mut hits).await?;
     Ok(Json(Value::Array(hits)))
 }

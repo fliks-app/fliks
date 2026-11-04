@@ -390,14 +390,15 @@ pub(crate) async fn refresh_any(
     st: &AppState,
     media: &MediaRow,
     defer_kick: bool,
+    prio: Priority,
 ) -> Result<Option<Found>, AppError> {
     let id = media.id;
     match media.media_type {
         MediaKind::Comic => {
-            crate::metadata::comics::refresh(st, id, Priority::Background).await?;
+            crate::metadata::comics::refresh(st, id, prio).await?;
         }
         MediaKind::Book => {
-            crate::ingest::books::refresh_media(st, id, Priority::Interactive)
+            crate::ingest::books::refresh_media(st, id, prio)
                 .await
                 .map_err(|e| match e.retry {
                     true => AppError::with_message(StatusCode::SERVICE_UNAVAILABLE, e.cause),
@@ -408,9 +409,7 @@ pub(crate) async fn refresh_any(
             merge_unmatched(st, id).await?;
         }
         _ => {
-            return Ok(Some(
-                refresh_metadata(st, id, defer_kick, Priority::Interactive).await?,
-            ));
+            return Ok(Some(refresh_metadata(st, id, defer_kick, prio).await?));
         }
     }
     Ok(None)
@@ -420,16 +419,17 @@ async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if let Some(found) = refresh_any(st, &media, true).await?
+    if let Some(found) = refresh_any(st, &media, true, Priority::Interactive).await?
         && media.has_seasons()
     {
         drop_absent(st, id, &found).await?;
     }
-    let guard = st.ingest.media.lock(id).await;
-    if let Err(e) = rescan_files(st, &guard, id).await {
-        tracing::warn!("identify: rescan of media #{id} failed: {e:?}");
+    if media.media_type != MediaKind::Book {
+        let guard = st.ingest.media.lock(id).await;
+        if let Err(e) = rescan_files(st, &guard, id).await {
+            tracing::warn!("identify: rescan of media #{id} failed: {e:?}");
+        }
     }
-    drop(guard);
     st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
         media_ids: vec![i64::from(id)],
         reason: "metadata-refresh".into(),
@@ -478,10 +478,7 @@ pub async fn identify(
     let (mut tmdb, mut tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
     let imdb = b.str("imdbId")?.flatten();
     let mut provider = b.namespace("preferredProvider")?;
-    let named = (
-        b.str("provider")?.flatten(),
-        b.str("externalId")?.flatten(),
-    );
+    let named = (b.str("provider")?.flatten(), b.str("externalId")?.flatten());
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -689,7 +686,9 @@ pub async fn refresh(
     let st2 = st.clone();
     tokio::spawn(async move {
         let title = media.title.clone();
-        let r = refresh_any(&st2, &media, false).await.map(|_| title);
+        let r = refresh_any(&st2, &media, false, Priority::Interactive)
+            .await
+            .map(|_| title);
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(json!({"ok": true}))))

@@ -10,7 +10,6 @@ use crate::{
         items::lock_versions,
         write::fields::{Fields, apply, merge_unmatched},
     },
-    metadata::Override,
     state::AppState,
 };
 use fliks_domain::comics::provider::Issue;
@@ -25,27 +24,6 @@ use fliks_domain::{
 };
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
-
-/// The metadata language of the media's library.
-pub(crate) async fn language_of_library(
-    st: &AppState,
-    library: i32,
-) -> Result<fliks_domain::metadata::language::Resolved, AppError> {
-    let over: (Option<String>, Option<String>) = sqlx::query_as(
-        r#"SELECT "metadataLanguage", "metadataRegion" FROM libraries WHERE id = $1"#,
-    )
-    .bind(library)
-    .fetch_one(&st.db)
-    .await?;
-    Ok(st
-        .metadata
-        .lang
-        .resolve(Some(&Override {
-            language: over.0,
-            region: over.1,
-        }))
-        .await?)
-}
 
 /// Writes `f` to the comic `media`, linked to `(ns, id)`: the volume fields that are not locked,
 /// then the issues merged by `(kind, sortNumber)` (a special by its label: its sort is a rank).
@@ -111,6 +89,7 @@ pub(crate) async fn set_details(
             .and_then(Value::as_i64)
             .and_then(|n| i32::try_from(n).ok())
     };
+    let year = int("year").filter(|y| (1..=9999).contains(y));
     sqlx::query(
         r#"INSERT INTO comic_details ("mediaId", publisher, "startYear", volume) VALUES ($1, $2, $3, $4)
            ON CONFLICT ("mediaId") DO UPDATE SET publisher = COALESCE($2, comic_details.publisher),
@@ -118,7 +97,7 @@ pub(crate) async fn set_details(
     )
     .bind(media)
     .bind(m.get("publisher").and_then(Value::as_str))
-    .bind(int("year"))
+    .bind(year)
     .bind(int("volume"))
     .execute(c)
     .await?;
@@ -304,7 +283,7 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
         .await?
         .flatten();
     let lang = match library {
-        Some(l) => language_of_library(st, l).await?,
+        Some(l) => crate::metadata::library_language(st, l).await?,
         None => st.metadata.lang.resolve(None).await?,
     };
     let fetched = fetch(st, ns, &id, &lang, prio).await?;

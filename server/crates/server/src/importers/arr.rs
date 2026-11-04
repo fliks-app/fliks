@@ -336,9 +336,11 @@ pub(super) async fn import(
         let st = st.clone();
         tokio::spawn(async move {
             for id in new_series {
+                let Ok(Some(media)) = crate::ingest::load_media(&st.db, id).await else {
+                    continue;
+                };
                 if let Err(e) =
-                    crate::media::write::refresh_metadata(&st, id, false, Priority::Background)
-                        .await
+                    crate::media::write::refresh_any(&st, &media, false, Priority::Background).await
                 {
                     tracing::warn!(media_id = id, error = %e, "metadata refresh after Sonarr import");
                 }
