@@ -3,7 +3,11 @@ use crate::{
     images::{ImageStore, paths::Target},
     libraries::{accessible_library_ids, paths_visible},
     media::{books, hydrate},
-    metadata::{Credits, Metadata, Upstream},
+    metadata::{
+        Credits, Metadata, Search, Upstream,
+        books::{ANCHOR, routes::hit as book_hit},
+        mark_existing, unavailable,
+    },
     state::AppState,
 };
 use fliks_domain::{
@@ -354,6 +358,54 @@ pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Valu
     })?;
     let (cast, crew) = link_credits(st, a, served, credits).await?;
     Ok(json!({"provider": p.provider, "cast": cast, "crew": crew}))
+}
+
+const BIBLIOGRAPHY_PAGES: u32 = 3;
+
+/// `GET /api/persons/:id/bibliography` (`persons.md` rule 23).
+pub async fn bibliography(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
+    let p = find(&st.db, id).await?;
+    let olid: Option<String> = sqlx::query_scalar(
+        r#"SELECT value FROM person_external_ids WHERE "personId" = $1 AND provider = 'openlibrary'"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let md = &st.metadata;
+    let (Some(olid), true) = (olid, md.available(ANCHOR)) else {
+        return Ok(json!([]));
+    };
+    let lang = md.lang.resolve(None).await?;
+    let mut hits: Vec<Value> = vec![];
+    for page in 1..=BIBLIOGRAPHY_PAGES {
+        let search = Search {
+            kind: MediaKind::Book,
+            query: &p.name,
+            year: None,
+            title: None,
+            author: Some(&p.name),
+            author_id: Some(&olid),
+            isbn: None,
+            language: None,
+            page,
+        };
+        let found = md
+            .of(ANCHOR)
+            .search(&search, &lang, Priority::Interactive)
+            .await
+            .map_err(|e| unavailable("request", ANCHOR, &e))?;
+        let before = hits.len();
+        for h in found.iter().filter_map(|v| book_hit(ANCHOR, v)) {
+            if !hits.iter().any(|x| x["externalId"] == h["externalId"]) {
+                hits.push(h);
+            }
+        }
+        if hits.len() == before {
+            break;
+        }
+    }
+    mark_existing(&st.db, a, MediaKind::Book, &mut hits).await?;
+    Ok(Value::Array(hits))
 }
 
 /// `books-api.md` A9: the people credited in `role` (`author` or `narrator`) on readable books.

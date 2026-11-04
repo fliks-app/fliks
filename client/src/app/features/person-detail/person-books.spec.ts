@@ -25,7 +25,7 @@ describe('PersonBooksComponent', () => {
     fixture.componentRef.setInput('role', 'author');
     fixture.detectChanges();
     http.expectOne((r) => r.url === '/api/persons/1/works' && r.params.get('role') === 'author').flush(personWorksFixture);
-    http.expectOne('/api/persons/1/provider-credits').flush([
+    http.expectOne('/api/persons/1/bibliography').flush([
       bookSearchResultFixture,
       { ...bookSearchResultFixture, externalId: 'OL2W', existingMediaId: 7 },
     ]);
@@ -36,29 +36,5 @@ describe('PersonBooksComponent', () => {
     expect(el.querySelectorAll('app-media-card').length).toBe(3);
     expect(fixture.componentInstance.missing().map((c) => c.externalId)).toEqual(['OL1W']);
     http.verify();
-  });
-
-  it('shows no bibliography when the server answers the person credits object', async () => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
-      ],
-    });
-    const http = TestBed.inject(HttpTestingController);
-    const fixture = TestBed.createComponent(PersonBooksComponent);
-    fixture.componentRef.setInput('personId', 1);
-    fixture.componentRef.setInput('role', 'author');
-    fixture.detectChanges();
-    http.expectOne((r) => r.url === '/api/persons/1/works').flush(personWorksFixture);
-    http.expectOne('/api/persons/1/provider-credits').flush({ provider: null, cast: [], crew: [] });
-    await new Promise((r) => setTimeout(r));
-    await fixture.whenStable();
-    fixture.detectChanges();
-    expect(fixture.componentInstance.missing()).toEqual([]);
-    expect(fixture.componentInstance.loading()).toBe(false);
   });
 });

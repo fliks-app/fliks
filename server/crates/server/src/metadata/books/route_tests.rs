@@ -49,6 +49,7 @@ async fn ctx(pool: PgPool, fakes: Vec<Fake>) -> (Ctx, AppState) {
         reader: st.jwt.sign_access(2, "reader").unwrap().token,
         app: crate::metadata::router()
             .merge(media::router())
+            .merge(crate::persons::router())
             .with_state(st.clone()),
         pool,
     };
@@ -700,4 +701,48 @@ async fn search_goes_on_to_the_next_provider_when_every_hit_is_dropped(pool: PgP
     let (c, _) = ctx(pool, vec![ol, gb]).await;
     let (_, v) = c.get("/api/metadata/search/book?q=a").await;
     assert_eq!(v[0]["provider"], "googlebooks");
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_bibliography_lists_the_anchor_works_of_an_author(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![full_anchor()]).await;
+    let owned = c.book(1).await;
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO persons (id, name) VALUES (1, 'Una Roe'), (2, 'Asin Only'), (3, 'No Id');
+        INSERT INTO person_external_ids ("personId", provider, value) VALUES
+          (1, 'openlibrary', 'OL7A'), (2, 'asin', 'B000000001');
+        INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (1, 'book', 'openlibrary', 'OL1W');
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (s, v) = c.get("/api/persons/1/bibliography").await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v[0]["externalId"], "OL1W");
+    assert_eq!(v[0]["existingMediaId"], owned);
+    let (_, v) = c
+        .call(&c.reader, "GET", "/api/persons/1/bibliography", None)
+        .await;
+    assert_eq!(v[0]["existingMediaId"], owned);
+    assert_eq!(c.get("/api/persons/2/bibliography").await, (200, json!([])));
+    assert_eq!(c.get("/api/persons/3/bibliography").await, (200, json!([])));
+    assert_eq!(c.get("/api/persons/9/bibliography").await.0, 404);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_bibliography_fails_with_the_anchor(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol.broken = true;
+    let (c, _) = ctx(pool, vec![ol]).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO persons (id, name) VALUES (1, 'Una Roe');
+        INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'openlibrary', 'OL7A');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.get("/api/persons/1/bibliography").await.0, 503);
 }
