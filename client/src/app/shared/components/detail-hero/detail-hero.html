@@ -4,6 +4,7 @@
 
 <div
   class="relative z-20 has-[.dropdown-open]:z-50 flex gap-4"
+  [attr.data-hero-lead]="desktopLayout() ? null : ''"
   [class.-mt-24]="!desktopLayout()"
   [class.flex-col]="!desktopLayout()"
   [class.items-center]="!desktopLayout()"

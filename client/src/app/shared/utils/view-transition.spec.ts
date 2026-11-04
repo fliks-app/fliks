@@ -1,4 +1,5 @@
 import {
+  betweenPosterPages,
   classUntilDone,
   clearPosterStamps,
   clearStalePosterStamps,
@@ -128,6 +129,17 @@ describe('view-transition poster stamps', () => {
       expect(enteringPosterPage(route('movies/:id'), route('series/:id'))).toBe(false);
       // Closing the player back onto the detail page: its own shrink owns that.
       expect(enteringPosterPage(route('watch/:mediaFileId'), route('movies/:id'))).toBe(false);
+    });
+  });
+
+  describe.each(['books/:id', 'comics/:id'])('%s', (path) => {
+    const node = (p: string) => ({ routeConfig: null, firstChild: { routeConfig: { path: p }, firstChild: null } });
+
+    it('morphs in from a card, out to a list and between two detail pages', () => {
+      expect(enteringPosterPage(node(''), node(path))).toBe(true);
+      expect(leavingPosterPage(node(path), node(''))).toBe(true);
+      expect(betweenPosterPages(node(path), node('movies/:id'))).toBe(true);
+      expect(enteringPosterPage(node(path), node(path))).toBe(false);
     });
   });
 
