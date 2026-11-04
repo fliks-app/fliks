@@ -64,13 +64,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-
   && cargo install cargo-watch --locked \
   && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry"
 
-# Dev stage for the server compose service: a Rust toolchain on the engine image's base, sources
-# bind-mounted and rebuilt by cargo-watch.
-FROM ${ENGINE_IMAGE} AS server-dev
+# Dev stage for the server compose service: a Rust toolchain on the runtime base (pg_dump for the
+# pre-migration backup), sources bind-mounted and rebuilt by cargo-watch.
+FROM runtime-base AS server-dev
 ENTRYPOINT []
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
-    cmake libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev zlib1g-dev \
+    cmake make libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev zlib1g-dev \
   && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
   && cargo install cargo-watch --locked \
   && cargo install sqlx-cli --locked --no-default-features --features rustls,postgres \
