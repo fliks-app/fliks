@@ -219,7 +219,7 @@ pub fn spawn_boot_refresh(st: &AppState) {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::metadata::stub::scene::SceneStub;
+    use crate::metadata::scene_stub::SceneStub;
     use std::sync::atomic::Ordering;
 
     const TVDB: i32 = 375921;

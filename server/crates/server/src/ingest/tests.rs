@@ -4053,7 +4053,7 @@ mod scene_import {
     }
 
     async fn unknown(c: &Ctx) -> i32 {
-        let down = std::sync::Arc::new(crate::metadata::stub::scene::SceneStub::default());
+        let down = std::sync::Arc::new(crate::metadata::scene_stub::SceneStub::default());
         down.down.store(true, std::sync::atomic::Ordering::SeqCst);
         c.st.metadata.add_plugin(down);
         let m = series(c, 375921, &[(3, 8)]).await;

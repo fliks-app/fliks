@@ -32,5 +32,5 @@ Code: `fliks_domain::release::scene` (pure), `server/src/scene.rs` (storage, ref
 | refused-for-now import is retried, then failed | `an_unknown_mapping_skips_and_fails_the_import`, `a_second_ingest_of_a_placed_file_is_already_present` (`ingest/tests.rs`); plugin repo `an_import_the_host_refuses_for_now_is_retried_then_failed` |
 | unlisted unfetched rows pruned, failed ids not refetched at once | `refresh_drops_unfetched_rows_that_are_no_longer_listed`, `an_unknown_mapping_is_fetched_on_demand_and_refuses_when_it_fails` (`scene.rs`) |
 | unmapped series as before | `an_unmapped_number_keeps_its_number`, `an_unmapped_aired_unit_searches_itself` (domain) |
-| the core never reaches TheXEM | no HTTP client in `scene.rs`; its tests use a stub provider (`metadata/stub.rs::SceneStub`); the plugin repo tests the `fliks.thexem` parsing on the recorded bodies (`plugins/thexem/tests/fixtures`) |
+| the core never reaches TheXEM | no HTTP client in `scene.rs`; its tests use a stub provider (`metadata/scene_stub.rs::SceneStub`); the plugin repo tests the `fliks.thexem` parsing on the recorded bodies (`plugins/thexem/tests/fixtures`) |
 | no scene provider means unmapped | `no_scene_provider_means_unmapped` (`scene.rs`) |

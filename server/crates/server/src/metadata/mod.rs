@@ -6,6 +6,8 @@ mod lists;
 mod orchestrator;
 mod provider;
 mod routes;
+#[cfg(any(test, feature = "parity"))]
+pub mod scene_stub;
 pub mod service;
 #[cfg(test)]
 pub(crate) mod stub;

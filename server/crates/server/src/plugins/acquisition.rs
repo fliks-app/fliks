@@ -729,7 +729,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             .await
             .unwrap();
         let st = app_state(&db);
-        let down = std::sync::Arc::new(crate::metadata::stub::scene::SceneStub::default());
+        let down = std::sync::Arc::new(crate::metadata::scene_stub::SceneStub::default());
         down.down.store(true, std::sync::atomic::Ordering::SeqCst);
         st.metadata.add_plugin(down);
         let out = matches(&st, vec![title("a", "Show.S03E02.1080p.WEB")], None)
