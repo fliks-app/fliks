@@ -1,23 +1,19 @@
-# Rust server and plugin SDK, in parallel jobs: lint (em dash, fmt, clippy, sqlx offline cache, parity seeds), build + test-shard (nextest
-# archive with the plugin wasm fixture, openapi.json drift) aggregated by `test`, plugin SDK tests and Windows clippy. Parity is parity.yml.
-name: Server
+# Every PR check in one workflow. `changes` picks the areas a change touches; `ci-ok`, the one required check,
+# passes when every job it needs succeeded or was skipped. The merge queue runs only the compile-level jobs (lint, tizen).
+name: CI
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
-    paths: &paths
-      - 'server/**'
-      - '!server/**/*.md'
-      - '.github/workflows/server.yml'
   push:
     branches: [main]
-    paths: *paths
+  merge_group:
   workflow_dispatch:
 
 # A newer PR push supersedes a running one; a main run must finish to save the caches.
 concurrency:
-  group: server-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -29,9 +25,47 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.diff.outputs.server }}
+      client: ${{ steps.diff.outputs.client }}
+      desktop: ${{ steps.diff.outputs.desktop }}
+    steps:
+      # Depth 2: a PR checks out its merge commit, whose first parent is the base branch tip.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          BEFORE: ${{ github.event.before }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          out() { printf 'server=%s\nclient=%s\ndesktop=%s\n' "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
+          # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
+          if [[ "$HEAD_REF" == release-please--* || "$DRAFT" == true ]]; then out false; exit 0; fi
+          case "$EVENT" in
+            pull_request) base=$(git rev-parse HEAD^1) ;;
+            merge_group) base=$QUEUE_BASE ;;
+            push) base=${BEFORE#0000000000000000000000000000000000000000} ;;
+            *) base= ;;
+          esac
+          if [ -z "$base" ] || ! git fetch -q --depth=1 origin "$base"; then out true; exit 0; fi
+          files=$(git diff --name-only "$base" HEAD | grep -v '\.md$' || true)
+          if grep -qE '^(\.github/(workflows/ci\.yml|actions/|scripts/)|rust-toolchain\.toml$)' <<< "$files"; then out true; exit 0; fi
+          hit() { grep -qE "$1" <<< "$files" && echo true || echo false; }
+          {
+            echo "server=$(hit '^(server/|engine\.lock$)')"
+            echo "client=$(hit '^client/')"
+            echo "desktop=$(hit '^desktop/')"
+          } | tee -a "$GITHUB_OUTPUT"
+
   lint:
-    # Release PRs only bump versions; main re-runs this after the merge.
-    if: ${{ !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -122,7 +156,8 @@ jobs:
 
   # Compiles the test binaries once; the `test-shard` jobs run them, so no shard pays the 4 minute compile.
   build:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
+    needs: changes
+    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -183,7 +218,6 @@ jobs:
     steps:
       # The tests read the sources (migrations, fixtures, plugin templates, WIT) at the path the build compiled in.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-rust
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: nextest-archive
@@ -192,20 +226,14 @@ jobs:
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      # cargo-nextest itself: the archive needs no Rust toolchain, `cargo` would install the pinned one.
       - run: >-
-          cargo nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
+          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
           --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
 
-  # The check name `test` of the former single job: green only if the build and every shard are.
-  test:
-    if: ${{ always() && !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
-    needs: [build, test-shard]
-    runs-on: ubuntu-latest
-    steps:
-      - run: '[ "${{ needs.build.result }}" = success ] && [ "${{ needs.test-shard.result }}" = success ]'
-
   plugin-sdk:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft }}
+    needs: changes
+    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -234,7 +262,8 @@ jobs:
 
   # Catches a Linux-only edit breaking the Windows target on main, before the release build does.
   windows-clippy:
-    if: github.event_name != 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.server == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -252,3 +281,191 @@ jobs:
           workspaces: server
       # What the Windows release build compiles: the integration tests are Unix-only.
       - run: cargo clippy --workspace --lib --bins -- -D warnings
+
+  client:
+    needs: changes
+    if: needs.changes.outputs.client == 'true' && github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npx ng test --watch=false
+
+  # The release-only widget build runs the Chromium 85 CSS guard; a dependency bump must trip it here.
+  tizen:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run tizen:build
+
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' && github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # The tests run .ts files directly: Node 24 strips the types.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # Scripts off: the Electron binary download is not needed to typecheck or test.
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test
+
+  # The Windows media-controls addon (C++/WinRT) only compiles on Windows.
+  desktop-win:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' && github.event_name != 'merge_group'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Build the SMTC addon against the Electron 45 ABI
+        working-directory: desktop/native
+        run: ../node_modules/.bin/node-gyp rebuild --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=x64
+      - run: test -f native/build/Release/fliks_smtc_win.node
+
+  android:
+    needs: changes
+    if: needs.changes.outputs.client == 'true' && github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Main seeds the cache; a PR would only add a copy of its own that main never restores.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          build-root-directory: client/android
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Only what `assembleDebug` compiles against. The default package set
+      # pulls the emulator, whose archive has arrived corrupt on the runner and
+      # failed the job before a line of our code was built. `tools` is gone from
+      # the SDK repository, and asking for it fails the whole step.
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: 'platform-tools platforms;android-36'
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Build Angular client
+        run: npm run build
+
+      - name: Capacitor sync to Android shell
+        run: npx cap sync android
+
+      - name: Compile Android shell
+        run: ./gradlew --no-daemon assembleDebug
+        working-directory: client/android
+
+      - name: Android unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+        working-directory: client/android
+
+  ios:
+    needs: changes
+    if: needs.changes.outputs.client == 'true' && github.event_name != 'merge_group'
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: '26.3'
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Build Angular client
+        run: npx ng build --configuration=production
+
+      - name: Capacitor sync to iOS shell
+        run: npx cap sync ios
+
+      # Simulator destination + signing off: a device build would need a
+      # provisioning profile, and the app plus its Live Activity widget compile
+      # the same either way.
+      - name: Compile iOS shell
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+        working-directory: client/ios/App
+
+  # The only required check: a skipped job (area untouched, or left out of the merge queue) counts as passed.
+  ci-ok:
+    if: always()
+    needs: [changes, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, desktop, desktop-win, android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success" or .result == "skipped")' <<< "$NEEDS"

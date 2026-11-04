@@ -17,7 +17,7 @@ on:
   # The nightly run on main seeds the caches a PR or tag restores; every merge would cost 14 Windows minutes.
   schedule:
     - cron: '30 2 * * *'
-  # A server-only change is covered on main by the Windows clippy job of server.yml.
+  # A server-only change is covered on main by the windows-clippy job of ci.yml.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
