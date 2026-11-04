@@ -3,7 +3,7 @@
 #
 # Packaged with Velopack (per-user Setup.exe + update feed on the `win-server`
 # channel; the desktop client owns `win` in the same release).
-# PR / main / dispatch   → builds the Setup.exe as a workflow artifact (fast: the
+# PR / nightly / dispatch → builds the Setup.exe as a workflow artifact (fast: the
 #   vendored binaries and the client build are cached).
 # Release tag `v*`       → also pulls the previous release for a delta package
 #   and uploads the release files, which the tray's updater reads.
@@ -12,16 +12,11 @@
 name: Build Windows server
 
 on:
-  # main seeds the caches: a PR only restores caches from its own branch or the base branch.
-  # Path filters don't apply to tag pushes.
   push:
-    branches: [main]
     tags: ['v*']
-    paths:
-      - 'windows/**'
-      - 'server/**'
-      - '!server/**/*.md'
-      - '.github/workflows/windows-installer.yml'
+  # The nightly run on main seeds the caches a PR or tag restores; every merge would cost 14 Windows minutes.
+  schedule:
+    - cron: '30 2 * * *'
   # A server-only change is covered on main by the Windows clippy job of server.yml.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
