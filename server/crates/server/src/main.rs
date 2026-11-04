@@ -6,11 +6,25 @@ use std::process::ExitCode;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    if std::env::args().nth(1).as_deref() == Some(fliks_server::plugins::compile::SUBCOMMAND) {
+/// The hidden subcommands run before any runtime exists: their children are limited in address
+/// space, and runtime threads would eat it.
+fn main() -> ExitCode {
+    let first = std::env::args().nth(1);
+    if first.as_deref() == Some(fliks_server::plugins::compile::SUBCOMMAND) {
         return fliks_server::plugins::compile::child_main();
     }
+    #[cfg(target_os = "linux")]
+    if first.as_deref() == Some(fliks_server::comics::sandbox::SUBCOMMAND) {
+        return fliks_server::comics::sandbox::child_main();
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime")
+        .block_on(run())
+}
+
+async fn run() -> ExitCode {
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
         .with(

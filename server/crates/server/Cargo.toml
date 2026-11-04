@@ -77,6 +77,10 @@ unicode-normalization = "0.1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 kepub = { path = "../kepub" }
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+# Writes the 7z fixtures of the archive tests.
+libarchive2 = "0.2"
+
 [dev-dependencies]
 # The integration tests reroute vetted addresses through `Net::route`.
 fliks-server = { path = ".", features = ["parity"] }
@@ -93,3 +97,5 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mimalloc = "0.1"
+# libarchive links system libraries and needs cmake and libclang: only the Linux (Docker) build carries it.
+libarchive2-sys = "0.2"

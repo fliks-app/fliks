@@ -5,3 +5,7 @@ runs:
   steps:
     - shell: bash
       run: rustup toolchain install
+    # libarchive2-sys (Linux only) builds libarchive with cmake and links these libraries.
+    - if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq cmake libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev

@@ -6,6 +6,7 @@ pub mod books;
 pub mod busy;
 pub mod cleanup;
 pub mod collections;
+pub mod comics;
 pub mod config;
 pub mod db;
 pub mod device_tokens;

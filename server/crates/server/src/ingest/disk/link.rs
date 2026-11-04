@@ -185,7 +185,7 @@ async fn relink_in_place(
         crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
-    if current.media_type == MediaKind::Book {
+    if crate::ingest::comics::registers(current.media_type) {
         let mut placed = vec![];
         for f in &d.files {
             let abs = PathBuf::from(resolve(&f.path, "/"));
@@ -199,7 +199,15 @@ async fn relink_in_place(
             }
         }
         if !placed.is_empty() {
-            match books::register(st, media.id, &placed).await {
+            match crate::ingest::comics::register_files(
+                st,
+                current.media_type,
+                media.id,
+                &placed,
+                None,
+            )
+            .await
+            {
                 Ok(done) => {
                     linked += done.files.len() as i64;
                     errors.extend(done.conflicts);
@@ -295,10 +303,10 @@ pub(super) async fn confirm_import(
             Ok(m) if !m.is_file() || !books::owns(media.media_type, &name) => {
                 errors.push(format!(
                     "{name}: not a {} file",
-                    if media.media_type == MediaKind::Book {
-                        "book"
-                    } else {
-                        "video"
+                    match media.media_type {
+                        MediaKind::Book => "book",
+                        MediaKind::Comic => "comic",
+                        _ => "video",
                     }
                 ));
                 continue;
@@ -340,7 +348,7 @@ pub(super) async fn confirm_import(
             episode_id,
         };
         // A book's files are ingested together: the parts of one audiobook are one version.
-        if media.media_type == MediaKind::Book {
+        if crate::ingest::comics::registers(media.media_type) {
             book_files.push(file);
             continue;
         }
@@ -430,7 +438,7 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
 /// Whether `name` is no valid `folderName` for a media of `kind` (a book's may hold several components).
 fn folder_error(kind: MediaKind, name: &str) -> bool {
     match kind {
-        MediaKind::Book => naming::validate_folder_path(name).is_err(),
+        MediaKind::Book | MediaKind::Comic => naming::validate_folder_path(name).is_err(),
         _ => validate_folder_name(name).is_err(),
     }
 }

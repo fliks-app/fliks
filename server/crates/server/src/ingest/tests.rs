@@ -3675,3 +3675,164 @@ mod book_import {
         );
     }
 }
+
+mod comic_ingest {
+    use super::*;
+    use crate::ingest::{books::Placed, comics};
+    use std::io::Write;
+    use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
+
+    fn png(w: u32, h: u32) -> Vec<u8> {
+        let mut out = vec![];
+        image::RgbImage::new(w, h)
+            .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    fn cbz(path: &Path, pages: usize) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut w = ZipWriter::new(fs::File::create(path).unwrap());
+        let o = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for i in 0..pages {
+            w.start_file(format!("p{:02}.png", i + 1), o).unwrap();
+            w.write_all(&png(8, 12)).unwrap();
+        }
+        w.finish().unwrap();
+    }
+
+    async fn comic(c: &Ctx, folder: &str) -> i32 {
+        let l = library(c, "C", &c.dir.join("comics"), r#"["comic"]"#).await;
+        media(c, l, folder, "comic").await
+    }
+
+    fn placed(c: &Ctx, rels: &[&str]) -> Vec<Placed> {
+        rels.iter()
+            .map(|r| Placed {
+                folder_id: 1,
+                rel: (*r).to_owned(),
+                abs: c.dir.join("comics").join(r),
+            })
+            .collect()
+    }
+
+    /// `(label, kind, pageCount, files)` of every issue, by sort key.
+    async fn issues(c: &Ctx, m: i32) -> Vec<(String, String, Option<i32>, i64)> {
+        sqlx::query_as(
+            r#"SELECT ci.label, ci.kind, ci."pageCount",
+                      (SELECT count(*) FROM item_parts p WHERE p."itemId" = ci."itemId")
+               FROM comic_issues ci WHERE ci."mediaId" = $1 ORDER BY ci.kind, ci."sortNumber""#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn archives_become_issues_of_one_image_edition_with_a_cover(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Star Gardens").await;
+        let d = c.dir.join("comics/Star Gardens");
+        for (n, pages) in [
+            ("Star Gardens 002.cbz", 3),
+            ("Star Gardens 001.cbz", 2),
+            ("Star Gardens 001 (Variant).cbz", 2),
+            ("Star Gardens Annual 01.cbz", 5),
+        ] {
+            cbz(&d.join(n), pages);
+        }
+        fs::write(d.join("Star Gardens 003.pdf"), b"%PDF-1.4").unwrap();
+        let rels: Vec<String> = fs::read_dir(&d)
+            .unwrap()
+            .map(|e| format!("Star Gardens/{}", e.unwrap().file_name().to_string_lossy()))
+            .collect();
+        let refs: Vec<&str> = rels.iter().map(String::as_str).collect();
+        let done = comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        assert_eq!(done.files.len(), 5);
+        assert_eq!(
+            issues(&c, m).await,
+            [
+                ("1".to_owned(), "annual".to_owned(), Some(5), 1),
+                ("1".to_owned(), "issue".to_owned(), Some(2), 2),
+                ("2".to_owned(), "issue".to_owned(), Some(3), 1),
+                ("3".to_owned(), "issue".to_owned(), None, 1),
+            ]
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM editions WHERE family = 'image'").await,
+            1
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 4);
+        let poster: Option<String> =
+            sqlx::query_scalar(r#"SELECT "posterUrl" FROM media WHERE id = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert!(poster.is_some());
+        // a cbz and a pdf in one volume: the edition has no single format
+        let format: Option<String> =
+            sqlx::query_scalar(r#"SELECT format FROM editions WHERE "mediaId" = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(format, None);
+        // a second run neither duplicates an issue nor a part
+        comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 4);
+        assert_eq!(count(&c, "SELECT count(*) FROM item_parts").await, 5);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_rescan_registers_new_files_and_queues_no_media_job(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Moon Tales").await;
+        cbz(&c.dir.join("comics/Moon Tales/Moon Tales 01.cbz"), 2);
+        assert_eq!(rescan(&c, m).await.unwrap().added, 1);
+        cbz(&c.dir.join("comics/Moon Tales/Moon Tales 02.cbz"), 2);
+        assert_eq!(rescan(&c, m).await.unwrap().added, 1);
+        assert_eq!(issues(&c, m).await.len(), 2);
+        assert!(c.st.ingest.queue.is_idle());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn unnumbered_files_are_issues_of_their_own_apart_from_issue_zero(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Moon Tales").await;
+        let d = c.dir.join("comics/Moon Tales");
+        for n in [
+            "Prologue.cbz",
+            "Epilogue.cbz",
+            "Moon Tales 000.cbz",
+            "Moon Tales 01.cbz",
+        ] {
+            cbz(&d.join(n), 2);
+        }
+        let rels: Vec<String> = [
+            "Prologue.cbz",
+            "Epilogue.cbz",
+            "Moon Tales 000.cbz",
+            "Moon Tales 01.cbz",
+        ]
+        .iter()
+        .map(|n| format!("Moon Tales/{n}"))
+        .collect();
+        let refs: Vec<&str> = rels.iter().map(String::as_str).collect();
+        comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        let labels = issues(&c, m).await;
+        assert_eq!(labels.len(), 4, "{labels:?}");
+        assert_eq!(labels.iter().filter(|i| i.0 == "0").count(), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM item_parts").await, 4);
+    }
+}

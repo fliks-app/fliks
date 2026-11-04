@@ -3,6 +3,7 @@ pub mod acl;
 pub mod arr_import;
 pub mod books;
 pub mod burn_in;
+pub mod comics;
 pub mod edl;
 pub mod external_id;
 pub mod js;

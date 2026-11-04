@@ -454,6 +454,28 @@
         }
       }
     },
+    "/api/comics/{itemId}/pages": {
+      "get": {
+        "tags": [
+          "crate::comics"
+        ],
+        "operationId": "pages",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/comics/{itemId}/pages/{index}": {
+      "get": {
+        "tags": [
+          "crate::comics"
+        ],
+        "operationId": "page",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/commands": {
       "get": {
         "tags": [

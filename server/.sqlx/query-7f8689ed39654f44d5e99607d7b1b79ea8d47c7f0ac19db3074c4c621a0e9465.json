@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.type = 'comic' AS \"comic!\" FROM media_files f JOIN media m ON m.id = f.\"mediaId\" WHERE f.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "comic!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7f8689ed39654f44d5e99607d7b1b79ea8d47c7f0ac19db3074c4c621a0e9465"
+}

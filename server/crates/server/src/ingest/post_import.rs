@@ -133,7 +133,7 @@ impl Queue {
             );
             let book = subject
                 .as_ref()
-                .is_some_and(|s| s.media_type == Some(MediaKind::Book));
+                .is_some_and(|s| s.media_type.is_some_and(super::comics::registers));
             progress(st, done, total, subject);
             if let Err(e) = enrich(st, id).await {
                 tracing::warn!("Post-import enrich of file #{id} failed: {e}");
@@ -213,6 +213,18 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     let Some((path, info)) = file_path(st, id).await.map_err(|e| e.to_string())? else {
         return Err("no contained path".into());
     };
+    // An `image` file has no video or audio job.
+    let comic = sqlx::query_scalar!(
+        r#"SELECT m.type = 'comic' AS "comic!" FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE f.id = $1"#,
+        id
+    )
+    .fetch_optional(&st.db)
+    .await
+    .map_err(|e| e.to_string())?
+    .unwrap_or(false);
+    if comic {
+        return Ok(());
+    }
     if let Some((family, _)) = super::books::classify(&super::library::file_name(&path)) {
         return enrich_book(st, id, &path, family, info).await;
     }
@@ -343,10 +355,14 @@ async fn settled(st: &AppState, media_id: i32) {
         .await
         .ok()
         .flatten()
-        .is_some_and(|t| t == MediaKind::Book.as_str());
-    if book {
-        super::books::settled(st, media_id).await;
-        return;
+        .and_then(|t| MediaKind::parse(&t));
+    match book {
+        Some(MediaKind::Book) => {
+            super::books::settled(st, media_id).await;
+            return;
+        }
+        Some(MediaKind::Comic) => return,
+        _ => {}
     }
     // One batch at a time, so a season pack does not queue every media's jobs at once.
     let _turn = st.ingest.settle.turn.lock().await;

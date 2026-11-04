@@ -1,0 +1,11 @@
+{"cases":[
+{"expected":{"kind":"issue","label":"1","sort":"1","volume":"Star Gardens","year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens 001 (2016) (Digital).cbz"}},
+{"expected":{"kind":"issue","label":"1.5","sort":"1.5","volume":"Star Gardens","year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens 1.5.cbr"}},
+{"expected":{"kind":"issue","label":"-1","sort":"-1","volume":"Star Gardens","year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens #-1.cb7"}},
+{"expected":{"kind":"annual","label":"2","sort":"2","volume":"Star Gardens","year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens Annual 02.cbz"}},
+{"expected":{"kind":"issue","label":"Prologue","sort":null,"volume":"Star Gardens","year":2016},"input":{"path":"Star Gardens (2016)/Prologue.cbz"}},
+{"expected":{"kind":"issue","label":"12","sort":"12","volume":"Moon Tales","year":null},"input":{"path":"Moon Tales 12.cbz"}},
+{"expected":{"kind":"issue","label":"3","sort":"3","volume":"Moon Tales","year":null},"input":{"path":"Moon_Tales_003_[Group].cbz"}},
+{"expected":{"kind":"issue","label":"0","sort":"0","volume":"Run Alpha","year":null},"input":{"path":"Pub/Run Alpha/Run Alpha 0.pdf"}},
+{"expected":{"kind":"issue","label":"Standalone","sort":null,"volume":"Standalone","year":null},"input":{"path":"Standalone.cbz"}}
+]}
