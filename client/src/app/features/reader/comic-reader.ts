@@ -155,7 +155,7 @@ export class ComicReaderComponent implements OnDestroy {
   private async open(): Promise<void> {
     const t = this.target();
     this.prefs.set(this.settings.comicPrefs(t.mediaId));
-    const saved = await this.readerApi.loadProgress(t).catch(() => null);
+    const [saved] = await Promise.all([this.readerApi.loadProgress(t).catch(() => null), this.api.prepare(t.fileId).catch(() => undefined)]);
     if (this.destroyed) return;
     this.measure();
     const at = pdfPageOf(saved?.locator, this.total());
@@ -171,7 +171,8 @@ export class ComicReaderComponent implements OnDestroy {
     const size = this.pages()[n - 1];
     const dpr = window.devicePixelRatio || 1;
     const width = this.webtoon() ? widthBucket(this.webtoonWidth(), dpr) : pageWidth(size, this.view(), count, dpr, tier);
-    return this.api.pageUrl(this.target().itemId, n - 1, width);
+    const t = this.target();
+    return this.api.pageUrl(t.itemId, t.fileId, n - 1, width);
   }
 
   protected aspect(n: number): string {
@@ -195,6 +196,7 @@ export class ComicReaderComponent implements OnDestroy {
 
   private report(n: number): void {
     this.page.set(n);
+    void this.api.prepare(this.target().fileId).catch(() => undefined);
     this.progress.report(this.target(), { progression: pdfProgression(n, this.total()), locator: { page: n } });
   }
 
