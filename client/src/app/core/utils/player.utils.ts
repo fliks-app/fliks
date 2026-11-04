@@ -771,3 +771,13 @@ export function readyDownloadFor(tasks: readonly DownloadTask[], mediaFileId: nu
   if (casting) return undefined;
   return tasks.find((t) => t.mediaFileId === mediaFileId && t.status === 'ready');
 }
+
+/** "1h05 remaining" / "12min remaining" for the seconds left; null once nothing is left. */
+export function remainingLabel(remainingSeconds: number, translate: TranslateService): string | null {
+  const rem = Math.floor(remainingSeconds);
+  if (rem <= 0) return null;
+  const h = Math.floor(rem / 3600);
+  const m = Math.floor((rem % 3600) / 60);
+  const suffix = translate.instant('media_info.remaining');
+  return h > 0 ? `${h}h${String(m).padStart(2, '0')} ${suffix}` : `${m}min ${suffix}`;
+}

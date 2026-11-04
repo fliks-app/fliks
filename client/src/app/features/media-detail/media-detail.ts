@@ -1,6 +1,7 @@
-import { Component, ElementRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, forwardRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
+import { MediaAdminService } from '../../core/services/media-admin.service';
 import { IdentifyModalService } from '../../core/services/identify-modal.service';
 import { hasProviderId } from '../../core/utils/media-identity';
 import { TrackingModalService } from '../../core/services/tracking-modal.service';
@@ -46,7 +47,7 @@ import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/m
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
 import { TrackingScope } from '../../shared/components/tracking-status-modal/tracking-status-modal';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
-import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
+import { MediaLibraryDialogComponent } from '../../shared/components/media-library-dialog/media-library-dialog';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
@@ -78,14 +79,13 @@ import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 import { ReleaseGrabController } from './release-grab-controller';
-import { LikeController } from './like-controller';
+import { MEDIA_SAVED_HOST } from '../../shared/components/detail-hero/detail-hero';
+import { LikeController } from '../../shared/utils/like-controller';
 import { AnalyzeController } from './analyze-controller';
 import { RequestFlowController } from './request-flow-controller';
 import { WatchedController } from './watched-controller';
 import { EpisodeViewController } from './episode-view-controller';
 import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
-import { asBookMedia } from './book/book-media';
-import { asComicMedia } from './comic/comic-media';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -121,7 +121,7 @@ interface HandedEpisode {
     MediaDetailSeasonsComponent,
     ReleasesModalComponent,
     MediaDetailProfilesModalComponent,
-    MediaDetailLibraryModalComponent,
+    MediaLibraryDialogComponent,
     RequestModalComponent,
     HorizontalScrollerComponent,
     CollapsibleSectionComponent,
@@ -137,10 +137,12 @@ interface HandedEpisode {
     TvSectionDirective,
   ],
   templateUrl: './media-detail.html',
+  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }],
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
   protected readonly kinds = KIND_REGISTRY;
   private readonly identifyModalService = inject(IdentifyModalService);
+  private readonly admin = inject(MediaAdminService);
   private readonly trackingModalService = inject(TrackingModalService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -182,7 +184,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   );
   readonly like = new LikeController(
     {
-      media: () => this.media(),
+      // A book or comic page owns its likes through the shared hero.
+      media: () => (this.kindPage ? null : this.media()),
       episodeMode: () => this.episodeMode(),
       focusedEpisode: () => this.focusedEpisode(),
     },
@@ -316,6 +319,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /** Last fanart declared, so returning to a cached page can re-declare it. */
   private fanartUrl: string | null = null;
+  private fanartIsCover = false;
 
   /** The hero navbar and the backdrop are global state, so a cached page hands
    *  them back on the way out and reclaims them on return. */
@@ -325,7 +329,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   private restoreChrome(): void {
-    this.backgroundService.set(this, this.fanartUrl);
+    this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
     const m = this.media();
     if (m) this.applyEpisodeFocus(m, this.route.snapshot.paramMap.get('episodeId'));
     else this.navbarService.enterHeroPage('');
@@ -366,12 +370,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.applyEpisodeFocus(m, params.get('episodeId'));
   });
 
-  /** Series / movie fanart, never the episode still: TMDB stills cap at
-   *  ~780×438 and look mushy stretched fullscreen. */
+  /** Fanart, never the episode still (TMDB stills cap at ~780×438 and look mushy fullscreen); the blurred cover when there is none. */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    this.fanartUrl = m ? pickFanart(m) : null;
-    this.backgroundService.set(this, this.fanartUrl);
+    const fanart = m ? pickFanart(m) : null;
+    if (!fanart && !this.fullLoaded()) return;
+    this.fanartIsCover = !fanart;
+    this.fanartUrl = fanart ?? m?.posterUrl ?? null;
+    this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
   });
 
   /** React to SSE rescan / import / metadata-refresh events for this media */
@@ -403,19 +409,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   protected readonly armSlide = armPageSlide;
 
   readonly media = signal<Media | null>(null);
-  protected readonly bookMedia = computed(() => asBookMedia(this.media()));
-  /** Fetched on the first book, so movie and series pages never load it. */
-  protected readonly bookWork = signal<Type<unknown> | null>(null);
-  protected readonly comicMedia = computed(() => asComicMedia(this.media()));
-  protected readonly comicVolume = signal<Type<unknown> | null>(null);
-  private readonly comicVolumeLoader = effect(() => {
-    if (!this.comicMedia() || untracked(this.comicVolume)) return;
-    void import('./comic/comic-volume.component').then((m) => this.comicVolume.set(m.ComicVolumeComponent));
-  });
-  private readonly bookWorkLoader = effect(() => {
-    if (!this.bookMedia() || untracked(this.bookWork)) return;
-    void import('./book/book-work.component').then((m) => this.bookWork.set(m.BookWorkComponent));
-  });
+  /** The page of a book or comic, loaded by the route's resolver before this component activates. */
+  protected readonly kindPage: Type<unknown> | null = this.route.snapshot.data['page'] ?? null;
   readonly cast = signal<MediaCastEntry[]>([]);
   readonly crew = signal<MediaCrewEntry[]>([]);
   readonly similar = signal<RelatedMedia[]>([]);
@@ -483,6 +478,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   );
 
   readonly loading = signal(true);
+  /** False while only a list handover is shown: it carries no `fanartUrl`, so its cover must not stand in for fanart yet. */
+  readonly fullLoaded = signal(false);
   readonly notFound = signal(false);
   /** Card-known episode data painted into the header while the media request is in flight, so the poster morph has a target. */
   readonly episodeSeed = signal<HandedEpisode | null>(this.handedEpisode());
@@ -499,14 +496,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly profilesErr = signal('');
 
   readonly libraries = signal<LibrarySummary[]>([]);
-  readonly selectedLibraryId = signal<number | null>(null);
-  readonly selectedFolderId = signal<number | null>(null);
-  readonly selectedLibraryFolders = computed(
-    () => this.libraries().find((l) => l.id === this.selectedLibraryId())?.folders ?? [],
-  );
-  readonly selectedProvider = signal<'tmdb' | 'tvdb' | null>(null);
-  readonly libraryPatchSaving = signal(false);
-  readonly libraryPatchSaved = signal(false);
 
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
   readonly canManageSubtitles = computed(() => this.auth.hasPermission('subtitles.manage'));
@@ -554,7 +543,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly episodeReleasesModal = viewChild<ReleasesModalComponent>('episodeReleasesModal');
   readonly seasonReleasesModal = viewChild<ReleasesModalComponent>('seasonReleasesModal');
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
-  readonly libraryModal = viewChild(MediaDetailLibraryModalComponent);
+  readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
   private readonly infoHeader = viewChild(MediaInfoHeaderComponent);
 
@@ -669,6 +658,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
     // Nothing here survives a switch to another title.
     this.notFound.set(false);
+    this.fullLoaded.set(false);
     this.cast.set([]);
     this.crew.set([]);
     this.similar.set([]);
@@ -697,6 +687,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         return;
       }
       this.media.set(m);
+      this.fullLoaded.set(true);
       // Paint from the cache-served media immediately; the uncacheable
       // playback-state calls below must not gate first paint.
       this.loading.set(false);
@@ -705,8 +696,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (wentBack) this.scrollMemory.restoreSticky(this.scrollKey());
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
-      this.selectedLibraryId.set(m.libraryId ?? null);
-      this.selectedProvider.set(m.preferredProvider ?? null);
       queueMicrotask(() => {
         void this.mediaService
           .getOne(id, { force: true })
@@ -858,49 +847,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return KIND_REGISTRY[this.expectedKind()].segment;
   }
 
-  onLibraryChange(id: number | null) {
-    this.selectedLibraryId.set(id);
-    this.selectedFolderId.set(null);
-  }
-
-  openLibraryModal() {
-    this.selectedFolderId.set(null);
-    this.libraryPatchSaved.set(false);
-    this.libraryModal()?.showModal();
-  }
-
-  async saveLibrary() {
-    const m = this.media();
-    if (!m) return;
-    const libId = this.selectedLibraryId();
-    if (libId == null) return;
-    const provider = this.selectedProvider();
-    const providerChanged = (m.preferredProvider ?? null) !== provider;
-    this.libraryPatchSaving.set(true);
-    this.libraryPatchSaved.set(false);
-    try {
-      const libraryChanged = libId !== m.libraryId;
-      const folderId =
-        this.selectedFolderId() ?? (libraryChanged ? this.selectedLibraryFolders()[0]?.id : null);
-      let updated = m;
-      if (folderId != null) {
-        await this.mediaService.moveToFolder(m.id, folderId);
-        this.toast.info(this.translate.instant('media_detail.move_started'));
-      } else if (libraryChanged) {
-        updated = await this.mediaService.patchLibrary(m.id, libId);
-      }
-      if (providerChanged) {
-        updated = await this.mediaService.update(m.id, {
-          preferredProvider: provider,
-        });
-      }
-      this.media.set(updated);
-      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
-      this.libraryPatchSaved.set(true);
-      setTimeout(() => this.libraryPatchSaved.set(false), 3000);
-    } finally {
-      this.libraryPatchSaving.set(false);
-    }
+  onLibrarySaved(updated: Media) {
+    this.media.set(updated);
+    if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
   }
 
   async saveProfiles() {
@@ -961,23 +910,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   async deleteMedia() {
     const m = this.media();
-    if (!m) return;
-    const messageKey = m.folderName
-      ? 'media_detail.confirm_delete'
-      : 'media_detail.delete_no_folder';
-    if (
-      !(await this.confirmation.confirm({
-        title: this.translate.instant('common.confirm'),
-        message: this.translate.instant(messageKey, { title: m.title }),
-        variant: 'danger',
-      }))
-    )
-      return;
+    if (!m || !(await this.admin.confirmDelete(m))) return;
     this.deleteLoading.set(true);
     try {
-      await this.mediaService.delete(m.id);
-      this.toast.success(this.translate.instant('media_detail.delete_success'));
-      void this.router.navigate(['/']);
+      await this.admin.removeMedia(m);
     } finally {
       this.deleteLoading.set(false);
     }
@@ -992,15 +928,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async refreshMetadata() {
     const m = this.media();
     if (!m) return;
-    // Fire-and-forget. Backend emits SSE `metadata.refreshed` / `metadata.failed`
-    // which the sseEffect below catches to toast + reload the media row.
+    const ep = this.focusedEpisode();
+    if (!ep) return this.admin.refreshMetadata(m.id);
     try {
-      const ep = this.focusedEpisode();
-      if (ep) {
-        await this.mediaService.refreshEpisodeMetadata(m.id, ep.id);
-      } else {
-        await this.mediaService.refreshMetadata(m.id);
-      }
+      await this.mediaService.refreshEpisodeMetadata(m.id, ep.id);
       this.toast.success(this.translate.instant('media_detail.refresh_launched'));
     } catch (err: unknown) {
       this.toast.error(serverMessage(err, this.translate, 'media_detail.refresh_error'));
@@ -1164,7 +1095,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const openers: Record<string, () => void> = {
       identify: () => this.openIdentifyModal(),
       profiles: () => this.openProfilesModal(),
-      library: () => this.openLibraryModal(),
+      library: () => this.libraryDialog()?.open(),
       subtitles: () => this.openSubtitles(),
       analyze: () => this.analyze.open(),
       refresh: () => void this.refreshMetadata(),
@@ -1183,17 +1114,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   openIdentifyModal() {
     const m = this.media();
-    if (!m) return;
-    this.identifyModalService.open({
-      mediaId: m.id,
-      mediaType: m.type,
-      title: m.title,
-      year: m.year ?? null,
-      path: m.path ?? null,
-      tmdbId: m.tmdbId ?? null,
-      tvdbId: m.tvdbId ?? null,
-      imdbId: m.imdbId ?? null,
-    });
+    if (m) this.admin.identify(m);
   }
 
   /** The title, art and whole episode tree change, so the page reloads rather

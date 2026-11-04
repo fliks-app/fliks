@@ -1,4 +1,5 @@
 //! The provider registry and `/api/metadata/*` (`docs/spec/metadata.md`); other domains call `Metadata` in process.
+pub mod attribution;
 pub mod books;
 pub mod comics;
 mod credits;
@@ -9,9 +10,8 @@ mod provider;
 mod routes;
 #[cfg(any(test, feature = "parity"))]
 pub mod scene_stub;
+mod search;
 pub mod service;
-#[cfg(test)]
-pub(crate) mod stub;
 mod types;
 
 pub use language::{LanguageCache, Override};
@@ -19,6 +19,7 @@ pub use orchestrator::{Key, prune_snapshots};
 use provider::Absent;
 pub use provider::{Call, EditionRef, MetadataProvider, Search};
 pub use routes::*;
+pub use search::*;
 pub use types::{Credits, MetaError, PersonDetails, Upstream};
 
 use crate::{http::AppError, sync::RwLockExt};
@@ -92,7 +93,7 @@ impl Metadata {
         self.slot(id).map(|(_, p)| p)
     }
 
-    /// A provider `resolve` or `fallback` returned; one that is not registered answers every call 503.
+    /// A provider `resolve` returned; one that is not registered answers every call 503.
     pub fn of(&self, id: Namespace) -> Arc<dyn MetadataProvider> {
         self.get(id).unwrap_or_else(|| Arc::new(Absent(id)))
     }
@@ -142,9 +143,37 @@ impl Metadata {
         all
     }
 
+    /// The available providers of the kind's order that support it.
+    pub fn serving(&self, kind: MediaKind) -> Vec<Namespace> {
+        self.order(kind)
+            .into_iter()
+            .filter(|p| self.available(*p) && self.of(*p).supports(kind))
+            .collect()
+    }
+
     /// The named provider iff it is available and supports `kind`, else the first of the kind's order.
     pub fn resolve(&self, name: Option<&str>, kind: MediaKind) -> Option<Namespace> {
         self.pick(name, self.order(kind), |p| p.supports(kind))
+    }
+
+    /// The providers whose answers carry ids of `ns` (an ASIN is Audible's and Audnexus's).
+    fn owners(ns: Namespace) -> Vec<Namespace> {
+        match ns {
+            Namespace::ASIN => vec![Namespace::AUDIBLE, Namespace::AUDNEXUS],
+            ns => vec![ns],
+        }
+    }
+
+    /// Whether a registered provider serves `kind` under the id namespace `ns`.
+    pub fn serves(&self, ns: Namespace, kind: MediaKind) -> bool {
+        Self::owners(ns)
+            .into_iter()
+            .any(|p| self.get(p).is_some_and(|x| x.supports(kind)))
+    }
+
+    /// Whether a provider answering ids of `ns` is available.
+    pub fn answers(&self, ns: Namespace) -> bool {
+        Self::owners(ns).into_iter().any(|p| self.available(p))
     }
 
     /// The named provider iff it is available.
@@ -158,23 +187,13 @@ impl Metadata {
         let name = name.unwrap_or(Namespace::TMDB.as_str());
         let ns = Namespace::parse(name)
             .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {name}")))?;
-        match self.available(ns) {
+        match self.answers(ns) {
             true => Ok(ns),
             false => Err(AppError::with_message(
                 StatusCode::SERVICE_UNAVAILABLE,
                 format!("The {} provider is not available", ns.as_str()),
             )),
         }
-    }
-
-    /// The first other provider of the kind's order that is available and supports `kind`.
-    pub fn fallback(&self, id: Namespace, kind: MediaKind) -> Option<Namespace> {
-        let order = self.order(kind);
-        self.pick(
-            None,
-            order.into_iter().filter(|o| *o != id).collect(),
-            |p| p.supports(kind),
-        )
     }
 
     /// The first other provider, over the orders of every kind, that is available and describes people.
@@ -220,4 +239,25 @@ impl Metadata {
             tracing::warn!("metadata provider order not reloaded: {e}");
         }
     }
+}
+
+/// The metadata language of a library.
+pub(crate) async fn library_language(
+    st: &crate::state::AppState,
+    library: i32,
+) -> Result<fliks_domain::metadata::language::Resolved, AppError> {
+    let over: (Option<String>, Option<String>) = sqlx::query_as(
+        r#"SELECT "metadataLanguage", "metadataRegion" FROM libraries WHERE id = $1"#,
+    )
+    .bind(library)
+    .fetch_one(&st.db)
+    .await?;
+    Ok(st
+        .metadata
+        .lang
+        .resolve(Some(&Override {
+            language: over.0,
+            region: over.1,
+        }))
+        .await?)
 }

@@ -6,6 +6,8 @@ import { of } from 'rxjs';
 import { OrphanScanPanelComponent } from './orphan-scan-panel';
 import {
   ImportsApiService,
+  OrphanFileId,
+  OrphanGroup,
   OrphanScanResult,
   RelinkOrphansBody,
 } from '../../../../../core/services/api/imports-api.service';
@@ -21,6 +23,7 @@ const result = (
   extra: Partial<MetadataSearchResult> = {},
 ): MetadataSearchResult => ({
   tmdbId,
+  externalId: String(tmdbId),
   provider: 'tmdb',
   title,
   originalTitle: title,
@@ -35,15 +38,19 @@ const result = (
   ...extra,
 });
 
-const scanResult = (folders: string[]): OrphanScanResult => ({
+const scanResult = (
+  folders: string[],
+  fileIds: OrphanFileId[] = [],
+  mediaType: OrphanGroup['mediaType'] = 'movie',
+): OrphanScanResult => ({
   libraryPath: '/medias',
   groups: folders.map((folderName) => ({
-    groupKey: `movie:${folderName}`,
-    mediaType: 'movie',
+    groupKey: `${mediaType}:${folderName}`,
+    mediaType,
     folderName,
     guessTitle: folderName,
     guessYear: 2001,
-    nfo: null,
+    fileIds,
     suggestedProvider: 'tmdb',
     files: [
       {
@@ -62,11 +69,16 @@ const scanResult = (folders: string[]): OrphanScanResult => ({
   orphanCount: folders.length,
 });
 
-function setup(folders: string[], metadataOverrides: Record<string, unknown> = {}) {
+function setup(
+  folders: string[],
+  metadataOverrides: Record<string, unknown> = {},
+  fileIds: OrphanFileId[] = [],
+  mediaType: OrphanGroup['mediaType'] = 'movie',
+) {
   const relinked: RelinkOrphansBody[] = [];
   const linked: RelinkOrphansBody[] = [];
   const importsApi = {
-    previewOrphans: () => Promise.resolve(scanResult(folders)),
+    previewOrphans: () => Promise.resolve(scanResult(folders, fileIds, mediaType)),
     relinkOrphansBatch: (items: RelinkOrphansBody[]) => {
       relinked.push(...items);
       return Promise.resolve({ queued: items.length });
@@ -102,7 +114,8 @@ type KindSearch = { searchMovie: (...a: never[]) => unknown; searchTv: (...a: ne
 const withSearchByKind = (m: KindSearch) =>
   ({
     ...m,
-    searchByKind: (kind: string, ...a: never[]) => (kind === 'series' ? m.searchTv : m.searchMovie)(...a),
+    search: (kind: string, query: never, opts?: { year?: number; provider?: string }) =>
+      (kind === 'series' ? m.searchTv : m.searchMovie)(query, opts?.year as never, opts?.provider as never),
   }) as unknown as MetadataService;
 
 describe('OrphanScanPanelComponent.importAll', () => {
@@ -137,7 +150,47 @@ describe('OrphanScanPanelComponent.importAll', () => {
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
     expect(panel.groups()[0].pick?.title).toBe('First');
-    expect(panel.groups()[0].fromNfo).toBe(false);
+    expect(panel.groups()[0].fromFile).toBe(false);
+  });
+
+  it('picks the result a file id names and marks it as from the file', async () => {
+    const { panel } = setup(['Alpha'], {}, [{ provider: 'tmdb', externalId: '22' }]);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(panel.groups()[0].pick?.title).toBe('Second');
+    expect(panel.groups()[0].fromFile).toBe(true);
+  });
+
+  it('identifies a book with an ISBN from its file: no pick, no external id sent', async () => {
+    const { panel, relinked } = setup(
+      ['Alpha'],
+      {},
+      [{ provider: 'isbn', externalId: '9780000000002' }],
+      'book',
+    );
+    await panel.scanPath('/medias', ['book'], 'openlibrary');
+
+    expect(panel.groups()[0].pick).toBeNull();
+    expect(panel.groups()[0].fromFile).toBe(true);
+    await panel.importAll(7);
+    expect(relinked[0].externalId).toBeUndefined();
+    expect(relinked[0].title).toBe('Alpha');
+  });
+
+  it('keeps the file-id choice on autoImportAll and on re-clicking the identify option', async () => {
+    const { panel, linked } = setup(['Alpha'], {}, [{ provider: 'isbn', externalId: '9780000000002' }], 'book');
+    await panel.scanPath('/medias', ['book'], 'openlibrary');
+    panel.pickUnmatched(0);
+    expect(panel.groups()[0].fromFile).toBe(true);
+    await panel.autoImportAll();
+    expect(linked[0].externalId).toBeUndefined();
+  });
+
+  it('keeps an nfo auto-pick on autoImportAll', async () => {
+    const { panel, linked } = setup(['Alpha'], {}, [{ provider: 'tmdb', externalId: '22' }]);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    await panel.autoImportAll();
+    expect(linked[0].externalId).toBe('22');
   });
 
   it('keeps an explicit pick over the first result', async () => {
@@ -409,7 +462,15 @@ describe('OrphanScanPanelComponent: a group whose search errored', () => {
 /** A TVDB work TheMovieDB does not know is reported with `tmdbId: 0`, so every
  *  such row would answer to the same identity. */
 describe('OrphanScanPanelComponent — picking among TVDB-only results', () => {
-  const tvdb = (tvdbId: number, title: string) => result(0, title, { provider: 'tvdb', tvdbId });
+  it('links a TVDB pick by the hit externalId', async () => {
+    const { panel, relinked } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tvdb');
+    panel.pick(0, result(0, 'First', { provider: 'tvdb', tvdbId: 101, externalId: '101' }));
+    await panel.importAll(7);
+    expect(relinked[0]).toMatchObject({ provider: 'tvdb', externalId: '101' });
+  });
+
+  const tvdb = (tvdbId: number, title: string) => result(0, title, { provider: 'tvdb', tvdbId, externalId: String(tvdbId) });
 
   it('VERDICT: switches the pick between two results that share tmdbId 0', async () => {
     const { panel } = setup(['Alpha']);
@@ -474,7 +535,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
           folderName: '',
           guessTitle: 'Sample Movie',
           guessYear: 2020,
-          nfo: null,
+          fileIds: [],
           suggestedProvider: 'tmdb',
           files: [
             {

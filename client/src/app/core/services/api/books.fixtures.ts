@@ -73,9 +73,9 @@ export const personWorksFixture: PersonWorks = {
 };
 
 export const bookSearchResultFixture: BookSearchResult = {
-  provider: 'openlibrary', externalId: 'OL1W', kind: 'book', title: 'Book One', subtitle: null,
-  authors: ['Author One'], year: 2020, coverUrl: null, series: { name: 'Series One', position: '1' },
-  editionCount: 2, mediaId: null,
+  provider: 'openlibrary', externalId: 'OL1W', mediaType: 'book', title: 'Book One', subtitle: null,
+  authors: ['Author One'], year: 2020, posterUrl: null, series: { name: 'Series One', position: '1' },
+  editionCount: 2, existingMediaId: null,
 };
 
 export const bookPreviewFixture: BookPreview = {

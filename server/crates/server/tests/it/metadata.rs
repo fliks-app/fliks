@@ -145,6 +145,7 @@ async fn search_marks_media_the_caller_can_read(pool: PgPool) {
     assert_eq!(ids(&admin), [json!(1), json!(2), Value::Null, Value::Null]);
     assert_eq!(admin[0]["existingMediaType"], "movie");
     assert_eq!(admin[0]["year"], 2020);
+    assert_eq!(admin[0]["externalId"], "11");
     assert!(admin[0].get("tvdbId").is_none() && admin[0]["provider"] == "tmdb");
     let (_, reader) = call(&c, "/api/metadata/search/movie?q=sample", Some(&c.reader)).await;
     assert_eq!(
@@ -234,13 +235,7 @@ async fn provider_choice_and_fallback(pool: PgPool) {
     )
     .await;
     assert_eq!(first(&v).0, "tmdb");
-    for q in [
-        "&mediaId=5&provider=",
-        "&mediaId=zz",
-        "&mediaId=0",
-        "&mediaId=99999999999",
-        "&provider=foo",
-    ] {
+    for q in ["&mediaId=zz", "&mediaId=0", "&mediaId=99999999999"] {
         let (_, v) = call(
             &c,
             &format!("/api/metadata/search/tv?q=x{q}"),
@@ -249,6 +244,20 @@ async fn provider_choice_and_fallback(pool: PgPool) {
         .await;
         assert_eq!(first(&v).0, "tmdb", "{q}");
     }
+    let (_, v) = call(
+        &c,
+        "/api/metadata/search/tv?q=x&mediaId=5&provider=",
+        Some(&c.admin),
+    )
+    .await;
+    assert_eq!(first(&v).0, "tvdb", "an empty provider names none");
+    let (s, _) = call(
+        &c,
+        "/api/metadata/search/tv?q=x&provider=foo",
+        Some(&c.admin),
+    )
+    .await;
+    assert_eq!(s, 400, "an unknown provider is refused");
     // an empty TMDB answer asks TVDB, whose results keep their own provider
     c.stub.ok("search/series", json!([]));
     let (_, v) = call(&c, "/api/metadata/search/tv?q=x", Some(&c.admin)).await;
@@ -259,6 +268,37 @@ async fn provider_choice_and_fallback(pool: PgPool) {
             .await
             .1,
         json!([])
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_failing_provider_is_skipped_for_the_next_one(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    media(&pool, 7, "movie", Some(9), Some(90), 1).await;
+    c.stub.fail("search/movie", 500);
+    c.tvdb.ok(
+        "search/movie",
+        json!([{"provider": "tvdb", "tvdbId": 90, "title": "V", "year": 2001}]),
+    );
+    let (s, v) = call(&c, "/api/metadata/search/movie?q=x", Some(&c.admin)).await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(
+        (
+            v[0]["provider"].clone(),
+            v[0]["externalId"].clone(),
+            v[0]["existingMediaId"].clone()
+        ),
+        (json!("tvdb"), json!("90"), json!(7))
+    );
+    assert_eq!(v[0]["mediaType"], "movie");
+    c.tvdb.fail("search/movie", 500);
+    let (s, b) = call(&c, "/api/metadata/search/movie?q=x", Some(&c.admin)).await;
+    assert_eq!(s, 503, "{b}");
+    assert_eq!(
+        call(&c, "/api/metadata/search/nope?q=x", Some(&c.admin))
+            .await
+            .0,
+        400
     );
 }
 

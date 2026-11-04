@@ -39,6 +39,8 @@ pub(crate) struct Fake {
     finds: HashMap<(Namespace, String), String>,
     pub(crate) found: Vec<Value>,
     pub(crate) broken: bool,
+    /// The kinds served besides books, none by default.
+    kinds: Vec<MediaKind>,
     pub(crate) delay: std::time::Duration,
     calls: Mutex<Vec<String>>,
 }
@@ -51,8 +53,19 @@ impl Fake {
         }
     }
 
+    /// Serves `kinds` instead of books.
+    pub(crate) fn serving(mut self, kinds: &[MediaKind]) -> Self {
+        self.kinds = kinds.to_vec();
+        self
+    }
+
     pub(crate) fn edition(mut self, ns: Namespace, v: &str, record: Value) -> Self {
         self.editions.insert((ns, v.into()), record);
+        self
+    }
+
+    pub(crate) fn find(mut self, ns: Namespace, v: &str, work: &str) -> Self {
+        self.finds.insert((ns, v.into()), work.into());
         self
     }
 
@@ -70,7 +83,10 @@ impl MetadataProvider for Fake {
         self.id.unwrap()
     }
     fn supports(&self, kind: MediaKind) -> bool {
-        kind == MediaKind::Book
+        match self.kinds.as_slice() {
+            [] => kind == MediaKind::Book,
+            k => k.contains(&kind),
+        }
     }
     fn has_persons(&self) -> bool {
         false
@@ -99,6 +115,9 @@ impl MetadataProvider for Fake {
         _: Priority,
     ) -> Call<'a, Value> {
         self.log("work");
+        if self.broken {
+            return down();
+        }
         let r = self.works.get(id).cloned();
         let delay = self.delay;
         Box::pin(async move {
@@ -382,7 +401,7 @@ async fn an_audio_edition_takes_its_series_and_the_file_narrator(db: PgPool) {
         &st,
         media,
         Some(ed),
-        &matched(&[(Namespace::ASIN, "B000000002")]),
+        Some(&matched(&[(Namespace::ASIN, "B000000002")])),
         Some(file),
         P,
     )
@@ -494,7 +513,7 @@ async fn locked_fields_and_failing_providers_do_not_stop_the_attach(db: PgPool) 
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_work_held_by_another_media_is_left_unlinked(db: PgPool) {
+async fn a_work_held_by_another_media_is_left_unlinked_and_unwritten(db: PgPool) {
     crate::db::migrate(&db).await.unwrap();
     let st = state(&db, vec![anchor()]);
     let (other, media) = (book(&db).await, book(&db).await);
@@ -512,7 +531,7 @@ async fn a_work_held_by_another_media_is_left_unlinked(db: PgPool) {
     );
     assert_eq!(
         strings(&db, "SELECT title FROM media WHERE id = $1", media).await,
-        ["Alpha"]
+        ["Untitled"]
     );
 }
 
@@ -604,4 +623,117 @@ async fn identify_reads_the_title_of_an_asin_and_needs_the_anchor(db: PgPool) {
         Err(MetaError::Upstream(_))
     ));
     assert_eq!(ANCHOR, Namespace::OPENLIBRARY);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unmatched_book_takes_its_file_record_and_links_no_id(db: PgPool) {
+    crate::db::migrate(&db).await.unwrap();
+    let st = state(&db, vec![anchor()]);
+    let media = book(&db).await;
+    let ed = edition(&db, media, "text").await;
+    sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, provider) VALUES ($1, 'title', 'file')"#)
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    let file = json!({"title": "File Title", "overview": "From the OPF", "year": 2003,
+        "authors": [{"name": "Una Roe", "id": null}], "isbn13": [ISBN], "format": "epub"});
+    let file: &Map<String, Value> = file.as_object().unwrap();
+    attach_with(&st, media, Some(ed), None, Some(file), P)
+        .await
+        .unwrap();
+    let row: (String, Option<String>, bool) = sqlx::query_as(
+        r#"SELECT title, overview, "metadataRefreshedAt" IS NOT NULL FROM media WHERE id = $1"#,
+    )
+    .bind(media)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        ("File Title".into(), Some("From the OPF".into()), true)
+    );
+    assert_eq!(
+        strings(&db, r#"SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId" WHERE c."mediaId" = $1 AND c.role = 'author'"#, media).await,
+        ["Una Roe"]
+    );
+    assert_eq!(
+        strings(&db, r#"SELECT provider FROM media_field_sources WHERE "mediaId" = $1 AND field = 'overview'"#, media).await,
+        ["file"]
+    );
+    assert_eq!(
+        strings(
+            &db,
+            r#"SELECT count(*)::text FROM media_external_ids WHERE "mediaId" = $1"#,
+            media
+        )
+        .await,
+        ["0"]
+    );
+    assert_eq!(
+        strings(
+            &db,
+            r#"SELECT count(*)::text FROM edition_external_ids WHERE "editionId" = $1"#,
+            ed
+        )
+        .await,
+        ["0"]
+    );
+
+    sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES ($1, 'title', NULL, true)
+        ON CONFLICT ("mediaId", field) DO UPDATE SET provider = NULL, locked = true"#)
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE media SET title = 'Typed' WHERE id = $1")
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    attach_with(&st, media, Some(ed), None, Some(file), P)
+        .await
+        .unwrap();
+    assert_eq!(
+        strings(&db, r#"SELECT title FROM media WHERE id = $1"#, media).await,
+        ["Typed"]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unanchored_book_keeps_its_provider_record_over_its_file(db: PgPool) {
+    crate::db::migrate(&db).await.unwrap();
+    let gb = Fake::new(Namespace::GOOGLEBOOKS).edition(
+        Namespace::GOOGLEBOOKS,
+        "gb1",
+        json!({"title": "Gamma", "overview": "Provider text", "authors": [{"name": "Sol", "id": null}]}),
+    );
+    let st = state(&db, vec![anchor(), gb]);
+    let media = book(&db).await;
+    let ed = edition(&db, media, "text").await;
+    sqlx::query(r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES ($1, $2, 'googlebooks', 'gb1')"#)
+        .bind(ed)
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    let file = json!({"title": "File Title", "overview": "From the OPF",
+        "authors": [{"name": "Una Roe", "id": null}], "format": "epub"});
+    let file: &Map<String, Value> = file.as_object().unwrap();
+    for _ in 0..2 {
+        attach_with(&st, media, Some(ed), None, Some(file), P)
+            .await
+            .unwrap();
+        let row: (String, Option<String>) =
+            sqlx::query_as(r#"SELECT title, overview FROM media WHERE id = $1"#)
+                .bind(media)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(row, ("Gamma".into(), Some("Provider text".into())));
+        assert_eq!(
+            strings(&db, r#"SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId" WHERE c."mediaId" = $1 AND c.role = 'author'"#, media).await,
+            ["Sol"]
+        );
+    }
 }

@@ -80,6 +80,41 @@ pub async fn edition_records(
     Ok(out)
 }
 
+/// The work record of every plugin id the media holds (a work no anchor id names); a plugin that
+/// fails is skipped.
+pub async fn plugin_works(
+    st: &AppState,
+    media: i32,
+    lang: &Resolved,
+    prio: Priority,
+) -> Result<Records, MetaError> {
+    let held = sqlx::query_as::<_, (String, String)>(
+        r#"SELECT provider, value FROM media_external_ids WHERE "mediaId" = $1 ORDER BY provider"#,
+    )
+    .bind(media)
+    .fetch_all(&st.db)
+    .await?;
+    let mut out = vec![];
+    for (p, value) in held {
+        let Some(ns) = Namespace::parse(&p)
+            .filter(|n| n.core().is_none() && st.metadata.serves(*n, MediaKind::Book))
+        else {
+            continue;
+        };
+        match st
+            .metadata
+            .work(ns, MediaKind::Book, &value, lang, prio)
+            .await
+        {
+            Ok(Value::Object(r)) => out.push((ns, r)),
+            Ok(_) => {}
+            Err(MetaError::Upstream(e)) => tracing::warn!("{ns} work {value} skipped: {e}"),
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(out)
+}
+
 fn only(prov: Provenance, fields: &[Field]) -> Provenance {
     prov.into_iter()
         .filter(|(f, _)| fields.contains(f))

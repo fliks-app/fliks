@@ -24,14 +24,14 @@ use std::{
 };
 use tower::ServiceExt;
 
-const NS: &str = "org.test.comic:vol";
+pub(crate) const NS: &str = "org.test.comic:vol";
 
-fn ns() -> Namespace {
+pub(crate) fn ns() -> Namespace {
     Namespace::declare(NS, "Test Comics", "^[0-9]{1,9}$", "preserve").unwrap()
 }
 
 #[derive(Default)]
-struct Fake {
+pub(crate) struct Fake {
     works: HashMap<String, Value>,
     children: HashMap<String, Vec<Value>>,
     found: Vec<Value>,
@@ -140,7 +140,7 @@ fn children() -> Vec<Value> {
     ]
 }
 
-fn fake() -> Arc<Fake> {
+pub(crate) fn fake() -> Arc<Fake> {
     let mut f = Fake::default();
     f.works.insert("42".into(), work());
     f.works.insert(
@@ -561,20 +561,20 @@ async fn the_detail_names_the_providers_that_contributed(pool: PgPool) {
     let (s, v) = c.get(&format!("/api/media/{id}")).await;
     assert_eq!(s, 200);
     assert_eq!(
-        v["comic"]["providers"],
+        v["providers"],
         json!([{"provider": NS, "name": "Test Comics", "url": "https://cv.test"}])
     );
     // a volume nobody enriched carries none
     let local = c.local_volume().await;
     let (_, v) = c.get(&format!("/api/media/{local}")).await;
-    assert_eq!(v["comic"]["providers"], json!([]));
+    assert_eq!(v["providers"], json!([]));
     // the package leaves: the name stays, the link does not
     sqlx::query("DELETE FROM plugin_packages")
         .execute(&c.pool)
         .await
         .unwrap();
     let (_, v) = c.get(&format!("/api/media/{id}")).await;
-    assert_eq!(v["comic"]["providers"][0]["url"], Value::Null);
+    assert_eq!(v["providers"][0]["url"], Value::Null);
 }
 
 #[sqlx::test(migrations = false)]
@@ -584,9 +584,9 @@ async fn search_and_preview_answer_cards_and_the_issue_list(pool: PgPool) {
     assert_eq!(s, 200, "{v}");
     assert_eq!(
         v,
-        json!([{"provider": NS, "externalId": "42", "kind": "comic", "title": "Alpha Run", "year": 2016,
+        json!([{"provider": NS, "externalId": "42", "mediaType": "comic", "title": "Alpha Run", "year": 2016,
                 "publisher": "Pub House", "volume": 2, "issueCount": 3, "overview": "A run.",
-                "coverUrl": "https://img.test/a.jpg", "sourceUrl": "https://cv.test/42", "mediaId": null}])
+                "posterUrl": "https://img.test/a.jpg", "sourceUrl": "https://cv.test/42", "existingMediaId": null}])
     );
     assert_eq!(c.get("/api/metadata/search/comic").await.1, json!([]));
     assert_eq!(
@@ -615,11 +615,11 @@ async fn search_and_preview_answer_cards_and_the_issue_list(pool: PgPool) {
     let (s, _) = c.import(json!({"libraryId": 2})).await;
     assert_eq!(s, 201);
     let (_, v) = c.get("/api/metadata/search/comic?q=alpha").await;
-    assert!(v[0]["mediaId"].is_i64());
+    assert!(v[0]["existingMediaId"].is_i64());
     let (_, v) = c
         .call(&c.reader, "GET", "/api/metadata/search/comic?q=alpha", None)
         .await;
-    assert_eq!(v[0]["mediaId"], Value::Null);
+    assert_eq!(v[0]["existingMediaId"], Value::Null);
 }
 
 #[sqlx::test(migrations = false)]
@@ -825,7 +825,7 @@ async fn identify_links_the_volume_and_refreshes_it(pool: PgPool) {
     let (s, _) = c
         .call(&c.admin, "POST", &format!("/api/media/{m}/refresh"), None)
         .await;
-    assert_eq!(s, 400);
+    assert_eq!(s, 201);
     let (s, v) = c
         .call(
             &c.admin,
@@ -914,7 +914,7 @@ async fn a_homepage_that_is_not_https_is_not_a_link(pool: PgPool) {
         .await
         .unwrap();
     let (_, v) = c.import(json!({})).await;
-    assert_eq!(v["comic"]["providers"][0]["url"], Value::Null);
+    assert_eq!(v["providers"][0]["url"], Value::Null);
 }
 
 #[sqlx::test(migrations = false)]

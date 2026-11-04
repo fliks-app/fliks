@@ -39,7 +39,7 @@ Scope: what the `book` kind adds to the data model: the kind and its families, t
 
 ## Reads
 
-21. Progress of a book (rule 15) is read from `playback_states`: `progressPercent` is 100 once watched, else the percentage of the most recently played unfinished item.
+21. Progress of a book (rule 15) is read from `playback_states`: `progressPercent` is 100 once watched, else the percentage of the most recently played unfinished item: its `progression` (0..1) when set, else `positionSeconds / durationSeconds`.
 22. A work is readable through `media."libraryId"` alone, as any media. An edition is visible when `COALESCE(editions."libraryId", media."libraryId")` is readable: a hidden edition is dropped from every read of the work (`books-api.md` A5), never the work itself.
 23. Narrators and the per-edition view: a `narrator` credit belongs to an edition (`editionId` set); a narrator credit with a NULL `editionId` is not read. `author` and `translator` credits belong to the work (NULL `editionId`).
 

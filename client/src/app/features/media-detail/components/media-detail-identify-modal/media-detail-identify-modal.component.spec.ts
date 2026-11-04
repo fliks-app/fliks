@@ -19,6 +19,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     tvdbId: 4242,
     imdbId: 'tt0499308',
     provider: 'tvdb',
+    externalId: '4242',
     title: 'A Series',
     originalTitle: 'A Series',
     overview: '',
@@ -39,7 +40,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTranslateService(),
-        { provide: MetadataService, useValue: { searchByKind: (kind: string, ...a: unknown[]) => (kind === 'series' ? searchTv : vi.fn())(...a) } },
+        { provide: MetadataService, useValue: { search: (kind: string, ...a: unknown[]) => (kind === 'series' ? searchTv : vi.fn())(...a) } },
         { provide: MediaService, useValue: { identify } },
         { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       ],
@@ -64,7 +65,12 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
 
     await cmp.apply(tvdbOnly);
 
-    expect(identify).toHaveBeenCalledWith(795, { tvdbId: 4242, imdbId: 'tt0499308' });
+    expect(identify).toHaveBeenCalledWith(795, {
+      tvdbId: 4242,
+      imdbId: 'tt0499308',
+      provider: 'tvdb',
+      externalId: '4242',
+    });
   });
 
   it('still sends a real tmdbId', async () => {
@@ -72,7 +78,13 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
 
     await cmp.apply({ ...tvdbOnly, tmdbId: 77 });
 
-    expect(identify).toHaveBeenCalledWith(795, { tmdbId: 77, tvdbId: 4242, imdbId: 'tt0499308' });
+    expect(identify).toHaveBeenCalledWith(795, {
+      tmdbId: 77,
+      tvdbId: 4242,
+      imdbId: 'tt0499308',
+      provider: 'tvdb',
+      externalId: '4242',
+    });
   });
 
   it('searches with the media id so the server picks its library provider', async () => {
@@ -81,7 +93,20 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
 
     await cmp.search();
 
-    expect(searchTv).toHaveBeenCalledWith('A Series', undefined, undefined, 795);
+    expect(searchTv).toHaveBeenCalledWith('A Series', { year: undefined, provider: undefined, mediaId: 795 });
+  });
+
+  it('identifies a TVDB result by its provider and external id', async () => {
+    const { cmp, identify } = setup();
+
+    await cmp.apply({ ...tvdbOnly, externalId: '4242' });
+
+    expect(identify).toHaveBeenCalledWith(795, {
+      tvdbId: 4242,
+      imdbId: 'tt0499308',
+      provider: 'tvdb',
+      externalId: '4242',
+    });
   });
 
   it('identifies a plugin result by its namespace and id', async () => {
@@ -104,7 +129,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
 
     await cmp.search();
 
-    expect(searchTv).toHaveBeenCalledWith('A Series', undefined, 'org.x:aid', 795);
+    expect(searchTv).toHaveBeenCalledWith('A Series', { year: undefined, provider: 'org.x:aid', mediaId: 795 });
   });
 
   it('keys the in-flight spinner by result, not by the shared 0 id', async () => {
@@ -115,5 +140,19 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     expect(cmp.applyingKey()).toBe(cmp.key(tvdbOnly));
     expect(cmp.applyingKey()).not.toBe(cmp.key(other));
     await pending;
+  });
+
+  it('lists the providers of a book and identifies a hit by provider and external id only', async () => {
+    const { cmp, identify } = setup();
+    HTMLDialogElement.prototype.showModal = vi.fn();
+    const providersServing = vi.fn(() => Promise.resolve([{ provider: 'openlibrary', label: 'Open Library' }]));
+    (cmp as unknown as { metadata: { providersServing: typeof providersServing } }).metadata.providersServing = providersServing;
+    cmp.open({ mediaId: 5, mediaType: 'book', title: 'Alpha', year: null, path: null, tmdbId: null, tvdbId: null, imdbId: null });
+    await Promise.resolve();
+
+    expect(providersServing).toHaveBeenCalledWith('book');
+    expect(cmp.takesIds()).toBe(false);
+    await cmp.apply({ ...tvdbOnly, tmdbId: undefined, tvdbId: undefined, imdbId: undefined, provider: 'openlibrary', externalId: 'OL1W', mediaType: 'book' });
+    expect(identify).toHaveBeenCalledWith(5, { provider: 'openlibrary', externalId: 'OL1W' });
   });
 });

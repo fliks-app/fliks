@@ -6,6 +6,7 @@ pub mod disk;
 pub mod fsx;
 pub mod library;
 pub mod post_import;
+pub mod record;
 pub mod rescan;
 pub mod transfer;
 

@@ -1,6 +1,16 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import {
+  CdkDrag,
+  CdkDragHandle,
+  CdkDragPlaceholder,
+  CdkDropList,
+  moveItemInArray,
+} from '@angular/cdk/drag-drop';
+import { LucideArrowDown, LucideArrowUp, LucideGripVertical } from '@lucide/angular';
+import { TvService } from '../../../core/services/tv.service';
+import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -22,7 +32,18 @@ interface Row {
 /** Provider order per kind and the namespaces each provider plugin serves. */
 @Component({
   selector: 'app-metadata-settings',
-  imports: [RouterLink, TranslatePipe],
+  imports: [
+    RouterLink,
+    TranslatePipe,
+    CdkDropList,
+    DropListSettleDirective,
+    CdkDrag,
+    CdkDragHandle,
+    CdkDragPlaceholder,
+    LucideGripVertical,
+    LucideArrowUp,
+    LucideArrowDown,
+  ],
   templateUrl: './metadata.html',
 })
 export class MetadataSettingsComponent implements OnInit {
@@ -30,6 +51,7 @@ export class MetadataSettingsComponent implements OnInit {
   private readonly settings = inject(SettingsApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  readonly tv = inject(TvService);
 
   readonly kinds = KINDS;
   readonly loading = signal(true);
@@ -79,20 +101,21 @@ export class MetadataSettingsComponent implements OnInit {
       .map((x) => x.r);
   }
 
-  async move(kind: string, index: number, by: -1 | 1): Promise<void> {
+  async reorder(kind: string, from: number, to: number): Promise<void> {
     const names = this.rows(kind).map((r) => r.namespace);
-    const j = index + by;
-    if (j < 0 || j >= names.length) return;
-    [names[index], names[j]] = [names[j], names[index]];
+    if (from === to || to < 0 || to >= names.length) return;
+    moveItemInArray(names, from, to);
     // Slots of namespaces whose plugin is not installed keep their place.
     const shown = new Set(names);
     const base = [...this.order(kind), ...names.filter((n) => !this.order(kind).includes(n))];
     const next = [...names];
     const merged = base.map((n) => (shown.has(n) ? next.shift()! : n));
+    const previous = this.stored();
+    this.stored.set({ ...previous, [kind]: merged });
     try {
       await this.settings.set(orderKey(kind), JSON.stringify(merged));
-      this.stored.update((s) => ({ ...s, [kind]: merged }));
     } catch {
+      this.stored.set(previous);
       this.toast.error(this.translate.instant('settings.metadata.save_error'));
     }
   }

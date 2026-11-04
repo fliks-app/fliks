@@ -25,6 +25,16 @@ fn tmp() -> PathBuf {
     d
 }
 
+/// A provider of `ns` serving movies and series, for a relink that names it.
+fn video_provider(
+    ns: fliks_domain::external_id::Namespace,
+) -> Option<std::sync::Arc<dyn crate::metadata::MetadataProvider>> {
+    use fliks_domain::media::kind::MediaKind::{Movie, Series};
+    Some(std::sync::Arc::new(
+        crate::metadata::books::tests::Fake::new(ns).serving(&[Movie, Series]),
+    ))
+}
+
 fn touch(p: &Path, bytes: &[u8]) {
     fs::create_dir_all(p.parent().unwrap()).unwrap();
     fs::write(p, bytes).unwrap();
@@ -774,7 +784,11 @@ async fn rescan_adds_the_good_files_when_one_insert_fails(pool: PgPool) {
 
 #[sqlx::test(migrations = false)]
 async fn relink_in_place_is_contained(pool: PgPool) {
-    let c = ctx(pool).await;
+    let c = ctx_with(
+        pool,
+        video_provider(fliks_domain::external_id::Namespace::TMDB),
+    )
+    .await;
     let lib = c.dir.join("movies");
     let l = library(&c, "M", &lib, r#"["movie"]"#).await;
     touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
@@ -871,7 +885,11 @@ async fn relink_refuses_a_provider_that_serves_nothing(pool: PgPool) {
 
 #[sqlx::test(migrations = false)]
 async fn relink_does_not_pick_a_non_unique_id_held_in_another_library(pool: PgPool) {
-    let c = ctx(pool).await;
+    let c = ctx_with(
+        pool,
+        video_provider(fliks_domain::external_id::Namespace::TVDB),
+    )
+    .await;
     let a = library(&c, "A", &c.dir.join("a"), r#"["movie"]"#).await;
     let b = library(&c, "SecretLib", &c.dir.join("b"), r#"["movie"]"#).await;
     let other = media(&c, b, "Other (2000)", "movie").await;
@@ -2622,8 +2640,8 @@ mod book_ingest {
         let groups = b["groups"].as_array().unwrap();
         let show = groups.iter().find(|g| g["mediaType"] == "series").unwrap();
         assert_eq!(
-            (&show["guessTitle"], &show["nfo"]),
-            (&json!("Placeholder Show"), &Value::Null)
+            (&show["guessTitle"], &show["fileIds"]),
+            (&json!("Placeholder Show"), &json!([]))
         );
         let film = groups.iter().find(|g| g["mediaType"] == "movie").unwrap();
         assert_eq!(
@@ -2632,7 +2650,7 @@ mod book_ingest {
         );
         touch(
             &lib.join("Placeholder Show/tvshow.nfo"),
-            b"<tvshow><title>Show NFO</title></tvshow>",
+            b"<tvshow><title>Show NFO</title><uniqueid type='tmdb'>4242</uniqueid></tvshow>",
         );
         let (_, b) = call(
             &c,
@@ -2650,6 +2668,148 @@ mod book_ingest {
             .unwrap()
             .clone();
         assert_eq!(show["guessTitle"], "Show NFO");
+        assert_eq!(
+            show["fileIds"],
+            json!([{"provider": "tmdb", "externalId": "4242"}])
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unmatched_video_shows_its_nfo_and_a_refresh_without_id_merges_it_again(
+        pool: PgPool,
+    ) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("films");
+        let l = library(&c, "F", &lib, r#"["movie"]"#).await;
+        let file = lib.join("Placeholder Film (2001)/Placeholder Film (2001).mkv");
+        touch(&file, b"x");
+        let nfo = lib.join("Placeholder Film (2001)/movie.nfo");
+        touch(
+            &nfo,
+            b"<movie><title>Placeholder Film</title><plot>A plot.</plot><genre>Drama</genre>\
+              <runtime>93</runtime><premiered>2001-05-04</premiered></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            json!({"libraryId": l, "type": "movie", "folderName": "Placeholder Film (2001)",
+                   "files": [{"filePath": file}]}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let id = b["mediaId"].as_i64().unwrap();
+        let (overview, runtime, genres): (Option<String>, Option<i32>, Value) =
+            sqlx::query_as("SELECT overview, runtime, genres FROM media WHERE id = $1")
+                .bind(id as i32)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(
+            (overview.as_deref(), runtime, genres),
+            (Some("A plot."), Some(93), json!(["Drama"]))
+        );
+        let sources = "SELECT count(*) FROM media_field_sources WHERE provider = 'file'";
+        assert!(count(&c, sources).await > 0);
+        touch(
+            &nfo,
+            b"<movie><title>Placeholder Film</title><plot>Another plot.</plot></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/media/{id}/refresh"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let q =
+            format!("SELECT count(*) FROM media WHERE id = {id} AND overview = 'Another plot.'");
+        let mut merged = false;
+        for _ in 0..50 {
+            merged = count(&c, &q).await == 1;
+            if merged {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(merged);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_file_merge_keeps_what_was_set_by_hand_and_a_typed_year(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("films");
+        let l = library(&c, "F", &lib, r#"["movie"]"#).await;
+        let file = lib.join("Placeholder Film (2001)/Placeholder Film (2001).mkv");
+        touch(&file, b"x");
+        let nfo = lib.join("Placeholder Film (2001)/movie.nfo");
+        touch(
+            &nfo,
+            b"<movie><title>Placeholder Film</title><year>2001</year><plot>A plot.</plot></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            json!({"libraryId": l, "type": "movie", "folderName": "Placeholder Film (2001)",
+                   "year": 1999, "files": [{"filePath": file}]}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let id = b["mediaId"].as_i64().unwrap() as i32;
+        let (s, b) = call(
+            &c,
+            "PUT",
+            &format!("/api/media/{id}"),
+            &c.admin,
+            json!({"title": "Hand Title"}),
+        )
+        .await;
+        assert_eq!(s, 200, "{b}");
+        touch(
+            &nfo,
+            b"<movie><title>Other Title</title><year>2005</year><plot>Plot two.</plot></movie>",
+        );
+        assert!(
+            crate::media::write::fields::merge_unmatched(&c.st, id)
+                .await
+                .unwrap()
+        );
+        let (title, year, overview): (String, Option<i32>, Option<String>) =
+            sqlx::query_as("SELECT title, year, overview FROM media WHERE id = $1")
+                .bind(id)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(
+            (title.as_str(), year, overview.as_deref()),
+            ("Hand Title", Some(1999), Some("Plot two."))
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_file_merge_reads_nothing_of_an_offline_file(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("films");
+        let l = library(&c, "F", &lib, r#"["movie"]"#).await;
+        let m = media(&c, l, "Offline Film", "movie").await;
+        file_row(&c, m, "Offline Film.mkv").await;
+        assert!(
+            !crate::media::write::fields::merge_unmatched(&c.st, m)
+                .await
+                .unwrap()
+        );
+        let stamped: Option<chrono::DateTime<chrono::Utc>> =
+            sqlx::query_scalar(r#"SELECT "metadataRefreshedAt" FROM media WHERE id = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert!(stamped.is_none());
     }
 
     #[sqlx::test(migrations = false)]
@@ -2692,6 +2852,36 @@ mod book_ingest {
         assert_eq!(b["orphanCount"], 3);
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn the_orphan_scan_suggests_a_book_provider_for_a_book_group(pool: PgPool) {
+        let p = std::sync::Arc::new(crate::metadata::books::tests::anchor());
+        let c = ctx_with(pool, Some(p)).await;
+        let lib = c.dir.join("mixed");
+        let l = library(&c, "X", &lib, r#"["movie", "book"]"#).await;
+        sqlx::query(r#"UPDATE libraries SET "preferredProvider" = 'tmdb' WHERE id = $1"#)
+            .bind(l)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        touch(&lib.join("Placeholder Film (2001).mkv"), b"x");
+        touch(
+            &lib.join("Placeholder Author - Placeholder Book.epub"),
+            b"x",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        let groups = b["groups"].as_array().unwrap();
+        let book = groups.iter().find(|g| g["mediaType"] == "book").unwrap();
+        assert_eq!(book["suggestedProvider"], "openlibrary");
+    }
+
     async fn shelf(c: &Ctx) -> i32 {
         library(c, "B", &c.dir.join("books"), r#"["book"]"#).await
     }
@@ -2732,6 +2922,125 @@ mod book_ingest {
         assert_eq!(s, 200);
         assert!(eventually(|| !lib.join("Shared/Mirelune.epub").exists()).await);
         assert!(lib.join("Shared/Orfaline.epub").exists());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unmatched_book_takes_no_profile_of_another_family(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        sqlx::query(r#"INSERT INTO quality_profiles (name, cutoff, items) VALUES ('P', 18, '[]')"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let file = c.dir.join("books/Mirelune.epub");
+        epub(&file);
+        let body = json!({"libraryId": l, "type": "book", "folderName": "", "title": "Mirelune",
+            "files": [{"filePath": file}]});
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body,
+        )
+        .await;
+        assert_eq!((s, &b["linked"]), (201, &json!(1)), "{b}");
+        assert_eq!(count(&c, "SELECT count(*) FROM wants").await, 2);
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM wants WHERE "qualityProfileId" IS NOT NULL"#
+            )
+            .await,
+            0
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_title_typed_in_the_panel_is_locked_and_a_guessed_one_is_not(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Mirelune.epub");
+        epub(&file);
+        let body = json!({"libraryId": l, "type": "book", "folderName": "", "title": "Typed Name",
+            "files": [{"filePath": file}]});
+        let (s, _) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body,
+        )
+        .await;
+        assert_eq!(s, 201);
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM media_field_sources WHERE field = 'title' AND locked AND provider IS NULL"#
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn refreshing_an_unmatched_book_merges_its_file_record(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Solo", "book").await;
+        sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, provider) VALUES ($1, 'title', 'file')"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        epub(&lib.join("Solo/Mirelune.epub"));
+        books::register(&c.st, m, &placed(&c, &["Solo/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let r = books::refresh_media(
+            &c.st,
+            m,
+            fliks_domain::metadata::limiter::Priority::Interactive,
+        )
+        .await;
+        assert!(
+            r.is_err_and(|e| e.retry),
+            "the outage is reported for a retry"
+        );
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM media WHERE title = 'Mirelune' AND "metadataRefreshedAt" IS NOT NULL"#
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_book_refresh_during_a_provider_outage_is_a_503(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Solo", "book").await;
+        epub(&lib.join("Solo/Mirelune.epub"));
+        books::register(&c.st, m, &placed(&c, &["Solo/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let row = crate::ingest::load_media(&c.st.db, m)
+            .await
+            .unwrap()
+            .unwrap();
+        let e = crate::media::write::refresh_any(
+            &c.st,
+            &row,
+            false,
+            fliks_domain::metadata::limiter::Priority::Interactive,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(e.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[sqlx::test(migrations = false)]
@@ -3008,672 +3317,340 @@ mod book_ingest {
     }
 }
 
-mod book_import {
+mod relink_identified {
     use super::*;
     use crate::{
-        jobs::book_import,
-        metadata::{
-            Call, EditionRef, MetadataProvider, PersonDetails, Search, Upstream, stub::serve,
-        },
-        plugins::outbound::{Done, Gate, Reply},
+        ingest::books,
+        metadata::books::tests::{Fake as Books, ISBN, anchor},
     };
-    use fliks_domain::{
-        external_id::Namespace,
-        media::kind::MediaKind,
-        metadata::{
-            language::Resolved,
-            limiter::{Limits, Priority},
-        },
-    };
-    use std::{
-        sync::{Arc, Mutex},
-        time::{Duration, Instant},
-    };
+    use fliks_domain::external_id::Namespace;
+    use std::sync::Arc;
 
-    /// OpenLibrary stand-in behind a real `Gate`: a title answers a hit when its number is not a
-    /// multiple of three, and every call is recorded with its priority.
-    struct Stubbed {
-        g: Gate,
-        url: String,
-        limits: Limits,
-        priorities: Mutex<Vec<Priority>>,
-        busy: Mutex<(u32, u32)>,
-        /// Searches that fail 503 before the first answer.
-        down: Mutex<u32>,
-        /// Searches rejected 400 before the first answer.
-        rejects: Mutex<u32>,
-        /// Dropped by the first search: deletes every book media, as a user would mid-import.
-        wipe: Mutex<Option<PgPool>>,
+    const URL: &str = "/api/imports/library/orphans/relink";
+    const ASIN: &str = "B000000001";
+
+    fn pick(l: i32, folder: &str, file: &Path, provider: &str, id: &str) -> Value {
+        json!({"libraryId": l, "type": "book", "folderName": folder, "provider": provider,
+            "externalId": id, "files": [{"filePath": file}]})
     }
 
-    fn number(s: &str) -> u32 {
-        s.chars()
-            .filter(char::is_ascii_digit)
-            .collect::<String>()
-            .parse()
-            .unwrap_or(0)
-    }
-
-    impl Stubbed {
-        async fn get_json(&self, path: &str, p: Priority) -> Result<Value, Upstream> {
-            let url = format!("{}{path}", self.url);
-            let attempt = || async {
-                let r = reqwest::get(&url)
-                    .await
-                    .map_err(|e| Upstream::outage(e.to_string()))?;
-                let status = r.status().as_u16();
-                let inner = r.json::<Value>().await.unwrap_or_default();
-                Ok::<_, Upstream>(Reply {
-                    status,
-                    retry_after_ms: None,
-                    inner,
-                })
-            };
-            match self
-                .g
-                .run(p, Duration::from_secs(5), attempt, || true)
-                .await
-            {
-                Done::Reply(r) if r.status < 300 => Ok(r.inner),
-                Done::Reply(r) => Err(Upstream::new(Some(r.status), "status")),
-                Done::Failed(e) => Err(e),
-                Done::Refused(_) => Err(Upstream::outage("refused")),
-            }
-        }
-
-        async fn call(&self, path: String, p: Priority) -> Result<Value, Upstream> {
-            self.priorities.lock().unwrap().push(p);
-            {
-                let mut b = self.busy.lock().unwrap();
-                b.0 += 1;
-                b.1 = b.1.max(b.0);
-            }
-            let r = self.get_json(&path, p).await;
-            self.busy.lock().unwrap().0 -= 1;
-            r
-        }
-    }
-
-    fn gone<T: Send + 'static>() -> Call<'static, T> {
-        Box::pin(async { Err(Upstream::new(Some(500), "unused")) })
-    }
-
-    impl MetadataProvider for Stubbed {
-        fn id(&self) -> Namespace {
-            Namespace::OPENLIBRARY
-        }
-        fn supports(&self, kind: MediaKind) -> bool {
-            kind == MediaKind::Book
-        }
-        fn has_persons(&self) -> bool {
-            false
-        }
-        fn limits(&self) -> Limits {
-            self.limits
-        }
-        fn search<'a>(
-            &'a self,
-            q: &'a Search<'a>,
-            _: &'a Resolved,
-            p: Priority,
-        ) -> Call<'a, Vec<Value>> {
-            Box::pin(async move {
-                {
-                    let mut down = self.down.lock().unwrap();
-                    if *down > 0 {
-                        *down -= 1;
-                        return Err(Upstream::new(Some(503), "provider down"));
-                    }
-                }
-                {
-                    let mut rejects = self.rejects.lock().unwrap();
-                    if *rejects > 0 {
-                        *rejects -= 1;
-                        return Err(Upstream::new(Some(400), "bad query"));
-                    }
-                }
-                let wipe = self.wipe.lock().unwrap().take();
-                if let Some(db) = wipe {
-                    sqlx::query("DELETE FROM media WHERE type = 'book'")
-                        .execute(&db)
-                        .await
-                        .unwrap();
-                }
-                let title = q.title.unwrap_or_default();
-                let n = number(title);
-                let hit = self.call(format!("/search/{n}"), p).await?;
-                if hit["hit"] != true {
-                    return Ok(vec![]);
-                }
-                let authors: Vec<Value> = q.author.iter().map(|a| json!({"name": a})).collect();
-                Ok(vec![
-                    json!({"externalId": format!("OL{n}W"), "title": title, "authors": authors}),
-                ])
-            })
-        }
-        fn fetch_work<'a>(
-            &'a self,
-            _: MediaKind,
-            id: &'a str,
-            _: &'a Resolved,
-            p: Priority,
-        ) -> Call<'a, Value> {
-            Box::pin(async move {
-                self.call(format!("/work/{}", number(id)), p).await?;
-                Ok(
-                    json!({"title": format!("Work {id}"), "authors": [{"name": format!("Writer {id}")}]}),
-                )
-            })
-        }
-        fn fetch_children<'a>(
-            &'a self,
-            _: MediaKind,
-            _: &'a str,
-            _: Option<u32>,
-            _: &'a Resolved,
-            _: Priority,
-        ) -> Call<'a, Vec<Value>> {
-            gone()
-        }
-        fn child_stubs<'a>(
-            &'a self,
-            _: MediaKind,
-            _: &'a str,
-            _: &'a Resolved,
-            _: Priority,
-        ) -> Call<'a, Vec<Value>> {
-            gone()
-        }
-        fn find_by<'a>(
-            &'a self,
-            _: Namespace,
-            _: &'a str,
-            _: &'a Resolved,
-            _: Priority,
-        ) -> Call<'a, Option<(String, MediaKind)>> {
-            Box::pin(async { Ok(None) })
-        }
-        fn fetch_person<'a>(
-            &'a self,
-            _: &'a str,
-            _: &'a Resolved,
-            _: Priority,
-        ) -> Call<'a, PersonDetails> {
-            gone()
-        }
-        fn person_credits<'a>(
-            &'a self,
-            _: &'a str,
-            _: &'a Resolved,
-            _: Priority,
-        ) -> Call<'a, crate::metadata::Credits> {
-            gone()
-        }
-        fn fetch_edition<'a>(
-            &'a self,
-            _: &'a EditionRef<'a>,
-            _: &'a Resolved,
-            _: Priority,
-        ) -> Call<'a, Option<Value>> {
-            Box::pin(async { Ok(None) })
-        }
-    }
-
-    /// The stub, its limits and the instant of every request it served.
-    async fn stubbed(limits: Limits) -> (Arc<Stubbed>, Arc<Mutex<Vec<Instant>>>) {
-        let seen = Arc::new(Mutex::new(vec![]));
-        let log = seen.clone();
-        let (url, _) = serve(move |path, _| {
-            log.lock().unwrap().push(Instant::now());
-            let hit = path
-                .strip_prefix("/search/")
-                .is_none_or(|n| !number(n).is_multiple_of(3));
-            (200, None, json!({"hit": hit}).to_string())
-        })
-        .await;
-        let g = Gate::new("stub", limits, Duration::from_secs(5));
-        let p = Stubbed {
-            g,
-            url,
-            limits,
-            priorities: Mutex::default(),
-            busy: Mutex::default(),
-            down: Mutex::default(),
-            rejects: Mutex::default(),
-            wipe: Mutex::default(),
-        };
-        (Arc::new(p), seen)
-    }
-
-    fn work(c: &Ctx, n: u32) {
-        let (a, t) = (format!("Author{n:04}"), format!("Title{n:04}"));
-        touch(
-            &c.dir.join(format!("books/{a}/{t}/{t}.epub")),
-            format!("book {n}").as_bytes(),
-        );
+    fn google(isbn: &str) -> Books {
+        Books::new(Namespace::GOOGLEBOOKS).edition(
+            Namespace::GOOGLEBOOKS,
+            "gb1",
+            json!({"externalId": "gb1", "title": "Alpha", "year": 1999, "isbn13": [isbn],
+                   "authors": [{"name": "Una Roe"}]}),
+        )
     }
 
     async fn shelf(c: &Ctx) -> i32 {
         library(c, "B", &c.dir.join("books"), r#"["book"]"#).await
     }
 
-    async fn start(c: &Ctx, lib: i32) -> (u16, Value) {
-        let uri = format!("/api/imports/library/{lib}/books");
-        call(c, "POST", &uri, &c.admin, json!({})).await
-    }
-
-    async fn state(c: &Ctx, lib: i32) -> Value {
-        let uri = format!("/api/imports/library/{lib}/books");
-        call(c, "GET", &uri, &c.admin, json!({})).await.1
-    }
-
-    async fn finished(c: &Ctx, lib: i32, secs: u64) -> Value {
-        for _ in 0..secs * 10 {
-            let s = state(c, lib).await;
-            if s["status"] != "running" {
-                return s;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        panic!("the import did not finish");
-    }
-
-    async fn rows(c: &Ctx, sql: &'static str) -> Vec<(String, String)> {
-        sqlx::query_as(sql).fetch_all(&c.st.db).await.unwrap()
-    }
-
-    #[sqlx::test(migrations = false)]
-    async fn a_library_is_classified_imported_and_queued(pool: PgPool) {
-        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
-        let c = ctx_with(pool, Some(p)).await;
-        let l = shelf(&c).await;
-        let books = c.dir.join("books");
-        work(&c, 1);
-        work(&c, 3);
-        touch(&books.join("Loose0002.epub"), b"2");
-        touch(&books.join("Shelf/One0004.epub"), b"4");
-        touch(&books.join("Shelf/Two0005.epub"), b"5");
-        touch(&books.join("Gamma/Gamma0007.epub"), b"7");
-        touch(&books.join("Gamma/Gamma0007.pdf"), b"7");
-        touch(&books.join("Notes/readme.txt"), b"not a book");
-        let other = media(&c, l, "", "book").await;
-        sqlx::query(r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
-               SELECT $1, df."folderId", 'Gamma/Gamma0007.epub', 1, 'epub' FROM library_default_folders df
-               WHERE df."libraryId" = $2"#)
-            .bind(other)
-            .bind(l)
-            .execute(&c.st.db)
-            .await
-            .unwrap();
-        assert_eq!(
-            call(
-                &c,
-                "GET",
-                &format!("/api/imports/library/{l}/books"),
-                &c.admin,
-                json!({})
-            )
-            .await
-            .0,
-            404
-        );
-        let (s, b) = start(&c, l).await;
-        assert_eq!(s, 202, "{b}");
-        let done = finished(&c, l, 30).await;
-        assert_eq!(done["status"], "completed", "{done}");
-        let manual = rows(
-            &c,
-            "SELECT title, status FROM book_import_items WHERE status <> 'matched' ORDER BY title",
+    async fn work_of(c: &Ctx, media: i32) -> Option<String> {
+        sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'openlibrary'"#,
         )
-        .await;
-        assert_eq!(
-            (&done["total"], &done["failed"], &done["skipped"]),
-            (&json!(6), &json!(0), &json!(0)),
-            "{done}"
-        );
-        // an odd title has no hit; a loose file has no author to confirm one
-        assert_eq!(
-            manual,
-            [
-                ("Loose0002".into(), "manual".into()),
-                ("Title0003".into(), "manual".into())
-            ]
-        );
-        let media_of = rows(
-            &c,
-            r#"SELECT f."relativePath", m."folderName" FROM media_files f JOIN media m ON m.id = f."mediaId"
-               WHERE m.type = 'book' ORDER BY f."relativePath""#,
-        )
-        .await;
-        let named: Vec<(&str, &str)> = media_of
-            .iter()
-            .map(|(a, b)| (a.as_str(), b.as_str()))
-            .collect();
-        assert_eq!(
-            named,
-            [
-                (
-                    "Author0001/Title0001/Title0001.epub",
-                    "Author0001/Title0001"
-                ),
-                (
-                    "Author0003/Title0003/Title0003.epub",
-                    "Author0003/Title0003"
-                ),
-                ("Gamma/Gamma0007.epub", ""),
-                ("Gamma/Gamma0007.pdf", ""),
-                ("Loose0002.epub", ""),
-                ("Shelf/One0004.epub", ""),
-                ("Shelf/Two0005.epub", ""),
-            ]
-        );
-        let owner: i32 = sqlx::query_scalar(
-            r#"SELECT "mediaId" FROM media_files WHERE "relativePath" = 'Gamma/Gamma0007.epub'"#,
-        )
-        .fetch_one(&c.st.db)
+        .bind(media)
+        .fetch_optional(&c.st.db)
         .await
-        .unwrap();
-        assert_eq!(owner, other);
-        let (_, q) = call(
-            &c,
-            "GET",
-            &format!("/api/imports/library/{l}/books/queue"),
-            &c.admin,
-            json!({}),
-        )
-        .await;
-        assert_eq!(q["total"], 2, "{q}");
-        let first = q["items"][0]["mediaId"].as_i64().unwrap();
-        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'book', 'openlibrary', 'OL99W')"#)
-            .bind(first)
-            .execute(&c.st.db)
-            .await
-            .unwrap();
-        let (_, q) = call(
-            &c,
-            "GET",
-            &format!("/api/imports/library/{l}/books/queue"),
-            &c.admin,
-            json!({}),
-        )
-        .await;
-        assert_eq!(q["total"], 1, "{q}");
-        assert_eq!(start(&c, l).await.0, 202);
-        let again = finished(&c, l, 30).await;
-        assert_eq!(
-            (&again["total"], &again["status"]),
-            (&json!(0), &json!("completed")),
-            "{again}"
-        );
+        .unwrap()
     }
 
     #[sqlx::test(migrations = false)]
-    async fn a_second_import_is_refused_and_a_library_without_books_too(pool: PgPool) {
-        let c = ctx(pool).await;
+    async fn a_book_is_relinked_by_its_work_and_found_again(pool: PgPool) {
+        let c = ctx_with(pool, Some(Arc::new(anchor()))).await;
         let l = shelf(&c).await;
-        let movies = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
-        assert_eq!(start(&c, movies).await.0, 400);
-        let user: i32 = sqlx::query_scalar("SELECT id FROM users LIMIT 1")
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "openlibrary", "OL1W"),
+        )
+        .await;
+        assert_eq!((s, b["linked"].clone()), (201, json!(1)), "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
             .fetch_one(&c.st.db)
             .await
             .unwrap();
-        sqlx::query(
-            r#"INSERT INTO book_imports ("libraryId", "userId", total) VALUES ($1, $2, 0)"#,
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL1W"));
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "openlibrary", "OL1W"),
         )
-        .bind(l)
-        .bind(user)
-        .execute(&c.st.db)
-        .await
-        .unwrap();
-        let (s, b) = start(&c, l).await;
+        .await;
+        assert_eq!(s, 201, "{b}");
         assert_eq!(
-            (s, b["message"].as_str()),
-            (409, Some("errors.already_running"))
+            count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
+            1
         );
     }
 
     #[sqlx::test(migrations = false)]
-    async fn the_import_waits_for_a_folder_move(pool: PgPool) {
-        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
-        let c = ctx_with(pool, Some(p)).await;
+    async fn an_edition_pick_is_imported_under_the_work_its_isbn_names(pool: PgPool) {
+        let ol = anchor().find(Namespace::ISBN, ISBN, "OL1W");
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
         let l = shelf(&c).await;
-        work(&c, 1);
-        let moving = c.st.folder_moves.write().await;
-        assert_eq!(start(&c, l).await.0, 202);
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 0);
-        assert_eq!(state(&c, l).await["status"], "running");
-        drop(moving);
-        assert_eq!(finished(&c, l, 20).await["status"], "completed");
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!((s, b["linked"].clone()), (201, json!(1)), "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL1W"));
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT provider || ':' || value FROM edition_external_ids ORDER BY 1",
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["googlebooks:gb1".to_owned(), format!("isbn:{ISBN}")]);
+        assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_the_anchor_does_not_know_makes_an_unmatched_book(pool: PgPool) {
+        let c = ctx_with(pool, Some(Arc::new(anchor()))).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!((s, b["linked"].clone()), (201, json!(1)), "{b}");
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM media_external_ids WHERE provider = 'openlibrary'"
+            )
+            .await,
+            0
+        );
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT provider || ':' || value FROM edition_external_ids ORDER BY 1",
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["googlebooks:gb1".to_owned(), format!("isbn:{ISBN}")]);
+        assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
         assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
     }
 
     #[sqlx::test(migrations = false)]
-    async fn an_interrupted_import_resumes_without_repeating_a_work(pool: PgPool) {
-        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
-        let c = ctx_with(pool, Some(p)).await;
+    async fn an_explicit_work_survives_the_settle(pool: PgPool) {
+        let mut ol = anchor();
+        ol.works.insert("OL9W".into(), json!({"title": "Other"}));
+        ol.found =
+            vec![json!({"externalId": "OL1W", "title": "Alpha", "authors": [{"name": "Una Roe"}]})];
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
         let l = shelf(&c).await;
-        for n in 1..=40 {
-            work(&c, n);
-        }
-        let user: i32 = sqlx::query_scalar("SELECT id FROM users LIMIT 1")
+        let file = c.dir.join("books/Una Roe/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Una Roe/Alpha", &file, "openlibrary", "OL9W"),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
             .fetch_one(&c.st.db)
             .await
             .unwrap();
-        let id: i32 = sqlx::query_scalar(
-            r#"INSERT INTO book_imports ("libraryId", "userId") VALUES ($1, $2) RETURNING id"#,
-        )
-        .bind(l)
-        .bind(user)
-        .fetch_one(&c.st.db)
-        .await
-        .unwrap();
-        let task = tokio::spawn(book_import::run(c.st.clone(), id));
-        let mut seen = 0;
-        while seen < 5 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            seen = count(
-                &c,
-                "SELECT count(*) FROM book_import_items WHERE status <> 'pending'",
-            )
-            .await;
-        }
-        task.abort();
-        let _ = task.await;
-        let s = state(&c, l).await;
-        assert_eq!(
-            (&s["status"], &s["total"]),
-            (&json!("running"), &json!(40)),
-            "{s}"
-        );
-        assert!(s["pending"].as_i64().unwrap() > 0, "{s}");
-        book_import::resume(&c.st).await;
-        let done = finished(&c, l, 60).await;
-        assert_eq!(
-            (&done["status"], &done["pending"], &done["manual"]),
-            (&json!("completed"), &json!(0), &json!(13)),
-            "{done}"
-        );
+        assert_eq!(books::identify_media(&c.st, m).await.ok(), Some(m));
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL9W"));
         assert_eq!(
             count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
-            40
+            1
         );
-        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 40);
     }
 
     #[sqlx::test(migrations = false)]
-    async fn an_item_whose_media_vanishes_fails_alone(pool: PgPool) {
-        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
-        *p.wipe.lock().unwrap() = Some(pool.clone());
-        let c = ctx_with(pool, Some(p)).await;
-        let l = shelf(&c).await;
-        work(&c, 1);
-        work(&c, 2);
-        assert_eq!(start(&c, l).await.0, 202);
-        let done = finished(&c, l, 20).await;
-        assert_eq!(
-            (&done["status"], &done["pending"], &done["total"]),
-            (&json!("completed"), &json!(0), &json!(2)),
-            "{done}"
-        );
-        let first: (String, Option<i32>) = sqlx::query_as(
-            r#"SELECT status, "mediaId" FROM book_import_items ORDER BY id LIMIT 1"#,
+    async fn a_comic_is_relinked_by_its_plugin_id(pool: PgPool) {
+        use crate::metadata::comics::tests::{NS, fake};
+        let c = ctx_with(pool, None).await;
+        c.st.metadata.add_plugin(Arc::new(fake()));
+        sqlx::raw_sql(
+            r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+                 VALUES ('org.test.comic:vol', 'org.test.comic', '^[0-9]+$', 'preserve', 'Test Comics');
+               INSERT INTO plugin_packages ("pluginId", version, archive, origin, signature, manifest)
+                 VALUES ('org.test.comic', '1.0.0', '\x00', 'manual', 'sig',
+                         '{"id": "org.test.comic", "homepage": "https://cv.test"}');"#,
         )
-        .fetch_one(&c.st.db)
+        .execute(&c.st.db)
         .await
         .unwrap();
-        assert_eq!(first, ("manual".into(), None));
-        assert_eq!(done["matched"], 1, "{done}");
-    }
-
-    #[sqlx::test(migrations = false)]
-    async fn a_provider_outage_keeps_the_item_pending_until_it_recovers(pool: PgPool) {
-        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
-        *p.down.lock().unwrap() = 1;
-        let c = ctx_with(pool, Some(p)).await;
-        let l = shelf(&c).await;
-        work(&c, 1);
-        assert_eq!(start(&c, l).await.0, 202);
-        let mut cause = None;
-        for _ in 0..100 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            cause = sqlx::query_scalar::<_, Option<String>>(
-                "SELECT error FROM book_import_items WHERE status = 'pending' LIMIT 1",
-            )
-            .fetch_optional(&c.st.db)
-            .await
-            .unwrap()
-            .flatten();
-            if cause.is_some() {
-                break;
-            }
-        }
-        assert!(cause.is_some_and(|e| e.contains("provider down")));
-        let done = finished(&c, l, 30).await;
+        let l = library(&c, "C", &c.dir.join("comics"), r#"["comic"]"#).await;
+        let file = c.dir.join("comics/Alpha Run/Alpha Run 001.cbz");
+        touch(&file, b"a");
+        let mut body = pick(l, "Alpha Run", &file, NS, "42");
+        body["type"] = json!("comic");
+        let (s, b) = call(&c, "POST", URL, &c.admin, body).await;
+        assert_eq!(s, 201, "{b}");
         assert_eq!(
-            (&done["status"], &done["matched"], &done["manual"]),
-            (&json!("completed"), &json!(1), &json!(0)),
-            "{done}"
+            count(&c, "SELECT count(*) FROM media_external_ids WHERE provider = 'org.test.comic:vol' AND value = '42'").await,
+            1
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'comic'").await,
+            1
         );
     }
 
     #[sqlx::test(migrations = false)]
-    async fn a_permanent_provider_error_fails_its_item_and_not_the_next(pool: PgPool) {
-        let (p, _) = stubbed(Limits::new(1000.0, 100)).await;
-        *p.rejects.lock().unwrap() = 1;
-        let c = ctx_with(pool, Some(p)).await;
-        let l = shelf(&c).await;
-        work(&c, 1);
-        work(&c, 2);
-        assert_eq!(start(&c, l).await.0, 202);
-        let done = finished(&c, l, 20).await;
-        assert_eq!(
-            (
-                &done["status"],
-                &done["failed"],
-                &done["matched"],
-                &done["pending"]
-            ),
-            (&json!("completed"), &json!(1), &json!(1), &json!(0)),
-            "{done}"
-        );
-        let cause: String =
-            sqlx::query_scalar("SELECT error FROM book_import_items WHERE status = 'failed'")
-                .fetch_one(&c.st.db)
-                .await
-                .unwrap();
-        assert!(cause.contains("bad query"), "{cause}");
-    }
-
-    #[sqlx::test(migrations = false)]
-    async fn a_folder_that_moved_after_its_path_was_read_is_not_linked(pool: PgPool) {
+    async fn a_provider_serving_nothing_is_refused_before_the_lookup(pool: PgPool) {
         let c = ctx(pool).await;
+        let lib = c.dir.join("movies");
+        let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+        let m = media(&c, l, "Film (2001)", "movie").await;
+        sqlx::query(
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+               VALUES ($1, 'movie', 'tmdb', '77')"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
+        let body = json!({"libraryId": l, "type": "movie", "folderName": "Film (2001)",
+            "provider": "tmdb", "externalId": "77",
+            "files": [{"filePath": lib.join("Film (2001)/Film (2001).mkv")}]});
+        let (s, b) = call(&c, "POST", URL, &c.admin, body).await;
+        assert_eq!(s, 400, "{b}");
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 0);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_pick_of_a_held_work_joins_that_book(pool: PgPool) {
+        let ol = anchor().find(Namespace::ISBN, ISBN, "OL1W");
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
         let l = shelf(&c).await;
-        work(&c, 1);
-        let user: i32 = sqlx::query_scalar("SELECT id FROM users LIMIT 1")
+        let first = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&first, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &first, "openlibrary", "OL1W"),
+        )
+        .await;
+        assert_eq!((s, b["created"].clone()), (201, json!(true)), "{b}");
+        let second = c.dir.join("books/Alpha/Alpha 2.epub");
+        touch(&second, b"b");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &second, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!((s, b["created"].clone()), (201, json!(false)), "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
             .fetch_one(&c.st.db)
             .await
             .unwrap();
-        let (folder, path): (i32, String) =
-            sqlx::query_as(r#"SELECT id, path FROM library_folders WHERE "libraryId" = $1"#)
-                .bind(l)
-                .fetch_one(&c.st.db)
-                .await
-                .unwrap();
-        let work = |folder_path: &str| crate::ingest::disk::BookWork {
-            library_id: l,
-            folder_id: folder,
-            folder_path: folder_path.into(),
-            folder_name: "Author0001/Title0001".into(),
-            title: "Title0001".into(),
-            year: None,
-            files: vec![c.dir.join("books/Author0001/Title0001/Title0001.epub")],
-        };
-        let err = crate::ingest::disk::link_book_work(&c.st, user, work("/elsewhere"))
-            .await
-            .err()
-            .expect("a stale folder path");
-        assert_eq!(err.text(), crate::ingest::disk::FOLDER_MOVED);
-        assert_eq!(count(&c, "SELECT count(*) FROM media").await, 0);
-        let linked = crate::ingest::disk::link_book_work(&c.st, user, work(&path))
-            .await
-            .unwrap();
-        assert_eq!(linked.linked, 1);
+        assert_eq!(b["mediaId"], json!(m));
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM edition_external_ids WHERE provider = 'googlebooks' AND value = 'gb1'"
+            )
+            .await,
+            1
+        );
     }
 
     #[sqlx::test(migrations = false)]
-    async fn many_works_stay_under_the_provider_limits(pool: PgPool) {
-        const WORKS: u32 = 200;
-        let limits = Limits::new(200.0, 10);
-        let (p, seen) = stubbed(limits).await;
-        let c = ctx_with(pool, Some(p.clone())).await;
+    async fn an_audible_asin_is_a_pickable_edition_id(pool: PgPool) {
+        let ol = anchor().find(Namespace::ASIN, ASIN, "OL1W");
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        c.st.metadata
+            .add_plugin(Arc::new(Books::new(Namespace::AUDIBLE).edition(
+            Namespace::ASIN,
+            ASIN,
+            json!({"externalId": ASIN, "title": "Alpha", "asin": ASIN, "durationSeconds": 3600}),
+        )));
         let l = shelf(&c).await;
-        for n in 1..=WORKS {
-            work(&c, n);
-        }
-        assert_eq!(start(&c, l).await.0, 202);
-        let done = finished(&c, l, 900).await;
-        assert_eq!(done["status"], "completed", "{done}");
-        let manual = (1..=WORKS).filter(|n| n % 3 == 0).count() as u32;
+        let file = c.dir.join("books/Alpha/Alpha.m4b");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "asin", ASIN),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL1W"));
         assert_eq!(
-            (
-                &done["total"],
-                &done["matched"],
-                &done["manual"],
-                &done["failed"]
-            ),
-            (
-                &json!(WORKS),
-                &json!(WORKS - manual),
-                &json!(manual),
-                &json!(0)
-            ),
-            "{done}"
+            count(
+                &c,
+                &format!("SELECT count(*) FROM edition_external_ids WHERE provider = 'asin' AND value = '{ASIN}'")
+            )
+            .await,
+            1
         );
-        assert!(
-            p.priorities
-                .lock()
-                .unwrap()
-                .iter()
-                .all(|p| *p == Priority::Background)
-        );
-        assert_eq!(p.busy.lock().unwrap().1, 1, "lookups run one at a time");
-        let at = seen.lock().unwrap().clone();
-        let background = p.limits.rate_per_sec * p.limits.background_share;
-        let ceiling = (f64::from(p.limits.burst) + background * 1.0 + 1.0) as usize;
-        let busiest = (0..at.len())
-            .map(|i| {
-                at[i..]
-                    .iter()
-                    .take_while(|t| t.duration_since(at[i]) < Duration::from_secs(1))
-                    .count()
-            })
-            .max()
-            .unwrap_or(0);
-        assert!(
-            busiest <= ceiling,
-            "{busiest} requests in one second, ceiling {ceiling}"
-        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_non_canonical_id_is_refused(pool: PgPool) {
+        let c = ctx_with(pool, super::video_provider(Namespace::TMDB)).await;
+        let lib = c.dir.join("movies");
+        let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+        touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
+        let body = json!({"libraryId": l, "type": "movie", "folderName": "Film (2001)",
+            "provider": "tmdb", "externalId": "007",
+            "files": [{"filePath": lib.join("Film (2001)/Film (2001).mkv")}]});
+        let (s, b) = call(&c, "POST", URL, &c.admin, body).await;
+        assert_eq!(s, 400, "{b}");
+        assert_eq!(count(&c, "SELECT count(*) FROM media").await, 0);
     }
 }
 
@@ -3863,14 +3840,14 @@ mod comic_ingest {
             "<ComicInfo><Number>7</Number><Title>Seven</Title><Summary>Sum</Summary><Publisher>Pub</Publisher>\
              <Volume>2016</Volume><Year>2017</Year><Month>3</Month><Day>9</Day></ComicInfo>",
         );
-        cbz_with_info(&d.join("Moon Tales 06.cbz"), "<ComicInfo><Number>");
+        cbz_with_info(&d.join("Moon Tales 09.cbz"), "<ComicInfo><Number>");
         cbz_with_info(
             &d.join("Moon Tales 08.cbz"),
             "<!DOCTYPE x [<!ENTITY y \"z\">]><ComicInfo><Title>&y;</Title></ComicInfo>",
         );
         let refs = [
             "Moon Tales/Moon Tales 05.cbz",
-            "Moon Tales/Moon Tales 06.cbz",
+            "Moon Tales/Moon Tales 09.cbz",
             "Moon Tales/Moon Tales 08.cbz",
         ];
         comics::register(&c.st, m, &placed(&c, &refs))
@@ -3889,11 +3866,22 @@ mod comic_ingest {
         assert_eq!(
             got,
             [
-                ("6".to_owned(), None, None, None),
                 ("7".to_owned(), s("Seven"), s("Sum"), s("2017-03-09")),
                 ("8".to_owned(), None, None, None),
+                ("9".to_owned(), None, None, None),
             ]
         );
+        let d: (Option<String>, Option<i32>, Option<i32>) = sqlx::query_as(
+            r#"SELECT publisher, "startYear", volume FROM comic_details WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(d, (None, None, None));
+        crate::media::write::fields::merge_unmatched(&c.st, m)
+            .await
+            .unwrap();
         let d: (Option<String>, Option<i32>, Option<i32>) = sqlx::query_as(
             r#"SELECT publisher, "startYear", volume FROM comic_details WHERE "mediaId" = $1"#,
         )
@@ -3941,6 +3929,9 @@ mod comic_ingest {
                 .await
                 .unwrap();
         assert_eq!((title, overview), (None, Some("S".to_owned())));
+        crate::media::write::fields::merge_unmatched(&c.st, m)
+            .await
+            .unwrap();
         let p: Option<String> =
             sqlx::query_scalar(r#"SELECT publisher FROM comic_details WHERE "mediaId" = $1"#)
                 .bind(m)

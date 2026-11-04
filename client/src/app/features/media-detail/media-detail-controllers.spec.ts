@@ -5,7 +5,7 @@ import type { Episode, Media, Season } from '../../core/services/api/media.servi
 import type { LikesApiService } from '../../core/services/api/likes-api.service';
 import type { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { EpisodeViewController } from './episode-view-controller';
-import { LikeController } from './like-controller';
+import { LikeController } from '../../shared/utils/like-controller';
 import { WatchedController } from './watched-controller';
 
 const ep = (id: number, episodeNumber: number, hasFile = true): Episode =>

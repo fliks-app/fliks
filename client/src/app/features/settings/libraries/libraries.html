@@ -26,14 +26,10 @@
                   <span class="font-medium">{{ lib.name }}</span>
                 </div>
                 <div class="flex gap-1.5 mt-1">
-                  @if (lib.mediaTypes.includes('movie')) {
-                    <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_movie' | translate }}</span>
-                  }
-                  @if (lib.mediaTypes.includes('series')) {
-                    <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_series' | translate }}</span>
-                  }
-                  @if (lib.mediaTypes.includes('comic')) {
-                    <span class="badge badge-outline badge-sm">{{ 'settings.libraries.media_type_comic' | translate }}</span>
+                  @for (kind of kinds; track kind) {
+                    @if (lib.mediaTypes.includes(kind)) {
+                      <span class="badge badge-outline badge-sm">{{ registry[kind].libraryLabelKey | translate }}</span>
+                    }
                   }
                   @if (lib.preferredProvider) {
                     <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>

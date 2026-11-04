@@ -30,6 +30,21 @@
       "stub": true
     },
     {
+      "body": {
+        "prefix": "/tvdb/v4/search",
+        "status": 500
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__fail",
+      "stub": true
+    },
+    {
       "as": "admin",
       "expect": {
         "body": {

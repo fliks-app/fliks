@@ -8,6 +8,7 @@ export type CoreMediaActionId =
   | 'media.search-releases'
   | 'media.edit-profiles'
   | 'media.edit-library'
+  | 'media.edit'
   | 'media.edit-subtitles'
   | 'media.refresh-metadata'
   | 'media.analyze'
@@ -35,6 +36,7 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.search-releases',
   'media.edit-profiles',
   'media.edit-library',
+  'media.edit',
   'media.edit-subtitles',
   'media.refresh-metadata',
   'media.toggle-like',

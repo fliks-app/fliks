@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Fehlgeschlagen",
     "subtitle_sync_failed": "Sync fehlgeschlagen",
     "delete_no_folder": "Dieser Titel hat keinen eigenen Ordner: Nur der Bibliothekseintrag wird entfernt, die Datei bleibt auf der Festplatte.",
-    "delete_success": "Titel aus der Bibliothek entfernt."
+    "delete_success": "Titel aus der Bibliothek entfernt.",
+    "edit_details": "Details bearbeiten"
   },
   "requests": {
     "title": "Anfragen",
@@ -1797,7 +1798,12 @@
     "roots": "Dieser PC",
     "unreadable": "Ordner nicht lesbar"
   },
+  "attribution": {
+    "data_from": "Daten von {{name}}",
+    "unofficial": "Einige Angaben stammen aus inoffiziellen Quellen (Audible, Audnexus)."
+  },
   "common": {
+    "progress": "Fortschritt",
     "unexpected_error": "Ein Fehler ist aufgetreten. Laden Sie die Seite neu, wenn er erneut auftritt.",
     "browse": "Durchsuchen…",
     "item_count_one": "{{count}} Element",
@@ -2472,8 +2478,10 @@
       "folder_removed": "{{removedMedia}} Medien aus Fliks entfernt, {{unlinkedMedia}} mit ihren anderen Dateien behalten.",
       "extra_folders": "Weitere Ordner",
       "extra_folders_hint": "Werden hinzugefügt, sobald die Bibliothek erstellt ist. Hier wird nur der erste Ordner durchsucht: Durchsuchen Sie die anderen über die Seite der Bibliothek.",
-      "preferred_provider": "Metadaten-Provider",
-      "provider_auto": "Auto (TMDB als Standard)",
+      "preferred_provider": "Bevorzugter Provider",
+      "provider_auto": "Auto (globale Reihenfolge)",
+      "provider_order_hint": "Metadaten werden pro Medientyp in dieser Reihenfolge von den Providern gelesen. Der bevorzugte Provider steht bei den Typen, die er abdeckt, an erster Stelle. Die globale Reihenfolge wird unter Einstellungen, Metadaten festgelegt.",
+      "provider_none": "Kein Provider verfügbar",
       "metadata_language": "Sprache der Metadaten",
       "metadata_region": "Region der Metadaten",
       "metadata_inherit": "Von der globalen Einstellung erben",
@@ -2535,7 +2543,7 @@
       "scan_year_placeholder": "Jahr",
       "scan_search": "Suchen",
       "scan_no_match": "Keine Ergebnisse. Verfeinern Sie die Suche.",
-      "scan_from_nfo": "aus .nfo",
+      "scan_from_file": "aus der Datei",
       "scan_already": "bereits in der Bibliothek vorhanden",
       "scan_link": "Verknüpfen",
       "scan_relink_existing": "Mit vorhandenem Medium verknüpfen",
@@ -2550,6 +2558,7 @@
       "scan_error": "Scan fehlgeschlagen.",
       "scan_files": "{{count}} Datei(en)",
       "scan_add_unmatched": "Ohne Metadaten hinzufügen",
+      "scan_identify_from_file": "Aus der Datei identifizieren ({{id}})",
       "scan_unmatched_badge": "Keine Metadaten",
       "scan_unmatched_option": "Keine Übereinstimmung: unverändert hinzufügen",
       "scan_reorganize_needs_match": "Verschieben/Umbenennen gilt nur für identifizierte Titel",
@@ -2557,6 +2566,7 @@
       "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut",
       "media_filter_unidentified": "Nicht identifiziert",
       "scan_reorganize_needs_folder": "Verschieben/Umbenennen gilt nur für Titel mit eigenem Ordner",
+      "media_type_book": "Bücher und Hörbücher",
       "media_type_comic": "Comics"
     },
     "users": {
@@ -2709,6 +2719,7 @@
       "configure": "Konfigurieren",
       "empty": "Kein Metadatenanbieter installiert.",
       "order": "Reihenfolge pro Art",
+      "drag": "Verschieben",
       "move_up": "Nach oben",
       "move_down": "Nach unten",
       "load_error": "Die Metadaten-Einstellungen konnten nicht geladen werden.",

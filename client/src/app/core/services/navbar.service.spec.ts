@@ -42,6 +42,26 @@ describe('NavbarService', () => {
     expect(navbar.sidebarDocked()).toBe(false);
   });
 
+  it('clears the mobile navbar with a hero padding only off a TV and on a hero page', () => {
+    const make = (isTv: boolean) => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([{ path: '**', component: PageStub }]),
+          { provide: DeviceService, useValue: { isTv: () => isTv, isTablet: () => false, isDesktop: () => false } as unknown as DeviceService },
+        ],
+      });
+      const navbar = TestBed.inject(NavbarService);
+      navbar.isHeroPage.set(true);
+      return navbar;
+    };
+    const phone = make(false);
+    expect(phone.heroPaddingTop()).toContain('3rem');
+    phone.isHeroPage.set(false);
+    expect(phone.heroPaddingTop()).toBeNull();
+    expect(make(true).heroPaddingTop()).toBeNull();
+  });
+
   /** Entry screens are reached through a guard redirect (Tizen boots into
    *  /setup). A back entry recorded there makes the first hardware-back press
    *  a no-op redirect instead of leaving the app — Samsung rejects that. */

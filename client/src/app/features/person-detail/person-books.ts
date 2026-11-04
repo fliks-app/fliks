@@ -26,7 +26,7 @@ export class PersonBooksComponent {
   readonly loading = signal(true);
 
   /** Credits not yet in a readable library; the owned ones already show above. */
-  readonly missing = computed(() => this.credits().filter((c) => c.mediaId === null));
+  readonly missing = computed(() => this.credits().filter((c) => c.existingMediaId === null));
 
   constructor() {
     effect(() => void this.load(this.personId(), this.role()));
@@ -45,7 +45,8 @@ export class PersonBooksComponent {
         this.api.personProviderCredits(id).catch(() => []),
       ]);
       this.works.set(works);
-      this.credits.set(credits);
+      // Until the server serves book bibliographies it answers a person's `{provider, cast, crew}` object.
+      this.credits.set(Array.isArray(credits) ? credits : []);
     } finally {
       this.loading.set(false);
     }

@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Failed",
     "subtitle_sync_failed": "Sync failed",
     "delete_no_folder": "This title has no folder of its own: only the library entry will be removed, the file stays on disk.",
-    "delete_success": "Title removed from the library."
+    "delete_success": "Title removed from the library.",
+    "edit_details": "Edit details"
   },
   "requests": {
     "title": "Requests",
@@ -1797,7 +1798,12 @@
     "roots": "This PC",
     "unreadable": "Folder not readable"
   },
+  "attribution": {
+    "data_from": "Data from {{name}}",
+    "unofficial": "Some details come from unofficial sources (Audible, Audnexus)."
+  },
   "common": {
+    "progress": "Progress",
     "unexpected_error": "Something went wrong. Reload the page if it keeps happening.",
     "browse": "Browse…",
     "item_count_one": "{{count}} item",
@@ -2472,8 +2478,10 @@
       "folder_removed": "{{removedMedia}} media removed from Fliks, {{unlinkedMedia}} kept with their other files.",
       "extra_folders": "Additional folders",
       "extra_folders_hint": "Added once the library is created. Only the first folder is scanned here: scan the others from the library page.",
-      "preferred_provider": "Metadata provider",
-      "provider_auto": "Auto (TMDB by default)",
+      "preferred_provider": "Preferred provider",
+      "provider_auto": "Auto (global order)",
+      "provider_order_hint": "Metadata is read from these providers in order, per media type. The preferred provider goes first for the types it covers. The global order is set in Settings › Metadata.",
+      "provider_none": "No provider available",
       "metadata_language": "Metadata language",
       "metadata_region": "Metadata region",
       "metadata_inherit": "Inherit from the global setting",
@@ -2535,7 +2543,7 @@
       "scan_year_placeholder": "Year",
       "scan_search": "Search",
       "scan_no_match": "No results. Refine the search.",
-      "scan_from_nfo": "from .nfo",
+      "scan_from_file": "from file",
       "scan_already": "already present in the library",
       "scan_link": "Link",
       "scan_relink_existing": "Relink to existing media",
@@ -2550,6 +2558,7 @@
       "scan_error": "Scan failed.",
       "scan_files": "{{count}} file(s)",
       "scan_add_unmatched": "Add without metadata",
+      "scan_identify_from_file": "Identify from the file ({{id}})",
       "scan_unmatched_badge": "No metadata",
       "scan_unmatched_option": "No match: add as is",
       "scan_reorganize_needs_match": "Move/rename only applies to identified titles",
@@ -2557,6 +2566,7 @@
       "scan_search_failed_count": "{{count}} folder(s) not scanned (search failed), relaunch the scan from the Media tab",
       "media_filter_unidentified": "Unidentified",
       "scan_reorganize_needs_folder": "Move/rename only applies to titles with their own folder",
+      "media_type_book": "Books and audiobooks",
       "media_type_comic": "Comics"
     },
     "users": {
@@ -3112,6 +3122,7 @@
       "configure": "Configure",
       "empty": "No metadata provider installed.",
       "order": "Order per kind",
+      "drag": "Move",
       "move_up": "Move up",
       "move_down": "Move down",
       "load_error": "Could not load the metadata settings.",

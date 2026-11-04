@@ -109,6 +109,14 @@ pub async fn has_plugin_id(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Resu
     .await
 }
 
+/// Whether the media holds any id.
+pub async fn any(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1)"#)
+        .bind(media_id)
+        .fetch_one(db)
+        .await
+}
+
 /// Every id the media holds, by provider, as the domain events name them.
 pub async fn refs(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<ExternalId>> {
     let rows: Vec<(String, String)> = sqlx::query_as(

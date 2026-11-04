@@ -2,7 +2,7 @@
 use super::{
     MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
-    load_media, naming_formats,
+    load_media, naming_formats, record,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
     transfer::{Method, split_ext},
 };
@@ -14,7 +14,6 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
-    importers::nfo,
     libraries::{accessible_library_ids, paths_visible},
     media::write::{self as mw, body::Body},
     state::AppState,
@@ -32,11 +31,7 @@ use fliks_domain::{
         self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
         validate_folder_name, validate_folder_path,
     },
-    nfo::NfoData,
-    release::parsing::{
-        quality::parse_release_quality,
-        title::{ExtractedRelease, extract_media_title},
-    },
+    release::parsing::quality::parse_release_quality,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -136,7 +131,7 @@ struct Group {
     folder_name: String,
     guess_title: String,
     guess_year: Option<i64>,
-    nfo: Option<NfoData>,
+    file_ids: Vec<record::FileId>,
     suggested_provider: String,
     files: Vec<FileEntry>,
 }
@@ -203,6 +198,14 @@ struct Scanned {
     groups: Vec<Group>,
     scanned_files: usize,
     orphan_count: usize,
+}
+
+/// The provider that serves `kind` for the library's preference, else the raw preference.
+fn suggested(st: &AppState, provider: &str, kind: MediaKind) -> String {
+    st.metadata
+        .resolve(Some(provider), kind)
+        .map_or(provider, |n| n.as_str())
+        .to_owned()
 }
 
 /// `scanOrphansUnder` (rules 62-66): reads only; `folder_id` tags the groups of a library folder.
@@ -297,12 +300,8 @@ async fn scan_under(
                     folder_name: folder.clone(),
                     guess_title: folder,
                     guess_year: None,
-                    nfo: None,
-                    suggested_provider: st
-                        .metadata
-                        .resolve(Some(provider), media_type)
-                        .map_or(provider, |n| n.as_str())
-                        .to_owned(),
+                    file_ids: vec![],
+                    suggested_provider: suggested(st, provider, media_type),
                     files: vec![entry],
                 });
             }
@@ -310,16 +309,38 @@ async fn scan_under(
     }
     for g in &mut groups {
         let sample = PathBuf::from(&g.files[0].file_path);
-        let show_dir = root_p.join(&g.folder_name);
-        g.nfo = group_nfo(g.media_type, &show_dir, &sample, g.folder_name.is_empty()).await;
-        let (title, year) = guess(g.media_type, root_p, &sample, g.nfo.as_ref());
+        let dir = root_p.join(&g.folder_name);
+        let record = record::of_group(&record::Group {
+            kind: g.media_type,
+            root: root_p,
+            dir: &dir,
+            sample: &sample,
+            at_root: g.folder_name.is_empty(),
+        })
+        .await;
+        let (title, year) = record::title_year(record.as_ref());
         g.guess_title = title.unwrap_or_else(|| g.folder_name.clone());
         g.guess_year = year;
+        g.file_ids = record.as_ref().map(record::file_ids).unwrap_or_default();
     }
-    let works = book_groups(root_p, folder_id, provider, &book_files, linked).await;
+    let works = book_groups(
+        root_p,
+        folder_id,
+        &suggested(st, provider, MediaKind::Book),
+        &book_files,
+        linked,
+    )
+    .await;
     orphan_count += works.iter().map(|g| g.files.len()).sum::<usize>();
     groups.extend(works);
-    let volumes = comic_groups(root_p, folder_id, provider, &comic_files, linked).await;
+    let volumes = comic_groups(
+        root_p,
+        folder_id,
+        &suggested(st, provider, MediaKind::Comic),
+        &comic_files,
+        linked,
+    )
+    .await;
     orphan_count += volumes.iter().map(|g| g.files.len()).sum::<usize>();
     groups.extend(volumes);
     progress(st, &key, root, total, total);
@@ -331,62 +352,8 @@ async fn scan_under(
     }
 }
 
-/// The `.nfo` describing a group's work: a series' `tvshow.nfo` (`show_dir` is its folder), a movie
-/// at the scan root its own `<stem>.nfo` only, so the root's other `.nfo` files never name it.
-async fn group_nfo(
-    kind: MediaKind,
-    show_dir: &Path,
-    sample: &Path,
-    at_root: bool,
-) -> Option<NfoData> {
-    match kind {
-        MediaKind::Series => nfo::for_show(show_dir, sample).await,
-        _ if at_root => nfo::file(&sample.with_extension("nfo")).await,
-        _ => nfo::for_video(sample).await,
-    }
-}
-
-/// A group's title and year: the `.nfo`'s, else the path's; `None` title when both are empty.
-fn guess(
-    kind: MediaKind,
-    root: &Path,
-    sample: &Path,
-    nfo: Option<&NfoData>,
-) -> (Option<String>, Option<i64>) {
-    let (title, year) = match kind {
-        MediaKind::Book => {
-            let p = fliks_domain::books::filename::parse_path(&sample.to_string_lossy());
-            (p.title, p.year.map(i64::from))
-        }
-        _ => {
-            let ex = guess_from_path(root, sample);
-            (Some(ex.title), ex.year.map(i64::from))
-        }
-    };
-    let nonempty = |t: Option<String>| t.map(|t| t.trim().to_owned()).filter(|t| !t.is_empty());
-    (
-        nonempty(nfo.and_then(|n| n.title.clone())).or(nonempty(title)),
-        nfo.and_then(|n| n.year).or(year),
-    )
-}
-
-/// The file name's title, unless it has no year and a folder between it and `root` has one
-/// (`00000.m2ts` in `Title (2024)/`, a disc's `BDMV/STREAM`).
-fn guess_from_path(root: &Path, file: &Path) -> ExtractedRelease {
-    let ex = extract_media_title(&file_name(file));
-    if ex.year.is_some() {
-        return ex;
-    }
-    file.ancestors()
-        .skip(1)
-        .take_while(|d| d.starts_with(root) && *d != root)
-        .map(|d| extract_media_title(&file_name(d)))
-        .find(|f| f.year.is_some())
-        .unwrap_or(ex)
-}
-
 /// The works the book files make, one orphan group each for the works that have a file still
-/// unlinked (`book-import.md` rules 1-2). `files` is every book file of the root, linked or not.
+/// unlinked (`ingest.md` rules 102-103). `files` is every book file of the root, linked or not.
 async fn book_groups(
     root: &Path,
     folder_id: Option<i32>,
@@ -415,14 +382,24 @@ async fn book_groups(
                 episode_end: None,
             });
         }
+        let sample = PathBuf::from(&entries[0].file_path);
+        let record = record::of_group(&record::Group {
+            kind: MediaKind::Book,
+            root,
+            dir: root,
+            sample: &sample,
+            at_root: false,
+        })
+        .await;
+        let (title, year) = record::title_year(record.as_ref());
         out.push(Group {
             folder_id,
             group_key: format!("book:{}", w.name_path),
             media_type: MediaKind::Book,
             folder_name: w.anchor.unwrap_or_default(),
-            guess_title: w.title,
-            guess_year: w.year.map(i64::from),
-            nfo: None,
+            guess_title: title.unwrap_or(w.title),
+            guess_year: year.or(w.year.map(i64::from)),
+            file_ids: record.as_ref().map(record::file_ids).unwrap_or_default(),
             suggested_provider: provider.to_owned(),
             files: entries,
         });
@@ -469,20 +446,23 @@ async fn comic_groups(
             });
         }
         let first = PathBuf::from(&entries[0].file_path);
-        let guess = fliks_domain::comics::name::parse_path(
-            &fsx::rel_under(root, &first).unwrap_or_default(),
-        );
-        let format = comics::format_of(&file_name(&first)).unwrap_or("cbz");
-        let info = comics::read_info(&first, format).await;
-        let guess = fliks_domain::comics::info::resolve(&guess, info.as_ref());
+        let record = record::of_group(&record::Group {
+            kind: MediaKind::Comic,
+            root,
+            dir: root,
+            sample: &first,
+            at_root,
+        })
+        .await;
+        let (title, year) = record::title_year(record.as_ref());
         out.push(Group {
             folder_id,
             group_key: format!("comic:{dir}"),
             media_type: MediaKind::Comic,
             folder_name: if at_root { String::new() } else { dir },
-            guess_title: guess.series,
-            guess_year: guess.start_year.map(i64::from),
-            nfo: None,
+            guess_title: title.unwrap_or_default(),
+            guess_year: year,
+            file_ids: vec![],
             suggested_provider: provider.to_owned(),
             files: entries,
         });
@@ -769,70 +749,6 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
     relink_core(st, Some(a), a.user.id, d).await
 }
 
-/// One work of a bulk import: its files linked in place to an unmatched book (`book-import.md` rule 6).
-pub(crate) struct BookWork {
-    pub library_id: i32,
-    pub folder_id: i32,
-    /// The folder's path `files` were resolved against.
-    pub folder_path: String,
-    pub folder_name: String,
-    pub title: String,
-    pub year: Option<i32>,
-    pub files: Vec<PathBuf>,
-}
-
-/// The message of the error a link raises when its folder moved after the caller read the path.
-pub(crate) const FOLDER_MOVED: &str = "errors.folder_moved";
-
-pub(crate) struct Linked {
-    pub media_id: i32,
-    pub linked: i64,
-    pub errors: Vec<String>,
-}
-
-pub(crate) async fn link_book_work(
-    st: &AppState,
-    user: i32,
-    w: BookWork,
-) -> Result<Linked, AppError> {
-    let d = RelinkDto {
-        library_id: w.library_id,
-        media_type: MediaKind::Book,
-        external_id: None,
-        provider: None,
-        title: Some(w.title),
-        year: w.year,
-        quality_profile_id: None,
-        language_profile_id: None,
-        folder_name: w.folder_name,
-        scan_root: None,
-        reorganize: false,
-        transfer: None,
-        folder_id: Some(w.folder_id),
-        folder_path: Some(w.folder_path),
-        files: w
-            .files
-            .into_iter()
-            .map(|p| RelinkFile {
-                path: p.to_string_lossy().into_owned(),
-                season: None,
-                episode: None,
-                end: None,
-            })
-            .collect(),
-        priority: Priority::Background,
-    };
-    let r = relink_core(st, None, user, d).await?;
-    Ok(Linked {
-        media_id: r["mediaId"]
-            .as_i64()
-            .and_then(|m| i32::try_from(m).ok())
-            .unwrap_or_default(),
-        linked: r["linked"].as_i64().unwrap_or(0),
-        errors: serde_json::from_value(r["errors"].clone()).unwrap_or_default(),
-    })
-}
-
 /// `relink_orphans` after the library access check; `a` is only needed to import an identified title.
 async fn relink_core(
     st: &AppState,
@@ -922,7 +838,7 @@ use relink_dto::*;
 
 #[cfg(test)]
 mod tests {
-    use super::{guess_from_path, parse_relink};
+    use super::{parse_relink, record::guess_from_path};
     use std::path::Path;
 
     #[test]

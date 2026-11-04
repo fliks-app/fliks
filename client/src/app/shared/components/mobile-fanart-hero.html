@@ -1,12 +1,14 @@
 <!-- While two layers overlap the scrim mask sits on the pair: masking each lets the outgoing picture paint through the incoming one's faded bottom. -->
-<div class="relative -mx-4 -mt-4 hero-fanart-bleed" [class.hero-fanart-fade]="!!outgoing()">
+<div class="relative -mx-4 -mt-4 hero-fanart-bleed" [class.hero-fanart-fade]="!!outgoing()" [class.overflow-hidden]="blur()">
   <!-- Keyed on the url so appImgFadeIn fades the new picture in; the name rides the image, not a wrapper (desktop morph pairs img with img). -->
   @for (url of incoming(); track url) {
     <img
       appImgFadeIn
       [instant]="!!outgoing()"
       [style.view-transition-name]="viewTransitionName()"
-      [src]="url | resolveUrl: 'medium'"
+      [src]="url | resolveUrl: (blur() ? 'thumb' : 'medium')"
+      [style.filter]="blur() ? 'blur(24px)' : null"
+      [style.transform]="blur() ? 'scale(1.2)' : null"
       [alt]="imageAlt()"
       loading="eager"
       fetchpriority="high"

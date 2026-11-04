@@ -1,8 +1,14 @@
 //! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
-use super::{already_running, body::Body, entity_or_404, gate};
+use super::{
+    already_running,
+    body::Body,
+    entity_or_404,
+    fields::{Fields, apply, merge_unmatched},
+    gate,
+};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
-    field_sources::set_field_sources,
+    field_sources::merge_field_sources,
     items,
 };
 use crate::{
@@ -25,7 +31,7 @@ use fliks_domain::{
     media::{kind::MediaKind, release::ReleaseKind},
     metadata::{field::Field, limiter::Priority},
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sqlx::PgConnection;
 use std::collections::HashSet;
 
@@ -299,37 +305,12 @@ pub async fn refresh_metadata(
     let found = service::for_media(st, id, prio).await?;
     let d = &found.details;
     let free = |f: Field| !found.locked.contains(&f);
-    let original = if free(Field::OriginalTitle) {
-        let title = free(Field::Title).then(|| d.title.clone());
-        d.original_title.clone().or(title)
-    } else {
-        None
-    };
+    let mut fields = Fields::from_map(media.media_type, d.raw.as_object().unwrap_or(&Map::new()));
+    if fields.original_title.is_none() && free(Field::OriginalTitle) && free(Field::Title) {
+        fields.original_title = fields.title.clone();
+    }
     let mut tx = st.db.begin().await?;
-    sqlx::query!(
-        r#"UPDATE media SET title = COALESCE($2, title), "originalTitle" = COALESCE($3, "originalTitle"),
-             "alternativeTitles" = COALESCE($4, "alternativeTitles"),
-             year = COALESCE($5, year), overview = COALESCE($6, overview),
-             status = COALESCE($7::text::media_status_enum, status), "posterUrl" = COALESCE($8, "posterUrl"),
-             "fanartUrl" = COALESCE($9, "fanartUrl"), "logoUrl" = COALESCE($10, "logoUrl"),
-             rating = COALESCE($11, rating), genres = COALESCE($12, genres), runtime = COALESCE($13, runtime)
-           WHERE id = $1"#,
-        id,
-        free(Field::Title).then(|| d.title.clone()),
-        original,
-        free(Field::AlternativeTitles).then(|| json!(d.alternative_titles)),
-        d.year.filter(|y| y.is_finite()).map(|y| y as i32),
-        d.overview,
-        free(Field::Status).then(|| super::map_status(media.media_type, &d.status)),
-        d.poster_url,
-        d.fanart_url,
-        d.logo_url,
-        d.rating,
-        free(Field::Genres).then(|| json!(d.genres)),
-        d.runtime
-    )
-    .execute(&mut *tx)
-    .await?;
+    apply(&mut tx, id, &fields).await?;
     set_release_dates(
         &mut tx,
         id,
@@ -345,7 +326,7 @@ pub async fn refresh_metadata(
     if free(Field::Collection) {
         set_tmdb_collection(&mut tx, id, d.tmdb_collection()).await?;
     }
-    set_field_sources(&mut tx, id, &found.provenance).await?;
+    merge_field_sources(&mut tx, id, &found.provenance).await?;
     tx.commit().await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
@@ -375,12 +356,6 @@ pub async fn refresh_metadata(
             });
         }
     }
-    sqlx::query!(
-        r#"UPDATE media SET "metadataRefreshedAt" = now() WHERE id = $1"#,
-        id
-    )
-    .execute(&st.db)
-    .await?;
     Ok(found)
 }
 
@@ -409,23 +384,52 @@ async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::
     Ok(())
 }
 
+/// Reads a media again from its provider ids and its files, whatever its kind (`media-write.md`
+/// rule 109); the `Found` of a video read from a provider.
+pub(crate) async fn refresh_any(
+    st: &AppState,
+    media: &MediaRow,
+    defer_kick: bool,
+    prio: Priority,
+) -> Result<Option<Found>, AppError> {
+    let id = media.id;
+    match media.media_type {
+        MediaKind::Comic => {
+            crate::metadata::comics::refresh(st, id, prio).await?;
+        }
+        MediaKind::Book => {
+            crate::ingest::books::refresh_media(st, id, prio)
+                .await
+                .map_err(|e| match e.retry {
+                    true => AppError::with_message(StatusCode::SERVICE_UNAVAILABLE, e.cause),
+                    false => AppError::internal(e.cause),
+                })?;
+        }
+        _ if !external_ids::any(&st.db, id).await? => {
+            merge_unmatched(st, id).await?;
+        }
+        _ => {
+            return Ok(Some(refresh_metadata(st, id, defer_kick, prio).await?));
+        }
+    }
+    Ok(None)
+}
+
 async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if media.media_type == MediaKind::Comic {
-        crate::metadata::comics::refresh(st, id, Priority::Background).await?;
-    } else {
-        let found = refresh_metadata(st, id, true, Priority::Interactive).await?;
-        if media.has_seasons() {
-            drop_absent(st, id, &found).await?;
+    if let Some(found) = refresh_any(st, &media, true, Priority::Interactive).await?
+        && media.has_seasons()
+    {
+        drop_absent(st, id, &found).await?;
+    }
+    if media.media_type != MediaKind::Book {
+        let guard = st.ingest.media.lock(id).await;
+        if let Err(e) = rescan_files(st, &guard, id).await {
+            tracing::warn!("identify: rescan of media #{id} failed: {e:?}");
         }
     }
-    let guard = st.ingest.media.lock(id).await;
-    if let Err(e) = rescan_files(st, &guard, id).await {
-        tracing::warn!("identify: rescan of media #{id} failed: {e:?}");
-    }
-    drop(guard);
     st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
         media_ids: vec![i64::from(id)],
         reason: "metadata-refresh".into(),
@@ -474,10 +478,7 @@ pub async fn identify(
     let (mut tmdb, mut tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
     let imdb = b.str("imdbId")?.flatten();
     let mut provider = b.namespace("preferredProvider")?;
-    let named = (
-        b.namespace("provider")?.flatten(),
-        b.str("externalId")?.flatten(),
-    );
+    let named = (b.str("provider")?.flatten(), b.str("externalId")?.flatten());
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -490,9 +491,7 @@ pub async fn identify(
         }
         (Some(p), Some(ext)) => {
             let ns = Namespace::parse(&p)
-                .filter(|n| {
-                    st.metadata.available(*n) && st.metadata.of(*n).supports(media.media_type)
-                })
+                .filter(|n| st.metadata.answers(*n) && st.metadata.serves(*n, media.media_type))
                 .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?;
             let value = ns
                 .normalize(ext.trim())
@@ -539,7 +538,17 @@ pub async fn identify(
         return Err(already_running());
     }
     let applied = async {
-        apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?;
+        match (media.media_type, pin) {
+            (MediaKind::Book, Some((ns, value))) => {
+                crate::metadata::books::routes::identify_to(&st, id, ns, &value).await?;
+            }
+            (MediaKind::Book, None) => {
+                return Err(AppError::bad_request(
+                    "Provide the id of a book provider (provider and externalId) to identify this media against",
+                ));
+            }
+            (_, pin) => apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?,
+        }
         entity_or_404(&st, &a, id).await
     };
     let body = match applied.await {
@@ -661,13 +670,6 @@ pub async fn refresh(
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if media.media_type == MediaKind::Comic
-        && !crate::metadata::comics::has_provider_id(&st, id).await?
-    {
-        return Err(AppError::bad_request(
-            "This comic holds no provider id: identify it against a comic provider first",
-        ));
-    }
     st.hub.emit(SseEvent::MetadataStarted {
         media_id: i64::from(id),
         title: media.title.clone(),
@@ -683,15 +685,10 @@ pub async fn refresh(
     }
     let st2 = st.clone();
     tokio::spawn(async move {
-        let r = if media.media_type == MediaKind::Comic {
-            crate::metadata::comics::refresh(&st2, id, Priority::Background)
-                .await
-                .map(|_| media.title.clone())
-        } else {
-            refresh_metadata(&st2, id, false, Priority::Interactive)
-                .await
-                .map(|_| media.title.clone())
-        };
+        let title = media.title.clone();
+        let r = refresh_any(&st2, &media, false, Priority::Interactive)
+            .await
+            .map(|_| title);
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(json!({"ok": true}))))

@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Falhou",
     "subtitle_sync_failed": "Sincronização falhou",
     "delete_no_folder": "Este título não tem uma pasta própria: apenas a entrada da biblioteca será removida, o ficheiro permanece no disco.",
-    "delete_success": "Título removido da biblioteca."
+    "delete_success": "Título removido da biblioteca.",
+    "edit_details": "Editar detalhes"
   },
   "requests": {
     "title": "Pedidos",
@@ -1797,7 +1798,12 @@
     "roots": "Este PC",
     "unreadable": "Pasta ilegível"
   },
+  "attribution": {
+    "data_from": "Dados de {{name}}",
+    "unofficial": "Alguns detalhes vêm de fontes não oficiais (Audible, Audnexus)."
+  },
   "common": {
+    "progress": "Progresso",
     "unexpected_error": "Ocorreu um erro. Recarregue a página se voltar a acontecer.",
     "browse": "Procurar…",
     "item_count_one": "{{count}} elemento",
@@ -2472,8 +2478,10 @@
       "folder_removed": "{{removedMedia}} medias removidas do Fliks, {{unlinkedMedia}} mantidas com os seus outros ficheiros.",
       "extra_folders": "Pastas adicionais",
       "extra_folders_hint": "Adicionadas depois de a biblioteca ser criada. Aqui só a primeira pasta é analisada: analise as outras a partir da página da biblioteca.",
-      "preferred_provider": "Fornecedor de metadados",
-      "provider_auto": "Auto (TMDB por predefinição)",
+      "preferred_provider": "Fornecedor preferido",
+      "provider_auto": "Auto (ordem global)",
+      "provider_order_hint": "Os metadados são lidos destes fornecedores por ordem, para cada tipo de media. O fornecedor preferido passa à frente nos tipos que cobre. A ordem global define-se em Definições › Metadados.",
+      "provider_none": "Nenhum fornecedor disponível",
       "metadata_language": "Idioma dos metadados",
       "metadata_region": "Região dos metadados",
       "metadata_inherit": "Herdar da definição global",
@@ -2535,7 +2543,7 @@
       "scan_year_placeholder": "Ano",
       "scan_search": "Pesquisar",
       "scan_no_match": "Nenhum resultado. Refine a pesquisa.",
-      "scan_from_nfo": "a partir de .nfo",
+      "scan_from_file": "a partir do ficheiro",
       "scan_already": "já presente na biblioteca",
       "scan_link": "Associar",
       "scan_relink_existing": "Reassociar ao media existente",
@@ -2550,6 +2558,7 @@
       "scan_error": "Falha na análise.",
       "scan_files": "{{count}} ficheiro(s)",
       "scan_add_unmatched": "Adicionar sem metadados",
+      "scan_identify_from_file": "Identificar a partir do ficheiro ({{id}})",
       "scan_unmatched_badge": "Sem metadados",
       "scan_unmatched_option": "Sem correspondência: adicionar tal como está",
       "scan_reorganize_needs_match": "Mover/renomear aplica-se apenas a títulos identificados",
@@ -2557,6 +2566,7 @@
       "scan_search_failed_count": "{{count}} pasta(s) não analisada(s) (pesquisa falhou), reinicie a análise no separador Media",
       "media_filter_unidentified": "Não identificados",
       "scan_reorganize_needs_folder": "Mover/renomear aplica-se apenas a títulos com pasta própria",
+      "media_type_book": "Livros e audiolivros",
       "media_type_comic": "Quadrinhos"
     },
     "users": {
@@ -2709,6 +2719,7 @@
       "configure": "Configurar",
       "empty": "Nenhum fornecedor de metadados instalado.",
       "order": "Ordem por tipo",
+      "drag": "Mover",
       "move_up": "Subir",
       "move_down": "Descer",
       "load_error": "Não foi possível carregar as definições de metadados.",

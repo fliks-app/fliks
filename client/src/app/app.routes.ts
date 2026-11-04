@@ -227,6 +227,7 @@ export const routes: Routes = [
             (m) => m.MediaDetailComponent,
           ),
         data: { kind: 'book', reuse: true },
+        resolve: { page: () => import('./features/media-detail/book/book-work.component').then((m) => m.BookWorkComponent) },
       },
       {
         path: 'comics/:id',
@@ -235,6 +236,7 @@ export const routes: Routes = [
             (m) => m.MediaDetailComponent,
           ),
         data: { kind: 'comic', reuse: true },
+        resolve: { page: () => import('./features/media-detail/comic/comic-volume.component').then((m) => m.ComicVolumeComponent) },
       },
       {
         path: 'collections/:id',

@@ -123,6 +123,16 @@ fn full_anchor() -> Fake {
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_providers_route_lists_the_book_providers(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![anchor()]).await;
+    let (_, v) = c.get("/api/metadata/providers").await;
+    assert_eq!(
+        v["serving"]["book"],
+        json!([{"provider": "openlibrary", "label": "Open Library"}])
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn search_maps_hits_and_marks_owned_works(pool: PgPool) {
     let (c, _) = ctx(pool, vec![full_anchor()]).await;
     let owned = c.book(1).await;
@@ -135,14 +145,14 @@ async fn search_maps_hits_and_marks_owned_works(pool: PgPool) {
     assert_eq!(s, 200, "{v}");
     assert_eq!(
         v,
-        json!([{"provider": "openlibrary", "externalId": "OL1W", "kind": "book", "title": "Alpha",
-                "subtitle": "Sub", "authors": ["Una Roe"], "year": 1999, "coverUrl": "http://img/a.jpg",
-                "series": {"name": "Cycle", "position": "2"}, "editionCount": 7, "mediaId": owned}])
+        json!([{"provider": "openlibrary", "externalId": "OL1W", "mediaType": "book", "title": "Alpha",
+                "subtitle": "Sub", "authors": ["Una Roe"], "year": 1999, "posterUrl": "http://img/a.jpg",
+                "series": {"name": "Cycle", "position": "2"}, "editionCount": 7, "existingMediaId": owned}])
     );
     let (_, v) = c
         .get("/api/metadata/search/book?title=alpha&author=roe")
         .await;
-    assert_eq!(v[0]["mediaId"], owned);
+    assert_eq!(v[0]["existingMediaId"], owned);
 }
 
 #[sqlx::test(migrations = false)]
@@ -157,9 +167,9 @@ async fn search_hides_a_work_held_in_an_unreadable_library(pool: PgPool) {
     let (_, v) = c
         .call(&c.reader, "GET", "/api/metadata/search/book?q=a", None)
         .await;
-    assert_eq!(v[0]["mediaId"], Value::Null);
+    assert_eq!(v[0]["existingMediaId"], Value::Null);
     let (_, v) = c.get("/api/metadata/search/book?q=a").await;
-    assert_eq!(v[0]["mediaId"], hidden);
+    assert_eq!(v[0]["existingMediaId"], hidden);
 }
 
 #[sqlx::test(migrations = false)]
@@ -190,6 +200,50 @@ async fn search_validates_and_falls_back(pool: PgPool) {
     assert_eq!(v[0]["authors"], json!(["Sol"]));
     let (_, v) = c
         .get("/api/metadata/search/book?q=a&provider=openlibrary")
+        .await;
+    assert_eq!(v[0]["provider"], "googlebooks");
+}
+
+#[sqlx::test(migrations = false)]
+async fn search_names_an_audible_hit_by_its_asin_and_finds_the_held_edition(pool: PgPool) {
+    let mut audible = Fake::new(Namespace::AUDIBLE);
+    audible.found =
+        vec![json!({"externalId": "B000000001", "title": "Alpha", "authors": ["Una Roe"]})];
+    let mut ol = full_anchor();
+    ol.found = vec![];
+    let (c, _) = ctx(pool, vec![ol, audible]).await;
+    let (_, v) = c.get("/api/metadata/search/book?q=a").await;
+    assert_eq!(
+        (v[0]["provider"].as_str(), v[0]["externalId"].as_str()),
+        (Some("asin"), Some("B000000001"))
+    );
+    assert_eq!(v[0]["existingMediaId"], Value::Null);
+    let owned = c.book(1).await;
+    let e = c.edition(owned, "audio").await;
+    sqlx::query(r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES ($1, $2, 'asin', 'B000000001')"#)
+        .bind(e)
+        .bind(owned)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (_, v) = c.get("/api/metadata/search/book?q=a").await;
+    assert_eq!(v[0]["existingMediaId"], owned);
+}
+
+#[sqlx::test(migrations = false)]
+async fn search_asks_the_preferred_provider_of_the_media_first(pool: PgPool) {
+    let mut gb = Fake::new(Namespace::GOOGLEBOOKS);
+    gb.found = vec![json!({"externalId": "gb1", "title": "Gamma", "authors": ["Sol"]})];
+    let (c, _) = ctx(pool, vec![full_anchor(), gb]).await;
+    let m = c.book(1).await;
+    sqlx::query(r#"UPDATE libraries SET "preferredProvider" = 'googlebooks' WHERE id = 1"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (_, v) = c.get("/api/metadata/search/book?q=a").await;
+    assert_eq!(v[0]["provider"], "openlibrary");
+    let (_, v) = c
+        .get(&format!("/api/metadata/search/book?q=a&mediaId={m}"))
         .await;
     assert_eq!(v[0]["provider"], "googlebooks");
 }
@@ -402,35 +456,29 @@ fn sources_uri(id: i32) -> String {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_work_is_relinked_unless_another_book_holds_it(pool: PgPool) {
+async fn the_work_is_identified_and_never_put(pool: PgPool) {
     let (c, _) = ctx(pool, vec![full_anchor()]).await;
-    let (a, b) = (c.book(1).await, c.book(1).await);
-    let put = async |id: i32, w: &str| {
-        let body = json!({"level": "work", "provider": "openlibrary", "value": w});
-        c.call(&c.admin, "PUT", &sources_uri(id), Some(body)).await
-    };
-    let (s, v) = put(a, "OL1W").await;
-    assert_eq!(s, 200, "{v}");
-    assert_eq!(v["work"]["value"], "OL1W");
-    let title: String = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
-        .bind(a)
-        .fetch_one(&c.pool)
-        .await
-        .unwrap();
-    assert_eq!(title, "Alpha");
-    let (s, v) = put(b, "OL1W").await;
-    assert_eq!((s, v["message"].as_str()), (409, Some("taken")));
-    let (s, v) = put(a, "OL2W").await;
-    assert_eq!((s, v["work"]["value"].as_str()), (200, Some("OL2W")));
-    assert_eq!(put(a, "OL9W").await.0, 404);
+    let a = c.book(1).await;
+    let (s, v) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{a}/identify"),
+            Some(json!({"provider": "openlibrary", "externalId": "OL1W"})),
+        )
+        .await;
+    assert_eq!(s, 201, "{v}");
+    let put = json!({"level": "work", "provider": "openlibrary", "value": "OL2W"});
+    let (s, _) = c.call(&c.admin, "PUT", &sources_uri(a), Some(put)).await;
+    assert_eq!(s, 400);
     let (_, v) = c.get(&sources_uri(a)).await;
-    assert_eq!(v["work"]["value"], "OL2W");
+    assert_eq!(v["work"]["value"], "OL1W");
     let (s, v) = c
         .call(
             &c.admin,
             "DELETE",
             &format!(
-                "{}?level=work&provider=openlibrary&value=OL2W",
+                "{}?level=work&provider=openlibrary&value=OL1W",
                 sources_uri(a)
             ),
             None,
@@ -462,9 +510,9 @@ async fn edition_ids_are_added_replaced_and_removed(pool: PgPool) {
     );
     c.call(
         &c.admin,
-        "PUT",
-        &uri,
-        Some(json!({"level": "work", "provider": "openlibrary", "value": "OL1W"})),
+        "POST",
+        &format!("/api/media/{media}/identify"),
+        Some(json!({"provider": "openlibrary", "externalId": "OL1W"})),
     )
     .await;
     let (_, v) = put("asin", "B000000002").await;
@@ -552,4 +600,104 @@ async fn sources_check_access_kind_and_input(pool: PgPool) {
         (s, v["message"].as_str()),
         (404, Some(&*format!("Edition #{ed} not found")))
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn identify_links_the_work_of_a_book_and_refuses_one_another_book_holds(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![full_anchor()]).await;
+    let (a, b) = (c.book(1).await, c.book(1).await);
+    let identify = async |id: i32, body: Value| {
+        c.call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{id}/identify"),
+            Some(body),
+        )
+        .await
+    };
+    let (s, v) = identify(a, json!({"provider": "openlibrary", "externalId": "OL1W"})).await;
+    assert_eq!(s, 201, "{v}");
+    let (_, v) = c.get(&sources_uri(a)).await;
+    assert_eq!(v["work"]["value"], "OL1W");
+    let (s, _) = identify(b, json!({"provider": "openlibrary", "externalId": "OL1W"})).await;
+    assert_eq!(s, 409);
+    let (s, _) = identify(b, json!({"tmdbId": 5})).await;
+    assert_eq!(s, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn identify_takes_an_asin_from_an_audible_hit(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol = ol.find(Namespace::ASIN, "B000000001", "OL1W");
+    let (c, _) = ctx(pool, vec![ol, Fake::new(Namespace::AUDIBLE)]).await;
+    let a = c.book(1).await;
+    let (s, v) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{a}/identify"),
+            Some(json!({"provider": "asin", "externalId": "B000000001"})),
+        )
+        .await;
+    assert_eq!(s, 201, "{v}");
+    let (_, v) = c.get(&sources_uri(a)).await;
+    assert_eq!(v["work"]["value"], "OL1W");
+}
+
+#[sqlx::test(migrations = false)]
+async fn attaching_a_work_another_book_holds_writes_nothing(pool: PgPool) {
+    let (c, st) = ctx(pool, vec![full_anchor()]).await;
+    let (a, b) = (c.book(1).await, c.book(1).await);
+    let m = super::identify::BookMatch {
+        work: "OL1W".into(),
+        edition: vec![],
+        confidence: 100,
+    };
+    let go = fliks_domain::metadata::limiter::Priority::Interactive;
+    super::link::attach(&st, a, None, &m, go).await.unwrap();
+    super::link::attach(&st, b, None, &m, go).await.unwrap();
+    let title: String = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
+        .bind(b)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "Untitled");
+    assert!(
+        super::link::stored(&c.pool, b, None)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_held_book_is_named_only_to_a_reader_of_its_library(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![full_anchor()]).await;
+    let hidden = c.book(2).await;
+    sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'book', 'openlibrary', 'OL1W')"#)
+        .bind(hidden)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let held = |readable: &'static [i32]| {
+        crate::media::write::book_import::held_book_in(
+            &c.pool,
+            Namespace::OPENLIBRARY,
+            "OL1W",
+            readable,
+        )
+    };
+    assert_eq!(held(&[1]).await.unwrap(), None);
+    assert_eq!(held(&[1, 2]).await.unwrap(), Some(hidden));
+}
+
+#[sqlx::test(migrations = false)]
+async fn search_goes_on_to_the_next_provider_when_every_hit_is_dropped(pool: PgPool) {
+    let mut ol = anchor();
+    ol.found = vec![json!({"title": "no id"})];
+    let mut gb = Fake::new(Namespace::GOOGLEBOOKS);
+    gb.found = vec![json!({"externalId": "gb1", "title": "Gamma", "authors": ["Sol"]})];
+    let (c, _) = ctx(pool, vec![ol, gb]).await;
+    let (_, v) = c.get("/api/metadata/search/book?q=a").await;
+    assert_eq!(v[0]["provider"], "googlebooks");
 }

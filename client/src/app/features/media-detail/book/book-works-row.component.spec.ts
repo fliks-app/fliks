@@ -43,7 +43,7 @@ describe('BookWorksRowComponent', () => {
   it('renders a titled card per work, linked to its book page, the current one highlighted', () => {
     const fixture = render();
     const cards = fixture.debugElement.queryAll((d) => d.name === 'app-media-card');
-    expect(fixture.nativeElement.querySelector('h2').textContent).toContain('Series One');
+    expect(fixture.nativeElement.querySelector('button').textContent).toContain('Series One');
     expect(cards.map((c) => c.componentInstance.title())).toEqual(['Book One', 'Book Three']);
     expect(cards.map((c) => c.componentInstance.subtitle())).toEqual(['#1', '']);
     expect(cards.map((c) => c.componentInstance.link())).toEqual([['/books', '1'], ['/books', '3']]);

@@ -1,65 +1,34 @@
 @let m = media();
 @let c = comic();
 
-<header class="relative isolate -mx-4 -mt-4 px-4 pt-16 pb-8">
-  <!-- Clipped on its own so the hero content keeps its focus rings. -->
-  <div class="absolute inset-0 overflow-hidden -z-10" aria-hidden="true">
-    @if (m.posterUrl) {
-      <img class="size-full object-cover scale-125 blur-3xl opacity-40" [cachedSrc]="m.posterUrl | resolveUrl: 'thumb'" alt="" />
-    }
-    <div class="absolute inset-0 bg-linear-to-b from-transparent to-base-100"></div>
-  </div>
-
-  <div class="flex gap-6 lg:gap-10">
-    <div class="w-32 sm:w-40 lg:w-56 shrink-0 aspect-2/3 rounded-xl overflow-hidden bg-base-300 shadow-xl">
-      @if (m.posterUrl) {
-        <img class="size-full object-cover" [cachedSrc]="m.posterUrl | resolveUrl: 'medium'" [alt]="m.title" />
+<app-detail-hero [title]="title()" [mediaId]="m.id" mediaType="comic" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="overview()" [progressPercent]="progressPercent()" [progressLabel]="progressLabel()">
+  @if (c) {
+    <p heroMeta class="flex flex-wrap gap-x-3 text-base-content/70" data-testid="facts">
+      @if (c.publisher) {
+        <span>{{ c.publisher }}</span>
       }
-    </div>
-
-    <div class="flex-1 min-w-0 flex flex-col gap-2">
-      <div class="flex items-start gap-2">
-        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ title() }}</h1>
-        @if (canEdit()) {
-          <button type="button" class="btn btn-ghost btn-sm btn-square mt-1" [attr.aria-label]="'comic.edit.volume' | translate" (click)="openVolume()" data-testid="edit-volume">
-            <svg lucidePencil class="size-4"></svg>
-          </button>
-        }
-      </div>
-      <p class="flex flex-wrap gap-x-3 text-base-content/70" data-testid="facts">
-        @if (c.publisher) {
-          <span>{{ c.publisher }}</span>
-        }
-        @if (c.startYear) {
-          <span>{{ c.startYear }}</span>
-        }
-        @if (c.volume != null) {
-          <span>{{ 'comic.volume' | translate: { n: c.volume } }}</span>
-        }
-      </p>
-      @if (overview()) {
-        <p class="mt-2 max-w-3xl text-base-content/80">{{ overview() }}</p>
+      @if (c.startYear) {
+        <span>{{ c.startYear }}</span>
       }
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        @if (canRead && next(); as n) {
-          <a class="btn btn-primary" [routerLink]="readLink(n.itemId)" data-testid="read-button">
-            {{ (started() ? 'comic.continue' : 'comic.read') | translate }}
-            <span class="opacity-70">{{ 'comic.issue_number' | translate: { n: n.number } }}</span>
-          </a>
-        }
-        <span class="text-sm text-base-content/60">
-          {{ 'comic.read_count' | translate: { read: readCount(), total: c.issues.length } }}
-        </span>
-      </div>
-    </div>
-  </div>
-</header>
+      @if (c.volume != null) {
+        <span>{{ 'comic.volume' | translate: { n: c.volume } }}</span>
+      }
+    </p>
+  }
+  @if (next(); as n) {
+    <a ngProjectAs="[heroActions]" class="btn btn-primary" autofocus [routerLink]="readLink(n.itemId)" data-testid="read-button">
+      {{ (started() ? 'comic.continue' : 'comic.read') | translate }}
+      <span class="opacity-70">{{ 'comic.issue_number' | translate: { n: n.number } }}</span>
+    </a>
+  }
+  <app-provider-attribution [providers]="m.providers" />
+</app-detail-hero>
 
 <ng-template #issueRows let-issues let-kind="kind">
   <ul class="flex flex-col gap-1">
     @for (i of issues; track i.itemId) {
       <li class="flex items-center gap-1">
-        @if (canRead && i.mediaFileId != null) {
+        @if (i.mediaFileId != null) {
           <a class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="readLink(i.itemId)" data-testid="issue">
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </a>
@@ -103,7 +72,8 @@
   }
 </ng-template>
 
-<div class="flex flex-col gap-8">
+@if (c) {
+<div class="mt-8 flex flex-col gap-8">
   <section>
     <h2 class="mb-2 text-lg font-semibold">{{ 'comic.issues' | translate }}</h2>
     <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: main(), kind: 'issue' }" />
@@ -121,7 +91,7 @@
     </section>
   }
 </div>
-
+}
 <dialog #volumeDialog class="modal" (close)="editingVolume.set(false)">
   <div class="modal-box max-w-lg">
     <app-modal-header [title]="'comic.edit.volume' | translate" />
@@ -133,16 +103,16 @@
         </label>
         <label class="form-control">
           <span class="label-text">{{ 'comic.edit.publisher' | translate }}</span>
-          <input class="input input-bordered w-full" name="publisher" [value]="c.publisher ?? ''" />
+          <input class="input input-bordered w-full" name="publisher" [value]="c?.publisher ?? ''" />
         </label>
         <div class="grid grid-cols-2 gap-3">
           <label class="form-control">
             <span class="label-text">{{ 'comic.edit.start_year' | translate }}</span>
-            <input class="input input-bordered w-full" name="startYear" type="number" min="1" max="9999" [value]="c.startYear ?? ''" />
+            <input class="input input-bordered w-full" name="startYear" type="number" min="1" max="9999" [value]="c?.startYear ?? ''" />
           </label>
           <label class="form-control">
             <span class="label-text">{{ 'comic.edit.volume_number' | translate }}</span>
-            <input class="input input-bordered w-full" name="volume" type="number" min="0" max="9999" [value]="c.volume ?? ''" />
+            <input class="input input-bordered w-full" name="volume" type="number" min="0" max="9999" [value]="c?.volume ?? ''" />
           </label>
         </div>
         <label class="form-control">

@@ -134,6 +134,7 @@ impl Field {
                 "productionCompanies",
                 "videos",
                 "keywords",
+                "volume",
             ],
             Self::Ids => &["tmdbId", "tvdbId", "imdbId"],
             Self::Subtitle => &["subtitle"],

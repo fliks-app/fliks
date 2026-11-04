@@ -1,3 +1,5 @@
+import { KIND_REGISTRY, MEDIA_KINDS } from '../../core/media-kinds';
+
 /** Poster morph between a media card and the media page. The stamp must outlive the click (snapshot on next tick, read again on back), so it is only replaced,
  * and the router hook drops it when neither side has a poster. */
 /** The clicked card's badges and progress bar, captured as one layer. */
@@ -54,7 +56,7 @@ const HERO_MUTED = 'data-hero-muted';
 
 export function muteHeroUntilDone(transition: { finished: Promise<unknown> }): void {
   const heroes = [
-    ...document.querySelectorAll<HTMLElement>('app-media-info-header img'),
+    ...document.querySelectorAll<HTMLElement>('app-media-info-header img, app-detail-hero img'),
   ];
   heroes.forEach((el) => el.setAttribute(HERO_MUTED, ''));
   const done = () => heroes.forEach((el) => el.removeAttribute(HERO_MUTED));
@@ -73,8 +75,7 @@ export interface RouteNode {
 
 /** Routes that carry a hero poster, i.e. the other half of a card's morph. */
 const POSTER_ROUTES = new Set<string | undefined>([
-  'movies/:id',
-  'series/:id',
+  ...MEDIA_KINDS.map((k) => `${KIND_REGISTRY[k].segment}/:id`),
   'series/:id/episode/:episodeId',
   'add/movie/:provider/:externalId',
   'add/tv/:provider/:externalId',

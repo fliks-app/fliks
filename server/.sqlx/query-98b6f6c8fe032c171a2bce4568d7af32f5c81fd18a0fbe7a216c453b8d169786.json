@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media (title, \"originalTitle\", year, type, status, monitored, \"alternativeTitles\",\n             genres, \"libraryId\", \"folderName\", \"languageProfileId\", \"addedById\")\n           VALUES ($1, $1, $2, $3, 'released', false, '[]', '[]', $4, $5, $6, $7)\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int4",
+        "Text",
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "98b6f6c8fe032c171a2bce4568d7af32f5c81fd18a0fbe7a216c453b8d169786"
+}

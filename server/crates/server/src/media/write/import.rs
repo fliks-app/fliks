@@ -1,10 +1,15 @@
 //! Metadata imports (rules 10-17, 19-22): the provider reads happen first, the rows in one
 //! transaction; images and credits follow detached.
-use super::{body::Body, entity_or_404, metadata, resolve_profile};
+use super::{
+    body::Body,
+    entity_or_404, fields,
+    identified::{Creation, create_identified},
+    metadata, resolve_profile,
+};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
     external_ids::{self, Ids},
-    field_sources::set_field_sources,
+    field_sources::merge_field_sources,
     items::{self, NewWant},
 };
 use crate::{
@@ -21,11 +26,10 @@ use fliks_domain::{
     acl::{Action, Subject},
     external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
-    metadata::limiter::Priority,
+    metadata::{field::Field, limiter::Priority},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
-    nfo::NfoData,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sqlx::PgConnection;
 use std::path::PathBuf;
 
@@ -124,7 +128,11 @@ async fn duplicate_ref(
     ns: Namespace,
     value: &str,
 ) -> Result<(), AppError> {
-    match external_ids::holder(&st.db, media_type, ns, value).await? {
+    let held = match media_type {
+        MediaKind::Book => super::book_import::held_book(&st.db, ns, value).await?,
+        _ => external_ids::holder(&st.db, media_type, ns, value).await?,
+    };
+    match held {
         Some(_) => Err(AppError::conflict("This title is already in the library")),
         None => Ok(()),
     }
@@ -404,7 +412,7 @@ async fn insert_media(
             .execute(&mut *tx)
             .await?;
     }
-    set_field_sources(tx, id, &found.provenance).await?;
+    merge_field_sources(tx, id, &found.provenance).await?;
     Ok((id, free))
 }
 
@@ -495,24 +503,19 @@ pub async fn import_in(
     duplicate_ref(st, media_type, ns, value).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
-    let imp = Import {
-        media_type,
-        library_id: target.id,
-        folder_id: target.folder_id,
-        quality_profile_id: resolve_profile(&st.db, false, profiles.0, target.default_quality)
-            .await?,
-        language_profile_id: resolve_profile(&st.db, true, profiles.1, target.default_language)
-            .await?,
-        added_by,
-        monitored_seasons: seasons,
-        links,
-    };
-    import_title(
+    create_identified(
         st,
-        Some(ns.as_str().into()),
-        value.to_owned(),
-        imp,
-        Priority::Interactive,
+        &Creation {
+            kind: media_type,
+            id: (ns, value),
+            target: &target,
+            profiles,
+            user: added_by,
+            links,
+            seasons,
+            wants: None,
+            prio: Priority::Interactive,
+        },
     )
     .await
 }
@@ -616,9 +619,49 @@ pub async fn import_media(
             external
         }
     };
-    let imp = prepare(&st, &a, &c, seasons).await?;
-    let id = import_title(&st, provider, external, imp, Priority::Interactive).await?;
+    let target = resolve_target(&st, &a, c.media_type, c.library, c.folder).await?;
+    let ns = match plugin {
+        Some(p) => p,
+        None if provider.as_deref() == Some("tvdb") => Namespace::TVDB,
+        None => Namespace::TMDB,
+    };
+    let id = create_identified(
+        &st,
+        &Creation {
+            kind: c.media_type,
+            id: (ns, &external),
+            target: &target,
+            profiles: (c.quality, c.language),
+            user: Some(a.user.id),
+            links: vec![],
+            seasons,
+            wants: None,
+            prio: Priority::Interactive,
+        },
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
+}
+
+/// The folder a book or comic created from a provider record gets, by the naming layout of its kind.
+pub(super) async fn creation_folder(
+    st: &AppState,
+    kind: MediaKind,
+    title: &str,
+    year: Option<i64>,
+) -> Result<String, AppError> {
+    let format = folder_format(&st.db, kind).await?;
+    let name = naming::apply_book_format(
+        &format,
+        &naming::BookNameTokens {
+            title: title.to_owned(),
+            year,
+            ..Default::default()
+        },
+    );
+    naming::validate_folder_path(&name)
+        .map(str::to_owned)
+        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))
 }
 
 /// `createUnmatched` input (rule 19): a title found on disk with no provider id.
@@ -633,7 +676,11 @@ pub struct Unmatched {
     pub language_profile_id: Option<i32>,
     pub library_default_quality: Option<i32>,
     pub library_default_language: Option<i32>,
-    pub nfo: Option<NfoData>,
+    /// What the files say (`metadata-orchestrator.md` rule 39), merged once the shell exists.
+    pub record: Option<Map<String, Value>>,
+    /// The title or year was typed by the caller: it is locked.
+    pub lock_title: bool,
+    pub lock_year: bool,
     pub artwork: Artwork,
 }
 
@@ -660,29 +707,16 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         u.library_default_language,
     )
     .await?;
-    let nfo = u.nfo.unwrap_or_default();
     let title = u.title;
-    let original = nfo
-        .original_title
-        .clone()
-        .filter(|o| !o.is_empty())
-        .unwrap_or_else(|| title.clone());
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles", overview,
-             genres, runtime, rating, "libraryId", "folderName",
-             "languageProfileId", "addedById")
-           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,
-             $9, $10, $11, $12)
+        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles",
+             genres, "libraryId", "folderName", "languageProfileId", "addedById")
+           VALUES ($1, $1, $2, $3, 'released', false, '[]', '[]', $4, $5, $6, $7)
            RETURNING id"#,
         title,
-        original,
         u.year,
         u.media_type.as_str(),
-        nfo.plot,
-        json!(nfo.genres.clone().unwrap_or_default()),
-        nfo.runtime.and_then(|r| i32::try_from(r).ok()),
-        nfo.rating,
         u.library_id,
         u.folder_name,
         l,
@@ -690,13 +724,27 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     )
     .fetch_one(&mut *tx)
     .await?;
-    set_release_dates(
-        &mut tx,
-        id,
-        &[(ReleaseKind::Release, nfo.premiered.clone())],
-        false,
-    )
-    .await?;
+    // The shell's values come from the files, so a later file merge may replace them.
+    let from_file: Vec<_> = [Field::Title, Field::OriginalTitle]
+        .into_iter()
+        .chain(u.year.map(|_| Field::Year))
+        .map(|f| (f, Namespace::FILE))
+        .collect();
+    crate::media::field_sources::merge_field_sources(&mut tx, id, &from_file).await?;
+    for (typed, field) in [(u.lock_title, Field::Title), (u.lock_year, Field::Year)] {
+        if typed {
+            crate::media::field_sources::lock(&mut *tx, id, field).await?;
+        }
+    }
+    // A book's file record is merged by its settle, with the credits and the series.
+    if let Some(mut record) = u.record.filter(|_| u.media_type != MediaKind::Book) {
+        record.insert("title".into(), title.clone().into());
+        match u.year {
+            Some(y) => record.insert("year".into(), y.into()),
+            None => record.remove("year"),
+        };
+        fields::merge_files(&mut tx, id, u.media_type, &[record]).await?;
+    }
     if let Some(f) = u.folder_id {
         crate::libraries::assert_folder_in_library(&mut *tx, u.library_id, f).await?;
     }

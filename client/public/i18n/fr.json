@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Échec",
     "subtitle_sync_failed": "Échec de la synchro",
     "delete_no_folder": "Ce titre n'a pas de dossier propre : seule l'entrée de la bibliothèque sera supprimée, le fichier reste sur le disque.",
-    "delete_success": "Titre supprimé de la bibliothèque."
+    "delete_success": "Titre supprimé de la bibliothèque.",
+    "edit_details": "Modifier les détails"
   },
   "requests": {
     "title": "Demandes",
@@ -1797,7 +1798,12 @@
     "roots": "Ce PC",
     "unreadable": "Dossier illisible"
   },
+  "attribution": {
+    "data_from": "Données de {{name}}",
+    "unofficial": "Certains détails viennent de sources non officielles (Audible, Audnexus)."
+  },
   "common": {
+    "progress": "Progression",
     "unexpected_error": "Une erreur est survenue. Rechargez la page si elle se reproduit.",
     "browse": "Parcourir…",
     "item_count_one": "{{count}} élément",
@@ -2472,8 +2478,10 @@
       "folder_removed": "{{removedMedia}} médias retirés de Fliks, {{unlinkedMedia}} conservés avec leurs autres fichiers.",
       "extra_folders": "Dossiers supplémentaires",
       "extra_folders_hint": "Ajoutés une fois la bibliothèque créée. Seul le premier dossier est analysé ici : analysez les autres depuis la page de la bibliothèque.",
-      "preferred_provider": "Fournisseur de métadonnées",
-      "provider_auto": "Auto (TMDB par défaut)",
+      "preferred_provider": "Fournisseur prioritaire",
+      "provider_auto": "Auto (ordre global)",
+      "provider_order_hint": "Les métadonnées sont lues chez ces fournisseurs dans l'ordre, pour chaque type de média. Le fournisseur prioritaire passe en tête des types qu'il couvre. L'ordre global se règle dans Paramètres › Métadonnées.",
+      "provider_none": "Aucun fournisseur disponible",
       "metadata_language": "Langue des métadonnées",
       "metadata_region": "Région des métadonnées",
       "metadata_inherit": "Hériter du réglage global",
@@ -2535,7 +2543,7 @@
       "scan_year_placeholder": "Année",
       "scan_search": "Rechercher",
       "scan_no_match": "Aucun résultat. Affinez la recherche.",
-      "scan_from_nfo": "depuis .nfo",
+      "scan_from_file": "depuis le fichier",
       "scan_already": "déjà présent dans la bibliothèque",
       "scan_link": "Lier",
       "scan_relink_existing": "Relier au média existant",
@@ -2550,6 +2558,7 @@
       "scan_error": "Échec de l'analyse.",
       "scan_files": "{{count}} fichier(s)",
       "scan_add_unmatched": "Ajouter sans métadonnées",
+      "scan_identify_from_file": "Identifier depuis le fichier ({{id}})",
       "scan_unmatched_badge": "Sans métadonnées",
       "scan_unmatched_option": "Aucune correspondance : ajouter tel quel",
       "scan_reorganize_needs_match": "Le déplacement/renommage ne s'applique qu'aux titres identifiés",
@@ -2557,6 +2566,7 @@
       "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias",
       "media_filter_unidentified": "Non identifiés",
       "scan_reorganize_needs_folder": "Le déplacement/renommage ne s'applique qu'aux titres dans leur propre dossier",
+      "media_type_book": "Livres et livres audio",
       "media_type_comic": "Bandes dessinées"
     },
     "users": {
@@ -2709,6 +2719,7 @@
       "configure": "Configurer",
       "empty": "Aucun fournisseur de métadonnées installé.",
       "order": "Ordre par type",
+      "drag": "Déplacer",
       "move_up": "Monter",
       "move_down": "Descendre",
       "load_error": "Impossible de charger les réglages de métadonnées.",
@@ -3739,7 +3750,7 @@
     "reaction_section_bar": "Dans la barre",
     "reaction_section_animated": "Animés",
     "reaction_no_result": "Aucun emoji trouvé",
-    "chat_name_sep": "\u00a0: ",
+    "chat_name_sep": " : ",
     "tab_members": "Membres",
     "host_badge": "Hôte",
     "status_ready": "Prêt",

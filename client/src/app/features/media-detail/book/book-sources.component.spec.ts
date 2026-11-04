@@ -22,29 +22,29 @@ describe('BookSourcesComponent', () => {
     return { fixture, http, el, button };
   }
 
-  it('lists the work link and the edition identifiers', async () => {
+  it('lists the edition identifiers only', async () => {
     const { el } = await setup();
     const rows = Array.from(el.querySelectorAll('[data-testid="source-row"]'));
-    expect(rows).toHaveLength(2);
-    expect(rows[0].textContent).toContain('OL1W');
-    expect(rows[1].textContent).toContain('9780000000002');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('9780000000002');
+    expect(el.textContent).not.toContain('OL1W');
   });
 
   it('unlinks an identifier', async () => {
     const { fixture, http, button } = await setup();
     button(0, 1).click();
     const req = http.expectOne((r) => r.method === 'DELETE' && r.url === '/api/media/1/sources');
-    expect(req.request.params.get('level')).toBe('work');
-    expect(req.request.params.get('value')).toBe('OL1W');
-    req.flush({ work: null, editions: bookSourcesFixture.editions });
+    expect(req.request.params.get('level')).toBe('edition');
+    expect(req.request.params.get('value')).toBe('9780000000002');
+    req.flush({ work: null, editions: [{ editionId: 100, ids: [] }] });
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="source-row"]').textContent).toContain('books_work.not_linked');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="source-row"]')).toHaveLength(0);
   });
 
   it('relinks through the form, then clears it', async () => {
     const { fixture, http, el, button } = await setup();
-    button(1, 0).click();
+    button(0, 0).click();
     fixture.detectChanges();
     const input = el.querySelector('input') as HTMLInputElement;
     expect(input.value).toBe('9780000000002');

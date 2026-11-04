@@ -70,8 +70,7 @@ describe('LibraryDetailState.validate', () => {
   it('rejects a library with no media type', () => {
     const { state } = setup();
     state.formName.set('Films');
-    state.formMovies.set(false);
-    state.formSeries.set(false);
+    state.formKinds.set(new Set());
     expect(state.validate()).toBe(false);
     expect(state.saveError()).toBe('settings.libraries.media_type_required');
   });
@@ -87,7 +86,7 @@ describe('LibraryDetailState.create', () => {
   it('sends the metadata locale and the selected users, then adopts the new library', async () => {
     const { state, created } = setup();
     state.formName.set('  Films  ');
-    state.formSeries.set(false);
+    state.toggleKind('series', false);
     state.formMetadataLanguage.set('fr');
     state.formMetadataRegion.set('FR');
     state.formPath.set('/medias/movies');
@@ -129,6 +128,18 @@ describe('LibraryDetailState.save', () => {
 
     expect(await state.save()).toBe(true);
     expect(updated).toEqual([expect.not.objectContaining({ path: expect.anything() })]);
+  });
+
+  it('sends the kinds in registry order', async () => {
+    const { state, created } = setup();
+    state.formName.set('Mixed');
+    state.formKinds.set(new Set());
+    state.toggleKind('comic', true);
+    state.toggleKind('book', true);
+    state.formPath.set('/medias/mixed');
+
+    await state.create();
+    expect(created).toEqual([expect.objectContaining({ mediaTypes: ['book', 'comic'] })]);
   });
 
   it('keeps the book type of a library and sends its m4b merge options', async () => {

@@ -17,11 +17,12 @@ import { SseService } from '../../../../../core/services/sse.service';
 import { serverMessage } from '../../../../../core/utils/server-message';
 import {
   MetadataService,
-  MetadataSearchResult,
+  SearchHit,
   searchResultKey,
 } from '../../../../../core/services/api/metadata.service';
 import {
   ImportsApiService,
+  OrphanFileId,
   OrphanGroup,
   OrphanScanResult,
   RelinkOrphansBody,
@@ -35,15 +36,32 @@ const SEARCH_CONCURRENCY = 8;
  *  fan-out here means dozens of full videos copying at once. */
 const AUTO_IMPORT_CONCURRENCY = 3;
 
+/** The ISBN or ASIN the files of a book name: the settle identifies the book from it. */
+export function bookFileId(group: OrphanGroup): OrphanFileId | undefined {
+  return group.fileIds.find((f) => f.provider === 'isbn' || f.provider === 'asin');
+}
+
+/** Whether a search hit is the title one of the file ids names. */
+function namesHit(ids: OrphanFileId[], hit: SearchHit): boolean {
+  return ids.some(
+    (f) =>
+      (f.provider === hit.provider && f.externalId === hit.externalId) ||
+      (f.provider === 'tmdb' && String(hit.tmdbId) === f.externalId) ||
+      (f.provider === 'tvdb' && String(hit.tvdbId) === f.externalId) ||
+      (f.provider === 'imdb' && hit.imdbId === f.externalId),
+  );
+}
+
 interface GroupVM {
   group: OrphanGroup;
   query: string;
   year: number | null;
-  results: MetadataSearchResult[];
+  results: SearchHit[];
   searching: boolean;
   searched: boolean;
-  pick: MetadataSearchResult | null;
-  fromNfo: boolean;
+  pick: SearchHit | null;
+  /** The pick is the title a file id names, or none: the settle identifies it from the file. */
+  fromFile: boolean;
   linking: boolean;
   done: boolean;
   error: string;
@@ -194,7 +212,7 @@ export class OrphanScanPanelComponent {
           searching: false,
           searched: false,
           pick: null,
-          fromNfo: false,
+          fromFile: !!bookFileId(group),
           linking: false,
           done: false,
           error: '',
@@ -263,7 +281,7 @@ export class OrphanScanPanelComponent {
   private relinkBody(
     libraryId: number,
     vm: GroupVM,
-    pick: MetadataSearchResult | null,
+    pick: SearchHit | null,
   ): RelinkOrphansBody {
     const group = vm.group;
     return {
@@ -271,10 +289,7 @@ export class OrphanScanPanelComponent {
       type: group.mediaType,
       ...(pick
         ? {
-            externalId:
-              pick.provider === 'tvdb' && pick.tvdbId != null
-                ? String(pick.tvdbId)
-                : String(pick.tmdbId),
+            externalId: pick.externalId,
             provider: pick.provider,
           }
         : {
@@ -305,7 +320,8 @@ export class OrphanScanPanelComponent {
       'settings.libraries.scan_error',
     );
     const status = (err as { status?: number })?.status;
-    return status ? `${message} (HTTP ${status})` : message;
+    if (status) return `${message} (HTTP ${status})`;
+    return err instanceof Error ? `${message} (${err.message})` : message;
   }
 
   private patch(index: number, partial: Partial<GroupVM>) {
@@ -321,7 +337,7 @@ export class OrphanScanPanelComponent {
       ...partial,
       results: [],
       pick: null,
-      fromNfo: false,
+      fromFile: !!bookFileId(this.groups()[index].group),
       searched: false,
       searching: false,
     });
@@ -340,26 +356,20 @@ export class OrphanScanPanelComponent {
     const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
-      const results = await this.metadata.searchByKind(vm.group.mediaType, query, vm.year ?? undefined, provider);
+      const results = await this.metadata.search(vm.group.mediaType, query, { year: vm.year ?? undefined, provider });
       if (stale()) return;
 
-      // Auto-select the match referenced by the .nfo id, if any.
-      const nfo = vm.group.nfo;
-      const auto = nfo
-        ? results.find(
-            (r) =>
-              (nfo.tmdbId != null && r.tmdbId === nfo.tmdbId) ||
-              (nfo.tvdbId != null && r.tvdbId === nfo.tvdbId),
-          )
-        : undefined;
+      // Auto-select the match a file id names; a book with an ISBN or ASIN is identified from it.
+      const auto = results.find((r) => namesHit(vm.group.fileIds, r));
+      const fromFile = !!auto || !!bookFileId(vm.group);
       // Import-all takes the first result when nothing is picked, so pick it
       // here: the row the import will use is the row the user sees selected.
       this.patch(index, {
         results,
         searching: false,
         searched: true,
-        pick: auto ?? results[0] ?? null,
-        fromNfo: !!auto,
+        pick: auto ?? (fromFile ? null : (results[0] ?? null)),
+        fromFile,
       });
     } catch (err: unknown) {
       if (stale()) return;
@@ -372,20 +382,21 @@ export class OrphanScanPanelComponent {
   }
 
   readonly key = searchResultKey;
+  protected readonly bookFileId = bookFileId;
 
-  isPicked(pick: MetadataSearchResult | null, result: MetadataSearchResult): boolean {
+  isPicked(pick: SearchHit | null, result: SearchHit): boolean {
     return !!pick && searchResultKey(pick) === searchResultKey(result);
   }
 
-  pick(index: number, result: MetadataSearchResult) {
+  pick(index: number, result: SearchHit) {
     const current = this.groups()[index]?.pick ?? null;
     const same = this.isPicked(current, result);
-    this.patch(index, { pick: same ? null : result, fromNfo: false });
+    this.patch(index, { pick: same ? null : result, fromFile: false });
   }
 
   /** The "add as is" pseudo-option: always sets an unmatched pick, no toggle. */
   pickUnmatched(index: number) {
-    this.patch(index, { pick: null, fromNfo: false });
+    this.patch(index, { pick: null, fromFile: !!bookFileId(this.groups()[index].group) });
   }
 
   /** Why the reorganize toggle is ignored for this group's link button, or '' when it applies. */
@@ -484,18 +495,17 @@ export class OrphanScanPanelComponent {
     if (generation !== this.scanGeneration || !vm || vm.done || vm.linking) return;
     if (!vm.searched) await this.search(index);
     if (generation !== this.scanGeneration || this.groups()[index].error) return;
-    // No provider match: still add it, unmatched, rather than leave it behind.
-    const best = this.bestMatch(this.groups()[index]);
-    this.patch(index, { pick: best });
+    // A file id already chose; otherwise a best match, or none: add it unmatched rather than leave it behind.
+    if (!this.groups()[index].fromFile) this.patch(index, { pick: this.bestMatch(this.groups()[index]) });
     await this.link(index);
   }
 
-  private bestMatch(vm: GroupVM): MetadataSearchResult | null {
+  private bestMatch(vm: GroupVM): SearchHit | null {
     if (!vm.results.length) return null;
     const norm = (s: string | null | undefined) =>
       (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const query = norm(vm.query);
-    let best: MetadataSearchResult | null = null;
+    let best: SearchHit | null = null;
     let bestScore = -Infinity;
     vm.results.forEach((r, idx) => {
       let score = 0;

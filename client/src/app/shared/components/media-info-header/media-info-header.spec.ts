@@ -135,6 +135,7 @@ async function createFixture(
           heroLogoUrl: () => null,
           heroTitle: () => '',
           isHeroPage: () => false,
+          heroPaddingTop: () => null,
           showBackButton: () => false,
           mobileNavTitle: () => '',
           mobileNavbarVisible: () => true,

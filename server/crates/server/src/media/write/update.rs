@@ -28,6 +28,7 @@ use fliks_domain::{
     acl::{Action, Subject},
     external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
+    metadata::field::Field,
 };
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
@@ -177,6 +178,37 @@ fn columns(b: &Body) -> Result<Columns, AppError> {
         }
     }
     Ok((out, release))
+}
+
+/// The fields of `cols` whose value differs from the stored one: the ones an edit sets by hand.
+async fn changed_fields(
+    c: &mut PgConnection,
+    id: i32,
+    cols: &[(&'static str, Col)],
+) -> sqlx::Result<Vec<Field>> {
+    let old: Option<Value> = sqlx::query_scalar(
+        r#"SELECT jsonb_build_object('title', title, 'originalTitle', "originalTitle", 'year', year,
+             'overview', overview, 'status', status::text, 'posterUrl', "posterUrl",
+             'fanartUrl', "fanartUrl", 'rating', rating, 'genres', genres, 'runtime', runtime)
+           FROM media WHERE id = $1 FOR UPDATE"#,
+    )
+    .bind(id)
+    .fetch_optional(&mut *c)
+    .await?;
+    let old = old.unwrap_or_default();
+    Ok(cols
+        .iter()
+        .filter_map(|(k, col)| {
+            let field = Field::parse(k)?;
+            let new = match col {
+                Col::Text(v) | Col::Enum(_, v) => json!(v),
+                Col::Int(v) => json!(v),
+                Col::Float(v) => json!(v),
+                Col::Json(v) => json!(v),
+            };
+            (old.get(*k) != Some(&new)).then_some(field)
+        })
+        .collect())
 }
 
 fn push_value(q: &mut QueryBuilder<Postgres>, c: &Col) {
@@ -464,6 +496,7 @@ pub async fn update(
         drop_details(&mut tx, id).await?;
     }
     if !cols.is_empty() {
+        let by_hand = changed_fields(&mut tx, id, &cols).await?;
         let mut q = QueryBuilder::new("UPDATE media SET ");
         for (i, (k, c)) in cols.iter().enumerate() {
             if i > 0 {
@@ -480,6 +513,7 @@ pub async fn update(
         }
         q.push(")");
         q.build().execute(&mut *tx).await.map_err(clash_or)?;
+        crate::media::field_sources::set_by_hand(&mut tx, id, &by_hand).await?;
     }
     if let Some(date) = release
         && set_release_dates(&mut tx, id, &[(ReleaseKind::Release, date)], false).await?

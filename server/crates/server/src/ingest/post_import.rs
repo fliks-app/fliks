@@ -361,8 +361,17 @@ async fn settled(st: &AppState, media_id: i32) {
             super::books::settled(st, media_id).await;
             return;
         }
-        Some(MediaKind::Comic) => return,
-        _ => {}
+        Some(MediaKind::Comic) => {
+            if let Err(e) = crate::media::write::fields::merge_unmatched(st, media_id).await {
+                tracing::warn!("Post-import[comic #{media_id}]: file merge failed: {e}");
+            }
+            return;
+        }
+        _ => {
+            if let Err(e) = crate::media::write::fields::merge_unmatched(st, media_id).await {
+                tracing::warn!("Post-import[media #{media_id}]: file merge failed: {e}");
+            }
+        }
     }
     // One batch at a time, so a season pack does not queue every media's jobs at once.
     let _turn = st.ingest.settle.turn.lock().await;

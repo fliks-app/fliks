@@ -67,7 +67,7 @@ export interface Season {
   id: number;
   seasonNumber: number;
   monitored: boolean;
-  preferredProvider?: 'tmdb' | 'tvdb' | null;
+  preferredProvider?: string | null;
   /** Season-specific poster (TMDB/TVDB); null → fall back to series poster. */
   posterUrl: string | null;
   /** Season synopsis; null on providers that don't carry one (TVDB). */
@@ -79,7 +79,13 @@ export interface Season {
   episodes: Episode[];
 }
 
-export type MetadataProvider = 'tmdb' | 'tvdb';
+/** A source the detail credits: a plugin with its link, or an unofficial one. */
+export interface MediaProvider {
+  provider: string;
+  name: string;
+  url: string | null;
+  unofficial?: boolean;
+}
 
 export interface Media {
   id: number;
@@ -122,9 +128,13 @@ export interface Media {
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
   /** Fully watched (movie completed / series all episodes watched), per user. */
   watched?: boolean;
+  /** The sources to credit, on the detail only (`GET /api/media/:id`). */
+  providers?: MediaProvider[];
+  /** Which provider wrote each field, `null` for one edited by hand; on the detail only. */
+  fieldSources?: Record<string, string | null>;
   /** Resume progress 0-100 (movies only; 0 for series). */
   progressPercent?: number;
-  preferredProvider?: 'tmdb' | 'tvdb' | null;
+  preferredProvider?: string | null;
   /** Plugin namespaces only; absent when the media holds none. */
   externalIds?: { provider: string; value: string }[];
   imdbId?: string | null;
@@ -554,7 +564,7 @@ export class MediaService {
 
   updateSeason(
     seasonId: number,
-    patch: { monitored?: boolean; preferredProvider?: 'tmdb' | 'tvdb' | null },
+    patch: { monitored?: boolean; preferredProvider?: string | null },
   ) {
     return firstValueFrom(
       this.http.patch<Season>(`/api/media/seasons/${seasonId}`, patch),

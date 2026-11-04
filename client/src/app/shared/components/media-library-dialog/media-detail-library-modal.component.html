@@ -45,10 +45,9 @@
           [ngModel]="selectedProvider()"
           (ngModelChange)="selectedProviderChange.emit($event)"
         >
-          @for (opt of providerOptions; track opt.value) {
-            <option [ngValue]="opt.value">
-              {{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}
-            </option>
+          <option [ngValue]="null">{{ 'media_detail.provider_inherit' | translate }}</option>
+          @for (p of providerOptions(); track p.provider) {
+            <option [ngValue]="p.provider">{{ p.label }}</option>
           }
         </select>
         <span class="label-text-alt opacity-60">{{

@@ -29,6 +29,18 @@ pub async fn of(db: impl PgExecutor<'_>, edition: i32) -> sqlx::Result<Option<(i
     Ok(row.and_then(|r| Some((r.mediaId, Family::parse(&r.family)?))))
 }
 
+/// The media of the edition holding `value` for `provider`.
+pub async fn media_of_id(
+    db: &sqlx::PgPool,
+    provider: Namespace,
+    value: &str,
+) -> sqlx::Result<Option<i32>> {
+    match super::external_ids::find_edition(db, provider, value).await? {
+        Some(e) => Ok(of(db, e).await?.map(|(media, _)| media)),
+        None => Ok(None),
+    }
+}
+
 /// The fields locked on `edition`.
 pub async fn locked_fields(c: impl PgExecutor<'_>, edition: i32) -> sqlx::Result<Vec<Field>> {
     let names = sqlx::query_scalar!(
@@ -40,28 +52,31 @@ pub async fn locked_fields(c: impl PgExecutor<'_>, edition: i32) -> sqlx::Result
     Ok(names.iter().filter_map(|n| Field::parse(n)).collect())
 }
 
-/// Replaces the rows of `edition` that are not locked by `provenance`; a locked row stays as it is.
-pub async fn set_field_sources(
+/// Replaces the unlocked rows of the fields `provenance` names; the rows of other fields stay, so a
+/// provider that wrote less than the one before does not erase what the latter wrote.
+pub async fn merge_field_sources(
     c: &mut PgConnection,
     edition: i32,
     provenance: &[(Field, Namespace)],
 ) -> sqlx::Result<()> {
-    sqlx::query!(
-        r#"DELETE FROM edition_field_sources WHERE "editionId" = $1 AND NOT locked"#,
-        edition
-    )
-    .execute(&mut *c)
-    .await?;
     let fields: Vec<&str> = provenance.iter().map(|(f, _)| f.as_str()).collect();
     let providers: Vec<&str> = provenance.iter().map(|(_, p)| p.as_str()).collect();
-    sqlx::query!(
+    sqlx::query(
+        r#"DELETE FROM edition_field_sources
+           WHERE "editionId" = $1 AND NOT locked AND field = ANY($2)"#,
+    )
+    .bind(edition)
+    .bind(&fields)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(
         r#"INSERT INTO edition_field_sources ("editionId", field, provider)
            SELECT $1, f, p FROM UNNEST($2::text[], $3::text[]) AS t(f, p)
            ON CONFLICT DO NOTHING"#,
-        edition,
-        &fields as &[&str],
-        &providers as &[&str]
     )
+    .bind(edition)
+    .bind(&fields)
+    .bind(&providers)
     .execute(&mut *c)
     .await?;
     Ok(())

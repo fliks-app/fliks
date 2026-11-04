@@ -154,7 +154,8 @@ pub async fn create_shell(
     for family in kind.families() {
         sqlx::query!(
             r#"INSERT INTO wants ("mediaId", family, "qualityProfileId", "folderId")
-               VALUES ($1, $2, $3, COALESCE($4, (SELECT df."folderId" FROM media m
+               VALUES ($1, $2, (SELECT id FROM quality_profiles WHERE id = $3 AND family = $2),
+                 COALESCE($4, (SELECT df."folderId" FROM media m
                  JOIN library_default_folders df ON df."libraryId" = m."libraryId" WHERE m.id = $1)))"#,
             media,
             family.as_str(),

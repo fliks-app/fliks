@@ -198,7 +198,7 @@
     }
 
     <!-- Progress bar -->
-    @if (progressPercent() > 0) {
+    @if (progressPercent() > 0 && progressPercent() < 100) {
       <div class="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
         <div class="h-full bg-primary" [style.width.%]="progressPercent()"></div>
       </div>

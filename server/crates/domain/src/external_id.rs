@@ -175,6 +175,14 @@ impl Namespace {
         Some(Self::Plugin(PluginNamespace(key)))
     }
 
+    /// The namespace the ids this provider answers are stored in: Audible and Audnexus answer ASINs.
+    pub fn id_namespace(self) -> Self {
+        match self {
+            Self::AUDIBLE | Self::AUDNEXUS => Self::ASIN,
+            n => n,
+        }
+    }
+
     /// A core name, or a plugin namespace already declared.
     pub fn parse(s: &str) -> Option<Self> {
         if let Some(p) = ExternalProvider::parse(s) {

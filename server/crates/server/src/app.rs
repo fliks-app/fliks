@@ -301,12 +301,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::ingest::disk::preview,
         crate::ingest::disk::relink_batch,
         crate::ingest::disk::relink,
-        jobs::book_import::start,
-        jobs::book_import::latest,
-        jobs::book_import::queue,
         metadata::providers,
-        metadata::search_movie,
-        metadata::search_tv,
+        metadata::search_hits,
         metadata::trending_movie,
         metadata::popular_movie,
         metadata::upcoming_movie,
@@ -324,9 +320,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::legacy_movie,
         metadata::legacy_tv,
         metadata::legacy_seasons,
-        metadata::books::routes::search_book,
         metadata::books::routes::preview_book,
-        metadata::comics::routes::search_comic,
         metadata::comics::routes::preview_comic,
         metadata::books::routes::sources_get,
         metadata::books::routes::sources_put,
@@ -488,7 +482,6 @@ fn api() -> Router<AppState> {
         .merge(crate::wanted::router())
         .merge(system::api())
         .merge(jobs::router())
-        .merge(jobs::book_import::router())
         .merge(requests::router())
         .merge(cleanup::router())
         .merge(subtitles::router())

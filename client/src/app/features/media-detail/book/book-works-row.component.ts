@@ -1,4 +1,5 @@
 import { Component, input } from '@angular/core';
+import { CollapsibleSectionComponent } from '../../../shared/components/collapsible-section/collapsible-section';
 import { HorizontalScrollerComponent } from '../../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../../shared/components/media-card/media-card';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -14,12 +15,13 @@ export interface WorkItem {
 
 @Component({
   selector: 'app-book-works-row',
-  imports: [HorizontalScrollerComponent, MediaCardComponent],
+  imports: [CollapsibleSectionComponent, HorizontalScrollerComponent, MediaCardComponent],
   templateUrl: './book-works-row.component.html',
   host: { class: 'block' },
 })
 export class BookWorksRowComponent {
   readonly heading = input.required<string>();
+  readonly persistKey = input('');
   readonly items = input.required<WorkItem[]>();
   /** The work on screen, marked in its own series row. */
   readonly currentId = input<number | null>(null);

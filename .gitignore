@@ -116,3 +116,4 @@ client/ios/App/App/Local.xcconfig
 
 # dev data dir (pre-migration dumps and the like)
 server/data/
+server/crates/server/data/

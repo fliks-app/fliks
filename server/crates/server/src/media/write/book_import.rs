@@ -1,26 +1,27 @@
 //! `POST /api/media/import` for a book (`docs/spec/book-metadata.md` rule 21).
 use super::{
     body::Body,
-    import::{Target, folder_format, resolve_target},
+    identified::{Creation, create_identified},
+    import::{Target, creation_folder, resolve_target},
 };
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed},
     libraries::{accessible_library_ids, paths_visible},
     media::{
-        books,
-        external_ids::{self},
+        books, editions,
+        external_ids::{self, edition_id},
         hydrate,
         items::{self, NewWant},
         wants,
     },
     metadata::{
-        Override, Upstream,
+        Upstream,
         books::{
             ANCHOR,
-            identify::BookMatch,
-            link::{attach, replace_credits, stored},
-            people, text, work_id,
+            identify::{BookMatch, work_of},
+            link::{attach, discovered, replace_credits, stored},
+            merge, people, text, work_id,
         },
         {fail, unavailable},
     },
@@ -30,9 +31,12 @@ use axum::{Json, http::StatusCode};
 use fliks_domain::external_id::Namespace;
 use fliks_domain::{
     media::kind::MediaKind,
-    media::wants::{MAX_WANTS, WantSpec, parse_wants},
+    media::{
+        AUDIO_EXTS,
+        family::Family,
+        wants::{MAX_WANTS, WantSpec, parse_wants},
+    },
     metadata::limiter::Priority,
-    naming::{self, BookNameTokens, validate_folder_path},
 };
 use serde_json::Value;
 
@@ -55,20 +59,33 @@ pub(super) async fn import_book(
     let b = Body::new(v, &FIELDS)?;
     let bad = |m: &str| AppError::bad_request(vec![m.to_owned()]);
     let provider = b.required(b.str("provider")?, "provider", "must be a string")?;
-    if provider != ANCHOR.as_str() {
-        return Err(AppError::bad_request(vec![format!(
-            "provider must be one of the following values: {}",
-            ANCHOR.as_str()
-        )]));
-    }
+    let ns = Namespace::parse(&provider)
+        .filter(|n| *n == ANCHOR || st.metadata.serves(*n, MediaKind::Book))
+        .ok_or_else(|| {
+            let others = st.metadata.serving(MediaKind::Book);
+            let mut served = vec![ANCHOR.as_str().to_owned()];
+            for n in others.into_iter().map(Namespace::id_namespace) {
+                if !served.iter().any(|s| s == n.as_str()) {
+                    served.push(n.as_str().to_owned());
+                }
+            }
+            bad(&format!(
+                "provider must be one of the following values: {}",
+                served.join(", ")
+            ))
+        })?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;
-    let work =
-        work_id(&external).ok_or_else(|| bad("externalId must be an Open Library work id"))?;
+    let id = match ns {
+        ANCHOR => {
+            work_id(&external).ok_or_else(|| bad("externalId must be an Open Library work id"))?
+        }
+        _ => ns
+            .normalize(&external)
+            .ok_or_else(|| bad(&format!("externalId is not a {provider} id")))?,
+    };
     let (library, folder) = (b.id("libraryId")?.flatten(), b.id("folderId")?.flatten());
-    if external_ids::find(&st.db, MediaKind::Book, ANCHOR, &work)
-        .await?
-        .is_some()
-    {
+    let readable = accessible_library_ids(&st.db, a).await?;
+    if held_book_in(&st.db, ns, &id, &readable).await?.is_some() {
         return Err(AppError::conflict(TAKEN));
     }
     let target = resolve_target(st, a, MediaKind::Book, library, folder).await?;
@@ -80,17 +97,18 @@ pub(super) async fn import_book(
     if let Some(w) = &wants {
         wants::check_profiles(&st.db, w).await?;
     }
-    let id = create_book(
+    let id = create_identified(
         st,
-        &NewBook {
+        &Creation {
+            kind: MediaKind::Book,
+            id: (ns, &id),
             target: &target,
-            folder,
+            profiles: (None, None),
             user: Some(a.user.id).filter(|u| *u != 0),
-            work: &work,
-            prio: Priority::Interactive,
+            links: vec![],
+            seasons: None,
             wants: wants.as_deref(),
-            discovered: false,
-            links: &[],
+            prio: Priority::Interactive,
         },
     )
     .await?;
@@ -128,20 +146,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         discovered,
         links,
     } = *new;
-    let over = sqlx::query!(
-        r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
-        target.id
-    )
-    .fetch_one(&st.db)
-    .await?;
-    let lang = st
-        .metadata
-        .lang
-        .resolve(Some(&Override {
-            language: over.language,
-            region: over.region,
-        }))
-        .await?;
+    let lang = crate::metadata::library_language(st, target.id).await?;
     let meta_fail = |e| match e {
         crate::metadata::MetaError::Upstream(e) => fail(ANCHOR, &e, true),
         crate::metadata::MetaError::Db(e) => e.into(),
@@ -176,18 +181,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         .get("year")
         .and_then(Value::as_i64)
         .filter(|y| (1..=9999).contains(y));
-    let format = folder_format(&st.db, MediaKind::Book).await?;
-    let name = naming::apply_book_format(
-        &format,
-        &BookNameTokens {
-            title: title.clone(),
-            year,
-            ..Default::default()
-        },
-    );
-    let name = validate_folder_path(&name)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-        .to_owned();
+    let name = creation_folder(st, MediaKind::Book, &title, year).await?;
 
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
@@ -284,61 +278,37 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
     Ok(id)
 }
 
-/// `media.resolveOrCreate` for a book: a work of the anchor goes through `create_book`; one named only by
-/// a plugin namespace is made from that provider's work record, with no anchor id (the plugin's ids and
-/// the caller's own links are the only ones written) and the wants of every family.
-pub(crate) async fn create_for_plugin(
-    st: &AppState,
-    (ns, value): (Namespace, &str),
-    (library, folder): (Option<i32>, Option<i32>),
-    links: Vec<(Namespace, String)>,
-) -> Result<i32, AppError> {
-    let all = super::all_library_ids(&st.db).await?;
-    let target = super::resolve_target_in(st, &all, MediaKind::Book, library, folder).await?;
-    let prio = Priority::Interactive;
+/// A book from a provider id: an anchor work, an edition under the work its ISBN or ASIN names (else
+/// unmatched), or a plugin work with no anchor id.
+pub(crate) async fn create_book_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
+    Ok(book_from(st, c, false).await?.0)
+}
+
+/// `create_book_from`, except that an edition whose anchor work a book already holds joins that book;
+/// the flag tells whether the book is new.
+pub(crate) async fn book_or_held(st: &AppState, c: &Creation<'_>) -> Result<(i32, bool), AppError> {
+    book_from(st, c, true).await
+}
+
+async fn book_from(st: &AppState, c: &Creation<'_>, join: bool) -> Result<(i32, bool), AppError> {
+    let (ns, value) = c.id;
     if ns == ANCHOR {
         let work = work_id(value)
             .ok_or_else(|| AppError::bad_request("an Open Library work id is needed"))?;
-        return create_book(
-            st,
-            &NewBook {
-                target: &target,
-                folder,
-                user: None,
-                work: &work,
-                prio,
-                wants: None,
-                discovered: false,
-                links: &links,
-            },
-        )
-        .await;
+        return Ok((create_book(st, &new_book(c, &work)).await?, true));
     }
-    if !st.metadata.available(ns) {
+    if !st.metadata.answers(ns) {
         return Err(AppError::bad_request("the provider is not available"));
     }
-    let over = sqlx::query!(
-        r#"SELECT "metadataLanguage" AS language, "metadataRegion" AS region FROM libraries WHERE id = $1"#,
-        target.id
-    )
-    .fetch_one(&st.db)
-    .await?;
-    let lang = st
-        .metadata
-        .lang
-        .resolve(Some(&Override {
-            language: over.language,
-            region: over.region,
-        }))
-        .await?;
+    if matches!(ns, Namespace::Core(_)) {
+        return create_from_edition(st, c, join).await;
+    }
+    let lang = crate::metadata::library_language(st, c.target.id).await?;
     let Value::Object(record) = st
         .metadata
-        .work(ns, MediaKind::Book, value, &lang, prio)
+        .work(ns, MediaKind::Book, value, &lang, c.prio)
         .await
-        .map_err(|e| match e {
-            crate::metadata::MetaError::Upstream(e) => fail(ns, &e, true),
-            crate::metadata::MetaError::Db(e) => e.into(),
-        })?
+        .map_err(|e| meta_error(ns, e))?
     else {
         return Err(unavailable(
             "request",
@@ -346,38 +316,168 @@ pub(crate) async fn create_for_plugin(
             &Upstream::new(None, "unexpected work record"),
         ));
     };
-    let title = text(&record, "title")
-        .ok_or_else(|| unavailable("request", ns, &Upstream::new(None, "the work has no title")))?;
+    let own = std::iter::once((ns, value.to_owned()))
+        .chain(c.links.iter().cloned())
+        .collect();
+    Ok((insert_unanchored(st, c, &record, ns, own).await?, true))
+}
+
+fn new_book<'a>(c: &'a Creation<'a>, work: &'a str) -> NewBook<'a> {
+    NewBook {
+        target: c.target,
+        folder: c.target.folder_id,
+        user: c.user,
+        work,
+        prio: c.prio,
+        wants: c.wants,
+        discovered: false,
+        links: &c.links,
+    }
+}
+
+fn meta_error(ns: Namespace, e: crate::metadata::MetaError) -> AppError {
+    match e {
+        crate::metadata::MetaError::Upstream(e) => fail(ns, &e, true),
+        crate::metadata::MetaError::Db(e) => e.into(),
+    }
+}
+
+/// An edition of a core provider (Google Books, BnF, ...): the book of the anchor work its ISBN or ASIN
+/// names, else an unmatched book that settle identifies from the files; the edition keeps its ids.
+async fn create_from_edition(
+    st: &AppState,
+    c: &Creation<'_>,
+    join: bool,
+) -> Result<(i32, bool), AppError> {
+    let (ns, value) = c.id;
+    let pick = edition_id(ns, value)
+        .ok_or_else(|| AppError::bad_request(format!("{ns} names no book edition")))?;
+    let lang = crate::metadata::library_language(st, c.target.id).await?;
+    let mut ids = vec![(ns, pick)];
+    let records = merge::edition_records(st, &ids, &lang, c.prio)
+        .await
+        .map_err(|e| meta_error(ns, e))?;
+    let Some((from, record)) = records.iter().find(|(p, _)| *p == ns).or(records.first()) else {
+        return Err(AppError::not_found(
+            "the provider does not know this edition",
+        ));
+    };
+    for id in discovered(&records) {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    let hinted: Vec<_> = ids
+        .iter()
+        .filter(|(n, _)| *n == Namespace::ISBN || *n == Namespace::ASIN)
+        .cloned()
+        .collect();
+    let audio = record
+        .get("durationSeconds")
+        .and_then(Value::as_i64)
+        .is_some_and(|d| d > 0)
+        || text(record, "format").is_some_and(|f| AUDIO_EXTS.contains(&format!(".{f}").as_str()));
+    let family = if audio { Family::Audio } else { Family::Text };
+    let work = work_of(st, &hinted, &lang, c.prio).await;
+    let held = match &work {
+        Some(work) if join => external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await?,
+        _ => None,
+    };
+    let id = match (&work, held) {
+        (_, Some(held)) => same_library(&st.db, held, c.target.id)
+            .await
+            .map(|_| held)?,
+        (Some(work), None) => create_book(st, &new_book(c, work)).await?,
+        (None, None) => insert_unanchored(st, c, record, *from, c.links.clone()).await?,
+    };
+    let edition = add_edition(&st.db, id, family, &ids).await?;
+    if let Some(work) = work {
+        let m = BookMatch {
+            work,
+            edition: ids,
+            confidence: 100,
+        };
+        if let Err(e) = attach(st, id, Some(edition), &m, c.prio).await {
+            tracing::warn!("edition #{edition} of book #{id} not merged: {e:?}");
+        }
+    }
+    Ok((id, held.is_none()))
+}
+
+/// 400 unless the book is in `library`, so an edition never lands on a book of another one.
+async fn same_library(db: &sqlx::PgPool, media: i32, library: i32) -> Result<(), AppError> {
+    let held: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(media)
+        .fetch_one(db)
+        .await?;
+    match held == Some(library) {
+        true => Ok(()),
+        false => Err(AppError::bad_request(
+            "Media already belongs to another library",
+        )),
+    }
+}
+
+/// The edition an import makes before any file exists, holding the ids the provider gave.
+async fn add_edition(
+    db: &sqlx::PgPool,
+    media: i32,
+    family: Family,
+    ids: &[(Namespace, String)],
+) -> Result<i32, AppError> {
+    let mut tx = db.begin().await?;
+    let edition: i32 = sqlx::query_scalar(
+        r#"INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id"#,
+    )
+    .bind(media)
+    .bind(family.as_str())
+    .fetch_one(&mut *tx)
+    .await?;
+    for (ns, value) in ids {
+        external_ids::link_edition(&mut tx, edition, media, *ns, value).await?;
+    }
+    tx.commit().await?;
+    Ok(edition)
+}
+
+/// The book of a provider record with no anchor id: `own` is linked to the media, `pref` is its preferred
+/// provider and the wants are those of `c` (every family when unset).
+async fn insert_unanchored(
+    st: &AppState,
+    c: &Creation<'_>,
+    record: &serde_json::Map<String, Value>,
+    pref: Namespace,
+    own: Vec<(Namespace, String)>,
+) -> Result<i32, AppError> {
+    let target = c.target;
+    let title = text(record, "title").ok_or_else(|| {
+        unavailable(
+            "request",
+            pref,
+            &Upstream::new(None, "the work has no title"),
+        )
+    })?;
     let year = record
         .get("year")
         .and_then(Value::as_i64)
+        .or_else(|| text(record, "releaseDate")?.get(..4)?.parse().ok())
         .filter(|y| (1..=9999).contains(y))
         .map(|y| y as i32);
-    let format = folder_format(&st.db, MediaKind::Book).await?;
-    let name = naming::apply_book_format(
-        &format,
-        &BookNameTokens {
-            title: title.clone(),
-            year: year.map(i64::from),
-            ..Default::default()
-        },
-    );
-    let name = validate_folder_path(&name)
-        .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-        .to_owned();
+    let name = creation_folder(st, MediaKind::Book, &title, year.map(i64::from)).await?;
     let mut tx = st.db.begin().await?;
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, overview,
-             "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt")
-           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5, $6, now())
+             "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt", "addedById")
+           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5, $6, now(), $7)
            RETURNING id"#,
     )
     .bind(&title)
     .bind(year)
-    .bind(text(&record, "overview"))
+    .bind(text(record, "overview"))
     .bind(target.id)
     .bind(&name)
-    .bind(ns.as_str())
+    .bind(pref.as_str())
+    .bind(c.user)
     .fetch_one(&mut *tx)
     .await?;
     items::create_shell(
@@ -386,23 +486,27 @@ pub(crate) async fn create_for_plugin(
         MediaKind::Book,
         NewWant {
             quality_profile_id: None,
-            folder_id: folder,
+            folder_id: target.folder_id,
         },
     )
     .await?;
-    let own = std::iter::once((ns, value.to_owned())).chain(links);
-    for (n, v) in own {
-        external_ids::link(&mut tx, id, MediaKind::Book, n, &v).await?;
+    for (n, v) in &own {
+        external_ids::link(&mut tx, id, MediaKind::Book, *n, v).await?;
+    }
+    if let Some(w) = c.wants {
+        wants::replace(&mut tx, id, w)
+            .await
+            .map_err(|e| wants::write_error(e, id))?;
     }
     sqlx::query(r#"INSERT INTO book_details ("mediaId") VALUES ($1) ON CONFLICT DO NOTHING"#)
         .bind(id)
         .execute(&mut *tx)
         .await?;
-    let authors = people(&record, "authors");
+    let authors = people(record, "authors");
     replace_credits(&mut tx, id, None, "author", None, &authors).await?;
     tx.commit().await?;
     tracing::info!(
-        "Imported book \"{title}\" (#{id}) from {ns} into library #{}",
+        "Imported book \"{title}\" (#{id}) from {pref} into library #{}",
         target.id
     );
     st.hub.emit_domain(DomainEvent::MediaImported {
@@ -410,7 +514,7 @@ pub(crate) async fn create_for_plugin(
         external_ids: external_ids::refs(&st.db, id).await?,
         media_type: MediaKind::Book,
         library_id: Some(i64::from(target.id)),
-        added_by_user_id: None,
+        added_by_user_id: c.user.map(i64::from),
     });
     Ok(id)
 }
@@ -502,4 +606,34 @@ async fn add_to_existing(
     }
     tx.commit().await?;
     Ok(Some(id))
+}
+
+/// The book that holds `id` of `ns`: an edition provider's id sits on an edition, the others on the work.
+pub(crate) async fn held_book(
+    db: &sqlx::PgPool,
+    ns: Namespace,
+    id: &str,
+) -> sqlx::Result<Option<i32>> {
+    match ns {
+        Namespace::Core(_) if ns != ANCHOR => editions::media_of_id(db, ns, id).await,
+        _ => external_ids::find(db, MediaKind::Book, ns, id).await,
+    }
+}
+
+/// `held_book` limited to the books of `readable` libraries, so an answer never names another one.
+pub(crate) async fn held_book_in(
+    db: &sqlx::PgPool,
+    ns: Namespace,
+    id: &str,
+    readable: &[i32],
+) -> sqlx::Result<Option<i32>> {
+    let Some(media) = held_book(db, ns, id).await? else {
+        return Ok(None);
+    };
+    let library: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(media)
+        .fetch_optional(db)
+        .await?
+        .flatten();
+    Ok(library.filter(|l| readable.contains(l)).map(|_| media))
 }

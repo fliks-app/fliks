@@ -685,7 +685,7 @@ fn uses_stub(sc: &Value) -> bool {
 }
 
 /// Keys the recordings predate (additive contract keys): never compared.
-const ADDITIVE: &[&str] = &["$..trackMarkers"];
+const ADDITIVE: &[&str] = &["$..trackMarkers", "$.providers", "$.fieldSources"];
 
 /// Step-level `ignore`: paths dropped from that step's body only.
 fn step_ignore(step: &Value) -> Vec<Vec<Seg>> {

@@ -90,14 +90,7 @@
 
     <!-- Progress bar -->
     @if (resumeLabel() && progressPercent() > 0) {
-      <div class="mt-4">
-        <div class="w-full bg-base-300 rounded-full h-1.5">
-          <div class="bg-primary rounded-full h-1.5 transition-all" [style.width.%]="progressPercent()"></div>
-        </div>
-        @if (remainingLabel()) {
-          <p class="text-sm text-base-content/50 mt-1 text-center">{{ remainingLabel() }}</p>
-        }
-      </div>
+      <app-hero-progress class="block mt-4" [percent]="progressPercent()" [label]="remainingLabel()" [centered]="true" />
     }
 
     <!-- OCR extraction in progress -->
@@ -200,40 +193,13 @@
 
   <div
     class="flex gap-6 lg:gap-10 relative z-20 has-[.dropdown-open]:z-50"
-    [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
+    [style.padding-top]="navbar.heroPaddingTop()"
   >
     <!-- Poster / Still (desktop only): compact on md-lg so the title keeps room in a short viewport; 200px from lg, 220 from xl, 280 from 2xl. -->
-    <div class="shrink-0 rounded-xl overflow-hidden"
-         [class.w-[140px]]="posterMode() === 'poster'"
-         [class.lg:w-[200px]]="posterMode() === 'poster'"
-         [class.xl:w-[220px]]="posterMode() === 'poster'"
-         [class.2xl:w-[280px]]="posterMode() === 'poster'"
-         [class.w-[28%]]="posterMode() === 'still'"
-         [class.3xl:w-[22%]]="posterMode() === 'still'">
-      @if (posterUrl()) {
-        <img
-          appImgFadeIn
-          [cachedSrc]="posterUrl()! | resolveUrl:(posterMode() === 'still' ? 'thumb' : 'medium')" [alt]="title()"
-          loading="eager" fetchpriority="high" decoding="async"
-          [appSpoiler]="spoilerImage()"
-          #posterSpoiler="spoiler"
-          [revealLabel]="'spoilers.reveal' | translate"
-          [class.scale-110]="posterSpoiler.masked()"
-          class="w-full rounded-xl object-cover bg-base-300"
-          [class.aspect-2/3]="posterMode() === 'poster'"
-          [class.aspect-video]="posterMode() === 'still'"
-          [style.view-transition-name]="episodeId() ? 'media-poster-ep-' + episodeId() : 'media-poster-' + mediaId()"
-        />
-      } @else {
-        <div
-          class="rounded-xl bg-base-300 flex items-center justify-center text-base-content/30"
-          [class.aspect-2/3]="posterMode() === 'poster'"
-          [class.aspect-video]="posterMode() === 'still'"
-        >
-          <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>
-        </div>
-      }
-    </div>
+    <app-hero-poster
+      [url]="posterUrl()" [alt]="title()" [mode]="posterMode()" [spoiler]="spoilerImage()"
+      [viewTransitionName]="episodeId() ? 'media-poster-ep-' + episodeId() : 'media-poster-' + mediaId()"
+    />
 
     <div class="flex-1 min-w-0 pt-2">
       <!-- Title -->
@@ -372,14 +338,7 @@
 
       <!-- Progress bar -->
       @if (resumeLabel() && progressPercent() > 0) {
-        <div class="mt-5 max-w-md">
-          <div class="w-full bg-base-300 rounded-full h-1.5">
-            <div class="bg-primary rounded-full h-1.5 transition-all" [style.width.%]="progressPercent()"></div>
-          </div>
-          @if (remainingLabel()) {
-            <p class="text-sm text-base-content/50 mt-1">{{ remainingLabel() }}</p>
-          }
-        </div>
+        <app-hero-progress class="block mt-5 max-w-md" [percent]="progressPercent()" [label]="remainingLabel()" />
       }
 
       <!-- OCR extraction in progress -->

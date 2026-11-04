@@ -2,7 +2,7 @@
 use super::*;
 use crate::media::{
     external_ids,
-    write::{book_import, import_in},
+    write::{book_import::held_book, import_in},
 };
 use crate::metadata::books::ANCHOR;
 use crate::plugins::imports::{db_err, host_err};
@@ -47,9 +47,11 @@ pub async fn resolve_or_create(
     lock_titles(&mut tx, &keys).await.map_err(lock_err)?;
     let mut found = None;
     for (ns, value) in &entries {
-        found = external_ids::find(&mut *tx, kind, *ns, value)
-            .await
-            .map_err(db_err)?;
+        found = match kind {
+            MediaKind::Book => held_book(&st.db, *ns, value).await,
+            _ => external_ids::find(&mut *tx, kind, *ns, value).await,
+        }
+        .map_err(db_err)?;
         if found.is_some() {
             break;
         }
@@ -77,7 +79,7 @@ pub async fn resolve_or_create(
             }
             let Some((ns, value)) = entries
                 .iter()
-                .find(|(ns, _)| own(ns) && st.metadata.available(*ns))
+                .find(|(ns, _)| own(ns) && st.metadata.answers(*ns))
             else {
                 return Err(host_err(
                     "unsupported-provider",
@@ -111,20 +113,16 @@ async fn create(
     (library, folder): (Option<i32>, Option<i32>),
     links: Vec<(Namespace, String)>,
 ) -> Result<i32, HostError> {
-    let created = if kind == MediaKind::Book {
-        book_import::create_for_plugin(st, (ns, value), (library, folder), links).await
-    } else {
-        import_in(
-            st,
-            kind,
-            (ns, value),
-            (None, None),
-            (library, folder),
-            None,
-            (None, links),
-        )
-        .await
-    };
+    let created = import_in(
+        st,
+        kind,
+        (ns, value),
+        (None, None),
+        (library, folder),
+        None,
+        (None, links),
+    )
+    .await;
     match created {
         Ok(id) => Ok(id),
         // Held by an import that does not take the title lock: the media exists now.
@@ -162,6 +160,7 @@ fn served_entries(
         .iter()
         .filter_map(|i| Some((Namespace::parse(&i.provider)?, i.value.as_str())))
         .filter(|(ns, _)| served(*ns))
+        .map(|(ns, v)| (ns.id_namespace(), v))
         .map(|(ns, v)| (ns, ns.normalize(v)))
         .collect();
     let mut known: Vec<(Namespace, String)> = parsed
@@ -185,4 +184,50 @@ fn served_entries(
         ));
     }
     Ok(known)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metadata::books::tests::{Fake, anchor, state};
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    fn id(provider: &str, value: &str) -> t::ExternalId {
+        t::ExternalId {
+            provider: provider.into(),
+            value: value.into(),
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_id_is_found_again_and_an_audible_id_is_created(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]');
+               INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/b')"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let audible = Fake::new(Namespace::AUDIBLE).edition(
+            Namespace::ASIN,
+            "B000000001",
+            json!({"title": "Gamma", "authors": [{"name": "Sol", "id": null}]}),
+        );
+        let st = state(&db, vec![anchor(), audible]);
+        let ids = [id("audible", "B000000001")];
+        let first = resolve_or_create(&st, "org.fake", "book", &ids, None, None)
+            .await
+            .unwrap();
+        let again = resolve_or_create(&st, "org.fake", "book", &ids, None, None)
+            .await
+            .unwrap();
+        assert_eq!(first, again);
+        let books: i64 = sqlx::query_scalar("SELECT count(*) FROM media WHERE type = 'book'")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(books, 1);
+    }
 }

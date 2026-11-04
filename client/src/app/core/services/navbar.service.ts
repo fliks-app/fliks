@@ -200,6 +200,13 @@ export class NavbarService {
     return !this.effectiveSidebarPinned();
   });
 
+  /** Top padding that clears the mobile navbar for a desktop-layout hero; null when no navbar overlaps it. */
+  readonly heroPaddingTop = computed(() =>
+    this.isHeroPage() && !this.device.isTv() && this.mobileNavbarVisible()
+      ? 'calc(env(safe-area-inset-top, 0px) + 3rem)'
+      : null,
+  );
+
   /** Mobile navbar center: hero title on fanart pages, otherwise static/dynamic page title. */
   readonly mobileNavTitle = computed(() =>
     this.isHeroPage() ? this.heroTitle() : this.pageTitle(),

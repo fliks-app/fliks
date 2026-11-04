@@ -13,6 +13,7 @@ use crate::{
         editions::{self, Facts},
         external_ids::{self, Link, edition_id},
         field_sources,
+        write::fields::{Fields, apply},
     },
     metadata::{MetaError, Override, Upstream},
     state::AppState,
@@ -39,15 +40,16 @@ pub async fn attach(
     m: &BookMatch,
     p: Priority,
 ) -> Result<(), MetaError> {
-    attach_with(st, media, edition, m, None, p).await
+    attach_with(st, media, edition, Some(m), None, p).await
 }
 
-/// `attach` with a record read from the file (`file` provenance), which every merge takes in.
+/// `attach` with a record read from the file (`file` provenance), which every merge takes in; without a
+/// match only the file record is merged, and no id is linked.
 pub async fn attach_with(
     st: &AppState,
     media: i32,
     edition: Option<i32>,
-    m: &BookMatch,
+    m: Option<&BookMatch>,
     file: Option<&Map<String, Value>>,
     prio: Priority,
 ) -> Result<(), MetaError> {
@@ -61,31 +63,51 @@ pub async fn attach_with(
             _ => return Ok(()),
         },
     };
-    let work = work_id(&m.work).ok_or_else(|| Upstream::new(None, "not a work id"))?;
-    if !st.metadata.available(ANCHOR) {
-        return Err(Upstream::outage("the work provider is unavailable").into());
-    }
-    let lang = st.metadata.lang.resolve(Some(&ctx.over)).await?;
-    let Value::Object(work_record) = st
-        .metadata
-        .work(ANCHOR, MediaKind::Book, &work, &lang, prio)
-        .await?
-    else {
-        return Err(Upstream::new(None, "unexpected work record").into());
+    let work = match m {
+        Some(m) => Some(work_id(&m.work).ok_or_else(|| Upstream::new(None, "not a work id"))?),
+        None => None,
     };
-    let refs = match edition {
-        Some(_) => edition_refs(&m.edition),
-        None => vec![],
+    let lang = st.metadata.lang.resolve(Some(&ctx.over)).await?;
+    let work_record = match &work {
+        Some(work) => {
+            if !st.metadata.available(ANCHOR) {
+                return Err(Upstream::outage("the work provider is unavailable").into());
+            }
+            let Value::Object(r) = st
+                .metadata
+                .work(ANCHOR, MediaKind::Book, work, &lang, prio)
+                .await?
+            else {
+                return Err(Upstream::new(None, "unexpected work record").into());
+            };
+            r
+        }
+        None => Map::new(),
+    };
+    let refs = match (edition, m) {
+        (Some(_), Some(m)) => edition_refs(&m.edition),
+        (Some(e), None) => edition_refs(&external_ids::edition_ids(&st.db, e).await?),
+        _ => vec![],
     };
     let mut records = merge::edition_records(st, &refs, &lang, prio).await?;
+    if m.is_none() {
+        records.extend(merge::plugin_works(st, media, &lang, prio).await?);
+    }
+    let provider_backed = work.is_some() || !records.is_empty();
     records.extend(file.map(|f| (Namespace::FILE, f.clone())));
     let mut ids = refs;
-    for id in discovered(&records) {
+    for id in discovered(&records).into_iter().filter(|_| work.is_some()) {
         if !ids.contains(&id) {
             ids.push(id);
         }
     }
-    let work_locked = field_sources::locked_fields(&st.db, media).await?;
+    let mut work_locked = field_sources::locked_fields(&st.db, media).await?;
+    if !provider_backed {
+        // The file alone fills empty fields and its own, never a hand edit.
+        let mut c = st.db.acquire().await?;
+        work_locked.extend(field_sources::not_from_file(&mut *c, media).await?);
+        work_locked.extend(crate::media::write::fields::unsourced(&mut c, media).await?);
+    }
     let edition_locked = match edition {
         Some(e) => Some(editions::locked_fields(&st.db, e).await?),
         None => None,
@@ -123,17 +145,25 @@ pub async fn attach_with(
         }
     }
 
-    match external_ids::link(&mut tx, media, MediaKind::Book, ANCHOR, &work).await? {
+    let linked = match &work {
+        Some(work) => external_ids::link(&mut tx, media, MediaKind::Book, ANCHOR, work).await?,
+        None => Link::Linked,
+    };
+    match linked {
         Link::Linked => {}
         Link::Taken => {
-            let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, &work).await?;
+            let work = work.as_deref().unwrap_or_default();
+            let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, work).await?;
             match holder.filter(|h| *h != media && edition.is_some()) {
                 Some(holder) => {
                     absorb(&mut tx, media, holder).await?;
                     tx.commit().await?;
                     return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
                 }
-                None => tracing::warn!("book #{media}: another work holds the {work} id"),
+                None => {
+                    tracing::warn!("book #{media}: another work holds the {work} id");
+                    return Ok(());
+                }
             }
         }
         Link::Gone => return Ok(()),
@@ -146,25 +176,7 @@ pub async fn attach_with(
 
     let title = text(&wmap, "title");
     let poster = text(&wmap, "posterUrl");
-    sqlx::query!(
-        r#"UPDATE media SET title = COALESCE($2, title), year = COALESCE($3, year),
-             overview = COALESCE($4, overview), "posterUrl" = COALESCE($5, "posterUrl"),
-             rating = COALESCE($6, rating), "metadataRefreshedAt" = now()
-           WHERE id = $1"#,
-        media,
-        title,
-        wmap.get("year")
-            .and_then(Value::as_i64)
-            .filter(|y| (1..=9999).contains(y))
-            .map(|y| y as i32),
-        text(&wmap, "overview"),
-        poster,
-        wmap.get("rating")
-            .and_then(Value::as_f64)
-            .filter(|r| r.is_finite())
-    )
-    .execute(&mut *tx)
-    .await?;
+    apply(&mut tx, media, &Fields::from_map(MediaKind::Book, &wmap)).await?;
     let subjects = match wmap.get("subjects") {
         Some(Value::Array(a)) if !a.is_empty() => Some(Value::Array(a.clone())),
         _ => None,
@@ -193,7 +205,7 @@ pub async fn attach_with(
     )
     .await?;
     set_series(&mut tx, media, &wmap, provider_of(&wprov, Field::Series)).await?;
-    field_sources::set_field_sources(&mut tx, media, &wprov).await?;
+    field_sources::merge_field_sources(&mut tx, media, &wprov).await?;
 
     if let (Some(e), Some((emap, eprov))) = (edition, &emerged) {
         let work_title = title.clone().unwrap_or(ctx.title);
@@ -230,7 +242,7 @@ pub async fn attach_with(
             )
             .await?;
         }
-        editions::set_field_sources(&mut tx, e, eprov).await?;
+        editions::merge_field_sources(&mut tx, e, eprov).await?;
     }
     tx.commit().await?;
 
@@ -321,7 +333,7 @@ fn edition_refs(given: &[(Namespace, String)]) -> Vec<(Namespace, String)> {
 }
 
 /// The edition ids the records carry (`isbn13`, `asin`, and `externalId` in the record's own namespace).
-fn discovered(records: &Records) -> Vec<(Namespace, String)> {
+pub(crate) fn discovered(records: &Records) -> Vec<(Namespace, String)> {
     let mut out = vec![];
     for (p, r) in records {
         let own = text(r, "externalId").map(|v| (*p, v));

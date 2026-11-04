@@ -2,6 +2,8 @@
   "books_work": {
     "read": "Leer",
     "listen": "Escuchar",
+    "continue_reading": "Seguir leyendo",
+    "continue_listening": "Seguir escuchando",
     "soon": "Disponible en una versión posterior",
     "volume_of": "Volumen {{n}} de {{series}}",
     "in_series": "Parte de {{series}}",
@@ -25,22 +27,16 @@
     "chapters_edition": "Edición",
     "row_series": "En {{series}}",
     "row_author": "Más de {{author}}",
-    "unofficial": "Algunos datos proceden de fuentes no oficiales (Audible, Audnexus).",
     "sources": "Fuentes",
-    "source_work": "Obra",
     "source_edition": "Edición",
-    "not_linked": "Sin vincular",
     "relink": "Volver a vincular",
     "unlink": "Desvincular",
     "link": "Vincular",
-    "level": "Nivel",
     "provider": "Proveedor",
     "value": "Identificador",
     "edition": "Edición",
     "cancel": "Cancelar",
     "save": "Guardar",
-    "level_work": "Obra",
-    "level_edition": "Edición",
     "sources_hint": "Vincular un identificador actualiza los metadatos desde esa fuente.",
     "send_to": "Enviar a…",
     "send_queued": "Enviando a {{name}}",
@@ -51,6 +47,8 @@
     "offline_remove": "Quitar del dispositivo",
     "offline_retry": "Reintentar",
     "offline_audio_unplayable": "Este audiolibro no se puede reproducir tal cual en este dispositivo, así que no se puede guardar sin conexión",
-    "offline_wifi_only": "Las descargas están limitadas a Wi-Fi"
+    "offline_wifi_only": "Las descargas están limitadas a Wi-Fi",
+    "row_similar": "Libros similares",
+    "edit_profiles": "Formatos e idiomas"
   }
 }

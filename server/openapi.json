@@ -828,40 +828,6 @@
         }
       }
     },
-    "/api/imports/library/{libraryId}/books": {
-      "get": {
-        "tags": [
-          "jobs::book_import"
-        ],
-        "summary": "`GET /api/imports/library/:libraryId/books` (rule 9).",
-        "operationId": "latest",
-        "responses": {
-          "200": {}
-        }
-      },
-      "post": {
-        "tags": [
-          "jobs::book_import"
-        ],
-        "summary": "`POST /api/imports/library/:libraryId/books` (rule 4).",
-        "operationId": "start",
-        "responses": {
-          "202": {}
-        }
-      }
-    },
-    "/api/imports/library/{libraryId}/books/queue": {
-      "get": {
-        "tags": [
-          "jobs::book_import"
-        ],
-        "summary": "`GET /api/imports/library/:libraryId/books/queue` (rule 11).",
-        "operationId": "queue",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
     "/api/imports/library/{libraryId}/orphans/scan": {
       "post": {
         "tags": [
@@ -2115,7 +2081,7 @@
         "tags": [
           "metadata::books::routes"
         ],
-        "summary": "`PUT /api/media/{id}/sources` (rules 23-24).",
+        "summary": "`PUT /api/media/{id}/sources` (rules 23-24): an edition level only, the work is identified.",
         "operationId": "sources_put",
         "responses": {
           "200": {}
@@ -2419,54 +2385,20 @@
         "tags": [
           "metadata"
         ],
-        "summary": "Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available providers serving each video kind.",
+        "summary": "Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available\nproviders serving each kind, in the admin's order.",
         "operationId": "providers",
         "responses": {
           "200": {}
         }
       }
     },
-    "/api/metadata/search/book": {
-      "get": {
-        "tags": [
-          "metadata::books::routes"
-        ],
-        "summary": "`GET /api/metadata/search/book` (rules 18-19).",
-        "operationId": "search_book",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/search/comic": {
-      "get": {
-        "tags": [
-          "metadata::comics::routes"
-        ],
-        "summary": "`GET /api/metadata/search/comic` (rule 39).",
-        "operationId": "search_comic",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/search/movie": {
+    "/api/metadata/search/{kind}": {
       "get": {
         "tags": [
           "metadata"
         ],
-        "operationId": "search_movie",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/search/tv": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "operationId": "search_tv",
+        "summary": "`GET /api/metadata/search/{kind}` with `kind` one of `movie`, `tv`, `book`, `comic`.",
+        "operationId": "search_hits",
         "responses": {
           "200": {}
         }

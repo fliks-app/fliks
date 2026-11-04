@@ -6,6 +6,7 @@ use super::{
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
     libraries::{accessible_library_ids, assert_media_accessible, media_not_found, paths_visible},
+    metadata::attribution,
     state::AppState,
 };
 use axum::{
@@ -184,6 +185,8 @@ pub async fn get_media(
     } else if media["type"] == MediaKind::Comic.as_str() {
         media["comic"] = comics::detail(&st.db, id, a.user.id, &acl).await?;
     }
+    media["providers"] = attribution::providers(&st.db, id).await?.into();
+    media["fieldSources"] = attribution::field_sources(&st.db, id).await?;
     Ok(Json(media))
 }
 
@@ -205,8 +208,10 @@ pub async fn similar_media(
     id: Result<PathParams<i32>, AppError>,
     Query(q): Pairs,
 ) -> Result<Json<Vec<Value>>, AppError> {
-    let (id, _) = gate(&st, &a, id).await?;
-    Ok(Json(related::similar(&st.db, id, similar_limit(&q)).await?))
+    let (id, acl) = gate(&st, &a, id).await?;
+    Ok(Json(
+        related::similar(&st.db, id, similar_limit(&q), &acl).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/media/{id}/collection", responses((status = 200)))]

@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Non riuscito",
     "subtitle_sync_failed": "Sincronizzazione non riuscita",
     "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco.",
-    "delete_success": "Titolo rimosso dalla libreria."
+    "delete_success": "Titolo rimosso dalla libreria.",
+    "edit_details": "Modifica dettagli"
   },
   "requests": {
     "title": "Richieste",
@@ -1797,7 +1798,12 @@
     "roots": "Questo PC",
     "unreadable": "Cartella non leggibile"
   },
+  "attribution": {
+    "data_from": "Dati da {{name}}",
+    "unofficial": "Alcuni dettagli provengono da fonti non ufficiali (Audible, Audnexus)."
+  },
   "common": {
+    "progress": "Avanzamento",
     "unexpected_error": "Si è verificato un errore. Ricarica la pagina se si ripete.",
     "browse": "Sfoglia…",
     "item_count_one": "{{count}} elemento",
@@ -2472,8 +2478,10 @@
       "folder_removed": "{{removedMedia}} contenuti rimossi da Fliks, {{unlinkedMedia}} mantenuti con i loro altri file.",
       "extra_folders": "Cartelle aggiuntive",
       "extra_folders_hint": "Aggiunte dopo la creazione della libreria. Qui viene analizzata solo la prima cartella: analizza le altre dalla pagina della libreria.",
-      "preferred_provider": "Provider di metadati",
-      "provider_auto": "Auto (TMDB per impostazione predefinita)",
+      "preferred_provider": "Provider preferito",
+      "provider_auto": "Auto (ordine globale)",
+      "provider_order_hint": "I metadati vengono letti da questi provider in ordine, per tipo di media. Il provider preferito passa per primo nei tipi che copre. L'ordine globale si imposta in Impostazioni › Metadati.",
+      "provider_none": "Nessun provider disponibile",
       "metadata_language": "Lingua dei metadati",
       "metadata_region": "Regione dei metadati",
       "metadata_inherit": "Eredita dall'impostazione globale",
@@ -2535,7 +2543,7 @@
       "scan_year_placeholder": "Anno",
       "scan_search": "Cerca",
       "scan_no_match": "Nessun risultato. Affina la ricerca.",
-      "scan_from_nfo": "da .nfo",
+      "scan_from_file": "dal file",
       "scan_already": "già presente nella libreria",
       "scan_link": "Collega",
       "scan_relink_existing": "Ricollega al file multimediale esistente",
@@ -2550,6 +2558,7 @@
       "scan_error": "Analisi fallita.",
       "scan_files": "{{count}} file",
       "scan_add_unmatched": "Aggiungi senza metadati",
+      "scan_identify_from_file": "Identifica dal file ({{id}})",
       "scan_unmatched_badge": "Senza metadati",
       "scan_unmatched_option": "Nessuna corrispondenza: aggiungi così com'è",
       "scan_reorganize_needs_match": "Sposta/rinomina si applica solo ai titoli identificati",
@@ -2557,6 +2566,7 @@
       "scan_search_failed_count": "{{count}} cartella/e non analizzata/e (ricerca fallita), rilancia la scansione dalla scheda Media",
       "media_filter_unidentified": "Non identificati",
       "scan_reorganize_needs_folder": "Sposta/rinomina si applica solo ai titoli con una propria cartella",
+      "media_type_book": "Libri e audiolibri",
       "media_type_comic": "Fumetti"
     },
     "users": {
@@ -2709,6 +2719,7 @@
       "configure": "Configura",
       "empty": "Nessun provider di metadati installato.",
       "order": "Ordine per tipo",
+      "drag": "Sposta",
       "move_up": "Su",
       "move_down": "Giù",
       "load_error": "Impossibile caricare le impostazioni dei metadati.",

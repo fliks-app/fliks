@@ -793,6 +793,25 @@ impl IdentifyError {
 /// Rule 16: identifies the editions of a book that have no id yet and attaches the match.
 /// Answers the media the book ends up in: a work that holds the id already absorbs it.
 pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyError> {
+    merge_editions(st, media, false, Priority::Background).await
+}
+
+/// The refresh of a book: every edition is merged again from its stored ids (or, with none, identified
+/// as `identify_media` does) and its file record.
+pub async fn refresh_media(
+    st: &AppState,
+    media: i32,
+    prio: Priority,
+) -> Result<i32, IdentifyError> {
+    merge_editions(st, media, true, prio).await
+}
+
+async fn merge_editions(
+    st: &AppState,
+    media: i32,
+    all: bool,
+    prio: Priority,
+) -> Result<i32, IdentifyError> {
     let mut media = media;
     let rows = sqlx::query!(
         r#"SELECT e.id, e.family,
@@ -802,9 +821,12 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
                JOIN media_files f ON f.id = p."mediaFileId"
                WHERE i."editionId" = e.id ORDER BY p."version", p.position LIMIT 1) AS rel
            FROM editions e WHERE e."mediaId" = $1
-             AND NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
+             AND ($2 OR NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
+               OR NOT EXISTS (SELECT 1 FROM media_external_ids w
+                               WHERE w."mediaId" = e."mediaId" AND w.provider = 'openlibrary'))
            ORDER BY e.id"#,
-        media
+        media,
+        all
     )
     .fetch_all(&st.db)
     .await
@@ -827,28 +849,58 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
         else {
             continue;
         };
-        let (hints, record) = hints_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
-        let found = match identify::identify(st, &hints, Priority::Background).await {
-            Ok(m) => m,
-            Err(e) => return Err(IdentifyError::of(media, c.edition, "identify", e)),
+        let record = record_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
+        let hints = identify::BookHints::of_record(c.family, &record);
+        let record = Some(record);
+        let stored = if all {
+            link::stored(&st.db, media, Some(c.edition))
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
         };
-        let m = match found {
-            Some(m) => m,
-            None => match link::stored(&st.db, media, None).await {
-                Ok(Some(s)) => identify::BookMatch {
-                    edition: vec![],
-                    ..s
-                },
-                _ => continue,
-            },
+        let m = match stored {
+            Some(m) if !m.edition.is_empty() => Some(m),
+            stored => {
+                let found = match identify::identify(st, &hints, prio).await {
+                    Ok(m) => m,
+                    Err(_) if stored.is_some() => stored.clone(),
+                    Err(e) => {
+                        // An outage still leaves an unanchored book its file metadata.
+                        let held = link::stored(&st.db, media, None).await.ok().flatten();
+                        if let (None, Some(r)) = (held, record.as_ref()) {
+                            let _ =
+                                link::attach_with(st, media, Some(c.edition), None, Some(r), prio)
+                                    .await;
+                        }
+                        return Err(IdentifyError::of(media, c.edition, "identify", e));
+                    }
+                };
+                // A work the media already holds wins over the one the file suggests.
+                let held = link::stored(&st.db, media, None).await.ok().flatten();
+                match (found, held) {
+                    (Some(f), Some(h)) if f.work == h.work => Some(f),
+                    (_, Some(h)) => Some(identify::BookMatch {
+                        edition: vec![],
+                        ..h
+                    }),
+                    (Some(f), None) => Some(f),
+                    (None, None) => None,
+                }
+            }
         };
+        // Unmatched: the file record alone still gives the media its own title, authors, overview.
+        if m.is_none() && record.is_none() {
+            continue;
+        }
         let attached = link::attach_with(
             st,
             media,
             Some(c.edition),
-            &m,
+            m.as_ref(),
             record.as_ref(),
-            Priority::Background,
+            prio,
         )
         .await;
         if let Ok(Some((owner, _))) = crate::media::editions::of(&st.db, c.edition).await {
@@ -859,16 +911,15 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
     Ok(media)
 }
 
-async fn hints_of(
+/// The file record of a book file: an EPUB's package, an audio file's tags, else its name.
+pub(crate) async fn record_of(
     family: Family,
     path: &Path,
     rel: &str,
     tags: Option<MediaTags>,
-) -> (identify::BookHints, Option<Map<String, Value>>) {
+) -> Map<String, Value> {
     if family == Family::Audio {
-        let h = tags::audio_hints(tags.as_ref(), rel);
-        let record = tags.as_ref().map(|t| tags::audio_record(t, &h, None));
-        return (h, record);
+        return tags::audio_record(tags.as_ref(), rel, None);
     }
     let p = path.to_path_buf();
     let epub = tokio::task::spawn_blocking(move || archive::read_epub(&p))
@@ -876,13 +927,34 @@ async fn hints_of(
         .ok()
         .flatten();
     match epub {
-        Some(e) => {
-            let h = tags::epub_hints(&e.meta, rel);
-            let record = tags::epub_record(&e.meta, &h, "epub");
-            (h, Some(record))
-        }
-        None => (tags::name_hints(family, rel), None),
+        Some(e) => tags::epub_record(&e.meta, rel, "epub"),
+        None => tags::name_record(rel),
     }
+}
+
+/// Boot sweep: media with files, no id and no merge yet get their files merged, one at a time.
+/// A merge stamps `metadataRefreshedAt`, so each media leaves the sweep once it has been merged.
+pub async fn backfill_unmatched(st: &AppState) {
+    let ids = sqlx::query!(
+        r#"SELECT m.id, m.type FROM media m
+           WHERE m."metadataRefreshedAt" IS NULL
+             AND NOT EXISTS (SELECT 1 FROM media_external_ids x WHERE x."mediaId" = m.id)
+             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id)
+           ORDER BY m.id"#
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    let st = st.clone();
+    tokio::spawn(async move {
+        for r in ids {
+            if r.r#type == "book" {
+                settled(&st, r.id).await;
+            } else if let Err(e) = crate::media::write::fields::merge_unmatched(&st, r.id).await {
+                tracing::warn!("Backfill[media #{}]: file merge failed: {e}", r.id);
+            }
+        }
+    });
 }
 
 /// Settles a book once its post-import work is done (`post_import::settled`).

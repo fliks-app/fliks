@@ -3,7 +3,7 @@ import type { Episode, Media } from '../../core/services/api/media.service';
 import type { LikeState, LikesApiService } from '../../core/services/api/likes-api.service';
 
 export interface LikeHost {
-  media(): Media | null;
+  media(): Pick<Media, 'id'> | null;
   episodeMode(): boolean;
   focusedEpisode(): Episode | null;
 }

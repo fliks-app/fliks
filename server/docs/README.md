@@ -6,7 +6,7 @@ Per-domain specs live under [`spec/`](spec/), one file per domain. The parity sc
 
 Watch party: [`spec/watch-party.md`](spec/watch-party.md) (routes, state machine, events).
 
-Books: [`spec/books.md`](spec/books.md) (the `book` kind, editions and their facts, ids, series, sort keys), [`spec/books-api.md`](spec/books-api.md) (routes and wire shapes), [`spec/book-metadata.md`](spec/book-metadata.md) (trait semantics, record mapping, identify and attach seams), [`spec/book-ingest.md`](spec/book-ingest.md) (ingest seams), [`spec/book-import.md`](spec/book-import.md) (bulk import job, manual queue), [`spec/books-reader.md`](spec/books-reader.md) (EPUB manifest, sanitised resources, CSP).
+Books: [`spec/books.md`](spec/books.md) (the `book` kind, editions and their facts, ids, series, sort keys), [`spec/books-api.md`](spec/books-api.md) (routes and wire shapes), [`spec/book-metadata.md`](spec/book-metadata.md) (trait semantics, record mapping, identify and attach seams), [`spec/book-ingest.md`](spec/book-ingest.md) (ingest seams), [`spec/books-reader.md`](spec/books-reader.md) (EPUB manifest, sanitised resources, CSP).
 
 Reader annotations: [`spec/annotations.md`](spec/annotations.md) (bookmarks and highlights of a text item, routes, limits).
 
