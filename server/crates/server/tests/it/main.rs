@@ -6,6 +6,7 @@ mod books_api;
 mod books_reader;
 mod burn_in;
 mod cleanup_bulk;
+mod comics_api;
 mod device_tokens;
 mod email_devices;
 mod events_ticket;

@@ -1,5 +1,5 @@
 use super::{
-    aggregates, books, calendar as cal, hydrate, list,
+    aggregates, books, calendar as cal, comics, hydrate, list,
     params::{Calendar, Recent, Search, bare},
     related, streams, tracking,
 };
@@ -181,6 +181,8 @@ pub async fn get_media(
     if media["type"] == MediaKind::Book.as_str() {
         let book = books::detail(&st.db, id, a.user.id, &acl).await?;
         media["book"] = book;
+    } else if media["type"] == MediaKind::Comic.as_str() {
+        media["comic"] = comics::detail(&st.db, id, a.user.id, &acl).await?;
     }
     Ok(Json(media))
 }

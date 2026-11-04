@@ -33,7 +33,7 @@ pub fn is_due<Z: TimeZone>(m: &Row, now: DateTime<Utc>, tz: &Z) -> bool {
     };
     let settled = match m.kind {
         MediaKind::Series => m.status == "ended",
-        MediaKind::Movie | MediaKind::Book => released(),
+        MediaKind::Movie | MediaKind::Book | MediaKind::Comic => released(),
     };
     !settled
         || m.refreshed_at

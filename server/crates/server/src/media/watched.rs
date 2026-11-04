@@ -10,10 +10,12 @@ fn seasonal_array() -> String {
     format!("ARRAY[{}]::text[]", names.join(", "))
 }
 
-/// Seasonal: every on-disk item of its groups above 0 is completed; any other: one item is completed.
+/// Seasonal: every on-disk item of its groups above 0 is completed; a comic: every on-disk issue is completed;
+/// any other: one item is completed.
 /// `uid` is a user id, a bound parameter or a column, never user text; `m` aliases the media row.
 pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     let seasonal = seasonal_array();
+    let comic = MediaKind::Comic.as_str();
     format!(
         r#"CASE WHEN {m}.type = ANY({seasonal}) THEN
     EXISTS (
@@ -28,6 +30,15 @@ pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
           WHERE ps2."userId" = {uid} AND ps2."itemId" = e.id AND ps2.completed = true
         )
     )
+  WHEN {m}.type = '{comic}' THEN
+    EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = {m}.id AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id))
+    AND NOT EXISTS (
+      SELECT 1 FROM items i WHERE i."mediaId" = {m}.id AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM playback_states ps2
+          WHERE ps2."userId" = {uid} AND ps2."itemId" = i.id AND ps2.completed = true
+        )
+    )
   ELSE EXISTS (
       SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
       WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND ps.completed = true
@@ -36,12 +47,13 @@ pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     )
 }
 
-/// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind, 100 for a watched book.
+/// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind, 100 for a watched book or comic.
 pub(crate) fn progress(uid: impl Display, m: &str) -> String {
     let seasonal = seasonal_array();
-    let (book, watched) = (MediaKind::Book.as_str(), predicate(&uid, m));
+    let (book, comic) = (MediaKind::Book.as_str(), MediaKind::Comic.as_str());
+    let watched = predicate(&uid, m);
     format!(
-        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 WHEN {m}.type = '{book}' AND ({watched}) THEN 100 ELSE COALESCE((
+        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 WHEN {m}.type IN ('{book}', '{comic}') AND ({watched}) THEN 100 ELSE COALESCE((
     SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
     FROM playback_states ps JOIN items i ON i.id = ps."itemId"
     WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND i."groupId" IS NULL
@@ -60,7 +72,9 @@ mod tests {
         assert!(predicate(1, "m").contains("ANY(ARRAY['series']::text[])"));
         let p = progress("$1", "m");
         assert!(p.contains("ELSE COALESCE(") && p.contains("), 0) END"));
-        assert!(p.contains("type = 'book' AND (CASE WHEN") && p.contains("THEN 100 ELSE"));
+        assert!(
+            p.contains("type IN ('book', 'comic') AND (CASE WHEN") && p.contains("THEN 100 ELSE")
+        );
         assert!(!p.contains("'movie'") && !predicate(1, "m").contains("'movie'"));
     }
 }

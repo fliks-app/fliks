@@ -18,6 +18,7 @@
         "body": {
           "avatar": "/api/users/4/avatar?v=1767225600000",
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "other@parity.test",
@@ -72,6 +73,7 @@
         "body": {
           "avatar": "/api/users/4/avatar?v=1767225600000",
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "other@parity.test",
@@ -126,6 +128,7 @@
           },
           "playback": {
             "booksFinished": 0,
+            "comicsFinished": 0,
             "episodesWatched": 0,
             "moviesWatched": 0,
             "seriesStarted": 0,

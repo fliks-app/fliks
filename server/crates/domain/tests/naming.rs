@@ -124,6 +124,9 @@ fn setting_keys_are_derived_from_kind_and_scope() {
             Some("naming_book_format"),
             Some("naming_book_folder_format"),
             None,
+            None,
+            None,
+            None,
         ]
     );
     let rows = [(

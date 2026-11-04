@@ -119,6 +119,7 @@ pub fn build_register_probe(req: &Request, sample: &[String]) -> Option<(String,
         Some(MediaKind::Series) => "series",
         Some(MediaKind::Movie) | None => "film",
         Some(MediaKind::Book) => "book",
+        Some(MediaKind::Comic) => "comic",
     };
     Some((
         format!(
@@ -195,6 +196,7 @@ pub fn build_system_instruction(req: &Request) -> String {
         Some(MediaKind::Series) => "series",
         Some(MediaKind::Movie) | None => "movie",
         Some(MediaKind::Book) => "book",
+        Some(MediaKind::Comic) => "comic",
     };
     let mut bits = vec![];
     if let Some(t) = c.title.as_deref().filter(|t| !t.is_empty()) {

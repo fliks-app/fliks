@@ -21,6 +21,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "Zed@parity.test",
@@ -77,6 +78,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "alpha@parity.test",
@@ -133,6 +135,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "Beta@parity.test",
@@ -189,6 +192,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "a-b@parity.test",
@@ -245,6 +249,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "ab@parity.test",
@@ -301,6 +306,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "a_c@parity.test",
@@ -357,6 +363,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "ac@parity.test",
@@ -413,6 +420,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "Charlie@parity.test",
@@ -469,6 +477,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u00@parity.test",
@@ -525,6 +534,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u01@parity.test",
@@ -581,6 +591,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u02@parity.test",
@@ -637,6 +648,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u03@parity.test",
@@ -693,6 +705,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u04@parity.test",
@@ -749,6 +762,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u05@parity.test",
@@ -805,6 +819,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u06@parity.test",
@@ -861,6 +876,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u07@parity.test",
@@ -917,6 +933,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u08@parity.test",
@@ -973,6 +990,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u09@parity.test",
@@ -1029,6 +1047,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u10@parity.test",
@@ -1085,6 +1104,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u11@parity.test",
@@ -1141,6 +1161,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u12@parity.test",
@@ -1197,6 +1218,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u13@parity.test",
@@ -1253,6 +1275,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u14@parity.test",
@@ -1309,6 +1332,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u15@parity.test",
@@ -1365,6 +1389,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u16@parity.test",
@@ -1421,6 +1446,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u17@parity.test",
@@ -1477,6 +1503,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u18@parity.test",
@@ -1533,6 +1560,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u19@parity.test",
@@ -1589,6 +1617,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u20@parity.test",
@@ -1645,6 +1674,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u21@parity.test",
@@ -1701,6 +1731,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u22@parity.test",
@@ -1757,6 +1788,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u23@parity.test",
@@ -1813,6 +1845,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u24@parity.test",
@@ -1869,6 +1902,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u25@parity.test",
@@ -1925,6 +1959,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u26@parity.test",
@@ -1981,6 +2016,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u27@parity.test",
@@ -2037,6 +2073,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u28@parity.test",
@@ -2093,6 +2130,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "u29@parity.test",

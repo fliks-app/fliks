@@ -2,6 +2,7 @@
 pub(crate) mod aggregates;
 pub(crate) mod books;
 mod calendar;
+pub(crate) mod comics;
 pub mod details;
 pub mod editions;
 pub mod external_ids;

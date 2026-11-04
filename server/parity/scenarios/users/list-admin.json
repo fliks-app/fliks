@@ -9,6 +9,7 @@
           {
             "avatar": null,
             "bookQuotaLimit": 0,
+            "comicQuotaLimit": 0,
             "createdAt": "2026-01-01T00:00:00.000Z",
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
@@ -48,6 +49,7 @@
           {
             "avatar": null,
             "bookQuotaLimit": 0,
+            "comicQuotaLimit": 0,
             "createdAt": "2026-01-01T00:00:00.000Z",
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
@@ -92,6 +94,7 @@
           {
             "avatar": "/api/users/4/avatar?v=1767225600000",
             "bookQuotaLimit": 0,
+            "comicQuotaLimit": 0,
             "createdAt": "2026-01-01T00:00:00.000Z",
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
@@ -138,6 +141,7 @@
           {
             "avatar": null,
             "bookQuotaLimit": 0,
+            "comicQuotaLimit": 0,
             "createdAt": "2026-01-01T00:00:00.000Z",
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,
@@ -181,6 +185,7 @@
           {
             "avatar": null,
             "bookQuotaLimit": 0,
+            "comicQuotaLimit": 0,
             "createdAt": "2026-01-01T00:00:00.000Z",
             "edlAutoSkipCommercials": true,
             "edlEnabled": true,

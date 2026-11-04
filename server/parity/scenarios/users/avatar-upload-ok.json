@@ -12,6 +12,7 @@
       "expect": {
         "body": {
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "user@parity.test",
@@ -69,6 +70,7 @@
       "expect": {
         "body": {
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "user@parity.test",

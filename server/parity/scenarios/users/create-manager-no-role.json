@@ -17,6 +17,7 @@
         "body": {
           "avatar": null,
           "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
           "email": "new@parity.test",

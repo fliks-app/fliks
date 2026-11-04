@@ -11,15 +11,17 @@ pub enum MediaKind {
     Movie,
     Series,
     Book,
+    Comic,
 }
 
 impl MediaKind {
-    pub const ALL: [Self; 3] = [Self::Movie, Self::Series, Self::Book];
+    pub const ALL: [Self; 4] = [Self::Movie, Self::Series, Self::Book, Self::Comic];
     /// Wire names, in `ALL` order.
-    pub const NAMES: [&'static str; 3] = [
+    pub const NAMES: [&'static str; 4] = [
         Self::Movie.as_str(),
         Self::Series.as_str(),
         Self::Book.as_str(),
+        Self::Comic.as_str(),
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -27,6 +29,7 @@ impl MediaKind {
             Self::Movie => "movie",
             Self::Series => "series",
             Self::Book => "book",
+            Self::Comic => "comic",
         }
     }
 
@@ -42,7 +45,7 @@ impl MediaKind {
     /// Whether the title is made of seasons and episodes.
     pub const fn has_seasons(self) -> bool {
         match self {
-            Self::Movie | Self::Book => false,
+            Self::Movie | Self::Book | Self::Comic => false,
             Self::Series => true,
         }
     }
@@ -61,6 +64,7 @@ impl MediaKind {
         match self {
             Self::Movie | Self::Series => &[Family::Video],
             Self::Book => &[Family::Text, Family::Audio],
+            Self::Comic => &[Family::Image],
         }
     }
 
@@ -75,6 +79,7 @@ impl MediaKind {
             Self::Movie => "movies",
             Self::Series => "series",
             Self::Book => "books",
+            Self::Comic => "comics",
         }
     }
 
@@ -84,6 +89,7 @@ impl MediaKind {
             Self::Movie => "moviesWatched",
             Self::Series => "seriesStarted",
             Self::Book => "booksFinished",
+            Self::Comic => "comicsFinished",
         }
     }
 
@@ -135,18 +141,24 @@ mod tests {
         assert_eq!(MediaKind::Movie.count_key(), "movies");
         assert_eq!(MediaKind::Series.count_key(), "series");
         assert_eq!(MediaKind::Book.count_key(), "books");
-        assert_eq!(MediaKind::NAMES, ["movie", "series", "book"]);
+        assert_eq!(MediaKind::Comic.count_key(), "comics");
+        assert_eq!(MediaKind::Comic.completed_stat_key(), "comicsFinished");
+        assert_eq!(MediaKind::NAMES, ["movie", "series", "book", "comic"]);
         assert_eq!(MediaKind::seasonal_names(), ["series"]);
         assert_eq!(MediaKind::Movie.completed_stat_key(), "moviesWatched");
         assert_eq!(MediaKind::Series.completed_stat_key(), "seriesStarted");
         assert_eq!(MediaKind::Book.completed_stat_key(), "booksFinished");
         assert_eq!(MediaKind::parse("Movie"), None);
         assert!(MediaKind::Series.has_seasons());
-        assert!(!MediaKind::Movie.has_seasons() && !MediaKind::Book.has_seasons());
+        assert!(
+            !MediaKind::Movie.has_seasons()
+                && !MediaKind::Book.has_seasons()
+                && !MediaKind::Comic.has_seasons()
+        );
         assert_eq!(MediaKind::from_tv(true), MediaKind::Series);
         assert_eq!(
             MediaKind::one_of_message(),
-            "must be one of the following values: movie, series, book"
+            "must be one of the following values: movie, series, book, comic"
         );
     }
 }

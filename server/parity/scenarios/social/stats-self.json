@@ -19,6 +19,7 @@
           },
           "playback": {
             "booksFinished": 0,
+            "comicsFinished": 0,
             "episodesWatched": 0,
             "moviesWatched": 1,
             "seriesStarted": 0,
@@ -44,6 +45,7 @@
           },
           "playback": {
             "booksFinished": 0,
+            "comicsFinished": 0,
             "episodesWatched": 0,
             "moviesWatched": 0,
             "seriesStarted": 0,
@@ -69,6 +71,7 @@
           },
           "playback": {
             "booksFinished": 0,
+            "comicsFinished": 0,
             "episodesWatched": 0,
             "moviesWatched": 0,
             "seriesStarted": 0,
