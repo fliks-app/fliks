@@ -363,9 +363,18 @@ async fn external_ids_list_declared_plugin_namespaces_only(pool: PgPool) {
 async fn identify_with_pins(pool: PgPool, body: Value) -> Vec<(Option<String>, Vec<String>)> {
     let c = ctx(pool.clone()).await;
     for n in ["aid", "bid"] {
-        c.st.plugins
-            .namespaces
-            .edit(|k| k.declare(&format!("org.idpin:{n}"), n, "^[1-9][0-9]*$", "preserve"));
+        let name = format!("org.idpin:{n}");
+        let d = fliks_server::plugins::namespaces::Declared {
+            name: &name,
+            label: n,
+            id_pattern: "^[1-9][0-9]*$",
+            case: "preserve",
+        };
+        let known = &c.st.plugins.namespaces;
+        fliks_server::plugins::namespaces::claim(&pool, known, "org.idpin", None, &[d])
+            .await
+            .unwrap()
+            .unwrap();
     }
     sqlx::raw_sql(
         r#"UPDATE media SET "preferredProvider" = 'org.idpin:aid' WHERE id = 1;

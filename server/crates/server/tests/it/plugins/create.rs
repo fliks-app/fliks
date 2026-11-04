@@ -310,12 +310,21 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
     s.finish().await;
 }
 
-/// Declares a plugin namespace as its claim would.
-fn declare(st: &AppState, name: &str, label: &str, pattern: &str) -> Namespace {
-    st.plugins
-        .namespaces
-        .edit(|k| k.declare(name, label, pattern, "preserve"))
+/// Claims a plugin namespace as its plugin's registration does: the row, then the registry.
+async fn declare(st: &AppState, name: &str, label: &str, pattern: &str) -> Namespace {
+    use fliks_server::plugins::namespaces::{Declared, claim};
+    let d = Declared {
+        name,
+        label,
+        id_pattern: pattern,
+        case: "preserve",
+    };
+    let plugin = name.split_once(':').unwrap().0;
+    claim(&st.db, &st.plugins.namespaces, plugin, None, &[d])
+        .await
         .unwrap()
+        .unwrap();
+    Namespace::parse(name).unwrap()
 }
 
 /// A third-party provider of a declared namespace, counting its work reads; `extra` is merged into its record.
@@ -418,7 +427,7 @@ async fn a_plugin_namespace_resolves_to_one_media_that_refreshes() {
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    let ns = declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
+    let ns = declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$").await;
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:aid", json!({}))));
@@ -470,7 +479,7 @@ async fn a_plugin_namespace_creates_one_book_with_both_wants() {
     .await
     .unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$").await;
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata.add_plugin(Arc::new(Fake(
         reads.clone(),
@@ -555,7 +564,7 @@ async fn a_book_of_the_anchor_links_the_callers_own_ids() {
     let Some((st, s)) = books_state("create_book_anchor").await else {
         return;
     };
-    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$").await;
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "openlibrary", json!({}))));
@@ -592,7 +601,7 @@ async fn a_book_needs_an_id_the_caller_owns_and_the_anchor_when_named() {
     let Some((st, s)) = books_state("create_book_owned").await else {
         return;
     };
-    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$").await;
     st.metadata.add_plugin(Arc::new(Fake(
         Arc::new(AtomicUsize::new(0)),
         "org.fake:bid",
@@ -622,7 +631,7 @@ async fn concurrent_creates_of_one_book_make_one_media() {
     let Some((st, s)) = books_state("create_book_race").await else {
         return;
     };
-    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$").await;
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:bid", json!({}))));
@@ -649,7 +658,7 @@ async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
         fliks_server::config::random_hex(6)
     ));
     st.images = Arc::new(ImageStore::with_root(data));
-    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$").await;
     st.metadata
         .add_plugin(Arc::new(Fake(Arc::default(), "org.fake:aid", json!({}))));
     let both = vec![
@@ -683,7 +692,7 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$").await;
     st.metadata.add_plugin(Arc::new(Fake(
         Arc::default(),
         "org.fake:aid",
@@ -775,7 +784,7 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
         .unwrap_err();
     assert_eq!(e.code, "namespace-not-owned");
     // `org.fake.x` is not `org.fake`, and one id per namespace counts.
-    declare(&st, "org.fake.x:aid", "X", "^[1-9][0-9]*$");
+    declare(&st, "org.fake.x:aid", "X", "^[1-9][0-9]*$").await;
     st.metadata
         .add_plugin(Arc::new(Fake(Arc::default(), "org.fake.x:aid", json!({}))));
     let x = vec![ExternalId {
@@ -819,8 +828,8 @@ async fn a_lettered_namespace_refreshes_and_all_entries_are_linked() {
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
-    let slug = declare(&st, "org.fake:slug", "Slug", "^[a-z0-9-]+$");
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$").await;
+    let slug = declare(&st, "org.fake:slug", "Slug", "^[a-z0-9-]+$").await;
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:slug", json!({}))));
@@ -868,7 +877,7 @@ async fn a_pin_to_a_gone_plugin_falls_through() {
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$").await;
     sqlx::raw_sql(
         r#"INSERT INTO media (id, title, type, "libraryId", "preferredProvider")
              VALUES (900, 'Pinned', 'movie', 1, 'org.fake:aid');
