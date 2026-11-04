@@ -10,6 +10,7 @@ const DB = 'fliks-offline-books';
 const STORE = 'blobs';
 const PARALLEL = 6;
 const CHUNK_BYTES = 8 << 20;
+const BOOK_DIR = /^.*?\/api\/books\/\d+\/pub\//;
 const CSS_URL = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 /** Attributes of a chapter that load a resource the toolkit does not route through its fetcher. */
 const RESOURCE_ATTRS: [string, string][] = [
@@ -36,14 +37,29 @@ export class OfflineBookStoreService {
     return new URL(this.serverConfig.resolveUrl(`/api/books/${itemId}/pub/manifest.json`), document.baseURI).href;
   }
 
-  /** The reader's fetch: a stored resource when the book is on the device, else the network with the app's credentials. */
-  async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  /** The reader's fetch: a stored resource when the book is on the device, else the network with the app's credentials.
+   *  With `inline`, a chapter or stylesheet comes with its resources as object URLs when its frame cannot load them itself. */
+  async fetch(input: RequestInfo | URL, init?: RequestInit, inline = true): Promise<Response> {
     const url = input instanceof Request ? input.url : String(input);
-    if ((init?.method ?? 'GET') === 'GET') {
+    const get = (init?.method ?? 'GET') === 'GET';
+    if (get) {
       const blob = await this.stored(url).catch(() => null);
-      if (blob) return new Response(await (await this.inline(url, blob)).arrayBuffer(), { headers: { 'content-type': blob.type } });
+      if (blob) return this.response(inline ? await this.inline(url, blob) : blob);
     }
-    return this.network(input, init);
+    const res = await this.network(input, init);
+    // An app's frame is cross-origin to the server and has no cookie to send.
+    if (!inline || !get || !res.ok || !this.serverConfig.isNative || !/html|css/.test(res.headers.get('content-type') ?? '')) return res;
+    return this.response(await this.inline(url, await res.blob()));
+  }
+
+  /** Revokes the object URLs handed to a book's chapters; the next open makes them again. */
+  release(itemId: number): void {
+    const dir = this.manifestUrl(itemId).replace(/manifest\.json$/, '');
+    for (const [abs, u] of this.urls) {
+      if (!abs.startsWith(dir)) continue;
+      URL.revokeObjectURL(u);
+      this.urls.delete(abs);
+    }
   }
 
   /** Stores the sanitised publication of an EPUB: its manifest and every resource the manifest names. Returns the bytes kept. */
@@ -175,15 +191,10 @@ export class OfflineBookStoreService {
   }
 
   async remove(book: OfflineBook): Promise<void> {
-    const manifestDir = this.manifestUrl(book.itemId).replace(/manifest\.json$/, '');
-    for (const [abs, u] of this.urls) {
-      if (!abs.startsWith(manifestDir)) continue;
-      URL.revokeObjectURL(u);
-      this.urls.delete(abs);
-    }
+    this.release(book.itemId);
     try {
       if (book.family === 'text' && book.format === 'epub') {
-        const prefix = this.key(manifestDir);
+        const prefix = this.key(this.manifestUrl(book.itemId).replace(/manifest\.json$/, ''));
         await this.tx('readwrite', (s) => s.delete(IDBKeyRange.bound(prefix, `${prefix}\uffff`)));
       }
       for (const f of book.files) {
@@ -279,6 +290,10 @@ export class OfflineBookStoreService {
     return (await this.tx<Blob | undefined>('readonly', (s) => s.get(key))) ?? null;
   }
 
+  private async response(blob: Blob): Promise<Response> {
+    return new Response(await blob.arrayBuffer(), { headers: { 'content-type': blob.type } });
+  }
+
   private stored(url: string): Promise<Blob | null> {
     return this.get(this.key(url.split('#')[0]));
   }
@@ -308,6 +323,14 @@ export class OfflineBookStoreService {
     return text.replace(CSS_URL, (m, _q, ref: string) => (local.has(ref) ? `url("${local.get(ref)}")` : m));
   }
 
+  /** A resource of the same book from the server, in the apps only: anything else would get the app's token. */
+  private async served(abs: string, base: string): Promise<Blob | null> {
+    const dir = BOOK_DIR.exec(base)?.[0];
+    if (!this.serverConfig.isNative || !dir || !abs.startsWith(dir)) return null;
+    const res = await this.network(abs).catch(() => null);
+    return res?.ok ? res.blob() : null;
+  }
+
   /** `seen` is the chain of stylesheets being inlined, so an `@import` cycle ends instead of recursing. */
   private async objectUrl(ref: string | null, base: string, seen: Set<string>): Promise<string | null> {
     if (!ref || /^(data:|blob:|#)/.test(ref)) return null;
@@ -320,7 +343,7 @@ export class OfflineBookStoreService {
     const known = this.urls.get(abs);
     if (known) return known;
     if (seen.has(abs)) return null;
-    const blob = await this.stored(abs).catch(() => null);
+    const blob = (await this.stored(abs).catch(() => null)) ?? (await this.served(abs, base));
     if (!blob) return null;
     const u = URL.createObjectURL(await this.inline(abs, blob, new Set(seen).add(abs)));
     this.urls.set(abs, u);

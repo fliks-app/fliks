@@ -52,6 +52,20 @@ export class ReaderApiService {
     return { publication, positions: await publication.positionsFromManifest() };
   }
 
+  /** A chapter's markup with its resources left as written: its text needs none of them. */
+  async markup(itemId: number, link: Link): Promise<string> {
+    const url = link.toURL(this.manifestUrl(itemId));
+    if (!url) throw new Error(`Invalid href ${link.href}`);
+    const res = await this.store.fetch(url, undefined, false);
+    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    return res.text();
+  }
+
+  /** Lets go of what the chapters of the book held while it was open. */
+  release(itemId: number): void {
+    this.store.release(itemId);
+  }
+
   /** Null when the user has not started the item. Without the server, the last position this device saved. */
   async loadProgress(t: ReaderTarget): Promise<Partial<ReaderProgress> | null> {
     const local = () => (this.sync.resumePositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined) ?? null;

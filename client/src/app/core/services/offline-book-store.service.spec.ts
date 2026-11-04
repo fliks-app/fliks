@@ -63,6 +63,62 @@ describe('OfflineBookStoreService', () => {
     vi.unstubAllGlobals();
   });
 
+  const native = () => ((TestBed.inject(ServerConfigService) as { isNative: boolean }).isNative = true);
+  const CHAPTER = '<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="../s.css"/></head><body><img src="a.png"/><img src="https://elsewhere/x.png"/><img src="/api/users/me"/></body></html>';
+  const server = () => {
+    const served: Record<string, [string, string]> = {
+      'OEBPS/ch1.xhtml': [CHAPTER, 'application/xhtml+xml; charset=utf-8'],
+      's.css': ['@font-face{src:url("f.woff")}', 'text/css'],
+      'f.woff': ['font', 'font/woff'],
+      'OEBPS/a.png': ['png', 'image/png'],
+    };
+    const net = vi.fn(async (url: string, _init?: RequestInit) => {
+      const hit = served[String(url).replace(BASE, '')];
+      return hit ? new Response(hit[0], { headers: { 'content-type': hit[1] } }) : new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', net);
+    return net;
+  };
+
+  it('hands an app frame a served chapter whose own resources are object URLs fetched with the token', async () => {
+    native();
+    const net = server();
+    const html = await (await svc.fetch(`${BASE}OEBPS/ch1.xhtml`)).text();
+    expect(html).toContain('href="blob:local/');
+    expect(html).toContain('src="blob:local/');
+    expect(html).not.toContain('a.png');
+    // Off the book, nothing is fetched: the token would go along.
+    expect(html).toContain('https://elsewhere/x.png');
+    expect(html).toContain('src="/api/users/me"');
+    expect(net.mock.calls.map((c) => String(c[0]).replace(BASE, '')).sort()).toEqual(['OEBPS/a.png', 'OEBPS/ch1.xhtml', 'f.woff', 's.css']);
+    for (const [, init] of net.mock.calls) expect(new Headers(init?.headers).get('authorization')).toBe('Bearer tok');
+    const css = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as Blob).find((b) => b.type === 'text/css')!;
+    expect(await css.text()).toContain('url("blob:local/');
+  });
+
+  it('leaves a served chapter as it is on the web, where the frame has the cookie', async () => {
+    const net = server();
+    expect(await (await svc.fetch(`${BASE}OEBPS/ch1.xhtml`)).text()).toBe(CHAPTER);
+    expect(net).toHaveBeenCalledOnce();
+  });
+
+  it('reads a chapter without its resources when asked not to inline', async () => {
+    native();
+    const net = server();
+    expect(await (await svc.fetch(`${BASE}OEBPS/ch1.xhtml`, undefined, false)).text()).toBe(CHAPTER);
+    expect(net).toHaveBeenCalledOnce();
+  });
+
+  it('revokes the object URLs of a book on release and makes them again on the next read', async () => {
+    keep('ch1.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><body><img src="a.png"/></body></html>', 'application/xhtml+xml');
+    keep('a.png', 'png', 'image/png');
+    URL.revokeObjectURL = vi.fn();
+    await svc.fetch(`${BASE}ch1.xhtml`);
+    svc.release(7);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local/1');
+    expect(await (await svc.fetch(`${BASE}ch1.xhtml`)).text()).toContain('blob:local/2');
+  });
+
   it('stores the manifest and every resource it names, once each', async () => {
     const body = (url: string) =>
       url.endsWith('manifest.json')
