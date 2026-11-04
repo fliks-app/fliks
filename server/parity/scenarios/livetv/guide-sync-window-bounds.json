@@ -18,7 +18,7 @@
       },
       "expect": {
         "body": {
-          "id": 1001,
+          "id": 7,
           "key": "livetv_guide_days_future",
           "value": "0"
         },
@@ -264,7 +264,7 @@
       },
       "expect": {
         "body": {
-          "id": 1002,
+          "id": 8,
           "key": "livetv_guide_days_past",
           "value": "0"
         },
