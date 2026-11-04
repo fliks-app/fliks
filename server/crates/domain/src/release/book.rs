@@ -2,11 +2,11 @@
 use crate::books::filename::{BookNameGuess, parse_path};
 use crate::js::rx;
 use crate::language::{AppLanguage, app_language_by_iso};
-use crate::release::parsing::language::parse_release_language;
+use crate::release::parsing::language::parse_language_with;
 
 pub fn parse_book_language(title: &str) -> Vec<&'static AppLanguage> {
     let t = title.replace(['.', '_', '-'], " ").to_lowercase();
-    let mut langs = parse_release_language(title);
+    let mut langs = parse_language_with(title, tag_region_start);
     if rx!(r"\b(fr|francais|français)\b").is_match(&t)
         && let Some(fr) = app_language_by_iso("fr")
         && !langs.contains(&fr)
@@ -19,6 +19,30 @@ pub fn parse_book_language(title: &str) -> Vec<&'static AppLanguage> {
 fn is_lang(w: &str) -> bool {
     rx!(i r"^(?:fr|french|francais|français|german|deutsch|spanish|italian|english|multi)$")
         .is_match(w)
+}
+
+/// Where the tags of a name with no video marker begin: its first bracket group (not a leading one) or
+/// tag word, widened over the language codes right before it, else its end.
+fn tag_region_start(decoded: &str) -> usize {
+    let base = rx!(r"^\s*(?:[\[({][^\])}]*[\])}]\s*)*")
+        .find(decoded)
+        .map_or(0, |m| m.end());
+    let rest = &decoded[base..];
+    let bracket = rest.find(['[', '(', '{']).map(|i| base + i);
+    let word = rx!(r"[^\s.\-_\[\](){},;+&]+")
+        .find_iter(rest)
+        .find(|m| is_tag(m.as_str(), false))
+        .map(|m| {
+            let at = base + m.start();
+            rx!(i r"(?:[\s.\-_]+(?:fre|fra|vf|eng|ger|deu|esp|spa|ita|ptbr|por|jap|jpn|kor|chi|chn|rus|ara|nlx?|pol|pl|tur|swe|sv|dan|dk|nor|no|fin))+[\s.\-_]*$")
+                .find(&decoded[..at])
+                .map_or(at, |c| c.start())
+        });
+    bracket
+        .into_iter()
+        .chain(word)
+        .min()
+        .unwrap_or(decoded.len())
 }
 
 /// `digits_unit` is whether a bitrate or bit-depth unit follows, which makes a bare number a tag.
@@ -93,4 +117,32 @@ pub fn parse_book_release_name(title: &str) -> BookNameGuess {
         Some(y) => format!("{name} ({})", &y[..4]),
         None => name,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_short_code_in_the_work_title_is_not_a_language() {
+        for t in [
+            "Dan Simmons - Hyperion [EPUB]",
+            "Ken Bruen - No Exit [M4B]",
+            "La Fin des temps [EPUB]",
+        ] {
+            let ids: Vec<_> = parse_book_language(t).iter().map(|l| l.id).collect();
+            assert_eq!(ids, [crate::language::ENGLISH_LANGUAGE.id], "{t}");
+        }
+        for (t, iso) in [
+            ("Autore - Titolo ITA EPUB", "it"),
+            ("Title GER MP3", "de"),
+            ("[Audiobook] Dan Simmons - Hyperion", "en"),
+            ("[GRP] Ken Bruen - No Exit", "en"),
+        ] {
+            let ids: Vec<_> = parse_book_language(t).iter().map(|l| l.id).collect();
+            assert_eq!(ids, [app_language_by_iso(iso).unwrap().id], "{t}");
+        }
+        let tagged = parse_book_language("Some Title [EPUB] [fin]");
+        assert_eq!(tagged[0].id, app_language_by_iso("fi").unwrap().id);
+    }
 }

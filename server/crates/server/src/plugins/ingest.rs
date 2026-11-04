@@ -106,7 +106,7 @@ pub async fn run(
     runtime_dir: &Path,
     r: t::IngestRequest,
 ) -> Result<t::IngestResult, HostError> {
-    let family = super::served(r.family)?;
+    let family = Family::from(r.family);
     if matches!(family, Family::Video | Family::Image) && r.language.is_some() {
         return Err(host_err(
             "ERR_VALIDATION",

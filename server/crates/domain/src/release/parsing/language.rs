@@ -12,7 +12,16 @@ fn lang(iso: &str) -> &'static AppLanguage {
 /// Languages named in the title in title order: full words anywhere, short codes only in the tag
 /// region (after the work title). `dual`, `multi` or an `N lang` count alone give Unknown.
 pub fn parse_release_language(title: &str) -> Vec<&'static AppLanguage> {
+    parse_language_with(title, |_| 0)
+}
+
+/// `unmarked` gives the tag region start of a decoded name whose title no video marker ends.
+pub fn parse_language_with(
+    title: &str,
+    unmarked: impl FnOnce(&str) -> usize,
+) -> Vec<&'static AppLanguage> {
     let (decoded, tag_start) = decoded_with_tag_start(title);
+    let tag_start = tag_start.unwrap_or_else(|| unmarked(&decoded).min(decoded.len()));
     let norm = |s: &str| s.replace(['.', '_', '-'], " ").to_lowercase();
     let t = norm(&decoded);
     let tag_at = norm(&decoded[..tag_start]).len();

@@ -67,7 +67,7 @@ pub async fn set_status(db: &PgPool, id: &str, reason: Option<&str>) -> sqlx::Re
 }
 
 pub async fn mark_bundled(db: &PgPool, id: &str) -> sqlx::Result<()> {
-    sqlx::query(r#"UPDATE plugin_packages SET origin = 'bundled' WHERE "pluginId" = $1 AND origin <> 'bundled'"#)
+    sqlx::query(r#"UPDATE plugin_packages SET origin = 'bundled' WHERE "pluginId" = $1 AND origin <> 'bundled' AND "verifiedByKeyId" IS NOT NULL"#)
         .bind(id)
         .execute(db)
         .await

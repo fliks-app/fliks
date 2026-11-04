@@ -177,3 +177,24 @@ async fn bundled_skips_the_fliks_range_others_do_not() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unverified_package_with_a_bundled_id_stays_manual() {
+    let Some((s, h, m, w)) = setup("bundled_unverified", false).await else {
+        return;
+    };
+    let id: &'static str = Box::leak(m["id"].as_str().unwrap().to_owned().into_boxed_str());
+    let a: Archive = (id, "1.0.0", leak(pack(&m, "1.0.0", &w, Some(&test_key()))));
+    h.st.plugins.install_archives(&[a]).await;
+    sqlx::query(
+        r#"UPDATE plugin_packages SET origin = 'manual', "verifiedByKeyId" = NULL WHERE "pluginId" = $1"#,
+    )
+    .bind(id)
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    h.st.plugins.install_archives(&[a]).await;
+    assert_eq!(row(&s, id).await.1, "manual");
+    h.finish().await;
+    s.finish().await;
+}

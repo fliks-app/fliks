@@ -282,7 +282,14 @@ impl Plugins {
                 .map(Arc::new),
         });
         let rt = PluginRt::new(sh, m.clone(), &loaded.component, pkg.network_internal)
-            .map_err(|e| fail("invalid-component", e.to_string()))?;
+            .map_err(|e| {
+                fail(
+                    "incompatible-api",
+                    format!(
+                        "the component does not link against this core's plugin interface: {e:#}; install a build of this plugin made for this core"
+                    ),
+                )
+            })?;
         {
             let mut t = rt.timings.lock_clean();
             t.compile = loaded.elapsed;

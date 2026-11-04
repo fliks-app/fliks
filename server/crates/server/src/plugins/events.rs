@@ -186,7 +186,7 @@ fn event_unit(
     family: t::Family,
     unit: Option<&t::UnitRef>,
 ) -> Result<(Option<u32>, Option<u32>), HostError> {
-    match super::served(family)? {
+    match Family::from(family) {
         Family::Video => units::video(unit),
         Family::Image => Ok((None, None)),
         other if unit.is_some() => Err(super::imports::host_err(
