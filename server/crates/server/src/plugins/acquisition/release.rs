@@ -89,7 +89,7 @@ async fn identify(
                 let fits = fitting_kinds(&entry.title, se.season.is_some() || se.episode.is_some());
                 let fit = |i: &usize| fits.is_none_or(|k| k.contains(&library[*i].kind));
                 let all: Vec<usize> = (0..indexed.len()).filter(|i| named(&indexed[*i])).collect();
-                let first = all.iter().copied().find(fit).or(all.first().copied());
+                let first = all.iter().copied().find(fit);
                 let mut hits: Hits = first.into_iter().collect();
                 if let Some(first) = hits.first().copied()
                     && library[first].kind == MediaKind::Comic

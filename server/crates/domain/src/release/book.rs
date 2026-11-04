@@ -21,13 +21,23 @@ fn is_lang(w: &str) -> bool {
         .is_match(w)
 }
 
-/// Where the tags of a name with no video marker begin: its first bracket group or tag word, else its end.
+/// Where the tags of a name with no video marker begin: its first bracket group (not a leading one) or
+/// tag word, widened over the language codes right before it, else its end.
 fn tag_region_start(decoded: &str) -> usize {
-    let bracket = decoded.find(['[', '(', '{']);
+    let base = rx!(r"^\s*(?:[\[({][^\])}]*[\])}]\s*)*")
+        .find(decoded)
+        .map_or(0, |m| m.end());
+    let rest = &decoded[base..];
+    let bracket = rest.find(['[', '(', '{']).map(|i| base + i);
     let word = rx!(r"[^\s.\-_\[\](){},;+&]+")
-        .find_iter(decoded)
+        .find_iter(rest)
         .find(|m| is_tag(m.as_str(), false))
-        .map(|m| m.start());
+        .map(|m| {
+            let at = base + m.start();
+            rx!(i r"(?:[\s.\-_]+(?:fre|fra|vf|eng|ger|deu|esp|spa|ita|ptbr|por|jap|jpn|kor|chi|chn|rus|ara|nlx?|pol|pl|tur|swe|sv|dan|dk|nor|no|fin))+$")
+                .find(&decoded[..at])
+                .map_or(at, |c| c.start())
+        });
     bracket
         .into_iter()
         .chain(word)
@@ -122,6 +132,15 @@ mod tests {
         ] {
             let ids: Vec<_> = parse_book_language(t).iter().map(|l| l.id).collect();
             assert_eq!(ids, [crate::language::ENGLISH_LANGUAGE.id], "{t}");
+        }
+        for (t, iso) in [
+            ("Autore - Titolo ITA EPUB", "it"),
+            ("Title GER MP3", "de"),
+            ("[Audiobook] Dan Simmons - Hyperion", "en"),
+            ("[GRP] Ken Bruen - No Exit", "en"),
+        ] {
+            let ids: Vec<_> = parse_book_language(t).iter().map(|l| l.id).collect();
+            assert_eq!(ids, [app_language_by_iso(iso).unwrap().id], "{t}");
         }
         let tagged = parse_book_language("Some Title [EPUB] [fin]");
         assert_eq!(tagged[0].id, app_language_by_iso("fi").unwrap().id);
