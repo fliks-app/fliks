@@ -384,7 +384,10 @@ async fn import_creates_the_volume_and_its_fileless_issues(pool: PgPool) {
     assert_eq!(issues[0]["title"], "Start");
     assert_eq!(issues[0]["releaseDate"], "2016-06-01");
     let id = v["id"].as_i64().unwrap() as i32;
-    assert_eq!(c.issues(id).await.iter().filter(|r| r.5).count(), 0);
+    assert!(
+        c.issues(id).await.iter().all(|r| r.5),
+        "a monitored volume wants every issue"
+    );
     let ext: String = sqlx::query_scalar(
         r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2"#,
     )
@@ -464,6 +467,11 @@ async fn a_refresh_merges_onto_the_local_issues_and_honours_the_locks(pool: PgPo
     lock(&c, m, "title").await;
     lock(&c, m, "publisher").await;
     link(&c, m).await;
+    sqlx::query(r#"UPDATE media SET monitored = false WHERE id = $1"#)
+        .bind(m)
+        .execute(&c.pool)
+        .await
+        .unwrap();
     assert!(
         comics::refresh(&c.st, m, Priority::Interactive)
             .await
@@ -491,7 +499,8 @@ async fn a_refresh_merges_onto_the_local_issues_and_honours_the_locks(pool: PgPo
         ("Local Pub", Some(2016), Some(2))
     );
     let mut got = c.issues(m).await;
-    // the issues the provider added have no file and are not wanted
+    // the new issues follow the volume (not monitored here), the three that were there keep true
+    assert_eq!(got.iter().filter(|r| r.5).count(), 3);
     got.iter_mut().for_each(|r| r.5 = false);
     assert_eq!(
         got,

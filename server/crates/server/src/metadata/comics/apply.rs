@@ -142,7 +142,7 @@ pub async fn write(st: &AppState, media: i32, ns: Namespace, f: &Fetched) -> Res
         }
         let item: i32 = sqlx::query_scalar(
             r#"INSERT INTO items ("mediaId", "editionId", monitored, title, "airDate")
-               VALUES ($1, $2, false, $3, $4::text::date) RETURNING id"#,
+               VALUES ($1, $2, (SELECT monitored FROM media WHERE id = $1), $3, $4::text::date) RETURNING id"#,
         )
         .bind(media)
         .bind(edition)
