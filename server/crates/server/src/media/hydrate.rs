@@ -140,6 +140,16 @@ WHERE media.id = ANY($1)"#
                     track_markers::annotate(info);
                 }
             }
+            if let Some(ids) = obj.get_mut("externalIds").and_then(Value::as_array_mut) {
+                ids.retain(|e| {
+                    e["provider"]
+                        .as_str()
+                        .is_some_and(|p| fliks_domain::external_id::Namespace::parse(p).is_some())
+                });
+                if ids.is_empty() {
+                    obj.remove("externalIds");
+                }
+            }
             if see_paths {
                 let path = media_path(r.lib_path.as_deref(), r.folder_name.as_deref());
                 obj.insert("path".into(), path.into());

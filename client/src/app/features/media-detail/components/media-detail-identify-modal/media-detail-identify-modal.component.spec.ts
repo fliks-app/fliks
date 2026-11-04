@@ -87,9 +87,14 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
   it('identifies a plugin result by its namespace and id', async () => {
     const { cmp, identify } = setup();
 
-    await cmp.apply({ ...tvdbOnly, provider: 'org.x:aid', externalId: '9', tvdbId: 0, imdbId: undefined });
+    await cmp.apply({ ...tvdbOnly, provider: 'org.x:aid', externalId: '9' });
 
-    expect(identify).toHaveBeenCalledWith(795, { provider: 'org.x:aid', externalId: '9' });
+    expect(identify).toHaveBeenCalledWith(795, {
+      tvdbId: 4242,
+      imdbId: 'tt0499308',
+      provider: 'org.x:aid',
+      externalId: '9',
+    });
   });
 
   it('searches the provider picked in the form', async () => {

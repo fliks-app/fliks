@@ -18,6 +18,18 @@ describe('mediaTitleKey', () => {
   });
 });
 
+describe('mediaTitleKey with several plugin ids', () => {
+  it('prefers the pinned namespace', () => {
+    const ids = [
+      { provider: 'a:x', value: '1' },
+      { provider: 'b:x', value: '2' },
+    ];
+    expect(
+      mediaTitleKey(media({ tmdbId: null, externalIds: ids, preferredProvider: 'b:x' as never })),
+    ).toEqual({ provider: 'b:x', externalId: '2' });
+  });
+});
+
 describe('RequestFlowController on a plugin-only title', () => {
   const m = media({ tmdbId: null, externalIds: [{ provider: 'org.x:aid', value: '9' }] });
   function setup() {

@@ -530,7 +530,7 @@ pub async fn decline(db: &PgPool, id: i32, by: i32, reason: Option<&str>) -> sql
 
 /// Takes a pending row for approval; false when it is not pending.
 pub async fn claim_approval(
-    db: &PgPool,
+    db: impl PgExecutor<'_>,
     id: i32,
     by: i32,
     media_id: Option<i32>,
@@ -1096,4 +1096,23 @@ pub async fn rule_delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
             .rows_affected()
             == 1,
     )
+}
+
+/// Locks media `id` and reports whether it still holds the request's title key.
+pub async fn lock_media_holding(
+    db: &mut PgConnection,
+    id: i32,
+    t: &TitleKey,
+) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM (SELECT id FROM media WHERE id = $1 FOR UPDATE) m
+             JOIN media_external_ids e ON e."mediaId" = m.id
+             WHERE e.kind = $2 AND e.provider = $3 AND e.value = $4)"#,
+    )
+    .bind(id)
+    .bind(t.media_type.as_str())
+    .bind(t.provider.as_str())
+    .bind(&t.external_id)
+    .fetch_one(db)
+    .await
 }

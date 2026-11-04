@@ -20,10 +20,9 @@ pub(super) async fn link_files(
     if let Some(l) = media.library_id
         && l != d.library_id
     {
-        return Err(AppError::bad_request(format!(
-            "Media already belongs to another library (\"{}\")",
-            media.library_name.clone().unwrap_or_default()
-        )));
+        return Err(AppError::bad_request(
+            "Media already belongs to another library",
+        ));
     }
     let guard = st.ingest.media.lock(media.id).await;
     let (mut errors, mut slot) = (vec![], false);
@@ -46,7 +45,10 @@ pub(super) async fn link_files(
                 };
             (linked, 0)
         };
-    let identified = media.tmdb_id.is_some() || media.tvdb_id.is_some() || media.imdb_id.is_some();
+    let identified = media.tmdb_id.is_some()
+        || media.tvdb_id.is_some()
+        || media.imdb_id.is_some()
+        || crate::media::external_ids::has_plugin_id(&st.db, media.id).await?;
     if media.has_seasons()
         && slot
         && identified
@@ -476,12 +478,22 @@ pub(super) async fn find_or_import(
         AppError::bad_request(vec!["externalId is not an id of the provider".to_owned()])
     })?;
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
-        Ok(
-            match crate::media::external_ids::find(&st.db, d.media_type, ns, &ext).await? {
-                Some(id) => load_media(&st.db, id).await?,
-                None => None,
-            },
-        )
+        let id = if ns.is_unique() {
+            crate::media::external_ids::find(&st.db, d.media_type, ns, &ext).await?
+        } else {
+            crate::media::external_ids::find_in_library(
+                &st.db,
+                d.media_type,
+                ns,
+                &ext,
+                d.library_id,
+            )
+            .await?
+        };
+        Ok(match id {
+            Some(id) => load_media(&st.db, id).await?,
+            None => None,
+        })
     };
     if let Some(m) = lookup().await? {
         return Ok((m, false));

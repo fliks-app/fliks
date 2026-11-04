@@ -310,6 +310,15 @@ async fn a_plugin_title_is_identified_by_its_namespace_and_deleted_through_a_req
         )
         .await;
     assert_eq!(st, 400, "a provider without its id: {r}");
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/media/200/identify",
+            Some(&h.admin),
+            Some(json!({"provider": NS, "externalId": "1", "preferredProvider": "tvdb"})),
+        )
+        .await;
+    assert_eq!(st, 400, "a pair and a pin contradict: {r}");
 
     let del = json!({"kind": "delete", "mediaType": "series", "provider": NS, "externalId": "1", "title": "T"});
     let (st, r) = h

@@ -25,7 +25,7 @@ export interface RequestFlowDeps {
 export function mediaTitleKey(m: Media | null): TitleKey | null {
   if (!m) return null;
   if (m.tmdbId != null) return { tmdbId: m.tmdbId };
-  const pin = m.externalIds?.[0];
+  const pin = m.externalIds?.find((e) => e.provider === m.preferredProvider) ?? m.externalIds?.[0];
   if (pin) return { provider: pin.provider, externalId: pin.value };
   return m.tvdbId != null ? { provider: 'tvdb', externalId: String(m.tvdbId) } : null;
 }

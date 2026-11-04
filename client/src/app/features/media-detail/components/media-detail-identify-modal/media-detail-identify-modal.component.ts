@@ -37,7 +37,7 @@ export interface IdentifyModalConfig {
 function identifyTarget(r: MetadataSearchResult) {
   return r.provider === 'tmdb' || r.provider === 'tvdb' || !r.externalId
     ? searchResultIds(r)
-    : { provider: r.provider, externalId: r.externalId };
+    : { ...searchResultIds(r), provider: r.provider, externalId: r.externalId };
 }
 
 @Component({

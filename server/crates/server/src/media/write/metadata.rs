@@ -479,20 +479,36 @@ pub async fn identify(
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let mut pin = None;
     match named {
+        (Some(_), Some(_)) if provider.is_some() => {
+            return Err(AppError::bad_request(
+                "provider and externalId replace preferredProvider",
+            ));
+        }
         (Some(p), Some(ext)) => {
             let ns = Namespace::parse(&p)
                 .filter(|n| {
-                    st.metadata
-                        .get(*n)
-                        .is_some_and(|m| m.supports(media.media_type))
+                    st.metadata.available(*n) && st.metadata.of(*n).supports(media.media_type)
                 })
                 .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?;
             let value = ns
                 .normalize(ext.trim())
                 .ok_or_else(|| AppError::bad_request(format!("Invalid id for provider: {p}")))?;
             match ns {
-                Namespace::TMDB => tmdb = value.parse().ok(),
-                Namespace::TVDB => tvdb = value.parse().ok(),
+                Namespace::TMDB | Namespace::TVDB => {
+                    let slot = if ns == Namespace::TMDB {
+                        &mut tmdb
+                    } else {
+                        &mut tvdb
+                    };
+                    let id = value.parse().ok();
+                    if slot.is_some() && *slot != id {
+                        return Err(AppError::bad_request(format!(
+                            "externalId contradicts {}",
+                            ns.as_str()
+                        )));
+                    }
+                    *slot = id;
+                }
                 _ => {
                     provider = Some(Some(p));
                     pin = Some((ns, value));

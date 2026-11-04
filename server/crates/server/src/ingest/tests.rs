@@ -870,6 +870,37 @@ async fn relink_refuses_a_provider_that_serves_nothing(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn relink_does_not_pick_a_non_unique_id_held_in_another_library(pool: PgPool) {
+    let c = ctx(pool).await;
+    let a = library(&c, "A", &c.dir.join("a"), r#"["movie"]"#).await;
+    let b = library(&c, "SecretLib", &c.dir.join("b"), r#"["movie"]"#).await;
+    let other = media(&c, b, "Other (2000)", "movie").await;
+    sqlx::query(
+        r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+           VALUES ($1, 'movie', 'tvdb', '55')"#,
+    )
+    .bind(other)
+    .execute(&c.st.db)
+    .await
+    .unwrap();
+    touch(&c.dir.join("a/Film (2001)/Film (2001).mkv"), b"f");
+    let body = json!({"libraryId": a, "type": "movie", "folderName": "Film (2001)",
+        "provider": "tvdb", "externalId": "55",
+        "files": [{"filePath": c.dir.join("a/Film (2001)/Film (2001).mkv")}]});
+    let (s, b) = call(
+        &c,
+        "POST",
+        "/api/imports/library/orphans/relink",
+        &c.admin,
+        body,
+    )
+    .await;
+    assert_ne!(s, 201, "{b}");
+    assert!(!b.to_string().contains("SecretLib"), "{b}");
+    assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn relink_transfer_copy_then_move(pool: PgPool) {
     let c = ctx(pool).await;
     let scan =
