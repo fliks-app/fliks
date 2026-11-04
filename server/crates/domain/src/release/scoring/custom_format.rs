@@ -64,11 +64,12 @@ fn eval_spec(
     title: &str,
     attrs: &crate::release::parsing::attributes::ReleaseAttributes,
     spec: &CustomFormatSpec,
+    regex: Option<&regress::Regex>,
     flags: &[String],
 ) -> bool {
     let value = norm(Some(&spec.value));
     match spec.kind.as_str() {
-        "title_regex" => title_regex(&spec.value).is_some_and(|r| r.find(title).is_some()),
+        "title_regex" => regex.is_some_and(|r| r.find(title).is_some()),
         "source" => norm(attrs.source) == value,
         "resolution" => {
             attrs.resolution > 0 && parse_int(&value) == Some(i64::from(attrs.resolution))
@@ -90,15 +91,81 @@ fn eval_spec(
     }
 }
 
-/// A format with no condition matches nothing; a `required` condition must hold on its own.
+/// Formats with their title patterns compiled once, to score many titles.
+pub struct CompiledFormats<'a> {
+    formats: &'a [CustomFormat],
+    regexes: Vec<Vec<Option<regress::Regex>>>,
+}
+
+impl<'a> CompiledFormats<'a> {
+    pub fn new(formats: &'a [CustomFormat]) -> Self {
+        let regexes = formats
+            .iter()
+            .map(|f| {
+                f.specs
+                    .iter()
+                    .map(|s| {
+                        (s.kind == "title_regex")
+                            .then(|| title_regex(&s.value))
+                            .flatten()
+                    })
+                    .collect()
+            })
+            .collect();
+        Self { formats, regexes }
+    }
+
+    fn each<'s>(
+        &'s self,
+        title: &'s str,
+        flags: &'s [String],
+    ) -> impl Iterator<Item = (&'s CustomFormat, bool)> + 's {
+        let attrs = parse_release_attributes(title);
+        self.formats
+            .iter()
+            .zip(&self.regexes)
+            .map(move |(f, r)| (f, format_holds(title, &attrs, f, r, flags)))
+    }
+
+    pub fn score(&self, title: &str, flags: &[String]) -> i64 {
+        self.each(title, flags)
+            .filter(|(_, m)| *m)
+            .map(|(f, _)| f.score)
+            .sum()
+    }
+
+    pub fn test(&self, title: &str, flags: &[String]) -> Vec<CustomFormatMatch> {
+        self.each(title, flags)
+            .map(|(f, matched)| CustomFormatMatch {
+                format_id: f.id,
+                format_name: f.name.clone(),
+                matched,
+                score: if matched { f.score } else { 0 },
+            })
+            .collect()
+    }
+}
+
 pub fn matches_format(title: &str, fmt: &CustomFormat, flags: &[String]) -> bool {
+    CompiledFormats::new(std::slice::from_ref(fmt))
+        .each(title, flags)
+        .any(|(_, m)| m)
+}
+
+/// A format with no condition matches nothing; a `required` condition must hold on its own.
+fn format_holds(
+    title: &str,
+    attrs: &crate::release::parsing::attributes::ReleaseAttributes,
+    fmt: &CustomFormat,
+    regexes: &[Option<regress::Regex>],
+    flags: &[String],
+) -> bool {
     if fmt.specs.is_empty() {
         return false;
     }
-    let attrs = parse_release_attributes(title);
     let mut groups: Vec<(&str, bool)> = vec![];
-    for spec in &fmt.specs {
-        let raw = eval_spec(title, &attrs, spec, flags);
+    for (spec, regex) in fmt.specs.iter().zip(regexes) {
+        let raw = eval_spec(title, attrs, spec, regex.as_ref(), flags);
         let result = raw != spec.negate;
         if spec.required && !result {
             return false;
@@ -112,11 +179,7 @@ pub fn matches_format(title: &str, fmt: &CustomFormat, flags: &[String]) -> bool
 }
 
 pub fn score_release_with(formats: &[CustomFormat], title: &str, flags: &[String]) -> i64 {
-    formats
-        .iter()
-        .filter(|f| matches_format(title, f, flags))
-        .map(|f| f.score)
-        .sum()
+    CompiledFormats::new(formats).score(title, flags)
 }
 
 pub fn test_release(
@@ -124,18 +187,7 @@ pub fn test_release(
     title: &str,
     flags: &[String],
 ) -> Vec<CustomFormatMatch> {
-    formats
-        .iter()
-        .map(|f| {
-            let matched = matches_format(title, f, flags);
-            CustomFormatMatch {
-                format_id: f.id,
-                format_name: f.name.clone(),
-                matched,
-                score: if matched { f.score } else { 0 },
-            }
-        })
-        .collect()
+    CompiledFormats::new(formats).test(title, flags)
 }
 
 /// `Err(value)` of the first `title_regex` that does not compile.
