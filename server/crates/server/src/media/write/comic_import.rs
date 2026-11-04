@@ -1,18 +1,16 @@
 //! `POST /api/media/import` for a comic volume (`docs/spec/comics.md` rule 41).
 use super::{
     body::Body,
-    identified::Creation,
+    identified::{Creation, Row, TAKEN, announce, discard, insert_row},
     import::{creation_folder, resolve_target},
 };
 use crate::{
-    events::DomainEvent,
     http::{AppError, auth::Authed},
     libraries::{accessible_library_ids, paths_visible},
     media::{
         comics,
         external_ids::{self, Link},
         hydrate,
-        items::{self, NewWant},
     },
     metadata::comics::{fetch, routes::comic_provider, write},
     state::AppState,
@@ -22,7 +20,6 @@ use fliks_domain::{media::kind::MediaKind, metadata::limiter::Priority};
 use serde_json::Value;
 
 const FIELDS: [&str; 5] = ["type", "provider", "externalId", "libraryId", "folderId"];
-const TAKEN: &str = "This title is already in the library";
 
 pub(super) async fn import_comic(
     st: &AppState,
@@ -80,7 +77,6 @@ pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result
         fetched.work.year.map(i64::from),
     )
     .await?;
-    let user = c.user;
     let same: Option<i32> = sqlx::query_scalar(
         r#"SELECT id FROM media WHERE type = 'comic' AND "libraryId" = $1 AND "folderName" = $2 LIMIT 1"#,
     )
@@ -93,69 +89,24 @@ pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result
             "{TAKEN}: identify comic #{other} against this provider instead"
         )));
     }
-    let mut tx = st.db.begin().await?;
-    let media: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "libraryId",
-             "folderName", "addedById", "preferredProvider")
-           VALUES ($1, $1, $2, 'comic', 'released', true, $3, $4, $5, $6)
-           RETURNING id"#,
-    )
-    .bind(&title)
-    .bind(fetched.work.year)
-    .bind(c.target.id)
-    .bind(&folder_name)
-    .bind(user)
-    .bind(ns.as_str())
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| {
-        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
-            AppError::conflict(TAKEN)
-        } else {
-            e.into()
-        }
-    })?;
-    items::create_shell(
-        &mut tx,
-        media,
-        MediaKind::Comic,
-        NewWant {
-            quality_profile_id: None,
-            folder_id: c.target.folder_id,
-        },
-    )
-    .await?;
-    let linked = external_ids::link(&mut tx, media, MediaKind::Comic, ns, id).await?;
-    for (n, v) in &c.links {
-        external_ids::link(&mut tx, media, MediaKind::Comic, *n, v).await?;
+    let row = Row {
+        kind: MediaKind::Comic,
+        title: &title,
+        year: fetched.work.year,
+        folder: &folder_name,
+        overview: None,
+        provider: Some(ns),
+        refreshed: false,
+    };
+    let (media, mut tx) = insert_row(st, &row, c.target, c.user, &c.links, None).await?;
+    if external_ids::link(&mut tx, media, MediaKind::Comic, ns, id).await? != Link::Linked {
+        return Err(AppError::conflict(TAKEN));
     }
     tx.commit().await?;
-
-    let undo = async |e: AppError| {
-        if let Err(d) = sqlx::query!("DELETE FROM media WHERE id = $1", media)
-            .execute(&st.db)
-            .await
-        {
-            tracing::warn!("comic #{media} left behind after a failed import: {d}");
-        }
-        e
-    };
-    if linked != Link::Linked {
-        return Err(undo(AppError::conflict(TAKEN)).await);
-    }
     if let Err(e) = write(st, media, ns, &fetched).await {
-        return Err(undo(e).await);
+        discard(st, media, MediaKind::Comic).await;
+        return Err(e);
     }
-    tracing::info!(
-        "Imported comic \"{title}\" (#{media}) into library #{}",
-        c.target.id
-    );
-    st.hub.emit_domain(DomainEvent::MediaImported {
-        media_id: i64::from(media),
-        external_ids: external_ids::refs(&st.db, media).await?,
-        media_type: MediaKind::Comic,
-        library_id: Some(i64::from(c.target.id)),
-        added_by_user_id: user.map(i64::from),
-    });
+    announce(st, (media, MediaKind::Comic, &title), c.target.id, c.user).await?;
     Ok(media)
 }

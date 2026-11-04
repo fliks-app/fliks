@@ -283,7 +283,6 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
         st,
         &NewBook {
             target: &target,
-            folder: None,
             user: Some(job.user),
             work,
             prio: BACKGROUND,

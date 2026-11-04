@@ -1,19 +1,16 @@
 //! `POST /api/media/import` for a book (`docs/spec/book-metadata.md` rule 21).
 use super::{
     body::Body,
-    identified::{Creation, create_identified},
+    identified::{Creation, Row, TAKEN, announce, create_identified, discard, insert_row},
     import::{Target, creation_folder, resolve_target},
 };
 use crate::{
-    events::DomainEvent,
     http::{AppError, auth::Authed},
     libraries::{accessible_library_ids, paths_visible},
     media::{
         books, editions,
         external_ids::{self, edition_id},
-        hydrate,
-        items::{self, NewWant},
-        wants,
+        hydrate, wants,
     },
     metadata::{
         Upstream,
@@ -48,7 +45,6 @@ const FIELDS: [&str; 6] = [
     "folderId",
     "wants",
 ];
-const TAKEN: &str = "This title is already in the library";
 const NOT_READABLE: &str = "errors.book_library_not_accessible";
 
 pub(super) async fn import_book(
@@ -124,7 +120,6 @@ pub(super) async fn import_book(
 /// added by `user`; `discovered` also writes the `discovered_works` ledger row with the media.
 pub(crate) struct NewBook<'a> {
     pub target: &'a Target,
-    pub folder: Option<i32>,
     pub user: Option<i32>,
     pub work: &'a str,
     pub prio: Priority,
@@ -138,7 +133,6 @@ pub(crate) struct NewBook<'a> {
 pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32, AppError> {
     let NewBook {
         target,
-        folder,
         user,
         work,
         prio,
@@ -183,45 +177,16 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         .filter(|y| (1..=9999).contains(y));
     let name = creation_folder(st, MediaKind::Book, &title, year).await?;
 
-    let mut tx = st.db.begin().await?;
-    let id = sqlx::query_scalar!(
-        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "libraryId",
-             "folderName", "addedById")
-           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5)
-           RETURNING id"#,
-        title,
-        year.map(|y| y as i32),
-        target.id,
-        name,
-        user
-    )
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| {
-        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
-            AppError::conflict(TAKEN)
-        } else {
-            e.into()
-        }
-    })?;
-    items::create_shell(
-        &mut tx,
-        id,
-        MediaKind::Book,
-        NewWant {
-            quality_profile_id: None,
-            folder_id: folder,
-        },
-    )
-    .await?;
-    for (ns, value) in links {
-        external_ids::link(&mut tx, id, MediaKind::Book, *ns, value).await?;
-    }
-    if let Some(w) = wants {
-        wants::replace(&mut tx, id, w)
-            .await
-            .map_err(|e| wants::write_error(e, id))?;
-    }
+    let row = Row {
+        kind: MediaKind::Book,
+        title: &title,
+        year: year.map(|y| y as i32),
+        folder: &name,
+        overview: None,
+        provider: None,
+        refreshed: false,
+    };
+    let (id, mut tx) = insert_row(st, &row, target, user, links, wants).await?;
     if discovered {
         sqlx::query(
             r#"INSERT INTO discovered_works (provider, value, "mediaId") VALUES ($1, $2, $3)
@@ -243,12 +208,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         {
             tracing::warn!("ledger row of book #{id} left behind: {d}");
         }
-        if let Err(d) = sqlx::query!("DELETE FROM media WHERE id = $1", id)
-            .execute(&st.db)
-            .await
-        {
-            tracing::warn!("book #{id} left behind after a failed import: {d}");
-        }
+        discard(st, id, MediaKind::Book).await;
         e
     };
     let m = BookMatch {
@@ -264,17 +224,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         Ok(_) => return Err(undo(AppError::conflict(TAKEN)).await),
         Err(e) => return Err(undo(e.into()).await),
     }
-    tracing::info!(
-        "Imported book \"{title}\" (#{id}) into library #{}",
-        target.id
-    );
-    st.hub.emit_domain(DomainEvent::MediaImported {
-        media_id: i64::from(id),
-        external_ids: external_ids::refs(&st.db, id).await?,
-        media_type: MediaKind::Book,
-        library_id: Some(i64::from(target.id)),
-        added_by_user_id: user.map(i64::from),
-    });
+    announce(st, (id, MediaKind::Book, &title), target.id, user).await?;
     Ok(id)
 }
 
@@ -325,7 +275,6 @@ async fn book_from(st: &AppState, c: &Creation<'_>, join: bool) -> Result<(i32, 
 fn new_book<'a>(c: &'a Creation<'a>, work: &'a str) -> NewBook<'a> {
     NewBook {
         target: c.target,
-        folder: c.target.folder_id,
         user: c.user,
         work,
         prio: c.prio,
@@ -464,40 +413,17 @@ async fn insert_unanchored(
         .filter(|y| (1..=9999).contains(y))
         .map(|y| y as i32);
     let name = creation_folder(st, MediaKind::Book, &title, year.map(i64::from)).await?;
-    let mut tx = st.db.begin().await?;
-    let id: i32 = sqlx::query_scalar(
-        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, overview,
-             "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt", "addedById")
-           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5, $6, now(), $7)
-           RETURNING id"#,
-    )
-    .bind(&title)
-    .bind(year)
-    .bind(text(record, "overview"))
-    .bind(target.id)
-    .bind(&name)
-    .bind(pref.as_str())
-    .bind(c.user)
-    .fetch_one(&mut *tx)
-    .await?;
-    items::create_shell(
-        &mut tx,
-        id,
-        MediaKind::Book,
-        NewWant {
-            quality_profile_id: None,
-            folder_id: target.folder_id,
-        },
-    )
-    .await?;
-    for (n, v) in &own {
-        external_ids::link(&mut tx, id, MediaKind::Book, *n, v).await?;
-    }
-    if let Some(w) = c.wants {
-        wants::replace(&mut tx, id, w)
-            .await
-            .map_err(|e| wants::write_error(e, id))?;
-    }
+    let overview = text(record, "overview");
+    let row = Row {
+        kind: MediaKind::Book,
+        title: &title,
+        year,
+        folder: &name,
+        overview: overview.as_deref(),
+        provider: Some(pref),
+        refreshed: true,
+    };
+    let (id, mut tx) = insert_row(st, &row, target, c.user, &own, c.wants).await?;
     sqlx::query(r#"INSERT INTO book_details ("mediaId") VALUES ($1) ON CONFLICT DO NOTHING"#)
         .bind(id)
         .execute(&mut *tx)
@@ -505,17 +431,7 @@ async fn insert_unanchored(
     let authors = people(record, "authors");
     replace_credits(&mut tx, id, None, "author", None, &authors).await?;
     tx.commit().await?;
-    tracing::info!(
-        "Imported book \"{title}\" (#{id}) from {pref} into library #{}",
-        target.id
-    );
-    st.hub.emit_domain(DomainEvent::MediaImported {
-        media_id: i64::from(id),
-        external_ids: external_ids::refs(&st.db, id).await?,
-        media_type: MediaKind::Book,
-        library_id: Some(i64::from(target.id)),
-        added_by_user_id: c.user.map(i64::from),
-    });
+    announce(st, (id, MediaKind::Book, &title), target.id, c.user).await?;
     Ok(id)
 }
 
@@ -538,7 +454,6 @@ pub async fn import_book_for_request(
         st,
         &NewBook {
             target: &target,
-            folder,
             user: added_by.filter(|u| *u != 0),
             work,
             prio: Priority::Interactive,
