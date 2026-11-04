@@ -42,7 +42,10 @@ The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect 
 
 ## Git workflow
 
-- **`main` is protected**: direct pushes are rejected (`protected branch hook declined`). Every change has to land via a pull request — branch off `main`, push the branch, open the PR, then merge through GitHub (`gh pr merge`).
+- **`main` is protected**: direct pushes are rejected (`protected branch hook declined`). Every change lands through a pull request: branch off `main`, push, open the PR, then add it to the merge queue.
+- **Merges go through the merge queue** (ruleset `main merge queue`, squash): the REST merge endpoint (`gh api -X PUT .../pulls/<n>/merge`) is refused. Enqueue with `gh pr merge <n> --auto`, or, when `gh pr merge` fails, `gh api graphql -f query='mutation($id:ID!){enqueuePullRequest(input:{pullRequestId:$id}){mergeQueueEntry{position}}}' -f id=$(gh pr view <n> --json id -q .id)`. The queue re-runs `commitlint`, `release-parser` and `ci-ok` on the PR rebased onto the latest `main` (only `lint` and `tizen` build there; tests ran on the PR) and merges when they pass.
+- **Required checks**: `commitlint`, `release-parser` and `ci-ok`, the aggregate of `.github/workflows/ci.yml` (jobs gated by the paths a change touches; a skipped job counts as passed). A PR last pushed before a change to these workflows has no `ci-ok` run and stays pending: rebase it onto `origin/main` and push.
+- **Parity is not on the merge path**: `parity.yml` runs nightly on `main` and on a PR labelled `parity`. Label every PR that changes server behaviour, a parity seed or an `expect`.
 - **Don't run `git push` against `main` directly**; it always fails. If you mistakenly committed straight to local `main`, move the commit onto a branch (`git checkout -b <branch>` while on the commit, then `git reset --hard origin/main` on `main`) before pushing.
 - **A bad commit message blocks the merge, squash included**: `commitlint` and `release-parser` are required checks and lint every commit of the PR, so a squash with a clean title does not escape them. Check every commit body before pushing (`git log --format=%b origin/main..HEAD | awk 'length > 100'`). Fixing a published commit means rewording it (`git filter-branch --msg-filter … origin/main..HEAD`) and a force-push with `--force-with-lease`, which is destructive and needs explicit user approval.
 - **Never merge `main` into a PR branch**: the merge commit (`Merge remote-tracking branch 'origin/main' into …`) is not a conventional commit and fails `release-parser`. Bring a branch up to date by rebasing onto `origin/main` before its first push; once it is published, catching up means a rebase and a force-push, which needs explicit user approval.
@@ -56,7 +59,7 @@ Two jobs in `.github/workflows/commit-lint.yml` check every commit of a PR, then
 - `commitlint`: `wagoid/commitlint-github-action` with `@commitlint/config-conventional` defaults.
 - `release-parser`: release-please's own, stricter parser (`.github/scripts/check-commit-parse.mjs`). release-please silently drops a message it can't parse from the changelog and the version bump. It rejects merge commits and an unbalanced `(` in the body.
 
-Both are required status checks on `main`: a red one blocks the merge, `gh api .../merge` answers 405. **Always apply these rules**:
+Both are required status checks on `main`: a red one keeps the PR out of the merge queue. **Always apply these rules**:
 
 - **Header format**: `type(scope): subject` — type and scope lowercase, scope optional but encouraged.
 - **Allowed types**: `feat`, `fix`, `chore`, `refactor`, `style`, `docs`, `test`, `perf`, `build`, `ci`, `revert`.
@@ -64,7 +67,7 @@ Both are required status checks on `main`: a red one blocks the merge, `gh api .
 - **Subject ending**: no trailing period.
 - **Header length**: keep ≤ 72 characters when possible; the limit is 100.
 - **Body**: separate from the header with one blank line. Explain *why*, not *what*. Wrap each line at ≤ 100 characters. Keep every `(` closed: `release-parser` rejects an unbalanced one. Reference incidents, constraints, or prior bugs that motivated the change.
-- **Squash-merge messages are linted too, after the fact**: the `commit_message` passed to a squash merge (`gh api .../merge -f commit_message=...`) becomes a commit on `main`, linted on push, with no way to fix it once merged (#1570 shipped a 139-character body line). Hard-wrap every line of it at ≤ 100 characters, like any commit body, and check `awk '{print length}'` before merging.
+- **The squash message is built by GitHub, not by you**: the queue squashes with the repository's settings (title: the single commit's headline, or the PR title for several commits, plus ` (#n)`; body: the commit messages). No `commit_message` can be passed, so every commit message on the branch must already be the final one: lines ≤ 100 characters, no line starting with `#` (commitlint reads it as a footer). The queue lints the squashed commits before they land.
 - **Footer**: blank line before, used for issue refs (`Refs: #123`) or `BREAKING CHANGE:` notes.
 - **No `Co-Authored-By` lines** (overrides the default Claude Code template — see the user's global instructions).
 - **Don't skip hooks** (`--no-verify`, `--no-gpg-sign`) unless explicitly asked.
