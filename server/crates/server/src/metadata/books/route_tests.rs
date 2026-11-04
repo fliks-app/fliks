@@ -456,35 +456,29 @@ fn sources_uri(id: i32) -> String {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_work_is_relinked_unless_another_book_holds_it(pool: PgPool) {
+async fn the_work_is_identified_and_never_put(pool: PgPool) {
     let (c, _) = ctx(pool, vec![full_anchor()]).await;
-    let (a, b) = (c.book(1).await, c.book(1).await);
-    let put = async |id: i32, w: &str| {
-        let body = json!({"level": "work", "provider": "openlibrary", "value": w});
-        c.call(&c.admin, "PUT", &sources_uri(id), Some(body)).await
-    };
-    let (s, v) = put(a, "OL1W").await;
-    assert_eq!(s, 200, "{v}");
-    assert_eq!(v["work"]["value"], "OL1W");
-    let title: String = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
-        .bind(a)
-        .fetch_one(&c.pool)
-        .await
-        .unwrap();
-    assert_eq!(title, "Alpha");
-    let (s, v) = put(b, "OL1W").await;
-    assert_eq!((s, v["message"].as_str()), (409, Some("taken")));
-    let (s, v) = put(a, "OL2W").await;
-    assert_eq!((s, v["work"]["value"].as_str()), (200, Some("OL2W")));
-    assert_eq!(put(a, "OL9W").await.0, 404);
+    let a = c.book(1).await;
+    let (s, v) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{a}/identify"),
+            Some(json!({"provider": "openlibrary", "externalId": "OL1W"})),
+        )
+        .await;
+    assert_eq!(s, 201, "{v}");
+    let put = json!({"level": "work", "provider": "openlibrary", "value": "OL2W"});
+    let (s, _) = c.call(&c.admin, "PUT", &sources_uri(a), Some(put)).await;
+    assert_eq!(s, 400);
     let (_, v) = c.get(&sources_uri(a)).await;
-    assert_eq!(v["work"]["value"], "OL2W");
+    assert_eq!(v["work"]["value"], "OL1W");
     let (s, v) = c
         .call(
             &c.admin,
             "DELETE",
             &format!(
-                "{}?level=work&provider=openlibrary&value=OL2W",
+                "{}?level=work&provider=openlibrary&value=OL1W",
                 sources_uri(a)
             ),
             None,
@@ -516,9 +510,9 @@ async fn edition_ids_are_added_replaced_and_removed(pool: PgPool) {
     );
     c.call(
         &c.admin,
-        "PUT",
-        &uri,
-        Some(json!({"level": "work", "provider": "openlibrary", "value": "OL1W"})),
+        "POST",
+        &format!("/api/media/{media}/identify"),
+        Some(json!({"provider": "openlibrary", "externalId": "OL1W"})),
     )
     .await;
     let (_, v) = put("asin", "B000000002").await;

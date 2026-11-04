@@ -333,7 +333,7 @@ fn taken() -> AppError {
     AppError::conflict("taken")
 }
 
-/// `PUT /api/media/{id}/sources` (rules 23-24).
+/// `PUT /api/media/{id}/sources` (rules 23-24): an edition level only, the work is identified.
 #[utoipa::path(put, path = "/api/media/{id}/sources", responses((status = 200)))]
 pub async fn sources_put(
     State(st): State<AppState>,
@@ -344,32 +344,13 @@ pub async fn sources_put(
     let g = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &["level", "editionId", "provider", "value"])?;
     let (level, provider, value) = parse(&b)?;
-    match level {
-        Level::Work => {
-            if external_ids::find(&st.db, MediaKind::Book, ANCHOR, &value)
-                .await?
-                .is_some_and(|m| m != g.media)
-            {
-                return Err(taken());
-            }
-            let m = BookMatch {
-                work: value.clone(),
-                edition: vec![],
-                confidence: 100,
-            };
-            attach(&st, g.media, None, &m, GO)
-                .await
-                .map_err(|e| meta_fail(ANCHOR, e))?;
-            let linked = stored(&st.db, g.media, None).await?.map(|m| m.work);
-            if linked.as_deref() != Some(&value) {
-                return Err(taken());
-            }
-        }
-        Level::Edition(edition) => {
-            visible_edition(&st.db, &g, edition).await?;
-            put_edition(&st, g.media, edition, provider, value).await?;
-        }
-    }
+    let Level::Edition(edition) = level else {
+        return Err(AppError::bad_request(vec![
+            "level must be one of the following values: edition".to_owned(),
+        ]));
+    };
+    visible_edition(&st.db, &g, edition).await?;
+    put_edition(&st, g.media, edition, provider, value).await?;
     Ok(Json(sources(&st.db, &g).await?))
 }
 
