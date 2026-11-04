@@ -167,6 +167,12 @@ async fn edition(c: &mut PgConnection, media: i32) -> sqlx::Result<i32> {
 async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     lock_versions(&mut tx, media).await?;
+    sqlx::query(
+        r#"INSERT INTO comic_details ("mediaId") VALUES ($1) ON CONFLICT ("mediaId") DO NOTHING"#,
+    )
+    .bind(media)
+    .execute(&mut *tx)
+    .await?;
     let edition = edition(&mut tx, media).await?;
     for r in rows {
         let placed: bool = sqlx::query_scalar(
