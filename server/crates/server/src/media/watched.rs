@@ -47,17 +47,17 @@ pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     )
 }
 
-/// The percentage of the most recent unfinished ungrouped item of a media; `0` for a seasonal kind, 100 for a watched book or comic.
+/// The percentage of the most recent unfinished ungrouped item of a media (a reader's `progression` when set, else position over duration); `0` for a seasonal kind, 100 for a watched book or comic.
 pub(crate) fn progress(uid: impl Display, m: &str) -> String {
     let seasonal = seasonal_array();
     let (book, comic) = (MediaKind::Book.as_str(), MediaKind::Comic.as_str());
     let watched = predicate(&uid, m);
     format!(
         r#"CASE WHEN {m}.type = ANY({seasonal}) THEN 0 WHEN {m}.type IN ('{book}', '{comic}') AND ({watched}) THEN 100 ELSE COALESCE((
-    SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
+    SELECT ROUND(LEAST(1, COALESCE(ps.progression, ps."positionSeconds" / NULLIF(ps."durationSeconds", 0))) * 100)::int
     FROM playback_states ps JOIN items i ON i.id = ps."itemId"
     WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND i."groupId" IS NULL
-      AND ps.completed = false AND ps."durationSeconds" > 0
+      AND ps.completed = false AND (ps."durationSeconds" > 0 OR ps.progression IS NOT NULL)
     ORDER BY ps."lastPlayedAt" DESC LIMIT 1
   ), 0) END"#
     )
@@ -75,6 +75,7 @@ mod tests {
         assert!(
             p.contains("type IN ('book', 'comic') AND (CASE WHEN") && p.contains("THEN 100 ELSE")
         );
+        assert!(p.contains("COALESCE(ps.progression"));
         assert!(!p.contains("'movie'") && !predicate(1, "m").contains("'movie'"));
     }
 }
