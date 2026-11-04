@@ -8,14 +8,16 @@ fn lang(iso: &str) -> &'static AppLanguage {
     app_language_by_iso(iso).unwrap_or(UNKNOWN_LANGUAGE)
 }
 
-pub fn parse_release_language(title: &str) -> &'static AppLanguage {
+/// Every language the title names, in title order; `dual`, `multi` or an `N lang` count alone give Unknown.
+pub fn parse_release_language(title: &str) -> Vec<&'static AppLanguage> {
     let t = title.replace(['.', '_', '-'], " ").to_lowercase();
-    let families: [(&regex::Regex, &str); 17] = [
+    let families: [(&regex::Regex, &str); 18] = [
         (
-            rx!(r"\b(french|vff|vfi|vf\b|truefrench|vostfr|vost)\b"),
+            rx!(r"\b(french|fre|fra|vff|vfi|vf\b|truefrench|vostfr|vost)\b"),
             "fr",
         ),
-        (rx!(r"\b(german|deutsch)\b"), "de"),
+        (rx!(r"\b(english|eng)\b"), "en"),
+        (rx!(r"\b(german|deutsch|ger|deu)\b"), "de"),
         (rx!(r"\b(spanish|espanol|esp\b|spa\b|latino)\b"), "es"),
         (rx!(r"\b(italian|italiano|ita\b)\b"), "it"),
         (
@@ -38,13 +40,18 @@ pub fn parse_release_language(title: &str) -> &'static AppLanguage {
         (rx!(r"\b(norwegian|norv[eé]gien|nor\b|no\b)\b"), "no"),
         (rx!(r"\b(finnish|finlandais|fin\b)\b"), "fi"),
     ];
-    if let Some((_, iso)) = families.iter().find(|(r, _)| r.is_match(&t)) {
-        return lang(iso);
+    let mut found: Vec<(usize, &str)> = families
+        .iter()
+        .filter_map(|(r, iso)| r.find(&t).map(|m| (m.start(), *iso)))
+        .collect();
+    found.sort_by_key(|(at, _)| *at);
+    if !found.is_empty() {
+        return found.into_iter().map(|(_, iso)| lang(iso)).collect();
     }
-    if rx!(r"\bmulti\b").is_match(&t) {
-        return UNKNOWN_LANGUAGE;
+    if rx!(r"\b(multi|dual|([2-9]|\d{2,}) langs?)\b").is_match(&t) {
+        return vec![UNKNOWN_LANGUAGE];
     }
-    ENGLISH_LANGUAGE
+    vec![ENGLISH_LANGUAGE]
 }
 
 /// A source's `unknown_iso` replaces an Unknown parse; anything else is kept.
@@ -59,4 +66,15 @@ pub fn resolve_unknown_language(
             .unwrap_or(parsed),
         _ => parsed,
     }
+}
+
+/// `resolve_unknown_language` over a list.
+pub fn resolve_unknown_languages(
+    parsed: Vec<&'static AppLanguage>,
+    unknown_iso: Option<&str>,
+) -> Vec<&'static AppLanguage> {
+    parsed
+        .into_iter()
+        .map(|l| resolve_unknown_language(l, unknown_iso))
+        .collect()
 }

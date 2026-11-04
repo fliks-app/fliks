@@ -4,14 +4,16 @@ use crate::js::rx;
 use crate::language::{AppLanguage, app_language_by_iso};
 use crate::release::parsing::language::parse_release_language;
 
-pub fn parse_book_language(title: &str) -> &'static AppLanguage {
+pub fn parse_book_language(title: &str) -> Vec<&'static AppLanguage> {
     let t = title.replace(['.', '_', '-'], " ").to_lowercase();
-    if rx!(r"\b(fr|fra|fre|francais|français)\b").is_match(&t)
+    let mut langs = parse_release_language(title);
+    if rx!(r"\b(fr|francais|français)\b").is_match(&t)
         && let Some(fr) = app_language_by_iso("fr")
+        && !langs.contains(&fr)
     {
-        return fr;
+        langs.insert(0, fr);
     }
-    parse_release_language(title)
+    langs
 }
 
 fn is_lang(w: &str) -> bool {

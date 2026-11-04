@@ -74,14 +74,13 @@ fn eval_spec(
         "resolution" => {
             attrs.resolution > 0 && parse_int(&value) == Some(i64::from(attrs.resolution))
         }
-        "language" => {
-            let lang = parse_release_language(title);
+        "language" => parse_release_language(title).iter().any(|lang| {
             norm(Some(lang.iso_code)) == value
                 || norm(Some(lang.name)) == value
                 || lang
                     .iso639_2
                     .is_some_and(|c| c.iter().any(|c| norm(Some(c)) == value))
-        }
+        }),
         "release_flag" => flags.iter().any(|f| norm(Some(f)) == value),
         "release_group" => norm(attrs.release_group.as_deref()) == value,
         "edition" => norm(attrs.edition) == value,

@@ -2,7 +2,8 @@
 use super::rejection::*;
 use super::sizes::*;
 use super::sort::{Sortable, sort_releases_by_relevance};
-use crate::release::parsing::language::{parse_release_language, resolve_unknown_language};
+use crate::language::AppLanguage;
+use crate::release::parsing::language::{parse_release_language, resolve_unknown_languages};
 use crate::release::parsing::quality::parse_release_quality;
 use crate::release::parsing::season_episode::{ReleaseCoverage, Span, release_coverage};
 use serde::{Deserialize, Serialize};
@@ -33,8 +34,7 @@ pub struct ScoredRelease {
     pub allowed: bool,
     pub custom_format_score: i64,
     pub blocklisted: bool,
-    pub language_id: u32,
-    pub language_name: &'static str,
+    pub languages: Vec<&'static AppLanguage>,
     pub language_allowed: bool,
     pub rejections: Vec<ReleaseRejection>,
     pub is_full_season: bool,
@@ -128,7 +128,8 @@ pub fn score_and_sort_releases(
                 .source_unknown_lang
                 .get(&r.source_id)
                 .and_then(|i| i.as_deref());
-            let lang = resolve_unknown_language(parse_release_language(&r.title), unknown_iso);
+            let langs = resolve_unknown_languages(parse_release_language(&r.title), unknown_iso);
+            let lang_ids: BTreeSet<u32> = langs.iter().map(|l| l.id).collect();
             let custom_format_score = score_custom_formats(&r.title, &r.flags);
             let blocklisted = is_blocked(&r.title, r.source_id);
             let coverage = release_coverage(&r.title);
@@ -136,7 +137,7 @@ pub fn score_and_sort_releases(
             let rejections = compute_rejections(&RejectionInput {
                 quality_id: quality.id,
                 allowed: opts.allowed.clone(),
-                language_id: lang.id,
+                language_ids: lang_ids.clone(),
                 allowed_langs: opts.allowed_langs.clone(),
                 is_blocklisted: blocklisted,
                 size_bytes: r.size,
@@ -165,10 +166,9 @@ pub fn score_and_sort_releases(
                 allowed: opts.allowed.contains(&quality.id),
                 custom_format_score,
                 blocklisted,
-                language_id: lang.id,
-                language_name: lang.name,
+                languages: langs,
                 language_allowed: opts.allowed_langs.is_empty()
-                    || opts.allowed_langs.contains(&lang.id),
+                    || !opts.allowed_langs.is_disjoint(&lang_ids),
                 rejections,
                 is_full_season: coverage.seasons.is_some() && coverage.episodes.is_none(),
                 size_deviation: compute_size_deviation(

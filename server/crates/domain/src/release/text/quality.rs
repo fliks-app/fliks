@@ -36,7 +36,7 @@ pub struct TextRelease {
     pub quality: &'static AppQuality,
     pub format: Option<&'static str>,
     pub retail: bool,
-    pub language: &'static AppLanguage,
+    pub languages: Vec<&'static AppLanguage>,
     pub names: BookNameGuess,
 }
 
@@ -60,7 +60,7 @@ pub fn parse_text_release(title: &str) -> TextRelease {
             .unwrap_or(&TEXT_QUALITIES[0]),
         format,
         retail: rx!(r"\bretail\b").is_match(&t) && !rx!(r"\bnon[ -]?retail\b").is_match(&t),
-        language: parse_book_language(title),
+        languages: parse_book_language(title),
         names: parse_book_release_name(title),
     }
 }
