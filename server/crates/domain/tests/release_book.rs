@@ -25,7 +25,7 @@ fn text_releases_reproduce_expected() {
 
 #[test]
 fn comic_releases_reproduce_expected() {
-    replay("release-comics", 20, |i| {
+    replay("release-comics", 29, |i| {
         json!(parse_image_release(i["title"].as_str().unwrap()))
     });
 }

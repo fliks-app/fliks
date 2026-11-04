@@ -44,7 +44,7 @@ pub fn satisfied_sql() -> String {
   WHEN w.family = 'image' AND m.type = 'comic' THEN NOT EXISTS (
     SELECT 1 FROM items ci JOIN comic_issues cx ON cx."itemId" = ci.id
     WHERE ci."mediaId" = m.id AND ci.monitored
-      AND (ci."airDate" IS NULL OR ci."airDate" <= (now() AT TIME ZONE 'UTC')::date)
+      AND ci."airDate" <= (now() AT TIME ZONE 'UTC')::date
       AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ci.id))
   ELSE EXISTS (SELECT 1 FROM editions e JOIN items i ON i."editionId" = e.id
                JOIN item_parts ip ON ip."itemId" = i.id

@@ -85,6 +85,12 @@ impl Sortable for ScoredBookRelease {
 pub struct ExpectedIssue {
     pub kind: String,
     pub number: String,
+    /// The year the volume started: an earlier release names another volume.
+    #[serde(default)]
+    pub start_year: Option<i32>,
+    /// The year the issue came out: a release more than a year away is another run of the number.
+    #[serde(default)]
+    pub air_year: Option<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -193,6 +199,23 @@ fn show(kind: &str, number: &str) -> String {
     }
 }
 
+/// `YEAR_MISMATCH` for a release older than the volume or far from the issue's own year.
+fn year_rejection(want: &ExpectedIssue, got: &ComicRelease) -> Option<ReleaseRejection> {
+    let year = got.year?;
+    let expected = match (want.start_year, want.air_year) {
+        (Some(s), _) if year < s => s,
+        (_, Some(a)) if (year - a).abs() > 1 => a,
+        _ => return None,
+    };
+    Some(ReleaseRejection {
+        code: "YEAR_MISMATCH".to_owned(),
+        params: Some(BTreeMap::from([
+            ("actual", Param::Num(year.into())),
+            ("expected", Param::Num(expected.into())),
+        ])),
+    })
+}
+
 /// `EPISODE_MISMATCH` for another issue (or none), `COLLECTED_EDITION` for a trade or a run.
 fn issue_rejections(want: &ExpectedIssue, got: &ComicRelease) -> Vec<ReleaseRejection> {
     if got.collected {
@@ -202,7 +225,7 @@ fn issue_rejections(want: &ExpectedIssue, got: &ComicRelease) -> Vec<ReleaseReje
         }];
     }
     if got.number.as_deref() == Some(want.number.as_str()) && got.kind == want.kind {
-        return vec![];
+        return year_rejection(want, got).into_iter().collect();
     }
     let actual = got
         .number

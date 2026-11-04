@@ -31,8 +31,11 @@ pub async fn matches(
     let (library, identified) = identify(library, titles).await;
     let mut out = vec![];
     let mut scenes: HashMap<i32, Mapping> = HashMap::new();
-    for (entry, se, coverage, hit) in identified {
-        let seasonal = hit.map(|i| &library[i]).filter(|m| m.kind.has_seasons());
+    for (entry, se, coverage, hits) in identified {
+        let seasonal = hits
+            .first()
+            .map(|&i| &library[i])
+            .filter(|m| m.kind.has_seasons());
         if let Some(m) = seasonal.filter(|_| se.season.is_some())
             && !scenes.contains_key(&m.id)
         {
@@ -41,16 +44,19 @@ pub async fn matches(
         let scene = seasonal
             .and_then(|m| scenes.get(&m.id))
             .unwrap_or(&Mapping::Unmapped);
-        out.push(match_one(db, &library, min_age, (entry, scene), &se, coverage, hit).await?);
+        out.push(match_one(db, &library, min_age, (entry, scene), &se, coverage, hits).await?);
     }
     Ok(out)
 }
+
+/// The library media a title names: the first, and every comic volume when the first is a comic.
+type Hits = Vec<usize>;
 
 type Identified = (
     t::ReleaseTitle,
     ParsedSeasonEpisode,
     t::ReleaseCoverage,
-    Option<usize>,
+    Hits,
 );
 
 /// Each title with its parsed season and episode, its coverage and the library media it names.
@@ -77,10 +83,17 @@ async fn identify(
                 let se = parse_season_episode(&entry.title);
                 let coverage = wit_coverage(&coverage_of(&se));
                 let tokens = release_title_tokens(&entry.title);
-                let hit = indexed.iter().position(|idx| {
-                    matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch)
-                });
-                (entry, se, coverage, hit)
+                let named =
+                    |idx: &_| matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch);
+                let mut hits: Hits = indexed.iter().position(named).into_iter().collect();
+                if let Some(first) = hits.first().copied()
+                    && library[first].kind == MediaKind::Comic
+                {
+                    hits = (first..indexed.len())
+                        .filter(|i| library[*i].kind == MediaKind::Comic && named(&indexed[*i]))
+                        .collect();
+                }
+                (entry, se, coverage, hits)
             })
             .collect();
         (library, identified)
@@ -97,8 +110,9 @@ async fn match_one(
     (entry, scene): (t::ReleaseTitle, &Mapping),
     se: &ParsedSeasonEpisode,
     coverage: t::ReleaseCoverage,
-    hit: Option<usize>,
+    hits: Hits,
 ) -> sqlx::Result<t::ReleaseMatch> {
+    let hit = hits.first().copied();
     // The title's numbers are scene numbers: read them as aired ones before anything uses them.
     let translated;
     let unresolved = |media: i32| t::ReleaseMatch {
@@ -127,11 +141,8 @@ async fn match_one(
     {
         return super::book::match_one(db, book, min_age, entry).await;
     }
-    if let Some(comic) = hit
-        .map(|i| &library[i])
-        .filter(|m| m.kind == MediaKind::Comic)
-    {
-        return super::comic::match_one(db, comic, min_age, entry).await;
+    if hit.is_some_and(|i| library[i].kind == MediaKind::Comic) {
+        return super::comic::match_one(db, library, &hits, min_age, entry).await;
     }
     let skip = |reason: t::SkipReason, media: Option<i32>, s: Option<i32>, e: Option<i32>| {
         t::ReleaseMatch {

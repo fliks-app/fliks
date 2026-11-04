@@ -107,10 +107,10 @@ pub async fn run(
     r: t::IngestRequest,
 ) -> Result<t::IngestResult, HostError> {
     let family = super::served(r.family)?;
-    if family == Family::Video && r.language.is_some() {
+    if matches!(family, Family::Video | Family::Image) && r.language.is_some() {
         return Err(host_err(
             "ERR_VALIDATION",
-            "library.ingest: a video ingest has no language",
+            format!("library.ingest: a {family} ingest has no language"),
         ));
     }
     let language = r.language.as_deref().and_then(parse_language_code);
@@ -396,11 +396,12 @@ mod tests {
             .execute(&db)
             .await
             .unwrap();
-        let st = AppState::new(
+        let mut st = AppState::new(
             db,
             crate::config::Config::from_lookup(|_| None),
             "0123456789abcdef0123456789abcdef",
         );
+        st.images = std::sync::Arc::new(crate::images::ImageStore::with_root(dir.join("images")));
         Shelf {
             st,
             dl,

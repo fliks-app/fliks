@@ -706,6 +706,321 @@
 "input": {
 "title": "Moon Tales Vol. 2 (2020)"
 }
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "3",
+"scan": false,
+"series": "Moon Tales",
+"year": 2024
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales 003 - 2024"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": false,
+"kind": "issue",
+"scan": false,
+"series": "Moon Tales",
+"year": 2020
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales #1 - #12 (2020)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "1",
+"scan": false,
+"series": "Moon Tales Special Edition",
+"year": 2021
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales Special Edition 001 (2021)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "3",
+"scan": false,
+"series": "Moon Tales",
+"year": 2022
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales 003 Part 2 (2022)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "12",
+"scan": false,
+"series": "Moon Tales",
+"volume": 2,
+"year": 2021
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales v2.12 (2021)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"group": "GRP",
+"kind": "issue",
+"number": "5",
+"scan": false,
+"series": "Moon Tales"
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales 005-GRP"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": false,
+"kind": "issue",
+"scan": false,
+"series": "Moon Tales",
+"volume": 3,
+"year": 2022
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales Vol 3 (TPB) (2022)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "2099",
+"scan": false,
+"series": "Star Gardens",
+"year": 2015
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens 2099 (2015)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "7",
+"scan": false,
+"series": "Moon Tales",
+"year": 2020
+},
+"format": null,
+"languages": [
+{
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+}
+],
+"quality": {
+"id": 301,
+"name": "Unknown-image",
+"rank": 5,
+"resolution": 0,
+"source": "unknown"
+}
+},
+"input": {
+"title": "Moon Tales 007 (2020) EPUB"
+}
 }
 ]
 }

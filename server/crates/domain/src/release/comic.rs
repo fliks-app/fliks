@@ -59,11 +59,11 @@ pub fn parse_comic_release(title: &str) -> ComicRelease {
         ..Default::default()
     };
     let mut s = raw.replace('_', " ");
+    if let Some(c) = rx!(i r"(?:digital|scan|c2c|webrip|\d)\)?-([a-zA-Z]\w*)$").captures(&s) {
+        r.group = Some(c[1].to_owned());
+        s.truncate(c.get(1).map_or(s.len(), |m| m.start() - 1));
+    }
     if scene {
-        if let Some(c) = rx!(i r"(?:digital|scan|c2c|webrip|\d{4}\)?)-(\w+)$").captures(&s) {
-            r.group = Some(c[1].to_owned());
-            s.truncate(c.get(1).map_or(s.len(), |m| m.start() - 1));
-        }
         s = spaced(&s);
     }
     let mut bare = String::new();
@@ -93,11 +93,16 @@ pub fn parse_comic_release(title: &str) -> ComicRelease {
         r.digital |= words.iter().any(|w| w == "digital" || w == "webrip");
         r.scan |= words.iter().any(|w| w == "scan" || w == "scanned");
         r.c2c |= words.iter().any(|w| w == "c2c") || inner.eq_ignore_ascii_case("cover to cover");
+        let word = rx!(
+            i r"^(?:tpb|trade paperback|omnibus|hardcover|hc|graphic novel|compendium|collection|collected|deluxe edition|library edition)$"
+        )
+        .is_match(inner);
+        r.collected |= word;
         if is_year(inner) {
             r.year.get_or_insert(inner.parse().unwrap_or(0));
         } else if let Some(n) = rx!(i r"^of\s+(\d+)$").captures(inner) {
             r.of = n[1].parse().ok();
-        } else if !inner.is_empty() && !words.iter().all(|w| tag(w) || is_year(w)) {
+        } else if !word && !inner.is_empty() && !words.iter().all(|w| tag(w) || is_year(w)) {
             r.group = Some(inner.to_owned());
         }
     }
@@ -109,11 +114,15 @@ pub fn parse_comic_release(title: &str) -> ComicRelease {
     let collected = rx!(
         i r"\b(?:tpb|trade paperback|omnibus|hardcover|hc|graphic novel|compendium|collection|collected|deluxe edition|library edition|complete)\b"
     );
-    r.collected = collected.is_match(&s);
+    r.collected |= collected.is_match(&bare);
     let bare = collected.replace_all(&bare, " ");
     let bare = rx!(i r"\b(?:digital|webrip|scan(?:ned)?|c2c)\b").replace_all(&bare, " ");
+    let bare = rx!(i r"\b(?:part|pt)\.?\s*\d+\b").replace_all(&bare, " ");
+    let bare = rx!(i r"(^|\s)(v(?:ol(?:ume)?\.?\s?)?\d{1,3})\.(\d{1,3})(\s|$)")
+        .replace_all(&bare, "$1$2 $3$4");
     let mut bare = bare.into_owned();
-    if let Some(c) = rx!(r"(?:^|\s)#?(\d{1,4})\s?-\s?(\d{1,4})(?:\s|$)").captures(&bare)
+    if let Some(c) = rx!(r"(?:^|\s)#?(\d{1,4})\s?-\s?#?(\d{1,4})(?:\s|$)").captures(&bare)
+        && !is_year(&c[2])
         && c[2].parse::<u32>().ok() > c[1].parse::<u32>().ok()
     {
         r.collected = true;
@@ -140,4 +149,18 @@ pub fn parse_comic_release(title: &str) -> ComicRelease {
     r.volume = n.volume_no;
     r.collected |= r.volume.is_some() && r.number.is_none();
     r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_group_after_a_number() {
+        let r = parse_comic_release("Moon Tales 005-GRP");
+        assert_eq!(
+            (r.number.as_deref(), r.group.as_deref()),
+            (Some("5"), Some("GRP"))
+        );
+    }
 }

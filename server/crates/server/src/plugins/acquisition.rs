@@ -392,7 +392,10 @@ pub async fn score_any(
     wished(m.kind, family)?;
     let language = book_language(m.kind, family, language.as_deref())?;
     if m.kind == MediaKind::Comic {
-        let issue = unit.as_ref().map(comic::expected).transpose()?;
+        let issue = match unit.as_ref() {
+            Some(u) => Some(comic::expectation(&st.db, m.id, u).await?),
+            None => None,
+        };
         return book::score(st, media_id, Family::Image, None, issue, releases)
             .await
             .map_err(db_err);

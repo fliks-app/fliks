@@ -37,7 +37,8 @@ pub struct ImageRelease {
     pub comic: ComicRelease,
 }
 
-/// A name that names no format is a CBZ: indexers carry comics as archives and rarely say so.
+/// A name that names no format is a CBZ (indexers carry comics as archives and rarely say so), one that
+/// names a book or audio format is `Unknown-image`, which no profile allows.
 pub fn parse_image_release(title: &str) -> ImageRelease {
     let t = title.replace(['.', '_'], " ").to_lowercase();
     let format = [
@@ -49,11 +50,13 @@ pub fn parse_image_release(title: &str) -> ImageRelease {
     .into_iter()
     .find(|(r, _)| r.is_match(&t))
     .map(|(_, f)| f);
+    let other = format.is_none()
+        && rx!(r"\b(?:epub|mobi|azw3?|kf8|fb2|djvu|m4b|m4a|mp3|flac|ogg|opus|aac)\b").is_match(&t);
     ImageRelease {
         quality: IMAGE_QUALITIES
             .iter()
             .find(|q| Some(q.source) == format)
-            .unwrap_or(&IMAGE_QUALITIES[1]),
+            .unwrap_or(&IMAGE_QUALITIES[if other { 0 } else { 1 }]),
         format,
         languages: parse_book_language(title),
         comic: parse_comic_release(title),
