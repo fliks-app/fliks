@@ -102,7 +102,7 @@ pub async fn apply(c: &mut PgConnection, media: i32, f: &Fields) -> sqlx::Result
 }
 
 /// The shared columns that hold a value no source row accounts for: a hand edit, a creation guess.
-async fn unsourced(c: &mut PgConnection, media: i32) -> sqlx::Result<Vec<Field>> {
+pub(crate) async fn unsourced(c: &mut PgConnection, media: i32) -> sqlx::Result<Vec<Field>> {
     let current: Option<Value> = sqlx::query_scalar(
         r#"SELECT jsonb_build_object('title', title, 'originalTitle', "originalTitle", 'year', year,
              'overview', overview, 'posterUrl', "posterUrl", 'fanartUrl', "fanartUrl",

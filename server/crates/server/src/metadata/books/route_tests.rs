@@ -624,3 +624,48 @@ async fn identify_links_the_work_of_a_book_and_refuses_one_another_book_holds(po
     let (s, _) = identify(b, json!({"tmdbId": 5})).await;
     assert_eq!(s, 400);
 }
+
+#[sqlx::test(migrations = false)]
+async fn identify_takes_an_asin_from_an_audible_hit(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol = ol.find(Namespace::ASIN, "B000000001", "OL1W");
+    let (c, _) = ctx(pool, vec![ol, Fake::new(Namespace::AUDIBLE)]).await;
+    let a = c.book(1).await;
+    let (s, v) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{a}/identify"),
+            Some(json!({"provider": "asin", "externalId": "B000000001"})),
+        )
+        .await;
+    assert_eq!(s, 201, "{v}");
+    let (_, v) = c.get(&sources_uri(a)).await;
+    assert_eq!(v["work"]["value"], "OL1W");
+}
+
+#[sqlx::test(migrations = false)]
+async fn attaching_a_work_another_book_holds_writes_nothing(pool: PgPool) {
+    let (c, st) = ctx(pool, vec![full_anchor()]).await;
+    let (a, b) = (c.book(1).await, c.book(1).await);
+    let m = super::identify::BookMatch {
+        work: "OL1W".into(),
+        edition: vec![],
+        confidence: 100,
+    };
+    let go = fliks_domain::metadata::limiter::Priority::Interactive;
+    super::link::attach(&st, a, None, &m, go).await.unwrap();
+    super::link::attach(&st, b, None, &m, go).await.unwrap();
+    let title: String = sqlx::query_scalar("SELECT title FROM media WHERE id = $1")
+        .bind(b)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "Untitled");
+    assert!(
+        super::link::stored(&c.pool, b, None)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}

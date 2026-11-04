@@ -386,7 +386,7 @@ async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::
 
 /// Reads a media again from its provider ids and its files, whatever its kind (`media-write.md`
 /// rule 109); the `Found` of a video read from a provider.
-async fn refresh_any(
+pub(crate) async fn refresh_any(
     st: &AppState,
     media: &MediaRow,
     defer_kick: bool,
@@ -399,7 +399,10 @@ async fn refresh_any(
         MediaKind::Book => {
             crate::ingest::books::refresh_media(st, id, Priority::Interactive)
                 .await
-                .map_err(|e| AppError::internal(e.cause))?;
+                .map_err(|e| match e.retry {
+                    true => AppError::with_message(StatusCode::SERVICE_UNAVAILABLE, e.cause),
+                    false => AppError::internal(e.cause),
+                })?;
         }
         _ if !external_ids::any(&st.db, id).await? => {
             merge_unmatched(st, id).await?;
@@ -476,7 +479,7 @@ pub async fn identify(
     let imdb = b.str("imdbId")?.flatten();
     let mut provider = b.namespace("preferredProvider")?;
     let named = (
-        b.namespace("provider")?.flatten(),
+        b.str("provider")?.flatten(),
         b.str("externalId")?.flatten(),
     );
     let media = load_media(&st.db, id)
@@ -491,9 +494,7 @@ pub async fn identify(
         }
         (Some(p), Some(ext)) => {
             let ns = Namespace::parse(&p)
-                .filter(|n| {
-                    st.metadata.available(*n) && st.metadata.of(*n).supports(media.media_type)
-                })
+                .filter(|n| st.metadata.answers(*n) && st.metadata.serves(*n, media.media_type))
                 .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?;
             let value = ns
                 .normalize(ext.trim())

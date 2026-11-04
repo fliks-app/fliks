@@ -861,10 +861,11 @@ async fn merge_editions(
             None
         };
         let m = match stored {
-            Some(m) => Some(m),
-            None => {
+            Some(m) if !m.edition.is_empty() => Some(m),
+            stored => {
                 let found = match identify::identify(st, &hints, prio).await {
                     Ok(m) => m,
+                    Err(_) if stored.is_some() => stored.clone(),
                     Err(e) => {
                         // An outage still leaves an unanchored book its file metadata.
                         let held = link::stored(&st.db, media, None).await.ok().flatten();

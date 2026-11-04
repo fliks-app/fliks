@@ -425,6 +425,10 @@ pub(crate) async fn identify_to(
         attach(st, media, None, &m, GO)
             .await
             .map_err(|e| meta_fail(ANCHOR, e))?;
+        // A concurrent identify may have linked the work first: attach then wrote nothing.
+        if stored(&st.db, media, None).await?.is_none_or(|s| s.work != work) {
+            return Err(taken());
+        }
     }
     if let Some((ns, v)) = edition {
         let first = sqlx::query_scalar!(

@@ -86,9 +86,14 @@ pub async fn attach_with(
     };
     let refs = match (edition, m) {
         (Some(_), Some(m)) => edition_refs(&m.edition),
+        (Some(e), None) => edition_refs(&external_ids::edition_ids(&st.db, e).await?),
         _ => vec![],
     };
     let mut records = merge::edition_records(st, &refs, &lang, prio).await?;
+    if m.is_none() {
+        records.extend(merge::plugin_works(st, media, &lang, prio).await?);
+    }
+    let provider_backed = work.is_some() || !records.is_empty();
     records.extend(file.map(|f| (Namespace::FILE, f.clone())));
     let mut ids = refs;
     for id in discovered(&records).into_iter().filter(|_| work.is_some()) {
@@ -96,7 +101,13 @@ pub async fn attach_with(
             ids.push(id);
         }
     }
-    let work_locked = field_sources::locked_fields(&st.db, media).await?;
+    let mut work_locked = field_sources::locked_fields(&st.db, media).await?;
+    if !provider_backed {
+        // The file alone fills empty fields and its own, never a hand edit.
+        let mut c = st.db.acquire().await?;
+        work_locked.extend(field_sources::not_from_file(&mut *c, media).await?);
+        work_locked.extend(crate::media::write::fields::unsourced(&mut c, media).await?);
+    }
     let edition_locked = match edition {
         Some(e) => Some(editions::locked_fields(&st.db, e).await?),
         None => None,
@@ -149,7 +160,10 @@ pub async fn attach_with(
                     tx.commit().await?;
                     return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
                 }
-                None => tracing::warn!("book #{media}: another work holds the {work} id"),
+                None => {
+                    tracing::warn!("book #{media}: another work holds the {work} id");
+                    return Ok(());
+                }
             }
         }
         Link::Gone => return Ok(()),

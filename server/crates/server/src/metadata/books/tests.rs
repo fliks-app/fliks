@@ -115,6 +115,9 @@ impl MetadataProvider for Fake {
         _: Priority,
     ) -> Call<'a, Value> {
         self.log("work");
+        if self.broken {
+            return down();
+        }
         let r = self.works.get(id).cloned();
         let delay = self.delay;
         Box::pin(async move {
@@ -510,7 +513,7 @@ async fn locked_fields_and_failing_providers_do_not_stop_the_attach(db: PgPool) 
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_work_held_by_another_media_is_left_unlinked(db: PgPool) {
+async fn a_work_held_by_another_media_is_left_unlinked_and_unwritten(db: PgPool) {
     crate::db::migrate(&db).await.unwrap();
     let st = state(&db, vec![anchor()]);
     let (other, media) = (book(&db).await, book(&db).await);
@@ -528,7 +531,7 @@ async fn a_work_held_by_another_media_is_left_unlinked(db: PgPool) {
     );
     assert_eq!(
         strings(&db, "SELECT title FROM media WHERE id = $1", media).await,
-        ["Alpha"]
+        ["Untitled"]
     );
 }
 
@@ -628,6 +631,11 @@ async fn an_unmatched_book_takes_its_file_record_and_links_no_id(db: PgPool) {
     let st = state(&db, vec![anchor()]);
     let media = book(&db).await;
     let ed = edition(&db, media, "text").await;
+    sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, provider) VALUES ($1, 'title', 'file')"#)
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
     let file = json!({"title": "File Title", "overview": "From the OPF", "year": 2003,
         "authors": [{"name": "Una Roe", "id": null}], "isbn13": [ISBN], "format": "epub"});
     let file: &Map<String, Value> = file.as_object().unwrap();
@@ -690,4 +698,42 @@ async fn an_unmatched_book_takes_its_file_record_and_links_no_id(db: PgPool) {
         strings(&db, r#"SELECT title FROM media WHERE id = $1"#, media).await,
         ["Typed"]
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unanchored_book_keeps_its_provider_record_over_its_file(db: PgPool) {
+    crate::db::migrate(&db).await.unwrap();
+    let gb = Fake::new(Namespace::GOOGLEBOOKS).edition(
+        Namespace::GOOGLEBOOKS,
+        "gb1",
+        json!({"title": "Gamma", "overview": "Provider text", "authors": [{"name": "Sol", "id": null}]}),
+    );
+    let st = state(&db, vec![anchor(), gb]);
+    let media = book(&db).await;
+    let ed = edition(&db, media, "text").await;
+    sqlx::query(r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES ($1, $2, 'googlebooks', 'gb1')"#)
+        .bind(ed)
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    let file = json!({"title": "File Title", "overview": "From the OPF",
+        "authors": [{"name": "Una Roe", "id": null}], "format": "epub"});
+    let file: &Map<String, Value> = file.as_object().unwrap();
+    for _ in 0..2 {
+        attach_with(&st, media, Some(ed), None, Some(file), P)
+            .await
+            .unwrap();
+        let row: (String, Option<String>) =
+            sqlx::query_as(r#"SELECT title, overview FROM media WHERE id = $1"#)
+                .bind(media)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(row, ("Gamma".into(), Some("Provider text".into())));
+        assert_eq!(
+            strings(&db, r#"SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId" WHERE c."mediaId" = $1 AND c.role = 'author'"#, media).await,
+            ["Sol"]
+        );
+    }
 }

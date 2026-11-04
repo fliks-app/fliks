@@ -2989,6 +2989,11 @@ mod book_ingest {
         let lib = c.dir.join("books");
         let l = shelf(&c).await;
         let m = media(&c, l, "Solo", "book").await;
+        sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, provider) VALUES ($1, 'title', 'file')"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
         epub(&lib.join("Solo/Mirelune.epub"));
         books::register(&c.st, m, &placed(&c, &["Solo/Mirelune.epub"]))
             .await
@@ -3011,6 +3016,23 @@ mod book_ingest {
             .await,
             1
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_book_refresh_during_a_provider_outage_is_a_503(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Solo", "book").await;
+        epub(&lib.join("Solo/Mirelune.epub"));
+        books::register(&c.st, m, &placed(&c, &["Solo/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let row = crate::ingest::load_media(&c.st.db, m).await.unwrap().unwrap();
+        let e = crate::media::write::refresh_any(&c.st, &row, false)
+            .await
+            .unwrap_err();
+        assert_eq!(e.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[sqlx::test(migrations = false)]

@@ -28,6 +28,7 @@ pub struct BookHints {
     pub year: Option<i32>,
 }
 
+#[derive(Clone)]
 pub struct BookMatch {
     /// The OpenLibrary work id (`OL...W`).
     pub work: String,
