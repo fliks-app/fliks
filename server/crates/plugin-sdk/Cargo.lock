@@ -1215,7 +1215,23 @@ source = "git+https://github.com/fliks-app/engine?tag=v1.9.1#2c0aa3fc5ec38a1a994
 dependencies = [
  "serde",
  "serde_json",
- "utoipa 6.0.0",
+ "utoipa",
+]
+
+[[package]]
+name = "fliks-plugin-manifest"
+version = "5.2.1"
+dependencies = [
+ "base64 0.23.1",
+ "ed25519-dalek 3.0.0",
+ "fliks_domain",
+ "miniz_oxide 0.9.1",
+ "nodejs-semver",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -1232,6 +1248,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "ed25519-dalek 3.0.0",
+ "fliks-plugin-manifest",
  "fliks-plugin-route",
  "fliks-server",
  "futures-util",
@@ -1274,6 +1291,7 @@ dependencies = [
  "emojis",
  "flate2",
  "fliks-engine-core",
+ "fliks-plugin-manifest",
  "fliks_domain",
  "futures-util",
  "getrandom 0.4.3",
@@ -1285,6 +1303,7 @@ dependencies = [
  "hyper-util",
  "image",
  "jsonwebtoken",
+ "kepub",
  "lettre",
  "libc",
  "md-5",
@@ -1309,9 +1328,8 @@ dependencies = [
  "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
- "unicode-normalization",
  "url",
- "utoipa 5.5.0",
+ "utoipa",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
@@ -2055,6 +2073,15 @@ dependencies = [
  "sha2 0.10.9",
  "signature 2.2.0",
  "zeroize",
+]
+
+[[package]]
+name = "kepub"
+version = "5.2.1"
+dependencies = [
+ "encoding_rs",
+ "percent-encoding",
+ "zip",
 ]
 
 [[package]]
@@ -3983,18 +4010,6 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "utoipa"
-version = "5.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bde15df68e80b16c7d16b9616e80770ad158988daa56a27dccd1e55558b0160"
-dependencies = [
- "indexmap",
- "serde",
- "serde_json",
- "utoipa-gen 5.5.0",
-]
-
-[[package]]
-name = "utoipa"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8765fe27aeff71012a3f90fa474cf1df863a7d0dd81ed25de4e63fff2544994f"
@@ -4002,18 +4017,7 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_json",
- "utoipa-gen 6.0.1",
-]
-
-[[package]]
-name = "utoipa-gen"
-version = "5.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ba0b99ee52df3028635d93840c797102da61f8a7bb3cf751032455895b52ef8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
+ "utoipa-gen",
 ]
 
 [[package]]

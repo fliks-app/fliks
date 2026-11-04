@@ -8,7 +8,7 @@ on:
     paths:
       - 'server/providers.lock'
       - 'scripts/bump-providers.sh'
-      - 'server/crates/server/src/plugins/trust.rs'
+      - 'server/crates/plugin-manifest/src/trust.rs'
       - '.github/workflows/providers-lock.yml'
 
 permissions:

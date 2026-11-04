@@ -2,9 +2,9 @@
 //! deterministic archive, and `verify` through the host's own `inspect`.
 
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-use fliks_server::plugins::archive::{pack, sha256_hex};
-use fliks_server::plugins::manifest::{Inspected, check_files, inspect};
-use fliks_server::plugins::trust;
+use fliks_plugin_manifest::archive::{pack, sha256_hex};
+use fliks_plugin_manifest::manifest::{Inspected, check_files, inspect};
+use fliks_plugin_manifest::trust;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -207,7 +207,7 @@ pub fn public_key(hex: &str) -> Result<VerifyingKey, Error> {
 pub fn verify(archive: &[u8], extra_keys: trust::Keys, budget: usize) -> Result<Inspected, Error> {
     let mut keys = trust::official_keys();
     keys.extend(extra_keys);
-    let refusal = |r: fliks_server::plugins::archive::Refusal| format!("{}: {}", r.code, r.detail);
+    let refusal = |r: fliks_plugin_manifest::archive::Refusal| format!("{}: {}", r.code, r.detail);
     let i = inspect(archive, true, &keys).map_err(refusal)?;
     check_files(&i).map_err(refusal)?;
     let wasm = i.archive.get("plugin.wasm").ok_or("no plugin.wasm")?;

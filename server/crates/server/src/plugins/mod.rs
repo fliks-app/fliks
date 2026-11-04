@@ -1,7 +1,6 @@
 //! The plugin host (`docs/spec/plugins.md`, pluginApi 3 on wasm): install pipeline, registry,
 //! runtime and the `/api/plugins/*` routes.
 pub mod acquisition;
-pub mod archive;
 pub mod backup;
 pub mod bundled;
 pub mod catalog;
@@ -16,7 +15,6 @@ pub mod ingest;
 pub mod install;
 pub mod jobs;
 pub mod logs;
-pub mod manifest;
 pub mod namespaces;
 pub mod outbound;
 pub mod packages;
@@ -28,12 +26,13 @@ pub mod runtime;
 pub mod scheduled;
 pub mod sources;
 pub mod staging;
-pub mod trust;
 pub mod ui;
 pub mod units;
 #[cfg(test)]
 mod vectors;
 pub mod webhooks;
+
+pub use fliks_plugin_manifest::{archive, manifest, trust};
 
 use crate::ingest::KeyedLocks;
 use crate::state::AppState;

@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 lock=server/providers.lock
 catalog_url="${CATALOG_URL:-https://fliks-app.github.io/fliks-plugin-catalog}"
 providers=(fliks.tmdb fliks.tvdb fliks.openlibrary fliks.bnf fliks.googlebooks fliks.audible fliks.audnexus)
-api="$(sed -n 's/^pub const SUPPORTED_PLUGIN_API_VERSIONS: \[u32; [0-9]*\] = \[\([0-9]*\)\];/\1/p' server/crates/server/src/plugins/manifest.rs)"
+api="$(sed -n 's/^pub const SUPPORTED_PLUGIN_API_VERSIONS: \[u32; [0-9]*\] = \[\([0-9]*\)\];/\1/p' server/crates/plugin-manifest/src/manifest.rs)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 fail() { echo "error: $*" >&2; exit 1; }
@@ -17,7 +17,7 @@ fail() { echo "error: $*" >&2; exit 1; }
 verify() {
     base64 -d "$2" > "$tmp/sig" 2>/dev/null || base64 -d <(tr -d ' \n' < "$2" | sed 's/=*$//') > "$tmp/sig" 2>/dev/null || return 1
     local b64
-    for b64 in $(sed -n '/OFFICIAL_KEYS/,/;$/p' server/crates/server/src/plugins/trust.rs | grep -o '"[A-Za-z0-9+/]\{43\}="' | tr -d '"'); do
+    for b64 in $(sed -n '/OFFICIAL_KEYS/,/;$/p' server/crates/plugin-manifest/src/trust.rs | grep -o '"[A-Za-z0-9+/]\{43\}="' | tr -d '"'); do
         { printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00'; echo "$b64" | base64 -d; } > "$tmp/key.der"
         openssl pkey -pubin -inform DER -in "$tmp/key.der" -out "$tmp/key.pem" 2>/dev/null || continue
         openssl pkeyutl -verify -pubin -inkey "$tmp/key.pem" -rawin -in "$1" -sigfile "$tmp/sig" >/dev/null 2>&1 && return 0
