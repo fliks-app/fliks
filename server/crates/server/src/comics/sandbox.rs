@@ -9,7 +9,9 @@
 //! and the job slots stay in the parent.
 use super::{
     ar::Src,
-    archive::{Error, Listing, MAX_ENTRY_BYTES, MAX_PAGES, Page, SOLID_CACHE_BYTES, local},
+    archive::{
+        Error, Listing, MAX_ENTRY_BYTES, MAX_INFO_BYTES, MAX_PAGES, Page, SOLID_CACHE_BYTES, local,
+    },
 };
 use std::{
     ffi::OsString,
@@ -75,7 +77,7 @@ fn error_of(c: u8) -> Error {
 
 // ---- the child ----
 
-/// The hidden subcommand: `comic-archive <list|count|page|page-at> <n>`, the archive on stdin, the
+/// The hidden subcommand: `comic-archive <list|count|page|page-at|info> <n>`, the archive on stdin, the
 /// answer on stdout.
 pub fn child_main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(2).collect();
@@ -91,6 +93,10 @@ pub fn child_main() -> ExitCode {
             w.write_all(&(n.len() as u64).to_le_bytes())
         }),
         Some("page") => answer(&mut out, local::page(path, n), |w, b| write_bytes(w, b)),
+        Some("info") => answer(&mut out, local::info(path), |w, b| match b {
+            Some(b) => w.write_all(&[1]).and_then(|()| write_bytes(w, b)),
+            None => w.write_all(&[0]),
+        }),
         Some("page-at") => answer(&mut out, local::page_at(path, n), |w, b| write_bytes(w, b)),
         _ => return ExitCode::from(2),
     };
@@ -322,5 +328,16 @@ pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
     call("page-at", path, ordinal, MAX_ENTRY_BYTES + (1 << 20), |r| {
         status(r)?;
         bytes_of(r)
+    })
+}
+
+/// The archive-root `ComicInfo.xml`, `None` when there is none.
+pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+    call("info", path, 0, MAX_INFO_BYTES + (1 << 20), |r| {
+        status(r)?;
+        match u8_of(r)? {
+            1 => bytes_of(r).map(Some),
+            _ => Ok(None),
+        }
     })
 }

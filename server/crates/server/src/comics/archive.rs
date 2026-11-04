@@ -27,6 +27,10 @@ const HEADER_BYTES: u64 = 256 * 1024;
 const DIMS_BUDGET: u64 = 64 * 1024 * 1024;
 /// Decoded pages of one solid archive the page cache may hold.
 pub const SOLID_CACHE_BYTES: u64 = 256 * 1024 * 1024;
+/// Uncompressed bytes of a `ComicInfo.xml`.
+pub const MAX_INFO_BYTES: u64 = 1024 * 1024;
+/// Bytes a solid archive may decode while looking for its `ComicInfo.xml`.
+const INFO_SCAN_BYTES: u64 = 256 * 1024 * 1024;
 const PAGE_EXTS: [&str; 5] = ["jpg", "jpeg", "png", "webp", "gif"];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -87,6 +91,12 @@ fn page_name(raw: &str) -> Option<String> {
     let file = segs.last()?;
     let ext = file.rsplit_once('.')?.1.to_ascii_lowercase();
     (!bad && !file.is_empty() && PAGE_EXTS.contains(&ext.as_str())).then_some(name)
+}
+
+/// The archive-root `ComicInfo.xml`, any case; the name is only a key.
+fn info_name(raw: &str) -> Option<String> {
+    let name = raw.replace('\\', "/");
+    name.eq_ignore_ascii_case("ComicInfo.xml").then_some(name)
 }
 
 /// Digit runs compare as numbers (`2` before `10`), case ignored.
@@ -211,7 +221,13 @@ fn sorted<T>(mut v: Vec<(T, String)>) -> Result<Vec<(T, String)>, Error> {
     Ok(v)
 }
 
-fn zip_read(z: &mut ZipFile, i: usize, head: bool, budget: &Cell<u64>) -> Result<Vec<u8>, Error> {
+fn zip_read(
+    z: &mut ZipFile,
+    i: usize,
+    head: bool,
+    budget: &Cell<u64>,
+    max: u64,
+) -> Result<Vec<u8>, Error> {
     let f = z.by_index(i).map_err(|e| match e {
         zip::result::ZipError::UnsupportedArchive(m)
             if m == zip::result::ZipError::PASSWORD_REQUIRED =>
@@ -221,7 +237,7 @@ fn zip_read(z: &mut ZipFile, i: usize, head: bool, budget: &Cell<u64>) -> Result
         zip::result::ZipError::UnsupportedArchive(_) => Error::Unsupported("zip method"),
         _ => Error::Corrupt,
     })?;
-    let cap = MAX_ENTRY_BYTES.min(
+    let cap = max.min(
         f.compressed_size()
             .saturating_mul(MAX_RATIO)
             .max(RATIO_FLOOR),
@@ -268,6 +284,7 @@ pub(super) mod local {
     pub(in crate::comics) fn each(
         src: &Src<'_>,
         budget: u64,
+        name_of: fn(&str) -> Option<String>,
         mut on: impl FnMut(usize, String, u64, &mut Reader) -> Result<bool, Error>,
     ) -> Result<(), Error> {
         let len = src.len();
@@ -287,7 +304,7 @@ pub(super) mod local {
                 continue;
             }
             let name = (h.regular && !h.hardlink)
-                .then(|| h.name.as_deref().and_then(page_name))
+                .then(|| h.name.as_deref().and_then(name_of))
                 .flatten();
             let Some(name) = name else {
                 r.drain().map_err(map)?;
@@ -309,7 +326,7 @@ pub(super) mod local {
 
     /// The current entry's bytes (`size` is its declared size, already under the entry cap), sized
     /// to fit: `TooLarge` past the entry cap.
-    fn take(r: &mut Reader, size: u64) -> Result<Vec<u8>, Error> {
+    fn take(r: &mut Reader, size: u64, cap: u64) -> Result<Vec<u8>, Error> {
         let mut out = Vec::with_capacity(size as usize);
         let mut buf = vec![0u8; 64 * 1024];
         loop {
@@ -319,7 +336,7 @@ pub(super) mod local {
                 return Ok(out);
             }
             out.extend_from_slice(&buf[..n]);
-            if out.len() as u64 > MAX_ENTRY_BYTES {
+            if out.len() as u64 > cap {
                 return Err(Error::TooLarge);
             }
         }
@@ -328,8 +345,8 @@ pub(super) mod local {
     pub fn list(src: &Src<'_>) -> Result<Listing, Error> {
         let mut found: Vec<(String, usize, Page, Option<Vec<u8>>)> = vec![];
         let mut kept = 0u64;
-        each(src, MAX_TOTAL_BYTES, |ord, name, size, r| {
-            let bytes = take(r, size)?;
+        each(src, MAX_TOTAL_BYTES, page_name, |ord, name, size, r| {
+            let bytes = take(r, size, MAX_ENTRY_BYTES)?;
             let (width, height) = dimensions(&bytes[..bytes.len().min(HEADER_BYTES as usize)]);
             let keep = kept + bytes.capacity() as u64 <= SOLID_CACHE_BYTES;
             if keep {
@@ -356,7 +373,7 @@ pub(super) mod local {
     /// `(ordinal, name)` of every page in reading order.
     pub fn names(src: &Src<'_>) -> Result<Vec<(usize, String)>, Error> {
         let mut out = vec![];
-        each(src, MAX_TOTAL_BYTES, |o, n, _, _| {
+        each(src, MAX_TOTAL_BYTES, page_name, |o, n, _, _| {
             out.push((o, n));
             Ok(true)
         })?;
@@ -366,14 +383,27 @@ pub(super) mod local {
     /// The page at archive position `ordinal`: one pass.
     pub fn page_at(src: &Src<'_>, ordinal: usize) -> Result<Vec<u8>, Error> {
         let mut found = None;
-        each(src, MAX_TOTAL_BYTES, |o, _, size, r| {
+        each(src, MAX_TOTAL_BYTES, page_name, |o, _, size, r| {
             if o != ordinal {
                 return Ok(true);
             }
-            found = Some(take(r, size)?);
+            found = Some(take(r, size, MAX_ENTRY_BYTES)?);
             Ok(false)
         })?;
         found.ok_or(Error::Missing)
+    }
+
+    /// The archive-root `ComicInfo.xml`, `None` when there is none: one pass.
+    pub fn info(src: &Src<'_>) -> Result<Option<Vec<u8>>, Error> {
+        let mut found = None;
+        each(src, INFO_SCAN_BYTES, info_name, |_, _, size, r| {
+            if size > MAX_INFO_BYTES {
+                return Err(Error::TooLarge);
+            }
+            found = Some(take(r, size, MAX_INFO_BYTES)?);
+            Ok(false)
+        })?;
+        Ok(found)
     }
 
     /// Page `index` alone: a pass for the order, then one for the page.
@@ -401,6 +431,10 @@ pub(super) mod local {
     }
 
     pub fn page_at(_: &Path, _: usize) -> Result<Vec<u8>, Error> {
+        Err(Error::Unsupported("libarchive"))
+    }
+
+    pub fn info(_: &Path) -> Result<Option<Vec<u8>>, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 
@@ -439,6 +473,14 @@ mod lib {
         }
     }
 
+    pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+        if sandbox::enabled() {
+            sandbox::info(path)
+        } else {
+            local::info(&Src::Path(path))
+        }
+    }
+
     pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
         if sandbox::enabled() {
             sandbox::page(path, index)
@@ -464,7 +506,7 @@ pub fn list(path: &Path) -> Result<Listing, Error> {
                 let (width, height) = if left == 0 {
                     (0, 0)
                 } else {
-                    match zip_read(&mut z, i, true, &budget) {
+                    match zip_read(&mut z, i, true, &budget, MAX_ENTRY_BYTES) {
                         Ok(b) => {
                             left = left.saturating_sub(b.len() as u64);
                             dimensions(&b)
@@ -507,6 +549,32 @@ pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
     lib::page_at(path, ordinal)
 }
 
+/// The bytes of the archive-root `ComicInfo.xml` (at most `MAX_INFO_BYTES`), `None` when there is
+/// none. A zip entry reads through the ratio cap and the operation budget like a page.
+pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+    match sniff(path)? {
+        Kind::Zip => {
+            let mut z = open_zip(path)?;
+            if z.len() > MAX_ENTRIES {
+                return Err(Error::TooLarge);
+            }
+            for i in 0..z.len() {
+                let f = z.by_index_raw(i).map_err(|_| Error::Corrupt)?;
+                let regular = f.unix_mode().map_or(0o100000, |m| m & 0o170000) == 0o100000;
+                if f.is_dir() || !regular || !f.name().ok().is_some_and(|n| info_name(&n).is_some())
+                {
+                    continue;
+                }
+                drop(f);
+                return zip_read(&mut z, i, false, &Cell::new(MAX_INFO_BYTES), MAX_INFO_BYTES)
+                    .map(Some);
+            }
+            Ok(None)
+        }
+        Kind::Lib => lib::info(path),
+    }
+}
+
 /// The original bytes of page `index` (0-based, reading order).
 pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
     match sniff(path)? {
@@ -514,7 +582,13 @@ pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
             let mut z = open_zip(path)?;
             let names = zip_names(&mut z)?;
             let (i, _) = names.get(index).ok_or(Error::Missing)?;
-            zip_read(&mut z, *i, false, &Cell::new(MAX_TOTAL_BYTES))
+            zip_read(
+                &mut z,
+                *i,
+                false,
+                &Cell::new(MAX_TOTAL_BYTES),
+                MAX_ENTRY_BYTES,
+            )
         }
         Kind::Lib => lib::page(path, index),
     }
@@ -580,6 +654,27 @@ mod tests {
             .iter()
             .map(|(n, b)| (*n, b.clone(), false, false))
             .collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn a_zip_comic_info_is_read_at_the_root_within_its_cap() {
+        let t = Tmp::new("info");
+        let xml = b"<ComicInfo><Series>A</Series></ComicInfo>".to_vec();
+        let p = t.file(
+            "a.cbz",
+            &plain(&[("p1.png", png(1, 1)), ("ComicInfo.xml", xml.clone())]),
+        );
+        assert_eq!(info(&p), Ok(Some(xml.clone())));
+        let p = t.file(
+            "b.cbz",
+            &plain(&[("p1.png", png(1, 1)), ("x/ComicInfo.xml", xml)]),
+        );
+        assert_eq!(info(&p), Ok(None));
+        let big = vec![b' '; MAX_INFO_BYTES as usize + 1];
+        let p = t.file("c.cbz", &plain(&[("ComicInfo.xml", big)]));
+        assert_eq!(info(&p), Err(Error::TooLarge));
+        let bomb = zip(&[("ComicInfo.xml", vec![b' '; 8 * 1024 * 1024], false, true)]);
+        assert_eq!(info(&t.file("d.cbz", &bomb)), Err(Error::TooLarge));
     }
 
     #[test]
@@ -749,6 +844,26 @@ mod tests {
         }
 
         #[test]
+        fn a_7z_comic_info_is_read_at_the_root_only() {
+            let t = Tmp::new("seveninfo");
+            let p = t.0.join("a.cb7");
+            seven(
+                &p,
+                &[("p1.png", &png(2, 2)), ("comicinfo.XML", b"<ComicInfo/>")],
+                None,
+            );
+            assert_eq!(info(&p), Ok(Some(b"<ComicInfo/>".to_vec())));
+            seven(
+                &p,
+                &[("p1.png", &png(2, 2)), ("sub/ComicInfo.xml", b"x")],
+                None,
+            );
+            assert_eq!(info(&p), Ok(None));
+            seven(&p, &[("ComicInfo.xml", &vec![b' '; 1024 * 1024 + 1])], None);
+            assert_eq!(info(&p), Err(Error::TooLarge));
+        }
+
+        #[test]
         fn a_7z_reads_in_memory_and_skips_links() {
             let t = Tmp::new("seven");
             let p = t.0.join("a.cb7");
@@ -881,13 +996,15 @@ mod tests {
                 &rar5(&[("big.bin", &vec![7u8; 1024 * 1024]), ("p1.png", &png(2, 2))]),
             );
             let mut seen = 0;
-            let r = local::each(&Src::Path(&p), 100 * 1024, |_, _, _, _| {
+            let r = local::each(&Src::Path(&p), 100 * 1024, page_name, |_, _, _, _| {
                 seen += 1;
                 Ok(true)
             });
             assert_eq!((r, seen), (Err(Error::TooLarge), 0));
             assert_eq!(
-                local::each(&Src::Path(&p), 2 * 1024 * 1024, |_, _, _, _| Ok(true)),
+                local::each(&Src::Path(&p), 2 * 1024 * 1024, page_name, |_, _, _, _| Ok(
+                    true
+                )),
                 Ok(())
             );
         }

@@ -41,3 +41,22 @@ export interface ComicPageSize {
   width: number;
   height: number;
 }
+
+// PATCH /api/media/:id/comic: each key present is set and locked
+export interface ComicVolumePatch {
+  title?: string;
+  overview?: string | null;
+  publisher?: string | null;
+  startYear?: number | null;
+  volume?: number | null;
+}
+
+// PATCH /api/comics/issues/:itemId
+export interface ComicIssuePatch {
+  number?: string;
+  sort?: number;
+  kind?: ComicIssue['kind'];
+  title?: string | null;
+  overview?: string | null;
+  releaseDate?: string | null;
+}

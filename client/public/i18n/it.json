@@ -4098,6 +4098,24 @@
     "finished": "Letto",
     "progress": "Avanzamento della lettura",
     "special_number": "Speciale {{n}}",
-    "specials": "Speciali"
+    "specials": "Speciali",
+    "edit": {
+      "volume": "Modifica volume",
+      "issue": "Modifica numero",
+      "title": "Titolo",
+      "publisher": "Editore",
+      "start_year": "Anno di inizio",
+      "volume_number": "Numero del volume",
+      "overview": "Trama",
+      "number": "Numero",
+      "sort": "Posizione di ordinamento",
+      "kind": "Tipo",
+      "kind_issue": "Numero",
+      "kind_annual": "Annuale",
+      "kind_special": "Speciale",
+      "release_date": "Data di uscita",
+      "saved": "Salvato",
+      "invalid": "Numero e posizione di ordinamento sono obbligatori."
+    }
   }
 }

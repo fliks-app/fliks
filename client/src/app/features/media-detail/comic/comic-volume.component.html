@@ -18,7 +18,14 @@
     </div>
 
     <div class="flex-1 min-w-0 flex flex-col gap-2">
-      <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ m.title }}</h1>
+      <div class="flex items-start gap-2">
+        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ title() }}</h1>
+        @if (canEdit) {
+          <button type="button" class="btn btn-ghost btn-sm btn-square mt-1" [attr.aria-label]="'comic.edit.volume' | translate" (click)="openVolume()" data-testid="edit-volume">
+            <svg lucidePencil class="size-4"></svg>
+          </button>
+        }
+      </div>
       <p class="flex flex-wrap gap-x-3 text-base-content/70" data-testid="facts">
         @if (c.publisher) {
           <span>{{ c.publisher }}</span>
@@ -30,8 +37,8 @@
           <span>{{ 'comic.volume' | translate: { n: c.volume } }}</span>
         }
       </p>
-      @if (m.overview) {
-        <p class="mt-2 max-w-3xl text-base-content/80">{{ m.overview }}</p>
+      @if (overview()) {
+        <p class="mt-2 max-w-3xl text-base-content/80">{{ overview() }}</p>
       }
       <div class="mt-4 flex flex-wrap items-center gap-3">
         @if (canRead && next(); as n) {
@@ -51,15 +58,20 @@
 <ng-template #issueRows let-issues let-kind="kind">
   <ul class="flex flex-col gap-1">
     @for (i of issues; track i.itemId) {
-      <li>
+      <li class="flex items-center gap-1">
         @if (canRead && i.mediaFileId != null) {
-          <a class="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="readLink(i.itemId)" data-testid="issue">
+          <a class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="readLink(i.itemId)" data-testid="issue">
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </a>
         } @else {
-          <div class="flex items-center gap-3 rounded-lg px-3 py-2" [class.opacity-50]="i.mediaFileId == null" data-testid="issue">
+          <div class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2" [class.opacity-50]="i.mediaFileId == null" data-testid="issue">
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </div>
+        }
+        @if (canEdit) {
+          <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'comic.edit.issue' | translate" (click)="openIssue(i)" data-testid="edit-issue">
+            <svg lucidePencil class="size-4"></svg>
+          </button>
         }
       </li>
     }
@@ -109,3 +121,81 @@
     </section>
   }
 </div>
+
+<dialog #volumeDialog class="modal" (close)="editingVolume.set(false)">
+  <div class="modal-box max-w-lg">
+    <app-modal-header [title]="'comic.edit.volume' | translate" />
+    @if (editingVolume()) {
+      <form class="flex flex-col gap-3" (submit)="saveVolume($event)" data-testid="volume-form">
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.title' | translate }}</span>
+          <input class="input input-bordered w-full" name="title" required [value]="title()" />
+        </label>
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.publisher' | translate }}</span>
+          <input class="input input-bordered w-full" name="publisher" [value]="c.publisher ?? ''" />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control">
+            <span class="label-text">{{ 'comic.edit.start_year' | translate }}</span>
+            <input class="input input-bordered w-full" name="startYear" type="number" min="1" max="9999" [value]="c.startYear ?? ''" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">{{ 'comic.edit.volume_number' | translate }}</span>
+            <input class="input input-bordered w-full" name="volume" type="number" min="0" max="9999" [value]="c.volume ?? ''" />
+          </label>
+        </div>
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.overview' | translate }}</span>
+          <textarea class="textarea textarea-bordered w-full" rows="4" name="overview" [value]="overview() ?? ''"></textarea>
+        </label>
+        <app-modal-footer>
+          <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
+          <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
+        </app-modal-footer>
+      </form>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop"><button aria-label="close"></button></form>
+</dialog>
+
+<dialog #issueDialog class="modal" (close)="editingIssue.set(null)">
+  <div class="modal-box max-w-lg">
+    <app-modal-header [title]="'comic.edit.issue' | translate" />
+    @if (editingIssue(); as i) {
+      <form class="flex flex-col gap-3" (submit)="saveIssue($event)" data-testid="issue-form">
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control">
+            <span class="label-text">{{ 'comic.edit.number' | translate }}</span>
+            <input class="input input-bordered w-full" name="number" required [value]="i.number" />
+          </label>
+          <label class="form-control">
+            <span class="label-text">{{ 'comic.edit.sort' | translate }}</span>
+            <input class="input input-bordered w-full" name="sort" type="number" step="any" min="-9999" max="9999" required [value]="i.sort" />
+          </label>
+        </div>
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.kind' | translate }}</span>
+          <select class="select select-bordered w-full" name="kind">
+            @for (k of kinds; track k) {
+              <option [value]="k" [selected]="k === i.kind">{{ 'comic.edit.kind_' + k | translate }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.title' | translate }}</span>
+          <input class="input input-bordered w-full" name="title" [value]="i.title ?? ''" />
+        </label>
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.release_date' | translate }}</span>
+          <input class="input input-bordered w-full" name="releaseDate" type="date" [value]="i.releaseDate ?? ''" />
+        </label>
+        <app-modal-footer>
+          <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
+          <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
+        </app-modal-footer>
+      </form>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop"><button aria-label="close"></button></form>
+</dialog>

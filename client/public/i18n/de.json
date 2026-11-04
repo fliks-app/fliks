@@ -4098,6 +4098,24 @@
     "finished": "Gelesen",
     "progress": "Lesefortschritt",
     "special_number": "Special {{n}}",
-    "specials": "Specials"
+    "specials": "Specials",
+    "edit": {
+      "volume": "Band bearbeiten",
+      "issue": "Heft bearbeiten",
+      "title": "Titel",
+      "publisher": "Verlag",
+      "start_year": "Startjahr",
+      "volume_number": "Bandnummer",
+      "overview": "Beschreibung",
+      "number": "Nummer",
+      "sort": "Sortierposition",
+      "kind": "Art",
+      "kind_issue": "Heft",
+      "kind_annual": "Jahresheft",
+      "kind_special": "Sonderheft",
+      "release_date": "Erscheinungsdatum",
+      "saved": "Gespeichert",
+      "invalid": "Nummer und Sortierposition sind erforderlich."
+    }
   }
 }

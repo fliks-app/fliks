@@ -5,7 +5,14 @@ use super::{
     library::file_name,
 };
 use crate::{comics::archive, media::items::lock_versions, state::AppState};
-use fliks_domain::{comics::name, media::family::Family};
+use fliks_domain::{
+    comics::{
+        info::{self, ComicInfo},
+        name,
+    },
+    media::family::Family,
+    metadata::field::Field,
+};
 use sqlx::{PgConnection, PgPool};
 use std::path::Path;
 
@@ -35,11 +42,29 @@ async fn count_pages(abs: &Path, format: &str) -> Option<i32> {
         .and_then(|n| i32::try_from(n).ok())
 }
 
+/// The `ComicInfo.xml` of an archive: one bounded read, ignored with a log when absent or unusable.
+pub(crate) async fn read_info(abs: &Path, format: &str) -> Option<ComicInfo> {
+    if format == "pdf" {
+        return None;
+    }
+    let p = abs.to_path_buf();
+    let read = crate::comics::blocking_ingest(move || archive::info(&p)).await?;
+    let parsed = match read {
+        Ok(Some(xml)) => info::parse(&xml),
+        Ok(None) => return None,
+        Err(e) => Err(format!("{e:?}")),
+    };
+    parsed
+        .inspect_err(|e| tracing::warn!(file = %abs.display(), "ComicInfo.xml ignored: {e}"))
+        .ok()
+}
+
 struct Row {
     file: i32,
     rel: String,
     format: &'static str,
     pages: Option<i32>,
+    info: Option<ComicInfo>,
 }
 
 /// Inserts or updates the rows of `files`, then makes an issue of each (rules 17-20).
@@ -55,6 +80,7 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             .await
             .map_err(|e| format!("{n}: {e}"))?;
         let pages = count_pages(&f.abs, format).await;
+        let info = read_info(&f.abs, format).await;
         let Some(file) = sqlx::query_scalar!(
             r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "mtimeMs")
                VALUES ($1, $2, $3, $4, $5, $6)
@@ -81,6 +107,7 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             rel: f.rel.replace('\\', "/"),
             format,
             pages,
+            info,
         });
     }
     if !rows.is_empty() {
@@ -172,6 +199,8 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
     .execute(&mut *tx)
     .await?;
     let edition = edition(&mut tx, media).await?;
+    let locked = crate::media::field_sources::locked_fields(&mut *tx, media).await?;
+    let free = |f: Field| !locked.contains(&f);
     for r in rows {
         let placed: bool = sqlx::query_scalar(
             r#"SELECT EXISTS (SELECT 1 FROM item_parts WHERE "mediaFileId" = $1)"#,
@@ -183,6 +212,17 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
             continue;
         }
         let n = name::parse_path(r.rel.rsplit('/').next().unwrap_or(&r.rel));
+        let n = info::resolve(&n, r.info.as_ref());
+        sqlx::query(
+            r#"UPDATE comic_details SET publisher = COALESCE(publisher, $2),
+                 "startYear" = COALESCE("startYear", $3), volume = COALESCE(volume, $4) WHERE "mediaId" = $1"#,
+        )
+        .bind(media)
+        .bind(n.publisher.as_deref().filter(|_| free(Field::Publisher)))
+        .bind(n.start_year.filter(|_| free(Field::Year)))
+        .bind(n.volume_no.filter(|_| free(Field::Details)))
+        .execute(&mut *tx)
+        .await?;
         let item: Option<i32> = sqlx::query_scalar(
             r#"SELECT "itemId" FROM comic_issues WHERE "mediaId" = $1 AND kind = $2
                AND CASE WHEN $3::text IS NULL THEN label = $4 ELSE "sortNumber" = $3::text::numeric END
@@ -201,14 +241,32 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
                     .bind(r.pages)
                     .execute(&mut *tx)
                     .await?;
+                sqlx::query(
+                    r#"UPDATE items i SET
+                         title = CASE WHEN 'title' = ANY(ci."lockedFields") THEN i.title ELSE COALESCE(i.title, $2) END,
+                         overview = CASE WHEN 'overview' = ANY(ci."lockedFields") THEN i.overview ELSE COALESCE(i.overview, $3) END,
+                         "airDate" = CASE WHEN 'releaseDate' = ANY(ci."lockedFields") THEN i."airDate"
+                           ELSE COALESCE(i."airDate", $4::text::date) END
+                       FROM comic_issues ci WHERE ci."itemId" = i.id AND i.id = $1"#,
+                )
+                .bind(i)
+                .bind(&n.title)
+                .bind(&n.summary)
+                .bind(&n.release_date)
+                .execute(&mut *tx)
+                .await?;
                 i
             }
             None => {
                 let i: i32 = sqlx::query_scalar(
-                    r#"INSERT INTO items ("mediaId", "editionId", monitored) VALUES ($1, $2, true) RETURNING id"#,
+                    r#"INSERT INTO items ("mediaId", "editionId", monitored, title, overview, "airDate")
+                       VALUES ($1, $2, true, $3, $4, $5::text::date) RETURNING id"#,
                 )
                 .bind(media)
                 .bind(edition)
+                .bind(&n.title)
+                .bind(&n.summary)
+                .bind(&n.release_date)
                 .fetch_one(&mut *tx)
                 .await?;
                 sqlx::query(

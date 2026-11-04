@@ -4098,6 +4098,24 @@
     "finished": "Lu",
     "progress": "Progression de lecture",
     "special_number": "Spécial {{n}}",
-    "specials": "Spéciaux"
+    "specials": "Spéciaux",
+    "edit": {
+      "volume": "Modifier le volume",
+      "issue": "Modifier le numéro",
+      "title": "Titre",
+      "publisher": "Éditeur",
+      "start_year": "Année de début",
+      "volume_number": "Numéro de volume",
+      "overview": "Résumé",
+      "number": "Numéro",
+      "sort": "Position de tri",
+      "kind": "Type",
+      "kind_issue": "Numéro",
+      "kind_annual": "Annuel",
+      "kind_special": "Hors-série",
+      "release_date": "Date de parution",
+      "saved": "Enregistré",
+      "invalid": "Le numéro et la position de tri sont requis."
+    }
   }
 }

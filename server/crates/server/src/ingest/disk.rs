@@ -472,13 +472,16 @@ async fn comic_groups(
         let guess = fliks_domain::comics::name::parse_path(
             &fsx::rel_under(root, &first).unwrap_or_default(),
         );
+        let format = comics::format_of(&file_name(&first)).unwrap_or("cbz");
+        let info = comics::read_info(&first, format).await;
+        let guess = fliks_domain::comics::info::resolve(&guess, info.as_ref());
         out.push(Group {
             folder_id,
             group_key: format!("comic:{dir}"),
             media_type: MediaKind::Comic,
             folder_name: if at_root { String::new() } else { dir },
-            guess_title: guess.volume,
-            guess_year: guess.year.map(i64::from),
+            guess_title: guess.series,
+            guess_year: guess.start_year.map(i64::from),
             nfo: None,
             suggested_provider: provider.to_owned(),
             files: entries,

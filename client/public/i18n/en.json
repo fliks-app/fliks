@@ -4098,6 +4098,24 @@
     "finished": "Read",
     "progress": "Reading progress",
     "special_number": "Special {{n}}",
-    "specials": "Specials"
+    "specials": "Specials",
+    "edit": {
+      "volume": "Edit volume",
+      "issue": "Edit issue",
+      "title": "Title",
+      "publisher": "Publisher",
+      "start_year": "Start year",
+      "volume_number": "Volume number",
+      "overview": "Overview",
+      "number": "Number",
+      "sort": "Sort position",
+      "kind": "Type",
+      "kind_issue": "Issue",
+      "kind_annual": "Annual",
+      "kind_special": "Special",
+      "release_date": "Release date",
+      "saved": "Saved",
+      "invalid": "Number and sort position are required."
+    }
   }
 }

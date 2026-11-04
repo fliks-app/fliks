@@ -277,6 +277,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::write::bulk,
         media::write::patch_season,
         media::write::patch_episode,
+        media::write::patch_volume,
+        media::write::patch_issue,
         media::write::import_tmdb,
         media::write::import_media,
         media::write::identify,

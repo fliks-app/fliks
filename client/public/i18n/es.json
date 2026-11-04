@@ -4098,6 +4098,24 @@
     "finished": "Leído",
     "progress": "Progreso de lectura",
     "special_number": "Especial {{n}}",
-    "specials": "Especiales"
+    "specials": "Especiales",
+    "edit": {
+      "volume": "Editar volumen",
+      "issue": "Editar número",
+      "title": "Título",
+      "publisher": "Editorial",
+      "start_year": "Año de inicio",
+      "volume_number": "Número de volumen",
+      "overview": "Sinopsis",
+      "number": "Número",
+      "sort": "Posición de orden",
+      "kind": "Tipo",
+      "kind_issue": "Número",
+      "kind_annual": "Anual",
+      "kind_special": "Especial",
+      "release_date": "Fecha de publicación",
+      "saved": "Guardado",
+      "invalid": "El número y la posición de orden son obligatorios."
+    }
   }
 }
