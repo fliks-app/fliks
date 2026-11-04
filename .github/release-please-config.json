@@ -65,6 +65,16 @@
         },
         {
           "type": "toml",
+          "path": "server/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fliks-plugin-manifest')].version"
+        },
+        {
+          "type": "toml",
+          "path": "server/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='kepub')].version"
+        },
+        {
+          "type": "toml",
           "path": "server/crates/plugin-sdk/Cargo.lock",
           "jsonpath": "$.package[?(@.name.value=='fliks-server')].version"
         },
@@ -72,6 +82,16 @@
           "type": "toml",
           "path": "server/crates/plugin-sdk/Cargo.lock",
           "jsonpath": "$.package[?(@.name.value=='fliks_domain')].version"
+        },
+        {
+          "type": "toml",
+          "path": "server/crates/plugin-sdk/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fliks-plugin-manifest')].version"
+        },
+        {
+          "type": "toml",
+          "path": "server/crates/plugin-sdk/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='kepub')].version"
         },
         {
           "type": "generic",
