@@ -56,7 +56,7 @@ impl ExpectedTitle {
 pub struct RejectionInput {
     pub quality_id: u32,
     pub allowed: BTreeSet<u32>,
-    pub language_id: u32,
+    pub language_ids: BTreeSet<u32>,
     pub allowed_langs: BTreeSet<u32>,
     pub is_blocklisted: bool,
     pub size_bytes: f64,
@@ -208,7 +208,7 @@ pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection> {
         }
     }
 
-    if !o.allowed_langs.is_empty() && !o.allowed_langs.contains(&o.language_id) {
+    if !o.allowed_langs.is_empty() && o.allowed_langs.is_disjoint(&o.language_ids) {
         out.push(rej("LANGUAGE_NOT_ALLOWED", vec![]));
     }
     if o.is_blocklisted {

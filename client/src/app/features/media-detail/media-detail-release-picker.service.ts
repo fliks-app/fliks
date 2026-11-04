@@ -18,8 +18,7 @@ export interface MovieRelease {
   blocklisted: boolean;
   sourceId: number;
   sourceName: string;
-  languageId: number;
-  languageName: string;
+  languages: { id: number; name: string }[];
   languageAllowed: boolean;
   size: number;
   seeders: number;

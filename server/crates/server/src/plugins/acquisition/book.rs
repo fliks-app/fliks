@@ -1,5 +1,5 @@
 //! The audio and text families of rule 31: the wants of a book as targets, matches and scores.
-use super::release::{Inputs, custom_formats, wit_rejections};
+use super::release::{Inputs, custom_formats, wit_languages, wit_rejections};
 use super::*;
 use fliks_domain::profiles::{default_allowed, default_sizes};
 use fliks_domain::release::audio::quality::parse_audio_release;
@@ -422,8 +422,7 @@ pub async fn score(
             allowed: s.allowed,
             custom_format_score: s.custom_format_score as i32,
             blocklisted: s.blocklisted,
-            language_id: Some(s.language_id),
-            language_name: Some(s.language_name.into()),
+            languages: wit_languages(&s.languages),
             language_allowed: s.language_allowed,
             whole_group: false,
             coverage: None,

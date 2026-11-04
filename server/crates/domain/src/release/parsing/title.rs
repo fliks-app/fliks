@@ -165,7 +165,7 @@ fn years(s: &str) -> impl Iterator<Item = u32> {
         .map(|m| m[1].parse().expect("4 digits"))
 }
 
-pub fn extract_media_title(raw_name: &str) -> ExtractedRelease {
+fn decode_name(raw_name: &str) -> String {
     let decoded = decode_html_entities(raw_name);
     let mut decoded = rx!(i r"\.torrent$").replace(&decoded, "").into_owned();
     if let Some(dot) = decoded.rfind('.')
@@ -174,28 +174,45 @@ pub fn extract_media_title(raw_name: &str) -> ExtractedRelease {
     {
         decoded.truncate(dot);
     }
-    let se = parse_season_episode(&decoded);
+    decoded
+}
 
+/// The work title at the head of a decoded name, with the season marker and year found on the way.
+fn title_slot(decoded: &str) -> (&str, Option<usize>, Option<u32>) {
     let cut = rx!(i r"\b(?:S\d{1,2}(?:E\d{1,3})?|Season[\s._-]?\d{1,2}|\d{1,2}x\d{1,3}|Complete[\s._-]?(?:Series|S\d{1,2}))\b")
-        .find(&decoded)
+        .find(decoded)
         .map(|m| m.start());
     let year = match cut {
         Some(c) => years(&decoded[..c]).next(),
-        None => years(&decoded).next(),
+        None => years(decoded).next(),
     };
     let slot = match (cut, year) {
         (Some(c), _) => &decoded[..c],
         (None, Some(y)) => {
             let at = regex::Regex::new(&format!(r"(?-u:\b){y}(?-u:\b)")).expect("year pattern");
-            at.find(&decoded)
-                .map_or(decoded.as_str(), |m| &decoded[..m.start()])
+            at.find(decoded).map_or(decoded, |m| &decoded[..m.start()])
         }
         (None, None) => {
             let meta = rx!(i r"\b(?:2160p|1080p|720p|480p|4K|UHD|BluRay|BDRip|WEB-?DL|WEB-?Rip|HDTV|DVDRip|REMUX|x264|x265|HEVC|H[\s._]?264|H[\s._]?265|AV1|VP9|DTS|AC3|AAC|TrueHD|HDR|DV|HDR10|Atmos|MA|5\.1|7\.1)\b");
-            meta.find(&decoded)
-                .map_or(decoded.as_str(), |m| &decoded[..m.start()])
+            meta.find(decoded)
+                .map_or(decoded, |m| &decoded[..m.start()])
         }
     };
+    (slot, cut, year)
+}
+
+/// The decoded name and the byte offset where its tag region starts (0 when no marker ends the title).
+pub fn decoded_with_tag_start(raw_name: &str) -> (String, usize) {
+    let decoded = decode_name(raw_name);
+    let end = title_slot(&decoded).0.len();
+    let start = if end == decoded.len() { 0 } else { end };
+    (decoded, start)
+}
+
+pub fn extract_media_title(raw_name: &str) -> ExtractedRelease {
+    let decoded = decode_name(raw_name);
+    let se = parse_season_episode(&decoded);
+    let (slot, cut, year) = title_slot(&decoded);
 
     let title = prettify(slot);
     let search_key = title

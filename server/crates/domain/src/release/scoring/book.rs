@@ -10,7 +10,7 @@ use crate::js::round;
 use crate::language::AppLanguage;
 use crate::media::family::Family;
 use crate::release::audio::quality::parse_audio_release;
-use crate::release::parsing::language::resolve_unknown_language;
+use crate::release::parsing::language::resolve_unknown_languages;
 use crate::release::parsing::quality::AppQuality;
 use crate::release::parsing::season_episode::Span;
 use crate::release::text::quality::parse_text_release;
@@ -28,8 +28,7 @@ pub struct ScoredBookRelease {
     pub allowed: bool,
     pub custom_format_score: i64,
     pub blocklisted: bool,
-    pub language_id: u32,
-    pub language_name: &'static str,
+    pub languages: Vec<&'static AppLanguage>,
     pub language_allowed: bool,
     pub rejections: Vec<ReleaseRejection>,
     pub retail: bool,
@@ -104,7 +103,7 @@ pub struct BookScoreOptions {
 
 struct Parsed {
     quality: &'static AppQuality,
-    language: &'static AppLanguage,
+    languages: Vec<&'static AppLanguage>,
     retail: bool,
     names: BookNameGuess,
 }
@@ -116,7 +115,7 @@ fn parse(family: Family, title: &str) -> Option<Parsed> {
             let a = parse_audio_release(title);
             Some(Parsed {
                 quality: a.quality,
-                language: a.language,
+                languages: a.languages,
                 retail: false,
                 names: a.names,
             })
@@ -125,7 +124,7 @@ fn parse(family: Family, title: &str) -> Option<Parsed> {
             let t = parse_text_release(title);
             Some(Parsed {
                 quality: t.quality,
-                language: t.language,
+                languages: t.languages,
                 retail: t.retail,
                 names: t.names,
             })
@@ -172,14 +171,15 @@ pub fn score_and_sort_book_releases(
                 .source_unknown_lang
                 .get(&r.source_id)
                 .and_then(|i| i.as_deref());
-            let lang = resolve_unknown_language(p.language, unknown_iso);
+            let langs = resolve_unknown_languages(p.languages, unknown_iso);
+            let lang_ids: BTreeSet<u32> = langs.iter().map(|l| l.id).collect();
             let custom_format_score = score_custom_formats(&r.title, &r.flags);
             let blocklisted = is_blocked(&r.title, r.source_id);
             let is_audio = family == Family::Audio;
             let mut rejections = compute_rejections(&RejectionInput {
                 quality_id: p.quality.id,
                 allowed: opts.allowed.clone(),
-                language_id: lang.id,
+                language_ids: lang_ids.clone(),
                 allowed_langs: opts.allowed_langs.clone(),
                 is_blocklisted: blocklisted,
                 size_bytes: r.size,
@@ -217,10 +217,9 @@ pub fn score_and_sort_book_releases(
                 allowed: opts.allowed.contains(&p.quality.id),
                 custom_format_score,
                 blocklisted,
-                language_id: lang.id,
-                language_name: lang.name,
+                languages: langs,
                 language_allowed: opts.allowed_langs.is_empty()
-                    || opts.allowed_langs.contains(&lang.id),
+                    || !opts.allowed_langs.is_disjoint(&lang_ids),
                 rejections,
                 retail: p.retail,
                 size_deviation,

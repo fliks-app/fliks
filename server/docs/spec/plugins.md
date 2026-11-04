@@ -272,6 +272,7 @@ interface types {
   record release-coverage { groups: option<span>, units: option<span>, complete: bool }
   variant param-value { number(f64), text(string) }
   record rejection { code: string, params: list<tuple<string, param-value>> }
+  record release-language { id: u32, name: string }
   record scored-release {
     id: string,
     quality-id: u32,
@@ -280,8 +281,7 @@ interface types {
     allowed: bool,
     custom-format-score: s32,
     blocklisted: bool,
-    language-id: option<u32>,
-    language-name: option<string>,
+    languages: list<release-language>,
     language-allowed: bool,
     whole-group: bool,
     coverage: option<release-coverage>,

@@ -27,8 +27,7 @@ function makeRelease(overrides: Partial<MovieRelease> = {}): MovieRelease {
     blocklisted: false,
     sourceId: 1,
     sourceName: 'indexer',
-    languageId: 1,
-    languageName: 'English',
+    languages: [{ id: 1, name: 'English' }],
     languageAllowed: true,
     size: 1_000_000,
     seeders: 5,
@@ -138,5 +137,18 @@ describe('ReleasesTableComponent — the tracker page behind the title', () => {
   it('a release whose feed named no page renders plain text, never a dead link', async () => {
     const { fixture } = await createFixture([withUrl(undefined)]);
     expect(fixture.nativeElement.querySelector('a[target="_blank"]')).toBeNull();
+  });
+});
+
+describe('ReleasesTableComponent languages', () => {
+  it('shows one badge per language of the release', async () => {
+    const languages = [
+      { id: 5, name: 'Italian' },
+      { id: 2, name: 'French' },
+    ];
+    const { fixture } = await createFixture([makeRelease({ languages })]);
+    const text = Array.from(fixture.nativeElement.querySelectorAll('.badge-info')).map((e) => (e as HTMLElement).textContent?.trim());
+    expect(text).toContain('Italian');
+    expect(text).toContain('French');
   });
 });

@@ -461,14 +461,25 @@ fn into_scored(
             allowed: s.allowed,
             custom_format_score: s.custom_format_score as i32,
             blocklisted: s.blocklisted,
-            language_id: Some(s.language_id),
-            language_name: Some(s.language_name.into()),
+            languages: wit_languages(&s.languages),
             language_allowed: s.language_allowed,
             whole_group: s.is_full_season,
             coverage: Some(wit_coverage(&s.coverage)),
             size_deviation: s.size_deviation,
             video_codec: s.video_codec.map(str::to_owned),
             rejections: wit_rejections(s.rejections),
+        })
+        .collect()
+}
+
+pub(super) fn wit_languages(
+    langs: &[&'static fliks_domain::language::AppLanguage],
+) -> Vec<t::ReleaseLanguage> {
+    langs
+        .iter()
+        .map(|l| t::ReleaseLanguage {
+            id: l.id,
+            name: l.name.into(),
         })
         .collect()
 }

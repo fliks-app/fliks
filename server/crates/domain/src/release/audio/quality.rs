@@ -52,7 +52,7 @@ pub struct AudioRelease {
     pub codec: Option<&'static str>,
     pub bitrate_kbps: Option<u32>,
     pub bit_depth: Option<u32>,
-    pub language: &'static AppLanguage,
+    pub languages: Vec<&'static AppLanguage>,
     pub names: BookNameGuess,
 }
 
@@ -134,7 +134,7 @@ pub fn parse_audio_release(title: &str) -> AudioRelease {
         codec,
         bitrate_kbps,
         bit_depth,
-        language: parse_book_language(title),
+        languages: parse_book_language(title),
         names: parse_book_release_name(title),
     }
 }
