@@ -57,7 +57,7 @@ fn meta_fail(p: Namespace, e: MetaError) -> AppError {
     }
 }
 
-fn unknown_provider(name: &str) -> AppError {
+pub(crate) fn unknown_provider(name: &str) -> AppError {
     AppError::bad_request(format!("Unknown provider: {name}"))
 }
 
@@ -68,7 +68,7 @@ fn book_provider(md: &Metadata, name: &str) -> Result<Namespace, AppError> {
         .ok_or_else(|| unknown_provider(name))
 }
 
-fn page(q: &[(String, String)]) -> Result<u32, AppError> {
+pub(crate) fn page(q: &[(String, String)]) -> Result<u32, AppError> {
     let Some(raw) = bare(q, "page").filter(|p| !p.is_empty()) else {
         return Ok(1);
     };

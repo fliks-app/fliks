@@ -5,7 +5,8 @@ use crate::{
     libraries::accessible_library_ids,
     metadata::{
         Metadata, Search,
-        routes::{Ids, Pairs, Res, bare, lang, unavailable},
+        books::routes::{page, unknown_provider},
+        routes::{Ids, Pairs, Res, bare, lang, unavailable, year},
     },
     state::AppState,
 };
@@ -33,28 +34,11 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
         )
 }
 
-fn unknown_provider(name: &str) -> AppError {
-    AppError::bad_request(format!("Unknown provider: {name}"))
-}
-
 /// A registered provider that supports comics.
 pub(crate) fn comic_provider(md: &Metadata, name: &str) -> Result<Namespace, AppError> {
     Namespace::parse(name)
         .filter(|p| md.get(*p).is_some_and(|x| x.supports(MediaKind::Comic)))
         .ok_or_else(|| unknown_provider(name))
-}
-
-fn page(q: &[(String, String)]) -> Result<u32, AppError> {
-    let Some(raw) = bare(q, "page").filter(|p| !p.is_empty()) else {
-        return Ok(1);
-    };
-    let n = fliks_domain::media::query::js_number(&raw)
-        .filter(|n| n.fract() == 0.0 && n.is_finite())
-        .ok_or_else(|| AppError::bad_request("page must be an integer number"))?;
-    if n < 1.0 {
-        return Err(AppError::bad_request("page must not be less than 1"));
-    }
-    Ok(n.min(f64::from(u32::MAX)) as u32)
 }
 
 /// The fields of a `ComicSearchResult`, without `mediaId`.
@@ -116,9 +100,7 @@ pub async fn search_comic(State(st): State<AppState>, a: Authed, Query(q): Pairs
     if query.is_empty() {
         return Ok(Json(json!([])));
     }
-    let year = bare(&q, "year")
-        .and_then(|y| y.trim().parse::<i64>().ok())
-        .filter(|y| *y != 0);
+    let year = year(bare(&q, "year").as_deref());
     let md = &st.metadata;
     let mut order: Vec<Namespace> = md
         .order(MediaKind::Comic)

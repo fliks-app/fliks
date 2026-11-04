@@ -211,6 +211,8 @@ pub struct Gate {
     malformed: AtomicU32,
     /// `requestTimeoutMs`: connection and response headers of each attempt.
     pub timeout: Duration,
+    /// `limits.maxPauseSecs`: the longest a `rate-limited(retry)` of the plugin pauses the limiter.
+    max_pause_ms: u64,
 }
 
 impl Gate {
@@ -225,7 +227,13 @@ impl Gate {
             slow_logged: AtomicBool::new(false),
             malformed: AtomicU32::new(0),
             timeout,
+            max_pause_ms: MAX_PAUSE_MS,
         }
+    }
+
+    pub fn with_max_pause_secs(mut self, secs: u64) -> Self {
+        self.max_pause_ms = (secs * 1000).clamp(MAX_PAUSE_MS, MAX_PLUGIN_PAUSE_MS);
+        self
     }
 
     /// From a validated manifest `provider` block.
@@ -244,7 +252,8 @@ impl Gate {
             .get("requestTimeoutMs")
             .and_then(Value::as_u64)
             .map_or(DEFAULT_REQUEST_TIMEOUT, Duration::from_millis);
-        Some(Self::new(id, limits, timeout))
+        let max_pause = l.get("maxPauseSecs").and_then(Value::as_u64);
+        Some(Self::new(id, limits, timeout).with_max_pause_secs(max_pause.unwrap_or(0)))
     }
 
     #[cfg(test)]
@@ -275,13 +284,25 @@ impl Gate {
         self.limiter.lock_clean().on_quota_exhausted(day);
     }
 
-    /// `rate-limited(retry)`: the upstream asked for `secs` of quiet.
+    /// `rate-limited(retry)`: the upstream asked for `secs` of quiet, up to `limits.maxPauseSecs`.
     pub fn pause_secs(&self, secs: u32) {
         let now = self.clock.now_ms();
-        let until = now + u64::from(secs) * 1000;
+        let ms = (u64::from(secs) * 1000).min(self.max_pause_ms);
+        if ms > MAX_PAUSE_MS {
+            tracing::warn!(
+                "{}: paused for {}s at the provider's request",
+                self.id,
+                ms / 1000
+            );
+        }
         self.limiter
             .lock_clean()
-            .pause_up_to(now, until, MAX_PLUGIN_PAUSE_MS);
+            .pause_up_to(now, now + ms, self.max_pause_ms);
+    }
+
+    /// The plugin's settings changed (a new key may lift what paused it).
+    pub fn clear_pause(&self) {
+        self.limiter.lock_clean().clear_pause();
     }
 
     /// A record that parsed (`true`) or not: the failure of its export, which the 2xx of the request
@@ -1068,6 +1089,7 @@ mod tests {
     #[tokio::test]
     async fn a_plugin_pause_of_hours_is_kept_and_answered_with_its_length() {
         let (g, _) = gate(fast());
+        let g = g.with_max_pause_secs(86_400);
         let h = AtomicU32::new(0);
         let go = || {
             g.run(
@@ -1095,6 +1117,39 @@ mod tests {
         let d = go().await;
         assert!(matches!(&d, Done::Refused(r) if r.retry_after_secs == Some(86_400)));
         assert_eq!(hits(&h), 0);
+        g.clear_pause();
+        assert_eq!(status(&go().await), 200);
+        // a plugin that did not opt in is held to 5 minutes
+        let (g2, _) = gate(fast());
+        g2.pause_secs(7_200);
+        let d = g2
+            .run(
+                Background,
+                Duration::from_secs(120),
+                || async {
+                    Ok::<_, ()>(Reply {
+                        status: 200,
+                        retry_after_ms: None,
+                        inner: (),
+                    })
+                },
+                || true,
+            )
+            .await;
+        assert!(matches!(&d, Done::Refused(r) if r.retry_after_secs == Some(300)));
+    }
+
+    #[test]
+    fn the_manifest_key_opts_in_to_long_pauses() {
+        let block = |extra: &str| {
+            serde_json::from_str::<Value>(&format!(
+                r#"{{"limits": {{"ratePerSec": 1.0, "burst": 1{extra}}}}}"#
+            ))
+            .unwrap()
+        };
+        let pause = |b: &Value| Gate::from_block("p", b).unwrap().max_pause_ms;
+        assert_eq!(pause(&block("")), MAX_PAUSE_MS);
+        assert_eq!(pause(&block(r#", "maxPauseSecs": 86400"#)), 86_400_000);
     }
 
     #[tokio::test]

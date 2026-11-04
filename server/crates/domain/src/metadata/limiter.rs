@@ -3,7 +3,7 @@
 
 /// The longest a `Retry-After` can pause the limiter.
 pub const MAX_PAUSE_MS: u64 = 300_000;
-/// The longest a plugin's `rate-limited` can pause it: the rest of a daily window.
+/// The most `limits.maxPauseSecs` can allow a plugin's `rate-limited` to pause the limiter: a day.
 pub const MAX_PLUGIN_PAUSE_MS: u64 = 86_400_000;
 const BACKOFF_START_MS: u64 = 1_000;
 const BACKOFF_MAX_MS: u64 = 60_000;
@@ -167,6 +167,11 @@ impl Limiter {
     /// the pause does not end on a burst.
     pub fn pause_until(&mut self, now: u64, until: u64) {
         self.pause_up_to(now, until, MAX_PAUSE_MS);
+    }
+
+    /// Ends a pause (a plugin's settings changed).
+    pub fn clear_pause(&mut self) {
+        self.paused_until = 0;
     }
 
     /// `pause_until` with another ceiling.

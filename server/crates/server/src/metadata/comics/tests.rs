@@ -142,6 +142,10 @@ fn children() -> Vec<Value> {
 fn fake() -> Arc<Fake> {
     let mut f = Fake::default();
     f.works.insert("42".into(), work());
+    f.works.insert(
+        "43".into(),
+        json!({"externalId": "43", "title": "Alpha Run", "mediaType": "comic"}),
+    );
     f.children.insert("42".into(), children());
     f.found = vec![work(), json!({"title": "no id"})];
     Arc::new(f)
@@ -351,6 +355,8 @@ async fn import_creates_the_volume_and_its_fileless_issues(pool: PgPool) {
         )
     );
     assert_eq!(v["preferredProvider"], NS);
+    // the poster host is not one the image store may fetch: no remote URL is kept
+    assert_eq!(v["posterUrl"], Value::Null);
     let comic = &v["comic"];
     assert_eq!(
         (
@@ -651,4 +657,278 @@ async fn a_second_work_call_inside_the_ttl_is_a_snapshot_not_a_call(pool: PgPool
     c.get(&format!("/api/metadata/{NS}/comic/42")).await;
     c.get(&format!("/api/metadata/{NS}/comic/42")).await;
     assert_eq!(*c.fake.work_calls.lock().unwrap(), 2);
+}
+
+async fn add_issue(
+    c: &Ctx,
+    media: i32,
+    kind: &str,
+    sort: &str,
+    label: &str,
+    title: Option<&str>,
+) -> i32 {
+    let e: i32 = sqlx::query_scalar(r#"SELECT id FROM editions WHERE "mediaId" = $1 LIMIT 1"#)
+        .bind(media)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let i: i32 = sqlx::query_scalar(
+        r#"INSERT INTO items ("mediaId", "editionId", monitored, title) VALUES ($1, $2, true, $3) RETURNING id"#,
+    )
+    .bind(media)
+    .bind(e)
+    .bind(title)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label) VALUES ($1, $2, $3, $4::text::numeric, $5)"#,
+    )
+    .bind(i)
+    .bind(media)
+    .bind(kind)
+    .bind(sort)
+    .bind(label)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    i
+}
+
+#[sqlx::test(migrations = false)]
+async fn specials_match_by_label_and_never_take_another_specials_rank(pool: PgPool) {
+    let mut f = Fake::default();
+    f.works.insert("42".into(), work());
+    f.children.insert(
+        "42".into(),
+        vec![
+            issue("Prologue", json!(2), "special", Some("Pro"), None),
+            issue("Interlude", json!(1), "special", None, None),
+        ],
+    );
+    let c = ctx(pool, Some(Arc::new(f))).await;
+    let m = c.local_volume().await;
+    add_issue(&c, m, "special", "1", "Special 1", Some("Mine")).await;
+    add_issue(&c, m, "special", "100000", "Prologue", Some("Local")).await;
+    link(&c, m).await;
+    comics::refresh(&c.st, m, Priority::Interactive)
+        .await
+        .unwrap();
+    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT ci."sortNumber"::float8::text, ci.label, i.title FROM comic_issues ci
+           JOIN items i ON i.id = ci."itemId" WHERE ci."mediaId" = $1 AND ci.kind = 'special'
+           ORDER BY ci."sortNumber""#,
+    )
+    .bind(m)
+    .fetch_all(&c.pool)
+    .await
+    .unwrap();
+    let s = |a: &str, b: &str, t: Option<&str>| (a.to_owned(), b.to_owned(), t.map(Into::into));
+    assert_eq!(
+        rows,
+        [
+            s("1", "Special 1", Some("Mine")),
+            s("2", "Interlude", None),
+            s("100000", "Prologue", Some("Pro")),
+        ]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn edits_survive_a_refresh_until_they_are_unlocked(pool: PgPool) {
+    let c = ctx(pool, None).await;
+    let m = c.local_volume().await;
+    link(&c, m).await;
+    let item: i32 = sqlx::query_scalar(
+        r#"SELECT "itemId" FROM comic_issues WHERE "mediaId" = $1 AND "sortNumber" = 2"#,
+    )
+    .bind(m)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let title = |c: &Ctx| {
+        let pool = c.pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<String>>("SELECT title FROM items WHERE id = $1")
+                .bind(item)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    let (s, _) = c
+        .call(
+            &c.admin,
+            "PATCH",
+            &format!("/api/comics/issues/{item}"),
+            Some(json!({"title": "Mine"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let (s, _) = c
+        .call(
+            &c.admin,
+            "PATCH",
+            &format!("/api/media/{m}/comic"),
+            Some(json!({"publisher": "Mine Pub"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    comics::refresh(&c.st, m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(title(&c).await.as_deref(), Some("Mine"));
+    let publisher = || async {
+        sqlx::query_scalar::<_, String>(
+            r#"SELECT publisher FROM comic_details WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(publisher().await, "Mine Pub");
+    c.call(
+        &c.admin,
+        "PATCH",
+        &format!("/api/comics/issues/{item}"),
+        Some(json!({"unlock": ["title"]})),
+    )
+    .await;
+    c.call(
+        &c.admin,
+        "PATCH",
+        &format!("/api/media/{m}/comic"),
+        Some(json!({"unlock": ["publisher"]})),
+    )
+    .await;
+    comics::refresh(&c.st, m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(title(&c).await.as_deref(), Some("Next"));
+    assert_eq!(publisher().await, "Pub House");
+}
+
+#[sqlx::test(migrations = false)]
+async fn identify_links_the_volume_and_refreshes_it(pool: PgPool) {
+    let c = ctx(pool, None).await;
+    let m = c.local_volume().await;
+    let (s, _) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{m}/identify"),
+            Some(json!({"tmdbId": 5})),
+        )
+        .await;
+    assert_eq!(s, 400);
+    let (s, _) = c
+        .call(&c.admin, "POST", &format!("/api/media/{m}/refresh"), None)
+        .await;
+    assert_eq!(s, 400);
+    let (s, v) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{m}/identify"),
+            Some(json!({"provider": NS, "externalId": "42"})),
+        )
+        .await;
+    assert_eq!(s, 201, "{v}");
+    for _ in 0..100 {
+        let done: bool = sqlx::query_scalar(
+            r#"SELECT "metadataRefreshedAt" IS NOT NULL FROM media WHERE id = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+        if done {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let (pin, ext): (Option<String>, String) = sqlx::query_as(
+        r#"SELECT m."preferredProvider", e.value FROM media m JOIN media_external_ids e ON e."mediaId" = m.id WHERE m.id = $1"#,
+    )
+    .bind(m)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!((pin.as_deref(), ext.as_str()), (Some(NS), "42"));
+    assert_eq!(c.issues(m).await.len(), 5);
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_volume_already_in_the_library_is_a_conflict_whoever_made_it(pool: PgPool) {
+    let c = ctx(pool, None).await;
+    sqlx::query(r#"UPDATE media SET "folderName" = 'Alpha Run' WHERE id = $1"#)
+        .bind(c.local_volume().await)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, v) = c.import(json!({})).await;
+    assert_eq!(s, 409, "{v}");
+    assert!(v["message"].as_str().unwrap().contains("identify"));
+    // a second volume of the same title from another id of the same provider
+    sqlx::query(r#"DELETE FROM media"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(c.import(json!({})).await.0, 201);
+    let (s, _) = c.import(json!({"externalId": "43"})).await;
+    assert_eq!(s, 409);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_second_provider_keeps_the_sources_of_what_it_did_not_write(pool: PgPool) {
+    let c = ctx(pool, None).await;
+    let m = c.local_volume().await;
+    link(&c, m).await;
+    sqlx::query(
+        r#"INSERT INTO media_field_sources ("mediaId", field, provider) VALUES ($1, 'authors', 'org.other:x')"#,
+    )
+    .bind(m)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    comics::refresh(&c.st, m, Priority::Interactive)
+        .await
+        .unwrap();
+    let kept: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM media_field_sources WHERE "mediaId" = $1 AND provider = 'org.other:x'"#,
+    )
+    .bind(m)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(kept, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_homepage_that_is_not_https_is_not_a_link(pool: PgPool) {
+    let c = ctx(pool, None).await;
+    sqlx::query(r#"UPDATE plugin_packages SET manifest = '{"homepage": "javascript:alert(1)"}'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (_, v) = c.import(json!({})).await;
+    assert_eq!(v["comic"]["providers"][0]["url"], Value::Null);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_long_run_imports_in_one_go(pool: PgPool) {
+    let mut f = Fake::default();
+    f.works.insert("42".into(), work());
+    f.children.insert(
+        "42".into(),
+        (1..=4000)
+            .map(|n| issue(&n.to_string(), json!(n.min(9999)), "issue", None, None))
+            .collect(),
+    );
+    let c = ctx(pool, Some(Arc::new(f))).await;
+    let (s, v) = c.import(json!({})).await;
+    assert_eq!(s, 201);
+    assert_eq!(v["comic"]["issues"].as_array().unwrap().len(), 4000);
 }

@@ -9,12 +9,13 @@ use crate::{
     metadata::Override,
     state::AppState,
 };
+use fliks_domain::comics::provider::Issue;
 use fliks_domain::{
     external_id::Namespace,
     media::kind::MediaKind,
     metadata::{field::Field, limiter::Priority},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// The metadata language of the media's library.
 pub(crate) async fn language_of_library(
@@ -38,9 +39,22 @@ pub(crate) async fn language_of_library(
 }
 
 /// Writes `f` to the comic `media`, linked to `(ns, id)`: the volume fields that are not locked,
-/// then the issues merged by `(kind, sort)`.
+/// then the issues merged by `(kind, sortNumber)` (a special by its label: its sort is a rank).
 pub async fn write(st: &AppState, media: i32, ns: Namespace, f: &Fetched) -> Result<(), AppError> {
     let w = &f.work;
+    // Only a stored local copy is ever written as the poster.
+    let stored = match &w.poster_url {
+        Some(url)
+            if !field_sources::locked_fields(&st.db, media)
+                .await?
+                .contains(&Field::PosterUrl) =>
+        {
+            st.images
+                .download_and_store(url, &Target::media(media, Variant::Poster))
+                .await
+        }
+        _ => None,
+    };
     let mut tx = st.db.begin().await?;
     lock_versions(&mut tx, media).await?;
     let alive: Option<String> =
@@ -70,8 +84,8 @@ pub async fn write(st: &AppState, media: i32, ns: Namespace, f: &Fetched) -> Res
     let year = take(Field::Year, w.year.is_some())
         .then_some(w.year)
         .flatten();
-    let poster = take(Field::PosterUrl, w.poster_url.is_some())
-        .then(|| w.poster_url.clone())
+    let poster = take(Field::PosterUrl, stored.is_some())
+        .then_some(stored)
         .flatten();
     let publisher = take(Field::Publisher, w.publisher.is_some())
         .then(|| w.publisher.clone())
@@ -102,81 +116,142 @@ pub async fn write(st: &AppState, media: i32, ns: Namespace, f: &Fetched) -> Res
     .bind(volume)
     .execute(&mut *tx)
     .await?;
-    field_sources::set_field_sources(&mut tx, media, &provenance).await?;
+    field_sources::merge_field_sources(&mut tx, media, &provenance).await?;
+    merge_issues(&mut tx, media, &f.issues).await?;
+    tx.commit().await?;
+    Ok(())
+}
 
-    let edition = edition(&mut tx, media).await?;
-    let rows: Vec<(i32, String, f64)> = sqlx::query_as(
-        r#"SELECT "itemId", kind, "sortNumber"::float8 FROM comic_issues WHERE "mediaId" = $1"#,
+/// The issues merged onto the volume's, one statement per step whatever their number.
+async fn merge_issues(
+    tx: &mut sqlx::PgConnection,
+    media: i32,
+    issues: &[Issue],
+) -> Result<(), AppError> {
+    if issues.is_empty() {
+        return Ok(());
+    }
+    let kinds: Vec<&str> = issues.iter().map(|i| i.kind).collect();
+    let sorts: Vec<String> = issues.iter().map(Issue::sort_text).collect();
+    let labels: Vec<&str> = issues.iter().map(|i| i.label.as_str()).collect();
+    let matched: Vec<(i32, i32)> = sqlx::query_as(
+        r#"SELECT DISTINCT ON (t.i) t.i::int, ci."itemId"
+           FROM UNNEST($2::text[], $3::text[], $4::text[]) WITH ORDINALITY AS t(kind, sort, label, i)
+           JOIN comic_issues ci ON ci."mediaId" = $1 AND ci.kind = t.kind
+             AND CASE WHEN t.kind = 'special' THEN ci.label = t.label
+                      ELSE ci."sortNumber" = t.sort::numeric END
+           ORDER BY t.i, ci."itemId""#,
     )
     .bind(media)
+    .bind(&kinds)
+    .bind(&sorts)
+    .bind(&labels)
     .fetch_all(&mut *tx)
     .await?;
-    let held: HashMap<(String, i64), i32> = rows
+    let held: HashMap<usize, i32> = matched
         .into_iter()
-        .map(|(item, kind, sort)| ((kind, (sort * 100.0).round() as i64), item))
+        .map(|(i, item)| (i as usize - 1, item))
         .collect();
-    for i in &f.issues {
-        let (kind, sort) = i.key();
-        if let Some(item) = held.get(&(kind.to_owned(), sort)) {
-            sqlx::query(
-                r#"UPDATE comic_issues SET label = CASE WHEN 'label' = ANY("lockedFields") THEN label ELSE $2 END
-                   WHERE "itemId" = $1"#,
-            )
-            .bind(item)
-            .bind(&i.label)
-            .execute(&mut *tx)
-            .await?;
-            sqlx::query(
-                r#"UPDATE items i SET
-                     title = CASE WHEN 'title' = ANY(ci."lockedFields") THEN i.title ELSE COALESCE($2, i.title) END,
-                     "airDate" = CASE WHEN 'releaseDate' = ANY(ci."lockedFields") THEN i."airDate"
-                       ELSE COALESCE($3::text::date, i."airDate") END
-                   FROM comic_issues ci WHERE ci."itemId" = i.id AND i.id = $1"#,
-            )
-            .bind(item)
-            .bind(&i.title)
-            .bind(&i.release_date)
-            .execute(&mut *tx)
-            .await?;
-            continue;
+
+    let (mut ids, mut m_labels, mut m_titles, mut m_dates) = (vec![], vec![], vec![], vec![]);
+    for (n, i) in issues.iter().enumerate() {
+        if let Some(item) = held.get(&n) {
+            ids.push(*item);
+            m_labels.push(i.label.as_str());
+            m_titles.push(i.title.as_deref());
+            m_dates.push(i.release_date.as_deref());
         }
-        let item: i32 = sqlx::query_scalar(
-            r#"INSERT INTO items ("mediaId", "editionId", monitored, title, "airDate")
-               VALUES ($1, $2, (SELECT monitored FROM media WHERE id = $1), $3, $4::text::date) RETURNING id"#,
+    }
+    if !ids.is_empty() {
+        sqlx::query(
+            r#"UPDATE comic_issues ci SET label = u.label
+               FROM UNNEST($1::int[], $2::text[]) AS u(item, label)
+               WHERE ci."itemId" = u.item AND ci.kind <> 'special' AND NOT ('label' = ANY(ci."lockedFields"))"#,
         )
-        .bind(media)
-        .bind(edition)
-        .bind(&i.title)
-        .bind(&i.release_date)
-        .fetch_one(&mut *tx)
+        .bind(&ids)
+        .bind(&m_labels)
+        .execute(&mut *tx)
         .await?;
         sqlx::query(
-            r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label)
-               VALUES ($1, $2, $3, $4::text::numeric, $5)"#,
+            r#"UPDATE items i SET
+                 title = CASE WHEN 'title' = ANY(ci."lockedFields") THEN i.title ELSE COALESCE(u.title, i.title) END,
+                 "airDate" = CASE WHEN 'releaseDate' = ANY(ci."lockedFields") THEN i."airDate"
+                   ELSE COALESCE(u.date::date, i."airDate") END
+               FROM UNNEST($1::int[], $2::text[], $3::text[]) AS u(item, title, date)
+               JOIN comic_issues ci ON ci."itemId" = u.item
+               WHERE i.id = u.item"#,
         )
-        .bind(item)
-        .bind(media)
-        .bind(kind)
-        .bind(i.sort_text())
-        .bind(&i.label)
+        .bind(&ids)
+        .bind(&m_titles)
+        .bind(&m_dates)
         .execute(&mut *tx)
         .await?;
     }
-    tx.commit().await?;
 
-    if let Some(url) = poster
-        && let Some(local) = st
-            .images
-            .download_and_store(&url, &Target::media(media, Variant::Poster))
-            .await
-        && let Err(e) = sqlx::query(r#"UPDATE media SET "posterUrl" = $2 WHERE id = $1"#)
-            .bind(media)
-            .bind(local)
-            .execute(&st.db)
-            .await
-    {
-        tracing::warn!("poster of comic #{media}: {e}");
+    let fresh: Vec<(usize, &Issue)> = issues
+        .iter()
+        .enumerate()
+        .filter(|(n, _)| !held.contains_key(n))
+        .collect();
+    if fresh.is_empty() {
+        return Ok(());
     }
+    // A special's sort is the provider's rank: another special may hold it, so take the next free.
+    let mut taken: HashSet<i64> = sqlx::query_scalar::<_, f64>(
+        r#"SELECT "sortNumber"::float8 FROM comic_issues WHERE "mediaId" = $1 AND kind = 'special'"#,
+    )
+    .bind(media)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .map(|s| (s * 100.0).round() as i64)
+    .collect();
+    let (mut f_kinds, mut f_sorts, mut f_labels, mut f_titles, mut f_dates) =
+        (vec![], vec![], vec![], vec![], vec![]);
+    for (_, i) in &fresh {
+        let mut key = i.key().1;
+        if i.kind == "special" {
+            while !taken.insert(key) {
+                key += 100;
+            }
+        }
+        f_kinds.push(i.kind);
+        f_sorts.push(format!("{}", key as f64 / 100.0));
+        f_labels.push(i.label.as_str());
+        f_titles.push(i.title.as_deref());
+        f_dates.push(i.release_date.as_deref());
+    }
+    let edition = edition(&mut *tx, media).await?;
+    let new_ids: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT nextval(pg_get_serial_sequence('items', 'id'))::int FROM generate_series(1, $1::int)"#,
+    )
+    .bind(fresh.len() as i32)
+    .fetch_all(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO items (id, "mediaId", "editionId", monitored, title, "airDate")
+           SELECT u.id, $1, $2, (SELECT monitored FROM media WHERE id = $1), u.title, u.date::date
+           FROM UNNEST($3::int[], $4::text[], $5::text[]) AS u(id, title, date)"#,
+    )
+    .bind(media)
+    .bind(edition)
+    .bind(&new_ids)
+    .bind(&f_titles)
+    .bind(&f_dates)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label)
+           SELECT u.id, $1, u.kind, u.sort::numeric, u.label
+           FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[]) AS u(id, kind, sort, label)"#,
+    )
+    .bind(media)
+    .bind(&new_ids)
+    .bind(&f_kinds)
+    .bind(&f_sorts)
+    .bind(&f_labels)
+    .execute(&mut *tx)
+    .await?;
     Ok(())
 }
 
@@ -210,6 +285,11 @@ async fn linked(st: &AppState, media: i32) -> Result<Option<(Namespace, String)>
         .collect();
     held.sort_by_key(|h| h.0);
     Ok(held.into_iter().next().map(|(_, ns, v)| (ns, v)))
+}
+
+/// Whether the media holds the id of a comic provider.
+pub async fn has_provider_id(st: &AppState, media: i32) -> Result<bool, AppError> {
+    Ok(linked(st, media).await?.is_some())
 }
 
 /// Reads the provider the media is linked to again and writes it (rule 43); `false` when the media

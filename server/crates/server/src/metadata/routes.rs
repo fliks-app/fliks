@@ -95,7 +95,7 @@ pub(crate) fn fail(provider: Namespace, e: &Upstream, detail: bool) -> AppError 
 }
 
 /// `year ? +year : undefined`, dropped unless truthy (NaN and 0).
-fn year(raw: Option<&str>) -> Option<i64> {
+pub(crate) fn year(raw: Option<&str>) -> Option<i64> {
     let f = raw?
         .trim()
         .parse::<f64>()

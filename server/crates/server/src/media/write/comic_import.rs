@@ -64,6 +64,18 @@ pub(super) async fn import_comic(
         .to_owned();
     let user = Some(a.user.id).filter(|u| *u != 0);
 
+    let same: Option<i32> = sqlx::query_scalar(
+        r#"SELECT id FROM media WHERE type = 'comic' AND "libraryId" = $1 AND "folderName" = $2 LIMIT 1"#,
+    )
+    .bind(target.id)
+    .bind(&folder_name)
+    .fetch_optional(&st.db)
+    .await?;
+    if let Some(other) = same {
+        return Err(AppError::conflict(format!(
+            "{TAKEN}: identify comic #{other} against this provider instead"
+        )));
+    }
     let mut tx = st.db.begin().await?;
     let media: i32 = sqlx::query_scalar(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "libraryId",

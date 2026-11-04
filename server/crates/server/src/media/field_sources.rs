@@ -39,3 +39,32 @@ pub async fn set_field_sources(
     .await?;
     Ok(())
 }
+
+/// Replaces the unlocked rows of the fields `provenance` names; the rows of other fields stay, so a
+/// provider that wrote less than the one before does not erase what the latter wrote.
+pub async fn merge_field_sources(
+    c: &mut PgConnection,
+    media: i32,
+    provenance: &[(Field, Namespace)],
+) -> sqlx::Result<()> {
+    let fields: Vec<&str> = provenance.iter().map(|(f, _)| f.as_str()).collect();
+    let providers: Vec<&str> = provenance.iter().map(|(_, p)| p.as_str()).collect();
+    sqlx::query(
+        r#"DELETE FROM media_field_sources WHERE "mediaId" = $1 AND NOT locked AND field = ANY($2)"#,
+    )
+    .bind(media)
+    .bind(&fields)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO media_field_sources ("mediaId", field, provider)
+           SELECT $1, f, p FROM UNNEST($2::text[], $3::text[]) AS t(f, p)
+           ON CONFLICT DO NOTHING"#,
+    )
+    .bind(media)
+    .bind(&fields)
+    .bind(&providers)
+    .execute(&mut *c)
+    .await?;
+    Ok(())
+}

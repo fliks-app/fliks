@@ -173,6 +173,9 @@ impl PluginRt {
     pub fn config_changed(&self, keys: Vec<String>) {
         *self.cfg_keys.lock_clean() = keys;
         self.cfg_gen.fetch_add(1, Ordering::SeqCst);
+        if let Some(g) = &self.sh.gate {
+            g.clear_pause();
+        }
     }
 
     /// `residentSetSizeBytes`: linear memory in use, `None` with no instance up.

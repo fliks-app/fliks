@@ -6,7 +6,7 @@ pub mod routes;
 mod tests;
 
 pub(crate) use apply::language_of_library;
-pub use apply::{refresh, write};
+pub use apply::{has_provider_id, refresh, write};
 
 use super::{MetaError, Upstream, fail, unavailable};
 use crate::{http::AppError, state::AppState};
@@ -94,7 +94,10 @@ pub async fn describe(db: &PgPool, names: &[String]) -> sqlx::Result<Vec<Value>>
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(provider, name, url)| json!({"provider": provider, "name": name, "url": url}))
+        .map(|(provider, name, url)| {
+            let url = url.filter(|u| u.starts_with("https://"));
+            json!({"provider": provider, "name": name, "url": url})
+        })
         .collect())
 }
 

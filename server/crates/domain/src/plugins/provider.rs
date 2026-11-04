@@ -140,15 +140,26 @@ fn namespace_entry(v: &Value) -> Option<&str> {
 
 fn limits_shaped(v: &Value) -> bool {
     v.as_object().is_some_and(|o| {
-        closed(o, &["ratePerSec", "burst", "dailyQuota", "backgroundShare"])
-            && o.get("ratePerSec")
-                .and_then(Value::as_f64)
-                .is_some_and(|r| r > 0.0 && r <= 1000.0)
+        closed(
+            o,
+            &[
+                "ratePerSec",
+                "burst",
+                "dailyQuota",
+                "backgroundShare",
+                "maxPauseSecs",
+            ],
+        ) && o
+            .get("ratePerSec")
+            .and_then(Value::as_f64)
+            .is_some_and(|r| r > 0.0 && r <= 1000.0)
             && o.get("burst").is_some_and(|b| is_uint(b, 1, 1000))
             && o.get("dailyQuota")
                 .is_none_or(|q| q.is_null() || is_uint(q, 1, u32::MAX.into()))
             && o.get("backgroundShare")
                 .is_none_or(|s| s.as_f64().is_some_and(|s| s > 0.0 && s <= 1.0))
+            && o.get("maxPauseSecs")
+                .is_none_or(|m| is_uint(m, 300, 86_400))
     })
 }
 

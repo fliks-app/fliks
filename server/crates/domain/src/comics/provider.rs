@@ -26,10 +26,22 @@ pub struct Work {
     pub source_url: Option<String>,
 }
 
-/// A trimmed string of 1 to `max` characters.
+/// A trimmed string of 1 to `max` characters with no control character.
 fn text(v: &Value, key: &str, max: usize) -> Option<String> {
     let s = v.get(key)?.as_str()?.trim();
-    (!s.is_empty() && s.chars().count() <= max).then(|| s.to_owned())
+    (!s.is_empty() && s.chars().count() <= max && !s.chars().any(char::is_control))
+        .then(|| s.to_owned())
+}
+
+/// `text` for a summary, which may hold line breaks and tabs.
+fn prose(v: &Value, key: &str, max: usize) -> Option<String> {
+    let s = v.get(key)?.as_str()?.trim();
+    (!s.is_empty()
+        && s.chars().count() <= max
+        && !s
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t')))
+    .then(|| s.to_owned())
 }
 
 fn int(v: &Value, key: &str, min: i64, max: i64) -> Option<i32> {
@@ -53,9 +65,9 @@ pub fn work(v: &Value) -> Result<Work, &'static str> {
     Ok(Work {
         external_id: text(v, "externalId", 128).ok_or("externalId is missing")?,
         title: text(v, "title", MAX_TITLE).ok_or("title is missing")?,
-        overview: text(v, "overview", MAX_OVERVIEW),
+        overview: prose(v, "overview", MAX_OVERVIEW),
         year: int(v, "year", 1, 9999),
-        poster_url: text(v, "posterUrl", MAX_URL),
+        poster_url: https(v, "posterUrl"),
         publisher: text(v, "publisher", 255),
         volume: int(v, "volume", 0, 9999),
         issue_count: int(v, "issueCount", 0, i64::from(i32::MAX)),
@@ -172,7 +184,7 @@ mod tests {
     fn a_work_needs_an_id_and_a_title_and_drops_what_is_out_of_range() {
         let w = work(
             &json!({"externalId": "42", "title": " Alpha ", "mediaType": "comic",
-            "year": 0, "volume": 3, "issueCount": -1, "publisher": "P", "sourceUrl": "http://x"}),
+            "year": 0, "volume": 3, "issueCount": -1, "publisher": "P", "sourceUrl": "http://x", "posterUrl": "http://p"}),
         )
         .unwrap();
         assert_eq!(
@@ -180,7 +192,14 @@ mod tests {
             ("Alpha", None, Some(3), None)
         );
         assert_eq!((w.publisher.as_deref(), w.source_url), (Some("P"), None));
+        assert_eq!(w.poster_url, None);
         assert!(work(&json!({"externalId": "42"})).is_err());
+        assert!(work(&json!({"externalId": "42", "title": "A\u{7}"})).is_err());
+        let w = work(
+            &json!({"externalId": "1", "title": "A", "publisher": "P\u{0}", "overview": "a\nb"}),
+        )
+        .unwrap();
+        assert_eq!((w.publisher, w.overview.as_deref()), (None, Some("a\nb")));
         assert!(work(&json!({"title": "A"})).is_err());
         assert!(work(&json!({"externalId": "1", "title": "A", "mediaType": "book"})).is_err());
         assert!(work(&json!([])).is_err());
