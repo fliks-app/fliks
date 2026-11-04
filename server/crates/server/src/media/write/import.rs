@@ -297,18 +297,13 @@ pub(crate) struct FolderOf<'a> {
     pub tmdb_id: Option<i64>,
 }
 
-/// The folder name of a media of `kind`, from its stored format: the one derivation every creation,
-/// relink and transfer shares.
-pub(crate) async fn folder_for(
-    db: &sqlx::PgPool,
-    kind: MediaKind,
-    t: &FolderOf<'_>,
-) -> Result<String, sqlx::Error> {
-    let format = folder_format(db, kind).await?;
+/// The folder name of a media of `kind` from `format`: the one derivation import, relink and
+/// transfer share.
+pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> String {
     let (title, original_title) = (t.title.to_owned(), t.original_title.map(str::to_owned));
-    Ok(match kind {
+    match kind {
         MediaKind::Movie => naming::apply_movie_folder_format(
-            &format,
+            format,
             &MovieFolder {
                 title,
                 original_title,
@@ -317,7 +312,7 @@ pub(crate) async fn folder_for(
             },
         ),
         MediaKind::Series => naming::apply_series_folder_format(
-            &format,
+            format,
             &SeriesFolder {
                 series_title: title,
                 original_title,
@@ -326,14 +321,23 @@ pub(crate) async fn folder_for(
             },
         ),
         MediaKind::Book | MediaKind::Comic => naming::apply_book_format(
-            &format,
+            format,
             &naming::BookNameTokens {
                 title,
                 year: t.year,
                 ..Default::default()
             },
         ),
-    })
+    }
+}
+
+/// `folder_name` with the stored format, else the import default.
+pub(crate) async fn folder_for(
+    db: &sqlx::PgPool,
+    kind: MediaKind,
+    t: &FolderOf<'_>,
+) -> Result<String, sqlx::Error> {
+    Ok(folder_name(&folder_format(db, kind).await?, kind, t))
 }
 
 /// `mapTmdbStatusToMediaStatus`.

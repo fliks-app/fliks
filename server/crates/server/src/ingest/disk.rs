@@ -2,7 +2,7 @@
 use super::{
     MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
-    load_media, record,
+    load_media, naming_formats, record,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
     transfer::{Method, split_ext},
 };

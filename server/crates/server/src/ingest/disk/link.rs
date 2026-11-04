@@ -268,6 +268,7 @@ pub(super) async fn confirm_import(
     uniquify: bool,
 ) -> Result<(i64, i64, Vec<String>), AppError> {
     let (mut imported, mut present, mut errors) = (0i64, 0i64, vec![]);
+    let formats = naming_formats(&st.db).await?;
     let mut book_files: Vec<library::File> = vec![];
     for (path, episode_id, quality) in entries {
         let name = file_name(Path::new(&path));
@@ -303,7 +304,7 @@ pub(super) async fn confirm_import(
             }
             Some(_) => {}
             None => {
-                let folder = pin_folder(st, &media).await?;
+                let folder = pin_folder(&formats, &media);
                 if folder_error(media.media_type, &folder) {
                     errors.push(format!("{name}: invalid folder name \"{folder}\""));
                     continue;
@@ -387,9 +388,18 @@ fn tally(
     }
 }
 
-pub(super) async fn pin_folder(st: &AppState, m: &MediaRow) -> Result<String, sqlx::Error> {
-    mw::folder_for(
-        &st.db,
+/// The stored naming format of `kind`'s folder, else the naming default.
+fn naming_folder_format(f: &naming::NamingFormats, kind: MediaKind) -> &str {
+    match kind {
+        MediaKind::Movie => &f.movie_folder,
+        MediaKind::Series => &f.series_folder,
+        MediaKind::Book | MediaKind::Comic => &f.book_folder,
+    }
+}
+
+pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
+    mw::folder_name(
+        naming_folder_format(f, m.media_type),
         m.media_type,
         &mw::FolderOf {
             title: &m.title,
@@ -398,7 +408,6 @@ pub(super) async fn pin_folder(st: &AppState, m: &MediaRow) -> Result<String, sq
             tmdb_id: m.tmdb_id.map(i64::from),
         },
     )
-    .await
 }
 
 /// Whether `name` is no valid `folderName` for a media of `kind` (a book's may hold several components).
@@ -553,8 +562,9 @@ async fn target_folder(
     year: Option<i32>,
 ) -> Result<String, AppError> {
     Ok(if d.transfer.is_some() {
-        let named = mw::folder_for(
-            &st.db,
+        let f = naming_formats(&st.db).await?;
+        let named = mw::folder_name(
+            naming_folder_format(&f, d.media_type),
             d.media_type,
             &mw::FolderOf {
                 title,
@@ -562,8 +572,7 @@ async fn target_folder(
                 year: year.map(i64::from),
                 tmdb_id: None,
             },
-        )
-        .await?;
+        );
         if folder_error(d.media_type, &named) {
             return Err(AppError::bad_request(format!(
                 "Invalid folder name for \"{title}\""

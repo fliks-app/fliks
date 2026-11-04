@@ -2679,15 +2679,7 @@ mod book_ingest {
         let c = ctx(pool).await;
         let (first, second) = (c.dir.join("films"), c.dir.join("films-b"));
         let l = library(&c, "F", &first, r#"["movie"]"#).await;
-        fs::create_dir_all(&second).unwrap();
-        let folder: i32 = sqlx::query_scalar(
-            r#"INSERT INTO library_folders ("libraryId", path) VALUES ($1, $2) RETURNING id"#,
-        )
-        .bind(l)
-        .bind(second.to_string_lossy().as_ref())
-        .fetch_one(&c.st.db)
-        .await
-        .unwrap();
+        let folder = second_folder(&c, l, &second).await;
         let file = second.join("Placeholder Film (2001)/Placeholder Film (2001).mkv");
         touch(&file, b"x");
         let (s, b) = call(

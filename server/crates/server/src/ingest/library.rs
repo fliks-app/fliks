@@ -185,6 +185,13 @@ pub async fn ingest(
             req: &req,
             scene: Default::default(),
         };
+        if media.media_type == MediaKind::Book
+            && books::classify(&file_name(&f.path)).is_some_and(|c| c.0 == Family::Audio)
+            && let Err(e) = probe(st, &f.path, false).await
+        {
+            out.retry.push(format!("{}: {e}", file_name(&f.path)));
+            continue;
+        }
         if book {
             let pending: Vec<String> = placed.iter().map(|(p, _)| p.rel.clone()).collect();
             match ctx

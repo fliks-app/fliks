@@ -389,12 +389,11 @@ async fn create_from_edition(
     let edition = match add_edition(&st.db, id, family, &ids).await {
         Ok(e) => e,
         Err(e) => {
-            if held.is_none()
-                && let Err(d) = sqlx::query!("DELETE FROM media WHERE id = $1", id)
-                    .execute(&st.db)
-                    .await
-            {
-                tracing::warn!("book #{id} left behind after a failed import: {d}");
+            if held.is_none() {
+                let guard = st.ingest.media.lock(id).await;
+                if let Err(d) = super::delete::remove_media(st, &guard, id).await {
+                    tracing::warn!("book #{id} left behind after a failed import: {}", d.text());
+                }
             }
             return Err(e);
         }

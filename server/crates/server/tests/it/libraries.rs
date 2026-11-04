@@ -1167,7 +1167,8 @@ async fn the_boot_sweep_unlinks_the_sources_of_a_committed_move(pool: PgPool) {
     let (_, f2) = folder_pair(&c).await;
     let id = media_with_files(&pool, "Mv", &[f2]).await;
     put(&c, "f1/Mv/0.mkv", b"zero");
-    put(&c, "f2/Mv/0.mkv", b"zero");
+    put(&c, "f2/Mv/.keep", b"");
+    std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
     journal_for(&c, &pool, id, true, true).await;
     fliks_server::media::write::recover(&c.st).await;
     assert!(!c.tmp.join("f1/Mv/0.mkv").exists());
@@ -1185,7 +1186,8 @@ async fn the_boot_sweep_removes_the_copies_of_an_uncommitted_move(pool: PgPool) 
     let (f1, _) = folder_pair(&c).await;
     let id = media_with_files(&pool, "Mv", &[f1]).await;
     put(&c, "f1/Mv/0.mkv", b"zero");
-    put(&c, "f2/Mv/0.mkv", b"zero");
+    put(&c, "f2/Mv/.keep", b"");
+    std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
     journal_for(&c, &pool, id, false, true).await;
     fliks_server::media::write::recover(&c.st).await;
     assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
@@ -1195,4 +1197,15 @@ async fn the_boot_sweep_removes_the_copies_of_an_uncommitted_move(pool: PgPool) 
         .await
         .unwrap();
     assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_boot_sweep_keeps_a_source_with_no_identical_copy(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (_, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f2]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    journal_for(&c, &pool, id, true, true).await;
+    fliks_server::media::write::recover(&c.st).await;
+    assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
 }
