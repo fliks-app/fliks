@@ -3,6 +3,7 @@ pub(crate) mod body;
 pub(crate) mod book_import;
 pub use book_import::import_book_for_request;
 mod comic_edit;
+mod comic_import;
 mod companions;
 mod delete;
 mod import;

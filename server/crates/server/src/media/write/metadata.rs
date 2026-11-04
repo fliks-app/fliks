@@ -22,7 +22,7 @@ use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::Action,
     external_id::Namespace,
-    media::release::ReleaseKind,
+    media::{kind::MediaKind, release::ReleaseKind},
     metadata::{field::Field, limiter::Priority},
 };
 use serde_json::{Value, json};
@@ -410,12 +410,16 @@ async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::
 }
 
 async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
-    let found = refresh_metadata(st, id, true, Priority::Interactive).await?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if media.has_seasons() {
-        drop_absent(st, id, &found).await?;
+    if media.media_type == MediaKind::Comic {
+        crate::metadata::comics::refresh(st, id, Priority::Background).await?;
+    } else {
+        let found = refresh_metadata(st, id, true, Priority::Interactive).await?;
+        if media.has_seasons() {
+            drop_absent(st, id, &found).await?;
+        }
     }
     let guard = st.ingest.media.lock(id).await;
     if let Err(e) = rescan_files(st, &guard, id).await {
@@ -519,6 +523,11 @@ pub async fn identify(
         _ => {
             return Err(AppError::bad_request("provider and externalId go together"));
         }
+    }
+    if media.media_type == MediaKind::Comic && pin.is_none() {
+        return Err(AppError::bad_request(
+            "Provide the id of a comic provider (provider and externalId) to identify this media against",
+        ));
     }
     let key = format!("Identify:{id}");
     let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));
@@ -652,6 +661,13 @@ pub async fn refresh(
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
+    if media.media_type == MediaKind::Comic
+        && !crate::metadata::comics::has_provider_id(&st, id).await?
+    {
+        return Err(AppError::bad_request(
+            "This comic holds no provider id: identify it against a comic provider first",
+        ));
+    }
     st.hub.emit(SseEvent::MetadataStarted {
         media_id: i64::from(id),
         title: media.title.clone(),
@@ -667,9 +683,15 @@ pub async fn refresh(
     }
     let st2 = st.clone();
     tokio::spawn(async move {
-        let r = refresh_metadata(&st2, id, false, Priority::Interactive)
-            .await
-            .map(|_| media.title.clone());
+        let r = if media.media_type == MediaKind::Comic {
+            crate::metadata::comics::refresh(&st2, id, Priority::Background)
+                .await
+                .map(|_| media.title.clone())
+        } else {
+            refresh_metadata(&st2, id, false, Priority::Interactive)
+                .await
+                .map(|_| media.title.clone())
+        };
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(json!({"ok": true}))))

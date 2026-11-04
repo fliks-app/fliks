@@ -8,6 +8,7 @@ use crate::metadata::{
     Call, Credits, EditionRef, MetadataProvider, PersonDetails, Search, Upstream,
 };
 use fliks_domain::{
+    comics::provider as comics,
     external_id::Namespace,
     media::kind::MediaKind,
     metadata::{
@@ -226,6 +227,32 @@ impl PluginProvider {
         self.checked(parse(json, array)).map(|v| self.sanitized(v))
     }
 
+    /// `record` for a work: a `comic` one that breaks rule 60 is malformed (rule 14).
+    fn work_record(&self, kind: MediaKind, json: &str) -> Result<Value, Upstream> {
+        let checked = parse(json, false).and_then(|v| {
+            if kind == MediaKind::Comic {
+                comics::work(&v).map_err(bad)?;
+            }
+            Ok(v)
+        });
+        self.checked(checked).map(|v| self.sanitized(v))
+    }
+
+    /// Rule 61: the children of a comic that pass, normalised; the rest is dropped and warned.
+    fn comic_children(&self, list: Vec<Value>) -> Vec<Value> {
+        let got = comics::issues(&list);
+        if got.invalid + got.repeats > 0 {
+            tracing::warn!(
+                "plugin \"{}\": {} comic issues dropped ({}), {} repeated",
+                self.rt.sh.id,
+                got.invalid,
+                got.first_reason.unwrap_or("none"),
+                got.repeats
+            );
+        }
+        got.kept.iter().map(comics::Issue::to_value).collect()
+    }
+
     /// `record` for an answer that may be absent (`fetch-edition`, `fetch-chapters`).
     fn optional_record(&self, json: Option<String>) -> Result<Option<Value>, Upstream> {
         let parsed = self.checked(json.map(|j| parse(&j, false)).transpose())?;
@@ -389,7 +416,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.record(&json, false)
+            self.work_record(kind, &json)
         }
         .boxed()
     }
@@ -414,7 +441,12 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.array(&json)
+            let list = self.array(&json)?;
+            Ok(if kind == MediaKind::Comic {
+                self.comic_children(list)
+            } else {
+                list
+            })
         }
         .boxed()
     }

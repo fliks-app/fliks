@@ -1,5 +1,6 @@
 {"cases":[
 {"expected":{"kind":"issue","label":"1","sort":"1","volume":"Star Gardens","volumeNo":null,"year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens 001 (2016) (Digital).cbz"}},
+{"expected":{"kind":"issue","label":"-0.5","sort":"-0.5","volume":"Star Gardens","volumeNo":null,"year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens #-0.5.cbz"}},
 {"expected":{"kind":"issue","label":"1.5","sort":"1.5","volume":"Star Gardens","volumeNo":null,"year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens 1.5.cbr"}},
 {"expected":{"kind":"issue","label":"-1","sort":"-1","volume":"Star Gardens","volumeNo":null,"year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens #-1.cb7"}},
 {"expected":{"kind":"annual","label":"2","sort":"2","volume":"Star Gardens","volumeNo":null,"year":2016},"input":{"path":"Star Gardens (2016)/Star Gardens Annual 02.cbz"}},

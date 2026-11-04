@@ -170,7 +170,7 @@ async fn cover(st: &AppState, media: i32, files: &[Placed], rows: &[Row]) {
 }
 
 /// The volume's `image` edition, created when it has none.
-async fn edition(c: &mut PgConnection, media: i32) -> sqlx::Result<i32> {
+pub(crate) async fn edition(c: &mut PgConnection, media: i32) -> sqlx::Result<i32> {
     if let Some(e) = sqlx::query_scalar!(
         r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = 'image' ORDER BY id LIMIT 1"#,
         media

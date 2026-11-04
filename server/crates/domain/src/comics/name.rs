@@ -62,7 +62,8 @@ pub fn number(n: &str) -> Option<String> {
     }
     let (neg, digits) = n.strip_prefix('-').map_or((false, n), |d| (true, d));
     let (int, frac) = digits.split_once('.').unwrap_or((digits, ""));
-    let neg = neg && !int.starts_with('0');
+    // A dash before a zero-padded number (`-001`) is a separator; `-0.5` is negative.
+    let neg = neg && !(int.len() > 1 && int.starts_with('0'));
     let int = int.trim_start_matches('0');
     let frac = frac.trim_end_matches('0');
     let int = if int.is_empty() { "0" } else { int };

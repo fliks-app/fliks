@@ -55,7 +55,7 @@ pub(crate) async fn detail(
     uid: i32,
     acl: &[i32],
 ) -> Result<Value, sqlx::Error> {
-    sqlx::query_scalar!(
+    let mut detail = sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('publisher', cd.publisher, 'startYear', cd."startYear", 'volume', cd.volume,
   'issues', COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'itemId', i.id,
@@ -81,5 +81,7 @@ FROM media m LEFT JOIN comic_details cd ON cd."mediaId" = m.id WHERE m.id = $1"#
         acl
     )
     .fetch_one(db)
-    .await
+    .await?;
+    detail["providers"] = crate::metadata::comics::attribution(db, id).await?.into();
+    Ok(detail)
 }

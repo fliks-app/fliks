@@ -247,10 +247,11 @@ pub async fn patch_issue(
         .num("sort")?
         .map(|s| {
             s.filter(|n| n.is_finite() && n.abs() < 10_000.0)
-                .map(|n| format!("{n}"))
+                .and_then(|n| fliks_domain::comics::name::number(&format!("{n}")))
                 .ok_or_else(|| {
                     AppError::bad_request(vec![
-                        "sort must be a number between -9999 and 9999".to_owned(),
+                        "sort must be a number between -9999 and 9999 with at most two decimals"
+                            .to_owned(),
                     ])
                 })
         })
