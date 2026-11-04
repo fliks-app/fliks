@@ -17,9 +17,7 @@
         ],
         "operationId": "cast_info",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -30,9 +28,7 @@
         ],
         "operationId": "login",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -43,9 +39,7 @@
         ],
         "operationId": "logout",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -56,9 +50,7 @@
         ],
         "operationId": "me",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -69,9 +61,7 @@
         ],
         "operationId": "pairing_pending",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -82,9 +72,7 @@
         ],
         "operationId": "pairing_request",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -95,9 +83,7 @@
         ],
         "operationId": "pairing_status",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -108,9 +94,7 @@
         ],
         "operationId": "pairing_approve",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -121,9 +105,7 @@
         ],
         "operationId": "pairing_cancel",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -134,9 +116,7 @@
         ],
         "operationId": "pairing_deny",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -147,9 +127,7 @@
         ],
         "operationId": "refresh",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -160,9 +138,7 @@
         ],
         "operationId": "register",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -173,9 +149,7 @@
         ],
         "operationId": "setup_status",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -185,9 +159,7 @@
         "summary": "First-boot admin: allowed only while `users` is empty, serialised by an advisory lock.",
         "operationId": "setup",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -198,9 +170,7 @@
         ],
         "operationId": "stream_token",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -212,9 +182,7 @@
         "summary": "Picker roster visibility: `everyone` (default), `lan` or `hidden` (setting `users_public_mode`).",
         "operationId": "users_public",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -225,9 +193,7 @@
         ],
         "operationId": "rule_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -236,9 +202,7 @@
         ],
         "operationId": "rule_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -249,9 +213,7 @@
         ],
         "operationId": "rule_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -260,9 +222,7 @@
         ],
         "operationId": "rule_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -271,9 +231,7 @@
         ],
         "operationId": "rule_remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -284,9 +242,7 @@
         ],
         "operationId": "recent",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -297,9 +253,7 @@
         ],
         "operationId": "resource",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -310,9 +264,7 @@
         ],
         "operationId": "candidate_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -323,9 +275,7 @@
         ],
         "operationId": "candidate_bulk",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -336,9 +286,7 @@
         ],
         "operationId": "candidate_delete_now",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -349,9 +297,7 @@
         ],
         "operationId": "exclusion_add",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -360,9 +306,7 @@
         ],
         "operationId": "exclusion_remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -373,9 +317,7 @@
         ],
         "operationId": "recommendation_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -386,9 +328,7 @@
         ],
         "operationId": "rule_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -397,9 +337,7 @@
         ],
         "operationId": "rule_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -410,9 +348,7 @@
         ],
         "operationId": "rule_import",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -423,9 +359,7 @@
         ],
         "operationId": "rule_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -434,9 +368,7 @@
         ],
         "operationId": "rule_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -445,9 +377,7 @@
         ],
         "operationId": "rule_remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -458,9 +388,7 @@
         ],
         "operationId": "rule_export",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -471,9 +399,7 @@
         ],
         "operationId": "rule_preview",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -484,9 +410,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -497,9 +421,7 @@
         ],
         "operationId": "detail",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -510,9 +432,7 @@
         ],
         "operationId": "watch_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -521,9 +441,7 @@
         ],
         "operationId": "watch_put",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -532,9 +450,7 @@
         ],
         "operationId": "watch_delete",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -545,9 +461,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -556,9 +470,7 @@
         ],
         "operationId": "trigger",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -569,9 +481,7 @@
         ],
         "operationId": "clear_history",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -582,9 +492,7 @@
         ],
         "operationId": "schedulers",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -596,9 +504,7 @@
         "summary": "`counts.md`: the sidebar counters; each degrades to empty without its ability, never a 403.",
         "operationId": "sidebar_counts",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -609,9 +515,7 @@
         ],
         "operationId": "format_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -620,9 +524,7 @@
         ],
         "operationId": "format_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -633,9 +535,7 @@
         ],
         "operationId": "format_test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -646,9 +546,7 @@
         ],
         "operationId": "format_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -657,9 +555,7 @@
         ],
         "operationId": "format_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -668,9 +564,7 @@
         ],
         "operationId": "format_delete",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -681,9 +575,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -692,9 +584,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -705,9 +595,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -718,9 +606,7 @@
         ],
         "operationId": "renew",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -731,9 +617,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -742,9 +626,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -755,9 +637,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -766,9 +646,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -779,9 +657,7 @@
         ],
         "operationId": "send",
         "responses": {
-          "202": {
-            "description": ""
-          }
+          "202": {}
         }
       }
     },
@@ -793,9 +669,7 @@
         "summary": "The admin's test: unlike a user's send, the answer carries the server's own error text.",
         "operationId": "test_send",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -806,9 +680,7 @@
         ],
         "operationId": "get_remote",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -818,9 +690,7 @@
         "summary": "Saves the three keys, then reconnects to the engine.",
         "operationId": "put_remote",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -831,9 +701,7 @@
         ],
         "operationId": "test_remote",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -844,9 +712,7 @@
         ],
         "operationId": "follows",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -857,9 +723,7 @@
         ],
         "operationId": "browse",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -870,9 +734,7 @@
         ],
         "operationId": "without_variant",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -883,9 +745,7 @@
         ],
         "operationId": "with_variant",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -896,9 +756,7 @@
         ],
         "operationId": "relink",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -909,9 +767,7 @@
         ],
         "operationId": "relink_batch",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -923,9 +779,7 @@
         "summary": "`GET /api/imports/library/:libraryId/books` (rule 9).",
         "operationId": "latest",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -935,9 +789,7 @@
         "summary": "`POST /api/imports/library/:libraryId/books` (rule 4).",
         "operationId": "start",
         "responses": {
-          "202": {
-            "description": ""
-          }
+          "202": {}
         }
       }
     },
@@ -949,9 +801,7 @@
         "summary": "`GET /api/imports/library/:libraryId/books/queue` (rule 11).",
         "operationId": "queue",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -963,9 +813,7 @@
         "summary": "`POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL on the path).",
         "operationId": "scan",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -977,9 +825,7 @@
         "summary": "`POST /api/imports/orphans/preview` (rules 61, 71: `settings.access`, absolute paths only).",
         "operationId": "preview",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -988,9 +834,7 @@
         "tags": [],
         "operationId": "radarr_import",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -999,9 +843,7 @@
         "tags": [],
         "operationId": "radarr_preview",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1010,9 +852,7 @@
         "tags": [],
         "operationId": "radarr_test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1021,9 +861,7 @@
         "tags": [],
         "operationId": "seerr_import_requests",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1032,9 +870,7 @@
         "tags": [],
         "operationId": "seerr_test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1043,9 +879,7 @@
         "tags": [],
         "operationId": "sonarr_import",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1054,9 +888,7 @@
         "tags": [],
         "operationId": "sonarr_preview",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1065,9 +897,7 @@
         "tags": [],
         "operationId": "sonarr_test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1079,9 +909,7 @@
         "summary": "An audio item has no subtitles, pre-roll, EDL or scan: `item-delivery.md` rule 8.",
         "operationId": "item_playback_info",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1092,9 +920,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -1103,9 +929,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1116,9 +940,7 @@
         ],
         "operationId": "mine",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1129,9 +951,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -1141,9 +961,7 @@
         "summary": "`DELETE /api/libraries/:id` (rules 75-76): every media row, never a file; not transactional.",
         "operationId": "remove_library",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "patch": {
@@ -1152,9 +970,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1165,9 +981,7 @@
         ],
         "operationId": "access_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -1176,9 +990,7 @@
         ],
         "operationId": "access_put",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1189,9 +1001,7 @@
         ],
         "operationId": "add",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1202,9 +1012,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "patch": {
@@ -1213,9 +1021,7 @@
         ],
         "operationId": "patch",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1226,9 +1032,7 @@
         ],
         "operationId": "likes_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -1237,9 +1041,7 @@
         ],
         "operationId": "like_add",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -1249,9 +1051,7 @@
         "summary": "The body must repeat the granularity used to like (rule 3).",
         "operationId": "like_remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1262,9 +1062,7 @@
         ],
         "operationId": "like_state",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1275,9 +1073,7 @@
         ],
         "operationId": "restricted_groups",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -1286,9 +1082,7 @@
         ],
         "operationId": "set_restricted_groups",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1299,9 +1093,7 @@
         ],
         "operationId": "users",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1312,9 +1104,7 @@
         ],
         "operationId": "grants",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -1323,9 +1113,7 @@
         ],
         "operationId": "set_grants",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1336,9 +1124,7 @@
         ],
         "operationId": "admin_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1349,9 +1135,7 @@
         ],
         "operationId": "bulk_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1362,9 +1146,7 @@
         ],
         "operationId": "merge",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1375,9 +1157,7 @@
         ],
         "operationId": "update_channel",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1388,9 +1168,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -1399,9 +1177,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1412,9 +1188,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "patch": {
@@ -1423,9 +1197,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1436,15 +1208,9 @@
         ],
         "operationId": "sync_route",
         "responses": {
-          "201": {
-            "description": ""
-          },
-          "202": {
-            "description": ""
-          },
-          "409": {
-            "description": ""
-          }
+          "201": {},
+          "202": {},
+          "409": {}
         }
       }
     },
@@ -1455,9 +1221,7 @@
         ],
         "operationId": "match_report",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1468,9 +1232,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -1479,9 +1241,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1492,9 +1252,7 @@
         ],
         "operationId": "upload",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1505,9 +1263,7 @@
         ],
         "operationId": "test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1518,9 +1274,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "patch": {
@@ -1529,9 +1283,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1542,15 +1294,9 @@
         ],
         "operationId": "sync_route",
         "responses": {
-          "201": {
-            "description": ""
-          },
-          "202": {
-            "description": ""
-          },
-          "409": {
-            "description": ""
-          }
+          "201": {},
+          "202": {},
+          "409": {}
         }
       }
     },
@@ -1561,9 +1307,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1574,9 +1318,7 @@
         ],
         "operationId": "on_now",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1587,12 +1329,8 @@
         ],
         "operationId": "logo",
         "responses": {
-          "200": {
-            "description": ""
-          },
-          "404": {
-            "description": ""
-          }
+          "200": {},
+          "404": {}
         }
       }
     },
@@ -1603,9 +1341,7 @@
         ],
         "operationId": "play",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1616,9 +1352,7 @@
         ],
         "operationId": "set_prefs",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1629,9 +1363,7 @@
         ],
         "operationId": "window",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1642,12 +1374,8 @@
         ],
         "operationId": "program",
         "responses": {
-          "200": {
-            "description": ""
-          },
-          "404": {
-            "description": ""
-          }
+          "200": {},
+          "404": {}
         }
       }
     },
@@ -1658,9 +1386,7 @@
         ],
         "operationId": "search",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1671,9 +1397,7 @@
         ],
         "operationId": "leave",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1684,9 +1408,7 @@
         ],
         "operationId": "heartbeat",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1697,9 +1419,7 @@
         ],
         "operationId": "status",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1710,9 +1430,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1723,9 +1441,7 @@
         ],
         "operationId": "list_episode",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1736,9 +1452,7 @@
         ],
         "operationId": "list_season",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1749,9 +1463,7 @@
         ],
         "operationId": "detect_season",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1762,9 +1474,7 @@
         ],
         "operationId": "detect_all",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1775,9 +1485,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -1786,9 +1494,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1799,9 +1505,7 @@
         ],
         "operationId": "find",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -1811,9 +1515,7 @@
         "summary": "`POST /api/media` (rule 18): columns only, no library, no folder, no hook.",
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1824,9 +1526,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -1835,9 +1535,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1848,9 +1546,7 @@
         ],
         "operationId": "types",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1861,9 +1557,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -1872,9 +1566,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -1883,9 +1575,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1896,9 +1586,7 @@
         ],
         "operationId": "import_watch_history",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1909,9 +1597,7 @@
         ],
         "operationId": "test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -1923,9 +1609,7 @@
         "summary": "`PATCH /api/media/bulk` (rule 31): all or nothing, in one transaction.",
         "operationId": "bulk",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1936,9 +1620,7 @@
         ],
         "operationId": "calendar_entries",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1949,9 +1631,7 @@
         ],
         "operationId": "collection_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1962,9 +1642,7 @@
         ],
         "operationId": "count",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1975,9 +1653,7 @@
         ],
         "operationId": "count_by_library",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -1989,9 +1665,7 @@
         "summary": "`PATCH /api/media/episodes/:episodeId` (rule 34): no hook, no event.",
         "operationId": "patch_episode",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2002,9 +1676,7 @@
         ],
         "operationId": "genre_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2016,9 +1688,7 @@
         "summary": "`POST /api/media/import` (rule 17: a numeric `externalId` and a known `provider`).",
         "operationId": "import_media",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2030,9 +1700,7 @@
         "summary": "`POST /api/media/import/tmdb` (rules 10-13).",
         "operationId": "import_tmdb",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2043,9 +1711,7 @@
         ],
         "operationId": "leaving_soon",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2067,9 +1733,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2080,9 +1744,7 @@
         ],
         "operationId": "recent",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2094,9 +1756,7 @@
         "summary": "`PATCH /api/media/seasons/:seasonId` (rules 32-33).",
         "operationId": "patch_season",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2107,9 +1767,7 @@
         ],
         "operationId": "sync_queue",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2120,9 +1778,7 @@
         ],
         "operationId": "get_media",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -2132,9 +1788,7 @@
         "summary": "`PUT /api/media/:id` (rules 26-28).",
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -2144,9 +1798,7 @@
         "summary": "`DELETE /api/media/:id` (rule 66): the folder goes after the response, contained (rule 70).",
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2158,9 +1810,7 @@
         "summary": "No claim, no event: two analyses of one media both run (rule 60).",
         "operationId": "analyze",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2171,9 +1821,7 @@
         ],
         "operationId": "media_cast",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2184,9 +1832,7 @@
         ],
         "operationId": "media_collection",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2197,9 +1843,7 @@
         ],
         "operationId": "media_crew",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2210,9 +1854,7 @@
         ],
         "operationId": "edition_chapters",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2224,9 +1866,7 @@
         "summary": "`POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55: the episode is under `:id`).",
         "operationId": "refresh_episode",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2238,9 +1878,7 @@
         "summary": "`DELETE /api/media/:id/files/:fileId` (rule 77): only the string `true` deletes on disk.",
         "operationId": "remove_file",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2251,9 +1889,7 @@
         ],
         "operationId": "companions_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -2263,9 +1899,7 @@
         "summary": "Rules 93-95: a tracked subtitle goes through the subtitle delete, anything else is a contained unlink.",
         "operationId": "companions_delete",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2276,9 +1910,7 @@
         ],
         "operationId": "companions_download",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2290,9 +1922,7 @@
         "summary": "`POST .../companions/edl` (rules 89-92): the uploaded bytes, written atomically beside the video.",
         "operationId": "companions_edl",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2304,9 +1934,7 @@
         "summary": "`POST /api/media/:id/identify` (rules 47-50).",
         "operationId": "identify",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2318,9 +1946,7 @@
         "summary": "`PATCH /api/media/:id/library` (rule 29): a media with files moves them to the library's default folder.",
         "operationId": "patch_library",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2331,9 +1957,7 @@
         ],
         "operationId": "move_media",
         "responses": {
-          "202": {
-            "description": ""
-          }
+          "202": {}
         }
       }
     },
@@ -2345,9 +1969,7 @@
         "summary": "`PATCH /api/media/:id/profiles` (rule 30): `media.grab` or `media.edit`.",
         "operationId": "patch_profiles",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2359,9 +1981,7 @@
         "summary": "`POST /api/media/:id/refresh` (rule 52): `metadata.started` goes out before the claim.",
         "operationId": "refresh",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2372,9 +1992,7 @@
         ],
         "operationId": "rescan",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2385,9 +2003,7 @@
         ],
         "operationId": "similar_media",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2399,9 +2015,7 @@
         "summary": "`GET /api/media/{id}/sources` (rule 22).",
         "operationId": "sources_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -2411,9 +2025,7 @@
         "summary": "`PUT /api/media/{id}/sources` (rules 23-24).",
         "operationId": "sources_put",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -2423,9 +2035,7 @@
         "summary": "`DELETE /api/media/{id}/sources` (rule 25).",
         "operationId": "sources_delete",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2436,9 +2046,7 @@
         ],
         "operationId": "media_streams",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2449,9 +2057,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2462,9 +2068,7 @@
         ],
         "operationId": "auto",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2475,9 +2079,7 @@
         ],
         "operationId": "download",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2488,9 +2090,7 @@
         ],
         "operationId": "search",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2501,9 +2101,7 @@
         ],
         "operationId": "search_missing",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2514,9 +2112,7 @@
         ],
         "operationId": "upload",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2527,9 +2123,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2540,9 +2134,7 @@
         ],
         "operationId": "set_language",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2553,9 +2145,7 @@
         ],
         "operationId": "ocr",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2566,9 +2156,7 @@
         ],
         "operationId": "post_process",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2579,9 +2167,7 @@
         ],
         "operationId": "sync",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -2590,9 +2176,7 @@
         ],
         "operationId": "cancel_sync",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -2603,9 +2187,7 @@
         ],
         "operationId": "translate",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2616,9 +2198,7 @@
         ],
         "operationId": "upgrade",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2629,9 +2209,7 @@
         ],
         "operationId": "validate",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2642,9 +2220,7 @@
         ],
         "operationId": "track",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2655,9 +2231,7 @@
         ],
         "operationId": "wants_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -2666,9 +2240,7 @@
         ],
         "operationId": "wants_put",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2679,9 +2251,7 @@
         ],
         "operationId": "discover_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2692,9 +2262,7 @@
         ],
         "operationId": "discover_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2705,9 +2273,7 @@
         ],
         "operationId": "genres_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2718,9 +2284,7 @@
         ],
         "operationId": "genres_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2731,9 +2295,7 @@
         ],
         "operationId": "legacy_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2744,9 +2306,7 @@
         ],
         "operationId": "popular_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2757,9 +2317,7 @@
         ],
         "operationId": "popular_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2768,12 +2326,10 @@
         "tags": [
           "metadata"
         ],
-        "summary": "Whether the TMDB provider answers: a client keys a request by `tmdbId` only then.",
+        "summary": "Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available providers serving each video kind.",
         "operationId": "providers",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2785,9 +2341,7 @@
         "summary": "`GET /api/metadata/search/book` (rules 18-19).",
         "operationId": "search_book",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2798,9 +2352,7 @@
         ],
         "operationId": "search_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2811,9 +2363,7 @@
         ],
         "operationId": "search_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2824,9 +2374,7 @@
         ],
         "operationId": "trending_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2837,9 +2385,7 @@
         ],
         "operationId": "trending_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2850,9 +2396,7 @@
         ],
         "operationId": "legacy_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2863,9 +2407,7 @@
         ],
         "operationId": "legacy_seasons",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2876,9 +2418,7 @@
         ],
         "operationId": "upcoming_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2889,9 +2429,7 @@
         ],
         "operationId": "upcoming_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2903,9 +2441,7 @@
         "summary": "`GET /api/metadata/{provider}/book/{externalId}` (rule 20).",
         "operationId": "preview_book",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2916,9 +2452,7 @@
         ],
         "operationId": "details_movie",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2929,9 +2463,7 @@
         ],
         "operationId": "details_tv",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2942,9 +2474,7 @@
         ],
         "operationId": "season_stubs",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2955,9 +2485,7 @@
         ],
         "operationId": "seasons",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -2968,9 +2496,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -2979,9 +2505,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -2992,9 +2516,7 @@
         ],
         "operationId": "events",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3005,9 +2527,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -3016,9 +2536,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -3027,9 +2545,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3040,9 +2556,7 @@
         ],
         "operationId": "test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3053,9 +2567,7 @@
         ],
         "operationId": "root",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3066,9 +2578,7 @@
         ],
         "operationId": "authors",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3079,9 +2589,7 @@
         ],
         "operationId": "author",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3092,9 +2600,7 @@
         ],
         "operationId": "library",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3105,9 +2611,7 @@
         ],
         "operationId": "opensearch_description",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3118,9 +2622,7 @@
         ],
         "operationId": "recent",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3131,9 +2633,7 @@
         ],
         "operationId": "search",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3144,9 +2644,7 @@
         ],
         "operationId": "series_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3157,9 +2655,7 @@
         ],
         "operationId": "series_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3170,9 +2666,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -3181,9 +2675,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3194,9 +2686,7 @@
         ],
         "operationId": "by_token",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3208,9 +2698,7 @@
         "summary": "The `party_voice_ice_servers` array when it parses, else the public STUN default.",
         "operationId": "ice",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3222,9 +2710,7 @@
         "summary": "The animated assets under `/api/emoji` keyed by emoji, and the default bar; any other emoji is static.",
         "operationId": "reactions",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3235,9 +2721,7 @@
         ],
         "operationId": "show",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -3246,9 +2730,7 @@
         ],
         "operationId": "end",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       },
       "patch": {
@@ -3257,9 +2739,7 @@
         ],
         "operationId": "patch",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3270,9 +2750,7 @@
         ],
         "operationId": "set_cover",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -3281,9 +2759,7 @@
         ],
         "operationId": "clear_cover",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3294,9 +2770,7 @@
         ],
         "operationId": "intent",
         "responses": {
-          "202": {
-            "description": ""
-          }
+          "202": {}
         }
       }
     },
@@ -3307,9 +2781,7 @@
         ],
         "operationId": "invite",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3320,9 +2792,7 @@
         ],
         "operationId": "join",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3333,9 +2803,7 @@
         ],
         "operationId": "leave",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3346,9 +2814,7 @@
         ],
         "operationId": "transfer",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3359,9 +2825,7 @@
         ],
         "operationId": "kick",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3372,9 +2836,7 @@
         ],
         "operationId": "message",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3386,9 +2848,7 @@
         "summary": "The host replaces the programme: reorder, remove and add are one list.",
         "operationId": "programme",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3400,12 +2860,8 @@
         "summary": "Adds the proposal, or only the caller's vote when the title is already proposed.",
         "operationId": "propose",
         "responses": {
-          "200": {
-            "description": ""
-          },
-          "201": {
-            "description": ""
-          }
+          "200": {},
+          "201": {}
         }
       }
     },
@@ -3417,12 +2873,8 @@
         "summary": "[`propose`] for several titles at once, in order: one request against the rate limit.",
         "operationId": "propose_batch",
         "responses": {
-          "200": {
-            "description": ""
-          },
-          "201": {
-            "description": ""
-          }
+          "200": {},
+          "201": {}
         }
       }
     },
@@ -3433,9 +2885,7 @@
         ],
         "operationId": "unpropose",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3447,9 +2897,7 @@
         "summary": "The host picks a proposal: it joins the end of the programme (the head when it is empty).",
         "operationId": "choose",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3460,9 +2908,7 @@
         ],
         "operationId": "vote",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       },
       "delete": {
@@ -3471,9 +2917,7 @@
         ],
         "operationId": "unvote",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3484,9 +2928,7 @@
         ],
         "operationId": "queue",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3498,9 +2940,7 @@
         "summary": "A guest leaves the party for good; the host cannot, and anyone who is not a guest gets the 404.",
         "operationId": "quit",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3511,9 +2951,7 @@
         ],
         "operationId": "reaction",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3525,9 +2963,7 @@
         "summary": "The host replaces the programme by one item.",
         "operationId": "select",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3538,9 +2974,7 @@
         ],
         "operationId": "signal",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3552,9 +2986,7 @@
         "summary": "Takes a `scheduled` party live on the head of its programme. The gate makes it the only start:\na second one, or one that lost to an end, finds the row already moved.",
         "operationId": "start",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3565,9 +2997,7 @@
         ],
         "operationId": "status",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3578,9 +3008,7 @@
         ],
         "operationId": "voice",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3591,9 +3019,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3604,9 +3030,7 @@
         ],
         "operationId": "search",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3617,9 +3041,7 @@
         ],
         "operationId": "detail",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3630,9 +3052,7 @@
         ],
         "operationId": "follow_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -3641,9 +3061,7 @@
         ],
         "operationId": "follow_put",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -3652,9 +3070,7 @@
         ],
         "operationId": "follow_delete",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3665,9 +3081,7 @@
         ],
         "operationId": "provider_credits",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3678,9 +3092,7 @@
         ],
         "operationId": "works",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3691,9 +3103,7 @@
         ],
         "operationId": "continue_watching",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3704,9 +3114,7 @@
         ],
         "operationId": "hide",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3717,9 +3125,7 @@
         ],
         "operationId": "history",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3730,9 +3136,7 @@
         ],
         "operationId": "resume_info",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3743,9 +3147,7 @@
         ],
         "operationId": "episode_progress",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3756,9 +3158,7 @@
         ],
         "operationId": "toggle_season_watched",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3769,9 +3169,7 @@
         ],
         "operationId": "get_state",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -3780,15 +3178,9 @@
         ],
         "operationId": "heartbeat",
         "responses": {
-          "200": {
-            "description": ""
-          },
-          "400": {
-            "description": ""
-          },
-          "403": {
-            "description": ""
-          }
+          "200": {},
+          "400": {},
+          "403": {}
         }
       },
       "delete": {
@@ -3797,9 +3189,7 @@
         ],
         "operationId": "delete_state",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3810,9 +3200,7 @@
         ],
         "operationId": "toggle_series_watched",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3823,9 +3211,7 @@
         ],
         "operationId": "toggle_watched",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3836,9 +3222,7 @@
         ],
         "operationId": "watched_episodes",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3849,9 +3233,7 @@
         ],
         "operationId": "recommendations",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3862,9 +3244,7 @@
         ],
         "operationId": "dismissed_reset",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3875,9 +3255,7 @@
         ],
         "operationId": "dismissed_count",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3888,9 +3266,7 @@
         ],
         "operationId": "dismiss",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -3901,12 +3277,8 @@
         ],
         "operationId": "events",
         "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": ""
-          }
+          "204": {},
+          "403": {}
         }
       }
     },
@@ -3917,9 +3289,7 @@
         ],
         "operationId": "watched_ids",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3930,9 +3300,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -3941,9 +3309,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -3954,9 +3320,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -3965,9 +3329,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "patch": {
@@ -3976,9 +3338,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -3989,9 +3349,7 @@
         ],
         "operationId": "items",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4000,9 +3358,7 @@
         ],
         "operationId": "add_item",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4013,9 +3369,7 @@
         ],
         "operationId": "remove_by_media",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4026,9 +3380,7 @@
         ],
         "operationId": "reorder",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4039,9 +3391,7 @@
         ],
         "operationId": "remove_item",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4052,9 +3402,7 @@
         ],
         "operationId": "members",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4063,9 +3411,7 @@
         ],
         "operationId": "add_member",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4076,9 +3422,7 @@
         ],
         "operationId": "remove_member",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4089,9 +3433,7 @@
         ],
         "operationId": "save",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -4100,9 +3442,7 @@
         ],
         "operationId": "unsave",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4111,9 +3451,7 @@
         "tags": [],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4122,9 +3460,7 @@
         "tags": [],
         "operationId": "import_confirm",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4133,9 +3469,7 @@
         "tags": [],
         "operationId": "import_inspect",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4144,9 +3478,7 @@
         "tags": [],
         "operationId": "import_discard",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -4155,9 +3487,7 @@
         "tags": [],
         "operationId": "metrics",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4166,18 +3496,14 @@
         "tags": [],
         "operationId": "sources_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
         "tags": [],
         "operationId": "sources_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4186,18 +3512,14 @@
         "tags": [],
         "operationId": "sources_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
         "tags": [],
         "operationId": "sources_delete",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -4206,9 +3528,7 @@
         "tags": [],
         "operationId": "sources_catalog",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4217,9 +3537,7 @@
         "tags": [],
         "operationId": "sources_catalog_logo",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4228,9 +3546,7 @@
         "tags": [],
         "operationId": "sources_inspect",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4239,9 +3555,7 @@
         "tags": [],
         "operationId": "sources_refresh",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4250,9 +3564,7 @@
         "tags": [],
         "operationId": "ui",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4272,9 +3584,7 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -4283,9 +3593,7 @@
         "tags": [],
         "operationId": "data_usage",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4294,9 +3602,7 @@
         "tags": [],
         "operationId": "disable",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4305,9 +3611,7 @@
         "tags": [],
         "operationId": "enable",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4316,9 +3620,7 @@
         "tags": [],
         "operationId": "events_test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4327,9 +3629,7 @@
         "tags": [],
         "operationId": "export",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4338,9 +3638,7 @@
         "tags": [],
         "operationId": "import",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4349,9 +3647,7 @@
         "tags": [],
         "operationId": "logo",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4360,9 +3656,7 @@
         "tags": [],
         "operationId": "restart",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -4372,9 +3666,7 @@
         "summary": "Rules 36-39: route, policy, object guard, live check, then the guest's `http` export.",
         "operationId": "proxy",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4385,9 +3677,7 @@
         ],
         "operationId": "language_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4396,9 +3686,7 @@
         ],
         "operationId": "language_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4409,9 +3697,7 @@
         ],
         "operationId": "language_definitions",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4422,9 +3708,7 @@
         ],
         "operationId": "language_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -4433,9 +3717,7 @@
         ],
         "operationId": "language_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -4444,9 +3726,7 @@
         ],
         "operationId": "language_delete",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4468,9 +3748,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4479,9 +3757,7 @@
         ],
         "operationId": "quality_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4492,9 +3768,7 @@
         ],
         "operationId": "quality_get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -4503,9 +3777,7 @@
         ],
         "operationId": "quality_update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -4514,9 +3786,7 @@
         ],
         "operationId": "quality_delete",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4538,9 +3808,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -4560,9 +3828,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4585,9 +3851,7 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4598,9 +3862,7 @@
         ],
         "operationId": "commands",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4611,9 +3873,7 @@
         ],
         "operationId": "grants",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4624,9 +3884,7 @@
         ],
         "operationId": "grant_claim",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4637,9 +3895,7 @@
         ],
         "operationId": "grant_code",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4650,9 +3906,7 @@
         ],
         "operationId": "revoke",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -4663,9 +3917,7 @@
         ],
         "operationId": "register",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4676,9 +3928,7 @@
         ],
         "operationId": "targets",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4689,9 +3939,7 @@
         ],
         "operationId": "command",
         "responses": {
-          "202": {
-            "description": ""
-          }
+          "202": {}
         }
       }
     },
@@ -4702,9 +3950,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4713,9 +3959,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4726,9 +3970,7 @@
         ],
         "operationId": "comment_remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4739,9 +3981,7 @@
         ],
         "operationId": "title_state",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4752,9 +3992,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -4763,9 +4001,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "patch": {
@@ -4774,9 +4010,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4787,9 +4021,7 @@
         ],
         "operationId": "approve",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4800,9 +4032,7 @@
         ],
         "operationId": "comments_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4811,9 +4041,7 @@
         ],
         "operationId": "comment_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4824,9 +4052,7 @@
         ],
         "operationId": "decline",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -4837,9 +4063,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -4848,9 +4072,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4861,9 +4083,7 @@
         ],
         "operationId": "permissions",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4874,9 +4094,7 @@
         ],
         "operationId": "get",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -4885,9 +4103,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -4896,9 +4112,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4909,9 +4123,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -4920,9 +4132,7 @@
         ],
         "operationId": "put_bulk",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4933,9 +4143,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -4944,9 +4152,7 @@
         ],
         "operationId": "put_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4957,9 +4163,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4970,9 +4174,7 @@
         ],
         "operationId": "dismiss",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -4981,9 +4183,7 @@
         ],
         "operationId": "undismiss",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -4994,9 +4194,7 @@
         ],
         "operationId": "connectable",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5007,9 +4205,7 @@
         ],
         "operationId": "follow",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -5018,9 +4214,7 @@
         ],
         "operationId": "unfollow",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5031,9 +4225,7 @@
         ],
         "operationId": "recommend",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5044,9 +4236,7 @@
         ],
         "operationId": "following_popular",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5057,9 +4247,7 @@
         ],
         "operationId": "received",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5070,9 +4258,7 @@
         ],
         "operationId": "sent",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5083,9 +4269,7 @@
         ],
         "operationId": "dismiss",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5096,9 +4280,7 @@
         ],
         "operationId": "requests",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5109,9 +4291,7 @@
         ],
         "operationId": "accept",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5122,9 +4302,7 @@
         ],
         "operationId": "reject",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5135,9 +4313,7 @@
         ],
         "operationId": "search",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5148,9 +4324,7 @@
         ],
         "operationId": "followers",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5161,9 +4335,7 @@
         ],
         "operationId": "following",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5174,9 +4346,7 @@
         ],
         "operationId": "profile",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5187,9 +4357,7 @@
         ],
         "operationId": "stats",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5200,9 +4368,7 @@
         ],
         "operationId": "effective_settings",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5213,9 +4379,7 @@
         ],
         "operationId": "gpus",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5226,9 +4390,7 @@
         ],
         "operationId": "hw_accel",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5239,9 +4401,7 @@
         ],
         "operationId": "qualities",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5252,9 +4412,7 @@
         ],
         "operationId": "tonemap_algos",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5266,9 +4424,7 @@
         "summary": "Explicit stop from the client: ends the presence and the engine session; 204 for an unknown sid.",
         "operationId": "delete_session",
         "responses": {
-          "204": {
-            "description": ""
-          }
+          "204": {}
         }
       }
     },
@@ -5280,9 +4436,7 @@
         "summary": "Sidecar ranges on the container timeline (the direct-play clock), for original-file downloads.",
         "operationId": "edl",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5293,9 +4447,7 @@
         ],
         "operationId": "playback_info",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5306,9 +4458,7 @@
         ],
         "operationId": "blacklist_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -5317,9 +4467,7 @@
         ],
         "operationId": "blacklist_add",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -5328,9 +4476,7 @@
         ],
         "operationId": "blacklist_clear",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5341,9 +4487,7 @@
         ],
         "operationId": "blacklist_remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5354,9 +4498,7 @@
         ],
         "operationId": "health",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5367,9 +4509,7 @@
         ],
         "operationId": "history",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5380,9 +4520,7 @@
         ],
         "operationId": "missing",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5393,9 +4531,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -5404,9 +4540,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5417,9 +4551,7 @@
         ],
         "operationId": "rate_limits",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5430,9 +4562,7 @@
         ],
         "operationId": "test_connection",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5443,9 +4573,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -5454,9 +4582,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -5465,9 +4591,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5478,9 +4602,7 @@
         ],
         "operationId": "stats",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5491,9 +4613,7 @@
         ],
         "operationId": "test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5504,9 +4624,7 @@
         ],
         "operationId": "stats",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5517,9 +4635,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -5528,9 +4644,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5541,9 +4655,7 @@
         ],
         "operationId": "available",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5554,9 +4666,7 @@
         ],
         "operationId": "models",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5567,9 +4677,7 @@
         ],
         "operationId": "test_connection",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5580,9 +4688,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -5591,9 +4697,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -5602,9 +4706,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5615,9 +4717,7 @@
         ],
         "operationId": "test",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5628,9 +4728,7 @@
         ],
         "operationId": "activity",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5641,9 +4739,7 @@
         ],
         "operationId": "backup_create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5654,9 +4750,7 @@
         ],
         "operationId": "backup_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5668,9 +4762,7 @@
         "summary": "A download: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.",
         "operationId": "backup_download",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -5679,9 +4771,7 @@
         ],
         "operationId": "backup_delete",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5692,9 +4782,7 @@
         ],
         "operationId": "events",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5706,9 +4794,7 @@
         "summary": "One-time URL credential for the events stream: native clients cannot set a header on `EventSource`.",
         "operationId": "event_ticket",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5719,9 +4805,7 @@
         ],
         "operationId": "health",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5734,7 +4818,6 @@
         "operationId": "liveness",
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5753,9 +4836,7 @@
         ],
         "operationId": "log_list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5766,9 +4847,7 @@
         ],
         "operationId": "sessions",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5779,12 +4858,8 @@
         ],
         "operationId": "session",
         "responses": {
-          "200": {
-            "description": ""
-          },
-          "404": {
-            "description": ""
-          }
+          "200": {},
+          "404": {}
         }
       }
     },
@@ -5795,9 +4870,7 @@
         ],
         "operationId": "summary",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5809,9 +4882,7 @@
         "summary": "Rule 8: respond, then shut down through the normal path and exit non-zero so the supervisor restarts us.",
         "operationId": "restart",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5822,9 +4893,7 @@
         ],
         "operationId": "backup_restore",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5835,9 +4904,7 @@
         ],
         "operationId": "stats",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5848,9 +4915,7 @@
         ],
         "operationId": "streams",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5861,9 +4926,7 @@
         ],
         "operationId": "command",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5874,9 +4937,7 @@
         ],
         "operationId": "stats",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -5885,9 +4946,7 @@
         ],
         "operationId": "purge_all",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5898,9 +4957,7 @@
         ],
         "operationId": "purge_file",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5911,9 +4968,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5924,9 +4979,7 @@
         ],
         "operationId": "version",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5937,9 +4990,7 @@
         ],
         "operationId": "time",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5950,9 +5001,7 @@
         ],
         "operationId": "list",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "post": {
@@ -5961,9 +5010,7 @@
         ],
         "operationId": "create",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       }
     },
@@ -5974,9 +5021,7 @@
         ],
         "operationId": "set_avatar",
         "responses": {
-          "201": {
-            "description": ""
-          }
+          "201": {}
         }
       },
       "delete": {
@@ -5985,9 +5030,7 @@
         ],
         "operationId": "clear_avatar",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -5998,9 +5041,7 @@
         ],
         "operationId": "get_one",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "put": {
@@ -6009,9 +5050,7 @@
         ],
         "operationId": "update",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       },
       "delete": {
@@ -6020,9 +5059,7 @@
         ],
         "operationId": "remove",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -6033,9 +5070,7 @@
         ],
         "operationId": "stats",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -6046,9 +5081,7 @@
         ],
         "operationId": "wanted",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -6059,9 +5092,7 @@
         ],
         "operationId": "resolve",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     }
