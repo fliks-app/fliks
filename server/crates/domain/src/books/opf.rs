@@ -3,6 +3,7 @@
 use super::isbn::{self, Isbn};
 use crate::js::rx;
 use crate::language::normalize_language_code;
+use crate::release::parsing::title::decode_html_entities;
 use quick_xml::{
     Reader,
     events::{BytesStart, Event},
@@ -180,56 +181,78 @@ impl El {
     }
 }
 
-const BLOCKS: [&str; 13] = [
-    "p",
-    "div",
-    "br",
-    "li",
-    "ul",
-    "ol",
-    "tr",
-    "blockquote",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "hr",
-];
+/// Tags that end a line, as element names and as escaped markup (`br` included).
+const BLOCKS: &str = "p|div|br|li|ul|ol|dl|dt|dd|tr|td|th|table|blockquote|pre|hr|h[1-6]";
+const BREAK: char = '\u{1}';
 
-fn blocks_to_text(e: &El, out: &mut String) {
+fn blocks_to_text(e: &El, out: &mut String) -> bool {
+    let mut inline_markup = false;
     for n in &e.nodes {
         match n {
             Node::Text(t) => out.push_str(t),
+            Node::El(k) if matches!(k.name.as_str(), "script" | "style") => inline_markup = true,
             Node::El(k) => {
-                let block = BLOCKS.contains(&k.name.as_str());
+                inline_markup = true;
+                let block = rx!(&format!("^(?:{BLOCKS})$")).is_match(&k.name);
                 if block {
-                    out.push('\n');
+                    out.push(BREAK);
                 }
                 blocks_to_text(k, out);
                 if block {
-                    out.push('\n');
+                    out.push(BREAK);
                 }
             }
         }
     }
+    inline_markup
+}
+
+fn decode_html(s: &str) -> String {
+    let s = decode_html_entities(s);
+    rx!(r"&(laquo|raquo|lsaquo|rsaquo|bull|times|divide|shy);")
+        .replace_all(&s, |c: &regex::Captures| match &c[1] {
+            "laquo" => "\u{ab}",
+            "raquo" => "\u{bb}",
+            "lsaquo" => "\u{2039}",
+            "rsaquo" => "\u{203a}",
+            "bull" => "\u{2022}",
+            "times" => "\u{d7}",
+            "divide" => "\u{f7}",
+            _ => "",
+        })
+        .into_owned()
 }
 
 /// A description as plain text: the inline XHTML form and the entity-escaped one (markup that
-/// survives the XML decode) both lose their tags, block tags become line breaks.
+/// survives the XML decode) both lose their tags, scripts and styles; block tags and `br` become
+/// line breaks. Plain text keeps its own lines and blank lines.
 fn plain_description(e: &El) -> String {
     let mut s = String::new();
-    blocks_to_text(e, &mut s);
-    if rx!(r"<[A-Za-z/!][^>]*>").is_match(&s) {
-        let s2 = rx!(r"(?i)<br\s*/?>|</?(?:p|div|li|ul|ol|tr|blockquote|h[1-6])\b[^>]*>")
-            .replace_all(&s, "\n");
-        let s2 = rx!(r"<[A-Za-z/!][^>]*>").replace_all(&s2, "");
-        s = decode_entities(&s2);
+    let mut markup = blocks_to_text(e, &mut s);
+    if rx!(r"<[A-Za-z/!]").is_match(&s) {
+        markup = true;
+        let s2 = rx!(r"<!--[\s\S]*?-->").replace_all(&s, "");
+        let s2 =
+            rx!(i r"<(?:script|style)\b[^>]*>[\s\S]*?</(?:script|style)\s*>").replace_all(&s2, "");
+        let s2 = rx!(i & format!(r"</?(?:{BLOCKS})\b[^>]*>")).replace_all(&s2, "\u{1}");
+        let s2 = rx!(r"</?[A-Za-z][^>]*>").replace_all(&s2, "");
+        s = decode_html(&s2);
     }
-    s.lines()
-        .map(collapse)
-        .filter(|l| !l.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
+    if markup {
+        return s
+            .split(BREAK)
+            .map(collapse)
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    let mut out: Vec<String> = Vec::new();
+    for line in s.lines().map(collapse) {
+        if !(line.is_empty() && out.last().is_none_or(String::is_empty)) {
+            out.push(line);
+        }
+    }
+    out.join("\n").trim().to_owned()
 }
 
 pub(super) fn collapse(s: &str) -> String {

@@ -170,10 +170,21 @@ async fn merge_issues(
         .await?;
     }
 
+    // An issue renumbered by hand wins: its live key is not taken again for the provider's issue.
+    let live: HashSet<(String, i64)> = sqlx::query_as::<_, (String, f64)>(
+        r#"SELECT kind, "sortNumber"::float8 FROM comic_issues WHERE "mediaId" = $1 AND kind <> 'special'"#,
+    )
+    .bind(media)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .map(|(k, s)| (k, (s * 100.0).round() as i64))
+    .collect();
     let fresh: Vec<(usize, &Issue)> = issues
         .iter()
         .enumerate()
         .filter(|(n, _)| !held.contains_key(n))
+        .filter(|(_, i)| i.kind == "special" || !live.contains(&(i.kind.to_owned(), i.key().1)))
         .collect();
     if fresh.is_empty() {
         return Ok(());
