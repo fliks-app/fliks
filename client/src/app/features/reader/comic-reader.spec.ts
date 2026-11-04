@@ -19,7 +19,7 @@ async function open(saved: unknown, prefs?: unknown) {
       provideZonelessChangeDetection(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: StorageScopeService, useValue: { suffix: () => 's::1', canPersist: () => true } },
-      { provide: ComicsApiService, useValue: { pageUrl: (i: number, n: number, w?: number) => `/p/${i}/${n}?width=${w}` } },
+      { provide: ComicsApiService, useValue: { pageUrl: (i: number, _f: number, n: number, w?: number) => `/p/${i}/${n}?width=${w}`, prepare: async () => undefined } },
       { provide: ReaderApiService, useValue: { loadProgress: async () => saved, saveProgress } },
     ],
   });

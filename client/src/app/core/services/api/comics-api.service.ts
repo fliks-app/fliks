@@ -22,11 +22,17 @@ export class ComicsApiService {
     return res.pages;
   }
 
-  /** `index` is 0-based. A native client is cross-origin, so its token rides in the query like any `<img>` route. */
-  pageUrl(itemId: number, index: number, width?: number): string {
+  /** Mints or renews the stream token of the issue's file, which the native page URLs carry. */
+  async prepare(fileId: number): Promise<void> {
+    if (this.config.isNative) await this.auth.ensureStreamToken(fileId);
+  }
+
+  /** `index` is 0-based. A native client is cross-origin, so the file's stream token rides in the query. */
+  pageUrl(itemId: number, fileId: number, index: number, width?: number): string {
     const q = new URLSearchParams();
     if (width) q.set('width', String(width));
-    if (this.config.isNative && this.auth.playbackToken) q.set('token', this.auth.playbackToken);
+    const token = this.config.isNative ? this.auth.playbackTokenFor(fileId) : null;
+    if (token) q.set('token', token);
     const qs = q.toString();
     return this.config.resolveUrl(`/api/comics/${itemId}/pages/${index}${qs ? `?${qs}` : ''}`);
   }
