@@ -66,7 +66,7 @@ pub fn content_docs(pkg: &Element, opf_path: &str) -> Vec<String> {
 }
 
 /// Kobo reads only the EPUB3 `cover-image` property, not the EPUB2 `meta name="cover"` form.
-fn cover_image(pkg: &mut Element) {
+pub(crate) fn cover_image(pkg: &mut Element) {
     fn find_meta(e: &Element) -> Option<String> {
         e.children.iter().find_map(|n| match n {
             Node::Element(c) if c.local() == "meta" && c.attr("name") == Some("cover") => {
@@ -84,8 +84,26 @@ fn cover_image(pkg: &mut Element) {
     else {
         return;
     };
+    let has_cover = |e: &Element| {
+        e.attr("properties")
+            .is_some_and(|v| v.split_ascii_whitespace().any(|t| t == "cover-image"))
+    };
+    let flagged = manifest
+        .children
+        .iter()
+        .any(|n| matches!(n, Node::Element(e) if e.local() == "item" && has_cover(e)));
+    if flagged {
+        return;
+    }
     let item = manifest.children.iter_mut().find_map(|n| match n {
-        Node::Element(e) if e.local() == "item" && e.attr("id") == Some(&id) => Some(e),
+        Node::Element(e)
+            if e.local() == "item"
+                && e.attr("id") == Some(&id)
+                && e.attr("media-type")
+                    .is_some_and(|t| t.starts_with("image/")) =>
+        {
+            Some(e)
+        }
         _ => None,
     });
     if let Some(item) = item {

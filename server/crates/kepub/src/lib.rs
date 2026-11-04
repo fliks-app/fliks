@@ -41,6 +41,8 @@ pub enum Error {
     TooLarge,
     TooManyEntries,
     Malformed(&'static str),
+    /// A content document is encrypted (DRM), so rewriting it would corrupt it.
+    Encrypted,
 }
 
 impl fmt::Display for Error {
@@ -52,6 +54,7 @@ impl fmt::Display for Error {
             Error::TooLarge => f.write_str("archive exceeds the size limits"),
             Error::TooManyEntries => f.write_str("too many archive entries"),
             Error::Malformed(w) => write!(f, "malformed document: {w}"),
+            Error::Encrypted => f.write_str("content documents are encrypted"),
         }
     }
 }
@@ -140,6 +143,17 @@ struct Plan {
     docs: HashSet<usize>,
 }
 
+/// Whether an `EncryptedData` of `n` covers a content document; font obfuscation does not.
+fn encrypts(n: &Node, docs: &HashSet<usize>, idx: &Index) -> bool {
+    let Node::Element(e) = n else { return false };
+    let covers = e.local() == "CipherReference"
+        && e.attr("URI")
+            .and_then(|u| opf::resolve("", u))
+            .and_then(|u| idx.find(&u))
+            .is_some_and(|i| docs.contains(&i));
+    covers || e.children.iter().any(|c| encrypts(c, docs, idx))
+}
+
 fn plan<R: Read + Seek>(zip: &mut ZipArchive<R>, idx: &Index, lim: &Limits) -> Result<Plan, Error> {
     let container = read_by_name(zip, idx, "META-INF/container.xml", lim.max_document_bytes)?
         .ok_or(Error::NoPackage)?;
@@ -183,6 +197,12 @@ fn plan<R: Read + Seek>(zip: &mut ZipArchive<R>, idx: &Index, lim: &Limits) -> R
         .iter()
         .filter_map(|d| idx.find(d))
         .collect();
+    if let Some(enc) = read_by_name(zip, idx, "META-INF/encryption.xml", lim.max_document_bytes)? {
+        let nodes = dom::parse(&content::decode(&enc), false)?;
+        if nodes.iter().any(|n| encrypts(n, &docs, idx)) {
+            return Err(Error::Encrypted);
+        }
+    }
     opf::transform(pkg);
     let mut dummy = None;
     if let Some(first) = opf::first_spine_doc(pkg, &opf_path) {
