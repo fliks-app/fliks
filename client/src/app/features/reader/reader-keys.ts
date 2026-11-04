@@ -1,4 +1,4 @@
-export type ReaderKeyAction = 'left' | 'right' | 'next' | 'prev' | 'start' | 'end' | 'toc' | 'settings' | 'close';
+export type ReaderKeyAction = 'left' | 'right' | 'next' | 'prev' | 'start' | 'end' | 'toc' | 'settings' | 'notes' | 'search' | 'bookmark' | 'chrome' | 'close';
 
 interface KeyBinding {
   type: ReaderKeyAction;
@@ -15,6 +15,10 @@ export const READER_KEY_BINDINGS: KeyBinding[] = [
   { type: 'end', keyCombos: [{ keyCode: 35 }] },
   { type: 'toc', keyCombos: [{ keyCode: 84 }] },
   { type: 'settings', keyCombos: [{ keyCode: 83 }] },
+  { type: 'notes', keyCombos: [{ keyCode: 78 }] },
+  { type: 'search', keyCombos: [{ keyCode: 70 }] },
+  { type: 'bookmark', keyCombos: [{ keyCode: 66 }] },
+  { type: 'chrome', keyCombos: [{ keyCode: 13 }] },
   { type: 'close', keyCombos: [{ keyCode: 27 }] },
 ];
 

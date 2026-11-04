@@ -18,6 +18,10 @@ describe('readerKeyAction', () => {
     [35, {}, 'end'],
     [84, {}, 'toc'],
     [83, {}, 'settings'],
+    [78, {}, 'notes'],
+    [70, {}, 'search'],
+    [66, {}, 'bookmark'],
+    [13, {}, 'chrome'],
     [27, {}, 'close'],
   ] as const)('maps keyCode %i %j to %s', (code, init, action) => {
     expect(readerKeyAction(key(code, init))).toBe(action);
@@ -26,6 +30,6 @@ describe('readerKeyAction', () => {
   it('leaves browser shortcuts and other keys alone', () => {
     expect(readerKeyAction(key(37, { altKey: true }))).toBeNull();
     expect(readerKeyAction(key(39, { metaKey: true }))).toBeNull();
-    expect(readerKeyAction(key(66))).toBeNull();
+    expect(readerKeyAction(key(65))).toBeNull();
   });
 });
