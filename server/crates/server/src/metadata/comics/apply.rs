@@ -119,9 +119,9 @@ async fn merge_issues(
     let matched: Vec<(i32, i32)> = sqlx::query_as(
         r#"SELECT DISTINCT ON (t.i) t.i::int, ci."itemId"
            FROM UNNEST($2::text[], $3::text[], $4::text[]) WITH ORDINALITY AS t(kind, sort, label, i)
-           JOIN comic_issues ci ON ci."mediaId" = $1 AND ci.kind = t.kind
-             AND CASE WHEN t.kind = 'special' THEN ci.label = t.label
-                      ELSE ci."sortNumber" = t.sort::numeric END
+           JOIN comic_issues ci ON ci."mediaId" = $1 AND COALESCE(ci."providerKind", ci.kind) = t.kind
+             AND CASE WHEN t.kind = 'special' THEN COALESCE(ci."providerLabel", ci.label) = t.label
+                      ELSE COALESCE(ci."providerSort", ci."sortNumber") = t.sort::numeric END
            ORDER BY t.i, ci."itemId""#,
     )
     .bind(media)
@@ -224,8 +224,9 @@ async fn merge_issues(
     .execute(&mut *tx)
     .await?;
     sqlx::query(
-        r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label)
-           SELECT u.id, $1, u.kind, u.sort::numeric, u.label
+        r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label,
+                                    "providerKind", "providerSort", "providerLabel")
+           SELECT u.id, $1, u.kind, u.sort::numeric, u.label, u.kind, u.sort::numeric, u.label
            FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[]) AS u(id, kind, sort, label)"#,
     )
     .bind(media)
