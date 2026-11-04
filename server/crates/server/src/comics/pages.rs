@@ -1,7 +1,10 @@
 //! `GET /api/comics/:itemId/pages` and `/pages/:index` (`docs/spec/comics.md`, pages rules).
-use super::archive::{self, Error};
+use super::{
+    archive::{self, Error},
+    cache::{self, Key},
+};
 use crate::{
-    http::{AppError, auth::StreamAuthed, validate::PathParams},
+    http::{AppError, auth::FileBoundAuthed, validate::PathParams},
     libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
     state::AppState,
     stream::resolve_file,
@@ -23,19 +26,26 @@ use fliks_domain::acl::{Action, Subject};
 use image::{DynamicImage, ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder};
 use serde::Deserialize;
 use serde_json::json;
-use std::{io::Cursor, path::PathBuf, sync::LazyLock};
+use std::{
+    io::Cursor,
+    path::{Path, PathBuf},
+    sync::{Arc, LazyLock},
+};
 use tokio::sync::Semaphore;
 
-/// Pages decoded at once: a decode holds up to `MAX_ALLOC` bytes.
+/// Pages decoded at once. One decode holds at most `MAX_ALLOC` (200 MB) plus the JPEG and the
+/// page bytes (64 MiB), so the peak is about 3 x 270 MB.
 const PAGE_JOBS: usize = 3;
 const MAX_PIXELS: u64 = 25_000_000;
 const MAX_ALLOC: u64 = MAX_PIXELS * 8;
 const MAX_WIDTH: u32 = 4096;
 const JPEG_QUALITY: u8 = 82;
+/// Revalidated on every use: a page is cheap to confirm and the ACL can change.
+const NO_CACHE: &str = "private, no-cache";
 const IMAGE_CSP: &str = "default-src 'none'; sandbox";
 const CORP: HeaderName = HeaderName::from_static("cross-origin-resource-policy");
 
-static JOBS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(PAGE_JOBS));
+static JOBS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(PAGE_JOBS)));
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -63,13 +73,19 @@ fn failure(e: Error, item: i32) -> AppError {
 
 struct Source {
     path: PathBuf,
+    key: Key,
+}
+
+impl Source {
     /// Changes with the file's bytes: the file row, its size and mtime.
-    tag: String,
+    fn tag(&self) -> String {
+        format!("{}-{}-{}", self.key.file, self.key.size, self.key.mtime)
+    }
 }
 
 /// One lookup applies the ACL, so a hidden issue costs what a missing one does and reads like it.
-async fn source(st: &AppState, a: &StreamAuthed, item: i32) -> Result<Source, AppError> {
-    let acl = accessible_library_ids(&st.db, &a.0).await?;
+async fn source(st: &AppState, a: &FileBoundAuthed, item: i32) -> Result<Source, AppError> {
+    let acl = accessible_library_ids(&st.db, &a.auth).await?;
     let row: Option<(i32, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT mf.id, mf."relativePath" FROM items i
            JOIN comic_issues ci ON ci."itemId" = i.id
@@ -88,6 +104,12 @@ async fn source(st: &AppState, a: &StreamAuthed, item: i32) -> Result<Source, Ap
     if rel.to_ascii_lowercase().ends_with(".pdf") {
         return Err(AppError::not_found(format!("Issue #{item} is a PDF")));
     }
+    // A token bound to a file reads the pages of that file only.
+    if a.bound_file
+        .is_some_and(|b| i64::from(b) != i64::from(file))
+    {
+        return Err(item_missing(item));
+    }
     let f = resolve_file(st, None, i64::from(file)).await.map_err(|e| {
         if e.status() == StatusCode::NOT_FOUND {
             item_missing(item)
@@ -103,7 +125,11 @@ async fn source(st: &AppState, a: &StreamAuthed, item: i32) -> Result<Source, Ap
         .map_or(0, |d| d.as_millis());
     Ok(Source {
         path: f.absolute,
-        tag: format!("{file}-{}-{mtime}", f.size),
+        key: Key {
+            file,
+            size: f.size,
+            mtime,
+        },
     })
 }
 
@@ -115,11 +141,14 @@ fn not_modified(headers: &HeaderMap, etag: &str) -> bool {
 }
 
 /// The 304 answer when the caller already holds `etag`.
-fn cached(headers: &HeaderMap, etag: &str, cache: &'static str) -> Option<Response> {
+fn cached(headers: &HeaderMap, etag: &str) -> Option<Response> {
     not_modified(headers, etag).then(|| {
         (
             StatusCode::NOT_MODIFIED,
-            [(ETAG, etag.to_owned()), (CACHE_CONTROL, cache.to_owned())],
+            [
+                (ETAG, etag.to_owned()),
+                (CACHE_CONTROL, NO_CACHE.to_owned()),
+            ],
         )
             .into_response()
     })
@@ -128,28 +157,33 @@ fn cached(headers: &HeaderMap, etag: &str, cache: &'static str) -> Option<Respon
 #[utoipa::path(get, path = "/api/comics/{itemId}/pages", responses((status = 200)))]
 pub async fn pages(
     axum::extract::State(st): axum::extract::State<AppState>,
-    a: StreamAuthed,
+    a: FileBoundAuthed,
     headers: HeaderMap,
     p: Result<PathParams<i32>, AppError>,
 ) -> Result<Response, AppError> {
-    a.0.require(Action::Read, Subject::Media)?;
+    a.auth.require(Action::Read, Subject::Media)?;
     let PathParams(item) = p?;
     let src = source(&st, &a, item).await?;
-    let etag = format!("\"p-{}\"", src.tag);
-    if let Some(r) = cached(&headers, &etag, "private, no-cache") {
+    let etag = format!("\"p-{}\"", src.tag());
+    if let Some(r) = cached(&headers, &etag) {
         return Ok(r);
     }
-    let list = run(
-        move || archive::pages(&src.path).map_err(Failed::from),
-        item,
-    )
-    .await?;
+    let key = src.key;
+    let list = match cache::list(key) {
+        Some(l) => l,
+        None => {
+            let listing = run(move || archive::list(&src.path).map_err(Failed::from), item).await?;
+            let list = Arc::new(listing.pages);
+            cache::put_list(key, list.clone());
+            if let Some(s) = listing.solid {
+                cache::put_solid(key, Arc::new(s));
+            }
+            list
+        }
+    };
     let body = json!({"pages": list.iter().map(|p| json!({"width": p.width, "height": p.height})).collect::<Vec<_>>()});
     Ok((
-        [
-            (ETAG, etag),
-            (CACHE_CONTROL, "private, no-cache".to_owned()),
-        ],
+        [(ETAG, etag), (CACHE_CONTROL, NO_CACHE.to_owned())],
         Json(body),
     )
         .into_response())
@@ -160,35 +194,54 @@ pub struct PageQuery {
     width: Option<u32>,
 }
 
+/// A solid archive is decoded once and kept (`cache.rs`); the others read the one entry.
+fn read_page(path: &Path, key: Key, index: usize) -> Result<Vec<u8>, Failed> {
+    let missing = || Failed::App(AppError::not_found("Page not found"));
+    if let Some(s) = cache::solid(key) {
+        return s.get(index).cloned().ok_or_else(missing);
+    }
+    if archive::is_solid(path)? {
+        let listing = archive::list(path)?;
+        cache::put_list(key, Arc::new(listing.pages));
+        if let Some(s) = listing.solid {
+            let s = Arc::new(s);
+            cache::put_solid(key, s.clone());
+            return s.get(index).cloned().ok_or_else(missing);
+        }
+    }
+    archive::page(path, index).map_err(|e| match e {
+        Error::Missing => missing(),
+        e => Failed::Archive(e),
+    })
+}
+
 #[utoipa::path(get, path = "/api/comics/{itemId}/pages/{index}", responses((status = 200)))]
 pub async fn page(
     axum::extract::State(st): axum::extract::State<AppState>,
-    a: StreamAuthed,
+    a: FileBoundAuthed,
     headers: HeaderMap,
     p: Result<PathParams<(i32, i64)>, AppError>,
     Query(q): Query<PageQuery>,
 ) -> Result<Response, AppError> {
-    a.0.require(Action::Read, Subject::Media)?;
+    a.auth.require(Action::Read, Subject::Media)?;
     let PathParams((item, index)) = p?;
     if q.width.is_some_and(|w| w == 0 || w > MAX_WIDTH) {
         return Err(AppError::bad_request(format!(
             "width must be 1 to {MAX_WIDTH}"
         )));
     }
+    // Widths snap up to the next 256 px step, so the client's steps share one answer.
+    let width = q.width.map(|w| w.div_ceil(256) * 256);
     let index = usize::try_from(index).map_err(|_| AppError::not_found("Page not found"))?;
     let src = source(&st, &a, item).await?;
-    let etag = format!("\"{}-{index}-{}\"", src.tag, q.width.unwrap_or(0));
-    const CACHE: &str = "private, max-age=31536000, immutable";
-    if let Some(r) = cached(&headers, &etag, CACHE) {
+    let etag = format!("\"{}-{index}-{}\"", src.tag(), width.unwrap_or(0));
+    if let Some(r) = cached(&headers, &etag) {
         return Ok(r);
     }
-    let width = q.width;
+    let key = src.key;
     let (content_type, body) = run(
         move || {
-            let bytes = archive::page(&src.path, index).map_err(|e| match e {
-                Error::Missing => Failed::App(AppError::not_found("Page not found")),
-                e => Failed::Archive(e),
-            })?;
+            let bytes = read_page(&src.path, key, index)?;
             render(&bytes, width).map_err(|m| Failed::App(unprocessable(m)))
         },
         item,
@@ -201,7 +254,7 @@ pub async fn page(
                 ETAG,
                 HeaderValue::from_str(&etag).map_err(|e| AppError::internal(e.to_string()))?,
             ),
-            (CACHE_CONTROL, HeaderValue::from_static(CACHE)),
+            (CACHE_CONTROL, HeaderValue::from_static(NO_CACHE)),
             (X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")),
             (CONTENT_SECURITY_POLICY, HeaderValue::from_static(IMAGE_CSP)),
             (CORP, HeaderValue::from_static("cross-origin")),
@@ -211,18 +264,26 @@ pub async fn page(
         .into_response())
 }
 
-/// `work` on the blocking pool, at most `PAGE_JOBS` at a time.
+/// `work` on the blocking pool, holding one of the `PAGE_JOBS` slots until it returns.
+pub(crate) async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let slot = JOBS.clone().acquire_owned().await.ok()?;
+    tokio::task::spawn_blocking(move || {
+        let _slot = slot;
+        work()
+    })
+    .await
+    .ok()
+}
+
 async fn run<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, Failed> + Send + 'static,
     item: i32,
 ) -> Result<T, AppError> {
-    let _slot = JOBS
-        .acquire()
+    blocking(work)
         .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    tokio::task::spawn_blocking(work)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?
+        .ok_or_else(|| AppError::internal("page job failed"))?
         .map_err(|f| f.into_error(item))
 }
 
@@ -299,11 +360,7 @@ fn render(bytes: &[u8], width: Option<u32>) -> Result<(&'static str, Vec<u8>), &
     let img = if img.width() > width {
         let h = (u64::from(img.height()) * u64::from(width) + u64::from(img.width()) / 2)
             / u64::from(img.width());
-        img.resize_exact(
-            width,
-            h.max(1) as u32,
-            image::imageops::FilterType::Triangle,
-        )
+        img.thumbnail_exact(width, h.max(1) as u32)
     } else {
         img
     };
@@ -313,4 +370,32 @@ fn render(bytes: &[u8], width: Option<u32>) -> Result<(&'static str, Vec<u8>), &
 /// A JPEG cover of at most `width` from a page's bytes.
 pub(crate) fn cover(bytes: &[u8], width: u32) -> Option<Vec<u8>> {
     render(bytes, Some(width)).ok().map(|r| r.1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn png(w: u32, h: u32) -> Vec<u8> {
+        let mut out = vec![];
+        image::RgbImage::new(w, h)
+            .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    #[test]
+    fn a_page_is_downscaled_to_the_width_never_upscaled() {
+        let (ct, body) = render(&png(600, 900), Some(256)).unwrap();
+        let img = image::load_from_memory(&body).unwrap();
+        assert_eq!((ct, img.width(), img.height()), ("image/jpeg", 256, 384));
+        let (_, body) = render(&png(100, 50), Some(256)).unwrap();
+        assert_eq!(image::load_from_memory(&body).unwrap().width(), 100);
+    }
+
+    #[test]
+    fn a_page_that_is_no_image_is_refused() {
+        assert!(render(b"<html></html>", None).is_err());
+        assert!(render(&png(8, 8)[..20], None).is_err());
+    }
 }

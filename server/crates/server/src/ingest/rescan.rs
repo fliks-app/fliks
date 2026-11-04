@@ -1091,10 +1091,10 @@ pub async fn locate_in_place(
     let named = media.folder_name.as_deref().filter(|f| !f.is_empty());
     let rel = named.map_or_else(|| inner.clone(), |f| format!("{f}/{inner}"));
     if !super::books::owns(media.media_type, &file_name(&real)) {
-        return Ok(Err(if super::comics::registers(media.media_type) {
-            "not a book file"
-        } else {
-            "not a video file"
+        return Ok(Err(match media.media_type {
+            MediaKind::Book => "not a book file",
+            MediaKind::Comic => "not a comic file",
+            _ => "not a video file",
         }
         .into()));
     }

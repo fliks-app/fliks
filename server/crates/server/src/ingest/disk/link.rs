@@ -303,10 +303,10 @@ pub(super) async fn confirm_import(
             Ok(m) if !m.is_file() || !books::owns(media.media_type, &name) => {
                 errors.push(format!(
                     "{name}: not a {} file",
-                    if crate::ingest::comics::registers(media.media_type) {
-                        "book"
-                    } else {
-                        "video"
+                    match media.media_type {
+                        MediaKind::Book => "book",
+                        MediaKind::Comic => "comic",
+                        _ => "video",
                     }
                 ));
                 continue;

@@ -432,7 +432,12 @@ impl Ctx<'_> {
             )));
         };
         if !books::owns(self.media.media_type, &name) {
-            return Ok(Placed::Error(format!("{name}: not a book file")));
+            let what = if self.media.media_type == MediaKind::Comic {
+                "comic"
+            } else {
+                "book"
+            };
+            return Ok(Placed::Error(format!("{name}: not a {what} file")));
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();

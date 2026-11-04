@@ -29,9 +29,8 @@ async fn count_pages(abs: &Path, format: &str) -> Option<i32> {
         return None;
     }
     let p = abs.to_path_buf();
-    tokio::task::spawn_blocking(move || archive::page_count(&p))
-        .await
-        .ok()?
+    crate::comics::blocking(move || archive::page_count(&p))
+        .await?
         .ok()
         .and_then(|n| i32::try_from(n).ok())
 }
@@ -124,18 +123,17 @@ async fn cover(st: &AppState, media: i32, files: &[Placed], rows: &[Row]) {
         .filter_map(|r| {
             let f = files.iter().find(|f| f.rel.replace('\\', "/") == r.rel)?;
             let n = name::parse_path(&file_name(&f.abs));
-            Some((n.sort.parse().unwrap_or(0.0), f))
+            Some((n.sort.and_then(|s| s.parse().ok()).unwrap_or(f64::MAX), f))
         })
         .collect();
     paged.sort_by(|a, b| a.0.total_cmp(&b.0));
     for (_, f) in paged {
         let p = f.abs.clone();
-        let jpeg = tokio::task::spawn_blocking(move || {
+        let jpeg = crate::comics::blocking(move || {
             let first = archive::page(&p, 0).ok()?;
             crate::comics::cover(&first, COVER_WIDTH)
         })
         .await
-        .ok()
         .flatten();
         if let Some(b) = jpeg {
             super::books::store_cover(st, media, &b).await;
@@ -186,16 +184,19 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
         }
         let n = name::parse_path(r.rel.rsplit('/').next().unwrap_or(&r.rel));
         let item: Option<i32> = sqlx::query_scalar(
-            r#"SELECT "itemId" FROM comic_issues WHERE "mediaId" = $1 AND kind = $2 AND "sortNumber" = $3::text::numeric"#,
+            r#"SELECT "itemId" FROM comic_issues WHERE "mediaId" = $1 AND kind = $2
+               AND CASE WHEN $3::text IS NULL THEN label = $4 ELSE "sortNumber" = $3::text::numeric END
+               ORDER BY "itemId" LIMIT 1"#,
         )
         .bind(media)
         .bind(n.kind)
         .bind(&n.sort)
+        .bind(&n.label)
         .fetch_optional(&mut *tx)
         .await?;
         let item = match item {
             Some(i) => {
-                sqlx::query(r#"UPDATE comic_issues SET "pageCount" = COALESCE("pageCount", $2) WHERE "itemId" = $1"#)
+                sqlx::query(r#"UPDATE comic_issues SET "pageCount" = $2 WHERE "itemId" = $1"#)
                     .bind(i)
                     .bind(r.pages)
                     .execute(&mut *tx)
@@ -212,7 +213,9 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
                 .await?;
                 sqlx::query(
                     r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label, "pageCount")
-                       VALUES ($1, $2, $3, $4::text::numeric, $5, $6)"#,
+                       VALUES ($1, $2, $3, COALESCE($4::text::numeric,
+                         (SELECT GREATEST(COALESCE(max("sortNumber"), 0), 99999) + 1 FROM comic_issues
+                          WHERE "mediaId" = $2 AND kind = $3)), $5, $6)"#,
                 )
                 .bind(i)
                 .bind(media)
@@ -236,12 +239,11 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
         .await?;
     }
     sqlx::query(
-        r#"UPDATE editions SET format = COALESCE(format, $2) WHERE id = $1
-           AND NOT EXISTS (SELECT 1 FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
-                           JOIN items i ON i.id = p."itemId" WHERE i."editionId" = $1 AND f.quality <> $2)"#,
+        r#"UPDATE editions SET format = (SELECT CASE WHEN count(DISTINCT f.quality) = 1 THEN min(f.quality) END
+             FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
+             JOIN items i ON i.id = p."itemId" WHERE i."editionId" = $1) WHERE id = $1"#,
     )
     .bind(edition)
-    .bind(rows[0].format)
     .execute(&mut *tx)
     .await?;
     tx.commit().await
@@ -276,7 +278,8 @@ pub async fn refresh(
             let pages = count_pages(&abs, format).await;
             sqlx::query(
                 r#"UPDATE comic_issues SET "pageCount" = $2
-                   WHERE "itemId" IN (SELECT "itemId" FROM item_parts WHERE "mediaFileId" = $1)"#,
+                   WHERE "itemId" IN (SELECT p."itemId" FROM item_parts p WHERE p."mediaFileId" = $1
+                     AND p.version = (SELECT max(version) FROM item_parts WHERE "itemId" = p."itemId"))"#,
             )
             .bind(r.id)
             .bind(pages)

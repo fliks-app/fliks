@@ -43,7 +43,9 @@ ENTRYPOINT []
 
 # postgres client tools from PGDG: Ubuntu ships 16 and pg_dump refuses a
 # server newer than itself, which is every supported deployment.
+# The shared libraries libarchive (built into fliks-server) links, whatever the engine image ships.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
+    zlib1g libbz2-1.0 liblzma5 libzstd1 liblz4-1 libxml2 libssl3t64 libacl1 \
   && wget -q -O /usr/share/keyrings/pgdg.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
   && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update \

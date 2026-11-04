@@ -40,6 +40,8 @@ struct Ctx {
     admin: String,
     plain: String,
     stream: String,
+    bound1: String,
+    bound2: String,
     _dir: Dir,
 }
 
@@ -84,6 +86,18 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         cbz(&[("p1.png", b"<html><script>x()</script></html>".to_vec())]),
     )
     .unwrap();
+    #[cfg(target_os = "linux")]
+    {
+        use libarchive2::{ArchiveFormat, WriteArchive};
+        let mut w = WriteArchive::new()
+            .format(ArchiveFormat::SevenZip)
+            .open_file(one.join("f.cb7"))
+            .unwrap();
+        for (n, b) in [("p2.png", png(16, 24)), ("p1.png", png(8, 12))] {
+            w.add_file(n, &b).unwrap();
+        }
+        w.finish().unwrap();
+    }
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"
         INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read"]', false);
@@ -92,17 +106,17 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '{one}'), (2, 2, '{two}');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
-          (10, 'Alpha', 'comic', 1, ''), (11, 'Beta', 'comic', 1, ''), (12, 'Gamma', 'comic', 1, '');
+          (10, 'Alpha', 'comic', 1, ''), (11, 'Beta', 'comic', 1, ''), (12, 'Gamma', 'comic', 1, ''), (13, 'Delta', 'comic', 1, '');
         INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES
-          (1, 10, 'image', 'cbz', NULL), (2, 11, 'image', 'cbz', 2), (3, 12, 'image', NULL, NULL);
-        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 12, 3), (4, 12, 3), (5, 12, 3);
+          (1, 10, 'image', 'cbz', NULL), (2, 11, 'image', 'cbz', 2), (3, 12, 'image', NULL, NULL), (4, 13, 'image', 'cb7', NULL);
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 12, 3), (4, 12, 3), (5, 12, 3), (6, 13, 4);
         INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label) VALUES
-          (1, 10, 'issue', 1, '1'), (2, 11, 'issue', 1, '1'), (3, 12, 'issue', 1, '1'), (4, 12, 'issue', 2, '2'), (5, 12, 'issue', 3, '3');
+          (1, 10, 'issue', 1, '1'), (2, 11, 'issue', 1, '1'), (3, 12, 'issue', 1, '1'), (4, 12, 'issue', 2, '2'), (5, 12, 'issue', 3, '3'), (6, 13, 'issue', 1, '1');
         INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality) VALUES
           (1, 10, 1, 'a.cbz', 1, 'cbz'), (2, 11, 2, 'b.cbz', 1, 'cbz'), (3, 12, 1, 'c.pdf', 1, 'pdf'),
-          (4, 12, 1, 'd.cbz', 1, 'cbz'), (5, 12, 1, 'e.cbz', 1, 'cbz');
+          (4, 12, 1, 'd.cbz', 1, 'cbz'), (5, 12, 1, 'e.cbz', 1, 'cbz'), (6, 13, 1, 'f.cb7', 1, 'cb7');
         INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
-          (1, 1, 10, 0, 0), (2, 2, 11, 0, 0), (3, 3, 12, 0, 0), (4, 4, 12, 0, 0), (5, 5, 12, 0, 0);
+          (1, 1, 10, 0, 0), (2, 2, 11, 0, 0), (3, 3, 12, 0, 0), (4, 4, 12, 0, 0), (5, 5, 12, 0, 0), (6, 6, 13, 0, 0);
         "#,
         one = one.display(),
         two = two.display()
@@ -114,6 +128,8 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         admin: st.jwt.sign_access(1, "admin").unwrap().token,
         plain: st.jwt.sign_access(2, "plain").unwrap().token,
         stream: st.jwt.sign_stream(2, "plain").unwrap().token,
+        bound1: st.jwt.sign_stream_for(2, "plain", 1).unwrap().token,
+        bound2: st.jwt.sign_stream_for(2, "plain", 2).unwrap().token,
         app: comics::router().with_state(st),
         _dir: dir,
     }
@@ -175,7 +191,7 @@ async fn a_page_is_the_original_or_a_downscaled_jpeg(pool: PgPool) {
     assert_eq!((r.status, r.header("content-type")), (200, "image/png"));
     assert_eq!(r.body, png(16, 24));
     assert_eq!(r.header("x-content-type-options"), "nosniff");
-    assert!(r.header("cache-control").starts_with("private, max-age="));
+    assert_eq!(r.header("cache-control"), "private, no-cache");
     let small = c
         .get(Some(&c.admin), "/api/comics/1/pages/2?width=16", &[])
         .await;
@@ -184,7 +200,8 @@ async fn a_page_is_the_original_or_a_downscaled_jpeg(pool: PgPool) {
         (200, "image/jpeg")
     );
     let img = image::load_from_memory(&small.body).unwrap();
-    assert_eq!((img.width(), img.height()), (16, 24));
+    // widths snap up to the next 256 px step and a page is never upscaled
+    assert_eq!((img.width(), img.height()), (32, 48));
     let never_up = c
         .get(Some(&c.admin), "/api/comics/1/pages/0?width=512", &[])
         .await;
@@ -247,11 +264,15 @@ async fn access_follows_the_epub_reader_rules(pool: PgPool) {
             .status,
         404
     );
-    // the playback token rides in the query
-    let uri = format!("/api/comics/1/pages/0?token={}", c.stream);
+    // the playback token rides in the query, bound to the file it reads
+    let uri = format!("/api/comics/1/pages/0?token={}", c.bound1);
     assert_eq!(c.get(None, &uri, &[]).await.status, 200);
-    let uri = format!("/api/comics/2/pages/0?token={}", c.stream);
+    let uri = format!("/api/comics/1/pages?token={}", c.bound2);
     assert_eq!(c.get(None, &uri, &[]).await.status, 404);
+    let uri = format!("/api/comics/2/pages/0?token={}", c.bound2);
+    assert_eq!(c.get(None, &uri, &[]).await.status, 404);
+    let uri = format!("/api/comics/1/pages/0?token={}", c.stream);
+    assert_eq!(c.get(None, &uri, &[]).await.status, 401);
 }
 
 #[sqlx::test(migrations = false)]
@@ -272,4 +293,17 @@ async fn a_pdf_a_corrupt_archive_and_a_fake_image_answer_errors(pool: PgPool) {
             .status,
         422
     );
+}
+
+#[cfg(target_os = "linux")]
+#[sqlx::test(migrations = false)]
+async fn a_7z_serves_pages_in_reading_order_from_one_decode(pool: PgPool) {
+    let c = ctx(pool, "seven").await;
+    let r = c.get(Some(&c.admin), "/api/comics/6/pages", &[]).await;
+    assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+    assert_eq!(r.json()["pages"][0]["width"], 8);
+    for _ in 0..2 {
+        let p = c.get(Some(&c.admin), "/api/comics/6/pages/1", &[]).await;
+        assert_eq!((p.status, p.body), (200, png(16, 24)));
+    }
 }

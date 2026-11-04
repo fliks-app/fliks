@@ -12,8 +12,9 @@ pub struct ComicName {
     pub year: Option<i32>,
     /// The printed number (`"1"`, `"1.5"`), else the file stem.
     pub label: String,
-    /// The decimal text of the sort key (`"1"`, `"-1"`), `"0"` when the name has no number.
-    pub sort: String,
+    /// The decimal text of the sort key (`"1"`, `"-1"`); `None` when the name has no number, so a
+    /// file named `Prologue` is never mistaken for issue `0`.
+    pub sort: Option<String>,
     /// `issue`, `annual` or `special` (`comic_issues.kind`).
     pub kind: &'static str,
 }
@@ -66,8 +67,8 @@ pub fn parse_path(path: &str) -> ComicName {
         .map(|m| (m.start(), m.as_str().to_owned()))
         .and_then(|(at, n)| canonical(&n).map(|c| (at, c)));
     let (label, sort) = match &found {
-        Some((_, n)) => (n.clone(), n.clone()),
-        None => (tidy(file_stem), "0".to_owned()),
+        Some((_, n)) => (n.clone(), Some(n.clone())),
+        None => (tidy(file_stem), None),
     };
     let label = if label.is_empty() {
         file.to_owned()
@@ -122,13 +123,13 @@ mod tests {
             ("Star Gardens", Some(2016), "1")
         );
         let n = parse_path("Vol/Star Gardens #1.5.cbz");
-        assert_eq!((n.label.as_str(), n.sort.as_str()), ("1.5", "1.5"));
+        assert_eq!((n.label.as_str(), n.sort.as_deref()), ("1.5", Some("1.5")));
         let n = parse_path("Vol/Star Gardens -1.cbz");
-        assert_eq!(n.sort, "-1");
+        assert_eq!(n.sort.as_deref(), Some("-1"));
         let n = parse_path("Vol/Star Gardens Annual 02.cbz");
         assert!(n.kind == "annual" && n.label == "2");
         let n = parse_path("Vol/Prologue.cbz");
-        assert_eq!((n.label.as_str(), n.sort.as_str()), ("Prologue", "0"));
+        assert_eq!((n.label.as_str(), n.sort.as_deref()), ("Prologue", None));
         let n = parse_path("Moon Tales 12.cbz");
         assert_eq!((n.volume.as_str(), n.label.as_str()), ("Moon Tales", "12"));
     }

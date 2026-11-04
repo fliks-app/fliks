@@ -1,0 +1,164 @@
+//! A minimal read-only libarchive reader for 7z and RAR (`docs/spec/comics.md`, rule 22): the only
+//! `unsafe` of the comic code. Formats are limited to 7zip, rar and rar5, with no filter and so no
+//! external program; nothing is extracted, entries are read through `read`.
+use libarchive2_sys as sys;
+use std::{
+    ffi::{CStr, CString},
+    os::{raw::c_void, unix::ffi::OsStrExt},
+    path::Path,
+};
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Fail {
+    /// Not an archive libarchive reads, or a read error.
+    Corrupt,
+    /// The reads exceeded the budget.
+    TooLarge,
+}
+
+pub struct Header {
+    /// UTF-8, whatever the process locale; `None` when the archive has no name for the entry.
+    pub name: Option<String>,
+    pub regular: bool,
+    pub hardlink: bool,
+    pub encrypted: bool,
+    /// The size the header declares.
+    pub size: u64,
+}
+
+pub struct Reader {
+    raw: *mut sys::archive,
+    budget: u64,
+    utf8: Option<Utf8>,
+}
+
+/// A thread-local UTF-8 locale for as long as the reader lives: libarchive converts 7z and RAR
+/// names to the current locale, and under the image's C locale it drops the non-ASCII ones.
+struct Utf8 {
+    loc: libc::locale_t,
+    prev: libc::locale_t,
+}
+
+impl Utf8 {
+    fn enter() -> Option<Self> {
+        // SAFETY: static NUL-terminated name; a null result is checked.
+        let loc = unsafe {
+            libc::newlocale(
+                libc::LC_CTYPE_MASK,
+                c"C.UTF-8".as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        if loc.is_null() {
+            return None;
+        }
+        // SAFETY: `loc` is a valid locale; the previous one is restored in `drop`, on this thread.
+        let prev = unsafe { libc::uselocale(loc) };
+        Some(Self { loc, prev })
+    }
+}
+
+impl Drop for Utf8 {
+    fn drop(&mut self) {
+        // SAFETY: restores the locale this thread had and frees the one `enter` made, once.
+        unsafe {
+            libc::uselocale(self.prev);
+            libc::freelocale(self.loc);
+        }
+    }
+}
+
+impl Drop for Reader {
+    fn drop(&mut self) {
+        // SAFETY: `raw` came from `archive_read_new` and is freed exactly once, here.
+        unsafe { sys::archive_read_free(self.raw) };
+        self.utf8 = None;
+    }
+}
+
+fn ok(code: std::os::raw::c_int) -> bool {
+    code == sys::ARCHIVE_OK as std::os::raw::c_int
+}
+
+/// A C string as UTF-8, lossily.
+///
+/// # Safety
+/// `p` is null or a NUL-terminated string that outlives the call.
+unsafe fn text(p: *const std::os::raw::c_char) -> Option<String> {
+    // SAFETY: the caller's contract.
+    (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
+}
+
+impl Reader {
+    /// Opens `path` for reading; every byte `read` returns counts against `budget`.
+    pub fn open(path: &Path, budget: u64) -> Result<Self, Fail> {
+        let c = CString::new(path.as_os_str().as_bytes()).map_err(|_| Fail::Corrupt)?;
+        // SAFETY: no arguments; a null result is checked.
+        let raw = unsafe { sys::archive_read_new() };
+        if raw.is_null() {
+            return Err(Fail::Corrupt);
+        }
+        let r = Self {
+            raw,
+            budget,
+            utf8: Utf8::enter(),
+        };
+        // SAFETY: `raw` is a live read handle; `c` is NUL-terminated and outlives the open call.
+        let opened = unsafe {
+            ok(sys::archive_read_support_format_7zip(raw))
+                && ok(sys::archive_read_support_format_rar(raw))
+                && ok(sys::archive_read_support_format_rar5(raw))
+                && ok(sys::archive_read_open_filename(raw, c.as_ptr(), 64 * 1024))
+        };
+        if opened { Ok(r) } else { Err(Fail::Corrupt) }
+    }
+
+    /// The next entry, `None` at the end. A warning (a name the locale cannot convert, say) is
+    /// not an error.
+    pub fn next(&mut self) -> Result<Option<Header>, Fail> {
+        let mut entry: *mut sys::archive_entry = std::ptr::null_mut();
+        // SAFETY: `raw` is live and `entry` is a valid out pointer.
+        let code = unsafe { sys::archive_read_next_header(self.raw, &mut entry) };
+        if code == sys::ARCHIVE_EOF as std::os::raw::c_int {
+            return Ok(None);
+        }
+        if (!ok(code) && code != sys::ARCHIVE_WARN) || entry.is_null() {
+            return Err(Fail::Corrupt);
+        }
+        // SAFETY: `entry` is valid until the next header call; the strings are copied out here.
+        unsafe {
+            let name = text(sys::archive_entry_pathname_utf8(entry))
+                .or_else(|| text(sys::archive_entry_pathname(entry)));
+            Ok(Some(Header {
+                name,
+                regular: sys::archive_entry_filetype(entry) & 0o170000 == 0o100000,
+                hardlink: !sys::archive_entry_hardlink(entry).is_null(),
+                encrypted: sys::archive_entry_is_encrypted(entry) != 0,
+                size: u64::try_from(sys::archive_entry_size(entry)).unwrap_or(0),
+            }))
+        }
+    }
+
+    /// Up to `buf.len()` bytes of the current entry; 0 at its end.
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Fail> {
+        // SAFETY: `raw` is live; `buf` is valid for `buf.len()` writes.
+        let n = unsafe {
+            sys::archive_read_data(self.raw, buf.as_mut_ptr().cast::<c_void>(), buf.len())
+        };
+        let n = usize::try_from(n).map_err(|_| Fail::Corrupt)?;
+        if n as u64 > self.budget {
+            self.budget = 0;
+            return Err(Fail::TooLarge);
+        }
+        self.budget -= n as u64;
+        Ok(n)
+    }
+
+    /// Reads the rest of the entry. libarchive never skips what the caller does not read: its own
+    /// skip would decode a solid block outside the budget.
+    pub fn drain(&mut self) -> Result<(), Fail> {
+        let mut buf = [0u8; 64 * 1024];
+        while self.read(&mut buf)? > 0 {}
+        Ok(())
+    }
+}

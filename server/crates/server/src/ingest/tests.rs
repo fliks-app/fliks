@@ -3773,6 +3773,14 @@ mod comic_ingest {
                 .await
                 .unwrap();
         assert!(poster.is_some());
+        // a cbz and a pdf in one volume: the edition has no single format
+        let format: Option<String> =
+            sqlx::query_scalar(r#"SELECT format FROM editions WHERE "mediaId" = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(format, None);
         // a second run neither duplicates an issue nor a part
         comics::register(&c.st, m, &placed(&c, &refs))
             .await
@@ -3791,5 +3799,40 @@ mod comic_ingest {
         assert_eq!(rescan(&c, m).await.unwrap().added, 1);
         assert_eq!(issues(&c, m).await.len(), 2);
         assert!(c.st.ingest.queue.is_idle());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn unnumbered_files_are_issues_of_their_own_apart_from_issue_zero(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Moon Tales").await;
+        let d = c.dir.join("comics/Moon Tales");
+        for n in [
+            "Prologue.cbz",
+            "Epilogue.cbz",
+            "Moon Tales 000.cbz",
+            "Moon Tales 01.cbz",
+        ] {
+            cbz(&d.join(n), 2);
+        }
+        let rels: Vec<String> = [
+            "Prologue.cbz",
+            "Epilogue.cbz",
+            "Moon Tales 000.cbz",
+            "Moon Tales 01.cbz",
+        ]
+        .iter()
+        .map(|n| format!("Moon Tales/{n}"))
+        .collect();
+        let refs: Vec<&str> = rels.iter().map(String::as_str).collect();
+        comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        let labels = issues(&c, m).await;
+        assert_eq!(labels.len(), 4, "{labels:?}");
+        assert_eq!(labels.iter().filter(|i| i.0 == "0").count(), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM item_parts").await, 4);
     }
 }

@@ -1347,6 +1347,7 @@ dependencies = [
  "kepub",
  "lettre",
  "libarchive2",
+ "libarchive2-sys",
  "libc",
  "md-5",
  "mimalloc",

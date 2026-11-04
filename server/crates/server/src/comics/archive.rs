@@ -1,6 +1,6 @@
 //! Comic archives read in memory, never extracted (`docs/spec/comics.md`, archive rules). The format
 //! is sniffed from the magic bytes, so a `.cbr` that is a zip reads as one. Zip goes through `zip`,
-//! 7z and RAR through libarchive, read-only: no call that touches the filesystem is made.
+//! 7z and RAR through libarchive (`ar.rs`), read-only: no call that touches the filesystem is made.
 use std::{
     cell::Cell,
     cmp::Ordering,
@@ -23,6 +23,10 @@ pub const MAX_RATIO: u64 = 100;
 const RATIO_FLOOR: u64 = 1024 * 1024;
 /// How much of a page is read for its dimensions.
 const HEADER_BYTES: u64 = 256 * 1024;
+/// Bytes the dimension probe of a zip may read in all; pages past it list as `0 x 0`.
+const DIMS_BUDGET: u64 = 64 * 1024 * 1024;
+/// Decoded pages of one solid archive the page cache may hold.
+pub const SOLID_CACHE_BYTES: u64 = 256 * 1024 * 1024;
 const PAGE_EXTS: [&str; 5] = ["jpg", "jpeg", "png", "webp", "gif"];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -209,7 +213,12 @@ fn sorted<T>(mut v: Vec<(T, String)>) -> Result<Vec<(T, String)>, Error> {
 
 fn zip_read(z: &mut ZipFile, i: usize, head: bool, budget: &Cell<u64>) -> Result<Vec<u8>, Error> {
     let f = z.by_index(i).map_err(|e| match e {
-        zip::result::ZipError::UnsupportedArchive(_) => Error::Unsupported("encrypted"),
+        zip::result::ZipError::UnsupportedArchive(m)
+            if m == zip::result::ZipError::PASSWORD_REQUIRED =>
+        {
+            Error::Unsupported("encrypted")
+        }
+        zip::result::ZipError::UnsupportedArchive(_) => Error::Unsupported("zip method"),
         _ => Error::Corrupt,
     })?;
     let cap = MAX_ENTRY_BYTES.min(
@@ -225,40 +234,42 @@ fn zip_read(z: &mut ZipFile, i: usize, head: bool, budget: &Cell<u64>) -> Result
     )
 }
 
+/// What one pass over an archive learns: the pages in reading order and, for a solid format when
+/// they fit `SOLID_CACHE_BYTES`, the pages themselves.
+pub struct Listing {
+    pub pages: Vec<Page>,
+    pub solid: Option<Vec<Vec<u8>>>,
+}
+
+/// Whether reading one page decodes what precedes it (7z, RAR).
+pub fn is_solid(path: &Path) -> Result<bool, Error> {
+    Ok(sniff(path)? == Kind::Lib)
+}
+
 #[cfg(target_os = "linux")]
 mod lib {
     use super::*;
-    use libarchive2::{FileType, ReadArchive};
+    use crate::comics::ar::{Fail, Reader};
 
-    /// What a header says about an entry; `name` is set for a page that may be read.
-    struct Header {
-        name: Option<String>,
-        size: u64,
-        encrypted: bool,
+    fn map(f: Fail) -> Error {
+        match f {
+            Fail::Corrupt => Error::Corrupt,
+            Fail::TooLarge => Error::TooLarge,
+        }
     }
 
-    /// Walks the entries of a 7z or RAR in archive order; `on(name, archive)` runs for each page and
-    /// returns `false` to stop. Headers are bounded as a whole: libarchive decodes what a solid block
-    /// skips, so the declared sizes are capped before any of it is asked for.
-    fn lib_each(
+    /// One pass over the entries in archive order: `on(ordinal, name, reader)` runs for each page
+    /// and returns `false` to stop; at most `budget` bytes are decoded. Every entry is read to its end through the budget (`Reader`
+    /// never lets libarchive skip), and the declared sizes are capped before any of it.
+    pub(super) fn each(
         path: &Path,
-        mut on: impl FnMut(String, &mut ReadArchive<'_>) -> Result<bool, Error>,
+        budget: u64,
+        mut on: impl FnMut(usize, String, &mut Reader) -> Result<bool, Error>,
     ) -> Result<(), Error> {
         let len = std::fs::metadata(path).map_or(0, |m| m.len());
-        let mut ar = ReadArchive::open(path).map_err(|_| Error::Corrupt)?;
+        let mut r = Reader::open(path, budget).map_err(map)?;
         let (mut entries, mut declared) = (0usize, 0u64);
-        loop {
-            let h = match ar.next_entry() {
-                Ok(Some(e)) => Header {
-                    name: (e.file_type() == FileType::RegularFile && e.hardlink().is_none())
-                        .then(|| e.pathname().and_then(|n| page_name(&n)))
-                        .flatten(),
-                    size: u64::try_from(e.size()).unwrap_or(0),
-                    encrypted: e.is_encrypted(),
-                },
-                Ok(None) => return Ok(()),
-                Err(_) => return Err(Error::Corrupt),
-            };
+        while let Some(h) = r.next().map_err(map)? {
             entries += 1;
             declared = declared.saturating_add(h.size);
             if entries > MAX_ENTRIES
@@ -267,91 +278,88 @@ mod lib {
             {
                 return Err(Error::TooLarge);
             }
-            let Some(name) = h.name else { continue };
+            let name = (h.regular && !h.hardlink)
+                .then(|| h.name.as_deref().and_then(page_name))
+                .flatten();
+            let Some(name) = name else {
+                r.drain().map_err(map)?;
+                continue;
+            };
             if h.encrypted {
                 return Err(Error::Unsupported("encrypted"));
             }
             if h.size > MAX_ENTRY_BYTES {
                 return Err(Error::TooLarge);
             }
-            if !on(name, &mut ar)? {
+            if !on(entries - 1, name, &mut r)? {
                 return Ok(());
             }
+            r.drain().map_err(map)?;
         }
+        Ok(())
     }
 
-    /// The current entry's first `limit` bytes through the budget; `truncate` as in `read_limited`.
-    fn lib_read(
-        ar: &mut ReadArchive<'_>,
-        limit: u64,
-        truncate: bool,
-        budget: &Cell<u64>,
-    ) -> Result<Vec<u8>, Error> {
-        let mut out = vec![];
-        let mut buf = vec![0u8; 64 * 1024];
+    /// The current entry's bytes, `TooLarge` past the entry cap.
+    fn take(r: &mut Reader) -> Result<Vec<u8>, Error> {
+        let (mut out, mut buf) = (vec![], vec![0u8; 64 * 1024]);
         loop {
-            let n = ar.read_data(&mut buf).map_err(|_| Error::Corrupt)?;
+            let n = r.read(&mut buf).map_err(map)?;
             if n == 0 {
                 return Ok(out);
             }
-            let left = budget.get();
-            if n as u64 > left {
+            out.extend_from_slice(&buf[..n]);
+            if out.len() as u64 > MAX_ENTRY_BYTES {
                 return Err(Error::TooLarge);
-            }
-            budget.set(left - n as u64);
-            let room = (limit + 1).saturating_sub(out.len() as u64) as usize;
-            out.extend_from_slice(&buf[..n.min(room)]);
-            if out.len() as u64 > limit {
-                if !truncate {
-                    return Err(Error::TooLarge);
-                }
-                out.truncate(limit as usize);
-                return Ok(out);
             }
         }
     }
 
-    fn lib_names(path: &Path) -> Result<Vec<String>, Error> {
+    pub fn list(path: &Path) -> Result<Listing, Error> {
+        let mut found: Vec<(String, Page, Option<Vec<u8>>)> = vec![];
+        let mut kept = 0u64;
+        each(path, MAX_TOTAL_BYTES, |_, name, r| {
+            let bytes = take(r)?;
+            let (width, height) = dimensions(&bytes[..bytes.len().min(HEADER_BYTES as usize)]);
+            let keep = kept + bytes.len() as u64 <= SOLID_CACHE_BYTES;
+            if keep {
+                kept += bytes.len() as u64;
+            }
+            found.push((name, Page { width, height }, keep.then_some(bytes)));
+            Ok(true)
+        })?;
+        found.sort_by(|a, b| natural(&a.0, &b.0));
+        if found.len() > MAX_PAGES {
+            return Err(Error::TooLarge);
+        }
+        let solid = found
+            .iter()
+            .all(|f| f.2.is_some())
+            .then(|| found.iter_mut().filter_map(|f| f.2.take()).collect());
+        Ok(Listing {
+            pages: found.into_iter().map(|f| f.1).collect(),
+            solid,
+        })
+    }
+
+    /// `(ordinal, name)` of every page in reading order.
+    pub fn names(path: &Path) -> Result<Vec<(usize, String)>, Error> {
         let mut out = vec![];
-        lib_each(path, |n, _| {
-            out.push(((), n));
+        each(path, MAX_TOTAL_BYTES, |o, n, _| {
+            out.push((o, n));
             Ok(true)
         })?;
-        Ok(sorted(out)?.into_iter().map(|p| p.1).collect())
+        sorted(out)
     }
 
-    pub fn pages(path: &Path) -> Result<Vec<Page>, Error> {
-        let budget = Cell::new(MAX_TOTAL_BYTES);
-        let mut found = vec![];
-        lib_each(path, |n, ar| {
-            let (width, height) = match lib_read(ar, HEADER_BYTES, true, &budget) {
-                Ok(b) => dimensions(&b),
-                Err(Error::TooLarge) if budget.get() == 0 => return Err(Error::TooLarge),
-                Err(_) => (0, 0),
-            };
-            found.push((Page { width, height }, n));
-            Ok(true)
-        })?;
-        Ok(sorted(found)?.into_iter().map(|p| p.0).collect())
-    }
-
-    pub fn names(path: &Path) -> Result<Vec<String>, Error> {
-        lib_names(path)
-    }
-
+    /// Page `index` alone: two passes, the cache of decoded archives is `pages.rs`'s.
     pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
-        let raw = lib_names(path)?.get(index).ok_or(Error::Missing)?.clone();
+        let at = names(path)?.get(index).ok_or(Error::Missing)?.0;
         let mut found = None;
-        lib_each(path, |n, ar| {
-            if n != raw {
+        each(path, MAX_TOTAL_BYTES, |o, _, r| {
+            if o != at {
                 return Ok(true);
             }
-            found = Some(lib_read(
-                ar,
-                MAX_ENTRY_BYTES,
-                false,
-                &Cell::new(MAX_TOTAL_BYTES),
-            )?);
+            found = Some(take(r)?);
             Ok(false)
         })?;
         found.ok_or(Error::Corrupt)
@@ -363,11 +371,11 @@ mod lib {
 mod lib {
     use super::*;
 
-    pub fn pages(_: &Path) -> Result<Vec<Page>, Error> {
+    pub fn list(_: &Path) -> Result<Listing, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 
-    pub fn names(_: &Path) -> Result<Vec<String>, Error> {
+    pub fn names(_: &Path) -> Result<Vec<(usize, String)>, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 
@@ -376,32 +384,45 @@ mod lib {
     }
 }
 
-/// The dimensions of every page, in reading order. An unreadable header gives `0 x 0`, the page keeps its index.
-pub fn pages(path: &Path) -> Result<Vec<Page>, Error> {
-    let pages = match sniff(path)? {
+/// The pages in reading order with their dimensions (an unreadable header or a page past the
+/// probe budget gives `0 x 0`, the page keeps its index).
+pub fn list(path: &Path) -> Result<Listing, Error> {
+    let listing = match sniff(path)? {
         Kind::Zip => {
             let mut z = open_zip(path)?;
             let budget = Cell::new(MAX_TOTAL_BYTES);
-            let mut out = vec![];
+            let mut left = DIMS_BUDGET;
+            let mut pages = vec![];
             for (i, _) in zip_names(&mut z)? {
-                let (width, height) = match zip_read(&mut z, i, true, &budget) {
-                    Ok(b) => dimensions(&b),
-                    Err(Error::TooLarge) if budget.get() == 0 => return Err(Error::TooLarge),
-                    Err(_) => (0, 0),
+                let (width, height) = if left == 0 {
+                    (0, 0)
+                } else {
+                    match zip_read(&mut z, i, true, &budget) {
+                        Ok(b) => {
+                            left = left.saturating_sub(b.len() as u64);
+                            dimensions(&b)
+                        }
+                        Err(Error::TooLarge) if budget.get() == 0 => return Err(Error::TooLarge),
+                        Err(_) => (0, 0),
+                    }
                 };
-                out.push(Page { width, height });
+                pages.push(Page { width, height });
             }
-            out
+            Listing { pages, solid: None }
         }
-        Kind::Lib => lib::pages(path)?,
+        Kind::Lib => lib::list(path)?,
     };
-    if pages.is_empty() {
+    if listing.pages.is_empty() {
         return Err(Error::NoPages);
     }
-    Ok(pages)
+    Ok(listing)
 }
 
-/// The number of pages, from the entry list alone.
+pub fn pages(path: &Path) -> Result<Vec<Page>, Error> {
+    list(path).map(|l| l.pages)
+}
+
+/// The number of pages, from the entry list alone (a solid archive is read through once).
 pub fn page_count(path: &Path) -> Result<usize, Error> {
     let n = match sniff(path)? {
         Kind::Zip => zip_names(&mut open_zip(path)?)?.len(),
@@ -613,7 +634,25 @@ mod tests {
         use super::*;
         use libarchive2::{ArchiveFormat, EntryMut, FileType, WriteArchive};
 
+        /// The writer converts names through the thread's locale, so it runs under UTF-8; the
+        /// reader under test runs under the C locale.
         fn seven(path: &std::path::Path, files: &[(&str, &[u8])], link: Option<&str>) {
+            // SAFETY: static NUL-terminated name; the thread's locale is restored and freed below.
+            unsafe {
+                let loc = libc::newlocale(
+                    libc::LC_CTYPE_MASK,
+                    c"C.UTF-8".as_ptr(),
+                    std::ptr::null_mut(),
+                );
+                assert!(!loc.is_null(), "no C.UTF-8 locale");
+                let prev = libc::uselocale(loc);
+                write_seven(path, files, link);
+                libc::uselocale(prev);
+                libc::freelocale(loc);
+            }
+        }
+
+        fn write_seven(path: &std::path::Path, files: &[(&str, &[u8])], link: Option<&str>) {
             let mut w = WriteArchive::new()
                 .format(ArchiveFormat::SevenZip)
                 .open_file(path)
@@ -728,6 +767,36 @@ mod tests {
                     .collect::<Vec<_>>(),
                 [5, 3]
             );
+        }
+
+        #[test]
+        fn a_non_page_entry_counts_against_the_budget_too() {
+            let t = Tmp::new("budget");
+            let p = t.file(
+                "a.cbr",
+                &rar5(&[("big.bin", &vec![7u8; 1024 * 1024]), ("p1.png", &png(2, 2))]),
+            );
+            let mut seen = 0;
+            let r = lib::each(&p, 100 * 1024, |_, _, _| {
+                seen += 1;
+                Ok(true)
+            });
+            assert_eq!((r, seen), (Err(Error::TooLarge), 0));
+            assert_eq!(lib::each(&p, 2 * 1024 * 1024, |_, _, _| Ok(true)), Ok(()));
+        }
+
+        #[test]
+        fn non_ascii_names_read_under_the_c_locale() {
+            let t = Tmp::new("locale");
+            let p = t.0.join("a.cb7");
+            let a = png(4, 6);
+            seven(
+                &p,
+                &[("\u{e9}t\u{e9} 1.png", &a), ("\u{65e5}\u{672c}.png", &a)],
+                None,
+            );
+            assert_eq!(page_count(&p), Ok(2));
+            assert_eq!(page(&p, 0).unwrap(), a);
         }
 
         #[test]
