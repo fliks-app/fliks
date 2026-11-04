@@ -256,3 +256,226 @@ async fn a_hidden_collection_reads_like_a_missing_one(pool: PgPool) {
     assert_eq!(c.get("/api/opds/recent?page=0").await.status, 400);
     assert_eq!(c.get("/api/opds/recent?page=x").await.status, 400);
 }
+
+fn png(w: u32, h: u32) -> Vec<u8> {
+    let mut out = vec![];
+    image::RgbImage::new(w, h)
+        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .unwrap();
+    out
+}
+
+fn cbz() -> Vec<u8> {
+    use std::io::Write;
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(vec![]));
+    let o =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for n in ["p1.png", "p2.png", "p3.png"] {
+        w.start_file(n, o).unwrap();
+        w.write_all(&png(600, 900)).unwrap();
+    }
+    w.finish().unwrap().into_inner()
+}
+
+/// Libraries: 1 comics readable, 2 comics hidden, 4 books and comics readable. Volume 20 (library 1): issue 1
+/// (cbz, read to page 2), issue 2 (pdf), annual 1 (cbz); volume 21 (library 2): issue 1.
+async fn comics_ctx(pool: PgPool, tag: &str) -> (Ctx, std::path::PathBuf) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    let dir = std::env::temp_dir().join(format!("fliks-opds-it-{}-{tag}", std::process::id()));
+    let (one, two) = (dir.join("one"), dir.join("two"));
+    std::fs::create_dir_all(&one).unwrap();
+    std::fs::create_dir_all(&two).unwrap();
+    for (d, n) in [(&one, "a.cbz"), (&one, "c.cbz"), (&two, "h.cbz")] {
+        std::fs::write(d.join(n), cbz()).unwrap();
+    }
+    std::fs::write(one.join("b.pdf"), b"%PDF-1.4").unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"
+        INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read"]', false), (2, 'None', '[]', false);
+        INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (2, 'plain', false, 1), (3, 'noperm', false, 2);
+        INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Comics', '["comic"]'), (2, 'Hidden', '["comic"]'), (4, 'Mixed', '["book", "comic"]');
+        INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '{one}'), (2, 2, '{two}');
+        INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (4, 2);
+        INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (20, 'Alpha Annual Run', 'comic', 1, ''), (21, 'Secret', 'comic', 2, '');
+        INSERT INTO editions (id, "mediaId", family) VALUES (1, 20, 'image'), (2, 21, 'image');
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 20, 1), (2, 20, 1), (3, 20, 1), (4, 21, 2);
+        INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label, "pageCount") VALUES
+          (1, 20, 'issue', 1, '1', 3), (2, 20, 'issue', 2, '2', NULL), (3, 20, 'annual', 1, '1', 3), (4, 21, 'issue', 1, '1', 3);
+        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality) VALUES
+          (1, 20, 1, 'a.cbz', 5, 'cbz'), (2, 20, 1, 'b.pdf', 8, 'pdf'), (3, 20, 1, 'c.cbz', 5, 'cbz'), (4, 21, 2, 'h.cbz', 5, 'cbz');
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
+          (1, 1, 20, 0, 0), (2, 2, 20, 0, 0), (3, 3, 20, 0, 0), (4, 4, 21, 0, 0);
+        INSERT INTO playback_states ("userId", "mediaFileId", "itemId", locator, "lastPlayedAt")
+          VALUES (2, 1, 1, '{{"page": 2}}', '2026-01-02T03:04:05Z');
+        INSERT INTO playback_states ("userId", "mediaFileId", "itemId", locator) VALUES (2, 3, 3, '{{"page": 1e12}}');
+        "#,
+        one = one.display(),
+        two = two.display()
+    )))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let c = Ctx {
+        opds: token(&pool, 2, Kind::Opds).await,
+        kosync: token(&pool, 2, Kind::Kosync).await,
+        noperm: token(&pool, 3, Kind::Opds).await,
+        app: opds::router().with_state(st),
+    };
+    (c, dir)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_comic_volume_feed_streams_pages_with_the_pse_attributes(pool: PgPool) {
+    let (c, dir) = comics_ctx(pool, "feed").await;
+    let f = c.get("/api/opds/comics/20").await;
+    assert_eq!(f.status, 200);
+    assert!(
+        f.headers["content-type"]
+            .to_str()
+            .unwrap()
+            .contains("kind=acquisition")
+    );
+    let b = &f.body;
+    assert!(b.contains("xmlns:pse=\"http://vaemendis.net/opds-pse/ns\""));
+    assert!(b.contains(
+        "rel=\"http://vaemendis.net/opds-pse/stream\" href=\"/api/opds/issues/1/pages/{pageNumber}?width={maxWidth}\" \
+         type=\"image/jpeg\" pse:count=\"3\" pse:lastRead=\"2\" pse:lastReadDate=\"2026-01-02T03:04:05Z\""
+    ));
+    assert!(b.contains("href=\"/api/stream/1?download=1\" type=\"application/vnd.comicbook+zip\""));
+    assert!(b.contains("type=\"application/pdf\""));
+    assert_eq!(
+        b.matches("opds-pse/stream").count(),
+        2,
+        "the pdf has no PSE link"
+    );
+    assert_eq!(b.matches("lastRead=").count(), 2);
+    assert!(
+        b.contains("pse:lastRead=\"3\""),
+        "a huge page is clamped to the count"
+    );
+    let at = |t: &str| b.find(t).unwrap();
+    assert!(at("<title>Alpha Annual Run #1</title>") < at("<title>Alpha Annual Run #2</title>"));
+    assert!(
+        at("<title>Alpha Annual Run #2</title>") < at("<title>Alpha Annual Run Annual #1</title>")
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[sqlx::test(migrations = false)]
+async fn comics_are_listed_through_the_acl(pool: PgPool) {
+    let (c, dir) = comics_ctx(pool, "list").await;
+    let root = c.get("/api/opds").await.body;
+    assert!(root.contains("/api/opds/libraries/1\"") && root.contains("/api/opds/libraries/4\""));
+    assert!(root.contains("href=\"/api/opds/comics\""));
+    assert!(!root.contains("/api/opds/libraries/2\""));
+    let lib = c.get("/api/opds/libraries/1").await;
+    assert!(
+        lib.headers["content-type"]
+            .to_str()
+            .unwrap()
+            .contains("kind=navigation")
+    );
+    assert!(lib.body.contains("href=\"/api/opds/comics/20\""));
+    assert_eq!(c.get("/api/opds/libraries/2").await.status, 404);
+    let all = c.get("/api/opds/comics").await.body;
+    assert!(
+        all.contains("Alpha Annual Run") && all.contains("3 issues") && !all.contains("Secret")
+    );
+    assert!(
+        c.get("/api/opds/search?q=Alpha")
+            .await
+            .body
+            .contains("/api/opds/comics/20")
+    );
+    assert!(
+        !c.get("/api/opds/search?q=Secret")
+            .await
+            .body
+            .contains("<entry>")
+    );
+    let hidden = c.get("/api/opds/comics/21").await;
+    let missing = c.get("/api/opds/comics/99").await;
+    assert_eq!(
+        (hidden.status, &hidden.body[..]),
+        (404, missing.body.replace("99", "21").as_str())
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_pse_page_route_takes_the_opds_credential_and_the_page_acl(pool: PgPool) {
+    let (c, dir) = comics_ctx(pool, "page").await;
+    assert_eq!(c.raw("/api/opds/issues/1/pages/0", None).await.status, 401);
+    assert_eq!(
+        c.raw("/api/opds/issues/1/pages/0", Some(basic(&c.kosync)))
+            .await
+            .status,
+        401
+    );
+    let ok = c.get("/api/opds/issues/1/pages/0?width=300").await;
+    assert_eq!(ok.status, 200);
+    assert_eq!(ok.headers["content-type"], "image/jpeg");
+    assert_eq!(c.get("/api/opds/issues/1/pages/2").await.status, 200);
+    assert_eq!(
+        c.get("/api/opds/issues/1/pages/0?width=9999").await.status,
+        200
+    );
+    assert_eq!(
+        c.get("/api/opds/issues/1/pages/3").await.status,
+        404,
+        "past the last page"
+    );
+    assert_eq!(
+        c.get("/api/opds/issues/2/pages/0").await.status,
+        404,
+        "a pdf"
+    );
+    assert_eq!(
+        c.get("/api/opds/issues/4/pages/0").await.status,
+        404,
+        "a hidden library"
+    );
+    assert_eq!(c.get("/api/opds/issues/99/pages/0").await.status, 404);
+    assert_eq!(
+        c.get("/api/opds/issues/1/pages/0?width={maxWidth}")
+            .await
+            .status,
+        200,
+        "an unreplaced template"
+    );
+    assert_eq!(c.get("/api/opds/issues/x/pages/0").await.status, 400);
+    for auth in [
+        format!("Bearer {}", c.opds),
+        format!("Basic {}", STANDARD.encode(format!("r:{}", "x".repeat(8)))),
+    ] {
+        assert_eq!(
+            c.raw("/api/opds/issues/1/pages/0", Some(auth)).await.status,
+            401
+        );
+    }
+    assert_eq!(
+        c.raw("/api/opds/issues/1/pages/0?token=abc", None)
+            .await
+            .status,
+        401
+    );
+    assert_eq!(
+        c.raw("/api/opds/issues/1/pages/0", Some(basic(&c.noperm)))
+            .await
+            .status,
+        403
+    );
+    let etag = ok.headers["etag"].to_str().unwrap().to_owned();
+    let req = Request::builder()
+        .uri("/api/opds/issues/1/pages/0?width=300")
+        .header("authorization", basic(&c.opds))
+        .header("if-none-match", etag)
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        c.app.clone().oneshot(req).await.unwrap().status().as_u16(),
+        304
+    );
+    std::fs::remove_dir_all(dir).ok();
+}

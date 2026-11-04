@@ -2615,6 +2615,40 @@
         }
       }
     },
+    "/api/opds/comics": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "comics_list",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/opds/comics/{id}": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "operationId": "volume",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/opds/issues/{itemId}/pages/{index}": {
+      "get": {
+        "tags": [
+          "crate::opds"
+        ],
+        "summary": "The PSE stream URL: the page route of `comics/pages.rs` under the OPDS credential.",
+        "operationId": "issue_page",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/opds/libraries/{id}": {
       "get": {
         "tags": [
