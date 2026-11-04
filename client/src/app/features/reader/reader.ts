@@ -44,6 +44,7 @@ import { AudioPlayerService } from '../../core/services/audio-player/audio-playe
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { safeFileName, saveFile } from '../../core/plugins/save-file.plugin';
 import { ControlsVisibilityService } from '../player/controls/controls-visibility';
+import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { Immersive } from '../../core/plugins/immersive.plugin';
 import { BottomSheetComponent } from '../../shared/components/bottom-sheet';
 import { IS_STANDALONE_BUNDLE } from '../../core/utils/standalone-bundle';
@@ -186,7 +187,8 @@ const EXCERPT_MAX = 2000;
     '(window:pagehide)': 'flushProgress()',
     '(document:visibilitychange)': 'flushProgress()',
     '(mousemove)': 'chrome.onPointerMove()',
-    '(focusin)': 'chrome.onInteraction()',
+    '(focusin)': 'onFocusMove()',
+    '(focusout)': 'onFocusMove()',
     '(document:fullscreenchange)': 'onFullscreenChange()',
   },
 })
@@ -202,6 +204,7 @@ export class ReaderComponent implements OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly settingsStore = inject(ReaderSettingsService);
+  private readonly scope = inject(StorageScopeService);
   private readonly progress = inject(ReaderProgressService);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -225,7 +228,7 @@ export class ReaderComponent implements OnDestroy {
   private readonly onPhoneChange = (e: MediaQueryListEvent) => this.compact.set(e.matches);
   private readonly signature = computed(() => {
     const { theme, zoom, ...layout } = this.settings();
-    return layoutSignature(layout, ...this.viewport());
+    return layoutSignature({ ...layout, compact: this.compact() }, ...this.viewport());
   });
   private pagesReady = false;
   private paginateRun = 0;
@@ -240,6 +243,8 @@ export class ReaderComponent implements OnDestroy {
   protected readonly loading = signal(true);
   /** The player's controls countdown: shown on pointer moves and taps, held by an open panel or a drag. */
   protected readonly chrome = inject(ControlsVisibilityService);
+  /** Keyboard or remote focus on a bar control keeps the bars up; hidden bars are inert and would drop it. */
+  private readonly barFocused = signal(false);
   protected readonly chromeVisible = this.chrome.visible;
   protected readonly panel = signal<Panel | null>(null);
   /** The sheet keeps showing the panel it held while it slides away. */
@@ -355,7 +360,9 @@ export class ReaderComponent implements OnDestroy {
   constructor() {
     this.chrome.hide();
     this.phoneQuery.addEventListener('change', this.onPhoneChange);
-    this.chrome.configure({ pinned: computed(() => this.panel() !== null || this.scrubbing() !== null) });
+    this.chrome.configure({
+      pinned: computed(() => this.panel() !== null || this.scrubbing() !== null || this.barFocused()),
+    });
     // Android system bar icons go dark over a light page; the reader's bars and the app are dark.
     if (Capacitor.isNativePlatform()) {
       effect(() => {
@@ -521,7 +528,7 @@ export class ReaderComponent implements OnDestroy {
       this.counts.set(new Map());
       return;
     }
-    this.counts.set(loadCounts(this.target().itemId, this.signature()));
+    this.counts.set(loadCounts(this.scope.suffix(), this.target().itemId, this.signature()));
     this.paginateTimer = setTimeout(() => void this.startPagination(), PAGINATE_SETTLE_MS);
   }
 
@@ -536,7 +543,8 @@ export class ReaderComponent implements OnDestroy {
     const signature = this.signature();
     this.pagesReady = true;
     this.measureFrames();
-    await paginate({
+    if (pageCount(this.order(), this.counts()) !== null) return;
+    const exact = await paginate({
       host: this.pageHost().nativeElement,
       publication,
       positions: this.positions,
@@ -544,8 +552,10 @@ export class ReaderComponent implements OnDestroy {
       skip: (href) => this.counts().has(href),
       onCount: (href, n) => this.setCount(href, n),
       aborted: () => run !== this.paginateRun,
-    }).catch(() => undefined);
-    if (run === this.paginateRun) saveCounts(this.target().itemId, signature, this.counts());
+    }).catch(() => false);
+    if (exact && run === this.paginateRun && this.scope.canPersist()) {
+      saveCounts(this.scope.suffix(), this.target().itemId, signature, this.counts());
+    }
   }
 
   private setCount(href: string, screens: number): void {
@@ -589,7 +599,7 @@ export class ReaderComponent implements OnDestroy {
     this.act(action);
   }
 
-  protected act(action: ReaderKeyAction): void {
+  private act(action: ReaderKeyAction): void {
     const nav = this.navigator;
     const noop = () => undefined;
     switch (action) {
@@ -646,6 +656,11 @@ export class ReaderComponent implements OnDestroy {
     this.chrome.toggle();
   }
 
+  protected onFocusMove(): void {
+    queueMicrotask(() => this.barFocused.set(!!document.activeElement?.closest('.rd-bar')));
+    this.chrome.onInteraction();
+  }
+
   private setChrome(visible: boolean): void {
     if (visible) this.chrome.show();
     else this.chrome.hide();
@@ -695,7 +710,6 @@ export class ReaderComponent implements OnDestroy {
     this.setChrome(false);
   }
 
-  /** The margins beside the text turn pages like the toolkit's side zones on the text itself. */
   /** A click while the bars are up puts them away instead of turning the page; true when it did. */
   private dismissChrome(): boolean {
     if (this.panel() || !this.chromeVisible()) return false;
@@ -704,6 +718,7 @@ export class ReaderComponent implements OnDestroy {
     return true;
   }
 
+  /** The margins beside the text turn pages like the toolkit's side zones on the text itself. */
   protected onMarginClick(e: MouseEvent): void {
     if (e.target !== e.currentTarget || this.dismissChrome()) return;
     this.act(e.clientX < (e.currentTarget as HTMLElement).clientWidth / 2 ? 'left' : 'right');
@@ -740,7 +755,6 @@ export class ReaderComponent implements OnDestroy {
     this.navigator?.go(target, false, (ok) => ok || this.landing.set(null));
   }
 
-
   protected goToAnnotation(a: Annotation): void {
     this.goToPassage(parseLocator(a.locator));
   }
@@ -748,7 +762,7 @@ export class ReaderComponent implements OnDestroy {
   /** Jumps to a quoted passage and blinks an outline around it so the eye finds it on the page. */
   private goToPassage(target: Locator | null | undefined): void {
     if (target) this.navigator?.go(target, false, (ok) => ok && this.flash(target));
-    if (window.matchMedia(PHONE).matches) this.closePanel();
+    if (this.compact()) this.closePanel();
   }
 
   private flash(locator: Locator): void {

@@ -1,7 +1,7 @@
 import { Injectable, inject, signal, untracked } from '@angular/core';
 import { TextAlignment, type IEpubPreferences } from '@readium/navigator';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
-import type { AnnotationColour } from './annotations-api.service';
+import { ANNOTATION_COLOURS, type AnnotationColour } from './annotations-api.service';
 import { COMIC_MODES, COMIC_PREFS_DEFAULT, type ComicPrefs } from './comic-layout';
 import type { SidebarTab } from './reader-sidebar';
 
@@ -11,7 +11,6 @@ export interface ReaderPanelState {
   notesFilter: AnnotationColour | null;
 }
 const SIDEBAR_TABS: readonly SidebarTab[] = ['contents', 'bookmarks', 'notes', 'search'];
-const NOTE_COLOURS: readonly AnnotationColour[] = ['yellow', 'green', 'blue', 'pink'];
 
 export type ReaderTheme = 'original' | 'sepia' | 'calm' | 'slate' | 'night' | 'black';
 export type ReaderFont = 'publisher' | 'literata' | 'sans' | 'atkinson';
@@ -173,8 +172,9 @@ export class ReaderSettingsService {
 
   /** Untracked, so an effect saving one field doesn't rerun on the write it makes. */
   savePanel(patch: Partial<ReaderPanelState>): void {
-    this.panel.set(sanitizePanel({ ...untracked(this.panel), ...patch }));
-    this.write(this.panelKey, this.panel());
+    const next = sanitizePanel({ ...untracked(this.panel), ...patch });
+    this.panel.set(next);
+    this.write(this.panelKey, next);
   }
 
   comicPrefs(mediaId: number): ComicPrefs {
@@ -212,7 +212,7 @@ function sanitizePanel(raw: unknown): ReaderPanelState {
   const r = recordOf(raw);
   return {
     tab: oneOf(SIDEBAR_TABS, r['tab'], 'contents'),
-    notesFilter: NOTE_COLOURS.includes(r['notesFilter'] as AnnotationColour)
+    notesFilter: ANNOTATION_COLOURS.includes(r['notesFilter'] as AnnotationColour)
       ? (r['notesFilter'] as AnnotationColour)
       : null,
   };

@@ -202,7 +202,7 @@
         (pointerleave)="hovering.set(null)"
       >
         @if (bubble(); as b) {
-          <div class="rd-bubble" [style.inset-inline-start.%]="b.at * 100" role="status">
+          <div class="rd-bubble" [style.inset-inline-start.%]="b.at * 100" aria-hidden="true">
             <span class="block truncate font-medium">{{ b.title }}</span>
             <span class="tabular-nums text-base-content/70">
               @if (b.page) {
@@ -293,7 +293,7 @@
         [class]="
           compact()
             ? 'rd-panel flex flex-col text-base-content [--panel-off:none]'
-            : 'rd-panel [--panel-off:translateX(100%)] absolute bottom-0 right-0 top-[calc(env(safe-area-inset-top)+4rem)] z-40 flex w-[26rem] flex-col border-l border-base-content/10 bg-base-300/95 text-base-content shadow-2xl backdrop-blur'
+            : 'rd-panel [--panel-off:translateX(100%)] absolute bottom-0 right-0 top-[calc(env(safe-area-inset-top)+4rem)] z-40 flex w-[26rem] flex-col pb-[env(safe-area-inset-bottom)] border-l border-base-content/10 bg-base-300/95 text-base-content shadow-2xl backdrop-blur'
         "
         role="dialog"
         [attr.aria-label]="'reader.panel' | translate"
@@ -339,7 +339,7 @@
   @if (!compact() && panel(); as p) {
     <ng-container *ngTemplateOutlet="panelTpl; context: { $implicit: p }" />
   }
-  <app-bottom-sheet [open]="compact() && panel() !== null" (closed)="closePanel()">
+  <app-bottom-sheet [open]="compact() && panel() !== null" (closed)="closePanel(); sheetPanel.set(null)">
     @if (compact() && sheetPanel(); as p) {
       <ng-container *ngTemplateOutlet="panelTpl; context: { $implicit: p }" />
     }
