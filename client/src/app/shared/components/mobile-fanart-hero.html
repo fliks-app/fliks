@@ -1,5 +1,6 @@
-<!-- While two layers overlap the scrim mask sits on the pair: masking each lets the outgoing picture paint through the incoming one's faded bottom. -->
-<div class="relative -mx-4 -mt-4 hero-fanart-bleed" [class.hero-fanart-fade]="!!outgoing()" [class.overflow-hidden]="blur()">
+<!-- While two layers overlap the scrim mask sits on the pair: masking each lets the outgoing picture paint through the incoming one's faded bottom.
+     A blurred picture is scaled past the clip, which would cut its own fade, so its mask sits on the wrapper too. -->
+<div class="relative -mx-4 -mt-4 hero-fanart-bleed" [class.hero-fanart-fade]="!!outgoing() || blur()" [class.overflow-hidden]="blur()">
   <!-- Keyed on the url so appImgFadeIn fades the new picture in; the name rides the image, not a wrapper (desktop morph pairs img with img). -->
   @for (url of incoming(); track url) {
     <img
@@ -13,7 +14,7 @@
       loading="eager"
       fetchpriority="high"
       (load)="onIncomingLoad()"
-      [class.hero-fanart-fade]="!outgoing()"
+      [class.hero-fanart-fade]="!outgoing() && !blur()"
       class="relative w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
     />
   } @empty {
