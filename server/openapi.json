@@ -10,6 +10,29 @@
     "version": "1"
   },
   "paths": {
+    "/api/annotations/{id}": {
+      "delete": {
+        "tags": [
+          "crate::annotations"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
+      },
+      "patch": {
+        "tags": [
+          "crate::annotations"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {},
+          "400": {},
+          "404": {}
+        }
+      }
+    },
     "/api/auth/cast-info": {
       "post": {
         "tags": [
@@ -932,6 +955,30 @@
         "operationId": "sonarr_test",
         "responses": {
           "201": {}
+        }
+      }
+    },
+    "/api/items/{itemId}/annotations": {
+      "get": {
+        "tags": [
+          "crate::annotations"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::annotations"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {},
+          "400": {},
+          "404": {},
+          "409": {}
         }
       }
     },
