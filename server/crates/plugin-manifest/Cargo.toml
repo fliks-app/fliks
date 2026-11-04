@@ -1,0 +1,18 @@
+[package]
+name = "fliks-plugin-manifest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+fliks_domain = { path = "../domain" }
+serde.workspace = true
+serde_json.workspace = true
+unicode-normalization.workspace = true
+sha2 = "0.11"
+base64 = "0.23"
+ed25519-dalek = "3"
+nodejs-semver = "7"
+miniz_oxide = "0.9"
+regex.workspace = true

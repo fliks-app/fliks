@@ -439,7 +439,7 @@ database and needs no scope. Fields and rules: `server/docs/spec/provider-plugin
 ## Proposing an extension point
 
 Everything a plugin can reach is a closed set: the host functions in the WIT world
-(`server/crates/plugin-sdk/wit/fliks.wit`), the scopes in `server/crates/server/src/plugins/manifest.rs`,
+(`server/crates/plugin-sdk/wit/fliks.wit`), the scopes in `server/crates/plugin-manifest/src/manifest.rs`,
 the UI slots in `client/src/app/core/plugin-ui/ui-contribution.ts`, and the routes a manifest may
 declare. That is deliberate — a closed set is what makes a plugin's blast radius reviewable, and what
 lets core promise a plugin will keep working across a release.

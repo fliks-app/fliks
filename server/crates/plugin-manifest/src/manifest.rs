@@ -1,6 +1,6 @@
 //! `plugin.json` (`plugins.md` rules 1-5, 12, 16) and the inspect pipeline over an archive.
-use super::archive::{self, Archive, Refusal, refuse};
-use super::trust::{self, Keys, Trust};
+use crate::archive::{self, Archive, Refusal, refuse};
+use crate::trust::{self, Keys, Trust};
 use fliks_domain::plugins::provider;
 use nodejs_semver::{Range, Version};
 use serde_json::{Map, Value};
@@ -640,7 +640,7 @@ mod tests {
     /// the host validates shapes, it holds no typed UI contract to generate from).
     #[test]
     fn client_ui_types_carry_what_the_host_requires() {
-        let ts = include_str!("../../../../../client/src/app/core/plugin-ui/ui-contribution.ts");
+        let ts = include_str!("../../../../client/src/app/core/plugin-ui/ui-contribution.ts");
         let required = |iface: &str, fields: &[&str]| {
             let start = ts
                 .find(&format!("interface {iface} "))

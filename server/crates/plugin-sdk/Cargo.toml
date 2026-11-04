@@ -26,9 +26,10 @@ futures-util = { version = "0.3", default-features = false, features = ["alloc"]
 [features]
 # Native tooling for plugin repositories (build/package/verify, component tests); a wasm32 build
 # of the SDK never includes it.
-build = ["dep:fliks-server", "dep:wit-parser", "dep:ed25519-dalek", "dep:base64"]
+build = ["dep:fliks-plugin-manifest", "dep:wit-parser", "dep:ed25519-dalek", "dep:base64"]
 harness = [
   "build",
+  "dep:fliks-server",
   "fliks-server/parity",
   "dep:tokio",
   "dep:tokio-rustls",
@@ -38,6 +39,7 @@ harness = [
 ]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fliks-plugin-manifest = { path = "../plugin-manifest", optional = true }
 fliks-server = { path = "../server", default-features = false, optional = true }
 wit-parser = { version = "0.261", optional = true }
 ed25519-dalek = { version = "3", optional = true }
