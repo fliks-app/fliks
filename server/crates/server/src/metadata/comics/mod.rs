@@ -6,7 +6,8 @@ pub mod routes;
 pub(crate) mod tests;
 
 pub(crate) use apply::language_of_library;
-pub use apply::{has_provider_id, refresh, write};
+pub(crate) use apply::set_details;
+pub use apply::{refresh, write};
 
 use super::{MetaError, Upstream, fail, unavailable};
 use crate::{http::AppError, state::AppState};
@@ -99,16 +100,4 @@ pub async fn describe(db: &PgPool, names: &[String]) -> sqlx::Result<Vec<Value>>
             json!({"provider": provider, "name": name, "url": url})
         })
         .collect())
-}
-
-/// `ComicDetail.providers` (rule 44): the namespaces that hold an id or a field of the volume.
-pub async fn attribution(db: &PgPool, media: i32) -> sqlx::Result<Vec<Value>> {
-    let names: Vec<String> = sqlx::query_scalar(
-        r#"SELECT provider::text FROM media_external_ids WHERE "mediaId" = $1
-           UNION SELECT provider::text FROM media_field_sources WHERE "mediaId" = $1 AND provider IS NOT NULL"#,
-    )
-    .bind(media)
-    .fetch_all(db)
-    .await?;
-    describe(db, &names).await
 }

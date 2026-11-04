@@ -6,6 +6,7 @@ use super::{
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
     libraries::{accessible_library_ids, assert_media_accessible, media_not_found, paths_visible},
+    metadata::attribution,
     state::AppState,
 };
 use axum::{
@@ -184,6 +185,8 @@ pub async fn get_media(
     } else if media["type"] == MediaKind::Comic.as_str() {
         media["comic"] = comics::detail(&st.db, id, a.user.id, &acl).await?;
     }
+    media["providers"] = attribution::providers(&st.db, id).await?.into();
+    media["fieldSources"] = attribution::field_sources(&st.db, id).await?;
     Ok(Json(media))
 }
 
