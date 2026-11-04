@@ -98,11 +98,7 @@
       }
     </ng-container>
   }
-  @if (unofficial()) {
-    <p class="mt-2 text-xs text-base-content/60" data-testid="unofficial">
-      {{ 'books_work.unofficial' | translate }}
-    </p>
-  }
+  <app-provider-attribution [providers]="m.providers" />
 </app-detail-hero>
 
 @if (b) {
@@ -131,6 +127,11 @@
       [artist]="b.authors.map((a) => a.name).join(', ')"
     />
     <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
+    @if (canEdit()) {
+      <button type="button" class="btn btn-ghost btn-sm self-start" data-testid="sources-button" (click)="openDialog(sourcesOpen, sourcesDialog())">
+        {{ 'books_work.sources' | translate }}
+      </button>
+    }
   }
 
   @if (similarItems().length) {

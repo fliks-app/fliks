@@ -1,6 +1,7 @@
 import {
   Component,
   ElementRef,
+  computed,
   inject,
   output,
   signal,
@@ -33,10 +34,12 @@ export interface IdentifyModalConfig {
   imdbId: string | null;
 }
 
-/** A result identifies by its provider and external id. */
+/** A result identifies by its provider and external id; a video also sends the ids it carries. */
 function identifyTarget(r: SearchHit) {
   return { ...searchResultIds(r), provider: r.provider, externalId: r.externalId };
 }
+
+const IDS_KINDS: MediaType[] = ['movie', 'series'];
 
 @Component({
   selector: 'app-media-detail-identify-modal',
@@ -78,6 +81,9 @@ export class MediaDetailIdentifyModalComponent {
 
   readonly key = searchResultKey;
 
+  /** The typed TMDB, TVDB and IMDb ids only name a movie or a series. */
+  readonly takesIds = computed(() => IDS_KINDS.includes(this.config()?.mediaType as MediaType));
+
   open(config: IdentifyModalConfig) {
     this.config.set(config);
     this.formTitle.set(config.title);
@@ -89,12 +95,10 @@ export class MediaDetailIdentifyModalComponent {
     this.searched.set(false);
     this.formProvider.set('');
     this.providers.set([]);
-    if (config.mediaType === 'movie' || config.mediaType === 'series') {
-      void this.metadata
-        .providersServing(config.mediaType)
-        .then((p) => this.providers.set(p))
-        .catch(() => undefined);
-    }
+    void this.metadata
+      .providersServing(config.mediaType)
+      .then((p) => this.providers.set(p))
+      .catch(() => undefined);
     this.dialogEl()?.nativeElement.showModal();
   }
 

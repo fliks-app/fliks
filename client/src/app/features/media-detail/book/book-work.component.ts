@@ -10,8 +10,10 @@ import { mediaDetailLink } from '../../../core/media-kinds';
 import type { Media } from '../../../core/services/api/media.service';
 import { remainingLabel } from '../../../core/utils/player.utils';
 import { MediaService } from '../../../core/services/api/media.service';
+import { MediaAdminService } from '../../../core/services/media-admin.service';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
@@ -20,7 +22,6 @@ import { BookSourcesComponent } from './book-sources.component';
 import { BookWantsComponent } from './book-wants.component';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 
-const UNOFFICIAL_PROVIDERS = ['audible', 'audnexus'];
 
 function toItem(e: CollectionDetail['entries'][number]): WorkItem {
   return {
@@ -36,6 +37,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
 @Component({
   selector: 'app-book-work',
   imports: [
+    ProviderAttributionComponent,
     RouterLink,
     TranslatePipe,
     DetailHeroComponent,
@@ -59,6 +61,7 @@ export class BookWorkComponent {
   private readonly audio = inject(AudioPlayerService);
   private readonly queue = inject(PlaybackQueueService);
   private readonly translate = inject(TranslateService);
+  private readonly admin = inject(MediaAdminService);
 
   protected readonly book = computed(() => asBookMedia(this.media())?.book ?? null);
   protected readonly canEdit = computed(() => this.auth.hasPermission('media.edit'));
@@ -109,21 +112,17 @@ export class BookWorkComponent {
     return !!p && p.progression > 0 && this.book()!.editions.find((e) => e.id === p.editionId)?.family === family;
   }
 
-  protected readonly unofficial = computed(() =>
-    !!this.book()?.editions.some((e) => e.fieldSources.some((f) => f.provider && UNOFFICIAL_PROVIDERS.includes(f.provider))),
-  );
-
   protected readonly wantsOpen = signal(false);
   protected readonly sourcesOpen = signal(false);
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
   private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
 
-  /** Profiles are the wants dialog for a book; identify opens the work-level sources until books have a provider search. */
+  /** Profiles are the wants dialog for a book; identify is the shared modal. */
   protected readonly actions = computed<MediaActionHandlers>(() =>
     this.canEdit()
       ? {
           'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()),
-          'media.identify': () => this.openDialog(this.sourcesOpen, this.sourcesDialog()),
+          'media.identify': () => this.admin.identify(this.media()),
         }
       : {},
   );
@@ -179,7 +178,7 @@ export class BookWorkComponent {
     });
   }
 
-  private openDialog(open: { set(v: boolean): void }, dialog: ElementRef<HTMLDialogElement> | undefined): void {
+  protected openDialog(open: { set(v: boolean): void }, dialog: ElementRef<HTMLDialogElement> | undefined): void {
     open.set(true);
     dialog?.nativeElement.showModal();
   }

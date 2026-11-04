@@ -22,6 +22,7 @@ import {
 } from '../../../../../core/services/api/metadata.service';
 import {
   ImportsApiService,
+  OrphanFileId,
   OrphanGroup,
   OrphanScanResult,
   RelinkOrphansBody,
@@ -35,6 +36,22 @@ const SEARCH_CONCURRENCY = 8;
  *  fan-out here means dozens of full videos copying at once. */
 const AUTO_IMPORT_CONCURRENCY = 3;
 
+/** The ISBN or ASIN the files of a book name: the settle identifies the book from it. */
+export function bookFileId(group: OrphanGroup): OrphanFileId | undefined {
+  return group.fileIds.find((f) => f.provider === 'isbn' || f.provider === 'asin');
+}
+
+/** Whether a search hit is the title one of the file ids names. */
+function namesHit(ids: OrphanFileId[], hit: SearchHit): boolean {
+  return ids.some(
+    (f) =>
+      (f.provider === hit.provider && f.externalId === hit.externalId) ||
+      (f.provider === 'tmdb' && String(hit.tmdbId) === f.externalId) ||
+      (f.provider === 'tvdb' && String(hit.tvdbId) === f.externalId) ||
+      (f.provider === 'imdb' && hit.imdbId === f.externalId),
+  );
+}
+
 interface GroupVM {
   group: OrphanGroup;
   query: string;
@@ -43,7 +60,8 @@ interface GroupVM {
   searching: boolean;
   searched: boolean;
   pick: SearchHit | null;
-  fromNfo: boolean;
+  /** The pick is the title a file id names, or none: the settle identifies it from the file. */
+  fromFile: boolean;
   linking: boolean;
   done: boolean;
   error: string;
@@ -194,7 +212,7 @@ export class OrphanScanPanelComponent {
           searching: false,
           searched: false,
           pick: null,
-          fromNfo: false,
+          fromFile: !!bookFileId(group),
           linking: false,
           done: false,
           error: '',
@@ -319,7 +337,7 @@ export class OrphanScanPanelComponent {
       ...partial,
       results: [],
       pick: null,
-      fromNfo: false,
+      fromFile: !!bookFileId(this.groups()[index].group),
       searched: false,
       searching: false,
     });
@@ -341,23 +359,17 @@ export class OrphanScanPanelComponent {
       const results = await this.metadata.search(vm.group.mediaType, query, { year: vm.year ?? undefined, provider });
       if (stale()) return;
 
-      // Auto-select the match referenced by the .nfo id, if any.
-      const nfo = vm.group.nfo;
-      const auto = nfo
-        ? results.find(
-            (r) =>
-              (nfo.tmdbId != null && r.tmdbId === nfo.tmdbId) ||
-              (nfo.tvdbId != null && r.tvdbId === nfo.tvdbId),
-          )
-        : undefined;
+      // Auto-select the match a file id names; a book with an ISBN or ASIN is identified from it.
+      const auto = results.find((r) => namesHit(vm.group.fileIds, r));
+      const fromFile = !!auto || !!bookFileId(vm.group);
       // Import-all takes the first result when nothing is picked, so pick it
       // here: the row the import will use is the row the user sees selected.
       this.patch(index, {
         results,
         searching: false,
         searched: true,
-        pick: auto ?? results[0] ?? null,
-        fromNfo: !!auto,
+        pick: auto ?? (fromFile ? null : (results[0] ?? null)),
+        fromFile,
       });
     } catch (err: unknown) {
       if (stale()) return;
@@ -370,6 +382,7 @@ export class OrphanScanPanelComponent {
   }
 
   readonly key = searchResultKey;
+  protected readonly bookFileId = bookFileId;
 
   isPicked(pick: SearchHit | null, result: SearchHit): boolean {
     return !!pick && searchResultKey(pick) === searchResultKey(result);
@@ -378,12 +391,12 @@ export class OrphanScanPanelComponent {
   pick(index: number, result: SearchHit) {
     const current = this.groups()[index]?.pick ?? null;
     const same = this.isPicked(current, result);
-    this.patch(index, { pick: same ? null : result, fromNfo: false });
+    this.patch(index, { pick: same ? null : result, fromFile: false });
   }
 
   /** The "add as is" pseudo-option: always sets an unmatched pick, no toggle. */
   pickUnmatched(index: number) {
-    this.patch(index, { pick: null, fromNfo: false });
+    this.patch(index, { pick: null, fromFile: false });
   }
 
   /** Why the reorganize toggle is ignored for this group's link button, or '' when it applies. */

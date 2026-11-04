@@ -21,6 +21,7 @@
       <span class="opacity-70">{{ 'comic.issue_number' | translate: { n: n.number } }}</span>
     </a>
   }
+  <app-provider-attribution [providers]="m.providers" />
 </app-detail-hero>
 
 <ng-template #issueRows let-issues let-kind="kind">

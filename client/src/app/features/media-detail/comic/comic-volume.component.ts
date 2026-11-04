@@ -11,6 +11,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
+import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { asComicMedia, nextIssue } from './comic-media';
@@ -25,6 +26,7 @@ import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
     NgTemplateOutlet,
     TranslatePipe,
     DetailHeroComponent,
+    ProviderAttributionComponent,
     LucidePencil,
     ModalHeaderComponent,
     ModalFooterComponent,

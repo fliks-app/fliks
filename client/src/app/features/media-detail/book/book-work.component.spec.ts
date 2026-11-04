@@ -148,18 +148,6 @@ describe('BookWorkComponent', () => {
     expect(Array.from(el.querySelectorAll('[data-testid="format-button"]'))).toHaveLength(1);
   });
 
-  it('mentions unofficial sources only when a field comes from one', async () => {
-    const plain = await setup({ series: [], authors: [], editions: [textEditionFixture] });
-    expect(plain.el.querySelector('[data-testid="unofficial"]')).toBeNull();
-
-    TestBed.resetTestingModule();
-    const flagged = await setup({
-      series: [], authors: [],
-      editions: [{ ...textEditionFixture, fieldSources: [{ field: 'duration', provider: 'audnexus', locked: false }] }],
-    });
-    expect(flagged.el.querySelector('[data-testid="unofficial"]')).not.toBeNull();
-  });
-
   it('offers the Sources and wants dialogs to editors only, loaded when opened', async () => {
     const viewer = await setup({ series: [], authors: [], editions: [textEditionFixture] });
     viewer.http.verify();

@@ -1798,6 +1798,10 @@
     "roots": "Este PC",
     "unreadable": "Pasta ilegível"
   },
+  "attribution": {
+    "data_from": "Dados de {{name}}",
+    "unofficial": "Alguns detalhes vêm de fontes não oficiais (Audible, Audnexus)."
+  },
   "common": {
     "unexpected_error": "Ocorreu um erro. Recarregue a página se voltar a acontecer.",
     "browse": "Procurar…",
@@ -2538,7 +2542,7 @@
       "scan_year_placeholder": "Ano",
       "scan_search": "Pesquisar",
       "scan_no_match": "Nenhum resultado. Refine a pesquisa.",
-      "scan_from_nfo": "a partir de .nfo",
+      "scan_from_file": "a partir do ficheiro",
       "scan_already": "já presente na biblioteca",
       "scan_link": "Associar",
       "scan_relink_existing": "Reassociar ao media existente",
@@ -2553,6 +2557,7 @@
       "scan_error": "Falha na análise.",
       "scan_files": "{{count}} ficheiro(s)",
       "scan_add_unmatched": "Adicionar sem metadados",
+      "scan_identify_from_file": "Identificar a partir do ficheiro ({{id}})",
       "scan_unmatched_badge": "Sem metadados",
       "scan_unmatched_option": "Sem correspondência: adicionar tal como está",
       "scan_reorganize_needs_match": "Mover/renomear aplica-se apenas a títulos identificados",

@@ -1798,6 +1798,10 @@
     "roots": "This PC",
     "unreadable": "Folder not readable"
   },
+  "attribution": {
+    "data_from": "Data from {{name}}",
+    "unofficial": "Some details come from unofficial sources (Audible, Audnexus)."
+  },
   "common": {
     "unexpected_error": "Something went wrong. Reload the page if it keeps happening.",
     "browse": "Browse…",
@@ -2538,7 +2542,7 @@
       "scan_year_placeholder": "Year",
       "scan_search": "Search",
       "scan_no_match": "No results. Refine the search.",
-      "scan_from_nfo": "from .nfo",
+      "scan_from_file": "from file",
       "scan_already": "already present in the library",
       "scan_link": "Link",
       "scan_relink_existing": "Relink to existing media",
@@ -2553,6 +2557,7 @@
       "scan_error": "Scan failed.",
       "scan_files": "{{count}} file(s)",
       "scan_add_unmatched": "Add without metadata",
+      "scan_identify_from_file": "Identify from the file ({{id}})",
       "scan_unmatched_badge": "No metadata",
       "scan_unmatched_option": "No match: add as is",
       "scan_reorganize_needs_match": "Move/rename only applies to identified titles",

@@ -1798,6 +1798,10 @@
     "roots": "Dieser PC",
     "unreadable": "Ordner nicht lesbar"
   },
+  "attribution": {
+    "data_from": "Daten von {{name}}",
+    "unofficial": "Einige Angaben stammen aus inoffiziellen Quellen (Audible, Audnexus)."
+  },
   "common": {
     "unexpected_error": "Ein Fehler ist aufgetreten. Laden Sie die Seite neu, wenn er erneut auftritt.",
     "browse": "Durchsuchen…",
@@ -2538,7 +2542,7 @@
       "scan_year_placeholder": "Jahr",
       "scan_search": "Suchen",
       "scan_no_match": "Keine Ergebnisse. Verfeinern Sie die Suche.",
-      "scan_from_nfo": "aus .nfo",
+      "scan_from_file": "aus der Datei",
       "scan_already": "bereits in der Bibliothek vorhanden",
       "scan_link": "Verknüpfen",
       "scan_relink_existing": "Mit vorhandenem Medium verknüpfen",
@@ -2553,6 +2557,7 @@
       "scan_error": "Scan fehlgeschlagen.",
       "scan_files": "{{count}} Datei(en)",
       "scan_add_unmatched": "Ohne Metadaten hinzufügen",
+      "scan_identify_from_file": "Aus der Datei identifizieren ({{id}})",
       "scan_unmatched_badge": "Keine Metadaten",
       "scan_unmatched_option": "Keine Übereinstimmung: unverändert hinzufügen",
       "scan_reorganize_needs_match": "Verschieben/Umbenennen gilt nur für identifizierte Titel",

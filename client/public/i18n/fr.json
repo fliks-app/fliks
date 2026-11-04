@@ -1798,6 +1798,10 @@
     "roots": "Ce PC",
     "unreadable": "Dossier illisible"
   },
+  "attribution": {
+    "data_from": "Données de {{name}}",
+    "unofficial": "Certains détails viennent de sources non officielles (Audible, Audnexus)."
+  },
   "common": {
     "unexpected_error": "Une erreur est survenue. Rechargez la page si elle se reproduit.",
     "browse": "Parcourir…",
@@ -2538,7 +2542,7 @@
       "scan_year_placeholder": "Année",
       "scan_search": "Rechercher",
       "scan_no_match": "Aucun résultat. Affinez la recherche.",
-      "scan_from_nfo": "depuis .nfo",
+      "scan_from_file": "depuis le fichier",
       "scan_already": "déjà présent dans la bibliothèque",
       "scan_link": "Lier",
       "scan_relink_existing": "Relier au média existant",
@@ -2553,6 +2557,7 @@
       "scan_error": "Échec de l'analyse.",
       "scan_files": "{{count}} fichier(s)",
       "scan_add_unmatched": "Ajouter sans métadonnées",
+      "scan_identify_from_file": "Identifier depuis le fichier ({{id}})",
       "scan_unmatched_badge": "Sans métadonnées",
       "scan_unmatched_option": "Aucune correspondance : ajouter tel quel",
       "scan_reorganize_needs_match": "Le déplacement/renommage ne s'applique qu'aux titres identifiés",

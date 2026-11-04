@@ -67,6 +67,8 @@
                 <span class="badge badge-success badge-sm">{{ 'common.saved' | translate }}</span>
               } @else if (vm.pick) {
                 <span class="badge badge-primary badge-sm truncate max-w-40">{{ vm.pick.title }}</span>
+              } @else if (vm.searched && vm.fromFile) {
+                <span class="badge badge-ghost badge-sm">{{ 'settings.libraries.scan_from_file' | translate }}</span>
               } @else if (vm.searched) {
                 <span class="badge badge-ghost badge-sm">{{ 'settings.libraries.scan_unmatched_badge' | translate }}</span>
               }
@@ -120,7 +122,11 @@
                         <div class="h-14 w-9 rounded bg-base-300 shrink-0"></div>
                         <div class="min-w-0">
                           <span class="font-medium truncate italic text-base-content/70">
-                            {{ 'settings.libraries.scan_unmatched_option' | translate }}
+                            @if (bookFileId(vm.group); as id) {
+                              {{ 'settings.libraries.scan_identify_from_file' | translate: { id: (id.provider | uppercase) + ' ' + id.externalId } }}
+                            } @else {
+                              {{ 'settings.libraries.scan_unmatched_option' | translate }}
+                            }
                           </span>
                         </div>
                       </button>
@@ -146,8 +152,8 @@
                         <div class="min-w-0">
                           <div class="flex items-center gap-2">
                             <span class="font-medium truncate">{{ r.title }}</span>
-                            @if (vm.fromNfo && isPicked(vm.pick, r)) {
-                              <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_nfo' | translate }}</span>
+                            @if (vm.fromFile && isPicked(vm.pick, r)) {
+                              <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_file' | translate }}</span>
                             }
                           </div>
                           <div class="text-xs text-base-content/50">

@@ -1798,6 +1798,10 @@
     "roots": "Este equipo",
     "unreadable": "Carpeta ilegible"
   },
+  "attribution": {
+    "data_from": "Datos de {{name}}",
+    "unofficial": "Algunos detalles proceden de fuentes no oficiales (Audible, Audnexus)."
+  },
   "common": {
     "unexpected_error": "Se ha producido un error. Recarga la página si vuelve a ocurrir.",
     "browse": "Explorar…",
@@ -2538,7 +2542,7 @@
       "scan_year_placeholder": "Año",
       "scan_search": "Buscar",
       "scan_no_match": "No hay resultados. Afine la búsqueda.",
-      "scan_from_nfo": "desde .nfo",
+      "scan_from_file": "desde el archivo",
       "scan_already": "ya presente en la biblioteca",
       "scan_link": "Vincular",
       "scan_relink_existing": "Revincular al medio existente",
@@ -2553,6 +2557,7 @@
       "scan_error": "Error del análisis.",
       "scan_files": "{{count}} archivo(s)",
       "scan_add_unmatched": "Añadir sin metadatos",
+      "scan_identify_from_file": "Identificar desde el archivo ({{id}})",
       "scan_unmatched_badge": "Sin metadatos",
       "scan_unmatched_option": "Sin coincidencia: añadir tal cual",
       "scan_reorganize_needs_match": "Mover/renombrar solo se aplica a títulos identificados",

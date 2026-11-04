@@ -141,4 +141,18 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     expect(cmp.applyingKey()).not.toBe(cmp.key(other));
     await pending;
   });
+
+  it('lists the providers of a book and identifies a hit by provider and external id only', async () => {
+    const { cmp, identify } = setup();
+    HTMLDialogElement.prototype.showModal = vi.fn();
+    const providersServing = vi.fn(() => Promise.resolve([{ provider: 'openlibrary', label: 'Open Library' }]));
+    (cmp as unknown as { metadata: { providersServing: typeof providersServing } }).metadata.providersServing = providersServing;
+    cmp.open({ mediaId: 5, mediaType: 'book', title: 'Alpha', year: null, path: null, tmdbId: null, tvdbId: null, imdbId: null });
+    await Promise.resolve();
+
+    expect(providersServing).toHaveBeenCalledWith('book');
+    expect(cmp.takesIds()).toBe(false);
+    await cmp.apply({ ...tvdbOnly, tmdbId: undefined, tvdbId: undefined, imdbId: undefined, provider: 'openlibrary', externalId: 'OL1W', mediaType: 'book' });
+    expect(identify).toHaveBeenCalledWith(5, { provider: 'openlibrary', externalId: 'OL1W' });
+  });
 });

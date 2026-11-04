@@ -14,12 +14,10 @@ export interface OrphanFileEntry {
   episodeEnd: number | null;
 }
 
-export interface OrphanNfoIds {
-  tmdbId?: number;
-  imdbId?: string;
-  tvdbId?: number;
-  title?: string;
-  year?: number;
+/** An id the group's files name (a video's nfo, a book's ISBN or ASIN). */
+export interface OrphanFileId {
+  provider: string;
+  externalId: string;
 }
 
 export interface OrphanGroup {
@@ -28,7 +26,7 @@ export interface OrphanGroup {
   folderName: string;
   guessTitle: string | null;
   guessYear: number | null;
-  nfo: OrphanNfoIds | null;
+  fileIds: OrphanFileId[];
   suggestedProvider: string;
   files: OrphanFileEntry[];
 }

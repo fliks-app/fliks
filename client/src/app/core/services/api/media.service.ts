@@ -79,6 +79,14 @@ export interface Season {
   episodes: Episode[];
 }
 
+/** A source the detail credits: a plugin with its link, or an unofficial one. */
+export interface MediaProvider {
+  provider: string;
+  name: string;
+  url: string | null;
+  unofficial?: boolean;
+}
+
 export interface Media {
   id: number;
   title: string;
@@ -120,6 +128,10 @@ export interface Media {
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
   /** Fully watched (movie completed / series all episodes watched), per user. */
   watched?: boolean;
+  /** The sources to credit, on the detail only (`GET /api/media/:id`). */
+  providers?: MediaProvider[];
+  /** Which provider wrote each field, `null` for one edited by hand; on the detail only. */
+  fieldSources?: Record<string, string | null>;
   /** Resume progress 0-100 (movies only; 0 for series). */
   progressPercent?: number;
   preferredProvider?: string | null;

@@ -4,12 +4,9 @@ import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookEdition, BookSources } from '../../../core/services/api/books.models';
 import { editionLabel } from './book-media';
 
-type Level = 'work' | 'edition';
-
-const WORK_PROVIDERS = ['openlibrary'];
 const EDITION_PROVIDERS = ['isbn', 'asin', 'openlibrary', 'googlebooks', 'bnf'];
 
-/** Where the work and its editions are linked at the providers: link, relink or unlink an identifier. */
+/** Where the editions are linked at the providers: link, relink or unlink an identifier. The work is identified by the shared identify modal. */
 @Component({
   selector: 'app-book-sources',
   imports: [TranslatePipe],
@@ -24,13 +21,12 @@ export class BookSourcesComponent {
   protected readonly sources = signal<BookSources | null>(null);
   protected readonly busy = signal(false);
 
-  protected readonly level = signal<Level>('work');
   protected readonly editionId = signal<number | null>(null);
-  protected readonly provider = signal(WORK_PROVIDERS[0]);
+  protected readonly provider = signal(EDITION_PROVIDERS[0]);
   protected readonly value = signal('');
 
-  protected readonly providers = computed(() => (this.level() === 'work' ? WORK_PROVIDERS : EDITION_PROVIDERS));
-  protected readonly canSave = computed(() => !this.busy() && !!this.value().trim());
+  protected readonly providers = EDITION_PROVIDERS;
+  protected readonly canSave = computed(() => !this.busy() && this.editionId() != null && !!this.value().trim());
   protected readonly label = editionLabel;
 
   constructor() {
@@ -38,34 +34,32 @@ export class BookSourcesComponent {
       const id = this.mediaId();
       untracked(() => void this.load(id));
     });
+    effect(() => {
+      const first = this.editions()[0]?.id ?? null;
+      untracked(() => {
+        if (this.editionId() == null) this.editionId.set(first);
+      });
+    });
   }
 
   protected editionOf(id: number): BookEdition | undefined {
     return this.editions().find((e) => e.id === id);
   }
 
-  protected setLevel(level: Level): void {
-    this.level.set(level);
-    this.editionId.set(level === 'edition' ? (this.editions()[0]?.id ?? null) : null);
-    this.provider.set(this.providers()[0]);
-  }
-
   /** Loads a linked identifier into the form; saving it replaces the one at that provider. */
-  protected relink(level: Level, editionId: number | null, provider: string, value: string): void {
-    this.level.set(level);
+  protected relink(editionId: number, provider: string, value: string): void {
     this.editionId.set(editionId);
     this.provider.set(provider);
     this.value.set(value);
   }
 
   protected async save(): Promise<void> {
-    const level = this.level();
     const editionId = this.editionId();
-    if (level === 'edition' && editionId == null) return;
+    if (editionId == null) return;
     const ok = await this.run(() =>
       this.api.putSource(this.mediaId(), {
-        level,
-        editionId: level === 'edition' ? (editionId ?? undefined) : undefined,
+        level: 'edition',
+        editionId,
         provider: this.provider(),
         value: this.value().trim(),
       }),
@@ -73,9 +67,9 @@ export class BookSourcesComponent {
     if (ok) this.value.set('');
   }
 
-  protected unlink(level: Level, editionId: number | null, provider: string, value: string): Promise<boolean> {
+  protected unlink(editionId: number, provider: string, value: string): Promise<boolean> {
     return this.run(() =>
-      this.api.deleteSource(this.mediaId(), { level, editionId: editionId ?? undefined, provider, value }),
+      this.api.deleteSource(this.mediaId(), { level: 'edition', editionId, provider, value }),
     );
   }
 

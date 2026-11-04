@@ -1798,6 +1798,10 @@
     "roots": "Questo PC",
     "unreadable": "Cartella non leggibile"
   },
+  "attribution": {
+    "data_from": "Dati da {{name}}",
+    "unofficial": "Alcuni dettagli provengono da fonti non ufficiali (Audible, Audnexus)."
+  },
   "common": {
     "unexpected_error": "Si è verificato un errore. Ricarica la pagina se si ripete.",
     "browse": "Sfoglia…",
@@ -2538,7 +2542,7 @@
       "scan_year_placeholder": "Anno",
       "scan_search": "Cerca",
       "scan_no_match": "Nessun risultato. Affina la ricerca.",
-      "scan_from_nfo": "da .nfo",
+      "scan_from_file": "dal file",
       "scan_already": "già presente nella libreria",
       "scan_link": "Collega",
       "scan_relink_existing": "Ricollega al file multimediale esistente",
@@ -2553,6 +2557,7 @@
       "scan_error": "Analisi fallita.",
       "scan_files": "{{count}} file",
       "scan_add_unmatched": "Aggiungi senza metadati",
+      "scan_identify_from_file": "Identifica dal file ({{id}})",
       "scan_unmatched_badge": "Senza metadati",
       "scan_unmatched_option": "Nessuna corrispondenza: aggiungi così com'è",
       "scan_reorganize_needs_match": "Sposta/rinomina si applica solo ai titoli identificati",

@@ -91,8 +91,10 @@ export interface BookSources {
 }
 // PUT  /api/media/:id/sources -> BookSources (relinks and refreshes)
 export interface BookSourcePut {
-  level: 'work' | 'edition'; editionId?: number; provider: string; value: string;
+  level: 'edition'; editionId: number; provider: string; value: string;
 }
 // DELETE /api/media/:id/sources?level=&editionId=&provider=&value= -> BookSources
-export type BookSourceDelete = BookSourcePut;
+export interface BookSourceDelete {
+  level: 'work' | 'edition'; editionId?: number; provider: string; value: string;
+}
 
