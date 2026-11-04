@@ -6,30 +6,62 @@ import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
 import { KIND_REGISTRY, assertNever } from '../../media-kinds';
 
-export interface MetadataSearchResult {
-  /** Absent on a result of a provider that is not TMDB. */
-  tmdbId?: number;
-  /** The id in `provider`'s namespace, stamped by the server. */
-  externalId?: string;
-  tvdbId?: number | null;
-  imdbId?: string | null;
+/** What every search answers (`/api/metadata/search/{kind}`), plus the extras of the hit's kind. */
+export interface SearchHit {
   provider: string;
+  /** The id in `provider`'s namespace, normalised by the server. */
+  externalId: string;
+  mediaType: MediaType;
   title: string;
-  originalTitle: string;
-  overview: string;
   year: number | null;
   posterUrl: string | null;
+  existingMediaId: number | null;
+  /** Video hits only. */
+  existingMediaType?: MediaType | null;
+  /** Absent on a result of a provider that is not TMDB. */
+  tmdbId?: number;
+  tvdbId?: number | null;
+  imdbId?: string | null;
+  originalTitle?: string;
+  overview?: string | null;
   fanartUrl?: string | null;
+  rating?: number;
+  genres?: string[];
+  genreIds?: number[];
+  subtitle?: string | null;
+  authors?: string[];
+  series?: { name: string; position: string | null } | null;
+  editionCount?: number | null;
+  publisher?: string | null;
+  volume?: number | null;
+  issueCount?: number | null;
+  sourceUrl?: string | null;
+}
+
+/** A video title as the lists and details answer it. */
+export interface MetadataSearchResult extends SearchHit {
+  originalTitle: string;
+  overview: string;
   rating: number;
   genres: string[];
-  genreIds?: number[];
-  mediaType: MediaType;
-  existingMediaId: number | null;
   existingMediaType: MediaType | null;
 }
 
+export interface SearchOptions {
+  year?: number;
+  provider?: string;
+  /** The provider that media is refreshed from is searched first; an explicit `provider` still comes before. */
+  mediaId?: number;
+  page?: number;
+  /** Books only. */
+  title?: string;
+  author?: string;
+  isbn?: string;
+  language?: string;
+}
+
 /** TVDB reports `tmdbId: 0` for works TheMovieDB doesn't know, so every such row would share that key. */
-export function searchResultKey(r: MetadataSearchResult): string {
+export function searchResultKey(r: SearchHit): string {
   return `${r.provider}:${r.externalId ?? ''}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
 }
 
@@ -56,7 +88,7 @@ export function readOrder(list: ServingProvider[], preferred: string | null): Se
 }
 
 /** The ids worth sending to the API — the 0 above is not an id. */
-export function searchResultIds(r: MetadataSearchResult): {
+export function searchResultIds(r: SearchHit): {
   tmdbId?: number;
   tvdbId?: number;
   imdbId?: string;
@@ -161,31 +193,15 @@ export interface DiscoverFilters {
 export class MetadataService {
   private readonly http = inject(HttpClient);
 
-  /** `mediaId` lets the server search the provider that media is refreshed
-   *  from; an explicit `provider` still wins. */
-  searchMovie(q: string, year?: number, provider?: string, mediaId?: number) {
-    let params = new HttpParams().set('q', q);
-    if (year != null) params = params.set('year', String(year));
-    if (provider) params = params.set('provider', provider);
-    if (mediaId != null) params = params.set('mediaId', String(mediaId));
+  /** One search for every kind; the server walks the providers serving it. */
+  search(kind: MediaType, q: string, opts: SearchOptions = {}) {
+    let params = new HttpParams();
+    if (q) params = params.set('q', q);
+    for (const [key, value] of Object.entries(opts)) {
+      if (value != null && value !== '') params = params.set(key, String(value));
+    }
     return firstValueFrom(
-      this.http.get<MetadataSearchResult[]>('/api/metadata/search/movie', {
-        params,
-      }),
-    );
-  }
-
-  /** `mediaId` lets the server search the provider that media is refreshed
-   *  from; an explicit `provider` still wins. */
-  searchTv(q: string, year?: number, provider?: string, mediaId?: number) {
-    let params = new HttpParams().set('q', q);
-    if (year != null) params = params.set('year', String(year));
-    if (provider) params = params.set('provider', provider);
-    if (mediaId != null) params = params.set('mediaId', String(mediaId));
-    return firstValueFrom(
-      this.http.get<MetadataSearchResult[]>('/api/metadata/search/tv', {
-        params,
-      }),
+      this.http.get<SearchHit[]>(`/api/metadata/search/${KIND_REGISTRY[kind].providerSegment}`, { params }),
     );
   }
 
@@ -215,16 +231,6 @@ export class MetadataService {
 
   discoverTv(opts: DiscoverFilters) {
     return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/discover/tv', { params: this.discoverParams(opts) }));
-  }
-
-  searchByKind(type: MediaType, q: string, year?: number, provider?: string, mediaId?: number) {
-    switch (type) {
-      case 'movie': return this.searchMovie(q, year, provider, mediaId);
-      case 'series': return this.searchTv(q, year, provider, mediaId);
-      case 'book': throw new Error('Books go through BooksApiService');
-      case 'comic': throw new Error('Comics have no external metadata provider yet');
-      default: return assertNever(type);
-    }
   }
 
   discoverByKind(type: MediaType, opts: DiscoverFilters) {

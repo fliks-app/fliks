@@ -17,7 +17,7 @@ import { SseService } from '../../../../../core/services/sse.service';
 import { serverMessage } from '../../../../../core/utils/server-message';
 import {
   MetadataService,
-  MetadataSearchResult,
+  SearchHit,
   searchResultKey,
 } from '../../../../../core/services/api/metadata.service';
 import {
@@ -39,10 +39,10 @@ interface GroupVM {
   group: OrphanGroup;
   query: string;
   year: number | null;
-  results: MetadataSearchResult[];
+  results: SearchHit[];
   searching: boolean;
   searched: boolean;
-  pick: MetadataSearchResult | null;
+  pick: SearchHit | null;
   fromNfo: boolean;
   linking: boolean;
   done: boolean;
@@ -263,7 +263,7 @@ export class OrphanScanPanelComponent {
   private relinkBody(
     libraryId: number,
     vm: GroupVM,
-    pick: MetadataSearchResult | null,
+    pick: SearchHit | null,
   ): RelinkOrphansBody {
     const group = vm.group;
     return {
@@ -338,7 +338,7 @@ export class OrphanScanPanelComponent {
     const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
-      const results = await this.metadata.searchByKind(vm.group.mediaType, query, vm.year ?? undefined, provider);
+      const results = await this.metadata.search(vm.group.mediaType, query, { year: vm.year ?? undefined, provider });
       if (stale()) return;
 
       // Auto-select the match referenced by the .nfo id, if any.
@@ -371,11 +371,11 @@ export class OrphanScanPanelComponent {
 
   readonly key = searchResultKey;
 
-  isPicked(pick: MetadataSearchResult | null, result: MetadataSearchResult): boolean {
+  isPicked(pick: SearchHit | null, result: SearchHit): boolean {
     return !!pick && searchResultKey(pick) === searchResultKey(result);
   }
 
-  pick(index: number, result: MetadataSearchResult) {
+  pick(index: number, result: SearchHit) {
     const current = this.groups()[index]?.pick ?? null;
     const same = this.isPicked(current, result);
     this.patch(index, { pick: same ? null : result, fromNfo: false });
@@ -488,12 +488,12 @@ export class OrphanScanPanelComponent {
     await this.link(index);
   }
 
-  private bestMatch(vm: GroupVM): MetadataSearchResult | null {
+  private bestMatch(vm: GroupVM): SearchHit | null {
     if (!vm.results.length) return null;
     const norm = (s: string | null | undefined) =>
       (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const query = norm(vm.query);
-    let best: MetadataSearchResult | null = null;
+    let best: SearchHit | null = null;
     let bestScore = -Infinity;
     vm.results.forEach((r, idx) => {
       let score = 0;

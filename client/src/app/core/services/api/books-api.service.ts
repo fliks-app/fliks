@@ -40,10 +40,6 @@ export class BooksApiService {
     return firstValueFrom(this.http.get<BookSearchResult[]>(`/api/persons/${id}/provider-credits`));
   }
 
-  search(params: Params) {
-    return firstValueFrom(this.http.get<BookSearchResult[]>('/api/metadata/search/book', { params }));
-  }
-
   preview(provider: string, externalId: string) {
     return firstValueFrom(this.http.get<BookPreview>(`/api/metadata/${provider}/book/${externalId}`));
   }

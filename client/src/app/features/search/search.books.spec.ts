@@ -66,6 +66,6 @@ describe('SearchComponent books', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
     expect(c.bookLink(bookSearchResultFixture)).toEqual(['/add/book', 'openlibrary', 'OL1W']);
-    expect(c.bookLink({ ...bookSearchResultFixture, mediaId: 7 })).toEqual(['/books', '7']);
+    expect(c.bookLink({ ...bookSearchResultFixture, existingMediaId: 7 })).toEqual(['/books', '7']);
   });
 });

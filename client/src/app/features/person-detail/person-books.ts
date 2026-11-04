@@ -26,7 +26,7 @@ export class PersonBooksComponent {
   readonly loading = signal(true);
 
   /** Credits not yet in a readable library; the owned ones already show above. */
-  readonly missing = computed(() => this.credits().filter((c) => c.mediaId === null));
+  readonly missing = computed(() => this.credits().filter((c) => c.existingMediaId === null));
 
   constructor() {
     effect(() => void this.load(this.personId(), this.role()));

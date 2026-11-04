@@ -27,7 +27,7 @@ describe('PersonBooksComponent', () => {
     http.expectOne((r) => r.url === '/api/persons/1/works' && r.params.get('role') === 'author').flush(personWorksFixture);
     http.expectOne('/api/persons/1/provider-credits').flush([
       bookSearchResultFixture,
-      { ...bookSearchResultFixture, externalId: 'OL2W', mediaId: 7 },
+      { ...bookSearchResultFixture, externalId: 'OL2W', existingMediaId: 7 },
     ]);
     await new Promise((r) => setTimeout(r));
     await fixture.whenStable();

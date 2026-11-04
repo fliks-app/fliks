@@ -11,7 +11,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   MetadataService,
-  MetadataSearchResult,
+  SearchHit,
   searchResultIds,
   searchResultKey,
 } from '../../../../core/services/api/metadata.service';
@@ -34,10 +34,8 @@ export interface IdentifyModalConfig {
 }
 
 /** A result identifies by its provider and external id. */
-function identifyTarget(r: MetadataSearchResult) {
-  return !r.externalId
-    ? searchResultIds(r)
-    : { ...searchResultIds(r), provider: r.provider, externalId: r.externalId };
+function identifyTarget(r: SearchHit) {
+  return { ...searchResultIds(r), provider: r.provider, externalId: r.externalId };
 }
 
 @Component({
@@ -74,7 +72,7 @@ export class MediaDetailIdentifyModalComponent {
 
   readonly searching = signal(false);
   readonly searched = signal(false);
-  readonly results = signal<MetadataSearchResult[]>([]);
+  readonly results = signal<SearchHit[]>([]);
   /** Key of the result being applied, or 'ids' for the typed-ids button. */
   readonly applyingKey = signal<string | null>(null);
 
@@ -114,7 +112,7 @@ export class MediaDetailIdentifyModalComponent {
       const title = this.formTitle().trim();
       const year = this.formYear();
       const found = title
-        ? await this.metadata.searchByKind(cfg.mediaType, title, year ?? undefined, this.formProvider() || undefined, cfg.mediaId)
+        ? await this.metadata.search(cfg.mediaType, title, { year: year ?? undefined, provider: this.formProvider() || undefined, mediaId: cfg.mediaId })
         : [];
       this.results.set(found);
       this.searched.set(true);
@@ -125,12 +123,12 @@ export class MediaDetailIdentifyModalComponent {
 
   /** True when a candidate is already another title in the library — applying it
    *  would collide on the unique (type, tmdbId), so the backend refuses. */
-  isTaken(result: MetadataSearchResult): boolean {
+  isTaken(result: SearchHit): boolean {
     const cfg = this.config();
     return result.existingMediaId != null && result.existingMediaId !== cfg?.mediaId;
   }
 
-  async apply(result: MetadataSearchResult) {
+  async apply(result: SearchHit) {
     const cfg = this.config();
     if (!cfg || this.isTaken(result)) return;
     this.applyingKey.set(searchResultKey(result));

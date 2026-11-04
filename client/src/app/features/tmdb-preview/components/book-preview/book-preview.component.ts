@@ -61,7 +61,7 @@ export class BookPreviewComponent implements OnInit {
     return s ? (s.position ? `${s.name} #${s.position}` : s.name) : '';
   });
   protected readonly inLibraryLink = computed(() => {
-    const id = this.book()?.mediaId;
+    const id = this.book()?.existingMediaId;
     return id ? mediaDetailLink('book', id) : null;
   });
 

@@ -1,6 +1,6 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
 import { Media } from './api/media.service';
-import { MetadataSearchResult, TmdbGenre } from './api/metadata.service';
+import { MetadataSearchResult, SearchHit, TmdbGenre } from './api/metadata.service';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters';
@@ -23,7 +23,7 @@ export class SearchStateService {
   });
   readonly localResults = signal<Media[]>([]);
   readonly localLoading = signal(false);
-  readonly externalResults = signal<MetadataSearchResult[]>([]);
+  readonly externalResults = signal<SearchHit[]>([]);
   readonly externalLoading = signal(false);
   readonly peopleResults = signal<SocialUser[]>([]);
   readonly peopleLoading = signal(false);
@@ -116,9 +116,7 @@ export class SearchStateService {
   });
 
   /** Sorts only on a rating/recency pick (default keeps provider relevance); genre matches by TMDB id with a name fallback. */
-  private applyPanelFilters(
-    rows: MetadataSearchResult[],
-  ): MetadataSearchResult[] {
+  private applyPanelFilters<T extends SearchHit>(rows: T[]): T[] {
     const ids = [...this.discoverSelectedGenres()];
     const names = this.selectedGenreNames();
     const voteMin = this.discoverVoteMin();
@@ -128,10 +126,10 @@ export class SearchStateService {
     const filtered = rows.filter((row) => {
       if (ids.length) {
         const byId = !!row.genreIds && ids.every((id) => row.genreIds!.includes(id));
-        const byName = names.length > 0 && names.every((n) => row.genres.includes(n));
+        const byName = names.length > 0 && names.every((n) => (row.genres ?? []).includes(n));
         if (!byId && !byName) return false;
       }
-      if (row.rating < voteMin) return false;
+      if ((row.rating ?? 0) < voteMin) return false;
       if (yearMin != null && (row.year == null || row.year < yearMin)) return false;
       if (yearMax != null && (row.year == null || row.year > yearMax)) return false;
       return true;
@@ -142,7 +140,7 @@ export class SearchStateService {
       return [...filtered].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
     }
     if (sort === 'vote_average.desc') {
-      return [...filtered].sort((a, b) => b.rating - a.rating);
+      return [...filtered].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     }
     return filtered;
   }

@@ -127,7 +127,7 @@
             <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
             <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
               @for (row of bookExternal(); track row.provider + ':' + row.externalId) {
-                <app-media-card [imageUrl]="row.coverUrl" [title]="row.title" [subtitle]="row.authors.join(', ')" [badge]="row.mediaId ? 'library' : null" [link]="bookLink(row)" />
+                <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="(row.authors ?? []).join(', ')" [badge]="row.existingMediaId ? 'library' : null" [link]="bookLink(row)" />
               }
             </div>
           </div>
@@ -269,7 +269,7 @@
                   [imageUrl]="row.posterUrl"
                   [title]="row.title"
                   [subtitle]="'' + (row.year ?? '')"
-                  [rating]="row.rating"
+                  [rating]="row.rating ?? 0"
                   [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null"
                   [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null"
                 />
@@ -292,7 +292,7 @@
                   [imageUrl]="row.posterUrl"
                   [title]="row.title"
                   [subtitle]="'' + (row.year ?? '')"
-                  [rating]="row.rating"
+                  [rating]="row.rating ?? 0"
                   [badge]="cardStatus(row)"
                   [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null"
                   [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null"

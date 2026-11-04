@@ -103,7 +103,8 @@ type KindSearch = { searchMovie: (...a: never[]) => unknown; searchTv: (...a: ne
 const withSearchByKind = (m: KindSearch) =>
   ({
     ...m,
-    searchByKind: (kind: string, ...a: never[]) => (kind === 'series' ? m.searchTv : m.searchMovie)(...a),
+    search: (kind: string, query: never, opts?: { year?: number; provider?: string }) =>
+      (kind === 'series' ? m.searchTv : m.searchMovie)(query, opts?.year as never, opts?.provider as never),
   }) as unknown as MetadataService;
 
 describe('OrphanScanPanelComponent.importAll', () => {

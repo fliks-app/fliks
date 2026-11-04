@@ -1,4 +1,5 @@
 import type { MediaType } from '../../enums/media-type.enum';
+import type { SearchHit } from './metadata.service';
 
 // Shared
 export interface PersonRef { id: number; name: string; sortName: string | null }
@@ -61,12 +62,11 @@ export interface PersonWorks {
 }
 // GET /api/persons/:id/provider-credits for a person with an openlibrary/asin id answers BookSearchResult[]
 
-// GET /api/metadata/search/book?q=&title=&author=&isbn=&language=&page=
-export interface BookSearchResult {
-  provider: string; externalId: string; kind: 'book';
-  title: string; subtitle: string | null; authors: string[]; year: number | null; coverUrl: string | null;
+// GET /api/metadata/search/book?q=&title=&author=&isbn=&language=&page=: a SearchHit with the book extras
+export interface BookSearchResult extends SearchHit {
+  mediaType: 'book';
+  subtitle: string | null; authors: string[];
   series: { name: string; position: string | null } | null; editionCount: number | null;
-  mediaId: number | null;          // already in a library the caller can read
 }
 // GET /api/metadata/{provider}/book/{externalId} : the add preview
 export interface BookPreview extends BookSearchResult {

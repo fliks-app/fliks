@@ -17,11 +17,12 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { BooksApiService } from '../../core/services/api/books-api.service';
-import type { BookSearchResult, CollectionSummary, PersonListItem } from '../../core/services/api/books.models';
+import type { CollectionSummary, PersonListItem } from '../../core/services/api/books.models';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import {
   MetadataService,
   MetadataSearchResult,
+  SearchHit,
   DiscoverFilters,
   searchResultKey,
 } from '../../core/services/api/metadata.service';
@@ -160,7 +161,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly bookAuthors = signal<PersonListItem[]>([]);
   readonly bookSeries = signal<CollectionSummary[]>([]);
-  readonly bookExternal = signal<BookSearchResult[]>([]);
+  readonly bookExternal = signal<SearchHit[]>([]);
   readonly bookLoading = signal(false);
 
   readonly requestedTitles = signal<Map<string, FliksRequestStatus>>(new Map());
@@ -623,7 +624,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const [authors, series, rows] = await Promise.all([
       this.booksApi.persons({ role: 'author', q, limit: 12 }).catch(() => []),
       this.booksApi.collections({ kind: 'book', q, limit: 12 }).catch(() => []),
-      external ? this.booksApi.search({ q }).catch(() => []) : Promise.resolve([]),
+      external ? this.metadata.search('book', q).catch(() => []) : Promise.resolve([]),
       this.runLocalSearch(q, 'book'),
     ]);
     if (!fresh()) return;
@@ -633,8 +634,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.bookLoading.set(false);
   }
 
-  bookLink(row: BookSearchResult): string[] {
-    return row.mediaId ? mediaDetailLink('book', row.mediaId) : ['/add/book', row.provider, row.externalId];
+  bookLink(row: SearchHit): string[] {
+    return row.existingMediaId ? mediaDetailLink('book', row.existingMediaId) : ['/add/book', row.provider, row.externalId];
   }
 
   /** Local library query with the discover panel filters pushed to the backend
@@ -683,15 +684,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const fresh = () => this.state.query().trim() === q && this.state.contentType() === ct;
     this.state.externalLoading.set(true);
     try {
-      let rows: MetadataSearchResult[];
+      let rows: SearchHit[];
       if (ct !== 'all') {
-        rows = await this.metadata.searchByKind(ct, q);
+        rows = await this.metadata.search(ct, q);
       } else {
         const [movies, tv] = await Promise.all([
-          this.metadata.searchMovie(q),
-          this.metadata.searchTv(q),
+          this.metadata.search('movie', q),
+          this.metadata.search('series', q),
         ]);
-        rows = [...movies, ...tv].sort((a, b) => b.rating - a.rating);
+        rows = [...movies, ...tv].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
       }
       if (fresh()) {
         this.state.externalResults.set(rows);
@@ -704,7 +705,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  cardStatus(row: MetadataSearchResult): CardBadge {
+  cardStatus(row: SearchHit): CardBadge {
     if (row.existingMediaId) return 'library';
     const asked = this.requestedTitles();
     const reqStatus =
@@ -716,7 +717,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     return 'pending';
   }
 
-  externalLink(row: MetadataSearchResult): string[] {
+  externalLink(row: SearchHit): string[] {
     if (row.existingMediaId) {
       return mediaDetailLink(row.existingMediaType ?? 'movie', row.existingMediaId);
     }
