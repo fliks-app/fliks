@@ -1295,6 +1295,7 @@ dependencies = [
  "hyper-util",
  "image",
  "jsonwebtoken",
+ "kepub",
  "lettre",
  "libc",
  "md-5",

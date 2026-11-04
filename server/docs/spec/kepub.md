@@ -30,3 +30,4 @@ default transforms (MIT, see `THIRD-PARTY-NOTICES.md`).
    divs is not wrapped again.
 8. Nesting past 256 levels, or more than 500,000 nodes in a document (spans included), fails the
    conversion with `Malformed`. Markup outside the first `html` element moves into its body.
+9. The Kobo sync serves it on download (`kobo.md` rules 27-30), converting a file once per version and keeping the result in the cache directory.

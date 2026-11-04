@@ -102,15 +102,15 @@ pub async fn fetch<'e>(
     .await
 }
 
-/// The one place that chooses the formats and URLs of a book's file (the KEPUB hook of item 6.2).
+/// The one place that chooses the formats and URLs of a book's file: KEPUB, converted on download.
 fn downloads(k: &Kobo, b: &Book) -> Value {
     let url = format!(
-        "{}/cred/{}/api/stream/{}?download=1",
-        k.base, k.token, b.file
+        "{}/kobo/{}/download/{}/kepub",
+        k.base,
+        k.token,
+        uuid(BOOK_PREFIX, b.item)
     );
-    let of =
-        |format: &str| json!({"Format": format, "Size": b.size, "Url": url, "Platform": "Generic"});
-    json!([of("EPUB3"), of("EPUB")])
+    json!([{"Format": "KEPUB", "Size": b.size, "Url": url, "Platform": "Generic"}])
 }
 
 pub fn entitlement(

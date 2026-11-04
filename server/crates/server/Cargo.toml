@@ -75,6 +75,7 @@ ed25519-dalek = "3"
 nodejs-semver = "7"
 unicode-normalization = "0.1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
+kepub = { path = "../kepub" }
 
 [dev-dependencies]
 # The integration tests reroute vetted addresses through `Net::route`.

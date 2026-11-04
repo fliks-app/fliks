@@ -16,6 +16,17 @@ struct Ctx {
     app: Router,
     pool: PgPool,
     token: String,
+    cache: std::path::PathBuf,
+}
+
+/// A fresh empty directory under the system temp dir.
+fn scratch(tag: &str) -> std::path::PathBuf {
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("fliks-kobo-{}-{n}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
 }
 
 fn book(n: i32) -> String {
@@ -37,7 +48,9 @@ async fn token(pool: &PgPool, user: i32, kind: Kind) -> String {
 /// User 1 reads library 1; user 2 is disabled. Items: 1 and 4 EPUB in library 1, 2 EPUB in library 2, 3 PDF.
 async fn ctx(pool: PgPool) -> (Ctx, String) {
     fliks_server::db::migrate(&pool).await.unwrap();
-    let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let cache = scratch("cache");
+    st.kepub_cache = Some(cache.clone().into());
     sqlx::raw_sql(
         r#"
         INSERT INTO roles (id, name, permissions, "isDefault") VALUES (1, 'R', '["media.read"]', false);
@@ -69,6 +82,7 @@ async fn ctx(pool: PgPool) -> (Ctx, String) {
             app,
             pool,
             token: t,
+            cache,
         },
         disabled,
     )
@@ -230,14 +244,18 @@ async fn sync_round_trip_sends_changes_removals_and_survives_a_lost_answer(pool:
     assert!(!first.more);
     let e = &first.body[0]["NewEntitlement"];
     let dl = &e["BookMetadata"]["DownloadUrls"][0];
-    assert_eq!(dl["Format"], "EPUB3");
-    assert_eq!(e["BookMetadata"]["DownloadUrls"][1]["Format"], "EPUB");
+    assert_eq!(dl["Format"], "KEPUB");
+    assert_eq!(
+        e["BookMetadata"]["DownloadUrls"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(dl["Size"], 111);
     assert_eq!(
         dl["Url"],
         format!(
-            "https://kobo.example/cred/{}/api/stream/1?download=1",
-            c.token
+            "https://kobo.example/kobo/{}/download/{}/kepub",
+            c.token,
+            book(1)
         )
     );
     assert_eq!(e["BookMetadata"]["Title"], "Alpha");
@@ -797,7 +815,7 @@ async fn a_change_of_the_edition_or_the_credits_changes_the_entitlement(pool: Pg
         m["ContributorRoles"][0],
         json!({"Name": "Ann", "Role": "Author"})
     );
-    assert_eq!(m["DownloadUrls"].as_array().unwrap().len(), 2);
+    assert_eq!(m["DownloadUrls"][0]["Format"], "KEPUB");
 }
 
 #[sqlx::test(migrations = false)]
@@ -1102,4 +1120,168 @@ async fn native_resources_keep_json_values_and_the_store_host(pool: PgPool) {
     ] {
         assert_eq!(res[k], "False", "{k}");
     }
+}
+
+fn epub(chapter: &str) -> Vec<u8> {
+    use std::io::Write;
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let o = zip::write::SimpleFileOptions::default();
+    let container = r#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>"#;
+    let opf = r#"<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>"#;
+    for (n, b) in [
+        ("mimetype", "application/epub+zip"),
+        ("META-INF/container.xml", container),
+        ("content.opf", opf),
+        ("c1.xhtml", chapter),
+    ] {
+        w.start_file(n, o).unwrap();
+        w.write_all(b.as_bytes()).unwrap();
+    }
+    w.finish().unwrap().into_inner()
+}
+
+/// Puts `bytes` where item 1's file is, under a fresh folder root.
+async fn place(c: &Ctx, bytes: &[u8]) -> std::path::PathBuf {
+    let dir = scratch("lib");
+    std::fs::write(dir.join("a.epub"), bytes).unwrap();
+    sqlx::query("UPDATE library_folders SET path = $1 WHERE id = 1")
+        .bind(dir.to_str().unwrap())
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    dir
+}
+
+async fn download(
+    c: &Ctx,
+    token: &str,
+    uuid: &str,
+    range: Option<&str>,
+) -> (u16, axum::http::HeaderMap, Vec<u8>) {
+    let mut req = Request::builder()
+        .uri(format!("/kobo/{token}/download/{uuid}/kepub"))
+        .header("host", "kobo.example")
+        .header("x-forwarded-proto", "https");
+    if let Some(r) = range {
+        req = req.header("range", r);
+    }
+    let res = c
+        .app
+        .clone()
+        .oneshot(req.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let (status, h) = (res.status().as_u16(), res.headers().clone());
+    let b = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, h, b.to_vec())
+}
+
+fn kepubs(c: &Ctx) -> Vec<String> {
+    let mut v: Vec<_> = std::fs::read_dir(&c.cache)
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+fn text_of(zipped: &[u8], name: &str) -> String {
+    use std::io::Read;
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(zipped)).unwrap();
+    let mut s = String::new();
+    z.by_name(name).unwrap().read_to_string(&mut s).unwrap();
+    s
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_kepub_download_converts_once_per_file_version(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let dir = place(&c, &epub("<html><body><p>One. Two.</p></body></html>")).await;
+    let (status, h, body) = download(&c, &c.token, &book(1), None).await;
+    assert_eq!(status, 200);
+    assert_eq!(h["content-type"], "application/epub+zip");
+    assert!(
+        h["content-disposition"]
+            .to_str()
+            .unwrap()
+            .contains(".kepub.epub")
+    );
+    assert!(text_of(&body, "c1.xhtml").contains("koboSpan"));
+    assert_eq!(kepubs(&c).len(), 1);
+
+    // concurrent downloads of one version share the file
+    let all = futures_join(&c).await;
+    assert!(all.iter().all(|b| *b == body));
+    assert_eq!(kepubs(&c).len(), 1);
+
+    let (status, _, part) = download(&c, &c.token, &book(1), Some("bytes=0-3")).await;
+    assert_eq!((status, part.as_slice()), (206, &body[..4]));
+
+    // a replaced file is a new version; the old one is dropped
+    std::fs::write(
+        dir.join("a.epub"),
+        epub("<html><body><p>Changed text here.</p></body></html>"),
+    )
+    .unwrap();
+    let (_, _, again) = download(&c, &c.token, &book(1), None).await;
+    assert!(text_of(&again, "c1.xhtml").contains("Changed text here."));
+    assert_eq!(kepubs(&c).len(), 1);
+}
+
+async fn futures_join(c: &Ctx) -> Vec<Vec<u8>> {
+    let mut set = tokio::task::JoinSet::new();
+    for _ in 0..8 {
+        let (c2, t) = (
+            Ctx {
+                app: c.app.clone(),
+                pool: c.pool.clone(),
+                token: c.token.clone(),
+                cache: c.cache.clone(),
+            },
+            book(1),
+        );
+        set.spawn(async move { download(&c2, &c2.token, &t, None).await.2 });
+    }
+    let mut out = vec![];
+    while let Some(r) = set.join_next().await {
+        out.push(r.unwrap());
+    }
+    out
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_book_that_cannot_be_converted_falls_back_to_the_epub(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    place(&c, b"this is not a zip").await;
+    for _ in 0..2 {
+        let (status, h, _) = download(&c, &c.token, &book(1), None).await;
+        assert_eq!(status, 307);
+        assert_eq!(
+            h["location"],
+            format!(
+                "https://kobo.example/cred/{}/api/stream/1?download=1",
+                c.token
+            )
+        );
+    }
+    assert!(kepubs(&c).is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_kepub_download_follows_the_book_rules(pool: PgPool) {
+    let (c, disabled) = ctx(pool).await;
+    place(&c, &epub("<html><body><p>x</p></body></html>")).await;
+    // another library, a PDF, an unknown uuid, a shape that names nothing, a missing file
+    for uuid in [book(2), book(3), book(99), "nope".to_string(), book(4)] {
+        assert_eq!(download(&c, &c.token, &uuid, None).await.0, 404, "{uuid}");
+    }
+    assert_eq!(download(&c, &disabled, &book(1), None).await.0, 401);
+    let other = token(&c.pool, 1, Kind::Opds).await;
+    assert_eq!(download(&c, &other, &book(1), None).await.0, 401);
+    assert!(kepubs(&c).is_empty());
 }
