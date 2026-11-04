@@ -75,15 +75,9 @@ impl From<runtime::fliks::plugin::types::Family> for Family {
     }
 }
 
-/// The family of a call naming one work: every one but `image` is served.
+/// The family of a call naming one work: every family is served.
 pub fn served(f: runtime::fliks::plugin::types::Family) -> Result<Family, HostError> {
-    match Family::from(f) {
-        Family::Image => Err(imports::host_err(
-            "unsupported-family",
-            "family \"image\" is not served",
-        )),
-        served => Ok(served),
-    }
+    Ok(Family::from(f))
 }
 
 /// The 15 s a caller (boot, enable, confirm, restart) waits for `ready` (rules 23, 41).
@@ -659,14 +653,12 @@ mod kind_tests {
     use super::*;
 
     #[test]
-    fn only_image_is_refused_and_named() {
-        let family = served(w::Family::Image).unwrap_err();
-        assert_eq!(family.code, "unsupported-family");
-        assert_eq!(family.message, "family \"image\" is not served");
+    fn every_family_is_served() {
         for (wit, f) in [
             (w::Family::Video, Family::Video),
             (w::Family::Audio, Family::Audio),
             (w::Family::Text, Family::Text),
+            (w::Family::Image, Family::Image),
         ] {
             assert_eq!(served(wit).unwrap(), f);
         }

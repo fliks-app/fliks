@@ -127,6 +127,12 @@ async fn match_one(
     {
         return super::book::match_one(db, book, min_age, entry).await;
     }
+    if let Some(comic) = hit
+        .map(|i| &library[i])
+        .filter(|m| m.kind == MediaKind::Comic)
+    {
+        return super::comic::match_one(db, comic, min_age, entry).await;
+    }
     let skip = |reason: t::SkipReason, media: Option<i32>, s: Option<i32>, e: Option<i32>| {
         t::ReleaseMatch {
             id: entry.id.clone(),

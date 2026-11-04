@@ -139,6 +139,46 @@ ORDER BY ep."airDate" ASC, ep.id ASC"#,
                 "episodeTitle": e.title, "hasFile": e.on_disk})
         }));
     }
+    if p.media_type.is_none_or(|t| t == MediaKind::Comic) {
+        #[derive(sqlx::FromRow)]
+        struct Issue {
+            id: i32,
+            media_id: i32,
+            media_title: String,
+            poster_url: Option<String>,
+            fanart_url: Option<String>,
+            status: String,
+            year: Option<i32>,
+            label: String,
+            title: Option<String>,
+            date: String,
+            on_disk: bool,
+        }
+        let rows: Vec<Issue> = sqlx::query_as(
+            r#"SELECT i.id, m.id AS media_id, m.title AS media_title, m."posterUrl" AS poster_url,
+  m."fanartUrl" AS fanart_url, m.status::text AS status, m.year, ci.label, i.title,
+  to_char(i."airDate", 'YYYY-MM-DD') AS date,
+  EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id) AS on_disk
+FROM items i JOIN comic_issues ci ON ci."itemId" = i.id JOIN media m ON m.id = i."mediaId"
+WHERE i."airDate" BETWEEN $1::text::date AND $2::text::date
+  AND ($3::bool IS NOT TRUE OR (m.monitored = true AND i.monitored = true))
+  AND ($4::int IS NULL OR m."addedById" = $4) AND m."libraryId" = ANY($5)
+ORDER BY i."airDate", i.id"#,
+        )
+        .bind(&start)
+        .bind(&end)
+        .bind(p.monitored_only)
+        .bind(added_by)
+        .bind(ids)
+        .fetch_all(db)
+        .await
+        .map_err(date_error)?;
+        out.extend(rows.into_iter().map(|e| {
+            json!({"id": e.id, "mediaId": e.media_id, "title": e.media_title, "type": "comic", "event": "release",
+                "date": e.date, "posterUrl": e.poster_url, "fanartUrl": e.fanart_url, "status": e.status,
+                "year": e.year, "issueNumber": e.label, "issueTitle": e.title, "hasFile": e.on_disk})
+        }));
+    }
     out.sort_by(|a, b| a["date"].as_str().cmp(&b["date"].as_str()));
     Ok(out)
 }

@@ -2,7 +2,7 @@
 use super::imports::host_err;
 use super::runtime::{HostError, fliks::plugin::types as t};
 use super::units;
-use crate::ingest::{books, library, transfer::Method};
+use crate::ingest::{books, comics, library, transfer::Method};
 use crate::state::AppState;
 use fliks_domain::language::parse_language_code;
 use fliks_domain::media::{family::Family, kind::MediaKind};
@@ -191,13 +191,24 @@ pub async fn run(
             Err(e) => return Err(db_err(e)),
         }
     } else {
-        if let Some(f) = files.iter().find(|f| {
-            books::classify(&library::file_name(&f.path)).is_none_or(|(of, _)| of != family)
-        }) {
+        let wrong = |f: &library::File| {
+            let name = library::file_name(&f.path);
+            if family == Family::Image {
+                !comics::is_comic_file(&name)
+            } else {
+                books::classify(&name).is_none_or(|(of, _)| of != family)
+            }
+        };
+        if let Some(f) = files.iter().find(|f| wrong(f)) {
+            let what = if family == Family::Image {
+                "comic".to_owned()
+            } else {
+                format!("{family} book")
+            };
             return Err(host_err(
                 "ERR_VALIDATION",
                 format!(
-                    "library.ingest: \"{}\" is not a {family} book file",
+                    "library.ingest: \"{}\" is not a {what} file",
                     library::file_name(&f.path)
                 ),
             ));
@@ -464,6 +475,92 @@ mod tests {
         );
     }
 
+    fn cbz(path: &Path) {
+        use std::io::Write;
+        use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
+        let mut png = vec![];
+        image::RgbImage::new(8, 12)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let mut w = ZipWriter::new(std::fs::File::create(path).unwrap());
+        let o = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for n in ["p1.png", "p2.png"] {
+            w.start_file(n, o).unwrap();
+            w.write_all(&png).unwrap();
+        }
+        w.finish().unwrap();
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_comic_download_joins_the_wanted_issue(db: PgPool) {
+        let s = shelf(db).await;
+        let comics = s.runtime.join("comics");
+        std::fs::create_dir_all(&comics).unwrap();
+        sqlx::query(
+            r#"WITH l AS (INSERT INTO libraries (name, "mediaTypes") VALUES ('C', '["comic"]') RETURNING id),
+                    f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, $1 FROM l)
+               INSERT INTO media (id, title, type, "libraryId", "folderName", monitored)
+                 SELECT 2, 'Star Gardens', 'comic', id, 'Star Gardens', true FROM l"#,
+        )
+        .bind(comics.to_string_lossy().as_ref())
+        .execute(&s.st.db)
+        .await
+        .unwrap();
+        let mut c = s.st.db.acquire().await.unwrap();
+        crate::media::items::create_shell(&mut c, 2, MediaKind::Comic, Default::default())
+            .await
+            .unwrap();
+        drop(c);
+        sqlx::raw_sql(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES (2, 'image') RETURNING id),
+                    i AS (INSERT INTO items ("mediaId", "editionId", monitored, "airDate")
+                          SELECT 2, id, true, '2020-01-01' FROM e RETURNING id)
+               INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label)
+                 SELECT id, 2, 'issue', 3, '3' FROM i"#,
+        )
+        .execute(&s.st.db)
+        .await
+        .unwrap();
+        let wanted =
+            || async { crate::media::wants::list(&s.st.db, 2).await.unwrap()[0].satisfied };
+        assert!(!wanted().await);
+        let file = s.dl.join("Star Gardens 003 (2024) (Digital).cbz");
+        cbz(&file);
+        let mut req = request(&s, t::Family::Image, None, "unused.epub");
+        req.media_id = 2;
+        req.paths = vec![file.to_string_lossy().into_owned()];
+        let r = run(&s.st, "p", &s.runtime, req).await.unwrap();
+        let [imported] = &r.imported[..] else {
+            panic!("one file: {r:?}")
+        };
+        assert_eq!(imported.quality, "cbz");
+        let issues: i64 = sqlx::query_scalar(
+            r#"SELECT count(*) FROM comic_issues WHERE "mediaId" = 2 AND "itemId" = ANY($1)"#,
+        )
+        .bind(
+            imported
+                .item_ids
+                .iter()
+                .map(|i| *i as i32)
+                .collect::<Vec<_>>(),
+        )
+        .fetch_one(&s.st.db)
+        .await
+        .unwrap();
+        assert_eq!(issues, 1, "the archive is the wanted issue, not a new one");
+        let all: i64 =
+            sqlx::query_scalar(r#"SELECT count(*) FROM comic_issues WHERE "mediaId" = 2"#)
+                .fetch_one(&s.st.db)
+                .await
+                .unwrap();
+        assert_eq!(all, 1);
+        assert!(wanted().await);
+        let mut book = request(&s, t::Family::Image, None, "dl.epub");
+        book.media_id = 2;
+        let refused = run(&s.st, "p", &s.runtime, book).await;
+        assert_eq!(refused.unwrap_err().code, "ERR_VALIDATION");
+    }
+
     async fn editions(s: &Shelf, family: &str) -> Vec<(Option<String>, i64)> {
         sqlx::query_as(
             r#"SELECT e.language, count(p."mediaFileId") FROM editions e LEFT JOIN items i ON i."editionId" = e.id
@@ -576,7 +673,7 @@ mod tests {
         let image = request(&s, t::Family::Image, None, "e.epub");
         assert_eq!(
             code(run(&s.st, "p", &s.runtime, image).await),
-            "unsupported-family"
+            "ERR_VALIDATION"
         );
         let mut gone = request(&s, t::Family::Text, None, "f.epub");
         gone.media_id = 99;

@@ -465,15 +465,20 @@ impl Ctx<'_> {
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();
-        let mut base = naming::apply_book_format(
-            &self.formats.book,
-            &BookNameTokens {
-                title: m.title.clone(),
-                year: m.year.map(i64::from),
-                language: self.req.language.clone(),
-                ..Default::default()
-            },
-        );
+        // An issue's number lives in its file name, so a comic keeps it.
+        let mut base = if m.media_type == MediaKind::Comic {
+            transfer::split_ext(&name).0.to_owned()
+        } else {
+            naming::apply_book_format(
+                &self.formats.book,
+                &BookNameTokens {
+                    title: m.title.clone(),
+                    year: m.year.map(i64::from),
+                    language: self.req.language.clone(),
+                    ..Default::default()
+                },
+            )
+        };
         // The language is in the name so two languages of one format never collide (as `.fr` for a subtitle).
         if let Some(l) = self
             .req

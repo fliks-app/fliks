@@ -8,6 +8,7 @@ use crate::state::AppState;
 use chrono::{Days, NaiveDate, Utc};
 use fliks_domain::media::family::Family;
 use fliks_domain::media::kind::MediaKind;
+use fliks_domain::profiles::default_allowed;
 use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quality_string};
 use fliks_domain::release::parsing::season_episode::{
     ReleaseCoverage, coverage_of, parse_season_episode,
@@ -366,7 +367,10 @@ fn book_language(
         return Ok(None);
     };
     if kind != MediaKind::Book || family == Some(Family::Video) {
-        return Err(host_err("ERR_VALIDATION", "a video call has no language"));
+        return Err(host_err(
+            "ERR_VALIDATION",
+            "only a book call has a language",
+        ));
     }
     fliks_domain::language::parse_language_code(raw)
         .map(Some)
@@ -387,6 +391,12 @@ pub async fn score_any(
     };
     wished(m.kind, family)?;
     let language = book_language(m.kind, family, language.as_deref())?;
+    if m.kind == MediaKind::Comic {
+        let issue = unit.as_ref().map(comic::expected).transpose()?;
+        return book::score(st, media_id, Family::Image, None, issue, releases)
+            .await
+            .map_err(db_err);
+    }
     if m.kind != MediaKind::Book {
         let (season, episode) = super::units::video(unit.as_ref())?;
         return release::score_of(st, &m, season, episode, releases)
@@ -402,13 +412,14 @@ pub async fn score_any(
             .await
             .map_err(db_err)?,
     };
-    book::score(st, media_id, family, language.as_deref(), releases)
+    book::score(st, media_id, family, language.as_deref(), None, releases)
         .await
         .map_err(db_err)
 }
 
 mod book;
 mod candidates;
+mod comic;
 mod create;
 mod release;
 pub use book::score as score_book;
