@@ -1,6 +1,7 @@
 //! The release reads of rule 31: matching titles to the library and scoring candidates.
 use super::*;
 use crate::scene::Mapping;
+use fliks_domain::release::fitting_kinds;
 use fliks_domain::release::parsing::season_episode::ParsedSeasonEpisode;
 
 pub(super) fn wit_coverage(c: &ReleaseCoverage) -> t::ReleaseCoverage {
@@ -85,7 +86,11 @@ async fn identify(
                 let tokens = release_title_tokens(&entry.title);
                 let named =
                     |idx: &_| matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch);
-                let mut hits: Hits = indexed.iter().position(named).into_iter().collect();
+                let fits = fitting_kinds(&entry.title, se.season.is_some() || se.episode.is_some());
+                let fit = |i: &usize| fits.is_none_or(|k| k.contains(&library[*i].kind));
+                let all: Vec<usize> = (0..indexed.len()).filter(|i| named(&indexed[*i])).collect();
+                let first = all.iter().copied().find(fit).or(all.first().copied());
+                let mut hits: Hits = first.into_iter().collect();
                 if let Some(first) = hits.first().copied()
                     && library[first].kind == MediaKind::Comic
                 {

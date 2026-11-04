@@ -735,6 +735,36 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_release_goes_to_the_kind_it_names_among_same_title_media(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
+               INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+               INSERT INTO media (id, title, type, "libraryId", monitored) VALUES
+                 (10, 'Shared Title', 'book', 1, true),
+                 (11, 'Shared Title', 'comic', 1, true),
+                 (12, 'Shared Title', 'movie', 1, true)"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let st = app_state(&db);
+        let out = matches(
+            &st,
+            vec![
+                title("m", "Shared.Title.2021.2160p.WEB-DL.x265"),
+                title("b", "Some Author - Shared Title [EPUB]"),
+                title("c", "Shared Title 012 (2016) (digital).cbz"),
+            ],
+            None,
+        )
+        .await
+        .unwrap();
+        let ids: Vec<_> = out.iter().map(|m| m.media_id).collect();
+        assert_eq!(ids, [Some(12), Some(10), Some(11)]);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn an_unknown_mapping_skips_numbered_releases(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         series_with_episodes(&db).await;
