@@ -14,7 +14,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    media::{kind::MediaKind, path::media_path},
+    media::path::media_path,
 };
 use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf};
@@ -42,8 +42,8 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
         .await
         .map_err(|e| e.to_string())?;
     let roots: Vec<PathBuf> = all.iter().map(|f| PathBuf::from(&f.path)).collect();
-    // A book removes only what it owns and the directories that end up empty: sharing is harmless.
-    if m.media_type == MediaKind::Book {
+    // A book or comic removes only what it owns and the directories that end up empty: sharing is harmless.
+    if crate::ingest::registers(m.media_type) {
         return fsx::removable_dir_of(&root, m.media_type, folder, &roots, &[]);
     }
     let mut others: Vec<PathBuf> = sqlx::query!(
@@ -83,7 +83,7 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
 }
 
 /// What a delete leaves to remove from disk: the folders that held the media's files and, for a
-/// book, those files as `(folder id, relative path)`; both are unreadable once the rows are gone.
+/// book or comic, those files as `(folder id, relative path)`; both are unreadable once the rows are gone.
 #[derive(Default)]
 pub struct Leftover {
     pub folders: Vec<i32>,
@@ -112,7 +112,7 @@ pub async fn media_dirs_to_remove(
     for r in rows {
         match media_dir_in(st, m, &r.path).await {
             Ok(Some(dir)) => {
-                let owned = (m.media_type == MediaKind::Book).then(|| {
+                let owned = crate::ingest::registers(m.media_type).then(|| {
                     left.files
                         .iter()
                         .filter(|(f, _)| *f == r.id)
@@ -152,7 +152,7 @@ pub async fn remove_media(
     };
     left.folders.sort_unstable();
     left.folders.dedup();
-    if media.media_type == MediaKind::Book {
+    if crate::ingest::registers(media.media_type) {
         left.files = rows.into_iter().map(|r| (r.folder_id, r.rel)).collect();
     }
     crate::party::end_playing(st, id).await?;

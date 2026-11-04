@@ -17,6 +17,7 @@ use crate::libraries::Folder;
 use crate::media::external_ids;
 use crate::state::AppState;
 use crate::sync::MutexExt;
+use books::{Placed, Registration};
 use fliks_domain::{
     media::kind::MediaKind,
     naming::{NamingFormats, Scope, formats_from_rows, setting_key},
@@ -256,4 +257,32 @@ pub fn drop_thumbnails(st: &AppState, file_id: i32) {
             tracing::warn!("could not remove thumbnails of file #{file_id}: {e}");
         }
     });
+}
+
+/// Whether `kind` registers its files in one batch through `register_files`.
+pub fn registers(kind: MediaKind) -> bool {
+    matches!(kind, MediaKind::Book | MediaKind::Comic)
+}
+
+/// `books::register_language` for a book, `comics::register` for a comic.
+pub async fn register_files(
+    st: &AppState,
+    kind: MediaKind,
+    media: i32,
+    files: &[Placed],
+    language: Option<&str>,
+) -> Result<Registration, String> {
+    match kind {
+        MediaKind::Comic => comics::register(st, media, files).await,
+        _ => books::register_language(st, media, files, language).await,
+    }
+}
+
+/// Why a file is refused by a media of `kind`.
+pub fn not_owned_message(kind: MediaKind) -> &'static str {
+    match kind {
+        MediaKind::Book => "not a book file",
+        MediaKind::Comic => "not a comic file",
+        _ => "not a video file",
+    }
 }

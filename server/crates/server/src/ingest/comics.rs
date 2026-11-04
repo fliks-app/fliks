@@ -75,9 +75,13 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
         let Some(format) = format_of(&n) else {
             continue;
         };
-        let meta = tokio::fs::metadata(&f.abs)
-            .await
-            .map_err(|e| format!("{n}: {e}"))?;
+        let meta = match tokio::fs::metadata(&f.abs).await {
+            Ok(m) => m,
+            Err(e) => {
+                conflicts.push(format!("{n}: {e}"));
+                continue;
+            }
+        };
         let pages = count_pages(&f.abs, format).await;
         let info = read_info(&f.abs, format).await;
         let Some(file) = sqlx::query_scalar!(
@@ -336,26 +340,6 @@ pub async fn refresh(
         updated += 1;
     }
     Ok(updated)
-}
-
-/// Whether `kind` registers its files in one batch through `register_files`.
-pub fn registers(kind: fliks_domain::media::kind::MediaKind) -> bool {
-    use fliks_domain::media::kind::MediaKind::{Book, Comic};
-    matches!(kind, Book | Comic)
-}
-
-/// `books::register_language` for a book, `register` for a comic.
-pub async fn register_files(
-    st: &AppState,
-    kind: fliks_domain::media::kind::MediaKind,
-    media: i32,
-    files: &[Placed],
-    language: Option<&str>,
-) -> Result<Registration, String> {
-    match kind {
-        fliks_domain::media::kind::MediaKind::Comic => register(st, media, files).await,
-        _ => super::books::register_language(st, media, files, language).await,
-    }
 }
 
 #[cfg(test)]

@@ -136,7 +136,7 @@ async fn rescan_folders(
 ) -> Result<Vec<crate::libraries::Folder>, AppError> {
     let mut ids: Vec<i32> = rows.iter().map(|r| r.folder_id).collect();
     ids.extend(media.folder.iter().map(|f| f.id));
-    if super::comics::registers(media.media_type) {
+    if super::registers(media.media_type) {
         ids.extend(super::books::want_folders(&st.db, media.id).await?);
     }
     Ok(sqlx::query!(
@@ -249,7 +249,7 @@ pub async fn rescan_files(
             .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
             .collect();
         applied = async {
-            if super::comics::registers(media.media_type) {
+            if super::registers(media.media_type) {
                 return book_pass(st, &m, &base, &kept, &disk, &linked, &mut c).await;
             }
             refresh_existing(st, &m, &base, &kept, &slots, &mut c, &mut touched).await?;
@@ -270,7 +270,7 @@ pub async fn rescan_files(
     }
     // A stamped row must get its embedded detection even when a later step failed.
     // An interrupted walk proves nothing about the sidecars on disk.
-    if !super::comics::registers(media.media_type) {
+    if !super::registers(media.media_type) {
         reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
     }
     applied?;
@@ -350,7 +350,7 @@ async fn book_pass(
     let reg = if fresh.is_empty() {
         super::books::Registration::default()
     } else {
-        super::comics::register_files(st, media.media_type, media.id, &fresh, None)
+        super::register_files(st, media.media_type, media.id, &fresh, None)
             .await
             .map_err(AppError::internal)?
     };
@@ -1091,14 +1091,9 @@ pub async fn locate_in_place(
     let named = media.folder_name.as_deref().filter(|f| !f.is_empty());
     let rel = named.map_or_else(|| inner.clone(), |f| format!("{f}/{inner}"));
     if !super::books::owns(media.media_type, &file_name(&real)) {
-        return Ok(Err(match media.media_type {
-            MediaKind::Book => "not a book file",
-            MediaKind::Comic => "not a comic file",
-            _ => "not a video file",
-        }
-        .into()));
+        return Ok(Err(super::not_owned_message(media.media_type).into()));
     }
-    if named.is_none() && inner.contains('/') && !super::comics::registers(media.media_type) {
+    if named.is_none() && inner.contains('/') && !super::registers(media.media_type) {
         return Ok(Err(
             "a title with no folder can only own files at the library root".into(),
         ));

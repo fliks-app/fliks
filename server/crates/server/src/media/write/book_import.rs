@@ -143,10 +143,6 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         links,
     } = *new;
     let lang = crate::metadata::library_language(st, target.id).await?;
-    let meta_fail = |e| match e {
-        crate::metadata::MetaError::Upstream(e) => fail(ANCHOR, &e, true),
-        crate::metadata::MetaError::Db(e) => e.into(),
-    };
     if !st.metadata.available(ANCHOR) {
         return Err(unavailable(
             "request",
@@ -158,7 +154,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         .metadata
         .work(ANCHOR, MediaKind::Book, work, &lang, prio)
         .await
-        .map_err(meta_fail)?
+        .map_err(|e| meta_error(ANCHOR, e))?
     else {
         return Err(unavailable(
             "request",
@@ -219,7 +215,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         confidence: 100,
     };
     if let Err(e) = attach(st, id, None, &m, prio).await {
-        return Err(undo(meta_fail(e)).await);
+        return Err(undo(meta_error(ANCHOR, e)).await);
     }
     match stored(&st.db, id, None).await {
         Ok(Some(m)) if m.work == work => {}
@@ -349,7 +345,18 @@ async fn create_from_edition(
         (Some(work), None) => create_book(st, &new_book(c, work)).await?,
         (None, None) => insert_unanchored(st, c, record, *from, c.links.clone()).await?,
     };
-    let edition = add_edition(&st.db, id, family, &ids).await?;
+    let edition = match add_edition(&st.db, id, family, &ids).await {
+        Ok(e) => e,
+        Err(e) => {
+            if held.is_none() {
+                let guard = st.ingest.media.lock(id).await;
+                if let Err(d) = super::delete::remove_media(st, &guard, id).await {
+                    tracing::warn!("book #{id} left behind after a failed import: {}", d.text());
+                }
+            }
+            return Err(e);
+        }
+    };
     if let Some(work) = work {
         let m = BookMatch {
             work,

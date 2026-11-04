@@ -66,6 +66,11 @@ struct Move {
     from: PathBuf,
     to: PathBuf,
     keep: bool,
+    /// The destination folder and whether this run creates `to`, for the boot sweep to undo it.
+    #[serde(default)]
+    dest_folder: String,
+    #[serde(default)]
+    created: bool,
 }
 
 struct Journal {
@@ -183,6 +188,27 @@ async fn blocking<T: Send + 'static>(
         .map_err(|e| format!("{}: {e}", at.display()))
 }
 
+/// Class of the per-media Postgres advisory lock that keeps two processes off one move.
+const MOVE_LOCK: i32 = 0x4d4f_5645;
+
+/// The connection holding the move lock of `id`, or `None` when another process holds it;
+/// closing it, even on a panic, releases the session lock.
+async fn lock_move(
+    st: &AppState,
+    id: i32,
+) -> sqlx::Result<Option<sqlx::pool::PoolConnection<sqlx::Postgres>>> {
+    let mut conn = st.db.acquire().await?;
+    let got = sqlx::query_scalar::<_, bool>("SELECT pg_try_advisory_lock($1, $2)")
+        .bind(MOVE_LOCK)
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await?;
+    if got {
+        conn.close_on_drop();
+    }
+    Ok(got.then_some(conn))
+}
+
 /// The caller holds the media's lock; returns the files moved and the sources left behind.
 async fn run(
     st: &AppState,
@@ -193,12 +219,16 @@ async fn run(
 ) -> Result<(i64, i64), String> {
     let _moves = st.folder_moves.write().await;
     let db = |e: sqlx::Error| e.to_string();
+    let _lock = lock_move(st, id)
+        .await
+        .map_err(db)?
+        .ok_or_else(|| format!("Media #{id} is being moved by another process"))?;
     let dest = folder_of(&st.db, folder)
         .await
         .map_err(db)?
         .ok_or_else(|| format!("Folder #{folder} no longer exists"))?;
     let dest = &dest;
-    finish_pending(st, id).await;
+    let carried = finish_pending(st, id).await;
     let droot =
         fsx::Root::open(&dest.path).map_err(|e| format!("Folder \"{}\": {e}", dest.path))?;
     let items = plan(st, id, dest, &droot).await?;
@@ -210,6 +240,8 @@ async fn run(
             from: i.src.clone(),
             to: i.dest.clone(),
             keep: i.keep,
+            dest_folder: dest.path.clone(),
+            created: !i.present,
         })
         .collect();
     let listing: Vec<String> = moves
@@ -219,7 +251,7 @@ async fn run(
     tracing::info!("Move of media #{id} planned: {}", listing.join("; "));
     let mut journal = Journal {
         committed: false,
-        moves,
+        moves: carried.iter().cloned().chain(moves).collect(),
     };
     save_journal(&st.db, id, &journal).await.map_err(db)?;
     let total = items.len();
@@ -245,12 +277,12 @@ async fn run(
                 done += 1;
             }
             Ok(Some(false)) => {
-                undo(&droot, &dest.path, &created);
+                abort(st, id, &droot, &dest.path, &created, &carried).await;
                 return Err(format!("{} appeared during the move", it.dest.display()));
             }
             Ok(None) => copies.push(it),
             Err(e) => {
-                undo(&droot, &dest.path, &created);
+                abort(st, id, &droot, &dest.path, &created, &carried).await;
                 return Err(e);
             }
         }
@@ -259,7 +291,7 @@ async fn run(
     if need > 0 {
         let d = crate::libraries::disk(&dest.path).await;
         if d.accessible && u64::try_from(d.free_space).is_ok_and(|f| f < need) {
-            undo(&droot, &dest.path, &created);
+            abort(st, id, &droot, &dest.path, &created, &carried).await;
             return Err(format!(
                 "Not enough free space in \"{}\": {need} bytes needed",
                 dest.path
@@ -275,24 +307,71 @@ async fn run(
                 done += 1;
             }
             Ok(false) => {
-                undo(&droot, &dest.path, &created);
+                abort(st, id, &droot, &dest.path, &created, &carried).await;
                 return Err(format!("{} appeared during the move", it.dest.display()));
             }
             Err(e) => {
-                undo(&droot, &dest.path, &created);
+                abort(st, id, &droot, &dest.path, &created, &carried).await;
                 return Err(e);
             }
         }
     }
+    let dests: Vec<PathBuf> = items.iter().map(|i| i.dest.clone()).collect();
+    let root = PathBuf::from(&dest.path);
+    if let Err(e) = blocking(&root.clone(), move || sync_dirs(&root, &dests)).await {
+        abort(st, id, &droot, &dest.path, &created, &carried).await;
+        return Err(e);
+    }
     journal.committed = true;
     if let Err(e) = commit(st, id, dest, &items, &journal).await {
-        undo(&droot, &dest.path, &created);
-        return Err(db(e));
+        // The commit may have reached Postgres: the rows then point at the copies.
+        let committed = sqlx::query_scalar::<_, bool>(
+            r#"SELECT committed FROM media_moves WHERE "mediaId" = $1 FOR SHARE"#,
+        )
+        .bind(id)
+        .fetch_optional(&st.db)
+        .await;
+        match committed {
+            Ok(Some(true)) => {}
+            Ok(_) => {
+                abort(st, id, &droot, &dest.path, &created, &carried).await;
+                return Err(db(e));
+            }
+            Err(_) => return Err(db(e)),
+        }
     }
     let left = unlink_sources(id, journal.moves.into_iter().filter(|m| !m.keep).collect());
     let leftover = left.len() as i64;
     settle_journal(st, id, left).await;
     Ok((total as i64, leftover))
+}
+
+/// Makes the new directory entries durable: every directory from each destination up to `root`.
+/// Unix only; a filesystem that cannot sync a directory is taken as already durable.
+#[cfg_attr(not(unix), allow(unused_variables))]
+fn sync_dirs(root: &Path, dests: &[PathBuf]) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        let mut dirs = std::collections::BTreeSet::new();
+        for d in dests {
+            let mut p = d.parent();
+            while let Some(x) = p.filter(|x| x.starts_with(root)) {
+                dirs.insert(x.to_path_buf());
+                p = x.parent();
+            }
+        }
+        for d in dirs {
+            match fs::File::open(&d).and_then(|f| f.sync_all()) {
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::InvalidInput | io::ErrorKind::Unsupported
+                    ) => {}
+                r => r?,
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Unlinks the moved sources, pruning the directories they empty; returns those that stay.
@@ -313,8 +392,8 @@ fn unlink_sources(id: i32, moves: Vec<Move>) -> Vec<Move> {
 }
 
 /// A committed move whose sources could not all be unlinked (a crash, a busy file) finishes here
-/// on the media's next move; a source a row points at again is left alone.
-async fn finish_pending(st: &AppState, id: i32) {
+/// on the media's next move, which carries the ones still stuck into its own journal; a source a row points at again is left alone.
+async fn finish_pending(st: &AppState, id: i32) -> Vec<Move> {
     let Some((moves, true)) = sqlx::query_as::<_, (sqlx::types::Json<Vec<Move>>, bool)>(
         r#"SELECT plan, committed FROM media_moves WHERE "mediaId" = $1"#,
     )
@@ -324,7 +403,7 @@ async fn finish_pending(st: &AppState, id: i32) {
     .ok()
     .flatten()
     .map(|(m, c)| (m.0, c)) else {
-        return;
+        return vec![];
     };
     let mut todo = Vec::new();
     for m in moves.into_iter().filter(|m| !m.keep) {
@@ -337,11 +416,85 @@ async fn finish_pending(st: &AppState, id: i32) {
         .fetch_one(&st.db)
         .await
         .unwrap_or(true);
-        if !held {
+        if held {
+            continue;
+        }
+        if same_copy(m.from.clone(), m.to.clone()).await {
             todo.push(m);
+        } else {
+            tracing::warn!(
+                "Move of media #{id}: source kept, no identical copy at {}",
+                m.to.display()
+            );
         }
     }
-    settle_journal(st, id, unlink_sources(id, todo)).await;
+    let left = unlink_sources(id, todo);
+    settle_journal(st, id, left.clone()).await;
+    left
+}
+
+/// Boot sweep of `media_moves`: a committed move unlinks its leftover sources, an uncommitted one
+/// removes the copies it made (its rows still point at the sources).
+pub async fn recover(st: &AppState) {
+    let ids = sqlx::query_scalar::<_, i32>(r#"SELECT "mediaId" FROM media_moves"#)
+        .fetch_all(&st.db)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Move journals not listed: {e}");
+            vec![]
+        });
+    for id in ids {
+        let _guard = st.ingest.media.lock(id).await;
+        let _moves = st.folder_moves.write().await;
+        match lock_move(st, id).await {
+            Ok(Some(_lock)) => {
+                finish_pending(st, id).await;
+                discard_uncommitted(st, id).await;
+            }
+            Ok(None) => tracing::info!("Move journal of media #{id} skipped: a move is running"),
+            Err(e) => tracing::warn!("Move journal of media #{id} not swept: {e}"),
+        }
+    }
+}
+
+async fn discard_uncommitted(st: &AppState, id: i32) {
+    let Ok(Some(moves)) = sqlx::query_scalar::<_, sqlx::types::Json<Vec<Move>>>(
+        r#"SELECT plan FROM media_moves WHERE "mediaId" = $1 AND NOT committed"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await
+    else {
+        return;
+    };
+    for m in moves.0.iter().filter(|m| m.created) {
+        let held = sqlx::query_scalar::<_, bool>(
+            r#"SELECT EXISTS (SELECT 1 FROM media_files f JOIN library_folders lf ON lf.id = f."folderId"
+               WHERE lf.path = $1 AND f."relativePath" = $2)"#,
+        )
+        .bind(&m.dest_folder)
+        .bind(&m.rel)
+        .fetch_one(&st.db)
+        .await
+        .unwrap_or(true);
+        if held || !same_copy(m.from.clone(), m.to.clone()).await {
+            continue;
+        }
+        let gone =
+            fsx::Root::open(&m.dest_folder).and_then(|root| fsx::unlink_contained(&root, &m.to));
+        match gone {
+            Ok(_) => {
+                if let Some(dir) = m.to.parent() {
+                    fsx::prune_empty(Path::new(&m.dest_folder), dir);
+                }
+            }
+            Err(e) => tracing::warn!(
+                "Move of media #{id} interrupted, copy kept: {}: {e}",
+                m.to.display()
+            ),
+        }
+    }
+    settle_journal(st, id, vec![]).await;
 }
 
 /// Drops the journal once every source is gone, else keeps the sources still to unlink.
@@ -364,14 +517,31 @@ async fn settle_journal(st: &AppState, id: i32, left: Vec<Move>) {
     }
 }
 
-/// Removes the copies this run made, then the directories it left empty.
-fn undo(droot: &fsx::Root, folder: &str, created: &[&Path]) {
+/// Removes the copies this run made, then the directories it left empty; whether every one went.
+fn undo(droot: &fsx::Root, folder: &str, created: &[&Path]) -> bool {
+    let mut clean = true;
     for p in created {
         if let Err(e) = fsx::unlink_contained(droot, p) {
             tracing::warn!("Move rolled back, copy kept: {}: {e}", p.display());
+            clean = false;
         } else if let Some(dir) = p.parent() {
             fsx::prune_empty(Path::new(folder), dir);
         }
+    }
+    clean
+}
+
+/// `undo`, then drops the journal (but the sources still owed) when nothing was left, so a boot sweep only sees crashes.
+async fn abort(
+    st: &AppState,
+    id: i32,
+    droot: &fsx::Root,
+    folder: &str,
+    created: &[&Path],
+    carried: &[Move],
+) {
+    if undo(droot, folder, created) {
+        settle_journal(st, id, carried.to_vec()).await;
     }
 }
 

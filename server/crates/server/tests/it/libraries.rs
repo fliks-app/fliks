@@ -1147,3 +1147,95 @@ async fn a_source_left_after_the_commit_is_unlinked_by_the_next_run(pool: PgPool
     assert!(journal().await.is_none());
     assert!(c.tmp.join("f2/Mv/0.mkv").is_file());
 }
+
+async fn journal_for(c: &Ctx, pool: &PgPool, id: i32, committed: bool, created: bool) {
+    let (f1, f2) = (dir(c, "f1"), dir(c, "f2"));
+    let plan = json!([{"folder": f1, "rel": "Mv/0.mkv", "from": format!("{f1}/Mv/0.mkv"),
+        "to": format!("{f2}/Mv/0.mkv"), "keep": false, "dest_folder": f2, "created": created}]);
+    sqlx::query(r#"INSERT INTO media_moves ("mediaId", plan, committed) VALUES ($1, $2, $3)"#)
+        .bind(id)
+        .bind(plan)
+        .bind(committed)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_boot_sweep_unlinks_the_sources_of_a_committed_move(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (_, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f2]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    put(&c, "f2/Mv/.keep", b"");
+    std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
+    journal_for(&c, &pool, id, true, true).await;
+    fliks_server::media::write::recover(&c.st).await;
+    assert!(!c.tmp.join("f1/Mv/0.mkv").exists());
+    assert!(c.tmp.join("f2/Mv/0.mkv").is_file());
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM media_moves")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_boot_sweep_removes_the_copies_of_an_uncommitted_move(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (f1, _) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    put(&c, "f2/Mv/.keep", b"");
+    std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
+    journal_for(&c, &pool, id, false, true).await;
+    fliks_server::media::write::recover(&c.st).await;
+    assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
+    assert!(!c.tmp.join("f2/Mv/0.mkv").exists());
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM media_moves")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_boot_sweep_keeps_a_source_with_no_identical_copy(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (_, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f2]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    journal_for(&c, &pool, id, true, true).await;
+    fliks_server::media::write::recover(&c.st).await;
+    assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = false)]
+async fn a_stuck_source_survives_a_move_that_runs_before_it_is_freed(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    let src_dir = c.tmp.join("f1/Mv");
+    std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::File::create(src_dir.join("probe")).is_ok() {
+        return; // permissions are not enforced (root)
+    }
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    let plan: String =
+        sqlx::query_scalar(r#"SELECT plan::text FROM media_moves WHERE "mediaId" = $1"#)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(plan.contains("0.mkv"), "{plan}");
+    std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    assert!(!src_dir.join("0.mkv").exists());
+}

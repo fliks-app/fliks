@@ -28,8 +28,7 @@ use fliks_domain::{
     },
     metadata::limiter::Priority,
     naming::{
-        self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
-        validate_folder_name, validate_folder_path,
+        self, is_special_file, parse_episode_numbers, validate_folder_name, validate_folder_path,
     },
     release::parsing::quality::parse_release_quality,
 };
@@ -61,6 +60,14 @@ struct Lib {
     provider: Option<String>,
     dq: Option<i32>,
     dl: Option<i32>,
+}
+
+impl Lib {
+    /// The path of library folder `id`, or the first folder's when it is absent or unknown.
+    fn root_of(&self, id: Option<i32>) -> &str {
+        id.and_then(|i| self.folders.iter().find(|f| f.id == i))
+            .map_or(&self.path, |f| &f.path)
+    }
 }
 
 /// `requirePathFor`: 404 unknown, 400 without a root path.

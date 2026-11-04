@@ -18,7 +18,7 @@ use crate::{
     images::paths::{Target as Art, Variant},
     ingest::load_media,
     libraries::accessible_library_ids,
-    metadata::service::{self, Details, Found, Lookup},
+    metadata::service::{self, Found, Lookup},
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -175,9 +175,18 @@ pub async fn import_title(
         prio,
     )
     .await?;
-    let format = folder_format(&st.db, imp.media_type).await?;
     let d = &found.details;
-    let folder = folder_name(&format, imp.media_type, d);
+    let folder = folder_for(
+        &st.db,
+        imp.media_type,
+        &FolderOf {
+            title: &d.title,
+            original_title: d.original_title.as_deref(),
+            year: d.year.filter(|y| y.is_finite()).map(|y| y as i64),
+            tmdb_id: d.tmdb_id.map(i64::from),
+        },
+    )
+    .await?;
     let folder = validate_folder_name(&folder)
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{}\"", d.title)))?
         .to_owned();
@@ -260,7 +269,14 @@ pub(super) async fn folder_format(
     db: &sqlx::PgPool,
     media_type: MediaKind,
 ) -> Result<String, sqlx::Error> {
-    let key = naming::setting_key(media_type, naming::Scope::Folder);
+    let key = naming::setting_key(
+        if media_type == MediaKind::Comic {
+            MediaKind::Book
+        } else {
+            media_type
+        },
+        naming::Scope::Folder,
+    );
     let default = match media_type {
         MediaKind::Movie => "{Original Title} ({Release Year})",
         MediaKind::Series => "{Series Title}",
@@ -273,37 +289,55 @@ pub(super) async fn folder_format(
     Ok(stored.unwrap_or_else(|| default.to_owned()))
 }
 
-fn folder_name(format: &str, media_type: MediaKind, d: &Details) -> String {
-    let year = d.year.filter(|y| y.is_finite()).map(|y| y as i64);
-    let tmdb_id = d.tmdb_id.map(i64::from);
-    match media_type {
+/// What a folder format reads from a title.
+pub(crate) struct FolderOf<'a> {
+    pub title: &'a str,
+    pub original_title: Option<&'a str>,
+    pub year: Option<i64>,
+    pub tmdb_id: Option<i64>,
+}
+
+/// The folder name of a media of `kind` from `format`: the one derivation import, relink and
+/// transfer share.
+pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> String {
+    let (title, original_title) = (t.title.to_owned(), t.original_title.map(str::to_owned));
+    match kind {
         MediaKind::Movie => naming::apply_movie_folder_format(
             format,
             &MovieFolder {
-                title: d.title.clone(),
-                original_title: d.original_title.clone(),
-                year,
-                tmdb_id,
+                title,
+                original_title,
+                year: t.year,
+                tmdb_id: t.tmdb_id,
             },
         ),
         MediaKind::Series => naming::apply_series_folder_format(
             format,
             &SeriesFolder {
-                series_title: d.title.clone(),
-                original_title: d.original_title.clone(),
-                year,
-                tmdb_id,
+                series_title: title,
+                original_title,
+                year: t.year,
+                tmdb_id: t.tmdb_id,
             },
         ),
         MediaKind::Book | MediaKind::Comic => naming::apply_book_format(
             format,
             &naming::BookNameTokens {
-                title: d.title.clone(),
-                year,
+                title,
+                year: t.year,
                 ..Default::default()
             },
         ),
     }
+}
+
+/// `folder_name` with the stored format, else the import default.
+pub(crate) async fn folder_for(
+    db: &sqlx::PgPool,
+    kind: MediaKind,
+    t: &FolderOf<'_>,
+) -> Result<String, sqlx::Error> {
+    Ok(folder_name(&folder_format(db, kind).await?, kind, t))
 }
 
 /// `mapTmdbStatusToMediaStatus`.
@@ -458,27 +492,6 @@ fn common(b: &Body) -> Result<Common, AppError> {
     })
 }
 
-async fn prepare(
-    st: &AppState,
-    a: &Authed,
-    c: &Common,
-    seasons: Option<Vec<i32>>,
-) -> Result<Import, AppError> {
-    let target = resolve_target(st, a, c.media_type, c.library, c.folder).await?;
-    Ok(Import {
-        media_type: c.media_type,
-        library_id: target.id,
-        folder_id: target.folder_id,
-        quality_profile_id: resolve_profile(&st.db, false, c.quality, target.default_quality)
-            .await?,
-        language_profile_id: resolve_profile(&st.db, true, c.language, target.default_language)
-            .await?,
-        added_by: Some(a.user.id),
-        monitored_seasons: seasons,
-        links: vec![],
-    })
-}
-
 pub async fn all_library_ids(db: &sqlx::PgPool) -> Result<Vec<i32>, sqlx::Error> {
     sqlx::query_scalar!(r#"SELECT id AS "id!" FROM libraries ORDER BY id"#)
         .fetch_all(db)
@@ -533,13 +546,20 @@ pub async fn import_tmdb(
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
     st.metadata.require(None)?;
     duplicate_ref(&st, c.media_type, Namespace::TMDB, &tmdb.to_string()).await?;
-    let imp = prepare(&st, &a, &c, None).await?;
-    let id = import_title(
+    let target = resolve_target(&st, &a, c.media_type, c.library, c.folder).await?;
+    let id = create_identified(
         &st,
-        Some("tmdb".into()),
-        tmdb.to_string(),
-        imp,
-        Priority::Interactive,
+        &Creation {
+            kind: c.media_type,
+            id: (Namespace::TMDB, &tmdb.to_string()),
+            target: &target,
+            profiles: (c.quality, c.language),
+            user: Some(a.user.id),
+            links: vec![],
+            seasons: None,
+            wants: None,
+            prio: Priority::Interactive,
+        },
     )
     .await?;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
@@ -650,15 +670,17 @@ pub(super) async fn creation_folder(
     title: &str,
     year: Option<i64>,
 ) -> Result<String, AppError> {
-    let format = folder_format(&st.db, kind).await?;
-    let name = naming::apply_book_format(
-        &format,
-        &naming::BookNameTokens {
-            title: title.to_owned(),
+    let name = folder_for(
+        &st.db,
+        kind,
+        &FolderOf {
+            title,
+            original_title: None,
             year,
-            ..Default::default()
+            tmdb_id: None,
         },
-    );
+    )
+    .await?;
     naming::validate_folder_path(&name)
         .map(str::to_owned)
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))

@@ -186,12 +186,10 @@ async fn changed_fields(
     id: i32,
     cols: &[(&'static str, Col)],
 ) -> sqlx::Result<Vec<Field>> {
-    let old: Option<Value> = sqlx::query_scalar(
-        r#"SELECT jsonb_build_object('title', title, 'originalTitle', "originalTitle", 'year', year,
-             'overview', overview, 'status', status::text, 'posterUrl', "posterUrl",
-             'fanartUrl', "fanartUrl", 'rating', rating, 'genres', genres, 'runtime', runtime)
-           FROM media WHERE id = $1 FOR UPDATE"#,
-    )
+    let old: Option<Value> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT jsonb_build_object({}, 'status', status::text) FROM media WHERE id = $1 FOR UPDATE",
+        super::fields::SHARED_COLUMNS
+    )))
     .bind(id)
     .fetch_optional(&mut *c)
     .await?;
