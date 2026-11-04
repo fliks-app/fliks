@@ -3949,3 +3949,201 @@ mod comic_ingest {
         assert_eq!(p, None);
     }
 }
+
+mod scene_import {
+    use super::*;
+    use crate::ingest::{
+        library::{self, File, Request},
+        transfer::Method,
+    };
+
+    /// A series with `seasons` as (number, episodes), each episode an item with its own number.
+    async fn series(c: &Ctx, tvdb: i32, seasons: &[(i32, i32)]) -> i32 {
+        let lib = library(c, "S", &c.dir.join("series"), r#"["series"]"#).await;
+        let m = media(c, lib, "Show", "series").await;
+        let edition = crate::media::items::video_edition(&c.st.db, m)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'series', 'tvdb', $2)"#)
+            .bind(m)
+            .bind(tvdb.to_string())
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        for (n, eps) in seasons {
+            let g: i32 = sqlx::query_scalar(r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, true) RETURNING id"#)
+                .bind(m)
+                .bind(n)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+            sqlx::query(r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored) SELECT $1, $2, $3, e, true FROM generate_series(1, $4) e"#)
+                .bind(m)
+                .bind(edition)
+                .bind(g)
+                .bind(eps)
+                .execute(&c.st.db)
+                .await
+                .unwrap();
+        }
+        m
+    }
+
+    /// A mapping of scene season 4 onto aired season 3, library seasons 1 to 3 holding 10, 7, 8.
+    async fn mapped(c: &Ctx, tvdb: i32) -> i32 {
+        let m = series(c, tvdb, &[(1, 10), (2, 7), (3, 8)]).await;
+        let map: fliks_domain::release::scene::SceneMap = serde_json::from_str(include_str!(
+            "../../../../fixtures/scene-numbering/map.json"
+        ))
+        .unwrap();
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES ($1, $2)"#)
+            .bind(tvdb)
+            .bind(sqlx::types::Json(map))
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        m
+    }
+
+    async fn import(c: &Ctx, m: i32, name: &str, episode_id: Option<i32>) -> library::Outcome {
+        let path = c.dir.join("dl").join(name);
+        touch(&path, b"ep");
+        let guard = c.st.ingest.media.lock(m).await;
+        let req = Request {
+            media_id: m,
+            files: vec![File { path, episode_id }],
+            transfer: Method::Copy,
+            fallback_quality: None,
+            release_name: None,
+            force: false,
+            uniquify_on_collision: false,
+            replace_existing: false,
+            language: None,
+        };
+        library::ingest(&c.st, &guard, req).await.unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_scene_named_file_imports_into_its_aired_episode(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = mapped(&c, 375921).await;
+        let out = import(&c, m, "Show.S04E01.1080p.mkv", None).await;
+        assert_eq!(out.errors.len(), 0, "{:?}", out.errors);
+        let i = &out.imported[0];
+        assert_eq!((i.season_number, i.episode_number), (Some(3), Some(1)));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_explicit_episode_wins_over_the_name(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = mapped(&c, 375921).await;
+        let ep: i32 = sqlx::query_scalar(r#"SELECT e.id FROM items e JOIN item_groups g ON g.id = e."groupId" WHERE g."mediaId" = $1 AND g."number" = 1 AND e."number" = 2"#)
+            .bind(m)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let out = import(&c, m, "Show.S02E01-E02.1080p.mkv", Some(ep)).await;
+        let i = &out.imported[0];
+        assert_eq!((i.season_number, i.episode_number), (Some(1), Some(2)));
+        assert_eq!(
+            i.episode_end,
+            Some(2),
+            "the name's end stays untranslated, not 7"
+        );
+    }
+
+    async fn unknown(c: &Ctx) -> i32 {
+        let down = std::sync::Arc::new(crate::metadata::scene_stub::SceneStub::default());
+        down.down.store(true, std::sync::atomic::Ordering::SeqCst);
+        c.st.metadata.add_plugin(down);
+        let m = series(c, 375921, &[(3, 8)]).await;
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId") VALUES (375921)"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        m
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unknown_mapping_skips_and_fails_the_import(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = unknown(&c).await;
+        let out = import(&c, m, "Show.S04E01.1080p.mkv", None).await;
+        assert!(out.imported.is_empty() && out.errors.is_empty());
+        assert!(out.retry[0].contains("scene mapping"), "{:?}", out.retry);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_explicit_episode_imports_whatever_the_mapping_state(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = unknown(&c).await;
+        let ep: i32 = sqlx::query_scalar(r#"SELECT e.id FROM items e JOIN item_groups g ON g.id = e."groupId" WHERE g."mediaId" = $1 AND e."number" = 2"#)
+            .bind(m)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let out = import(&c, m, "Show.S04E01.1080p.mkv", Some(ep)).await;
+        assert_eq!(
+            (out.imported.len(), out.errors.len(), out.retry.len()),
+            (1, 0, 0)
+        );
+        assert_eq!(out.imported[0].episode_number, Some(2));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_ambiguous_number_is_a_plain_error_not_a_retry(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = series(&c, 375921, &[(1, 3), (2, 4), (3, 1)]).await;
+        let map: fliks_domain::release::scene::SceneMap = serde_json::from_str(include_str!(
+            "../../../../fixtures/scene-numbering/map-ambiguous.json"
+        ))
+        .unwrap();
+        sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES (375921, $1)"#)
+            .bind(sqlx::types::Json(map))
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let out = import(&c, m, "Show.S02E01.1080p.mkv", None).await;
+        assert_eq!(
+            (out.imported.len(), out.errors.len(), out.retry.len()),
+            (0, 1, 0)
+        );
+        assert!(out.errors[0].contains("ambiguous"), "{:?}", out.errors);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_second_ingest_of_a_placed_file_is_already_present(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = mapped(&c, 375921).await;
+        let path = c.dir.join("dl").join("Show.S04E01.1080p.mkv");
+        touch(&path, b"ep");
+        let run = || async {
+            let guard = c.st.ingest.media.lock(m).await;
+            let req = Request {
+                media_id: m,
+                files: vec![File {
+                    path: path.clone(),
+                    episode_id: None,
+                }],
+                transfer: Method::Copy,
+                fallback_quality: None,
+                release_name: None,
+                force: false,
+                uniquify_on_collision: false,
+                replace_existing: true,
+                language: None,
+            };
+            library::ingest(&c.st, &guard, req).await.unwrap()
+        };
+        let first = run().await;
+        assert_eq!(first.imported.len(), 1, "{:?}", first.errors);
+        let again = run().await;
+        assert_eq!(
+            (again.imported.len(), again.already_present.len()),
+            (0, 1),
+            "{:?}",
+            again.errors
+        );
+        assert!(again.errors.is_empty() && again.retry.is_empty());
+    }
+}

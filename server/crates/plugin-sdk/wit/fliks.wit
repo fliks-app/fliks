@@ -84,6 +84,8 @@ interface types {
     search-title: string,
     /// Empty is the whole work.
     scope: list<unit>,
+    /// The numbers release names use for `scope`, to query; empty is the whole work.
+    search-units: list<unit-ref>,
   }
 
   record span { first: f64, last: f64 }
@@ -110,7 +112,9 @@ interface types {
 
   record release-title { id: string, title: string, publish-date: string }
   enum match-decision { grab, skip }
-  enum skip-reason { on-disk, not-monitored, unmatched, too-fresh, not-available, unprofiled }
+  enum skip-reason {
+    on-disk, not-monitored, unmatched, too-fresh, not-available, unprofiled, scene-unresolved,
+  }
   record release-match {
     id: string,
     media-id: option<u32>,
@@ -333,6 +337,19 @@ interface metadata-provider {
     -> result<json, provider-error>;
 }
 
+/// An optional export of a provider that declares the `scene` capability.
+interface scene {
+  use types.{external-id};
+  use metadata-provider.{provider-error};
+
+  /// The scene numbering of a release name and the aired numbering it maps to.
+  record scene-pair { scene-season: u32, scene-episode: u32, season: u32, episode: u32 }
+  /// The ids of `origin` (a core namespace) the provider has a scene mapping for.
+  scene-mapped-ids: func(origin: string) -> result<list<string>, provider-error>;
+  /// The mapping of one id; none when the provider has none for it.
+  scene-mapping: func(id: external-id) -> result<option<list<scene-pair>>, provider-error>;
+}
+
 world plugin {
   include wasi:cli/imports@0.2.12;
   import wasi:http/types@0.2.12;
@@ -346,4 +363,9 @@ world plugin {
 world provider {
   include plugin;
   export metadata-provider;
+}
+
+world scene-provider {
+  include provider;
+  export scene;
 }

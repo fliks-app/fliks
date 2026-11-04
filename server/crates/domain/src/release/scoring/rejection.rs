@@ -148,6 +148,11 @@ fn title_block(
     }
 }
 
+/// The release names a season or episode the scene mapping cannot turn into an aired one.
+pub fn scene_unresolved() -> ReleaseRejection {
+    rej("SCENE_UNRESOLVED", vec![])
+}
+
 pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection> {
     let mut out = vec![];
     let title = o.release_title.as_deref().filter(|t| !t.is_empty());

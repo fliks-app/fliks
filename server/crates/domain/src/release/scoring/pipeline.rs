@@ -5,7 +5,10 @@ use super::sort::{Sortable, sort_releases_by_relevance};
 use crate::language::AppLanguage;
 use crate::release::parsing::language::{parse_release_language, resolve_unknown_languages};
 use crate::release::parsing::quality::parse_release_quality;
-use crate::release::parsing::season_episode::{ReleaseCoverage, Span, release_coverage};
+use crate::release::parsing::season_episode::{
+    ReleaseCoverage, Span, coverage_of, parse_season_episode,
+};
+use crate::release::scene::SceneMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -107,6 +110,12 @@ pub struct ScoreOptions {
     pub min_rank_exclusive: Option<i64>,
     #[serde(default)]
     pub max_rank_inclusive: Option<i64>,
+    /// Release titles carry scene numbers: read them as aired numbers.
+    #[serde(default)]
+    pub scene_map: Option<SceneMap>,
+    /// The series is mapped but its mapping is not known: no season or episode can be read.
+    #[serde(default)]
+    pub scene_unknown: bool,
 }
 
 /// Custom-format score of a release title and its flags, read from tables the caller precomputed.
@@ -132,9 +141,16 @@ pub fn score_and_sort_releases(
             let lang_ids: BTreeSet<u32> = langs.iter().map(|l| l.id).collect();
             let custom_format_score = score_custom_formats(&r.title, &r.flags);
             let blocklisted = is_blocked(&r.title, r.source_id);
-            let coverage = release_coverage(&r.title);
+            let se = parse_season_episode(&r.title);
+            let numbered = se.season.is_some();
+            let (se, unresolved) = match (&opts.scene_map, opts.scene_unknown && numbered) {
+                (_, true) => (se, true),
+                (Some(m), _) => m.translate(&se).map_or((se, true), |t| (t, false)),
+                _ => (se, false),
+            };
+            let coverage = coverage_of(&se);
             let quality = parsed.quality;
-            let rejections = compute_rejections(&RejectionInput {
+            let mut rejections = compute_rejections(&RejectionInput {
                 quality_id: quality.id,
                 allowed: opts.allowed.clone(),
                 language_ids: lang_ids.clone(),
@@ -159,6 +175,9 @@ pub fn score_and_sort_releases(
                 min_rank_exclusive: opts.min_rank_exclusive,
                 max_rank_inclusive: opts.max_rank_inclusive,
             });
+            if unresolved {
+                rejections.push(scene_unresolved());
+            }
             ScoredRelease {
                 quality_id: quality.id,
                 quality_name: quality.name,

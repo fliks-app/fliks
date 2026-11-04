@@ -1,5 +1,6 @@
 //! The release reads of rule 31: matching titles to the library and scoring candidates.
 use super::*;
+use crate::scene::Mapping;
 use fliks_domain::release::parsing::season_episode::ParsedSeasonEpisode;
 
 pub(super) fn wit_coverage(c: &ReleaseCoverage) -> t::ReleaseCoverage {
@@ -29,8 +30,18 @@ pub async fn matches(
     .await?;
     let (library, identified) = identify(library, titles).await;
     let mut out = vec![];
+    let mut scenes: HashMap<i32, Mapping> = HashMap::new();
     for (entry, se, coverage, hit) in identified {
-        out.push(match_one(db, &library, min_age, entry, &se, coverage, hit).await?);
+        let seasonal = hit.map(|i| &library[i]).filter(|m| m.kind.has_seasons());
+        if let Some(m) = seasonal.filter(|_| se.season.is_some())
+            && !scenes.contains_key(&m.id)
+        {
+            scenes.insert(m.id, crate::scene::for_media(st, m.id).await?);
+        }
+        let scene = seasonal
+            .and_then(|m| scenes.get(&m.id))
+            .unwrap_or(&Mapping::Unmapped);
+        out.push(match_one(db, &library, min_age, (entry, scene), &se, coverage, hit).await?);
     }
     Ok(out)
 }
@@ -83,11 +94,33 @@ async fn match_one(
     db: &PgPool,
     library: &[MediaRow],
     min_age: Option<u32>,
-    entry: t::ReleaseTitle,
+    (entry, scene): (t::ReleaseTitle, &Mapping),
     se: &ParsedSeasonEpisode,
     coverage: t::ReleaseCoverage,
     hit: Option<usize>,
 ) -> sqlx::Result<t::ReleaseMatch> {
+    // The title's numbers are scene numbers: read them as aired ones before anything uses them.
+    let translated;
+    let unresolved = |media: i32| t::ReleaseMatch {
+        id: entry.id.clone(),
+        media_id: Some(media as u32),
+        unit: None,
+        whole_group: se.is_full_season,
+        coverage: Some(coverage),
+        decision: t::MatchDecision::Skip,
+        skip_reason: Some(t::SkipReason::SceneUnresolved),
+    };
+    let (se, coverage) = match (hit.map(|i| &library[i]), scene) {
+        (Some(m), Mapping::Unknown) if se.season.is_some() => return Ok(unresolved(m.id)),
+        (Some(m), Mapping::Mapped(map)) => match map.translate(se) {
+            Some(t) => {
+                translated = t;
+                (&translated, wit_coverage(&coverage_of(&translated)))
+            }
+            None => return Ok(unresolved(m.id)),
+        },
+        _ => (se, coverage),
+    };
     if let Some(book) = hit
         .map(|i| &library[i])
         .filter(|m| m.kind == MediaKind::Book)
@@ -288,6 +321,16 @@ pub(super) async fn score_of(
     let titles = resolve_search_titles(&m.search(), None);
     let (size_by_quality, formats) = scoring_tables(db).await?;
     let (season, episode) = season_and_episode(db, m, season_n, episode_n).await?;
+    let scene = if m.kind.has_seasons() {
+        crate::scene::for_media(st, m.id).await?
+    } else {
+        Mapping::Unmapped
+    };
+    let scene_unknown = scene == Mapping::Unknown;
+    let scene_map = match scene {
+        Mapping::Mapped(map) => Some(map),
+        _ => None,
+    };
     let files = files_for(db, m, season.map(|s| s.0), episode.as_ref()).await?;
     let quals: Vec<Option<&str>> = files.iter().map(|f| f.as_deref()).collect();
     let min_resolution = if m.qp_res_only == Some(true) && !files.is_empty() {
@@ -316,6 +359,8 @@ pub(super) async fn score_of(
         min_custom_format_score: m.qp_id.map(|_| i64::from(m.qp_min_cf.unwrap_or(0))),
         min_rank_exclusive: min_rank,
         max_rank_inclusive: max_rank,
+        scene_map,
+        scene_unknown,
     };
     let (blocked, ids, candidates) = (inp.blocked, inp.ids, inp.candidates);
     let scored = tokio::task::spawn_blocking(move || {

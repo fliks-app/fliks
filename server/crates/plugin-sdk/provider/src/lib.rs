@@ -1,10 +1,11 @@
-//! Provider plugins: the `provider` world, which adds `metadata-provider` to the `plugin` world.
+//! Provider plugins: the `scene-provider` world, which adds `metadata-provider` and `scene` to the
+//! `plugin` world (a provider without the `scene` capability is also a valid `provider` world).
 //! Its imports are those of `fliks_plugin_sdk::bindings`; only the new exports are generated here.
 
 pub mod bindings {
     wit_bindgen::generate!({
         path: "../wit",
-        world: "provider",
+        world: "scene-provider",
         generate_all,
         pub_export_macro: true,
         export_macro_name: "__export_provider_world",
@@ -50,6 +51,7 @@ pub mod bindings {
 pub use bindings::exports::fliks::plugin::metadata_provider::{
     Lang, ProviderError, SearchQuery, UpstreamError,
 };
+pub use bindings::exports::fliks::plugin::scene::ScenePair;
 #[doc(hidden)]
 pub use fliks_plugin_sdk as sdk;
 
@@ -117,6 +119,16 @@ pub trait MetadataProvider {
         _params: Vec<(String, String)>,
         _lang: Lang,
     ) -> Result<String, ProviderError> {
+        Err(ProviderError::Unsupported)
+    }
+    /// The ids of `origin` this provider has a scene mapping for.
+    fn scene_mapped_ids(_origin: String) -> Result<Vec<String>, ProviderError> {
+        Err(ProviderError::Unsupported)
+    }
+    /// The scene to aired numbering of one id; none when it has no mapping.
+    fn scene_mapping(
+        _id: fliks_plugin_sdk::ExternalId,
+    ) -> Result<Option<Vec<ScenePair>>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
 }
@@ -198,6 +210,16 @@ macro_rules! export_provider {
                 <$t as $crate::MetadataProvider>::list(kind, name, params, lang)
             }
         }
+        impl $crate::bindings::exports::fliks::plugin::scene::Guest for __FliksProvider {
+            fn scene_mapped_ids(origin: String) -> Result<Vec<String>, $crate::ProviderError> {
+                <$t as $crate::MetadataProvider>::scene_mapped_ids(origin)
+            }
+            fn scene_mapping(
+                id: $crate::sdk::ExternalId,
+            ) -> Result<Option<Vec<$crate::ScenePair>>, $crate::ProviderError> {
+                <$t as $crate::MetadataProvider>::scene_mapping(id)
+            }
+        }
         // Native builds (unit tests, clippy) cannot link the component export names.
         #[cfg(target_arch = "wasm32")]
         $crate::bindings::__export_provider_world!(
@@ -208,6 +230,7 @@ macro_rules! export_provider {
         const _: () = {
             use $crate::bindings::exports::fliks::plugin::guest::Guest as G;
             use $crate::bindings::exports::fliks::plugin::metadata_provider::Guest as P;
+            use $crate::bindings::exports::fliks::plugin::scene::Guest as S;
             let _ = (
                 <__FliksProvider as G>::hello,
                 <__FliksProvider as G>::health,
@@ -228,6 +251,8 @@ macro_rules! export_provider {
                 <__FliksProvider as P>::fetch_person,
                 <__FliksProvider as P>::person_credits,
                 <__FliksProvider as P>::list,
+                <__FliksProvider as S>::scene_mapped_ids,
+                <__FliksProvider as S>::scene_mapping,
             );
         };
     };

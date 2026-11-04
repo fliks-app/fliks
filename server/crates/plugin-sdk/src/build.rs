@@ -261,7 +261,11 @@ pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
         want.push("fliks:plugin/metadata-provider@3.0.0");
     }
     want.sort_unstable();
-    if exports.iter().ne(want.iter()) {
+    // A provider built from the `scene-provider` world also exports the `scene` interface.
+    let mut with_scene = want.clone();
+    with_scene.push("fliks:plugin/scene@3.0.0");
+    with_scene.sort_unstable();
+    if exports.iter().ne(want.iter()) && !(provider && exports.iter().eq(with_scene.iter())) {
         return Err(format!(
             "exports {} instead of {}",
             exports.into_iter().collect::<Vec<_>>().join(", "),

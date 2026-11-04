@@ -56,7 +56,28 @@ pub(super) fn target(m: &MediaRow, d: Option<Decision>, files: &Files) -> Option
         expected_titles: titles.expected_titles,
         search_title: titles.search_title,
         scope: vec![],
+        search_units: vec![],
     })
+}
+
+/// Sets the unit of a target and the numbers release names use for it.
+pub(super) fn set_scope(tg: &mut t::Target, unit: t::Unit, scene: &Mapping) {
+    let aired = &unit.ref_;
+    tg.search_units = match (scene, aired.group) {
+        (Mapping::Mapped(map), Some(season)) => map
+            .scene_units(i64::from(season), aired.number.map(|n| n as i64))
+            .into_iter()
+            .map(|(s, e)| t::UnitRef {
+                group: Some(s as u32),
+                number: e.map(|n| n as f64),
+                end_number: None,
+                label: None,
+                absolute: None,
+            })
+            .collect(),
+        _ => vec![aired.clone()],
+    };
+    tg.scope = vec![unit];
 }
 
 /// A group (a season) as a unit; `count` is its items.
@@ -133,17 +154,18 @@ pub async fn context(
             .await
             .map_err(db_err);
     }
-    context_of(db, m, season_id, episode_id)
+    context_of(st, m, season_id, episode_id)
         .await
         .map_err(db_err)
 }
 
 async fn context_of(
-    db: &PgPool,
+    st: &AppState,
     m: MediaRow,
     season_id: Option<u32>,
     episode_id: Option<u32>,
 ) -> sqlx::Result<Option<t::Target>> {
+    let db = &st.db;
     let (mut season, mut episode) = (None, None);
     if let Some(eid) = episode_id {
         let e: Option<EpisodeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
@@ -177,10 +199,12 @@ async fn context_of(
             .bind(sid)
             .fetch_one(db)
             .await?;
-        tg.scope = vec![match &episode {
+        let unit = match &episode {
             Some(e) => item_unit((sid, number), e, count),
             None => group_unit(sid, number, count),
-        }];
+        };
+        let scene = crate::scene::for_media(st, m.id).await?;
+        set_scope(&mut tg, unit, &scene);
     }
     Ok(Some(tg))
 }
@@ -422,6 +446,12 @@ pub(super) async fn targets_for(
         let season_ids: Vec<i32> = by_season.keys().copied().collect();
         let totals = count_by_season(db, &season_ids, None).await?;
         let unaired = count_by_season(db, &season_ids, Some(today)).await?;
+        let mut scenes: HashMap<i32, Mapping> = HashMap::new();
+        for e in &eps {
+            if let std::collections::hash_map::Entry::Vacant(v) = scenes.entry(e.media.id) {
+                v.insert(crate::scene::stored_mapping(db, e.media.id).await?);
+            }
+        }
         for (sid, group) in by_season.iter().filter(|(_, g)| g.len() >= 2) {
             if unaired.get(sid).copied().unwrap_or(0) > 0 {
                 continue;
@@ -447,14 +477,16 @@ pub(super) async fn targets_for(
                 continue;
             }
             if let Some(mut tg) = target(m, Some(d), &files) {
-                tg.scope = vec![group_unit(*sid, group[0].season.1, total)];
+                let unit = group_unit(*sid, group[0].season.1, total);
+                set_scope(&mut tg, unit, &scenes[&m.id]);
                 targets.push(tg);
             }
         }
         for e in &eps {
             if let Some(mut tg) = target(&e.media, Some(e.decision), &e.files) {
                 let count = totals.get(&e.season.0).copied().unwrap_or(1);
-                tg.scope = vec![item_unit(e.season, &e.episode, count)];
+                let unit = item_unit(e.season, &e.episode, count);
+                set_scope(&mut tg, unit, &scenes[&e.media.id]);
                 targets.push(tg);
             }
         }

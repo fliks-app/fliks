@@ -1326,6 +1326,7 @@
       "TITLE_MISMATCH": "Title does not match the media",
       "EPISODE_MISMATCH": "Release does not match {{expected}} (found {{actual}})",
       "FULL_SEASON_FOR_EPISODE": "Full season, but only {{expected}} is wanted",
+      "SCENE_UNRESOLVED": "The scene numbering of this release cannot be read",
       "RESOLUTION_NOT_UPGRADED": "Not a resolution upgrade ({{actual}}p, needs above {{min}}p)",
       "SEQUEL_MISMATCH": "Sequel {{number}}, not the film wanted",
       "YEAR_MISMATCH": "Year {{actual}}, expected {{expected}}",

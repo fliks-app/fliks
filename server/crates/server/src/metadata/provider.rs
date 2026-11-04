@@ -7,6 +7,7 @@ use fliks_domain::{
         language::Resolved,
         limiter::{Limits, Priority},
     },
+    release::scene::Entry,
 };
 use futures_util::future::BoxFuture;
 use serde_json::Value;
@@ -141,6 +142,28 @@ pub trait MetadataProvider: Send + Sync {
         _p: Priority,
     ) -> Call<'a, Option<Value>> {
         Box::pin(async { Ok(None) })
+    }
+    /// Whether `scene_mapped_ids` and `scene_mapping` answer for the `tvdb` origin.
+    fn has_scene(&self) -> bool {
+        false
+    }
+    /// The TVDB ids this provider has a scene mapping for (`scene-numbering.md` rule 3).
+    fn scene_mapped_ids<'a>(&'a self, _p: Priority) -> Call<'a, Vec<String>> {
+        Box::pin(async {
+            Err(Upstream::new(
+                Some(404),
+                "the provider has no scene mapping",
+            ))
+        })
+    }
+    /// The scene to aired numbering of one TVDB id; `None` when the provider has none for it.
+    fn scene_mapping<'a>(&'a self, _id: &'a str, _p: Priority) -> Call<'a, Option<Vec<Entry>>> {
+        Box::pin(async {
+            Err(Upstream::new(
+                Some(404),
+                "the provider has no scene mapping",
+            ))
+        })
     }
     /// Chapters of an audio edition (`audnexus::Chapters` JSON); `None` when unsupported.
     fn fetch_chapters<'a>(

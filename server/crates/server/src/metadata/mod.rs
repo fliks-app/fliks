@@ -6,6 +6,8 @@ mod lists;
 mod orchestrator;
 mod provider;
 mod routes;
+#[cfg(any(test, feature = "parity"))]
+pub mod scene_stub;
 pub mod service;
 #[cfg(test)]
 pub(crate) mod stub;
@@ -72,6 +74,16 @@ impl Metadata {
     fn slot(&self, id: Namespace) -> Option<(bool, Arc<dyn MetadataProvider>)> {
         let p = self.dynamic.read_clean().providers.get(&id).cloned()?;
         Some((p.available(), p))
+    }
+
+    /// The first available provider, in registration order, that declares the scene capability.
+    pub fn scene_provider(&self) -> Option<Arc<dyn MetadataProvider>> {
+        let d = self.dynamic.read_clean();
+        d.added
+            .iter()
+            .filter_map(|id| d.providers.get(id))
+            .find(|p| p.available() && p.has_scene())
+            .cloned()
     }
 
     /// The provider registered under `id`, available or not.
