@@ -29,7 +29,6 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
              sb AS (UPDATE subtitle_blacklist SET "mediaId" = $2 WHERE "mediaId" = $1),
              cr AS (UPDATE content_recommendations SET "mediaId" = $2 WHERE "mediaId" = $1),
              rq AS (UPDATE requests SET "mediaId" = $2 WHERE "mediaId" = $1),
-             bi AS (UPDATE book_import_items SET "mediaId" = $2 WHERE "mediaId" = $1),
              dw AS (UPDATE discovered_works SET "mediaId" = $2 WHERE "mediaId" = $1),
              bm AS (UPDATE book_merges SET "mediaId" = $2 WHERE "mediaId" = $1)
            SELECT 1 AS done"#,
@@ -131,7 +130,6 @@ mod tests {
     /// when the holder already has the same row).
     const MOVED: &[&str] = &[
         "book_details",
-        "book_import_items",
         "book_merges",
         "cleanup_exclusions",
         "collection_entries",

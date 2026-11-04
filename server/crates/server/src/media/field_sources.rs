@@ -68,3 +68,16 @@ pub async fn merge_field_sources(
     .await?;
     Ok(())
 }
+
+/// Locks `field` as a manual value: the next merge leaves it alone.
+pub async fn lock(c: impl PgExecutor<'_>, media: i32, field: Field) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES ($1, $2, NULL, true)
+           ON CONFLICT ("mediaId", field) DO UPDATE SET provider = NULL, locked = true"#,
+    )
+    .bind(media)
+    .bind(field.as_str())
+    .execute(c)
+    .await?;
+    Ok(())
+}

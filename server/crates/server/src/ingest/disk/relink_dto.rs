@@ -22,8 +22,6 @@ pub struct RelinkDto {
     pub(super) reorganize: bool,
     pub(super) transfer: Option<Method>,
     pub(super) folder_id: Option<i32>,
-    /// The path of `folder_id` the file paths were resolved against; a batch item only.
-    pub(super) folder_path: Option<String>,
     pub(super) files: Vec<RelinkFile>,
     /// Background for a batch item; the single relink route makes it interactive.
     pub(super) priority: Priority,
@@ -153,7 +151,6 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
         reorganize: b.bool("reorganize")?.flatten().unwrap_or(false),
         transfer,
         folder_id: b.id("folderId")?.flatten(),
-        folder_path: None,
         files,
         priority: Priority::Background,
     })

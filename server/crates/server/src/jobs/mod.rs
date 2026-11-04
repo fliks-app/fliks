@@ -2,7 +2,6 @@
 //! Other domains audit their work through `run_audited`.
 mod audit;
 mod bodies;
-pub mod book_import;
 mod cron;
 mod names;
 mod routes;

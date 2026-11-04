@@ -164,6 +164,12 @@ W13-W16 (`rm -rf` of a media folder, W13, media-write rule 72; unlink of a video
 
 101. Existing folders are never renamed: `confirmImport` of a media that already has files in the same library follows the stored `folderName` (rule 18). The in-memory batch (rule 74) and queue (rule 34) lose work on restart and are not persisted. `settings.access` is the gate of rule 71 (no allow-list of source roots).
 
+### K. Book work classifier
+
+102. `ingest::books::plan::plan(rels, owner) -> Vec<Planned>` is pure. `rels` is every book file of one folder root (`/`-separated, linked or not), `owner(rel)` the `folderName` of the media that links the file, `None` when none does. It groups with `group::group` (`book-ingest.md` rules 2-4) and answers, in the order of `group`, the works that still have a file to take: `Planned {dir, name_path, anchor, title, year, files}`, `files` being the unlinked files of the work in `group` order. A work whose files are all linked is not planned.
+103. `anchor` is `Some(dir)` only when the work is anchored by its folder (`book-ingest.md` rule 10): `dir` is not the root, no other work of the root, linked or not, has the same `dir` or one below it, and every linked file of the work belongs to a media whose `folderName` is `dir`. Otherwise it is `None` and the work's media has the folder name `''`, owns its files by path and is created once per work. `title` and `year` come from `filename::parse_path(name_path)`, the title falling back to the last component of `dir`.
+104. The classifier never plans a file another media owns: it only ever lists unlinked files, and `register` (`book-ingest.md` rule 6) refuses one that was linked in the meantime.
+
 ## SQL
 
 Parameters `$n`:

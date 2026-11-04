@@ -404,7 +404,7 @@ fn guess_from_path(root: &Path, file: &Path) -> ExtractedRelease {
 }
 
 /// The works the book files make, one orphan group each for the works that have a file still
-/// unlinked (`book-import.md` rules 1-2). `files` is every book file of the root, linked or not.
+/// unlinked (`ingest.md` rules 102-103). `files` is every book file of the root, linked or not.
 async fn book_groups(
     root: &Path,
     folder_id: Option<i32>,
@@ -785,70 +785,6 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
         )));
     }
     relink_core(st, Some(a), a.user.id, d).await
-}
-
-/// One work of a bulk import: its files linked in place to an unmatched book (`book-import.md` rule 6).
-pub(crate) struct BookWork {
-    pub library_id: i32,
-    pub folder_id: i32,
-    /// The folder's path `files` were resolved against.
-    pub folder_path: String,
-    pub folder_name: String,
-    pub title: String,
-    pub year: Option<i32>,
-    pub files: Vec<PathBuf>,
-}
-
-/// The message of the error a link raises when its folder moved after the caller read the path.
-pub(crate) const FOLDER_MOVED: &str = "errors.folder_moved";
-
-pub(crate) struct Linked {
-    pub media_id: i32,
-    pub linked: i64,
-    pub errors: Vec<String>,
-}
-
-pub(crate) async fn link_book_work(
-    st: &AppState,
-    user: i32,
-    w: BookWork,
-) -> Result<Linked, AppError> {
-    let d = RelinkDto {
-        library_id: w.library_id,
-        media_type: MediaKind::Book,
-        external_id: None,
-        provider: None,
-        title: Some(w.title),
-        year: w.year,
-        quality_profile_id: None,
-        language_profile_id: None,
-        folder_name: w.folder_name,
-        scan_root: None,
-        reorganize: false,
-        transfer: None,
-        folder_id: Some(w.folder_id),
-        folder_path: Some(w.folder_path),
-        files: w
-            .files
-            .into_iter()
-            .map(|p| RelinkFile {
-                path: p.to_string_lossy().into_owned(),
-                season: None,
-                episode: None,
-                end: None,
-            })
-            .collect(),
-        priority: Priority::Background,
-    };
-    let r = relink_core(st, None, user, d).await?;
-    Ok(Linked {
-        media_id: r["mediaId"]
-            .as_i64()
-            .and_then(|m| i32::try_from(m).ok())
-            .unwrap_or_default(),
-        linked: r["linked"].as_i64().unwrap_or(0),
-        errors: serde_json::from_value(r["errors"].clone()).unwrap_or_default(),
-    })
 }
 
 /// `relink_orphans` after the library access check; `a` is only needed to import an identified title.

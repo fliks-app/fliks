@@ -39,15 +39,16 @@ pub async fn attach(
     m: &BookMatch,
     p: Priority,
 ) -> Result<(), MetaError> {
-    attach_with(st, media, edition, m, None, p).await
+    attach_with(st, media, edition, Some(m), None, p).await
 }
 
-/// `attach` with a record read from the file (`file` provenance), which every merge takes in.
+/// `attach` with a record read from the file (`file` provenance), which every merge takes in; without a
+/// match only the file record is merged, and no id is linked.
 pub async fn attach_with(
     st: &AppState,
     media: i32,
     edition: Option<i32>,
-    m: &BookMatch,
+    m: Option<&BookMatch>,
     file: Option<&Map<String, Value>>,
     prio: Priority,
 ) -> Result<(), MetaError> {
@@ -61,26 +62,35 @@ pub async fn attach_with(
             _ => return Ok(()),
         },
     };
-    let work = work_id(&m.work).ok_or_else(|| Upstream::new(None, "not a work id"))?;
-    if !st.metadata.available(ANCHOR) {
-        return Err(Upstream::outage("the work provider is unavailable").into());
-    }
-    let lang = st.metadata.lang.resolve(Some(&ctx.over)).await?;
-    let Value::Object(work_record) = st
-        .metadata
-        .work(ANCHOR, MediaKind::Book, &work, &lang, prio)
-        .await?
-    else {
-        return Err(Upstream::new(None, "unexpected work record").into());
+    let work = match m {
+        Some(m) => Some(work_id(&m.work).ok_or_else(|| Upstream::new(None, "not a work id"))?),
+        None => None,
     };
-    let refs = match edition {
-        Some(_) => edition_refs(&m.edition),
-        None => vec![],
+    let lang = st.metadata.lang.resolve(Some(&ctx.over)).await?;
+    let work_record = match &work {
+        Some(work) => {
+            if !st.metadata.available(ANCHOR) {
+                return Err(Upstream::outage("the work provider is unavailable").into());
+            }
+            let Value::Object(r) = st
+                .metadata
+                .work(ANCHOR, MediaKind::Book, work, &lang, prio)
+                .await?
+            else {
+                return Err(Upstream::new(None, "unexpected work record").into());
+            };
+            r
+        }
+        None => Map::new(),
+    };
+    let refs = match (edition, m) {
+        (Some(_), Some(m)) => edition_refs(&m.edition),
+        _ => vec![],
     };
     let mut records = merge::edition_records(st, &refs, &lang, prio).await?;
     records.extend(file.map(|f| (Namespace::FILE, f.clone())));
     let mut ids = refs;
-    for id in discovered(&records) {
+    for id in discovered(&records).into_iter().filter(|_| work.is_some()) {
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -123,10 +133,15 @@ pub async fn attach_with(
         }
     }
 
-    match external_ids::link(&mut tx, media, MediaKind::Book, ANCHOR, &work).await? {
+    let linked = match &work {
+        Some(work) => external_ids::link(&mut tx, media, MediaKind::Book, ANCHOR, work).await?,
+        None => Link::Linked,
+    };
+    match linked {
         Link::Linked => {}
         Link::Taken => {
-            let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, &work).await?;
+            let work = work.as_deref().unwrap_or_default();
+            let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, work).await?;
             match holder.filter(|h| *h != media && edition.is_some()) {
                 Some(holder) => {
                     absorb(&mut tx, media, holder).await?;

@@ -11,8 +11,6 @@ mod routes;
 pub mod scene_stub;
 mod search;
 pub mod service;
-#[cfg(test)]
-pub(crate) mod stub;
 mod types;
 
 pub use language::{LanguageCache, Override};

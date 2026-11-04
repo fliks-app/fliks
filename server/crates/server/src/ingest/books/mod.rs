@@ -837,19 +837,23 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
         // A work the media already holds wins over the one the file suggests.
         let held = link::stored(&st.db, media, None).await.ok().flatten();
         let m = match (found, held) {
-            (Some(f), Some(h)) if f.work == h.work => f,
-            (_, Some(h)) => identify::BookMatch {
+            (Some(f), Some(h)) if f.work == h.work => Some(f),
+            (_, Some(h)) => Some(identify::BookMatch {
                 edition: vec![],
                 ..h
-            },
-            (Some(f), None) => f,
-            (None, None) => continue,
+            }),
+            (Some(f), None) => Some(f),
+            (None, None) => None,
         };
+        // Unmatched: the file record alone still gives the media its own title, authors, overview.
+        if m.is_none() && record.is_none() {
+            continue;
+        }
         let attached = link::attach_with(
             st,
             media,
             Some(c.edition),
-            &m,
+            m.as_ref(),
             record.as_ref(),
             Priority::Background,
         )
@@ -886,6 +890,27 @@ async fn hints_of(
         }
         None => (tags::name_hints(family, rel), None),
     }
+}
+
+/// Boot sweep: books with files and no id nor merge yet get a settle, one at a time, which merges their file records.
+/// A settle stamps `metadataRefreshedAt`, so each book leaves the sweep once it has been merged.
+pub async fn backfill_unmatched(st: &AppState) {
+    let ids = sqlx::query_scalar!(
+        r#"SELECT m.id FROM media m
+           WHERE m.type = 'book' AND m."metadataRefreshedAt" IS NULL
+             AND NOT EXISTS (SELECT 1 FROM media_external_ids x WHERE x."mediaId" = m.id)
+             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id)
+           ORDER BY m.id"#
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    let st = st.clone();
+    tokio::spawn(async move {
+        for id in ids {
+            settled(&st, id).await;
+        }
+    });
 }
 
 /// Settles a book once its post-import work is done (`post_import::settled`).

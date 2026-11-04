@@ -301,9 +301,6 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::ingest::disk::preview,
         crate::ingest::disk::relink_batch,
         crate::ingest::disk::relink,
-        jobs::book_import::start,
-        jobs::book_import::latest,
-        jobs::book_import::queue,
         metadata::providers,
         metadata::search_hits,
         metadata::trending_movie,
@@ -485,7 +482,6 @@ fn api() -> Router<AppState> {
         .merge(crate::wanted::router())
         .merge(system::api())
         .merge(jobs::router())
-        .merge(jobs::book_import::router())
         .merge(requests::router())
         .merge(cleanup::router())
         .merge(subtitles::router())

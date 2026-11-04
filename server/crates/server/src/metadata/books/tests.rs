@@ -398,7 +398,7 @@ async fn an_audio_edition_takes_its_series_and_the_file_narrator(db: PgPool) {
         &st,
         media,
         Some(ed),
-        &matched(&[(Namespace::ASIN, "B000000002")]),
+        Some(&matched(&[(Namespace::ASIN, "B000000002")])),
         Some(file),
         P,
     )
@@ -620,4 +620,74 @@ async fn identify_reads_the_title_of_an_asin_and_needs_the_anchor(db: PgPool) {
         Err(MetaError::Upstream(_))
     ));
     assert_eq!(ANCHOR, Namespace::OPENLIBRARY);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unmatched_book_takes_its_file_record_and_links_no_id(db: PgPool) {
+    crate::db::migrate(&db).await.unwrap();
+    let st = state(&db, vec![anchor()]);
+    let media = book(&db).await;
+    let ed = edition(&db, media, "text").await;
+    let file = json!({"title": "File Title", "overview": "From the OPF", "year": 2003,
+        "authors": [{"name": "Una Roe", "id": null}], "isbn13": [ISBN], "format": "epub"});
+    let file: &Map<String, Value> = file.as_object().unwrap();
+    attach_with(&st, media, Some(ed), None, Some(file), P)
+        .await
+        .unwrap();
+    let row: (String, Option<String>, bool) = sqlx::query_as(
+        r#"SELECT title, overview, "metadataRefreshedAt" IS NOT NULL FROM media WHERE id = $1"#,
+    )
+    .bind(media)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        ("File Title".into(), Some("From the OPF".into()), true)
+    );
+    assert_eq!(
+        strings(&db, r#"SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId" WHERE c."mediaId" = $1 AND c.role = 'author'"#, media).await,
+        ["Una Roe"]
+    );
+    assert_eq!(
+        strings(&db, r#"SELECT provider FROM media_field_sources WHERE "mediaId" = $1 AND field = 'overview'"#, media).await,
+        ["file"]
+    );
+    assert_eq!(
+        strings(
+            &db,
+            r#"SELECT count(*)::text FROM media_external_ids WHERE "mediaId" = $1"#,
+            media
+        )
+        .await,
+        ["0"]
+    );
+    assert_eq!(
+        strings(
+            &db,
+            r#"SELECT count(*)::text FROM edition_external_ids WHERE "editionId" = $1"#,
+            ed
+        )
+        .await,
+        ["0"]
+    );
+
+    sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES ($1, 'title', NULL, true)
+        ON CONFLICT ("mediaId", field) DO UPDATE SET provider = NULL, locked = true"#)
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE media SET title = 'Typed' WHERE id = $1")
+        .bind(media)
+        .execute(&db)
+        .await
+        .unwrap();
+    attach_with(&st, media, Some(ed), None, Some(file), P)
+        .await
+        .unwrap();
+    assert_eq!(
+        strings(&db, r#"SELECT title FROM media WHERE id = $1"#, media).await,
+        ["Typed"]
+    );
 }

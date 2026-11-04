@@ -143,16 +143,6 @@ async fn relink_in_place(
 ) -> Result<i64, AppError> {
     let mut linked = 0i64;
     let _moves = st.folder_moves.read().await;
-    if let (Some(id), Some(path)) = (d.folder_id, &d.folder_path) {
-        let now: Option<String> =
-            sqlx::query_scalar("SELECT path FROM library_folders WHERE id = $1")
-                .bind(id)
-                .fetch_optional(&st.db)
-                .await?;
-        if now.as_ref() != Some(path) {
-            return Err(AppError::conflict(FOLDER_MOVED));
-        }
-    }
     let mut current = load_media(&st.db, media.id)
         .await?
         .unwrap_or_else(|| media.clone());
@@ -711,12 +701,14 @@ pub(super) async fn find_or_create_unmatched(
         |r| PathBuf::from(resolve(&crate::libraries::sanitize_path(r), "/")),
     );
     let (guessed_title, guessed_year) = guess(d.media_type, &root, &sample, nfo.as_ref());
-    let title = d
+    let typed = d
         .title
         .as_deref()
         .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map(str::to_owned)
+        .filter(|t| !t.is_empty() && Some(*t) != guessed_title.as_deref())
+        .map(str::to_owned);
+    let title = typed
+        .clone()
         .or(guessed_title)
         .unwrap_or_else(|| d.folder_name.clone());
     let year = d.year.or(guessed_year.and_then(|y| i32::try_from(y).ok()));
@@ -755,6 +747,14 @@ pub(super) async fn find_or_create_unmatched(
                 user,
             )
             .await?;
+            if typed.is_some() {
+                crate::media::field_sources::lock(
+                    &st.db,
+                    id,
+                    fliks_domain::metadata::field::Field::Title,
+                )
+                .await?;
+            }
             (id, true)
         }
     };
