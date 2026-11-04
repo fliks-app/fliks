@@ -73,13 +73,14 @@ fn annotation_missing(id: i32) -> AppError {
     AppError::not_found(format!("Annotation #{id} not found"))
 }
 
-/// Rule 5: a text item of a readable library, else a 404 that reads like a missing one.
+/// Rule 5: a text item whose media and edition sit in readable libraries, else a 404 that reads like a missing one.
 async fn readable(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
     let found = sqlx::query_scalar!(
         r#"SELECT i.id FROM items i
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
            JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
+             AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
            WHERE i.id = $1"#,
         item,
         &libs
@@ -168,7 +169,13 @@ pub async fn create(
             "excerpt must be shorter than or equal to {EXCERPT_MAX} characters"
         )));
     }
-    // The cap is checked in the insert, so concurrent posts cannot pass it together.
+    // The per-(user, item) lock serialises the count and the insert across concurrent posts.
+    let mut tx = st.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(a.user.id)
+        .bind(item)
+        .execute(&mut *tx)
+        .await?;
     let row = sqlx::query_as!(
         Annotation,
         r#"INSERT INTO annotations ("userId", "itemId", kind, colour, note, locator, excerpt)
@@ -185,8 +192,9 @@ pub async fn create(
         excerpt,
         PER_ITEM_MAX
     )
-    .fetch_optional(&st.db)
+    .fetch_optional(&mut *tx)
     .await?;
+    tx.commit().await?;
     let row = row.ok_or_else(|| AppError::conflict("Too many annotations"))?;
     Ok((StatusCode::CREATED, Json(row)))
 }

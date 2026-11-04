@@ -284,6 +284,63 @@ async fn the_count_is_capped_per_item(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn concurrent_posts_cannot_pass_the_cap(pool: PgPool) {
+    let (app, t) = ctx(pool.clone()).await;
+    sqlx::query(r#"INSERT INTO annotations ("userId", "itemId", kind, locator) SELECT 2, 1, 'bookmark', '{}' FROM generate_series(1, 1999)"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let post = || {
+        call(
+            &app,
+            &t[1],
+            "POST",
+            "/api/items/1/annotations",
+            Some(highlight("")),
+        )
+    };
+    let (a, b, c, d) = tokio::join!(post(), post(), post(), post());
+    let mut statuses = [a.0, b.0, c.0, d.0];
+    statuses.sort();
+    assert_eq!(statuses, [201, 409, 409, 409]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_edition_in_an_unreadable_library_hides_the_item(pool: PgPool) {
+    let (app, t) = ctx(pool.clone()).await;
+    sqlx::query(r#"UPDATE editions SET "libraryId" = 2 WHERE id = 1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, _) = call(&app, &t[1], "GET", "/api/items/1/annotations", None).await;
+    assert_eq!(s, 404);
+    let (s, _) = call(
+        &app,
+        &t[1],
+        "POST",
+        "/api/items/1/annotations",
+        Some(highlight("")),
+    )
+    .await;
+    assert_eq!(s, 404);
+    sqlx::query(r#"INSERT INTO annotations (id, "userId", "itemId", kind, colour, locator) VALUES (900, 2, 1, 'highlight', 'pink', '{}')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, _) = call(
+        &app,
+        &t[1],
+        "PATCH",
+        "/api/annotations/900",
+        Some(json!({"note": "x"})),
+    )
+    .await;
+    assert_eq!(s, 404);
+    let (s, _) = call(&app, &t[1], "DELETE", "/api/annotations/900", None).await;
+    assert_eq!(s, 404);
+}
+
+#[sqlx::test(migrations = false)]
 async fn deleting_the_item_or_the_user_removes_the_rows(pool: PgPool) {
     let (app, t) = ctx(pool.clone()).await;
     call(
