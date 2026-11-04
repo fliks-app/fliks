@@ -2,7 +2,7 @@ use fliks_server::config::Config;
 use std::process::ExitCode;
 
 // glibc keeps the peaks of a many-threaded server resident; musl malloc is slow under contention.
-#[cfg(all(target_os = "linux", feature = "libarchive"))]
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
