@@ -537,10 +537,11 @@ pub async fn identify(
     {
         return Err(already_running());
     }
+    let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
     let applied = async {
         match (media.media_type, pin) {
             (MediaKind::Book, Some((ns, value))) => {
-                crate::metadata::books::routes::identify_to(&st, id, ns, &value).await?;
+                crate::metadata::books::routes::identify_to(&st, id, ns, &value, &acl).await?;
             }
             (MediaKind::Book, None) => {
                 return Err(AppError::bad_request(

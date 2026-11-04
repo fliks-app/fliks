@@ -297,7 +297,10 @@ pub async fn patch_issue(
     let mut tx = st.db.begin().await?;
     lock_versions(&mut tx, media).await?;
     let done = sqlx::query(
-        r#"UPDATE comic_issues SET label = COALESCE($2, label), kind = COALESCE($3, kind),
+        r#"UPDATE comic_issues SET "providerKind" = COALESCE("providerKind", kind),
+             "providerSort" = COALESCE("providerSort", "sortNumber"),
+             "providerLabel" = COALESCE("providerLabel", label),
+             label = COALESCE($2, label), kind = COALESCE($3, kind),
              "sortNumber" = COALESCE($4::text::numeric, "sortNumber"),
              "lockedFields" = ARRAY(SELECT DISTINCT f FROM unnest("lockedFields" || $5::text[]) f
                WHERE f <> ALL($6::text[]))

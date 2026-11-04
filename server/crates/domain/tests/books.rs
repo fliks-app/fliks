@@ -92,3 +92,63 @@ fn many_repeated_values_are_deduplicated() {
     );
     assert!(started.elapsed() < Duration::from_secs(5));
 }
+
+fn description(inner: &str) -> Option<String> {
+    let xml =
+        format!("<package><metadata><dc:description>{inner}</dc:description></metadata></package>");
+    opf::parse(xml.as_bytes()).description
+}
+
+#[test]
+fn description_is_plain_text_in_both_forms() {
+    let want = Some("First & line\nSecond\nline".to_owned());
+    let escaped = "&lt;div&gt;&lt;p&gt;First &amp;amp; line&lt;/p&gt;&lt;p&gt;Second&lt;br/&gt;line&lt;/p&gt;&lt;/div&gt;";
+    let inline = "<div><p>First &amp; line</p><p>Second<br/>line</p></div>";
+    assert_eq!(description(escaped), want);
+    assert_eq!(description(inline), want);
+}
+
+#[test]
+fn description_source_whitespace_is_not_a_line_break_in_markup() {
+    let want = Some("one two\nthree".to_owned());
+    assert_eq!(description("<p>one\n   two</p>\n<p>three</p>"), want);
+    assert_eq!(
+        description("&lt;p&gt;one\n   two&lt;/p&gt;\n&lt;p&gt;three&lt;/p&gt;"),
+        want
+    );
+}
+
+#[test]
+fn description_plain_text_keeps_its_paragraphs() {
+    assert_eq!(
+        description("First  line\nsecond line\n\n\n\nNext paragraph"),
+        Some("First line\nsecond line\n\nNext paragraph".to_owned())
+    );
+}
+
+#[test]
+fn description_drops_scripts_styles_and_comments() {
+    let want = Some("kept\nalso".to_owned());
+    assert_eq!(
+        description(
+            "<p>kept</p><style>p { a: b }</style><script>x()</script><!-- a > b --><p>also</p>"
+        ),
+        want
+    );
+    assert_eq!(
+        description(
+            "&lt;p&gt;kept&lt;/p&gt;&lt;style&gt;p { a: b }&lt;/style&gt;&lt;script&gt;x()&lt;/script&gt;&lt;!-- a &gt; b --&gt;&lt;p&gt;also&lt;/p&gt;"
+        ),
+        want
+    );
+}
+
+#[test]
+fn description_decodes_named_entities_and_all_block_tags() {
+    assert_eq!(
+        description(
+            "&lt;h5&gt;Caf&eacute;&lt;/h5&gt;&lt;dd&gt;&laquo;&nbsp;l&rsquo;&eacute;t&eacute;&nbsp;&raquo;&lt;/dd&gt;&lt;td&gt;a&hellip;&lt;/td&gt;"
+        ),
+        Some("Caf\u{e9}\n\u{ab} l\u{2019}\u{e9}t\u{e9} \u{bb}\na\u{2026}".to_owned())
+    );
+}

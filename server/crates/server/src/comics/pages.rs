@@ -37,9 +37,7 @@ use std::{
 };
 use tokio::sync::Semaphore;
 
-/// Pages decoded at once. One job holds at most the page bytes (64 MiB), the decoder's `MAX_ALLOC`
-/// (200 MB) and its RGB copy (75 MB), so the peak is about 3 x 340 MB, 4 x with the ingest's slot. A request waiting for another's
-/// single-flight fill holds its slot meanwhile.
+/// Pages decoded at once: a job peaks near 340 MB (page bytes, decoder allocation, RGB copy).
 const PAGE_JOBS: usize = 3;
 const MAX_PIXELS: u64 = 25_000_000;
 const MAX_ALLOC: u64 = MAX_PIXELS * 8;

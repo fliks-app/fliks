@@ -2,9 +2,11 @@
 use super::{BOOK_PREFIX, Kobo, iso, json_response, parse_uuid, proxy, uuid};
 use crate::{
     http::AppError,
-    images::paths::{Size, Target, Variant},
-    libraries::HIDDEN_FILES_FROM,
-    paths::data_dir,
+    images::{
+        self,
+        paths::{Size, Target, Variant},
+    },
+    libraries::readable_file,
     state::AppState,
 };
 use axum::{
@@ -40,6 +42,7 @@ const UPDATED: &str = r#"GREATEST(i."updatedAt", m."updatedAt", f."updatedAt", e
 
 /// The EPUB items `$1` (library ids) lets the caller read; `$2` narrows to item ids (NULL: all).
 fn from_where() -> String {
+    let readable = readable_file("$1", "mf.id");
     format!(
         r#"FROM items i
 JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
@@ -49,11 +52,10 @@ JOIN LATERAL (
   WHERE ip."itemId" = i.id
     AND ip.version = (SELECT max(v.version) FROM item_parts v WHERE v."itemId" = i.id)
     AND lower(mf."relativePath") LIKE '%.epub'
-    AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$1) AND hp."mediaFileId" = mf.id)
+    AND {readable}
   ORDER BY ip.position, mf.id LIMIT 1) f ON true
 WHERE i."groupId" IS NULL
   AND i.id = (SELECT min(i2.id) FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL)
-  AND m."libraryId" = ANY($1) AND COALESCE(e."libraryId", m."libraryId") = ANY($1)
   AND ($2::int[] IS NULL OR i.id = ANY($2))
 ORDER BY i.id"#
     )
@@ -242,20 +244,18 @@ async fn serve_cover(
     } else {
         Size::Medium
     };
-    for size in [first, Size::Full] {
-        if let Ok(bytes) = tokio::fs::read(t.file(data_dir(), size)).await {
-            return Ok((
-                [
-                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
-                    (
-                        CACHE_CONTROL,
-                        HeaderValue::from_static("private, max-age=86400"),
-                    ),
-                ],
-                bytes,
-            )
-                .into_response());
-        }
+    if let Some(bytes) = images::read(&t, first).await {
+        return Ok((
+            [
+                (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                (
+                    CACHE_CONTROL,
+                    HeaderValue::from_static("private, max-age=86400"),
+                ),
+            ],
+            bytes,
+        )
+            .into_response());
     }
     Ok(not_found())
 }

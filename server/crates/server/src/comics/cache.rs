@@ -27,7 +27,7 @@ pub struct Entry {
 
 const LISTS: usize = 64;
 
-type Lists = Vec<(Key, Arc<Entry>)>;
+type Lists = Vec<(Key, Arc<Entry>, ())>;
 type Solids = Vec<(Key, Arc<Vec<Vec<u8>>>, u64)>;
 
 static LIST_CACHE: Mutex<Lists> = Mutex::new(Vec::new());
@@ -45,18 +45,13 @@ fn touch<T: Clone, E>(v: &mut Vec<(Key, T, E)>, key: Key) -> Option<T> {
 }
 
 pub fn list(key: Key) -> Option<Arc<Entry>> {
-    let mut v = LIST_CACHE.lock_clean();
-    let at = v.iter().position(|e| e.0 == key)?;
-    let e = v.remove(at);
-    let out = e.1.clone();
-    v.push(e);
-    Some(out)
+    touch(&mut LIST_CACHE.lock_clean(), key)
 }
 
 pub fn put_list(key: Key, entry: Arc<Entry>) {
     let mut v = LIST_CACHE.lock_clean();
     v.retain(|e| e.0 != key);
-    v.push((key, entry));
+    v.push((key, entry, ()));
     let extra = v.len().saturating_sub(LISTS);
     v.drain(..extra);
 }

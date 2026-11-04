@@ -6,7 +6,7 @@ pub mod sanitize;
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
     ingest::books::archive::{EntryError, OPF_CAP, read_entry, rootfile},
-    libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
+    libraries::{accessible_library_ids, readable_file},
     state::AppState,
     stream::resolve_file,
 };
@@ -50,8 +50,9 @@ async fn epub_path(st: &AppState, a: &Authed, item: i32) -> Result<PathBuf, AppE
            JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
            JOIN item_parts ip ON ip."itemId" = i.id
            JOIN media_files mf ON mf.id = ip."mediaFileId" AND lower(mf."relativePath") LIKE '%.epub'
-           WHERE i.id = $1 AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = mf.id)
-           ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1"#
+           WHERE i.id = $1 AND {}
+           ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1"#,
+        readable_file("$2", "mf.id")
     )))
     .bind(item)
     .bind(&acl)

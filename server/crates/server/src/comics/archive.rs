@@ -1,6 +1,5 @@
-//! Comic archives read in memory, never extracted (`docs/spec/comics.md`, archive rules). The format
-//! is sniffed from the magic bytes, so a `.cbr` that is a zip reads as one. Zip goes through `zip`,
-//! 7z and RAR through libarchive (`ar.rs`), read-only: no call that touches the filesystem is made.
+//! Comic archives read in memory, never extracted (`docs/spec/comics.md`). The format is sniffed from
+//! the magic bytes, so a `.cbr` that is a zip reads as one.
 use std::{
     cell::Cell,
     cmp::Ordering,

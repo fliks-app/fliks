@@ -871,7 +871,9 @@ mod tests {
                 sqlx::query(sql).execute(&db).await.unwrap();
             }
         };
-        q(r#"INSERT INTO media (id, title, type) VALUES (50, 'Mirelune', 'book')"#).await;
+        q(r#"INSERT INTO media (id, title, type, "libraryId")
+             SELECT 50, 'Mirelune', 'book', "libraryId" FROM media WHERE id = 1"#)
+        .await;
         q(
             r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
              VALUES (50, 'book', 'openlibrary', 'OL1W')"#,

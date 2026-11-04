@@ -535,6 +535,84 @@ async fn a_work_held_by_another_media_is_left_unlinked_and_unwritten(db: PgPool)
     );
 }
 
+async fn library(db: &PgPool, id: i32) {
+    sqlx::query("INSERT INTO libraries (id, name) VALUES ($1, 'L' || $1::text)")
+        .bind(id)
+        .execute(db)
+        .await
+        .unwrap();
+}
+
+async fn holder_in(db: &PgPool, library_id: i32) -> i32 {
+    let m: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('Held', 'book', $1) RETURNING id"#,
+    )
+    .bind(library_id)
+    .fetch_one(db)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'book', 'openlibrary', 'OL1W')"#)
+        .bind(m)
+        .execute(db)
+        .await
+        .unwrap();
+    m
+}
+
+async fn book_in(db: &PgPool, library_id: i32) -> (i32, i32) {
+    let m: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('Dup', 'book', $1) RETURNING id"#,
+    )
+    .bind(library_id)
+    .fetch_one(db)
+    .await
+    .unwrap();
+    (m, edition(db, m, "text").await)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_duplicate_in_another_library_is_not_absorbed(db: PgPool) {
+    crate::db::migrate(&db).await.unwrap();
+    let st = state(&db, vec![anchor()]);
+    library(&db, 1).await;
+    library(&db, 2).await;
+    let held = holder_in(&db, 1).await;
+    let (dup, ed) = book_in(&db, 2).await;
+    attach(&st, dup, Some(ed), &matched(&[]), P).await.unwrap();
+    let owner: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM editions WHERE id = $1"#)
+        .bind(ed)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    let alive: i64 = sqlx::query_scalar("SELECT count(*) FROM media WHERE id = ANY($1)")
+        .bind([held, dup])
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!((owner, alive), (dup, 2));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_duplicate_in_the_same_library_is_absorbed(db: PgPool) {
+    crate::db::migrate(&db).await.unwrap();
+    let st = state(&db, vec![anchor()]);
+    library(&db, 1).await;
+    let held = holder_in(&db, 1).await;
+    let (dup, ed) = book_in(&db, 1).await;
+    attach(&st, dup, Some(ed), &matched(&[]), P).await.unwrap();
+    let owner: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM editions WHERE id = $1"#)
+        .bind(ed)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    let gone: i64 = sqlx::query_scalar("SELECT count(*) FROM media WHERE id = $1")
+        .bind(dup)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!((owner, gone), (held, 0));
+}
+
 fn hints() -> BookHints {
     BookHints {
         family: Family::Text,

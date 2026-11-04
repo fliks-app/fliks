@@ -13,7 +13,7 @@ Plain `app_settings` keys written through `PUT /api/settings` (`settings.md`), a
 
 ## Devices
 
-4a. Permission: creating or updating a device and sending need the role permission `books.email` (`Create EmailDevice`; admins and `manage:all` hold it, a migration grants it only to roles that hold every core permission). Listing and deleting are open to the owner, so a role that lost it can still clean up; `GET /api/email-devices` carries `canSend`. Kind `other` (any address) also needs `manage Settings`, checked on creation, update and every send, else `403 email_devices.error_kind_forbidden`.
+4a. Permission: creating or updating a device and sending need the role permission `books.email` (`Create EmailDevice`; admins and `manage:all` hold it, a migration grants it only to roles that hold every core permission). A send also needs `read:media`. Listing and deleting are open to the owner, so a role that lost it can still clean up; `GET /api/email-devices` carries `canSend`. Kind `other` (any address) also needs `manage Settings`, checked on creation, update and every send, else `403 email_devices.error_kind_forbidden`.
 4b. The address domain must fit the kind, case-insensitively: `kindle` is `kindle.com` or `free.kindle.com`, `pocketbook` is `pbsync.com`; else `400 email_devices.error_domain`. Without this a role could mail any address.
 
 5. `email_devices("id", "userId" -> users ON DELETE CASCADE, name, kind, address, formats text[], "createdAt", "updatedAt")`, `UNIQUE("userId", name)`. `kind` is `kindle | pocketbook | other`. `formats` is a non-empty set of distinct values among `epub pdf mobi azw3 fb2 cbz`: what the device accepts. Absent on creation it defaults to `epub, pdf`.

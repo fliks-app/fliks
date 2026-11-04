@@ -31,6 +31,15 @@ pub const HIDDEN_FILES_FROM: &str = r#"FROM item_parts hp JOIN items hi ON hi.id
   JOIN editions he ON he.id = hi."editionId" JOIN media hm ON hm.id = he."mediaId"
   WHERE NOT COALESCE(he."libraryId", hm."libraryId") = ANY("#;
 
+/// The predicate every "readable text file" query shares: work, edition and each edition linking
+/// `file` sit in the libraries bound at `acl` (`$n`). Expects the aliases `m` (media) and `e` (edition).
+pub fn readable_file(acl: &str, file: &str) -> String {
+    format!(
+        r#"m."libraryId" = ANY({acl}) AND COALESCE(e."libraryId", m."libraryId") = ANY({acl})
+  AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}{acl}) AND hp."mediaFileId" = {file})"#
+    )
+}
+
 /// 404 `MediaFile #<id> not found` for a missing file, or one linked by an edition outside `ids`
 /// (an edition without `libraryId` follows its media, as in the book read routes).
 pub async fn assert_file_accessible(db: &PgPool, file: i32, ids: &[i32]) -> Result<(), AppError> {

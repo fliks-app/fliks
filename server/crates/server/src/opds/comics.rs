@@ -6,7 +6,7 @@ use crate::{
     libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
     media::{list::find_ids, params::Search},
     state::AppState,
-    stream::extname,
+    stream::{book_format, extname},
 };
 use axum::{
     extract::{Path, Query, State},
@@ -33,16 +33,6 @@ pub fn comic_search(page: i64) -> Search {
 
 fn issues_count(n: i64) -> String {
     format!("{n} issue{}", if n == 1 { "" } else { "s" })
-}
-
-fn comic_mime(ext: &str) -> &'static str {
-    match ext {
-        ".cbz" => "application/vnd.comicbook+zip",
-        ".cb7" => "application/x-cb7",
-        ".cbr" => "application/vnd.comicbook-rar",
-        ".pdf" => "application/pdf",
-        _ => "application/octet-stream",
-    }
 }
 
 /// Navigation entries of the volumes in `ids` (in that order) with a readable issue.
@@ -172,7 +162,7 @@ fn issue_entry(volume: &str, updated: &str, publisher: Option<&String>, r: Row) 
         ..Link::new(
             ACQUISITION,
             format!("/api/stream/{}?download=1", r.file),
-            comic_mime(&ext),
+            book_format(&ext).unwrap_or("application/octet-stream"),
         )
     }];
     if let Some(count) = r.page_count.filter(|_| ext != ".pdf") {

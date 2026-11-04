@@ -951,3 +951,158 @@ async fn only_coming_issues_of_a_monitored_volume_are_wanted(pool: PgPool) {
     let flags: Vec<bool> = c.issues(id).await.iter().map(|r| r.5).collect();
     assert_eq!(flags, [false, true, true]);
 }
+
+async fn refresh_ctx(pool: PgPool, children: Vec<Value>) -> (Ctx, i32) {
+    let mut f = Fake::default();
+    f.works.insert("42".into(), work());
+    f.children.insert("42".into(), children);
+    let c = ctx(pool, Some(Arc::new(f))).await;
+    let m = c.local_volume().await;
+    link(&c, m).await;
+    (c, m)
+}
+
+/// An issue of `m` whose provider key may differ from the live one (`provider_sort`).
+async fn put_issue(
+    c: &Ctx,
+    m: i32,
+    kind: &str,
+    sort: f64,
+    label: &str,
+    provider: Option<(f64, &str)>,
+) -> i32 {
+    let e: i32 = sqlx::query_scalar(r#"SELECT id FROM editions WHERE "mediaId" = $1"#)
+        .bind(m)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let i: i32 = sqlx::query_scalar(
+        r#"INSERT INTO items ("mediaId", "editionId", monitored) VALUES ($1, $2, true) RETURNING id"#,
+    )
+    .bind(m)
+    .bind(e)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label, "providerKind", "providerSort", "providerLabel")
+           VALUES ($1, $2, $3, $4::float8::numeric, $5, $3, $6::float8::numeric, $7)"#,
+    )
+    .bind(i)
+    .bind(m)
+    .bind(kind)
+    .bind(sort)
+    .bind(label)
+    .bind(provider.map_or(sort, |p| p.0))
+    .bind(provider.map_or(label, |p| p.1))
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    i
+}
+
+async fn counts(c: &Ctx, m: i32) -> (i64, i64) {
+    sqlx::query_as(
+        r#"SELECT (SELECT count(*) FROM comic_issues WHERE "mediaId" = $1),
+                  (SELECT count(*) FROM items WHERE "mediaId" = $1)"#,
+    )
+    .bind(m)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refresh_matches_an_issue_renumbered_by_hand(pool: PgPool) {
+    let (c, m) = refresh_ctx(pool, vec![issue("5", json!(5), "issue", None, None)]).await;
+    let item = put_issue(&c, m, "issue", 5.0, "5", None).await;
+    let (s, _) = c
+        .call(
+            &c.admin,
+            "PATCH",
+            &format!("/api/comics/issues/{item}"),
+            Some(json!({"sort": 5.5, "number": "5.5"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let before = counts(&c, m).await;
+    comics::refresh(&c.st, m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(counts(&c, m).await, before);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refresh_matches_a_renamed_special_by_the_provider_label(pool: PgPool) {
+    let (c, m) = refresh_ctx(pool, vec![issue("Pilot", json!(1), "special", None, None)]).await;
+    let item = put_issue(&c, m, "special", 1.0, "Pilot", None).await;
+    let (s, _) = c
+        .call(
+            &c.admin,
+            "PATCH",
+            &format!("/api/comics/issues/{item}"),
+            Some(json!({"number": "Renamed"})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let before = counts(&c, m).await;
+    comics::refresh(&c.st, m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(counts(&c, m).await, before);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refresh_does_not_recreate_a_number_the_user_moved_onto(pool: PgPool) {
+    let (c, m) = refresh_ctx(
+        pool,
+        vec![
+            issue("5", json!(5), "issue", None, None),
+            issue("6", json!(6), "issue", None, None),
+        ],
+    )
+    .await;
+    put_issue(&c, m, "issue", 6.0, "6", Some((5.0, "5"))).await;
+    let before = counts(&c, m).await;
+    assert!(
+        comics::refresh(&c.st, m, Priority::Interactive)
+            .await
+            .unwrap()
+    );
+    assert_eq!(counts(&c, m).await, before);
+}
+
+#[sqlx::test(migrations = false)]
+async fn editing_an_issue_pins_its_provider_key_once(pool: PgPool) {
+    let (c, m) = refresh_ctx(pool, vec![]).await;
+    let item = put_issue(&c, m, "issue", 5.0, "5", None).await;
+    sqlx::query(
+        r#"UPDATE comic_issues SET "providerKind" = NULL, "providerSort" = NULL, "providerLabel" = NULL WHERE "itemId" = $1"#,
+    )
+    .bind(item)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    for body in [
+        json!({"kind": "annual", "sort": 5.5, "number": "5.5"}),
+        json!({"sort": 7, "number": "7"}),
+    ] {
+        let (s, _) = c
+            .call(
+                &c.admin,
+                "PATCH",
+                &format!("/api/comics/issues/{item}"),
+                Some(body),
+            )
+            .await;
+        assert_eq!(s, 200);
+    }
+    let key: (String, f64, String) = sqlx::query_as(
+        r#"SELECT "providerKind", "providerSort"::float8, "providerLabel" FROM comic_issues WHERE "itemId" = $1"#,
+    )
+    .bind(item)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(key, ("issue".into(), 5.0, "5".into()));
+}

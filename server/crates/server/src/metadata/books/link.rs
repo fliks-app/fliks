@@ -154,14 +154,28 @@ pub async fn attach_with(
         Link::Taken => {
             let work = work.as_deref().unwrap_or_default();
             let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, work).await?;
-            match holder.filter(|h| *h != media && edition.is_some()) {
+            // An edition with no library follows its work: another library's work must not take it.
+            let same_library = match holder {
+                Some(h) => {
+                    sqlx::query_scalar::<_, bool>(
+                        r#"SELECT (SELECT "libraryId" FROM media WHERE id = $1)
+                              IS NOT DISTINCT FROM (SELECT "libraryId" FROM media WHERE id = $2)"#,
+                    )
+                    .bind(media)
+                    .bind(h)
+                    .fetch_one(&mut *tx)
+                    .await?
+                }
+                None => false,
+            };
+            match holder.filter(|h| *h != media && edition.is_some() && same_library) {
                 Some(holder) => {
                     absorb(&mut tx, media, holder).await?;
                     tx.commit().await?;
                     return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
                 }
                 None => {
-                    tracing::warn!("book #{media}: another work holds the {work} id");
+                    tracing::warn!("book #{media}: another work or library holds the {work} id");
                     return Ok(());
                 }
             }

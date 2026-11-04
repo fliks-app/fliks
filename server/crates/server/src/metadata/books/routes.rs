@@ -396,12 +396,13 @@ async fn put_edition(
 }
 
 /// `POST /api/media/:id/identify` of a book: links the work the id names (an edition id is looked up on
-/// the providers) and keeps an edition id on the first edition; the caller refreshes afterwards.
+/// the providers) and keeps an edition id on the edition of the id's family; the caller refreshes afterwards.
 pub(crate) async fn identify_to(
     st: &AppState,
     media: i32,
     provider: Namespace,
     value: &str,
+    acl: &[i32],
 ) -> Result<(), AppError> {
     let library: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
         .bind(media)
@@ -447,9 +448,18 @@ pub(crate) async fn identify_to(
         }
     }
     if let Some((ns, v)) = edition {
+        let family = if ns == Namespace::ASIN {
+            "audio"
+        } else {
+            "text"
+        };
         let first = sqlx::query_scalar!(
-            r#"SELECT id FROM editions WHERE "mediaId" = $1 ORDER BY id LIMIT 1"#,
-            media
+            r#"SELECT e.id FROM editions e JOIN media m ON m.id = e."mediaId"
+               WHERE e."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+               ORDER BY e.family <> $3, e.id LIMIT 1"#,
+            media,
+            acl,
+            family
         )
         .fetch_optional(&st.db)
         .await?;
