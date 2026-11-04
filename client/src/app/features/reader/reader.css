@@ -13,7 +13,7 @@
   gap: 0.125rem;
   min-height: 2.75rem;
   border-radius: 0.75rem;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 .rd-action:active {
   background: color-mix(in oklab, var(--color-base-content) 10%, transparent);
@@ -31,6 +31,84 @@
   transform: translate(-50%, calc(-100% - 0.5rem));
 }
 
+/* A transparent native range drives the drawn track, keeping keyboard and screen reader support. */
+.rd-scrub {
+  position: relative;
+  height: 2.25rem;
+}
+.rd-scrub > input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+.rd-track {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 0.25rem;
+  transform: translateY(-50%);
+  transition: height 150ms ease;
+}
+.rd-track > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding-inline-end: 3px;
+}
+.rd-track > span:last-child {
+  padding-inline-end: 0;
+}
+.rd-track > span > span {
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-base-content) 18%, transparent);
+}
+.rd-track > span > span > span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+}
+.rd-thumb {
+  position: absolute;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 25%, transparent);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 150ms ease;
+  pointer-events: none;
+}
+[dir='rtl'] .rd-thumb {
+  transform: translate(50%, -50%) scale(0);
+}
+.rd-scrub:hover .rd-track,
+.rd-scrub-active .rd-track,
+.rd-scrub > input:focus-visible ~ .rd-track {
+  height: 0.5rem;
+}
+.rd-scrub:hover .rd-thumb,
+.rd-scrub-active .rd-thumb,
+.rd-scrub > input:focus-visible ~ .rd-thumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+[dir='rtl'].rd-scrub:hover .rd-thumb,
+[dir='rtl'].rd-scrub-active .rd-thumb,
+[dir='rtl'] > input:focus-visible ~ .rd-thumb {
+  transform: translate(50%, -50%) scale(1);
+}
+.rd-scrub > input:focus-visible ~ .rd-thumb {
+  box-shadow: var(--focus-ring);
+}
+
 .rd-bubble {
   position: absolute;
   bottom: 100%;
@@ -40,10 +118,10 @@
   border-radius: 0.625rem;
   background: var(--color-base-100);
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
-  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transform: translateX(-50%);
   pointer-events: none;
 }

@@ -79,7 +79,7 @@ describe('selection context', () => {
 
   it('reads before and after across the nodes around a repeated phrase', () => {
     const range = select('<p>Alpha <i>the</i> <b>cat</b> sat.</p><p>Beta <i>a</i> <b>cat</b> ran.</p>', 1);
-    expect(rangeContext(range, 12)).toEqual({ before: ' sat.Beta a ', after: ' ran.' });
+    expect(rangeContext(range, 12)).toEqual({ before: ' sat.Beta a ', after: ' ran.', progression: 25 / 33 });
   });
 
   it('finds the block that holds the selection', () => {

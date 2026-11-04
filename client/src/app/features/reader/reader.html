@@ -1,11 +1,12 @@
 <div
-  class="fixed inset-0 overflow-hidden"
+  class="fixed inset-0 overflow-clip"
   [style.background-color]="colors().background"
   [style.color]="colors().text"
 >
   <!-- The toolkit sizes the host to its line length; the wrapper centres it and leaves the text clear of the bars. -->
   <div
     class="absolute inset-x-0 flex justify-center"
+    (click)="onMarginClick($event)"
     style="
       top: max(3rem, calc(env(safe-area-inset-top) + 2.5rem));
       bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2.5rem));
@@ -16,7 +17,7 @@
 
   <!-- Running header and footer, faint, while the bars are away. -->
   <div
-    class="pointer-events-none absolute inset-x-0 top-0 flex justify-center gap-2 px-6 text-[13px] tracking-wide transition-opacity duration-200"
+    class="pointer-events-none absolute inset-x-0 top-0 flex justify-center gap-2 px-6 text-sm tracking-wide transition-opacity duration-300"
     style="padding-top: max(0.75rem, env(safe-area-inset-top))"
     [style.opacity]="chromeVisible() ? 0 : 0.45"
     aria-hidden="true"
@@ -28,13 +29,14 @@
     }
   </div>
   <div
-    class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center gap-3 px-6 text-[13px] tabular-nums transition-opacity duration-200"
+    class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center gap-3 px-6 text-sm tabular-nums transition-opacity duration-300"
     style="padding-bottom: max(0.75rem, calc(env(safe-area-inset-bottom) + 0.25rem))"
     [style.opacity]="chromeVisible() ? 0 : 0.45"
     aria-hidden="true"
   >
-    <span>{{ page() }} / {{ pageTotal() }}</span>
-    <span>{{ 'reader.min_left' | translatePlural: chapterMinutes() }}</span>
+    @if (page() !== null) {
+      <span>{{ page() }} / {{ pageTotal() }}</span>
+    }
     <span>{{ percent() }}%</span>
   </div>
   <div
@@ -54,10 +56,12 @@
     </div>
   }
 
-  @if (panel()) {
+  <!-- A side panel leaves the book usable beside it on a wide screen, so highlights can follow one another. -->
+  @if (panel() && !compact()) {
     <button
       type="button"
       class="absolute inset-0 z-20 cursor-default"
+      [class.hidden]="panel() === 'sidebar'"
       tabindex="-1"
       [attr.aria-label]="'common.close' | translate"
       (click)="closePanel()"
@@ -65,9 +69,9 @@
   }
 
   <header
-    class="rd-bar absolute inset-x-0 top-0 z-30 flex items-center gap-1 border-b border-base-content/10 bg-base-300/90 px-2 text-base-content backdrop-blur transition-opacity duration-200"
+    class="rd-bar absolute inset-x-0 top-0 z-30 flex items-center gap-1 border-b border-base-content/10 bg-base-300/90 px-2 pb-2 text-base-content backdrop-blur transition-opacity duration-300"
     style="
-      padding-top: env(safe-area-inset-top);
+      padding-top: max(0.5rem, env(safe-area-inset-top));
       padding-left: max(0.5rem, env(safe-area-inset-left));
       padding-right: max(0.5rem, env(safe-area-inset-right));
     "
@@ -77,11 +81,11 @@
   >
     <button
       type="button"
-      class="btn btn-ghost btn-circle size-11"
+      class="btn btn-ghost btn-circle btn-md"
       [attr.aria-label]="'reader.back' | translate"
       (click)="back()"
     >
-      <svg lucideArrowLeft class="h-5 w-5"></svg>
+      <svg lucideArrowLeft class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
     <div class="flex min-w-0 flex-1 items-center gap-3 px-1">
       @if (info()?.coverUrl; as cover) {
@@ -94,31 +98,31 @@
       <div class="min-w-0">
         <h1 class="truncate text-sm font-semibold leading-tight">{{ title() }}</h1>
         @if (info()?.author) {
-          <p class="truncate text-xs leading-tight text-base-content/60">{{ info()?.author }}</p>
+          <p class="truncate text-sm leading-tight text-base-content/60">{{ info()?.author }}</p>
         }
       </div>
     </div>
     <button
       type="button"
-      class="btn btn-ghost btn-circle size-11 max-sm:hidden"
-      [class.btn-active]="panel() === 'sidebar' && tab() === 'contents'"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+      [class.btn-active]="panel() === 'sidebar' && (tab() === 'contents' || tab() === 'bookmarks')"
       [attr.aria-label]="'reader.contents' | translate"
-      (click)="openPanel('sidebar', 'contents')"
+      (click)="openPanel('sidebar', browseTab())"
     >
-      <svg lucideListTree class="h-5 w-5"></svg>
+      <svg lucideListTree class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
     <button
       type="button"
-      class="btn btn-ghost btn-circle size-11"
+      class="btn btn-ghost btn-circle btn-md"
       [class.btn-active]="panel() === 'sidebar' && tab() === 'search'"
       [attr.aria-label]="'reader.search' | translate"
       (click)="openPanel('sidebar', 'search')"
     >
-      <svg lucideSearch class="h-5 w-5"></svg>
+      <svg lucideSearch class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
     <button
       type="button"
-      class="btn btn-ghost btn-circle size-11"
+      class="btn btn-ghost btn-circle btn-md"
       [class.text-primary]="bookmarked()"
       [attr.aria-label]="
         (bookmarked() ? 'reader.remove_bookmark' : 'reader.add_bookmark') | translate
@@ -128,43 +132,58 @@
     >
       <svg
         lucideBookmark
-        class="h-5 w-5"
+        class="h-6 w-6 max-sm:h-5 max-sm:w-5"
         [attr.fill]="bookmarked() ? 'currentColor' : 'none'"
       ></svg>
     </button>
     <button
       type="button"
-      class="btn btn-ghost btn-circle size-11 max-sm:hidden"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
       [class.btn-active]="panel() === 'sidebar' && tab() === 'notes'"
       [attr.aria-label]="'reader.tab_notes' | translate"
       (click)="openPanel('sidebar', 'notes')"
     >
-      <svg lucideNotebookPen class="h-5 w-5"></svg>
+      <svg lucideNotebookPen class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
     @if (info()?.listen) {
       <button
         type="button"
-        class="btn btn-ghost btn-circle size-11 max-sm:hidden"
+        class="btn btn-ghost btn-circle btn-md max-sm:hidden"
         [attr.aria-label]="'reader.listen' | translate"
         (click)="listen()"
       >
-        <svg lucideHeadphones class="h-5 w-5"></svg>
+        <svg lucideHeadphones class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
       </button>
     }
     <button
       type="button"
-      class="btn btn-ghost btn-circle size-11"
+      class="btn btn-ghost btn-circle btn-md"
       [class.btn-active]="panel() === 'appearance'"
       [attr.aria-label]="'reader.appearance' | translate"
       [attr.aria-expanded]="panel() === 'appearance'"
       (click)="openPanel('appearance')"
     >
-      <svg lucideType class="h-5 w-5"></svg>
+      <svg lucideType class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
+    @if (canFullscreen) {
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+        [attr.aria-label]="(fullscreen() ? 'reader.exit_fullscreen' : 'reader.fullscreen') | translate"
+        [attr.aria-pressed]="fullscreen()"
+        (click)="toggleFullscreen()"
+      >
+        @if (fullscreen()) {
+          <svg lucideMinimize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+        } @else {
+          <svg lucideMaximize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+        }
+      </button>
+    }
   </header>
 
   <footer
-    class="rd-bar absolute inset-x-0 bottom-0 z-30 border-t border-base-content/10 bg-base-300/90 px-4 pt-2 text-base-content backdrop-blur transition-opacity duration-200"
+    class="rd-bar absolute inset-x-0 bottom-0 z-30 border-t border-base-content/10 bg-base-300/90 px-4 pt-1 text-base-content backdrop-blur transition-opacity duration-300"
     style="
       padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
       padding-left: max(1rem, env(safe-area-inset-left));
@@ -174,35 +193,27 @@
     [class.pointer-events-none]="!chromeVisible()"
     [attr.inert]="chromeVisible() ? null : ''"
   >
-    <div class="mx-auto flex max-w-4xl flex-col gap-1">
-      <div class="flex items-baseline justify-between gap-4 text-xs text-base-content/70">
-        <span class="min-w-0 truncate font-medium text-base-content">{{ chapterTitle() }}</span>
-        <span class="shrink-0 tabular-nums">
-          {{ 'reader.min_left' | translatePlural: chapterMinutes() }}
-          &middot;
-          {{ 'reader.page_of' | translate: { n: page(), total: pageTotal() } }}
-        </span>
-      </div>
-
-      <div class="relative h-11" [attr.dir]="rtl() ? 'rtl' : 'ltr'">
-        @if (scrubbing() !== null) {
-          <div
-            class="rd-bubble"
-            [style.inset-inline-start.%]="shownProgression() * 100"
-            role="status"
-          >
-            {{ bubble() }} &middot; {{ percent() }}%
+    <div class="relative mx-auto flex max-w-4xl flex-col pb-1">
+      <div
+        class="rd-scrub"
+        [attr.dir]="rtl() ? 'rtl' : 'ltr'"
+        [class.rd-scrub-active]="scrubbing() !== null"
+        (pointermove)="onHover($event)"
+        (pointerleave)="hovering.set(null)"
+      >
+        @if (bubble(); as b) {
+          <div class="rd-bubble" [style.inset-inline-start.%]="b.at * 100" role="status">
+            <span class="block truncate font-medium">{{ b.title }}</span>
+            <span class="tabular-nums text-base-content/70">
+              @if (b.page) {
+                {{ 'reader.page_of' | translate: { n: b.page, total: pageTotal() } }} &middot;
+              }
+              {{ b.percent }}%
+            </span>
           </div>
-        }
-        @for (t of ticks(); track t) {
-          <span
-            class="pointer-events-none absolute top-1/2 h-2 w-0.5 -translate-y-1/2 rounded-full bg-base-content/30"
-            [style.inset-inline-start.%]="t * 100"
-          ></span>
         }
         <input
           type="range"
-          class="range range-xs absolute inset-0 w-full"
           min="0"
           max="1000"
           step="1"
@@ -211,11 +222,31 @@
           (input)="onScrub($event)"
           (change)="onSeek($event)"
         />
+        <div class="rd-track" aria-hidden="true">
+          @for (s of segments(); track s.start) {
+            <span [style.inset-inline-start.%]="s.start * 100" [style.width.%]="s.width * 100">
+              <span><span [style.width.%]="s.fill * 100"></span></span>
+            </span>
+          }
+        </div>
+        <span class="rd-thumb" [style.inset-inline-start.%]="shownProgression() * 100" aria-hidden="true"></span>
       </div>
 
-      <div class="flex items-center justify-between text-xs text-base-content/70">
-        <span class="tabular-nums">{{ percent() }}%</span>
-        <span class="tabular-nums">
+      <div class="flex items-center justify-between gap-4 text-sm text-base-content/70">
+        <span class="min-w-0 truncate">
+          <span class="font-medium text-base-content">{{ chapterTitle() }}</span>
+          &middot;
+          @if (pagesLeft() !== null) {
+            {{ 'reader.pages_left' | translatePlural: (pagesLeft() ?? 0) }}
+          } @else {
+            {{ 'reader.min_left' | translatePlural: chapterMinutes() }}
+          }
+        </span>
+        <span class="shrink-0 tabular-nums">
+          @if (page() !== null) {
+            {{ 'reader.page_of' | translate: { n: page(), total: pageTotal() } }} &middot;
+          }
+          {{ percent() }}% &middot;
           @if (bookTime().h) {
             {{ 'reader.book_left_hm' | translate: { h: bookTime().h, m: bookTime().m } }}
           } @else {
@@ -228,7 +259,7 @@
         class="grid grid-cols-4 gap-1 sm:hidden"
         [attr.aria-label]="'reader.actions' | translate"
       >
-        <button type="button" class="rd-action" (click)="openPanel('sidebar', 'contents')">
+        <button type="button" class="rd-action" (click)="openPanel('sidebar', browseTab())">
           <svg lucideListTree class="h-5 w-5"></svg>
           <span>{{ 'reader.contents' | translate }}</span>
         </button>
@@ -255,37 +286,64 @@
     </div>
   </footer>
 
-  @if (panel() === 'sidebar') {
-    <app-reader-sidebar
-      [(tab)]="tab"
-      [toc]="tocEntries()"
-      [tocRows]="tocRows()"
-      [currentRow]="currentRow()"
-      [progression]="readThrough()"
-      [annotations]="annotations()"
-      [hits]="hits()"
-      [searching]="searching()"
-      [searched]="searched()"
-      [searchText]="searchText()"
-      [focusId]="focusId()"
-      (closed)="closePanel()"
-      (goToc)="goToRow($event)"
-      (goAnnotation)="goToAnnotation($event)"
-      (removeAnnotation)="removeAnnotation($event)"
-      (saveNote)="saveNote($event)"
-      (exportMarkdown)="exportMarkdown()"
-      (query)="search($event)"
-      (goHit)="goToHit($event)"
-    />
+  <!-- One template per panel: beside the book on a wide screen, in the shared bottom sheet on a phone. -->
+  <ng-template #panelTpl let-kind>
+    @if (kind === 'sidebar') {
+      <app-reader-sidebar
+        [class]="
+          compact()
+            ? 'rd-panel flex flex-col text-base-content [--panel-off:none]'
+            : 'rd-panel [--panel-off:translateX(100%)] absolute bottom-0 right-0 top-[calc(env(safe-area-inset-top)+4rem)] z-40 flex w-[26rem] flex-col border-l border-base-content/10 bg-base-300/95 text-base-content shadow-2xl backdrop-blur'
+        "
+        role="dialog"
+        [attr.aria-label]="'reader.panel' | translate"
+        animate.enter="panel-slide-in"
+        animate.leave="panel-slide-out"
+        [(tab)]="tab"
+        [toc]="tocEntries()"
+        [tocRows]="tocRows()"
+        [currentRow]="currentRow()"
+        [progression]="readThrough()"
+        [annotations]="annotations()"
+        [hits]="hits()"
+        [searching]="searching()"
+        [searched]="searched()"
+        [searchText]="searchText()"
+        [focusId]="focusId()"
+        (closed)="closePanel()"
+        (goToc)="goToRow($event)"
+        (goAnnotation)="goToAnnotation($event)"
+        (removeAnnotation)="removeAnnotation($event)"
+        (saveNote)="saveNote($event)"
+        (exportMarkdown)="exportMarkdown()"
+        (query)="search($event)"
+        (goHit)="goToHit($event)"
+      />
+    } @else if (kind === 'appearance') {
+      <app-reader-appearance
+        [class]="
+          compact()
+            ? 'rd-panel flex flex-col text-base-content [--panel-off:none]'
+            : 'rd-panel [--panel-off:translateX(calc(100%_+_0.75rem))] absolute right-3 top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 flex max-h-[calc(100%-6rem)] w-96 flex-col rounded-2xl border border-base-content/10 bg-base-300/95 text-base-content shadow-2xl backdrop-blur'
+        "
+        role="dialog"
+        [attr.aria-label]="'reader.appearance' | translate"
+        animate.enter="panel-slide-in"
+        animate.leave="panel-slide-out"
+        [settings]="settings()"
+        (changed)="change($event)"
+        (closed)="closePanel()"
+      />
+    }
+  </ng-template>
+  @if (!compact() && panel(); as p) {
+    <ng-container *ngTemplateOutlet="panelTpl; context: { $implicit: p }" />
   }
-
-  @if (panel() === 'appearance') {
-    <app-reader-appearance
-      [settings]="settings()"
-      (changed)="change($event)"
-      (closed)="closePanel()"
-    />
-  }
+  <app-bottom-sheet [open]="compact() && panel() !== null" (closed)="closePanel()">
+    @if (compact() && sheetPanel(); as p) {
+      <ng-container *ngTemplateOutlet="panelTpl; context: { $implicit: p }" />
+    }
+  </app-bottom-sheet>
 
   @if (selection(); as sel) {
     <div

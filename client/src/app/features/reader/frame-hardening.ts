@@ -1,13 +1,17 @@
 import { getCssSelector } from 'css-selector-generator';
 
-/** Readium hard-codes `allow-scripts` on its content iframes; drop it as each one is added, before its first navigation. */
+/** Readium hard-codes `allow-scripts` on its content iframes; drop it as each one is added, before its first navigation.
+ *  The selector generator the blocked script would have installed is then handed to every document the frame loads. */
 export function sandboxContentFrames(container: HTMLElement): () => void {
+  const harden = (f: HTMLIFrameElement) => {
+    f.setAttribute('sandbox', 'allow-same-origin');
+    f.addEventListener('load', () => f.contentWindow && provideCssSelectorGenerator(f.contentWindow));
+  };
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (!(node instanceof Element)) continue;
-        const frames = node instanceof HTMLIFrameElement ? [node] : node.querySelectorAll('iframe');
-        frames.forEach((f) => f.setAttribute('sandbox', 'allow-same-origin'));
+        (node instanceof HTMLIFrameElement ? [node] : node.querySelectorAll('iframe')).forEach(harden);
       }
     }
   });

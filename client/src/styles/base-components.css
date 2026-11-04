@@ -325,6 +325,26 @@ body.tv .to-base-100\/50 {
   display: none !important;
 }
 
+/* Side or bottom panels sliding in from their edge; the panel sets `--panel-off` to the hidden position. */
+@media (prefers-reduced-motion: no-preference) {
+  .panel-slide-in {
+    animation: panel-slide-in 250ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  .panel-slide-out {
+    animation: panel-slide-out 250ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  }
+}
+@keyframes panel-slide-in {
+  from {
+    transform: var(--panel-off, translateX(100%));
+  }
+}
+@keyframes panel-slide-out {
+  to {
+    transform: var(--panel-off, translateX(100%));
+  }
+}
+
 /* Open/close animation for anchored popover panels; `animate.leave="popover-pop-leaving"` keeps the node for the exit. */
 .popover-pop-in {
   transform-origin: top;

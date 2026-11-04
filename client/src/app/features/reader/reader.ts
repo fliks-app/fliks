@@ -10,11 +10,14 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   output,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideArrowLeft,
@@ -22,6 +25,8 @@ import {
   LucideCopy,
   LucideHeadphones,
   LucideListTree,
+  LucideMaximize,
+  LucideMinimize,
   LucideNotebookPen,
   LucideSearch,
   LucideShare2,
@@ -38,6 +43,10 @@ import { Layout, Locator, ReadingProgression, type Link, type Publication } from
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { safeFileName, saveFile } from '../../core/plugins/save-file.plugin';
+import { ControlsVisibilityService } from '../player/controls/controls-visibility';
+import { Immersive } from '../../core/plugins/immersive.plugin';
+import { BottomSheetComponent } from '../../shared/components/bottom-sheet';
+import { IS_STANDALONE_BUNDLE } from '../../core/utils/standalone-bundle';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { ToastService } from '../../core/services/toast.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -49,7 +58,7 @@ import {
   type AnnotationColour,
 } from './annotations-api.service';
 import { bookProgression } from './book-progress';
-import { destroyNavigator, provideCssSelectorGenerator, sandboxContentFrames, selectorOf } from './frame-hardening';
+import { destroyNavigator, sandboxContentFrames, selectorOf } from './frame-hardening';
 import { allowedExternalLink } from './link-scheme';
 import {
   COLOUR_HEX,
@@ -68,6 +77,17 @@ import {
   formatMinutes,
 } from './reader-estimates';
 import { provideReaderFonts, readerFontsDir } from './reader-fonts';
+import {
+  frameWindow,
+  layoutSignature,
+  loadCounts,
+  pageAt,
+  pageCount,
+  paginate,
+  saveCounts,
+  screensOf,
+  settled,
+} from './reader-pages';
 import { readerKeyAction, readerKeyBindings, type ReaderKeyAction } from './reader-keys';
 import { ReaderProgressService } from './reader-progress.service';
 import {
@@ -80,6 +100,7 @@ import {
 import { ReaderSidebarComponent, type SidebarTab, type TocEntry } from './reader-sidebar';
 import {
   ReaderSettingsService,
+  isDarkTheme,
   readerThemeColors,
   toReaderPreferences,
   type ReaderSettings,
@@ -108,7 +129,8 @@ interface PendingSelection {
 
 type Panel = 'appearance' | 'sidebar';
 
-const HIDE_AFTER_MS = 3000;
+/** A new layout needs a moment before its columns are final. */
+const PAGINATE_SETTLE_MS = 600;
 const PHONE = '(max-width: 639px)';
 
 const flattenToc = (links: Link[], depth = 0): TocRow[] =>
@@ -123,6 +145,11 @@ const pathOf = (href: string): string => href.split('#')[0];
 const sliderValue = (e: Event): number => Number((e.target as HTMLInputElement).value) / 1000;
 
 const CONTEXT_CHARS = 40;
+/** Three blinks of the Fliks violet, ending off. */
+const FLASH_TINT = '#605dff';
+const FLASH_STEPS = 6;
+const FLASH_STEP_MS = 280;
+const MAX_SEGMENTS = 12;
 const EXCERPT_MAX = 2000;
 
 @Component({
@@ -134,11 +161,15 @@ const EXCERPT_MAX = 2000;
     CachedSrcDirective,
     ReaderAppearanceComponent,
     ReaderSidebarComponent,
+    BottomSheetComponent,
+    NgTemplateOutlet,
     LucideArrowLeft,
     LucideBookmark,
     LucideCopy,
     LucideHeadphones,
     LucideListTree,
+    LucideMaximize,
+    LucideMinimize,
     LucideNotebookPen,
     LucideSearch,
     LucideShare2,
@@ -148,13 +179,15 @@ const EXCERPT_MAX = 2000;
   templateUrl: './reader.html',
   styleUrl: './reader.css',
   encapsulation: ViewEncapsulation.None,
-  providers: [ReaderSettingsService, ReaderProgressService],
+  providers: [ReaderSettingsService, ReaderProgressService, ControlsVisibilityService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown)': 'onKeydown($event)',
     '(window:pagehide)': 'flushProgress()',
     '(document:visibilitychange)': 'flushProgress()',
-    '(mousemove)': 'onMouseMove()',
+    '(mousemove)': 'chrome.onPointerMove()',
+    '(focusin)': 'chrome.onInteraction()',
+    '(document:fullscreenchange)': 'onFullscreenChange()',
   },
 })
 export class ReaderComponent implements OnDestroy {
@@ -179,10 +212,25 @@ export class ReaderComponent implements OnDestroy {
   private positions: Locator[] = [];
   private stopSandbox: (() => void) | null = null;
   private destroyed = false;
-  private hideTimer: ReturnType<typeof setTimeout> | null = null;
   private searchRun = 0;
   private readonly chapterText = new Map<string, string>();
   private readonly framed = new WeakSet<Window>();
+  private readonly order = signal<string[]>([]);
+  private readonly counts = signal<ReadonlyMap<string, number>>(new Map());
+  private readonly viewport = signal<[number, number]>([0, 0]);
+  /** A phone-width screen: halved margins, panels in the bottom sheet. Known before the book lays out, so it never
+   *  flips mid-load: preferences pushed while the toolkit shows its first frame leave that frame unheard. */
+  private readonly phoneQuery = window.matchMedia(PHONE);
+  protected readonly compact = signal(this.phoneQuery.matches);
+  private readonly onPhoneChange = (e: MediaQueryListEvent) => this.compact.set(e.matches);
+  private readonly signature = computed(() => {
+    const { theme, zoom, ...layout } = this.settings();
+    return layoutSignature(layout, ...this.viewport());
+  });
+  private pagesReady = false;
+  private paginateRun = 0;
+  private paginateTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopResize: (() => void) | null = null;
   private opener: HTMLElement | null = null;
   private marking = false;
 
@@ -190,9 +238,16 @@ export class ReaderComponent implements OnDestroy {
   protected readonly colors = computed(() => readerThemeColors(this.settings().theme));
   protected readonly title = signal('');
   protected readonly loading = signal(true);
-  protected readonly chromeVisible = signal(false);
+  /** The player's controls countdown: shown on pointer moves and taps, held by an open panel or a drag. */
+  protected readonly chrome = inject(ControlsVisibilityService);
+  protected readonly chromeVisible = this.chrome.visible;
   protected readonly panel = signal<Panel | null>(null);
-  protected readonly tab = signal<SidebarTab>('contents');
+  /** The sheet keeps showing the panel it held while it slides away. */
+  protected readonly sheetPanel = linkedSignal<Panel | null, Panel | null>({
+    source: this.panel,
+    computation: (p, prev) => p ?? prev?.value ?? null,
+  });
+  protected readonly tab = signal<SidebarTab>(this.settingsStore.panel().tab);
   protected readonly toc = signal<TocRow[]>([]);
   private readonly marks = signal<ReturnType<typeof chapterMarks>>([]);
   private readonly currentHref = signal('');
@@ -202,10 +257,18 @@ export class ReaderComponent implements OnDestroy {
     this.toc().findIndex((row) => pathOf(row.link.href) === this.currentHref()),
   );
   protected readonly rtl = signal(false);
+  private flashTimer?: ReturnType<typeof setTimeout>;
+  /** Bundles run fullscreen already and some browsers (iOS Safari) refuse it on a page. */
+  protected readonly canFullscreen = !IS_STANDALONE_BUNDLE && document.fullscreenEnabled;
+  protected readonly fullscreen = signal(!!document.fullscreenElement);
   protected readonly totalProgression = signal(0);
   /** The slider's value while it is being dragged, before the jump is made. */
   protected readonly scrubbing = signal<number | null>(null);
-  protected readonly shownProgression = computed(() => this.scrubbing() ?? this.totalProgression());
+  /** The released value, held until the navigator reports the page it landed on. */
+  private readonly landing = signal<number | null>(null);
+  protected readonly shownProgression = computed(
+    () => this.scrubbing() ?? this.landing() ?? this.totalProgression(),
+  );
 
   protected readonly tocEntries = computed<TocEntry[]>(() => {
     const marks = this.marks();
@@ -222,18 +285,39 @@ export class ReaderComponent implements OnDestroy {
     this.toc().map((r) => ({ href: r.link.href, title: r.title })),
   );
   protected readonly chapterTitle = computed(() => this.toc()[this.currentRow()]?.title ?? '');
+  /** The mouse position over the progress bar, previewed like a drag. */
+  protected readonly hovering = signal<number | null>(null);
   protected readonly bubble = computed(() => {
-    const at = this.scrubbing();
-    const mark = at == null ? undefined : chapterAt(this.marks(), at);
-    return mark?.title ?? '';
+    const at = this.scrubbing() ?? this.hovering();
+    if (at == null) return null;
+    const spot = this.positions[Math.min(this.positions.length - 1, Math.floor(at * this.positions.length))];
+    return {
+      at,
+      title: chapterAt(this.marks(), at)?.title ?? '',
+      page: spot && this.pageTotal() ? pageAt(this.order(), this.counts(), spot.href, spot.locations.progression ?? 0)?.page : undefined,
+      percent: Math.round(at * 100),
+    };
   });
-  protected readonly ticks = computed(() =>
-    this.marks()
-      .filter((m) => m.start > 0.001)
-      .map((m) => m.start),
+  /** One track segment per chapter, filled up to the shown position; too many chapters make one track. */
+  protected readonly segments = computed(() => {
+    const starts = this.marks().map((m) => m.start).filter((s, i) => i === 0 || s > 0.001);
+    const bounds = starts.length > 1 && starts.length <= MAX_SEGMENTS ? [0, ...starts.slice(1), 1] : [0, 1];
+    const at = this.shownProgression();
+    return bounds.slice(0, -1).map((start, i) => {
+      const end = bounds[i + 1];
+      return { start, width: end - start, fill: Math.min(1, Math.max(0, (at - start) / (end - start))) };
+    });
+  });
+  /** Screen pages of the current layout; null until every chapter is laid out, or in scroll mode. */
+  private readonly pageNow = computed(() => {
+    const loc = this.locator();
+    return loc && !this.settings().scroll ? pageAt(this.order(), this.counts(), pathOf(loc.href), loc.locations.progression ?? 0) : null;
+  });
+  protected readonly pageTotal = computed(() =>
+    this.settings().scroll ? null : pageCount(this.order(), this.counts()),
   );
-  protected readonly page = computed(() => this.locator()?.locations.position ?? 0);
-  protected readonly pageTotal = signal(0);
+  protected readonly page = computed(() => (this.pageTotal() ? (this.pageNow()?.page ?? null) : null));
+  protected readonly pagesLeft = computed(() => (this.pageTotal() ? (this.pageNow()?.left ?? null) : null));
   protected readonly chapterMinutes = computed(() => {
     const loc = this.locator();
     return loc ? chapterMinutesLeft(loc, this.positions) : 0;
@@ -269,10 +353,25 @@ export class ReaderComponent implements OnDestroy {
   private readonly sidebar = viewChild(ReaderSidebarComponent);
 
   constructor() {
+    this.chrome.hide();
+    this.phoneQuery.addEventListener('change', this.onPhoneChange);
+    this.chrome.configure({ pinned: computed(() => this.panel() !== null || this.scrubbing() !== null) });
+    // Android system bar icons go dark over a light page; the reader's bars and the app are dark.
+    if (Capacitor.isNativePlatform()) {
+      effect(() => {
+        const light = !isDarkTheme(this.settings().theme) && !this.chromeVisible();
+        Immersive.setLightStatusBar({ light }).catch(() => {});
+      });
+    }
     afterNextRender(() => void this.open());
+    effect(() => this.settingsStore.savePanel({ tab: this.tab() }));
     effect(() => {
-      const prefs = toReaderPreferences(this.settings(), this.colors());
+      const prefs = toReaderPreferences(this.settings(), this.colors(), this.compact());
       untracked(() => void this.navigator?.submitPreferences(new EpubPreferences(prefs)));
+    });
+    effect(() => {
+      this.signature();
+      untracked(() => this.repaginate());
     });
     effect(() => {
       const highlights = this.annotations().filter((a) => a.kind === 'highlight');
@@ -282,12 +381,18 @@ export class ReaderComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
+    this.paginateRun++;
+    if (this.paginateTimer) clearTimeout(this.paginateTimer);
+    this.stopResize?.();
+    this.phoneQuery.removeEventListener('change', this.onPhoneChange);
     this.closePanel();
     this.stopSandbox?.();
-    if (this.hideTimer) clearTimeout(this.hideTimer);
     void this.progress.flush();
+    clearTimeout(this.flashTimer);
     if (this.navigator) void destroyNavigator(this.navigator, this.pageHost().nativeElement);
     this.api.release(this.target().itemId);
+    if (document.fullscreenElement) void document.exitFullscreen();
+    if (Capacitor.isNativePlatform()) Immersive.setLightStatusBar({ light: false }).catch(() => {});
   }
 
   private async open(): Promise<void> {
@@ -305,10 +410,15 @@ export class ReaderComponent implements OnDestroy {
       }
       this.publication = publication;
       this.positions = positions;
-      this.pageTotal.set(positions.length);
+      this.order.set(publication.readingOrder.items.map((l) => l.href));
       this.furthest.set(typeof saved?.progression === 'number' ? saved.progression : 0);
       this.title.set(publication.metadata.title.getTranslation() || '');
-      const rows = flattenToc(publication.toc?.items ?? []);
+      // A bare arabic number in a table of contents is a chapter number; parts carry a name.
+      const rows = flattenToc(publication.toc?.items ?? []).map((r) =>
+        /^\d+$/.test(r.title.trim())
+          ? { ...r, title: this.translate.instant('reader.chapter_n', { n: r.title.trim() }) }
+          : r,
+      );
       this.toc.set(rows);
       this.marks.set(
         chapterMarks(
@@ -319,8 +429,13 @@ export class ReaderComponent implements OnDestroy {
       this.rtl.set(publication.metadata.effectiveReadingProgression === ReadingProgression.rtl);
       void this.loadAnnotations();
       const container = this.pageHost().nativeElement;
+      const watchSize = () => this.viewport.set([Math.round(container.clientWidth), Math.round(container.clientHeight)]);
+      watchSize();
+      const resizeObserver = new ResizeObserver(watchSize);
+      resizeObserver.observe(container);
+      this.stopResize = () => resizeObserver.disconnect();
       this.stopSandbox = sandboxContentFrames(container);
-      const prefs = toReaderPreferences(this.settings(), this.colors());
+      const prefs = toReaderPreferences(this.settings(), this.colors(), this.compact());
       this.navigator = new EpubNavigator(
         container,
         publication,
@@ -378,25 +493,81 @@ export class ReaderComponent implements OnDestroy {
         if (this.panel()) this.closePanel();
         else this.toggleChrome();
       },
+      click: () => this.dismissChrome(),
+      tap: () => this.dismissChrome(),
       textSelected: (sel) => this.onSelection(sel),
       peripheral: (e) => this.act(e.type as ReaderKeyAction),
     };
   }
 
   private onFrame(wnd: Window): void {
-    provideCssSelectorGenerator(wnd);
     provideReaderFonts(wnd.document);
     if (this.framed.has(wnd)) return;
     this.framed.add(wnd);
-    wnd.addEventListener('mousemove', () => this.onMouseMove(), { passive: true });
+    void settled(wnd).then(() => this.measureFrames());
+    wnd.addEventListener('mousemove', () => this.chrome.onPointerMove(), { passive: true });
     wnd.document.addEventListener('selectionchange', () => {
       if (wnd.getSelection()?.isCollapsed) this.selection.set(null);
     });
   }
 
+  /** Counting restarts from the cache on any layout change; the frames are read once the new layout has settled. */
+  private repaginate(): void {
+    this.paginateRun++;
+    this.pagesReady = false;
+    if (this.paginateTimer) clearTimeout(this.paginateTimer);
+    const [w, h] = this.viewport();
+    if (!this.publication || this.settings().scroll || !w) {
+      this.counts.set(new Map());
+      return;
+    }
+    this.counts.set(loadCounts(this.target().itemId, this.signature()));
+    this.paginateTimer = setTimeout(() => void this.startPagination(), PAGINATE_SETTLE_MS);
+  }
+
+  private async startPagination(): Promise<void> {
+    const publication = this.publication;
+    if (!publication || this.destroyed) return;
+    if (this.loading()) {
+      this.paginateTimer = setTimeout(() => void this.startPagination(), PAGINATE_SETTLE_MS);
+      return;
+    }
+    const run = this.paginateRun;
+    const signature = this.signature();
+    this.pagesReady = true;
+    this.measureFrames();
+    await paginate({
+      host: this.pageHost().nativeElement,
+      publication,
+      positions: this.positions,
+      prefs: toReaderPreferences(this.settings(), this.colors(), this.compact()),
+      skip: (href) => this.counts().has(href),
+      onCount: (href, n) => this.setCount(href, n),
+      aborted: () => run !== this.paginateRun,
+    }).catch(() => undefined);
+    if (run === this.paginateRun) saveCounts(this.target().itemId, signature, this.counts());
+  }
+
+  private setCount(href: string, screens: number): void {
+    if (this.counts().get(href) === screens) return;
+    this.counts.set(new Map(this.counts()).set(href, screens));
+  }
+
+  /** The reader's own frames, the current chapter and its preloaded neighbours, are exact. */
+  private measureFrames(): void {
+    if (!this.pagesReady || !this.navigator) return;
+    for (const href of this.order()) {
+      const wnd = frameWindow(this.navigator, href);
+      const n = wnd ? screensOf(wnd) : 0;
+      if (n) this.setCount(href, n);
+    }
+  }
+
   private onPosition(locator: Locator): void {
+    this.measureFrames();
     const total = bookProgression(locator, this.positions);
     this.totalProgression.set(total);
+    this.landing.set(null);
     this.locator.set(locator);
     this.currentHref.set(pathOf(locator.href));
     this.selection.set(null);
@@ -412,11 +583,13 @@ export class ReaderComponent implements OnDestroy {
     const action = readerKeyAction(e);
     if (!action) return;
     if ((e.key === 'Enter' || e.key === ' ') && target?.closest('button, a, summary')) return;
+    // Arrows move focus in the bars and panels; they turn pages only from the book.
+    if ((action === 'left' || action === 'right') && target?.closest('.rd-bar, .rd-panel')) return;
     e.preventDefault();
     this.act(action);
   }
 
-  private act(action: ReaderKeyAction): void {
+  protected act(action: ReaderKeyAction): void {
     const nav = this.navigator;
     const noop = () => undefined;
     switch (action) {
@@ -470,19 +643,12 @@ export class ReaderComponent implements OnDestroy {
   }
 
   protected toggleChrome(): void {
-    this.setChrome(!this.chromeVisible(), false);
+    this.chrome.toggle();
   }
 
-  private setChrome(visible: boolean, autoHide: boolean): void {
-    if (this.hideTimer) clearTimeout(this.hideTimer);
-    this.hideTimer = null;
-    this.chromeVisible.set(visible);
-    if (visible && autoHide) this.hideTimer = setTimeout(() => this.hideIdle(), HIDE_AFTER_MS);
-  }
-
-  private hideIdle(): void {
-    if (this.panel() || this.scrubbing() || this.host.nativeElement.querySelector('.rd-bar:focus-within')) return;
-    this.chromeVisible.set(false);
+  private setChrome(visible: boolean): void {
+    if (visible) this.chrome.show();
+    else this.chrome.hide();
   }
 
   /** Bars opened from a key put focus on their first control. */
@@ -492,11 +658,9 @@ export class ReaderComponent implements OnDestroy {
     });
   }
 
-  /** A mouse that moves brings the bars up and lets them go again; a touch or a key keeps them until toggled. */
-  protected onMouseMove(): void {
-    if (typeof matchMedia === 'function' && !matchMedia('(hover: hover)').matches) return;
-    if (this.chromeVisible() && !this.hideTimer) return;
-    this.setChrome(true, true);
+  /** The list button reopens the tab last browsed; search has its own button. */
+  protected browseTab(): SidebarTab {
+    return this.tab() === 'search' ? 'contents' : this.tab();
   }
 
   protected openPanel(panel: Panel, tab?: SidebarTab): void {
@@ -508,7 +672,7 @@ export class ReaderComponent implements OnDestroy {
     }
     if (tab) this.tab.set(tab);
     this.panel.set(panel);
-    this.setChrome(true, false);
+    this.setChrome(true);
   }
 
   protected closePanel(): void {
@@ -528,7 +692,37 @@ export class ReaderComponent implements OnDestroy {
     if (!row) return;
     this.navigator?.goLink(row.link, false, () => undefined);
     this.closePanel();
-    this.setChrome(false, false);
+    this.setChrome(false);
+  }
+
+  /** The margins beside the text turn pages like the toolkit's side zones on the text itself. */
+  /** A click while the bars are up puts them away instead of turning the page; true when it did. */
+  private dismissChrome(): boolean {
+    if (this.panel() || !this.chromeVisible()) return false;
+    this.selection.set(null);
+    this.chrome.hide();
+    return true;
+  }
+
+  protected onMarginClick(e: MouseEvent): void {
+    if (e.target !== e.currentTarget || this.dismissChrome()) return;
+    this.act(e.clientX < (e.currentTarget as HTMLElement).clientWidth / 2 ? 'left' : 'right');
+  }
+
+  protected onHover(e: PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+    this.hovering.set(this.rtl() ? 1 - x : x);
+  }
+
+  protected onFullscreenChange(): void {
+    this.fullscreen.set(!!document.fullscreenElement);
+  }
+
+  protected toggleFullscreen(): void {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen();
   }
 
   protected onScrub(e: Event): void {
@@ -541,13 +735,33 @@ export class ReaderComponent implements OnDestroy {
         Math.min(this.positions.length - 1, Math.floor(sliderValue(e) * this.positions.length))
       ];
     this.scrubbing.set(null);
-    if (target) this.navigator?.go(target, false, () => undefined);
+    if (!target) return;
+    this.landing.set(sliderValue(e));
+    this.navigator?.go(target, false, (ok) => ok || this.landing.set(null));
   }
 
+
   protected goToAnnotation(a: Annotation): void {
-    const target = parseLocator(a.locator);
-    if (target) this.navigator?.go(target, false, () => undefined);
+    this.goToPassage(parseLocator(a.locator));
+  }
+
+  /** Jumps to a quoted passage and blinks an outline around it so the eye finds it on the page. */
+  private goToPassage(target: Locator | null | undefined): void {
+    if (target) this.navigator?.go(target, false, (ok) => ok && this.flash(target));
     if (window.matchMedia(PHONE).matches) this.closePanel();
+  }
+
+  private flash(locator: Locator): void {
+    const nav = this.navigator;
+    if (!nav) return;
+    clearTimeout(this.flashTimer);
+    const on = [{ id: 'flash', locator, style: { type: DecorationStyleType.Outline, tint: FLASH_TINT } }];
+    let step = 0;
+    const tick = () => {
+      nav.applyDecorations(step % 2 === 0 ? on : [], 'flash');
+      if (++step < FLASH_STEPS) this.flashTimer = setTimeout(tick, FLASH_STEP_MS);
+    };
+    tick();
   }
 
   protected change(patch: Partial<ReaderSettings>): void {
@@ -644,7 +858,9 @@ export class ReaderComponent implements OnDestroy {
       ? frame.contentWindow.getSelection()!.getRangeAt(0)
       : null;
     const current = nav.currentLocator;
-    const { before, after } = range ? rangeContext(range, CONTEXT_CHARS) : { before: '', after: '' };
+    const { before, after, progression } = range
+      ? rangeContext(range, CONTEXT_CHARS)
+      : { before: '', after: '', progression: current.locations.progression ?? 0 };
     const block = range ? blockOf(range) : null;
     const cssSelector = block ? selectorOf(block) : undefined;
     this.writing.set(false);
@@ -658,7 +874,7 @@ export class ReaderComponent implements OnDestroy {
         type: 'application/xhtml+xml',
         title: this.chapterTitle(),
         locations: {
-          progression: current.locations.progression ?? 0,
+          progression,
           position: current.locations.position ?? 0,
           totalProgression: this.totalProgression(),
           ...(cssSelector && { cssSelector }),
@@ -811,8 +1027,7 @@ export class ReaderComponent implements OnDestroy {
       locations: { progression: hit.progression },
       text: { before: hit.before, highlight: hit.match, after: hit.after },
     });
-    if (target) this.navigator?.go(target, false, () => undefined);
-    if (window.matchMedia(PHONE).matches) this.closePanel();
+    this.goToPassage(target);
   }
 
   protected flushProgress(): void {

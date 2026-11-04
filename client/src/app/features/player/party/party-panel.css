@@ -1,5 +1,4 @@
 :host {
-  --off: translateX(100%);
   position: absolute;
   z-index: 200;
   display: block;
@@ -19,7 +18,7 @@
   width: 30%;
 }
 :host([data-dock='bottom']) {
-  --off: translateY(100%);
+  --panel-off: translateY(100%);
   top: 56.25vw;
   left: 0;
   right: 0;
@@ -33,17 +32,3 @@
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  :host(.party-panel-in) {
-    animation: panel-in 250ms cubic-bezier(0.2, 0, 0, 1);
-  }
-  :host(.party-panel-out) {
-    animation: panel-out 250ms cubic-bezier(0.2, 0, 0, 1) forwards;
-  }
-}
-@keyframes panel-in {
-  from { transform: var(--off); }
-}
-@keyframes panel-out {
-  to { transform: var(--off); }
-}

@@ -74,15 +74,21 @@ export function blockOf(range: Range): Element | null {
   return el?.closest(BLOCKS) ?? null;
 }
 
-/** The text on either side of a selection, read across the whole document rather than from its end text nodes. */
-export function rangeContext(range: Range, chars: number): { before: string; after: string } {
+/** The text on either side of a selection, read across the whole document rather than from its end text nodes,
+ * and where the selection starts in it, 0..1, measured like a search hit. */
+export function rangeContext(
+  range: Range,
+  chars: number,
+): { before: string; after: string; progression: number } {
   const body = range.startContainer.ownerDocument?.body ?? null;
-  if (!body) return { before: '', after: '' };
+  if (!body) return { before: '', after: '', progression: 0 };
   const head = range.cloneRange();
   head.selectNodeContents(body);
   head.setEnd(range.startContainer, range.startOffset);
   const tail = range.cloneRange();
   tail.selectNodeContents(body);
   tail.setStart(range.endContainer, range.endOffset);
-  return { before: head.toString().slice(-chars), after: tail.toString().slice(0, chars) };
+  const [h, t] = [head.toString(), tail.toString()];
+  const total = h.length + range.toString().length + t.length;
+  return { before: h.slice(-chars), after: t.slice(0, chars), progression: total ? h.length / total : 0 };
 }

@@ -1,7 +1,17 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, signal, untracked } from '@angular/core';
 import { TextAlignment, type IEpubPreferences } from '@readium/navigator';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
+import type { AnnotationColour } from './annotations-api.service';
 import { COMIC_MODES, COMIC_PREFS_DEFAULT, type ComicPrefs } from './comic-layout';
+import type { SidebarTab } from './reader-sidebar';
+
+/** Where the side panel was left: its tab and the notes colour filter. */
+export interface ReaderPanelState {
+  tab: SidebarTab;
+  notesFilter: AnnotationColour | null;
+}
+const SIDEBAR_TABS: readonly SidebarTab[] = ['contents', 'bookmarks', 'notes', 'search'];
+const NOTE_COLOURS: readonly AnnotationColour[] = ['yellow', 'green', 'blue', 'pink'];
 
 export type ReaderTheme = 'original' | 'sepia' | 'calm' | 'slate' | 'night' | 'black';
 export type ReaderFont = 'publisher' | 'literata' | 'sans' | 'atkinson';
@@ -91,8 +101,12 @@ export const resetPatch = (theme: ReaderTheme): Partial<ReaderSettings> => {
   return { ...presetPatch(theme), fontSize, margins, columns, justify };
 };
 
-export function toReaderPreferences(settings: ReaderSettings, colors: ThemeColors): IEpubPreferences {
-  const gutter = GUTTER_PX[settings.margins];
+/** Translucent Fliks violet: legible on every theme and unlike any highlight colour. */
+const SELECTION = 'rgba(96, 93, 255, 0.35)';
+
+/** `compact` (a phone-width reader) halves the side margins: the screen is too narrow to spare them. */
+export function toReaderPreferences(settings: ReaderSettings, colors: ThemeColors, compact = false): IEpubPreferences {
+  const gutter = GUTTER_PX[settings.margins] / (compact ? 2 : 1);
   return {
     fontSize: settings.fontSize,
     fontFamily: FONT_STACKS[settings.fontFamily],
@@ -108,6 +122,8 @@ export function toReaderPreferences(settings: ReaderSettings, colors: ThemeColor
     textColor: colors.text,
     linkColor: colors.link,
     visitedColor: colors.link,
+    selectionBackgroundColor: SELECTION,
+    selectionTextColor: colors.text,
   };
 }
 
@@ -143,22 +159,23 @@ export function sanitizeReaderSettings(raw: unknown): ReaderSettings {
 export class ReaderSettingsService {
   private readonly scope = inject(StorageScopeService);
   private readonly key = `reader.settings:${this.scope.suffix()}`;
+  private readonly comicKey = `reader.comics:${this.scope.suffix()}`;
+  private readonly panelKey = `reader.panel:${this.scope.suffix()}`;
 
-  readonly settings = signal<ReaderSettings>(this.load());
+  readonly settings = signal<ReaderSettings>(sanitizeReaderSettings(this.read(this.key)));
+  readonly panel = signal<ReaderPanelState>(sanitizePanel(this.read(this.panelKey)));
+  private comics = recordOf(this.read(this.comicKey));
 
   save(patch: Partial<ReaderSettings>): void {
-    const next = sanitizeReaderSettings({ ...this.settings(), ...patch });
-    this.settings.set(next);
-    if (!this.scope.canPersist()) return;
-    try {
-      localStorage.setItem(this.key, JSON.stringify(next));
-    } catch {
-      // Storage blocked or full: the settings last for this page only.
-    }
+    this.settings.set(sanitizeReaderSettings({ ...this.settings(), ...patch }));
+    this.write(this.key, this.settings());
   }
 
-  private readonly comicKey = `reader.comics:${this.scope.suffix()}`;
-  private comics: Record<string, unknown> = this.loadComics();
+  /** Untracked, so an effect saving one field doesn't rerun on the write it makes. */
+  savePanel(patch: Partial<ReaderPanelState>): void {
+    this.panel.set(sanitizePanel({ ...untracked(this.panel), ...patch }));
+    this.write(this.panelKey, this.panel());
+  }
 
   comicPrefs(mediaId: number): ComicPrefs {
     return sanitizeComicPrefs(this.comics[mediaId]);
@@ -166,36 +183,44 @@ export class ReaderSettingsService {
 
   saveComicPrefs(mediaId: number, prefs: ComicPrefs): void {
     this.comics = { ...this.comics, [mediaId]: sanitizeComicPrefs(prefs) };
+    this.write(this.comicKey, this.comics);
+  }
+
+  private read(key: string): unknown {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? 'null');
+    } catch {
+      return null;
+    }
+  }
+
+  /** Storage blocked or full: the value lasts for this page only. */
+  private write(key: string, value: unknown): void {
     if (!this.scope.canPersist()) return;
     try {
-      localStorage.setItem(this.comicKey, JSON.stringify(this.comics));
+      localStorage.setItem(key, JSON.stringify(value));
     } catch {
-      // Storage blocked or full: the layout lasts for this page only.
-    }
-  }
-
-  private loadComics(): Record<string, unknown> {
-    try {
-      const raw = JSON.parse(localStorage.getItem(this.comicKey) ?? 'null');
-      return raw && typeof raw === 'object' ? raw : {};
-    } catch {
-      return {};
-    }
-  }
-
-  private load(): ReaderSettings {
-    try {
-      const raw = localStorage.getItem(this.key);
-      return sanitizeReaderSettings(raw ? JSON.parse(raw) : null);
-    } catch {
-      return { ...READER_DEFAULTS };
+      /* kept in memory */
     }
   }
 }
 
+const recordOf = (raw: unknown): Record<string, unknown> =>
+  raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+function sanitizePanel(raw: unknown): ReaderPanelState {
+  const r = recordOf(raw);
+  return {
+    tab: oneOf(SIDEBAR_TABS, r['tab'], 'contents'),
+    notesFilter: NOTE_COLOURS.includes(r['notesFilter'] as AnnotationColour)
+      ? (r['notesFilter'] as AnnotationColour)
+      : null,
+  };
+}
+
 /** Per-volume comic layout, kept apart from the text settings so each volume remembers manga, webtoon or paged. */
 export function sanitizeComicPrefs(raw: unknown): ComicPrefs {
-  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const r = recordOf(raw);
   return {
     mode: oneOf(COMIC_MODES, r['mode'], COMIC_PREFS_DEFAULT.mode),
     spread: typeof r['spread'] === 'boolean' ? r['spread'] : COMIC_PREFS_DEFAULT.spread,

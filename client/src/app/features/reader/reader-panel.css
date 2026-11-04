@@ -2,7 +2,7 @@
   display: flex;
   justify-content: space-between;
   margin-bottom: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: color-mix(in oklab, var(--color-base-content) 62%, transparent);
 }
 
@@ -76,7 +76,7 @@
 
 .rd-group {
   margin: 0.75rem 0 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--color-base-content) 62%, transparent);
@@ -98,30 +98,4 @@
   text-align: center;
   font-size: 0.875rem;
   color: color-mix(in oklab, var(--color-base-content) 62%, transparent);
-}
-.rd-count {
-  display: inline-flex;
-  align-items: center;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--color-base-content) 10%, transparent);
-  font-size: 0.8125rem;
-}
-.rd-dot {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-}
-.rd-dot::before {
-  content: '';
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 999px;
-  background: var(--dot);
-}
-.rd-dot[aria-pressed='true']::before {
-  outline: 2px solid var(--color-base-content);
-  outline-offset: 2px;
 }

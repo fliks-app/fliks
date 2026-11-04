@@ -306,7 +306,7 @@
 @if (partyPanelShown()) {
   <!-- Party UI loads with the first party, out of the player chunk. -->
   @defer {
-    <app-party-panel animate.enter="party-panel-in" animate.leave="party-panel-out" (openSettings)="partyDialog.set('party')" />
+    <app-party-panel animate.enter="panel-slide-in" animate.leave="panel-slide-out" (openSettings)="partyDialog.set('party')" />
   }
 }
 @if (partyCtl.active() && partyDialog(); as dialog) {
