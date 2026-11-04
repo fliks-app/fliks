@@ -2842,6 +2842,36 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn refreshing_an_unmatched_book_merges_its_file_record(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Solo", "book").await;
+        epub(&lib.join("Solo/Mirelune.epub"));
+        books::register(&c.st, m, &placed(&c, &["Solo/Mirelune.epub"]))
+            .await
+            .unwrap();
+        let r = books::refresh_media(
+            &c.st,
+            m,
+            fliks_domain::metadata::limiter::Priority::Interactive,
+        )
+        .await;
+        assert!(
+            r.is_err_and(|e| e.retry),
+            "the outage is reported for a retry"
+        );
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM media WHERE title = 'Mirelune' AND "metadataRefreshedAt" IS NOT NULL"#
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn deleting_a_book_keeps_the_files_it_does_not_own(pool: PgPool) {
         let c = ctx(pool).await;
         let lib = c.dir.join("books");

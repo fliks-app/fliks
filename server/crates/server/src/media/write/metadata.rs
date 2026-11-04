@@ -687,6 +687,11 @@ pub async fn refresh(
             crate::metadata::comics::refresh(&st2, id, Priority::Background)
                 .await
                 .map(|_| media.title.clone())
+        } else if media.media_type == MediaKind::Book {
+            crate::ingest::books::refresh_media(&st2, id, Priority::Interactive)
+                .await
+                .map(|_| media.title.clone())
+                .map_err(|e| AppError::internal(e.cause))
         } else {
             refresh_metadata(&st2, id, false, Priority::Interactive)
                 .await

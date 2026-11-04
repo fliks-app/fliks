@@ -793,6 +793,25 @@ impl IdentifyError {
 /// Rule 16: identifies the editions of a book that have no id yet and attaches the match.
 /// Answers the media the book ends up in: a work that holds the id already absorbs it.
 pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyError> {
+    merge_editions(st, media, false, Priority::Background).await
+}
+
+/// The refresh of a book: every edition is merged again from its stored ids (or, with none, identified
+/// as `identify_media` does) and its file record.
+pub async fn refresh_media(
+    st: &AppState,
+    media: i32,
+    prio: Priority,
+) -> Result<i32, IdentifyError> {
+    merge_editions(st, media, true, prio).await
+}
+
+async fn merge_editions(
+    st: &AppState,
+    media: i32,
+    all: bool,
+    prio: Priority,
+) -> Result<i32, IdentifyError> {
     let mut media = media;
     let rows = sqlx::query!(
         r#"SELECT e.id, e.family,
@@ -802,11 +821,12 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
                JOIN media_files f ON f.id = p."mediaFileId"
                WHERE i."editionId" = e.id ORDER BY p."version", p.position LIMIT 1) AS rel
            FROM editions e WHERE e."mediaId" = $1
-             AND (NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
+             AND ($2 OR NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
                OR NOT EXISTS (SELECT 1 FROM media_external_ids w
                                WHERE w."mediaId" = e."mediaId" AND w.provider = 'openlibrary'))
            ORDER BY e.id"#,
-        media
+        media,
+        all
     )
     .fetch_all(&st.db)
     .await
@@ -830,20 +850,42 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
             continue;
         };
         let (hints, record) = hints_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
-        let found = match identify::identify(st, &hints, Priority::Background).await {
-            Ok(m) => m,
-            Err(e) => return Err(IdentifyError::of(media, c.edition, "identify", e)),
+        let stored = if all {
+            link::stored(&st.db, media, Some(c.edition))
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
         };
-        // A work the media already holds wins over the one the file suggests.
-        let held = link::stored(&st.db, media, None).await.ok().flatten();
-        let m = match (found, held) {
-            (Some(f), Some(h)) if f.work == h.work => Some(f),
-            (_, Some(h)) => Some(identify::BookMatch {
-                edition: vec![],
-                ..h
-            }),
-            (Some(f), None) => Some(f),
-            (None, None) => None,
+        let m = match stored {
+            Some(m) => Some(m),
+            None => {
+                let found = match identify::identify(st, &hints, prio).await {
+                    Ok(m) => m,
+                    Err(e) => {
+                        // An outage still leaves an unanchored book its file metadata.
+                        let held = link::stored(&st.db, media, None).await.ok().flatten();
+                        if let (None, Some(r)) = (held, record.as_ref()) {
+                            let _ =
+                                link::attach_with(st, media, Some(c.edition), None, Some(r), prio)
+                                    .await;
+                        }
+                        return Err(IdentifyError::of(media, c.edition, "identify", e));
+                    }
+                };
+                // A work the media already holds wins over the one the file suggests.
+                let held = link::stored(&st.db, media, None).await.ok().flatten();
+                match (found, held) {
+                    (Some(f), Some(h)) if f.work == h.work => Some(f),
+                    (_, Some(h)) => Some(identify::BookMatch {
+                        edition: vec![],
+                        ..h
+                    }),
+                    (Some(f), None) => Some(f),
+                    (None, None) => None,
+                }
+            }
         };
         // Unmatched: the file record alone still gives the media its own title, authors, overview.
         if m.is_none() && record.is_none() {
@@ -855,7 +897,7 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
             Some(c.edition),
             m.as_ref(),
             record.as_ref(),
-            Priority::Background,
+            prio,
         )
         .await;
         if let Ok(Some((owner, _))) = crate::media::editions::of(&st.db, c.edition).await {
