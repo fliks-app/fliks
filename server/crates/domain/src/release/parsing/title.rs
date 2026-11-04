@@ -201,11 +201,11 @@ fn title_slot(decoded: &str) -> (&str, Option<usize>, Option<u32>) {
     (slot, cut, year)
 }
 
-/// The decoded name and the byte offset where its tag region starts (0 when no marker ends the title).
-pub fn decoded_with_tag_start(raw_name: &str) -> (String, usize) {
+/// The decoded name and the byte offset where its tag region starts (`None` when no marker ends the title).
+pub fn decoded_with_tag_start(raw_name: &str) -> (String, Option<usize>) {
     let decoded = decode_name(raw_name);
     let end = title_slot(&decoded).0.len();
-    let start = if end == decoded.len() { 0 } else { end };
+    let start = (end != decoded.len()).then_some(end);
     (decoded, start)
 }
 
