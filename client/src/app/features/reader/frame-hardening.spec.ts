@@ -1,4 +1,4 @@
-import { provideCssSelectorGenerator, sandboxContentFrames } from './frame-hardening';
+import { destroyNavigator, provideCssSelectorGenerator, sandboxContentFrames } from './frame-hardening';
 
 const frameWithToolkitSandbox = () => {
   const frame = document.createElement('iframe');
@@ -67,5 +67,17 @@ describe('provideCssSelectorGenerator', () => {
       expect(doc.querySelectorAll(selector)).toHaveLength(1);
       expect(doc.querySelector(selector)).toBe(el);
     }
+  });
+});
+
+describe('destroyNavigator', () => {
+  it('takes the frames out of the page before the toolkit tears them down', async () => {
+    const container = document.createElement('div');
+    const frame = document.createElement('iframe');
+    container.appendChild(frame);
+    let parentAtDestroy: Element | null | undefined;
+    await destroyNavigator({ destroy: async () => void (parentAtDestroy = frame.parentElement) }, container);
+    expect(parentAtDestroy).toBeNull();
+    expect(container.querySelector('iframe')).toBeNull();
   });
 });

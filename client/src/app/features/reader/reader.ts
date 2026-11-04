@@ -49,7 +49,7 @@ import {
   type AnnotationColour,
 } from './annotations-api.service';
 import { bookProgression } from './book-progress';
-import { provideCssSelectorGenerator, sandboxContentFrames, selectorOf } from './frame-hardening';
+import { destroyNavigator, provideCssSelectorGenerator, sandboxContentFrames, selectorOf } from './frame-hardening';
 import { allowedExternalLink } from './link-scheme';
 import {
   COLOUR_HEX,
@@ -286,7 +286,7 @@ export class ReaderComponent implements OnDestroy {
     this.stopSandbox?.();
     if (this.hideTimer) clearTimeout(this.hideTimer);
     void this.progress.flush();
-    void this.navigator?.destroy();
+    if (this.navigator) void destroyNavigator(this.navigator, this.pageHost().nativeElement);
     this.api.release(this.target().itemId);
   }
 

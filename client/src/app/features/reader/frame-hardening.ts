@@ -15,6 +15,13 @@ export function sandboxContentFrames(container: HTMLElement): () => void {
   return () => observer.disconnect();
 }
 
+/** Readium waits for the shown frame to ack its hide before unmounting it, and a frame out of the page never
+ *  answers: taken out first, every frame is torn down and its observers disconnected. */
+export function destroyNavigator(navigator: { destroy(): Promise<void> }, container: HTMLElement): Promise<void> {
+  container.querySelectorAll('iframe').forEach((f) => f.remove());
+  return navigator.destroy();
+}
+
 type SelectorWindow = Window & {
   _readium_cssSelectorGenerator?: { getCssSelector: typeof getCssSelector };
 };
