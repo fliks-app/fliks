@@ -189,7 +189,10 @@ fn call<T>(
     }
     // SAFETY: `limits` makes only async-signal-safe calls between fork and exec.
     unsafe { cmd.pre_exec(limits) };
-    let mut child = cmd.spawn().map_err(|_| Error::Corrupt)?;
+    let mut child = cmd.spawn().map_err(|e| {
+        tracing::warn!("comic archive child cannot start: {e}");
+        Error::Corrupt
+    })?;
     let pid = child.id() as libc::pid_t;
     // `reaped` is set, under its lock, before the child is waited for: the watcher kills only while
     // the pid is still ours, so a reused pid is never hit.
@@ -218,10 +221,15 @@ fn call<T>(
     let parsed = parse(&mut pipe);
     let over = pipe.limit() == 0;
     *reaped.lock().unwrap_or_else(|e| e.into_inner()) = true;
+    let exited = child.try_wait().ok().flatten();
     let _ = child.kill();
     let _ = child.wait();
     match parsed {
         Ok(_) if over => Err(Error::TooLarge),
+        Err(Error::Corrupt) => {
+            tracing::warn!("comic archive child {op} gave no answer (exit {exited:?})");
+            Err(Error::Corrupt)
+        }
         r => r,
     }
 }
