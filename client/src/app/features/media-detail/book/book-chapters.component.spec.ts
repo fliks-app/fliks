@@ -3,7 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it } from 'vitest';
 import {
   audioEditionFixture, bookChaptersFixture, bookDetailFixture,
-} from '../../../core/services/api/books.fixtures';
+} from '../../../testing/books.fixtures';
 import { BookChaptersComponent } from './book-chapters.component';
 import { bookSpecProviders } from './book-test-setup';
 

@@ -16,7 +16,7 @@ import { ProviderAttributionComponent } from '../../../shared/components/provide
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
-import { asBookMedia } from './book-media';
+import { asBookMedia } from '../../../core/services/api/book-media';
 import { BookSourcesComponent } from './book-sources.component';
 import { BookWantsComponent } from './book-wants.component';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';

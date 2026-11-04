@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Media } from '../../../core/services/api/media.service';
-import { audioEditionFixture, bookDetailFixture, textEditionFixture } from '../../../core/services/api/books.fixtures';
-import { asBookMedia, editionFileNames, editionLabel, formatClock } from './book-media';
+import type { Media } from './media.service';
+import { audioEditionFixture, bookDetailFixture, textEditionFixture } from '../../../testing/books.fixtures';
+import { asBookMedia, editionFileNames, editionLabel } from './book-media';
 
 describe('book-media', () => {
   it('narrows only a book that carries its detail', () => {
@@ -11,12 +11,6 @@ describe('book-media', () => {
     expect(asBookMedia({ ...book, book: { authors: [] } } as unknown as Media)).toBeNull();
     expect(asBookMedia({ ...book, type: 'movie' } as unknown as Media)).toBeNull();
     expect(asBookMedia(null)).toBeNull();
-  });
-
-  it('formats a clock', () => {
-    expect(formatClock(59)).toBe('0:59');
-    expect(formatClock(1800)).toBe('30:00');
-    expect(formatClock(36000 + 61)).toBe('10:01:01');
   });
 
   it('names the files of an edition', () => {

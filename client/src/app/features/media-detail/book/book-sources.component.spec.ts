@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it } from 'vitest';
-import { bookDetailFixture, bookSourcesFixture } from '../../../core/services/api/books.fixtures';
+import { bookDetailFixture, bookSourcesFixture } from '../../../testing/books.fixtures';
 import { BookSourcesComponent } from './book-sources.component';
 import { bookSpecProviders } from './book-test-setup';
 

@@ -6,7 +6,7 @@ import { Router, provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { PersonsComponent } from './persons';
-import { personListItemFixture } from '../../core/services/api/books.fixtures';
+import { personListItemFixture } from '../../testing/books.fixtures';
 
 describe('PersonsComponent book mode', () => {
   it('lists the authors with their work count and keeps the role in the links', async () => {

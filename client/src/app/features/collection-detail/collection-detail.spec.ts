@@ -6,7 +6,7 @@ import { ActivatedRoute, provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { CollectionDetailComponent } from './collection-detail';
-import { collectionDetailFixture } from '../../core/services/api/books.fixtures';
+import { collectionDetailFixture } from '../../testing/books.fixtures';
 
 describe('CollectionDetailComponent', () => {
   async function setup() {

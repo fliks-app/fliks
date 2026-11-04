@@ -43,7 +43,7 @@
     <label class="flex flex-col gap-1 text-sm">
       {{ 'books_work.provider' | translate }}
       <select class="select select-sm" (change)="provider.set($any($event.target).value)">
-        @for (p of providers; track p) {
+        @for (p of providers(); track p) {
           <option [value]="p" [selected]="p === provider()">{{ p }}</option>
         }
       </select>

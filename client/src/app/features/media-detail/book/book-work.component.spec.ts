@@ -10,13 +10,13 @@ import { PlaybackQueueService } from '../../../core/services/playback-queue.serv
 import {
   bookChaptersFixture, bookDetailFixture, bookSourcesFixture, collectionDetailFixture, personWorksFixture,
   textEditionFixture,
-} from '../../../core/services/api/books.fixtures';
+} from '../../../testing/books.fixtures';
 import type { BookDetail } from '../../../core/services/api/books.models';
 import type { Media } from '../../../core/services/api/media.service';
 import { BookWorkComponent } from './book-work.component';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 import { bookSpecProviders } from './book-test-setup';
-import type { BookMedia } from './book-media';
+import type { BookMedia } from '../../../core/services/api/book-media';
 
 @Component({ selector: 'app-book-works-row', template: '' })
 class RowStub {

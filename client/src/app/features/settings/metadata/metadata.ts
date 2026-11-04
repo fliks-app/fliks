@@ -19,7 +19,6 @@ const KINDS = ['movie', 'series', 'book', 'comic', 'album'] as const;
 const DEFAULT_ORDER: Record<string, string[]> = {
   movie: ['tmdb', 'tvdb'],
   series: ['tmdb', 'tvdb'],
-  book: ['openlibrary', 'bnf', 'googlebooks', 'audible', 'audnexus'],
 };
 const orderKey = (kind: string) => `metadata.provider_order.${kind}`;
 

@@ -3,7 +3,8 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookChapter, BookEdition } from '../../../core/services/api/books.models';
 import { CollapsibleSectionComponent } from '../../../shared/components/collapsible-section/collapsible-section';
-import { editionLabel, formatClock } from './book-media';
+import { editionLabel } from '../../../core/services/api/book-media';
+import { formatTime } from '../../../core/utils/player.utils';
 
 /** Chapters of one of the audio editions that has a file; hidden when the edition has none. */
 @Component({
@@ -26,7 +27,7 @@ export class BookChaptersComponent {
     return audio.find((e) => e.id === this.picked())?.id ?? audio[0]?.id ?? null;
   });
 
-  protected readonly clock = formatClock;
+  protected readonly clock = formatTime;
   protected readonly label = editionLabel;
 
   constructor() {
