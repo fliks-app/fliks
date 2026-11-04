@@ -1,6 +1,6 @@
 # HTTP parity
 
-Scenarios replayed against `fliks-server`. A behaviour change edits the `expect`s it affects. CI runs all of it (`parity` jobs of `.github/workflows/server.yml`, one per mode and shard, not required): `PGHOST` set makes `run-all.sh` and the runner use the local `psql` and the `PG*` environment.
+Scenarios replayed against `fliks-server`. A behaviour change edits the `expect`s it affects. CI runs all of it (`.github/workflows/parity.yml`, nightly, on a PR labelled `parity` or by hand; one job per mode and shard, not required): `PGHOST` set makes `run-all.sh` and the runner use the local `psql` and the `PG*` environment.
 Locally it needs docker (a PostgreSQL container, `fliks-postgres-1` unless `PARITY_PG` names another), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
 
 ## Run everything
