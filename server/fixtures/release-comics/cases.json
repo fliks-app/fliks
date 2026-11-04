@@ -1,0 +1,671 @@
+{
+"cases": [
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"group": "Zone-Empire",
+"kind": "issue",
+"number": "3",
+"scan": false,
+"series": "Star Gardens",
+"year": 2024
+},
+"format": "cbz",
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens 003 (2024) (Digital) (Zone-Empire).cbz"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"group": "Nitro",
+"kind": "issue",
+"number": "12",
+"of": 12,
+"scan": false,
+"series": "Star Gardens",
+"year": 2023
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens #12 (of 12) (2023) (Digital) (Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"group": "Nitro",
+"kind": "annual",
+"number": "2",
+"scan": false,
+"series": "Star Gardens",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens Annual 002 (2024) (Digital) (Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"group": "Midnight",
+"kind": "issue",
+"number": "4",
+"scan": true,
+"series": "Star Gardens",
+"volume": 2,
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens v2 004 (2024) (Scan) (Midnight)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": true,
+"group": "Nitro",
+"kind": "issue",
+"scan": false,
+"series": "Star Gardens",
+"volume": 3,
+"year": 2023
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens TPB Vol 3 (2023) (Digital) (Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": true,
+"group": "Nitro",
+"kind": "issue",
+"scan": false,
+"series": "Star Gardens",
+"year": 2022
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens 001-012 (2022) (Digital) (Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"group": "GRP",
+"kind": "issue",
+"number": "5",
+"scan": false,
+"series": "Star Gardens",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star.Gardens.005.2024.Digital-GRP"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": true,
+"collected": false,
+"digital": false,
+"group": "Nitro",
+"kind": "issue",
+"number": "1.5",
+"scan": false,
+"series": "Star Gardens",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens 001.5 (2024) (c2c) (Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"kind": "issue",
+"number": "-1",
+"scan": false,
+"series": "Star Gardens",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star Gardens -1 (2024) (Digital)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"group": "Nitro",
+"kind": "special",
+"number": "1",
+"scan": false,
+"series": "Moon Tales",
+"year": 2021
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales Special 001 (2021) (Digital) (Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": true,
+"kind": "issue",
+"scan": false,
+"series": "Moon Tales",
+"year": 2021
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales Omnibus (2021) (Digital)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "7",
+"scan": false,
+"series": "Moon Tales"
+},
+"format": "cbr",
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 303,
+"name": "CBR",
+"rank": 20,
+"resolution": 0,
+"source": "cbr"
+}
+},
+"input": {
+"title": "Moon Tales 007 cbr"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "7",
+"scan": false,
+"series": "Moon Tales"
+},
+"format": "pdf",
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 305,
+"name": "PDF",
+"rank": 10,
+"resolution": 0,
+"source": "pdf"
+}
+},
+"input": {
+"title": "Moon Tales 007 PDF"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"number": "7",
+"of": 12,
+"scan": false,
+"series": "Moon Tales",
+"year": 2020
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales 007 of 012 (2020)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"kind": "issue",
+"number": "1",
+"scan": false,
+"series": "Special Forces",
+"year": 2019
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Special Forces 001 (2019) (Digital)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": false,
+"kind": "issue",
+"scan": false,
+"series": "Moon Tales",
+"year": 2020
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales Hardcover (2020)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": false,
+"kind": "issue",
+"scan": false,
+"series": "Moon Tales",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales 2024"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"group": "Nitro",
+"kind": "issue",
+"number": "9",
+"scan": false,
+"series": "Star Gardens",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Star_Gardens_009_(2024)_(Digital)_(Nitro)"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": false,
+"digital": true,
+"kind": "issue",
+"number": "3",
+"scan": false,
+"series": "Moon Tales",
+"year": 2024
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales 003 2024 Digital"
+}
+},
+{
+"expected": {
+"comic": {
+"c2c": false,
+"collected": true,
+"digital": false,
+"kind": "issue",
+"scan": false,
+"series": "Moon Tales",
+"volume": 2,
+"year": 2020
+},
+"format": null,
+"language": {
+"id": 1,
+"iso639_2": [
+"eng"
+],
+"isoCode": "en",
+"name": "English"
+},
+"quality": {
+"id": 302,
+"name": "CBZ",
+"rank": 30,
+"resolution": 0,
+"source": "cbz"
+}
+},
+"input": {
+"title": "Moon Tales Vol. 2 (2020)"
+}
+}
+]
+}

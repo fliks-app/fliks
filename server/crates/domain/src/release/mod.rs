@@ -1,6 +1,8 @@
 //! Release-name parsing and scoring (`docs/spec/release.md`).
 pub mod audio;
 pub mod book;
+pub mod comic;
+pub mod image;
 pub mod parsing;
 pub mod scene;
 pub mod scoring;
