@@ -3,23 +3,17 @@
 #
 # Triggers:
 #   - release tag `v*` (from release-please) → attaches DMG to the release
-#   - push to main / manual workflow_dispatch → uploads artifact for testing
+#   - nightly on main / manual workflow_dispatch → uploads artifact for testing
 #
 # Sibling of windows-installer.yml. Keep the two in sync.
 name: Build macOS server
 
 on:
-  # main seeds the caches: a tag or another branch can't restore a cache saved on a tag.
-  # Path filters don't apply to tag pushes.
   push:
-    branches: [main]
     tags: ['v*']
-    paths:
-      - 'macos/**'
-      - 'client/**'
-      - 'server/**'
-      - '!server/**/*.md'
-      - '.github/workflows/macos-server-dmg.yml'
+  # The nightly run on main seeds the caches a tag restores; every merge would cost 13 macOS minutes.
+  schedule:
+    - cron: '30 2 * * *'
   workflow_dispatch:
 
 # A main run must finish to save the caches.
