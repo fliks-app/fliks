@@ -18,6 +18,9 @@ RUN npx ng build --configuration=production
 # while a BuildKit cache mount is lost with the runner.
 FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.0-bookworm AS server-chef
 WORKDIR /server
+# libarchive2-sys builds libarchive with cmake, generates its bindings with libclang and links these libraries.
+RUN apt-get update && apt-get install -y --no-install-recommends cmake libclang-dev liblz4-dev libacl1-dev \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM server-chef AS server-plan
 COPY server/ .
@@ -65,6 +68,7 @@ FROM ${ENGINE_IMAGE} AS server-dev
 ENTRYPOINT []
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
+    cmake libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev zlib1g-dev \
   && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
   && cargo install cargo-watch --locked \
   && cargo install sqlx-cli --locked --no-default-features --features rustls,postgres \

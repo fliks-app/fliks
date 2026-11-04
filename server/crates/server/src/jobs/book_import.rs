@@ -379,7 +379,7 @@ async fn plan(st: &AppState, id: i32, job: &Job) -> Result<(), String> {
         let r = root.clone();
         let all = tokio::task::spawn_blocking(move || {
             let mut out = vec![];
-            disk::collect(&r, 0, true, &mut out);
+            disk::collect(&r, 0, true, false, &mut out);
             out
         })
         .await

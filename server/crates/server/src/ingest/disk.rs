@@ -1,6 +1,6 @@
 //! Disk import routes (`ingest.md` rules 60-93): orphan scan, preview, relink and its batch.
 use super::{
-    MediaRow, books, fsx, is_video,
+    MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
     load_media, naming_formats,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
@@ -143,8 +143,8 @@ struct Group {
 
 /// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only. Book
 /// files, when the library takes books, are read one level deeper and never through a link.
-pub(crate) fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBuf>) {
-    if depth > if book { BOOK_DEPTH } else { 3 } {
+pub(crate) fn collect(dir: &Path, depth: usize, book: bool, comic: bool, out: &mut Vec<PathBuf>) {
+    if depth > if book || comic { BOOK_DEPTH } else { 3 } {
         return;
     }
     let Ok(rd) = fs::read_dir(dir) else {
@@ -160,7 +160,7 @@ pub(crate) fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBu
             if !(depth > 0 && is_bonus_dir(&name)) {
                 subdirs.push(e.path());
             }
-        } else if book && books::is_book_file(&name) {
+        } else if (book && books::is_book_file(&name)) || (comic && comics::is_comic_file(&name)) {
             if kind.is_ok_and(|t| t.is_file()) {
                 out.push(e.path());
             }
@@ -173,7 +173,7 @@ pub(crate) fn collect(dir: &Path, depth: usize, book: bool, out: &mut Vec<PathBu
         }
     }
     for s in subdirs {
-        collect(&s, depth + 1, book, out);
+        collect(&s, depth + 1, book, comic, out);
     }
 }
 
@@ -217,15 +217,22 @@ async fn scan_under(
     let key = format!("OrphanScan:{root}");
     let r = PathBuf::from(root);
     let book = types.contains(&MediaKind::Book);
+    let comic = types.contains(&MediaKind::Comic);
     let all = tokio::task::spawn_blocking(move || {
         let mut out = vec![];
-        collect(&r, 0, book, &mut out);
+        collect(&r, 0, book, comic, &mut out);
         out
     })
     .await
     .unwrap_or_default();
-    let (book_files, video): (Vec<&PathBuf>, Vec<&PathBuf>) =
-        all.iter().partition(|p| books::is_book_file(&file_name(p)));
+    // A library that takes books keeps `.cbz` and `.pdf` as books; a comic-only one reads them as comics.
+    let comic_only = comic && !book;
+    let (book_files, rest): (Vec<&PathBuf>, Vec<&PathBuf>) = all
+        .iter()
+        .partition(|p| !comic_only && books::is_book_file(&file_name(p)));
+    let (comic_files, video): (Vec<&PathBuf>, Vec<&PathBuf>) = rest
+        .into_iter()
+        .partition(|p| comic && comics::is_comic_file(&file_name(p)));
     let unlinked: Vec<&PathBuf> = video
         .into_iter()
         .filter(|p| !linked.contains_key(*p))
@@ -312,6 +319,9 @@ async fn scan_under(
     let works = book_groups(root_p, folder_id, provider, &book_files, linked).await;
     orphan_count += works.iter().map(|g| g.files.len()).sum::<usize>();
     groups.extend(works);
+    let volumes = comic_groups(root_p, folder_id, provider, &comic_files, linked).await;
+    orphan_count += volumes.iter().map(|g| g.files.len()).sum::<usize>();
+    groups.extend(volumes);
     progress(st, &key, root, total, total);
     st.hub.activity().remove(&key);
     Scanned {
@@ -412,6 +422,63 @@ async fn book_groups(
             folder_name: w.anchor.unwrap_or_default(),
             guess_title: w.title,
             guess_year: w.year.map(i64::from),
+            nfo: None,
+            suggested_provider: provider.to_owned(),
+            files: entries,
+        });
+    }
+    out
+}
+
+/// The volumes the comic files make: the folder holding a file, a file at the root its own volume.
+/// Only volumes with a file still unlinked are listed.
+async fn comic_groups(
+    root: &Path,
+    folder_id: Option<i32>,
+    provider: &str,
+    files: &[&PathBuf],
+    linked: &HashMap<PathBuf, String>,
+) -> Vec<Group> {
+    let mut by_volume: std::collections::BTreeMap<String, Vec<&PathBuf>> = Default::default();
+    for p in files {
+        let Some(rel) = fsx::rel_under(root, p) else {
+            continue;
+        };
+        let dir = rel.rsplit_once('/').map_or(rel.as_str(), |d| d.0);
+        by_volume.entry(dir.to_owned()).or_default().push(p);
+    }
+    let mut out = vec![];
+    for (dir, paths) in by_volume {
+        if paths.iter().all(|p| linked.contains_key(*p)) {
+            continue;
+        }
+        let at_root = !paths
+            .iter()
+            .any(|p| fsx::rel_under(root, p).is_some_and(|r| r.contains('/')));
+        let mut entries = vec![];
+        for p in paths.iter().filter(|p| !linked.contains_key(**p)) {
+            entries.push(FileEntry {
+                file_path: p.to_string_lossy().into_owned(),
+                filename: file_name(p),
+                size: tokio::fs::metadata(p).await.map_or(0, |m| m.len()),
+                quality_name: "",
+                quality_id: 0,
+                season_number: None,
+                episode_number: None,
+                episode_end: None,
+            });
+        }
+        let first = PathBuf::from(&entries[0].file_path);
+        let guess = fliks_domain::comics::name::parse_path(
+            &fsx::rel_under(root, &first).unwrap_or_default(),
+        );
+        out.push(Group {
+            folder_id,
+            group_key: format!("comic:{dir}"),
+            media_type: MediaKind::Comic,
+            folder_name: if at_root { String::new() } else { dir },
+            guess_title: guess.volume,
+            guess_year: guess.year.map(i64::from),
             nfo: None,
             suggested_provider: provider.to_owned(),
             files: entries,
@@ -678,7 +745,7 @@ fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppErro
         }
     }
     match media_type {
-        MediaKind::Book => validate_folder_path(name),
+        MediaKind::Book | MediaKind::Comic => validate_folder_path(name),
         _ => validate_folder_name(name),
     }
     .map(str::to_owned)

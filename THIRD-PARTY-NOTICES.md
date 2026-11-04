@@ -28,6 +28,7 @@ Fliks rather than linked into it.
 | ffsubsync (PyPI) | MIT | https://github.com/smacke/ffsubsync |
 | alass (amd64 only, upstream release binary) | GPL-3.0 | https://github.com/kaegi/alass |
 | Chromaprint (`libchromaprint-tools`) | LGPL-2.1-or-later | https://github.com/acoustid/chromaprint |
+| libarchive (built into `fliks-server` on Linux through `libarchive2-sys`, reads CB7 and CBR) | BSD-2-Clause | https://www.libarchive.org |
 | Node.js runtime (NodeSource) | MIT | https://github.com/nodejs/node |
 | PostgreSQL client (PGDG archive) | PostgreSQL License | https://www.postgresql.org |
 

@@ -93,3 +93,5 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mimalloc = "0.1"
+# libarchive links system libraries and needs cmake and libclang: only the Linux (Docker) build carries it.
+libarchive2 = "0.2"

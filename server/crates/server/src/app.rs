@@ -148,6 +148,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         playback::toggle_series_watched,
         playback::toggle_season_watched,
         crate::books::resource,
+        crate::comics::pages,
+        crate::comics::page,
         crate::opds::root,
         crate::opds::library,
         crate::opds::recent,
@@ -455,6 +457,7 @@ fn api() -> Router<AppState> {
         .merge(qoe::router())
         .merge(crate::stream::router())
         .merge(crate::books::router())
+        .merge(crate::comics::router())
         .merge(crate::opds::router())
         .merge(libraries::router())
         .merge(images::router())

@@ -1,6 +1,6 @@
 # Spec: comics in the catalogue
 
-Scope: what the `comic` kind adds to the data model and to the media payloads: the kind and its family, a volume and its issues, `comic_details`, `comic_issues`, the wire shapes of the detail and the list. Archive ingest, the page routes, `ComicInfo.xml` and file-name parsing, metadata providers, acquisition, OPDS and the reader are later work (`plans/books-audiobooks.plan.md`, phase 7). The wire contract shared with the client is `plans/comics-contract.md`; the migration is `1789000000700_comics.sql`.
+Scope: what the `comic` kind adds to the data model and to the media payloads: the kind and its family, a volume and its issues, `comic_details`, `comic_issues`, the wire shapes of the detail and the list. Archive ingest and the page routes are the last two sections. `ComicInfo.xml` and file-name parsing, metadata providers, acquisition, OPDS and the reader are later work (`plans/books-audiobooks.plan.md`, phase 7). The wire contract shared with the client is `plans/comics-contract.md`; the migration is `1789000000700_comics.sql`.
 
 ## Kind and families
 
@@ -25,6 +25,30 @@ Keys absent for other kinds: a movie, series or book payload carries no `comic` 
 11. A list item of `GET /api/media?type=comic` and of the recently-added list carries `comic: {publisher, startYear, issueCount, readCount}`: the issues of the volume in the readable editions, and the ones the caller completed. Other lists (collections, playlists) carry none yet.
 12. A comic counts in `GET /api/media/counts` and `GET /api/counts` under `comics`, in a user's `comicQuotaLimit` (read and written like `bookQuotaLimit`, `users.md` rule 19) and in the social stats as `comicsFinished`, the number of volumes finished (rule 13).
 13. A comic is `watched` (and finished) when it has an issue with a part and every issue with a part is completed, the series rule (`media-query.md` rule 20) over its ungrouped items; its `progressPercent` is 100 then, else the progress of the most recently played unfinished issue.
+
+## Ingest
+
+15. A comic library (`"comic"` in `libraries."mediaTypes"`) owns the files whose extension is `cbz`, `cb7`, `cbr` or `pdf`. One file is one issue; the folder holding it is the volume (a file at the library root is a volume of its own). A library that also takes books keeps `.cbz` and `.pdf` as books (`book-ingest.md`): comic files are then `cb7` and `cbr` only. In a book library a `.cbz` stays a `text` file.
+16. The orphan scan lists one group per volume, `media_type` `comic`, `group_key` `comic:<folder>`, the folder as `folder_name`, the title and year from `fliks_domain::comics::name::parse_path` (the folder name without its bracketed groups, a `(2016)` year). That function also reads the issue from the file name: the last standalone number (`001`, `#1.5`, `-1`, canonical decimal text, leading zeros dropped) is `label` and `sort`; no number gives the file stem and `0`; the word `annual` or `special` sets `kind`. It is the one place the file-name parser of the metadata PR replaces.
+17. `register` writes the `media_files` row (`quality` = the format), then in one transaction, under the media's versions lock: the volume's `image` edition (created when missing), an ungrouped item and a `comic_issues` row per new file (`kind`, `sortNumber`, `label`, `pageCount`), and its `item_parts` row. A file already linked to an item is left alone.
+18. An issue is addressed by `("mediaId", kind, "sortNumber")`: a file whose key matches an existing issue, a variant cover or a second scan of the number, becomes the next `version` of that issue's item, never another issue. An issue whose file was removed keeps its item and takes the next file of its key.
+19. `editions.format` is set when every part file has the same format, else left NULL; the format of an issue is that of its part file (its extension).
+20. `pageCount` is the number of page entries of an archive, read from the entry list, NULL for a PDF (not paged by the server) and for an archive that cannot be read. The volume's poster, when it has none, is the first page (natural order) of the lowest issue, as a JPEG of at most 1000 px, stored like a book cover. A PDF has no cover.
+21. A comic file enqueues no video or audio job: the post-import enrich, the subtitle scheduler, the sprite and marker settle all skip the `image` family. A comic rescan refreshes the rows and the page count of changed files and registers the new ones, as a book rescan does.
+
+## Archives
+
+22. The format is read from the magic bytes, never the extension: a zip (a `.cbr` that is really a zip too) is read with the `zip` crate; 7z and RAR with libarchive, built and linked on Linux only (the Docker image; other platforms answer `Unsupported`). Nothing is extracted: entries are read into memory, in order, and no libarchive call touches the filesystem.
+23. A page is a regular entry whose extension is `jpg`, `jpeg`, `png`, `webp` or `gif`. Directories, symlinks, hardlinks, devices, hidden entries (a segment starting with `.`), `__MACOSX`, names with a NUL, a leading `/`, a drive letter, an empty or `.` or `..` segment, and every other extension (nested archives included) are not pages. A backslash is a separator. Pages are in natural order (digit runs compare as numbers, case ignored); the entry name is only a key.
+24. Limits, enforced while reading and not only from declared sizes: 20 000 entries, 5 000 pages, 64 MiB per entry, 2 GiB decompressed per operation (a solid block is counted), uncompressed over compressed at most 100 (1 MiB floor) per zip entry and over the file for 7z and RAR. Over a limit the archive is `TooLarge` (413). Encrypted entries, an unreadable archive, no page, a PDF: 422.
+25. Every decode goes through `image::Limits` and a 25 million pixel cap; a corrupt or oversized page is an error for that page only (the page list keeps its index with `0 x 0`), never a panic. Decoding runs on the blocking pool, three at a time.
+
+## Pages
+
+26. `GET /api/comics/:itemId/pages` answers `{ pages: [{ width, height }] }` and `GET /api/comics/:itemId/pages/:index?width=<px>` the page, 0-based. Both take `StreamAuthed` (cookie, bearer or the `?token=` playback credential, scoped tokens included) and `media.read`. The file is the first part of the highest version of the issue (`books-reader.md` rule 1 with `comic_issues` and an `image` edition); a missing or hidden issue is `404 Item #<id> not found`, a PDF part `404 Issue #<id> is a PDF`, an index out of range `404 Page not found`.
+27. Without `width` the original bytes are served when the content sniffs as jpeg, png, webp or gif (the sniffed type, never the entry's name), else the page is re-encoded; with `width` (1 to 4096, else 400) it is downscaled to it, never upscaled, as JPEG. Answers carry `X-Content-Type-Options: nosniff` and a CSP of `default-src 'none'; sandbox`.
+28. `ETag` = file row, size, mtime, index and width; `If-None-Match` answers 304 before any archive work. A page is `Cache-Control: private, max-age=31536000, immutable`, the list `private, no-cache`. There is no server-side page cache.
+29. Progress is the existing playback state (`plans/comics-contract.md`, Progress); the server adds nothing.
 
 ## Migration
 

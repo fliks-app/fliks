@@ -116,7 +116,7 @@ pub async fn ingest(
     if req.files.is_empty() {
         return Ok(out);
     }
-    let book = media.media_type == MediaKind::Book;
+    let book = super::comics::registers(media.media_type);
     let root = fsx::Root::open(&folder.path)
         .map_err(|e| format!("Library root \"{}\": {e}", folder.path))?;
     let mdir = media.dir_in(&root)?;
@@ -125,7 +125,7 @@ pub async fn ingest(
         .await
         .map_err(|e| e.to_string())?;
     let chosen = select(&media, std::mem::take(&mut req.files)).await;
-    let parts = if book {
+    let parts = if media.media_type == MediaKind::Book {
         book_parts(&chosen)
     } else {
         Default::default()
@@ -134,8 +134,13 @@ pub async fn ingest(
     for f in chosen {
         // A book's files go to the folder of their family (`book-ingest.md` rule 8).
         let target = if book {
-            match books::classify(&file_name(&f.path)) {
-                Some((family, _)) => {
+            let family = if media.media_type == MediaKind::Comic {
+                Some(Family::Image)
+            } else {
+                books::classify(&file_name(&f.path)).map(|c| c.0)
+            };
+            match family {
+                Some(family) => {
                     books::folder_for(&st.db, media.id, family, req.language.as_deref())
                         .await
                         .map_err(|e| e.to_string())?
@@ -209,7 +214,14 @@ pub async fn ingest(
                 abs: p.abs.clone(),
             })
             .collect();
-        let reg = books::register_language(st, media.id, &files, req.language.as_deref()).await?;
+        let reg = super::comics::register_files(
+            st,
+            media.media_type,
+            media.id,
+            &files,
+            req.language.as_deref(),
+        )
+        .await?;
         out.errors.extend(reg.conflicts);
         for r in reg.files {
             let Some((_, source)) = placed.iter().find(|(p, _)| p.rel == r.rel) else {
@@ -271,7 +283,7 @@ pub async fn ingest(
 
 /// Rule 19 (largest file by its real size; on a tie the later one) unless a series season pack.
 async fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
-    if (media.has_seasons() && files.len() > 1) || media.media_type == MediaKind::Book {
+    if (media.has_seasons() && files.len() > 1) || super::comics::registers(media.media_type) {
         return files;
     }
     let mut best: Option<(u64, File)> = None;
@@ -419,7 +431,7 @@ impl Ctx<'_> {
                 "{name}: source is not a regular file"
             )));
         };
-        if !books::is_book_file(&name) {
+        if !books::owns(self.media.media_type, &name) {
             return Ok(Placed::Error(format!("{name}: not a book file")));
         }
         let m = self.media;
@@ -479,6 +491,7 @@ impl Ctx<'_> {
             }
             if let Some(rel) = fsx::rel_under(self.root.path(), &dest)
                 && self.req.language.is_none()
+                && m.media_type == MediaKind::Book
                 && !books::is_own_work(&self.st.db, m.id, pending, &rel)
                     .await
                     .map_err(|e| e.to_string())?

@@ -115,7 +115,7 @@ fn walk(
         }
         let n = e.file_name().to_string_lossy().into_owned();
         let regular = match kind {
-            MediaKind::Book => e.file_type().is_ok_and(|t| t.is_file()),
+            MediaKind::Book | MediaKind::Comic => e.file_type().is_ok_and(|t| t.is_file()),
             _ => fs::metadata(&path).is_ok_and(|m| m.is_file()),
         };
         if !super::books::owns(kind, &n) || !regular {
@@ -136,7 +136,7 @@ async fn rescan_folders(
 ) -> Result<Vec<crate::libraries::Folder>, AppError> {
     let mut ids: Vec<i32> = rows.iter().map(|r| r.folder_id).collect();
     ids.extend(media.folder.iter().map(|f| f.id));
-    if media.media_type == MediaKind::Book {
+    if super::comics::registers(media.media_type) {
         ids.extend(super::books::want_folders(&st.db, media.id).await?);
     }
     Ok(sqlx::query!(
@@ -249,7 +249,7 @@ pub async fn rescan_files(
             .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
             .collect();
         applied = async {
-            if media.media_type == MediaKind::Book {
+            if super::comics::registers(media.media_type) {
                 return book_pass(st, &m, &base, &kept, &disk, &linked, &mut c).await;
             }
             refresh_existing(st, &m, &base, &kept, &slots, &mut c, &mut touched).await?;
@@ -270,7 +270,7 @@ pub async fn rescan_files(
     }
     // A stamped row must get its embedded detection even when a later step failed.
     // An interrupted walk proves nothing about the sidecars on disk.
-    if media.media_type != MediaKind::Book {
+    if !super::comics::registers(media.media_type) {
         reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
     }
     applied?;
@@ -313,9 +313,12 @@ async fn book_pass(
         })
         .collect();
     let refs: Vec<&super::books::KnownFile> = known.iter().collect();
-    c.updated += super::books::refresh(st, base, &refs)
-        .await
-        .map_err(AppError::internal)?;
+    c.updated += if media.media_type == MediaKind::Comic {
+        super::comics::refresh(st, base, &refs).await
+    } else {
+        super::books::refresh(st, base, &refs).await
+    }
+    .map_err(AppError::internal)?;
     let Some(folder) = media.folder.as_ref() else {
         return Ok(());
     };
@@ -347,7 +350,7 @@ async fn book_pass(
     let reg = if fresh.is_empty() {
         super::books::Registration::default()
     } else {
-        super::books::register(st, media.id, &fresh)
+        super::comics::register_files(st, media.media_type, media.id, &fresh, None)
             .await
             .map_err(AppError::internal)?
     };
@@ -355,6 +358,7 @@ async fn book_pass(
         tracing::warn!("Rescan[media #{}]: {why}", media.id);
     }
     if reg.files.is_empty()
+        && media.media_type == MediaKind::Book
         && let Err(e) = super::books::relay(st, media.id).await
     {
         tracing::warn!("Rescan[media #{}]: {e}", media.id);
@@ -1087,14 +1091,14 @@ pub async fn locate_in_place(
     let named = media.folder_name.as_deref().filter(|f| !f.is_empty());
     let rel = named.map_or_else(|| inner.clone(), |f| format!("{f}/{inner}"));
     if !super::books::owns(media.media_type, &file_name(&real)) {
-        return Ok(Err(if media.media_type == MediaKind::Book {
+        return Ok(Err(if super::comics::registers(media.media_type) {
             "not a book file"
         } else {
             "not a video file"
         }
         .into()));
     }
-    if named.is_none() && inner.contains('/') && media.media_type != MediaKind::Book {
+    if named.is_none() && inner.contains('/') && !super::comics::registers(media.media_type) {
         return Ok(Err(
             "a title with no folder can only own files at the library root".into(),
         ));
