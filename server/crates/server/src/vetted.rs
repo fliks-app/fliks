@@ -39,7 +39,8 @@ pub async fn client_for(url: &Url, base: reqwest::ClientBuilder) -> Result<Clien
         return Err("Refused: only http and https are allowed".into());
     }
     let (host, addrs) = resolve(url).await?;
-    base.redirect(redirect::Policy::none())
+    base.no_proxy()
+        .redirect(redirect::Policy::none())
         .resolve_to_addrs(&host, &addrs)
         .build()
         .map_err(|e| e.to_string())

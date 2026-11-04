@@ -7,6 +7,7 @@ use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
 use crate::state::AppState;
+use fliks_domain::media::family::Family;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
@@ -193,7 +194,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                let family = family.map(super::served).transpose()?;
+                let family = family.map(Family::from);
                 super::acquisition::context(&app, media_id, family, language, group_id, item_id)
                     .await
             }
@@ -256,7 +257,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                let family = family.map(super::served).transpose()?;
+                let family = family.map(Family::from);
                 super::acquisition::score_any(&app, media_id, family, language, unit, releases)
                     .await
             }

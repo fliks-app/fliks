@@ -75,11 +75,6 @@ impl From<runtime::fliks::plugin::types::Family> for Family {
     }
 }
 
-/// The family of a call naming one work: every family is served.
-pub fn served(f: runtime::fliks::plugin::types::Family) -> Result<Family, HostError> {
-    Ok(Family::from(f))
-}
-
 /// The 15 s a caller (boot, enable, confirm, restart) waits for `ready` (rules 23, 41).
 pub const READY_WAIT: Duration = Duration::from_secs(15);
 
@@ -660,7 +655,7 @@ mod kind_tests {
             (w::Family::Text, Family::Text),
             (w::Family::Image, Family::Image),
         ] {
-            assert_eq!(served(wit).unwrap(), f);
+            assert_eq!(Family::from(wit), f);
         }
     }
 }
