@@ -1,5 +1,6 @@
 //! Emulated Kobo store API (`docs/spec/kobo.md`), authenticated by a `kobo` device token in the path.
 mod books;
+mod download;
 mod proxy;
 mod resources;
 mod shelves;
@@ -70,6 +71,7 @@ pub fn router() -> Router<AppState> {
             "/{token}/{uuid}/{w}/{h}/{quality}/{grey}/image.jpg",
             only(get(books::cover_quality)),
         )
+        .route("/{token}/download/{uuid}/kepub", only(get(download::kepub)))
         .route("/{token}/v1/{*rest}", any(proxy::fallback))
         .fallback(unknown);
     Router::new().nest("/kobo", inner)

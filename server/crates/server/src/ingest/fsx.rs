@@ -161,6 +161,18 @@ pub fn rel_under(dir: &Path, abs: &Path) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join("/"))
 }
 
+/// `abs` resolved through symlinks, if it still sits under `folder`; the disk reads run off the runtime.
+pub async fn contained(folder: &str, abs: PathBuf) -> Option<PathBuf> {
+    let folder = folder.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let real = dunce::canonicalize(abs).ok()?;
+        real.starts_with(dunce::canonicalize(folder).ok()?)
+            .then_some(real)
+    })
+    .await
+    .ok()?
+}
+
 /// A source file: resolved through symlinks and required to be a regular file.
 pub fn regular_source(p: &Path) -> io::Result<(PathBuf, fs::Metadata)> {
     let real = dunce::canonicalize(p)?;

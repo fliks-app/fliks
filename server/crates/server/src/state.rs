@@ -34,6 +34,8 @@ pub struct AppState {
     pub sse_tickets: Arc<crate::events::Tickets>,
     /// Base URL of the Kobo store the proxy forwards to; only a test harness sets another.
     pub kobo_store: Arc<str>,
+    /// Where converted KEPUB files live; `None` is `<cache dir>/kepub`, only a test harness sets one.
+    pub kepub_cache: Option<Arc<std::path::Path>>,
 }
 
 impl AppState {
@@ -72,6 +74,7 @@ impl AppState {
             login_throttle: Arc::default(),
             sse_tickets: Arc::default(),
             kobo_store: crate::kobo::STORE.into(),
+            kepub_cache: None,
             cfg: Arc::new(cfg),
             db,
         }

@@ -1295,6 +1295,7 @@ dependencies = [
  "hyper-util",
  "image",
  "jsonwebtoken",
+ "kepub",
  "lettre",
  "libc",
  "md-5",
@@ -2043,6 +2044,15 @@ dependencies = [
  "sha2 0.10.9",
  "signature 2.2.0",
  "zeroize",
+]
+
+[[package]]
+name = "kepub"
+version = "5.2.1"
+dependencies = [
+ "encoding_rs",
+ "percent-encoding",
+ "zip",
 ]
 
 [[package]]
