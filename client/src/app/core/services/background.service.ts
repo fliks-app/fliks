@@ -19,7 +19,7 @@ export class BackgroundService {
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly streamingApi = inject(StreamingApiService);
 
-  private readonly claim = signal<{ owner: object; url: string } | null>(null);
+  private readonly claim = signal<{ owner: object; url: string; blur: boolean } | null>(null);
   private readonly ambient = signal<string | null>(null);
   private ambientAt = 0;
   private rolling = false;
@@ -37,9 +37,12 @@ export class BackgroundService {
     );
   });
 
+  /** The backdrop is a cover standing in for fanart: drawn blurred. */
+  readonly blur = computed(() => !!this.claim()?.blur && this.url() === this.claim()?.url);
+
   /** Declare the media page's fanart; `null` means not known yet, and holds. */
-  set(owner: object, url: string | null): void {
-    if (url) this.claim.set({ owner, url });
+  set(owner: object, url: string | null, opts?: { blur?: boolean }): void {
+    if (url) this.claim.set({ owner, url, blur: !!opts?.blur });
   }
 
   release(owner: object): void {

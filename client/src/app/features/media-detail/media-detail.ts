@@ -316,6 +316,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /** Last fanart declared, so returning to a cached page can re-declare it. */
   private fanartUrl: string | null = null;
+  private fanartIsCover = false;
 
   /** The hero navbar and the backdrop are global state, so a cached page hands
    *  them back on the way out and reclaims them on return. */
@@ -325,7 +326,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   private restoreChrome(): void {
-    this.backgroundService.set(this, this.fanartUrl);
+    this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
     const m = this.media();
     if (m) this.applyEpisodeFocus(m, this.route.snapshot.paramMap.get('episodeId'));
     else this.navbarService.enterHeroPage('');
@@ -366,12 +367,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.applyEpisodeFocus(m, params.get('episodeId'));
   });
 
-  /** Series / movie fanart, never the episode still: TMDB stills cap at
-   *  ~780×438 and look mushy stretched fullscreen. */
+  /** Fanart, never the episode still (TMDB stills cap at ~780×438 and look mushy fullscreen); the blurred cover when there is none. */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    this.fanartUrl = m ? pickFanart(m) : null;
-    this.backgroundService.set(this, this.fanartUrl);
+    const fanart = m ? pickFanart(m) : null;
+    this.fanartIsCover = !fanart;
+    this.fanartUrl = fanart ?? m?.posterUrl ?? null;
+    this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
   });
 
   /** React to SSE rescan / import / metadata-refresh events for this media */

@@ -15,6 +15,7 @@ const LAYERS = 3;
 export class BackgroundComponent {
   private readonly bg = inject(BackgroundService);
 
+  readonly blur = this.bg.blur;
   readonly layers = signal<readonly (string | null)[]>(Array<string | null>(LAYERS).fill(null));
   /** Layer fading in on top; `null` while the backdrop fades out to nothing. */
   readonly active = signal<number | null>(null);

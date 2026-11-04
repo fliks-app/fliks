@@ -16,6 +16,8 @@ import {
 export class MobileFanartHeroComponent {
   readonly fanartUrl = input<string | null | undefined>(null);
   readonly imageAlt = input('');
+  /** The picture is a cover standing in for fanart: drawn small and blurred. */
+  readonly blur = input(false);
   /** Pairs the hero with the opening card for the poster morph; on the wrapper so the title scrim travels with it. Null where nothing pairs. */
   readonly viewTransitionName = input<string | null>(null);
 
