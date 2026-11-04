@@ -42,6 +42,7 @@ The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect 
 
 ## Git workflow
 
+- **Prefer large pull requests over narrow ones**: group the related changes of one area or one piece of work (an audit's findings, a feature and its follow-ups) into one PR, not one PR per finding or per file. Split only when parts are independent and can land on their own schedule.
 - **`main` is protected**: direct pushes are rejected (`protected branch hook declined`). Every change lands through a pull request: branch off `main`, push, open the PR, then add it to the merge queue.
 - **Merges go through the merge queue** (ruleset `main merge queue`, squash): the REST merge endpoint (`gh api -X PUT .../pulls/<n>/merge`) is refused. Enqueue with `gh pr merge <n> --auto`, or, when `gh pr merge` fails, `gh api graphql -f query='mutation($id:ID!){enqueuePullRequest(input:{pullRequestId:$id}){mergeQueueEntry{position}}}' -f id=$(gh pr view <n> --json id -q .id)`. The queue re-runs `commitlint`, `release-parser` and `ci-ok` on the PR rebased onto the latest `main` (only `lint` and `tizen` build there; tests ran on the PR) and merges when they pass.
 - **Required checks**: `commitlint`, `release-parser` and `ci-ok`, the aggregate of `.github/workflows/ci.yml` (jobs gated by the paths a change touches; a skipped job counts as passed). A PR last pushed before a change to these workflows has no `ci-ok` run and stays pending: rebase it onto `origin/main` and push.
