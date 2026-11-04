@@ -61,19 +61,15 @@ pub(super) async fn import_book(
     let bad = |m: &str| AppError::bad_request(vec![m.to_owned()]);
     let provider = b.required(b.str("provider")?, "provider", "must be a string")?;
     let ns = Namespace::parse(&provider)
-        .filter(|n| {
-            *n == ANCHOR
-                || st
-                    .metadata
-                    .get(*n)
-                    .is_some_and(|p| p.supports(MediaKind::Book))
-        })
+        .filter(|n| *n == ANCHOR || st.metadata.serves(*n, MediaKind::Book))
         .ok_or_else(|| {
             let others = st.metadata.serving(MediaKind::Book);
-            let served: Vec<_> = std::iter::once(ANCHOR)
-                .chain(others.into_iter().filter(|n| *n != ANCHOR))
-                .map(|n| n.as_str().to_owned())
-                .collect();
+            let mut served = vec![ANCHOR.as_str().to_owned()];
+            for n in others.into_iter().map(Namespace::id_namespace) {
+                if !served.iter().any(|s| s == n.as_str()) {
+                    served.push(n.as_str().to_owned());
+                }
+            }
             bad(&format!(
                 "provider must be one of the following values: {}",
                 served.join(", ")
@@ -311,17 +307,27 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
 /// work makes the media from that provider's record, with no anchor id (the plugin's ids and the
 /// caller's own links are the only ones written) and the wants of every family.
 pub(crate) async fn create_book_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
+    Ok(book_from(st, c, false).await?.0)
+}
+
+/// `create_book_from`, except that an edition whose anchor work a book already holds joins that book;
+/// the flag tells whether the book is new.
+pub(crate) async fn book_or_held(st: &AppState, c: &Creation<'_>) -> Result<(i32, bool), AppError> {
+    book_from(st, c, true).await
+}
+
+async fn book_from(st: &AppState, c: &Creation<'_>, join: bool) -> Result<(i32, bool), AppError> {
     let (ns, value) = c.id;
     if ns == ANCHOR {
         let work = work_id(value)
             .ok_or_else(|| AppError::bad_request("an Open Library work id is needed"))?;
-        return create_book(st, &new_book(c, &work)).await;
+        return Ok((create_book(st, &new_book(c, &work)).await?, true));
     }
-    if !st.metadata.available(ns) {
+    if !st.metadata.answers(ns) {
         return Err(AppError::bad_request("the provider is not available"));
     }
     if matches!(ns, Namespace::Core(_)) {
-        return create_from_edition(st, c).await;
+        return create_from_edition(st, c, join).await;
     }
     let lang = library_language(st, c.target.id).await?;
     let Value::Object(record) = st
@@ -339,7 +345,7 @@ pub(crate) async fn create_book_from(st: &AppState, c: &Creation<'_>) -> Result<
     let own = std::iter::once((ns, value.to_owned()))
         .chain(c.links.iter().cloned())
         .collect();
-    insert_unanchored(st, c, &record, ns, own).await
+    Ok((insert_unanchored(st, c, &record, ns, own).await?, true))
 }
 
 fn new_book<'a>(c: &'a Creation<'a>, work: &'a str) -> NewBook<'a> {
@@ -384,7 +390,11 @@ async fn library_language(
 
 /// An edition of a core provider (Google Books, BnF, ...): the book of the anchor work its ISBN or ASIN
 /// names, else an unmatched book that settle identifies from the files; the edition keeps its ids.
-async fn create_from_edition(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
+async fn create_from_edition(
+    st: &AppState,
+    c: &Creation<'_>,
+    join: bool,
+) -> Result<(i32, bool), AppError> {
     let (ns, value) = c.id;
     let pick = edition_id(ns, value)
         .ok_or_else(|| AppError::bad_request(format!("{ns} names no book edition")))?;
@@ -393,7 +403,7 @@ async fn create_from_edition(st: &AppState, c: &Creation<'_>) -> Result<i32, App
     let records = merge::edition_records(st, &ids, &lang, c.prio)
         .await
         .map_err(|e| meta_error(ns, e))?;
-    let Some((_, record)) = records.iter().find(|(p, _)| *p == ns).or(records.first()) else {
+    let Some((from, record)) = records.iter().find(|(p, _)| *p == ns).or(records.first()) else {
         return Err(AppError::not_found(
             "the provider does not know this edition",
         ));
@@ -415,9 +425,16 @@ async fn create_from_edition(st: &AppState, c: &Creation<'_>) -> Result<i32, App
         || text(record, "format").is_some_and(|f| AUDIO_EXTS.contains(&format!(".{f}").as_str()));
     let family = if audio { Family::Audio } else { Family::Text };
     let work = work_of(st, &hinted, &lang, c.prio).await;
-    let id = match &work {
-        Some(work) => create_book(st, &new_book(c, work)).await?,
-        None => insert_unanchored(st, c, record, ns, c.links.clone()).await?,
+    let held = match &work {
+        Some(work) if join => external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await?,
+        _ => None,
+    };
+    let id = match (&work, held) {
+        (_, Some(held)) => same_library(&st.db, held, c.target.id)
+            .await
+            .map(|_| held)?,
+        (Some(work), None) => create_book(st, &new_book(c, work)).await?,
+        (None, None) => insert_unanchored(st, c, record, *from, c.links.clone()).await?,
     };
     let edition = add_edition(&st.db, id, family, &ids).await?;
     if let Some(work) = work {
@@ -430,7 +447,21 @@ async fn create_from_edition(st: &AppState, c: &Creation<'_>) -> Result<i32, App
             tracing::warn!("edition #{edition} of book #{id} not merged: {e:?}");
         }
     }
-    Ok(id)
+    Ok((id, held.is_none()))
+}
+
+/// 400 unless the book is in `library`, so an edition never lands on a book of another one.
+async fn same_library(db: &sqlx::PgPool, media: i32, library: i32) -> Result<(), AppError> {
+    let held: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(media)
+        .fetch_one(db)
+        .await?;
+    match held == Some(library) {
+        true => Ok(()),
+        false => Err(AppError::bad_request(
+            "Media already belongs to another library",
+        )),
+    }
 }
 
 /// The edition an import makes before any file exists, holding the ids the provider gave.

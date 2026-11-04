@@ -155,6 +155,26 @@ impl Metadata {
         self.pick(name, self.order(kind), |p| p.supports(kind))
     }
 
+    /// The providers whose answers carry ids of `ns` (an ASIN is Audible's and Audnexus's).
+    fn owners(ns: Namespace) -> Vec<Namespace> {
+        match ns {
+            Namespace::ASIN => vec![Namespace::AUDIBLE, Namespace::AUDNEXUS],
+            ns => vec![ns],
+        }
+    }
+
+    /// Whether a registered provider serves `kind` under the id namespace `ns`.
+    pub fn serves(&self, ns: Namespace, kind: MediaKind) -> bool {
+        Self::owners(ns)
+            .into_iter()
+            .any(|p| self.get(p).is_some_and(|x| x.supports(kind)))
+    }
+
+    /// Whether a provider answering ids of `ns` is available.
+    pub fn answers(&self, ns: Namespace) -> bool {
+        Self::owners(ns).into_iter().any(|p| self.available(p))
+    }
+
     /// The named provider iff it is available.
     pub fn named(&self, name: Option<&str>) -> Option<Namespace> {
         name.and_then(Namespace::parse)

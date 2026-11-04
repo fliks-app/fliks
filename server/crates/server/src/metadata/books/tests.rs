@@ -39,6 +39,8 @@ pub(crate) struct Fake {
     finds: HashMap<(Namespace, String), String>,
     pub(crate) found: Vec<Value>,
     pub(crate) broken: bool,
+    /// The kinds served besides books, none by default.
+    kinds: Vec<MediaKind>,
     pub(crate) delay: std::time::Duration,
     calls: Mutex<Vec<String>>,
 }
@@ -49,6 +51,12 @@ impl Fake {
             id: Some(id),
             ..Self::default()
         }
+    }
+
+    /// Serves `kinds` instead of books.
+    pub(crate) fn serving(mut self, kinds: &[MediaKind]) -> Self {
+        self.kinds = kinds.to_vec();
+        self
     }
 
     pub(crate) fn edition(mut self, ns: Namespace, v: &str, record: Value) -> Self {
@@ -75,7 +83,10 @@ impl MetadataProvider for Fake {
         self.id.unwrap()
     }
     fn supports(&self, kind: MediaKind) -> bool {
-        kind == MediaKind::Book
+        match self.kinds.as_slice() {
+            [] => kind == MediaKind::Book,
+            k => k.contains(&kind),
+        }
     }
     fn has_persons(&self) -> bool {
         false

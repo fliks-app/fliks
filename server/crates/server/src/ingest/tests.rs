@@ -25,6 +25,16 @@ fn tmp() -> PathBuf {
     d
 }
 
+/// A provider of `ns` serving movies and series, for a relink that names it.
+fn video_provider(
+    ns: fliks_domain::external_id::Namespace,
+) -> Option<std::sync::Arc<dyn crate::metadata::MetadataProvider>> {
+    use fliks_domain::media::kind::MediaKind::{Movie, Series};
+    Some(std::sync::Arc::new(
+        crate::metadata::books::tests::Fake::new(ns).serving(&[Movie, Series]),
+    ))
+}
+
 fn touch(p: &Path, bytes: &[u8]) {
     fs::create_dir_all(p.parent().unwrap()).unwrap();
     fs::write(p, bytes).unwrap();
@@ -774,7 +784,11 @@ async fn rescan_adds_the_good_files_when_one_insert_fails(pool: PgPool) {
 
 #[sqlx::test(migrations = false)]
 async fn relink_in_place_is_contained(pool: PgPool) {
-    let c = ctx(pool).await;
+    let c = ctx_with(
+        pool,
+        video_provider(fliks_domain::external_id::Namespace::TMDB),
+    )
+    .await;
     let lib = c.dir.join("movies");
     let l = library(&c, "M", &lib, r#"["movie"]"#).await;
     touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
@@ -871,7 +885,11 @@ async fn relink_refuses_a_provider_that_serves_nothing(pool: PgPool) {
 
 #[sqlx::test(migrations = false)]
 async fn relink_does_not_pick_a_non_unique_id_held_in_another_library(pool: PgPool) {
-    let c = ctx(pool).await;
+    let c = ctx_with(
+        pool,
+        video_provider(fliks_domain::external_id::Namespace::TVDB),
+    )
+    .await;
     let a = library(&c, "A", &c.dir.join("a"), r#"["movie"]"#).await;
     let b = library(&c, "SecretLib", &c.dir.join("b"), r#"["movie"]"#).await;
     let other = media(&c, b, "Other (2000)", "movie").await;
@@ -3080,6 +3098,7 @@ mod relink_identified {
     use std::sync::Arc;
 
     const URL: &str = "/api/imports/library/orphans/relink";
+    const ASIN: &str = "B000000001";
 
     fn pick(l: i32, folder: &str, file: &Path, provider: &str, id: &str) -> Value {
         json!({"libraryId": l, "type": "book", "folderName": folder, "provider": provider,
@@ -3289,8 +3308,111 @@ mod relink_identified {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn a_non_canonical_id_is_refused(pool: PgPool) {
+    async fn a_provider_serving_nothing_is_refused_before_the_lookup(pool: PgPool) {
         let c = ctx(pool).await;
+        let lib = c.dir.join("movies");
+        let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+        let m = media(&c, l, "Film (2001)", "movie").await;
+        sqlx::query(
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+               VALUES ($1, 'movie', 'tmdb', '77')"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
+        let body = json!({"libraryId": l, "type": "movie", "folderName": "Film (2001)",
+            "provider": "tmdb", "externalId": "77",
+            "files": [{"filePath": lib.join("Film (2001)/Film (2001).mkv")}]});
+        let (s, b) = call(&c, "POST", URL, &c.admin, body).await;
+        assert_eq!(s, 400, "{b}");
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 0);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_pick_of_a_held_work_joins_that_book(pool: PgPool) {
+        let ol = anchor().find(Namespace::ISBN, ISBN, "OL1W");
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
+        let l = shelf(&c).await;
+        let first = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&first, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &first, "openlibrary", "OL1W"),
+        )
+        .await;
+        assert_eq!((s, b["created"].clone()), (201, json!(true)), "{b}");
+        let second = c.dir.join("books/Alpha/Alpha 2.epub");
+        touch(&second, b"b");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &second, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!((s, b["created"].clone()), (201, json!(false)), "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(b["mediaId"], json!(m));
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM edition_external_ids WHERE provider = 'googlebooks' AND value = 'gb1'"
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_audible_asin_is_a_pickable_edition_id(pool: PgPool) {
+        let ol = anchor().find(Namespace::ASIN, ASIN, "OL1W");
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        c.st.metadata
+            .add_plugin(Arc::new(Books::new(Namespace::AUDIBLE).edition(
+            Namespace::ASIN,
+            ASIN,
+            json!({"externalId": ASIN, "title": "Alpha", "asin": ASIN, "durationSeconds": 3600}),
+        )));
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Alpha/Alpha.m4b");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "asin", ASIN),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL1W"));
+        assert_eq!(
+            count(
+                &c,
+                &format!("SELECT count(*) FROM edition_external_ids WHERE provider = 'asin' AND value = '{ASIN}'")
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_non_canonical_id_is_refused(pool: PgPool) {
+        let c = ctx_with(pool, super::video_provider(Namespace::TMDB)).await;
         let lib = c.dir.join("movies");
         let l = library(&c, "M", &lib, r#"["movie"]"#).await;
         touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
