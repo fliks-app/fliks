@@ -1,6 +1,6 @@
 <div class="fixed inset-0 flex flex-col overflow-hidden bg-black text-white select-none">
   <header
-    class="absolute inset-x-0 top-0 z-30 flex items-center gap-1 bg-base-100/90 px-2 text-base-content backdrop-blur transition-opacity"
+    class="absolute inset-x-0 top-0 z-30 flex items-center gap-1 bg-base-100/90 px-2 text-base-content backdrop-blur transition-opacity duration-300"
     [class.opacity-0]="!chrome()"
     [class.pointer-events-none]="!chrome()"
     [attr.inert]="chrome() ? null : ''"
@@ -111,7 +111,7 @@
   <p class="sr-only" aria-live="polite">{{ 'reader.comic_page_of' | translate: { n: page(), total: total() } }}</p>
 
   <footer
-    class="absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-base-100/90 px-4 py-2 text-base-content backdrop-blur transition-opacity"
+    class="absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-base-100/90 px-4 py-2 text-base-content backdrop-blur transition-opacity duration-300"
     [class.opacity-0]="!chrome()"
     [class.pointer-events-none]="!chrome()"
     [attr.inert]="chrome() ? null : ''"
@@ -129,6 +129,6 @@
       (input)="onScrub($event)"
       (change)="onSeek($event)"
     />
-    <span class="shrink-0 text-right text-xs tabular-nums">{{ shownPage() }} / {{ total() }}</span>
+    <span class="shrink-0 text-right text-sm tabular-nums">{{ shownPage() }} / {{ total() }}</span>
   </footer>
 </div>

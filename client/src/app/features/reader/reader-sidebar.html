@@ -1,92 +1,194 @@
-<aside
-  class="rd-panel z-40 flex flex-col bg-base-300/95 text-base-content shadow-2xl backdrop-blur max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-[calc(env(safe-area-inset-top)+3.5rem)] max-sm:rounded-t-3xl sm:absolute sm:bottom-0 sm:right-0 sm:top-[calc(env(safe-area-inset-top)+4rem)] sm:w-[26rem] sm:border-l sm:border-base-content/10"
-  style="padding-bottom: env(safe-area-inset-bottom)"
-  role="dialog"
-  [attr.aria-label]="'reader.panel' | translate"
->
-  <header class="flex items-center gap-2 p-3">
-    @if (tab() === 'search') {
-      <h2 class="flex-1 px-1 font-semibold">{{ 'reader.search' | translate }}</h2>
-    } @else {
-      <div class="rd-seg flex-1" role="tablist">
-        @for (t of tabs; track t) {
-          <button
-            type="button"
-            role="tab"
-            [attr.aria-selected]="tab() === t"
-            (click)="tab.set(t)"
-          >
-            {{ 'reader.tab_' + t | translate }}
-            @if (t === 'bookmarks') {
-              <span class="ms-1 text-xs tabular-nums opacity-60">{{ bookmarks().length }}</span>
-            } @else if (t === 'notes') {
-              <span class="ms-1 text-xs tabular-nums opacity-60">{{ highlights().length }}</span>
-            }
-          </button>
-        }
-      </div>
-    }
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle size-11"
-      [attr.aria-label]="'common.close' | translate"
-      (click)="closed.emit()"
-    >
-      <svg lucideX class="h-5 w-5"></svg>
-    </button>
-  </header>
-
-  <div class="scroll-ring-safe min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-    @switch (tab()) {
-      @case ('contents') {
-        <ul class="space-y-0.5">
-          @for (row of toc(); track $index) {
-            <li>
-              <button
-                type="button"
-                class="rd-row"
-                [class.rd-row-current]="$index === currentRow()"
-                [style.padding-inline-start.rem]="0.75 + row.depth"
-                [attr.aria-current]="$index === currentRow() ? 'location' : null"
-                (click)="goToc.emit($index)"
-              >
-                <span class="min-w-0 flex-1 truncate">{{ row.title }}</span>
-                @if ($index === currentRow()) {
-                  <span class="text-xs tabular-nums text-primary">{{ chapterPercent(row) }}%</span>
-                } @else if (isRead(row, $index)) {
-                  <svg
-                    lucideCheck
-                    class="h-4 w-4 shrink-0 text-base-content/50"
-                    [attr.aria-label]="'reader.read' | translate"
-                  ></svg>
-                }
-              </button>
-            </li>
-          } @empty {
-            <li class="px-3 py-2 text-sm text-base-content/60">
-              {{ 'reader.no_contents' | translate }}
-            </li>
+<header class="flex items-center gap-2 p-3">
+  @if (tab() === 'search') {
+    <h2 class="flex-1 px-1 font-semibold">{{ 'reader.search' | translate }}</h2>
+  } @else {
+    <div class="rd-seg flex-1" role="tablist">
+      @for (t of tabs; track t) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="tab() === t"
+          (click)="tab.set(t)"
+        >
+          {{ 'reader.tab_' + t | translate }}
+          @if (t === 'bookmarks') {
+            <span class="ms-1 text-sm tabular-nums opacity-60">{{ bookmarks().length }}</span>
+          } @else if (t === 'notes') {
+            <span class="ms-1 text-sm tabular-nums opacity-60">{{ highlights().length }}</span>
           }
-        </ul>
+        </button>
       }
+    </div>
+  }
+  <button
+    type="button"
+    class="btn btn-ghost btn-circle size-11"
+    [attr.aria-label]="'common.close' | translate"
+    (click)="closed.emit()"
+  >
+    <svg lucideX class="h-5 w-5"></svg>
+  </button>
+</header>
 
-      @case ('bookmarks') {
-        @for (group of bookmarkGroups(); track group.title) {
-          <p class="rd-group">{{ group.title }}</p>
-          @for (a of group.items; track a.id) {
-            <article class="rd-card">
+<div class="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1 scroll-py-1">
+  @switch (tab()) {
+    @case ('contents') {
+      <ul class="space-y-0.5">
+        @for (row of toc(); track $index) {
+          <li>
+            <button
+              type="button"
+              class="rd-row"
+              [class.rd-row-current]="$index === currentRow()"
+              [style.padding-inline-start.rem]="0.75 + row.depth"
+              [attr.aria-current]="$index === currentRow() ? 'location' : null"
+              (click)="goToc.emit($index)"
+            >
+              <span class="min-w-0 flex-1 truncate">{{ row.title }}</span>
+              @if ($index === currentRow()) {
+                <span class="text-sm tabular-nums text-primary">{{ chapterPercent(row) }}%</span>
+              } @else if (isRead(row, $index)) {
+                <svg
+                  lucideCheck
+                  class="h-4 w-4 shrink-0 text-base-content/50"
+                  [attr.aria-label]="'reader.read' | translate"
+                ></svg>
+              }
+            </button>
+          </li>
+        } @empty {
+          <li class="px-3 py-2 text-sm text-base-content/60">
+            {{ 'reader.no_contents' | translate }}
+          </li>
+        }
+      </ul>
+    }
+
+    @case ('bookmarks') {
+      @for (group of bookmarkGroups(); track group.title) {
+        <p class="rd-group">{{ group.title }}</p>
+        @for (a of group.items; track a.id) {
+          <article class="rd-card">
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-center gap-3 text-left"
+              (click)="goAnnotation.emit(a)"
+            >
+              <svg lucideBookmark class="h-5 w-5 shrink-0 text-primary"></svg>
+              <span class="min-w-0">
+                <span class="block truncate text-sm">{{ a.excerpt || group.title }}</span>
+                <span class="block text-sm text-base-content/60">{{
+                  a.createdAt | date: 'mediumDate'
+                }}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-circle size-11"
+              [attr.aria-label]="'common.delete' | translate"
+              (click)="removeAnnotation.emit(a)"
+            >
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          </article>
+        }
+      } @empty {
+        <p class="rd-empty">{{ 'reader.no_bookmarks' | translate }}</p>
+      }
+    }
+
+    @case ('notes') {
+      <div class="flex flex-wrap items-center gap-2 pb-3" role="group" [attr.aria-label]="'reader.filter_notes' | translate">
+        <button
+          type="button"
+          class="rd-chip inline-flex items-center gap-2"
+          [attr.aria-pressed]="activeFilter() === null"
+          (click)="pickFilter(null)"
+        >
+          {{ 'reader.notes_all' | translate }}
+          <span class="tabular-nums opacity-70">{{ highlights().length }}</span>
+        </button>
+        @for (c of colours; track c) {
+          @if (count(c); as n) {
+            <button
+              type="button"
+              class="rd-chip inline-flex items-center gap-2"
+              [attr.aria-pressed]="activeFilter() === c"
+              [attr.aria-label]="('reader.colour_' + c | translate) + ' (' + n + ')'"
+              (click)="pickFilter(c)"
+            >
+              <span class="size-3.5 rounded-full" [style.background-color]="hex[c]"></span>
+              <span class="tabular-nums">{{ n }}</span>
+            </button>
+          }
+        }
+        <span class="flex-1"></span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm h-11 min-h-11 gap-1 text-primary"
+          [disabled]="!highlights().length"
+          (click)="exportMarkdown.emit()"
+        >
+          <svg lucideDownload class="h-4 w-4"></svg>
+          {{ 'reader.export' | translate }}
+        </button>
+      </div>
+      @for (group of notes(); track group.title) {
+        <p class="rd-group">{{ group.title }}</p>
+        @for (a of group.items; track a.id) {
+          <article class="rd-card items-start" [class.rd-card-focus]="focusId() === a.id">
+            <span
+              class="mt-1 w-1 self-stretch rounded-full"
+              [style.background-color]="hex[a.colour ?? 'yellow']"
+            ></span>
+            <div class="min-w-0 flex-1">
               <button
                 type="button"
-                class="flex min-w-0 flex-1 items-center gap-3 text-left"
+                class="block w-full text-left font-serif text-[15px] leading-snug"
                 (click)="goAnnotation.emit(a)"
               >
-                <svg lucideBookmark class="h-5 w-5 shrink-0 text-primary"></svg>
-                <span class="min-w-0">
-                  <span class="block truncate text-sm">{{ a.excerpt || group.title }}</span>
-                  <span class="block text-xs text-base-content/60">{{
-                    a.createdAt | date: 'mediumDate'
-                  }}</span>
-                </span>
+                &laquo; {{ a.excerpt }} &raquo;
+              </button>
+              @if (editing() === a.id) {
+                <textarea
+                  #note
+                  class="textarea textarea-bordered mt-2 w-full text-sm"
+                  rows="3"
+                  maxlength="4000"
+                  [value]="a.note"
+                  [attr.aria-label]="'reader.note' | translate"
+                  (blur)="commit(a, note.value)"
+                ></textarea>
+              } @else if (a.note) {
+                <p class="mt-2 whitespace-pre-line text-sm">{{ a.note }}</p>
+              }
+              <p class="mt-2 text-sm text-base-content/60">
+                {{ a.createdAt | date: 'mediumDate' }}
+              </p>
+            </div>
+            <div class="flex flex-col">
+              <button
+                type="button"
+                class="btn btn-ghost btn-circle size-11"
+                [attr.aria-label]="'reader.go_to_passage' | translate"
+                [title]="'reader.go_to_passage' | translate"
+                (click)="goAnnotation.emit(a)"
+              >
+                <svg lucideBookOpen class="h-4 w-4"></svg>
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-circle size-11"
+                [class.text-primary]="editing() === a.id"
+                [attr.aria-label]="(editing() === a.id ? 'common.save' : 'reader.edit_note') | translate"
+                (mousedown)="editing() === a.id && $event.preventDefault()"
+                (click)="editing() === a.id ? flushNote() : startEdit(a.id)"
+              >
+                @if (editing() === a.id) {
+                  <svg lucideCheck class="h-4 w-4"></svg>
+                } @else {
+                  <svg lucidePencil class="h-4 w-4"></svg>
+                }
               </button>
               <button
                 type="button"
@@ -96,130 +198,48 @@
               >
                 <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>
-            </article>
-          }
-        } @empty {
-          <p class="rd-empty">{{ 'reader.no_bookmarks' | translate }}</p>
+            </div>
+          </article>
         }
+      } @empty {
+        <p class="rd-empty">{{ 'reader.no_notes' | translate }}</p>
       }
+    }
 
-      @case ('notes') {
-        <div class="flex items-center gap-2 pb-3">
-          <span class="rd-count">{{ highlights().length }}</span>
-          @for (c of colours; track c) {
-            <button
-              type="button"
-              class="rd-dot"
-              [style.--dot]="hex[c]"
-              [attr.aria-pressed]="filter() === c"
-              [attr.aria-label]="('reader.colour_' + c | translate) + ' (' + count(c) + ')'"
-              (click)="toggleFilter(c)"
-            ></button>
-          }
-          <span class="flex-1"></span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm h-11 min-h-11 gap-1 text-primary"
-            [disabled]="!highlights().length"
-            (click)="exportMarkdown.emit()"
+    @case ('search') {
+      <label class="relative mb-3 block">
+        <svg
+          lucideSearch
+          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-base-content/50"
+        ></svg>
+        <input
+          type="search"
+          [value]="searchText()"
+          class="input input-bordered h-11 w-full pl-9"
+          [placeholder]="'reader.search_placeholder' | translate"
+          [attr.aria-label]="'reader.search' | translate"
+          (keydown.enter)="query.emit(text($event))"
+        />
+      </label>
+      @if (searching()) {
+        <div class="flex justify-center py-6"><span class="loading loading-spinner"></span></div>
+      }
+      @for (h of hits(); track $index) {
+        <button type="button" class="rd-row block text-left" (click)="goHit.emit(h)">
+          <span class="block text-sm uppercase tracking-wide text-base-content/60">{{
+            h.chapter
+          }}</span>
+          <span class="block text-sm"
+            >{{ h.before
+            }}<mark class="rounded bg-primary/30 px-0.5 text-inherit">{{ h.match }}</mark
+            >{{ h.after }}</span
           >
-            <svg lucideDownload class="h-4 w-4"></svg>
-            {{ 'reader.export' | translate }}
-          </button>
-        </div>
-        @for (group of notes(); track group.title) {
-          <p class="rd-group">{{ group.title }}</p>
-          @for (a of group.items; track a.id) {
-            <article class="rd-card items-start" [class.rd-card-focus]="focusId() === a.id">
-              <span
-                class="mt-1 w-1 self-stretch rounded-full"
-                [style.background-color]="hex[a.colour ?? 'yellow']"
-              ></span>
-              <div class="min-w-0 flex-1">
-                <button
-                  type="button"
-                  class="block w-full text-left font-serif text-[15px] leading-snug"
-                  (click)="goAnnotation.emit(a)"
-                >
-                  &laquo; {{ a.excerpt }} &raquo;
-                </button>
-                @if (editing() === a.id) {
-                  <textarea
-                    #note
-                    class="textarea textarea-bordered mt-2 w-full text-sm"
-                    rows="3"
-                    maxlength="4000"
-                    [value]="a.note"
-                    [attr.aria-label]="'reader.note' | translate"
-                    (blur)="commit(a, note.value)"
-                  ></textarea>
-                } @else if (a.note) {
-                  <p class="mt-2 whitespace-pre-line text-sm">{{ a.note }}</p>
-                }
-                <p class="mt-2 text-xs text-base-content/60">
-                  {{ a.createdAt | date: 'mediumDate' }}
-                </p>
-              </div>
-              <div class="flex flex-col">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-circle size-11"
-                  [attr.aria-label]="'reader.edit_note' | translate"
-                  (click)="startEdit(a.id)"
-                >
-                  <svg lucidePencil class="h-4 w-4"></svg>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-circle size-11"
-                  [attr.aria-label]="'common.delete' | translate"
-                  (click)="removeAnnotation.emit(a)"
-                >
-                  <svg lucideTrash2 class="h-4 w-4"></svg>
-                </button>
-              </div>
-            </article>
-          }
-        } @empty {
-          <p class="rd-empty">{{ 'reader.no_notes' | translate }}</p>
-        }
-      }
-
-      @case ('search') {
-        <label class="relative mb-3 block">
-          <svg
-            lucideSearch
-            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-base-content/50"
-          ></svg>
-          <input
-            type="search"
-            [value]="searchText()"
-            class="input input-bordered h-11 w-full pl-9"
-            [placeholder]="'reader.search_placeholder' | translate"
-            [attr.aria-label]="'reader.search' | translate"
-            (keydown.enter)="query.emit(text($event))"
-          />
-        </label>
-        @if (searching()) {
-          <div class="flex justify-center py-6"><span class="loading loading-spinner"></span></div>
-        }
-        @for (h of hits(); track $index) {
-          <button type="button" class="rd-row block text-left" (click)="goHit.emit(h)">
-            <span class="block text-xs uppercase tracking-wide text-base-content/60">{{
-              h.chapter
-            }}</span>
-            <span class="block text-sm"
-              >{{ h.before
-              }}<mark class="rounded bg-primary/30 px-0.5 text-inherit">{{ h.match }}</mark
-              >{{ h.after }}</span
-            >
-          </button>
-        } @empty {
-          @if (searched() && !searching()) {
-            <p class="rd-empty">{{ 'reader.no_results' | translate }}</p>
-          }
+        </button>
+      } @empty {
+        @if (searched() && !searching()) {
+          <p class="rd-empty">{{ 'reader.no_results' | translate }}</p>
         }
       }
     }
-  </div>
-</aside>
+  }
+</div>

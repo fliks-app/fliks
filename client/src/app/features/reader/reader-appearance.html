@@ -1,197 +1,189 @@
-<section
-  class="rd-panel z-40 flex max-h-[70%] flex-col bg-base-300/95 text-base-content shadow-2xl backdrop-blur max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-3xl sm:absolute sm:right-3 sm:top-[calc(env(safe-area-inset-top)+4.5rem)] sm:max-h-[calc(100%-6rem)] sm:w-96 sm:rounded-2xl sm:border sm:border-base-content/10"
-  style="padding-bottom: env(safe-area-inset-bottom)"
-  role="dialog"
-  [attr.aria-label]="'reader.appearance' | translate"
->
-  <div class="mx-auto mt-2 h-1 w-10 rounded-full bg-base-content/25 sm:hidden"></div>
-  <header class="flex items-center justify-between px-4 pt-3">
-    <h2 class="font-semibold">{{ 'reader.appearance' | translate }}</h2>
-    <div class="flex items-center">
-      <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11 gap-1" (click)="reset()">
-        <svg lucideRotateCcw class="h-4 w-4"></svg>
-        {{ 'reader.reset' | translate }}
-      </button>
+<header class="flex items-center justify-between px-4 pt-3">
+  <h2 class="font-semibold">{{ 'reader.appearance' | translate }}</h2>
+  <div class="flex items-center">
+    <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11 gap-1" (click)="reset()">
+      <svg lucideRotateCcw class="h-4 w-4"></svg>
+      {{ 'reader.reset' | translate }}
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle size-11"
+      [attr.aria-label]="'common.close' | translate"
+      (click)="closed.emit()"
+    >
+      <svg lucideX class="h-5 w-5"></svg>
+    </button>
+  </div>
+</header>
+
+<div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4 pt-3 scroll-py-1">
+  <fieldset>
+    <legend class="rd-label">{{ 'reader.theme' | translate }}</legend>
+    <div class="grid grid-cols-3 gap-2">
+      @for (p of presets; track p.theme) {
+        <button
+          type="button"
+          class="rd-theme"
+          [style.background-color]="p.background"
+          [style.color]="p.text"
+          [attr.aria-pressed]="settings().theme === p.theme"
+          (click)="pick(p.theme)"
+        >
+          <b
+            class="text-2xl leading-none"
+            [style.font-family]="stacks[p.fontFamily] ?? 'Georgia, serif'"
+            >Aa</b
+          >
+          <span class="text-sm">{{ 'reader.theme_' + p.theme | translate }}</span>
+        </button>
+      }
+    </div>
+  </fieldset>
+
+  <div>
+    <div class="rd-label">
+      <span>{{ 'reader.font_size' | translate }}</span>
+      <span class="tabular-nums">{{ (settings().fontSize * 100).toFixed(0) }}%</span>
+    </div>
+    <div class="flex items-center gap-2">
       <button
         type="button"
-        class="btn btn-ghost btn-circle size-11"
-        [attr.aria-label]="'common.close' | translate"
-        (click)="closed.emit()"
+        class="btn btn-circle btn-ghost size-11"
+        [disabled]="!canShrink()"
+        [attr.aria-label]="'reader.smaller' | translate"
+        (click)="step(-range.step)"
       >
-        <svg lucideX class="h-5 w-5"></svg>
+        <svg lucideMinus class="h-4 w-4"></svg>
+      </button>
+      <input
+        type="range"
+        class="range range-xs flex-1"
+        [min]="range.min"
+        [max]="range.max"
+        [step]="range.step"
+        [value]="settings().fontSize"
+        [attr.aria-label]="'reader.font_size' | translate"
+        (input)="changed.emit({ fontSize: numberOf($event) })"
+      />
+      <button
+        type="button"
+        class="btn btn-circle btn-ghost size-11"
+        [disabled]="!canGrow()"
+        [attr.aria-label]="'reader.larger' | translate"
+        (click)="step(range.step)"
+      >
+        <svg lucidePlus class="h-4 w-4"></svg>
       </button>
     </div>
-  </header>
+  </div>
 
-  <div class="scroll-ring-safe min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4 pt-3">
-    <fieldset>
-      <legend class="rd-label">{{ 'reader.theme' | translate }}</legend>
-      <div class="grid grid-cols-3 gap-2">
-        @for (p of presets; track p.theme) {
-          <button
-            type="button"
-            class="rd-theme"
-            [style.background-color]="p.background"
-            [style.color]="p.text"
-            [attr.aria-pressed]="settings().theme === p.theme"
-            (click)="pick(p.theme)"
-          >
-            <b
-              class="text-2xl leading-none"
-              [style.font-family]="stacks[p.fontFamily] ?? 'Georgia, serif'"
-              >Aa</b
-            >
-            <span class="text-xs">{{ 'reader.theme_' + p.theme | translate }}</span>
-          </button>
-        }
-      </div>
-    </fieldset>
-
-    <div>
-      <div class="rd-label">
-        <span>{{ 'reader.font_size' | translate }}</span>
-        <span class="tabular-nums">{{ (settings().fontSize * 100).toFixed(0) }}%</span>
-      </div>
-      <div class="flex items-center gap-2">
+  <fieldset>
+    <legend class="rd-label">{{ 'reader.font_family' | translate }}</legend>
+    <div class="grid grid-cols-2 gap-2">
+      @for (font of fonts; track font) {
         <button
           type="button"
-          class="btn btn-circle btn-ghost size-11"
-          [disabled]="!canShrink()"
-          [attr.aria-label]="'reader.smaller' | translate"
-          (click)="step(-range.step)"
+          class="rd-chip"
+          [style.font-family]="stacks[font]"
+          [attr.aria-pressed]="settings().fontFamily === font"
+          (click)="changed.emit({ fontFamily: font })"
         >
-          <svg lucideMinus class="h-4 w-4"></svg>
+          {{ 'reader.font_' + font | translate }}
         </button>
+      }
+    </div>
+  </fieldset>
+
+  <div class="sm:block" [class.hidden]="!more()">
+    <div class="space-y-5">
+      <div>
+        <div class="rd-label">
+          <span>{{ 'reader.line_spacing' | translate }}</span>
+          <span class="tabular-nums">{{ settings().lineHeight.toFixed(1) }}</span>
+        </div>
         <input
           type="range"
-          class="range range-xs flex-1"
-          [min]="range.min"
-          [max]="range.max"
-          [step]="range.step"
-          [value]="settings().fontSize"
-          [attr.aria-label]="'reader.font_size' | translate"
-          (input)="changed.emit({ fontSize: numberOf($event) })"
+          class="range range-xs w-full"
+          [min]="lineRange.min"
+          [max]="lineRange.max"
+          [step]="lineRange.step"
+          [value]="settings().lineHeight"
+          [attr.aria-label]="'reader.line_spacing' | translate"
+          (input)="changed.emit({ lineHeight: numberOf($event) })"
         />
-        <button
-          type="button"
-          class="btn btn-circle btn-ghost size-11"
-          [disabled]="!canGrow()"
-          [attr.aria-label]="'reader.larger' | translate"
-          (click)="step(range.step)"
-        >
-          <svg lucidePlus class="h-4 w-4"></svg>
-        </button>
       </div>
-    </div>
 
-    <fieldset>
-      <legend class="rd-label">{{ 'reader.font_family' | translate }}</legend>
-      <div class="grid grid-cols-2 gap-2">
-        @for (font of fonts; track font) {
+      <fieldset>
+        <legend class="rd-label">{{ 'reader.margins' | translate }}</legend>
+        <div class="rd-seg">
+          @for (margin of margins; track margin) {
+            <button
+              type="button"
+              [attr.aria-pressed]="settings().margins === margin"
+              (click)="changed.emit({ margins: margin })"
+            >
+              {{ 'reader.margins_' + margin | translate }}
+            </button>
+          }
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend class="rd-label">{{ 'reader.layout' | translate }}</legend>
+        <div class="rd-seg">
           <button
             type="button"
-            class="rd-chip"
-            [style.font-family]="stacks[font]"
-            [attr.aria-pressed]="settings().fontFamily === font"
-            (click)="changed.emit({ fontFamily: font })"
+            [attr.aria-pressed]="!settings().scroll"
+            (click)="changed.emit({ scroll: false })"
           >
-            {{ 'reader.font_' + font | translate }}
+            {{ 'reader.layout_paginated' | translate }}
           </button>
-        }
-      </div>
-    </fieldset>
-
-    <div class="sm:block" [class.hidden]="!more()">
-      <div class="space-y-5">
-        <div>
-          <div class="rd-label">
-            <span>{{ 'reader.line_spacing' | translate }}</span>
-            <span class="tabular-nums">{{ settings().lineHeight.toFixed(1) }}</span>
-          </div>
-          <input
-            type="range"
-            class="range range-xs w-full"
-            [min]="lineRange.min"
-            [max]="lineRange.max"
-            [step]="lineRange.step"
-            [value]="settings().lineHeight"
-            [attr.aria-label]="'reader.line_spacing' | translate"
-            (input)="changed.emit({ lineHeight: numberOf($event) })"
-          />
+          <button
+            type="button"
+            [attr.aria-pressed]="settings().scroll"
+            (click)="changed.emit({ scroll: true })"
+          >
+            {{ 'reader.layout_scroll' | translate }}
+          </button>
         </div>
+      </fieldset>
 
+      @if (!settings().scroll) {
         <fieldset>
-          <legend class="rd-label">{{ 'reader.margins' | translate }}</legend>
+          <legend class="rd-label">{{ 'reader.columns' | translate }}</legend>
           <div class="rd-seg">
-            @for (margin of margins; track margin) {
+            @for (c of columns; track c) {
               <button
                 type="button"
-                [attr.aria-pressed]="settings().margins === margin"
-                (click)="changed.emit({ margins: margin })"
+                [attr.aria-pressed]="settings().columns === c"
+                (click)="changed.emit({ columns: c })"
               >
-                {{ 'reader.margins_' + margin | translate }}
+                {{ c === 'auto' ? ('reader.columns_auto' | translate) : c }}
               </button>
             }
           </div>
         </fieldset>
+      }
 
-        <fieldset>
-          <legend class="rd-label">{{ 'reader.layout' | translate }}</legend>
-          <div class="rd-seg">
-            <button
-              type="button"
-              [attr.aria-pressed]="!settings().scroll"
-              (click)="changed.emit({ scroll: false })"
-            >
-              {{ 'reader.layout_paginated' | translate }}
-            </button>
-            <button
-              type="button"
-              [attr.aria-pressed]="settings().scroll"
-              (click)="changed.emit({ scroll: true })"
-            >
-              {{ 'reader.layout_scroll' | translate }}
-            </button>
-          </div>
-        </fieldset>
-
-        @if (!settings().scroll) {
-          <fieldset>
-            <legend class="rd-label">{{ 'reader.columns' | translate }}</legend>
-            <div class="rd-seg">
-              @for (c of columns; track c) {
-                <button
-                  type="button"
-                  [attr.aria-pressed]="settings().columns === c"
-                  (click)="changed.emit({ columns: c })"
-                >
-                  {{ c === 'auto' ? ('reader.columns_auto' | translate) : c }}
-                </button>
-              }
-            </div>
-          </fieldset>
-        }
-
-        <label class="flex min-h-11 cursor-pointer items-center justify-between">
-          <span class="text-sm">{{ 'reader.justify' | translate }}</span>
-          <input
-            type="checkbox"
-            class="toggle toggle-primary"
-            [checked]="settings().justify"
-            (change)="changed.emit({ justify: !settings().justify })"
-          />
-        </label>
-      </div>
+      <label class="flex min-h-11 cursor-pointer items-center justify-between">
+        <span class="text-sm">{{ 'reader.justify' | translate }}</span>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          [checked]="settings().justify"
+          (change)="changed.emit({ justify: !settings().justify })"
+        />
+      </label>
     </div>
-
-    <button
-      type="button"
-      class="btn btn-ghost btn-sm h-11 min-h-11 w-full gap-1 sm:hidden"
-      [attr.aria-expanded]="more()"
-      (click)="more.set(!more())"
-    >
-      {{ (more() ? 'reader.fewer_settings' : 'reader.more_settings') | translate }}
-      <svg lucideChevronDown class="h-4 w-4 transition-transform" [class.rotate-180]="more()"></svg>
-    </button>
   </div>
-</section>
+
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm h-11 min-h-11 w-full gap-1 sm:hidden"
+    [attr.aria-expanded]="more()"
+    (click)="more.set(!more())"
+  >
+    {{ (more() ? 'reader.fewer_settings' : 'reader.more_settings') | translate }}
+    <svg lucideChevronDown class="h-4 w-4 transition-transform" [class.rotate-180]="more()"></svg>
+  </button>
+</div>

@@ -41,6 +41,19 @@ describe('sandboxContentFrames', () => {
     stop();
   });
 
+  it('hands each document a frame loads the selector generator its blocked script would have installed', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const stop = sandboxContentFrames(container);
+    const frame = frameWithToolkitSandbox();
+    container.append(frame);
+    await Promise.resolve();
+    frame.dispatchEvent(new Event('load'));
+    expect((frame.contentWindow as { _readium_cssSelectorGenerator?: unknown })._readium_cssSelectorGenerator).toBeDefined();
+    stop();
+    container.remove();
+  });
+
   it('stops once disconnected', async () => {
     const container = document.createElement('div');
     sandboxContentFrames(container)();

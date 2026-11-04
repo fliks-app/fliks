@@ -15,6 +15,7 @@ import {
 import { DatePipe } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
+  LucideBookOpen,
   LucideBookmark,
   LucideCheck,
   LucideDownload,
@@ -28,6 +29,7 @@ import {
   type Annotation,
   type AnnotationColour,
 } from './annotations-api.service';
+import { ReaderSettingsService } from './reader-settings.service';
 import { COLOUR_HEX, groupByChapter } from './reader-annotations';
 import type { SearchHit } from './reader-search';
 
@@ -47,6 +49,7 @@ export interface TocEntry {
   imports: [
     DatePipe,
     TranslatePipe,
+    LucideBookOpen,
     LucideBookmark,
     LucideCheck,
     LucideDownload,
@@ -87,7 +90,8 @@ export class ReaderSidebarComponent {
   protected readonly tabs: SidebarTab[] = ['contents', 'bookmarks', 'notes'];
   protected readonly colours = ANNOTATION_COLOURS;
   protected readonly hex = COLOUR_HEX;
-  protected readonly filter = signal<AnnotationColour | null>(null);
+  private readonly store = inject(ReaderSettingsService);
+  protected readonly filter = signal<AnnotationColour | null>(this.store.panel().notesFilter);
   protected readonly editing = signal<number | null>(null);
 
   protected readonly bookmarks = computed(() =>
@@ -96,8 +100,13 @@ export class ReaderSidebarComponent {
   protected readonly highlights = computed(() =>
     this.annotations().filter((a) => a.kind === 'highlight'),
   );
-  protected readonly notes = computed(() => {
+  /** A colour whose last highlight is gone stops filtering. */
+  protected readonly activeFilter = computed(() => {
     const f = this.filter();
+    return f && this.count(f) ? f : null;
+  });
+  protected readonly notes = computed(() => {
+    const f = this.activeFilter();
     return groupByChapter(
       this.highlights().filter((a) => !f || a.colour === f),
       this.tocRows(),
@@ -137,8 +146,10 @@ export class ReaderSidebarComponent {
     return this.highlights().filter((a) => a.colour === colour).length;
   }
 
-  protected toggleFilter(colour: AnnotationColour): void {
-    this.filter.update((f) => (f === colour ? null : colour));
+  /** Saved on a click only: a book without that colour shows all its notes and keeps the choice for the next. */
+  protected pickFilter(colour: AnnotationColour | null): void {
+    this.filter.set(colour === this.activeFilter() ? null : colour);
+    this.store.savePanel({ notesFilter: this.filter() });
   }
 
   protected startEdit(id: number): void {

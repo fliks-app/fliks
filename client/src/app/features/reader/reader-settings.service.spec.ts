@@ -112,8 +112,17 @@ describe('toReaderPreferences', () => {
       scrollPaddingRight: 64,
       backgroundColor: '#111',
       textColor: '#eee',
+      selectionTextColor: '#eee',
     });
     expect(prefs.fontFamily).toContain('Literata');
+  });
+
+  it('halves the side margins on a phone-width reader', () => {
+    expect(toReaderPreferences({ ...READER_DEFAULTS, margins: 'wide' }, colors, true)).toMatchObject({
+      pageGutter: 32,
+      scrollPaddingLeft: 32,
+      scrollPaddingRight: 32,
+    });
   });
 
   it('sets the columns and the justification only when asked', () => {
