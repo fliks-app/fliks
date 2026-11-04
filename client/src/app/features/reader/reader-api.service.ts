@@ -12,6 +12,8 @@ export interface ReaderTarget {
   mediaId: number;
   itemId: number;
   fileId: number;
+  /** Storage key of the copy on the device, when the book was downloaded. */
+  localKey?: string;
 }
 
 /** Where a reader stands: `progression` 0..1 over the whole book, `locator` a Readium locator (or a PDF page). */
