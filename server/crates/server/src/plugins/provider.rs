@@ -15,6 +15,7 @@ use fliks_domain::{
         limiter::{Limits, Priority},
     },
     plugins::provider,
+    release::scene::Entry,
 };
 use futures_util::{FutureExt, future::BoxFuture};
 use serde_json::Value;
@@ -28,6 +29,9 @@ const READY_WAIT: Duration = Duration::from_secs(30);
 const MAX_RECORD: usize = 16 << 20;
 /// Rule 14: elements of a list answer.
 const MAX_LIST: usize = 10_000;
+/// Rule 18a: the ids and the pairs a scene answer may hold.
+const MAX_SCENE_IDS: usize = 200_000;
+const MAX_SCENE_PAIRS: usize = 100_000;
 
 /// What the manifest's `provider` block says, read once.
 struct Block {
@@ -38,6 +42,7 @@ struct Block {
     find_by: Vec<String>,
     edition: Vec<String>,
     chapters: Vec<String>,
+    scene: Vec<String>,
     image_hosts: Vec<String>,
     limits: Limits,
     /// `snapshotTtlSecs`: a resource it does not name is zero.
@@ -83,6 +88,7 @@ impl Block {
             find_by: strs(&b["findBy"]),
             edition: strs(&b["editionNamespaces"]),
             chapters: strs(&b["chapterNamespaces"]),
+            scene: strs(&b["sceneNamespaces"]),
             image_hosts: strs(&b["imageHosts"]),
             limits: Limits {
                 rate_per_sec: l["ratePerSec"].as_f64().unwrap_or(1.0),
@@ -300,7 +306,10 @@ impl MetadataProvider for PluginProvider {
     }
 
     fn supports(&self, kind: MediaKind) -> bool {
-        self.block.kinds.iter().any(|(k, _)| *k == kind)
+        self.block
+            .kinds
+            .iter()
+            .any(|(k, caps)| *k == kind && caps.iter().any(|c| c != "scene"))
     }
 
     fn has_persons(&self) -> bool {
@@ -542,6 +551,67 @@ impl MetadataProvider for PluginProvider {
         self.declares(Some(kind), "search")
     }
 
+    fn has_scene(&self) -> bool {
+        self.declares(None, "scene") && self.block.scene.iter().any(|n| n == "tvdb")
+    }
+
+    fn scene_mapped_ids<'a>(&'a self, p: Priority) -> Call<'a, Vec<String>> {
+        async move {
+            if !self.has_scene() {
+                return Err(undeclared());
+            }
+            let ids = self
+                .call(false, p, move |i| {
+                    Box::pin(async move {
+                        let (g, s) = i.provider();
+                        g.call_scene_mapped_ids(s, "tvdb").await
+                    })
+                })
+                .await?;
+            self.checked(if ids.len() > MAX_SCENE_IDS {
+                Err(bad("too many ids"))
+            } else {
+                Ok(ids)
+            })
+        }
+        .boxed()
+    }
+
+    fn scene_mapping<'a>(&'a self, id: &'a str, p: Priority) -> Call<'a, Option<Vec<Entry>>> {
+        async move {
+            if !self.has_scene() {
+                return Err(undeclared());
+            }
+            let source = ExternalId {
+                provider: "tvdb".to_owned(),
+                value: id.to_owned(),
+            };
+            let pairs = self
+                .call(false, p, move |i| {
+                    Box::pin(async move {
+                        let (g, s) = i.provider();
+                        g.call_scene_mapping(s, &source).await
+                    })
+                })
+                .await?;
+            let pairs = self.checked(match pairs {
+                Some(p) if p.len() > MAX_SCENE_PAIRS => Err(bad("too many pairs")),
+                p => Ok(p),
+            })?;
+            Ok(pairs.filter(|p| !p.is_empty()).map(|p| {
+                p.into_iter()
+                    .map(|x| Entry {
+                        scene_season: x.scene_season.into(),
+                        scene_episode: x.scene_episode.into(),
+                        season: x.season.into(),
+                        episode: x.episode.into(),
+                    })
+                    .collect()
+            }))
+        }
+        .boxed()
+    }
+
     fn has_lists(&self, kind: MediaKind) -> bool {
         self.declares(Some(kind), "lists")
     }
@@ -666,7 +736,11 @@ impl Plugins {
                 Some(provider) => {
                     app.images
                         .allow_hosts(id, provider.image_hosts().to_vec(), bundled);
+                    let scene = provider.has_scene();
                     app.metadata.add_plugin(Arc::new(provider));
+                    if scene {
+                        crate::scene::spawn_boot_refresh(app);
+                    }
                 }
                 None => {
                     tracing::info!(

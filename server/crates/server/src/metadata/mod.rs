@@ -74,6 +74,16 @@ impl Metadata {
         Some((p.available(), p))
     }
 
+    /// The first available provider, in registration order, that declares the scene capability.
+    pub fn scene_provider(&self) -> Option<Arc<dyn MetadataProvider>> {
+        let d = self.dynamic.read_clean();
+        d.added
+            .iter()
+            .filter_map(|id| d.providers.get(id))
+            .find(|p| p.available() && p.has_scene())
+            .cloned()
+    }
+
     /// The provider registered under `id`, available or not.
     pub fn get(&self, id: Namespace) -> Option<Arc<dyn MetadataProvider>> {
         self.slot(id).map(|(_, p)| p)

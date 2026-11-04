@@ -48,7 +48,7 @@ pub mod bindings {
 }
 
 pub use bindings::exports::fliks::plugin::metadata_provider::{
-    Lang, ProviderError, SearchQuery, UpstreamError,
+    Lang, ProviderError, ScenePair, SearchQuery, UpstreamError,
 };
 #[doc(hidden)]
 pub use fliks_plugin_sdk as sdk;
@@ -117,6 +117,16 @@ pub trait MetadataProvider {
         _params: Vec<(String, String)>,
         _lang: Lang,
     ) -> Result<String, ProviderError> {
+        Err(ProviderError::Unsupported)
+    }
+    /// The ids of `origin` this provider has a scene mapping for.
+    fn scene_mapped_ids(_origin: String) -> Result<Vec<String>, ProviderError> {
+        Err(ProviderError::Unsupported)
+    }
+    /// The scene to aired numbering of one id; none when it has no mapping.
+    fn scene_mapping(
+        _id: fliks_plugin_sdk::ExternalId,
+    ) -> Result<Option<Vec<ScenePair>>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
 }
@@ -197,6 +207,14 @@ macro_rules! export_provider {
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::list(kind, name, params, lang)
             }
+            fn scene_mapped_ids(origin: String) -> Result<Vec<String>, $crate::ProviderError> {
+                <$t as $crate::MetadataProvider>::scene_mapped_ids(origin)
+            }
+            fn scene_mapping(
+                id: $crate::sdk::ExternalId,
+            ) -> Result<Option<Vec<$crate::ScenePair>>, $crate::ProviderError> {
+                <$t as $crate::MetadataProvider>::scene_mapping(id)
+            }
         }
         // Native builds (unit tests, clippy) cannot link the component export names.
         #[cfg(target_arch = "wasm32")]
@@ -228,6 +246,8 @@ macro_rules! export_provider {
                 <__FliksProvider as P>::fetch_person,
                 <__FliksProvider as P>::person_credits,
                 <__FliksProvider as P>::list,
+                <__FliksProvider as P>::scene_mapped_ids,
+                <__FliksProvider as P>::scene_mapping,
             );
         };
     };

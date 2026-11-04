@@ -266,12 +266,7 @@ impl Harness {
             .expect("no catalog sources");
 
         std::fs::create_dir_all(&dir).expect("the runtime dir");
-        let mut st = AppState::new(
-            pool.clone(),
-            // A plugin test never reaches TheXEM.
-            Config::from_lookup(|k| (k == "FLIKS_XEM_API_URL").then(|| "http://127.0.0.1:1".into())),
-            SECRET,
-        );
+        let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
         let opts = pool.connect_options();
         let fetch = fliks_server::plugins::fetch::Fetcher {
             net: setup.targets.clone(),

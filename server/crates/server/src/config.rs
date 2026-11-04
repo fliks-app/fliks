@@ -44,7 +44,6 @@ pub struct Config {
     pub refresh_token_ttl_days: i64,
     pub engine_url: String,
     pub engine_token: String,
-    pub xem_url: String,
 }
 
 impl Config {
@@ -106,7 +105,6 @@ impl Config {
             ),
             engine_url: get("FLIKS_ENGINE_URL").unwrap_or_default(),
             engine_token: get("FLIKS_ENGINE_TOKEN").unwrap_or_default(),
-            xem_url: get("FLIKS_XEM_API_URL").unwrap_or_else(|| crate::scene::BASE.into()),
         }
     }
 }

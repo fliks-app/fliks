@@ -1,18 +1,13 @@
-//! TheXEM scene mappings: storage, refresh and the per-media loader (`docs/spec/scene-numbering.md`).
-use crate::{ingest::KeyedLocks, outbound, state::AppState, sync::MutexExt};
-use fliks_domain::{
-    metadata::breaker::{Breaker, Outcome},
-    release::scene::{SceneMap, parse_havemap},
-};
-use serde_json::Value;
+//! Scene mappings: storage, refresh and the per-media loader (`docs/spec/scene-numbering.md`). The
+//! mappings come from the scene provider plugin, never from the core.
+use crate::{ingest::KeyedLocks, metadata::MetadataProvider, state::AppState, sync::MutexExt};
+use fliks_domain::{metadata::limiter::Priority, release::scene::SceneMap};
 use sqlx::{PgPool, types::Json};
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
-pub const BASE: &str = "https://thexem.info";
 
 /// What a series' scene numbering is, as far as is known.
 #[derive(Clone, Debug, PartialEq)]
@@ -20,75 +15,32 @@ pub enum Mapping {
     /// Names carry aired numbers.
     Unmapped,
     Mapped(SceneMap),
-    /// TheXEM maps the series but its mapping is not stored: names cannot be read.
+    /// The scene provider lists the series but its mapping is not stored: names cannot be read.
     Unknown,
 }
 
-/// The TheXEM client: one request a second, a breaker after three failures in a row, and the
-/// per-id lock of an on-demand fetch.
+/// The per-id lock of an on-demand fetch and the failures it remembers.
+#[derive(Default)]
 pub struct Xem {
-    base: String,
-    started: Instant,
-    last: tokio::sync::Mutex<Option<Instant>>,
-    breaker: Mutex<Breaker>,
     flights: KeyedLocks<i32>,
-    /// The last failed on-demand fetch per id, so a down TheXEM is asked once per window.
+    /// The last failed on-demand fetch per id, so a down provider is asked once per window.
     failed: Mutex<HashMap<i32, Instant>>,
 }
 
 const RETRY_AFTER_FAILURE: Duration = Duration::from_secs(30 * 60);
-const REQUEST_GAP: Duration = Duration::from_secs(1);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
-impl Xem {
-    pub fn new(base: &str) -> Self {
-        Self {
-            base: outbound::base_url(base, true),
-            started: Instant::now(),
-            last: Default::default(),
-            breaker: Mutex::new(Breaker::new(3, 30_000)),
-            flights: KeyedLocks::default(),
-            failed: Mutex::default(),
-        }
-    }
-
-    async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, String> {
-        let now_ms = || self.started.elapsed().as_millis() as u64;
-        if !self.breaker.lock_clean().allow(now_ms()) {
-            return Err("TheXEM circuit open".into());
-        }
-        {
-            let mut last = self.last.lock().await;
-            if let Some(wait) = last.and_then(|at| REQUEST_GAP.checked_sub(at.elapsed())) {
-                tokio::time::sleep(wait).await;
-            }
-            *last = Some(Instant::now());
-        }
-        let sent = outbound::client()
-            .get(format!("{}{path}", self.base))
-            .query(query)
-            .timeout(REQUEST_TIMEOUT)
-            .send()
-            .await;
-        let (outcome, out) = match sent {
-            Err(e) => (Outcome::Transient, Err(outbound::error_text(e))),
-            Ok(r) if !r.status().is_success() => {
-                let status = r.status().as_u16();
-                (Outcome::of_status(status), Err(format!("HTTP {status}")))
-            }
-            Ok(r) => match r.json::<Value>().await {
-                Ok(v) => (Outcome::Ok, Ok(v)),
-                Err(_) => (Outcome::Transient, Err("invalid JSON response".to_owned())),
-            },
-        };
-        self.breaker.lock_clean().record(now_ms(), outcome);
-        out
-    }
-
-    async fn map(&self, tvdb: i32) -> Result<SceneMap, String> {
-        let query = [("origin", "tvdb".to_owned()), ("id", tvdb.to_string())];
-        SceneMap::from_xem(&self.get("/map/all", &query).await?)
-    }
+async fn fetched(
+    provider: &Arc<dyn MetadataProvider>,
+    tvdb: i32,
+    p: Priority,
+) -> Result<SceneMap, String> {
+    let pairs = provider
+        .scene_mapping(&tvdb.to_string(), p)
+        .await
+        .map_err(|e| e.to_string())?;
+    pairs
+        .map(|entries| SceneMap { entries })
+        .ok_or_else(|| "the provider has no mapping for it".to_owned())
 }
 
 /// `None` when the series has no row; `Some(None)` when its mapping is not fetched yet.
@@ -147,7 +99,7 @@ pub async fn stored_mapping(db: &PgPool, media_id: i32) -> sqlx::Result<Mapping>
 }
 
 /// The state of a series; an unknown mapping is fetched on demand, at most once per window
-/// when TheXEM does not answer.
+/// when the provider does not answer.
 pub async fn for_media(st: &AppState, media_id: i32) -> sqlx::Result<Mapping> {
     let db = &st.db;
     let (state, Some(tvdb)) = lookup(db, media_id).await? else {
@@ -156,6 +108,9 @@ pub async fn for_media(st: &AppState, media_id: i32) -> sqlx::Result<Mapping> {
     if state != Mapping::Unknown {
         return Ok(state);
     }
+    let Some(provider) = st.metadata.scene_provider() else {
+        return Ok(Mapping::Unmapped);
+    };
     let _flight = st.xem.flights.lock(tvdb).await;
     if let Some(Some(map)) = stored(db, tvdb).await? {
         return applied(db, media_id, map).await;
@@ -169,9 +124,9 @@ pub async fn for_media(st: &AppState, media_id: i32) -> sqlx::Result<Mapping> {
     if held_off {
         return Ok(Mapping::Unknown);
     }
-    let fetched = st.xem.map(tvdb).await;
-    let failed = fetched.is_err();
-    keep_or_store(db, tvdb, fetched).await;
+    let got = fetched(&provider, tvdb, Priority::Interactive).await;
+    let failed = got.is_err();
+    keep_or_store(db, tvdb, got).await;
     if failed {
         st.xem.failed.lock_clean().insert(tvdb, Instant::now());
         return Ok(Mapping::Unknown);
@@ -204,14 +159,15 @@ async fn keep_or_store(db: &PgPool, tvdb: i32, fetched: Result<SceneMap, String>
 /// Lists the mapped TVDB ids, then fetches the mapping of each one a library series carries.
 pub async fn refresh(st: &AppState) -> sqlx::Result<()> {
     let (db, xem) = (&st.db, &st.xem);
-    let listed = xem
-        .get("/map/havemap", &[("origin", "tvdb".to_owned())])
-        .await;
-    match listed.and_then(|v| parse_havemap(&v)) {
-        Ok(ids) => {
-            let ids: Vec<i32> = ids
-                .into_iter()
-                .filter_map(|i| i32::try_from(i).ok())
+    let Some(provider) = st.metadata.scene_provider() else {
+        return Ok(());
+    };
+    match provider.scene_mapped_ids(Priority::Background).await {
+        Ok(listed) => {
+            let ids: Vec<i32> = listed
+                .iter()
+                .filter_map(|i| i.parse::<i32>().ok())
+                .filter(|i| *i > 0)
                 .collect();
             sqlx::query(
                 r#"INSERT INTO scene_mappings ("tvdbId") SELECT unnest($1::int[])
@@ -238,7 +194,7 @@ pub async fn refresh(st: &AppState) -> sqlx::Result<()> {
     .await?;
     for id in wanted {
         let _flight = xem.flights.lock(id).await;
-        keep_or_store(db, id, xem.map(id).await).await;
+        keep_or_store(db, id, fetched(&provider, id, Priority::Background).await).await;
     }
     Ok(())
 }
@@ -263,58 +219,37 @@ pub fn spawn_boot_refresh(st: &AppState) {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use crate::metadata::stub::scene::SceneStub;
+    use std::sync::atomic::Ordering;
 
-    const ALL: &str = include_str!("../../../fixtures/scene-numbering/map-all.json");
-    const HAVEMAP: &str = include_str!("../../../fixtures/scene-numbering/havemap.json");
-    const UNKNOWN: &str = include_str!("../../../fixtures/scene-numbering/map-unknown.json");
     const TVDB: i32 = 375921;
 
     fn fixture() -> SceneMap {
-        SceneMap::from_xem(&serde_json::from_str(ALL).unwrap()).unwrap()
+        serde_json::from_str(include_str!("../../../fixtures/scene-numbering/map.json")).unwrap()
     }
 
-    /// A loopback server answering 200 with the body of the first route its request line holds.
-    async fn stub(routes: Vec<(&'static str, &'static str)>) -> (String, Arc<AtomicUsize>) {
-        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}", l.local_addr().unwrap());
-        let hits = Arc::new(AtomicUsize::new(0));
-        let counted = hits.clone();
-        tokio::spawn(async move {
-            loop {
-                let Ok((mut c, _)) = l.accept().await else {
-                    return;
-                };
-                let routes = routes.clone();
-                counted.fetch_add(1, Ordering::SeqCst);
-                tokio::spawn(async move {
-                    let mut buf = vec![0; 4096];
-                    let n = c.read(&mut buf).await.unwrap_or(0);
-                    let head = String::from_utf8_lossy(&buf[..n]);
-                    let line = head.lines().next().unwrap_or("");
-                    let body = routes
-                        .iter()
-                        .find(|r| line.contains(r.0))
-                        .map_or("", |r| r.1);
-                    let reply = format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                        body.len()
-                    );
-                    let _ = c.write_all(reply.as_bytes()).await;
-                });
-            }
-        });
-        (url, hits)
-    }
-
-    fn state(db: &PgPool, xem: &str) -> AppState {
-        let xem = xem.to_owned();
-        let cfg = Config::from_lookup(move |k| (k == "FLIKS_XEM_API_URL").then(|| xem.clone()));
+    fn state(db: &PgPool) -> AppState {
+        let cfg = Config::from_lookup(|_| None);
         AppState::new(db.clone(), cfg, "0123456789abcdef0123456789abcdef")
+    }
+
+    /// A state with a scene provider answering `maps` (the TVDB id as a string to its mapping).
+    fn with_provider(db: &PgPool, stub: &Arc<SceneStub>) -> AppState {
+        let st = state(db);
+        st.metadata.add_plugin(stub.clone());
+        st
+    }
+
+    fn stub(ids: &[&str], mapped: bool) -> Arc<SceneStub> {
+        let s = Arc::new(SceneStub::default());
+        *s.ids.lock().unwrap() = ids.iter().map(|i| (*i).to_owned()).collect();
+        if mapped {
+            s.maps
+                .lock()
+                .unwrap()
+                .insert(TVDB.to_string(), fixture().entries);
+        }
+        s
     }
 
     /// A series carrying `TVDB` whose library seasons hold `seasons` as (number, episodes).
@@ -371,18 +306,18 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn refresh_keeps_the_stored_mapping_on_a_failure_body(db: PgPool) {
+    async fn refresh_keeps_the_stored_mapping_when_the_provider_has_none(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         series(&db, &[(1, 10), (2, 7), (3, 8)]).await;
         store(&db, Some(fixture())).await;
-        let (url, _) = stub(vec![("havemap", HAVEMAP), ("map/all", UNKNOWN)]).await;
-        refresh(&state(&db, &url)).await.unwrap();
+        let s = stub(&["70668", "375921", "x"], false);
+        refresh(&with_provider(&db, &s)).await.unwrap();
         assert_eq!(stored(&db, TVDB).await.unwrap(), Some(Some(fixture())));
         let listed: i64 = sqlx::query_scalar("SELECT count(*) FROM scene_mappings")
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(listed, 5, "every listed id has a row");
+        assert_eq!(listed, 2, "every valid listed id has a row");
     }
 
     #[sqlx::test(migrations = false)]
@@ -407,18 +342,31 @@ mod tests {
         series(&db, &[(1, 10), (2, 7), (3, 8)]).await;
         store(&db, None).await;
         assert_eq!(stored_mapping(&db, 1).await.unwrap(), Mapping::Unknown);
-        let (url, hits) = stub(vec![("map/all", UNKNOWN)]).await;
-        let down = state(&db, &url);
-        assert_eq!(for_media(&down, 1).await.unwrap(), Mapping::Unknown);
-        assert_eq!(for_media(&down, 1).await.unwrap(), Mapping::Unknown);
+        let down = stub(&[], true);
+        down.down.store(true, Ordering::SeqCst);
+        let st = with_provider(&db, &down);
+        assert_eq!(for_media(&st, 1).await.unwrap(), Mapping::Unknown);
+        assert_eq!(for_media(&st, 1).await.unwrap(), Mapping::Unknown);
         assert_eq!(
-            hits.load(Ordering::SeqCst),
+            down.mapping_calls.load(Ordering::SeqCst),
             1,
             "a failed id is not asked again at once"
         );
-        let up = state(&db, &stub(vec![("map/all", ALL)]).await.0);
-        assert_eq!(for_media(&up, 1).await.unwrap(), Mapping::Mapped(fixture()));
+        let up = stub(&[], true);
+        let st = with_provider(&db, &up);
+        assert_eq!(for_media(&st, 1).await.unwrap(), Mapping::Mapped(fixture()));
         assert_eq!(stored(&db, TVDB).await.unwrap(), Some(Some(fixture())));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn no_scene_provider_means_unmapped(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        series(&db, &[(1, 10), (2, 7), (3, 8)]).await;
+        store(&db, None).await;
+        let st = state(&db);
+        assert_eq!(for_media(&st, 1).await.unwrap(), Mapping::Unmapped);
+        refresh(&st).await.unwrap();
+        assert_eq!(stored(&db, TVDB).await.unwrap(), Some(None));
     }
 
     #[sqlx::test(migrations = false)]
@@ -430,8 +378,9 @@ mod tests {
             .execute(&db)
             .await
             .unwrap();
-        let (url, _) = stub(vec![("havemap", HAVEMAP), ("map/all", ALL)]).await;
-        refresh(&state(&db, &url)).await.unwrap();
+        let s = stub(&["375921"], true);
+        let st = with_provider(&db, &s);
+        refresh(&st).await.unwrap();
         assert_eq!(stored(&db, 5).await.unwrap(), None);
         assert_eq!(stored(&db, TVDB).await.unwrap(), Some(Some(fixture())));
         sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES (6, $1)"#)
@@ -439,7 +388,7 @@ mod tests {
             .execute(&db)
             .await
             .unwrap();
-        refresh(&state(&db, &url)).await.unwrap();
+        refresh(&st).await.unwrap();
         assert!(
             stored(&db, 6).await.unwrap().is_some(),
             "a stored mapping is kept"

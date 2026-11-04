@@ -1,19 +1,25 @@
 use fliks_domain::release::{
     parsing::season_episode::parse_season_episode,
-    scene::{SceneMap, parse_havemap},
+    scene::{Entry, SceneMap},
     scoring::{ReleaseCandidate, ScoreOptions, score_and_sort_releases},
 };
 use std::collections::BTreeMap;
 
-fn json(s: &str) -> serde_json::Value {
-    serde_json::from_str(s).unwrap()
+fn pairs(p: &[(i64, i64, i64, i64)]) -> SceneMap {
+    let entries = p
+        .iter()
+        .map(|&(scene_season, scene_episode, season, episode)| Entry {
+            scene_season,
+            scene_episode,
+            season,
+            episode,
+        })
+        .collect();
+    SceneMap { entries }
 }
 
 fn map() -> SceneMap {
-    SceneMap::from_xem(&json(include_str!(
-        "../../../fixtures/scene-numbering/map-all.json"
-    )))
-    .unwrap()
+    serde_json::from_str(include_str!("../../../fixtures/scene-numbering/map.json")).unwrap()
 }
 
 fn aired(title: &str) -> (Option<i64>, Option<i64>, bool) {
@@ -83,24 +89,8 @@ fn guard_rejects_a_library_with_other_season_counts() {
     assert!(map().fits(&lib(&[(1, 10), (2, 7), (3, 9)])));
     assert!(!map().fits(&lib(&[(1, 11), (2, 7), (3, 8)])));
     // A season the mapping leaves as it is does not count.
-    let identity = SceneMap::from_xem(&json(r#"{"result":"success","data":[{"scene":{"season":1,"episode":1},"tvdb":{"season":1,"episode":1}}]}"#)).unwrap();
+    let identity = pairs(&[(1, 1, 1, 1)]);
     assert!(identity.fits(&lib(&[(1, 12)])));
-}
-
-#[test]
-fn recorded_bodies_parse_and_failures_are_errors() {
-    let ids = parse_havemap(&json(include_str!(
-        "../../../fixtures/scene-numbering/havemap.json"
-    )));
-    assert_eq!(
-        ids.unwrap().into_iter().collect::<Vec<_>>(),
-        vec![70668, 70900, 71146, 71313, 375921]
-    );
-    let unknown = json(include_str!(
-        "../../../fixtures/scene-numbering/map-unknown.json"
-    ));
-    assert!(SceneMap::from_xem(&unknown).is_err());
-    assert!(SceneMap::from_xem(&json(r#"{"result":"success","data":[]}"#)).is_err());
 }
 
 fn codes(title: &str, patch: serde_json::Value) -> Vec<String> {
@@ -162,17 +152,15 @@ fn an_unknown_or_ambiguous_mapping_rejects_numbered_releases() {
 }
 
 fn ambiguous_map() -> SceneMap {
-    SceneMap::from_xem(&json(include_str!(
+    serde_json::from_str(include_str!(
         "../../../fixtures/scene-numbering/map-ambiguous.json"
-    )))
+    ))
     .unwrap()
 }
 
 #[test]
 fn a_double_episode_translates_and_a_cross_season_split_is_refused() {
     let m = ambiguous_map();
-    // The entries missing `scene` or `tvdb` are skipped: 8 of 10 remain.
-    assert_eq!(m.entries.len(), 8);
     let t = |title| m.translate(&parse_season_episode(title));
     let double = t("Show.S01E01.1080p").unwrap();
     assert_eq!(
@@ -193,11 +181,7 @@ fn a_double_episode_translates_and_a_cross_season_split_is_refused() {
 
 #[test]
 fn season_zero_is_left_out_of_a_pack_range() {
-    let entry = |ss, se, s, e| serde_json::json!({"scene": {"season": ss, "episode": se}, "tvdb": {"season": s, "episode": e}});
-    let body = serde_json::json!({"result": "success", "data": [
-        entry(1, 1, 1, 1), entry(2, 1, 0, 1), entry(2, 2, 2, 1)
-    ]});
-    let m = SceneMap::from_xem(&body).unwrap();
+    let m = pairs(&[(1, 1, 1, 1), (2, 1, 0, 1), (2, 2, 2, 1)]);
     let p = m
         .translate(&parse_season_episode("Show.S01-S02.1080p"))
         .unwrap();

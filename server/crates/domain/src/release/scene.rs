@@ -1,7 +1,6 @@
 //! Scene to aired numbering of a series (`docs/spec/scene-numbering.md`).
 use crate::release::parsing::season_episode::ParsedSeasonEpisode;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,18 +17,6 @@ pub struct SceneMap {
     pub entries: Vec<Entry>,
 }
 
-#[derive(Deserialize)]
-struct Side {
-    season: i64,
-    episode: i64,
-}
-
-#[derive(Deserialize)]
-struct Pair {
-    scene: Side,
-    tvdb: Side,
-}
-
 impl Entry {
     fn scene(&self) -> (i64, i64) {
         (self.scene_season, self.scene_episode)
@@ -40,50 +27,7 @@ impl Entry {
     }
 }
 
-fn data(v: &Value) -> Result<Value, String> {
-    match v.get("result").and_then(Value::as_str) {
-        Some("success") => Ok(v.get("data").cloned().unwrap_or(Value::Null)),
-        _ => Err("TheXEM did not answer success".into()),
-    }
-}
-
-/// The TVDB ids TheXEM maps (`/map/havemap?origin=tvdb`).
-pub fn parse_havemap(body: &Value) -> Result<BTreeSet<i64>, String> {
-    let Value::Array(ids) = data(body)? else {
-        return Err("havemap data is not a list".into());
-    };
-    ids.iter()
-        .map(|v| match v {
-            Value::String(s) => s.parse().ok(),
-            n => n.as_i64(),
-        })
-        .collect::<Option<_>>()
-        .ok_or_else(|| "havemap holds a non-numeric id".into())
-}
-
 impl SceneMap {
-    /// `/map/all?origin=tvdb&id=<tvdb>`; an entry without `scene` or `tvdb` is skipped, and a
-    /// mapping left with no entry is an error, never an identity.
-    pub fn from_xem(body: &Value) -> Result<Self, String> {
-        let Value::Array(rows) = data(body)? else {
-            return Err("mapping data is not a list".into());
-        };
-        let entries: Vec<Entry> = rows
-            .into_iter()
-            .filter_map(|r| serde_json::from_value::<Pair>(r).ok())
-            .map(|p| Entry {
-                scene_season: p.scene.season,
-                scene_episode: p.scene.episode,
-                season: p.tvdb.season,
-                episode: p.tvdb.episode,
-            })
-            .collect();
-        if entries.is_empty() {
-            return Err("empty mapping".into());
-        }
-        Ok(Self { entries })
-    }
-
     /// Episodes per aired season, season 0 left out.
     fn aired_episodes(&self) -> BTreeMap<i64, BTreeSet<i64>> {
         let mut out: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();

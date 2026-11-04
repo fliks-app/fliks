@@ -155,7 +155,6 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
     auth::spawn_jobs(db);
     jobs::spawn(&state);
-    scene::spawn_boot_refresh(&state);
     subtitles::scheduler::spawn_tick(&state);
     state.plugins.spawn(&state);
     if let Err(e) = state.metadata.load_orders().await {

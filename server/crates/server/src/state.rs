@@ -67,7 +67,7 @@ impl AppState {
             busy: crate::busy::Busy::default(),
             metadata: Arc::new(Metadata::new(db.clone())),
             images: Arc::new(ImageStore::new()),
-            xem: Arc::new(crate::scene::Xem::new(&cfg.xem_url)),
+            xem: Arc::default(),
             system: Arc::default(),
             jobs,
             subtitles: Arc::default(),

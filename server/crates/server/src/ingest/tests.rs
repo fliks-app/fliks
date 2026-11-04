@@ -215,7 +215,6 @@ async fn ctx_hello(
     let env = [
         ("FLIKS_ENGINE_URL", fake.url.clone()),
         ("FLIKS_ENGINE_TOKEN", "tok".into()),
-        ("FLIKS_XEM_API_URL", "http://127.0.0.1:1".into()),
     ];
     let cfg = Config::from_lookup(|k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()));
     let dir = tmp();
@@ -3993,10 +3992,10 @@ mod scene_import {
     /// A mapping of scene season 4 onto aired season 3, library seasons 1 to 3 holding 10, 7, 8.
     async fn mapped(c: &Ctx, tvdb: i32) -> i32 {
         let m = series(c, tvdb, &[(1, 10), (2, 7), (3, 8)]).await;
-        let body = include_str!("../../../../fixtures/scene-numbering/map-all.json");
-        let map =
-            fliks_domain::release::scene::SceneMap::from_xem(&serde_json::from_str(body).unwrap())
-                .unwrap();
+        let map: fliks_domain::release::scene::SceneMap = serde_json::from_str(include_str!(
+            "../../../../fixtures/scene-numbering/map.json"
+        ))
+        .unwrap();
         sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES ($1, $2)"#)
             .bind(tvdb)
             .bind(sqlx::types::Json(map))
@@ -4054,6 +4053,9 @@ mod scene_import {
     }
 
     async fn unknown(c: &Ctx) -> i32 {
+        let down = std::sync::Arc::new(crate::metadata::stub::scene::SceneStub::default());
+        down.down.store(true, std::sync::atomic::Ordering::SeqCst);
+        c.st.metadata.add_plugin(down);
         let m = series(c, 375921, &[(3, 8)]).await;
         sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId") VALUES (375921)"#)
             .execute(&c.st.db)
@@ -4092,10 +4094,10 @@ mod scene_import {
     async fn an_ambiguous_number_is_a_plain_error_not_a_retry(pool: PgPool) {
         let c = ctx(pool).await;
         let m = series(&c, 375921, &[(1, 3), (2, 4), (3, 1)]).await;
-        let body = include_str!("../../../../fixtures/scene-numbering/map-ambiguous.json");
-        let map =
-            fliks_domain::release::scene::SceneMap::from_xem(&serde_json::from_str(body).unwrap())
-                .unwrap();
+        let map: fliks_domain::release::scene::SceneMap = serde_json::from_str(include_str!(
+            "../../../../fixtures/scene-numbering/map-ambiguous.json"
+        ))
+        .unwrap();
         sqlx::query(r#"INSERT INTO scene_mappings ("tvdbId", entries) VALUES (375921, $1)"#)
             .bind(sqlx::types::Json(map))
             .execute(&c.st.db)

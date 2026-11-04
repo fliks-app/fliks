@@ -685,9 +685,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
     }
 
     fn app_state(db: &PgPool) -> AppState {
-        let cfg = crate::config::Config::from_lookup(|k| {
-            (k == "FLIKS_XEM_API_URL").then(|| "http://127.0.0.1:1".to_owned())
-        });
+        let cfg = crate::config::Config::from_lookup(|_| None);
         AppState::new(db.clone(), cfg, "0123456789abcdef0123456789abcdef")
     }
 
@@ -731,6 +729,9 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
             .await
             .unwrap();
         let st = app_state(&db);
+        let down = std::sync::Arc::new(crate::metadata::stub::scene::SceneStub::default());
+        down.down.store(true, std::sync::atomic::Ordering::SeqCst);
+        st.metadata.add_plugin(down);
         let out = matches(&st, vec![title("a", "Show.S03E02.1080p.WEB")], None)
             .await
             .unwrap();

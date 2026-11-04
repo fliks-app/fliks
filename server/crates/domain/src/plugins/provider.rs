@@ -10,7 +10,7 @@ pub const EXPORT: &str = "fliks:plugin/metadata-provider@3.0.0";
 /// The kinds of work a provider may serve (the documented set of the WIT `kind`).
 pub const KINDS: [&str; 5] = ["movie", "series", "book", "comic", "album"];
 /// The capabilities a kind lists, one per `metadata-provider` function family.
-pub const CAPABILITIES: [&str; 10] = [
+pub const CAPABILITIES: [&str; 11] = [
     "search",
     "work",
     "children",
@@ -21,6 +21,7 @@ pub const CAPABILITIES: [&str; 10] = [
     "credits",
     "findBy",
     "lists",
+    "scene",
 ];
 /// The resources `snapshotTtlSecs` may name.
 pub const RESOURCES: [&str; 5] = ["work", "children", "edition", "person", "chapters"];
@@ -28,10 +29,11 @@ pub const RESOURCES: [&str; 5] = ["work", "children", "edition", "person", "chap
 /// The longest `snapshotTtlSecs` value: ten years.
 const MAX_TTL_SECS: u64 = 315_360_000;
 
-const BLOCK_KEYS: [&str; 10] = [
+const BLOCK_KEYS: [&str; 11] = [
     "namespaces",
     "kinds",
     "findBy",
+    "sceneNamespaces",
     "editionNamespaces",
     "chapterNamespaces",
     "limits",
@@ -180,6 +182,23 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
     });
     if !kinds_ok {
         return Err("provider.kinds must map documented kinds to non-empty capability sets");
+    }
+    let scene = o.get("kinds").and_then(Value::as_object).is_some_and(|k| {
+        k.values()
+            .filter_map(Value::as_array)
+            .flatten()
+            .any(|c| c == "scene")
+    });
+    match (scene, o.get("sceneNamespaces")) {
+        (true, Some(n))
+            if unique_strings(n, |n| matches!(classify(n), Some(Class::Core(_))))
+                .is_some_and(|n| !n.is_empty()) => {}
+        (false, None) => {}
+        _ => {
+            return Err(
+                "provider.sceneNamespaces must list core namespaces, and go with the scene capability",
+            );
+        }
     }
     for key in ["findBy", "editionNamespaces", "chapterNamespaces"] {
         if let Some(v) = o.get(key)
