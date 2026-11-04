@@ -1,4 +1,4 @@
-@if (percent() > 0) {
+@if (percent() > 0 && percent() < 100) {
   <div class="w-full bg-base-300 rounded-full h-1.5" role="progressbar" [attr.aria-valuenow]="percent()" aria-valuemin="0" aria-valuemax="100">
     <div class="bg-primary rounded-full h-1.5 transition-all" [style.width.%]="percent()"></div>
   </div>

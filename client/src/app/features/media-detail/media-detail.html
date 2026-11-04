@@ -38,12 +38,8 @@
     <div class="text-center py-16 text-base-content/50">
       <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
     </div>
-  } @else if (bookMedia(); as bm) {
-    <ng-container *ngComponentOutlet="bookWork(); inputs: { media: bm }" />
-  } @else if (comicMedia(); as cm) {
-    <ng-container *ngComponentOutlet="comicVolume(); inputs: { media: cm }" />
-  } @else if (media()?.type === 'book' || media()?.type === 'comic') {
-    <div class="animate-pulse h-64 bg-base-300/40 rounded-xl mt-12"></div>
+  } @else if (kindPage && media(); as m) {
+    <ng-container *ngComponentOutlet="kindPage; inputs: { media: m }" />
   } @else if (media(); as m) {
     <!-- ===== EPISODE MODE ===== -->
     @if (episodeMode() && focusedEpisode(); as ep) {

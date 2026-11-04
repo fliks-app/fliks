@@ -51,6 +51,7 @@ describe('BookWorkComponent', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.match('/api/email-devices').forEach((r) => r.flush({ enabled: false, canSend: false, maxBytes: null, devices: [] }));
+    http.match('/api/likes/state/1').forEach((r) => r.flush({ media: false, seasonIds: [], episodeIds: [] }));
     return { fixture, http, el: fixture.nativeElement as HTMLElement };
   }
 
@@ -96,11 +97,30 @@ describe('BookWorkComponent', () => {
     http.expectOne('/api/media/1/editions/101/chapters').flush([]);
     await settle(fixture);
     const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="format-button"]'));
-    expect(buttons.map((b) => b.textContent!.trim())).toEqual(['books_work.listen', 'books_work.read']);
+    expect(buttons.map((b) => b.textContent!.trim())).toEqual(['books_work.continue_listening', 'books_work.read']);
     expect(buttons[0].disabled).toBe(false);
     expect(buttons[1].getAttribute('href')).toBe('/read/1/1000');
     expect(buttons[0].classList).toContain('btn-primary');
-    expect(el.textContent).toContain('books_work.progress');
+    expect(el.querySelector<HTMLElement>('app-hero-progress .bg-primary')!.style.width).toBe('25%');
+    expect(el.querySelector('app-hero-progress')!.textContent).toContain('media_info.remaining');
+  });
+
+  it('renders the title and cover from a card handoff before the editions arrive', async () => {
+    TestBed.configureTestingModule({
+      providers: bookSpecProviders(
+        { provide: AuthService, useValue: { hasPermission: () => false } },
+        { provide: AudioPlayerService, useValue: { play } },
+        { provide: StreamingApiService, useValue: {} },
+        { provide: DownloadManagerService, useValue: { tasks: signal([]) } },
+      ),
+    });
+    const fixture = TestBed.createComponent(BookWorkComponent);
+    fixture.componentRef.setInput('media', { id: 1, type: 'book', title: 'Book One', posterUrl: '/p.jpg' } as unknown as Media);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('h1')!.textContent).toBe('Book One');
+    expect(el.querySelector('[data-testid="format-button"]')).toBeNull();
+    expect(el.querySelector('app-book-editions')).toBeNull();
   });
 
   it('fills the series row with its entries and the author row without the work itself', async () => {

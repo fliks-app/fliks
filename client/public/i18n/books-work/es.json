@@ -2,6 +2,8 @@
   "books_work": {
     "read": "Leer",
     "listen": "Escuchar",
+    "continue_reading": "Seguir leyendo",
+    "continue_listening": "Seguir escuchando",
     "soon": "Disponible en una versión posterior",
     "volume_of": "Volumen {{n}} de {{series}}",
     "in_series": "Parte de {{series}}",
