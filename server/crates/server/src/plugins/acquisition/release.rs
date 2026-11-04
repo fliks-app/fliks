@@ -33,12 +33,14 @@ pub async fn matches(
     let mut scenes: HashMap<i32, Mapping> = HashMap::new();
     for (entry, se, coverage, hit) in identified {
         let seasonal = hit.map(|i| &library[i]).filter(|m| m.kind.has_seasons());
-        if let Some(m) = seasonal
+        if let Some(m) = seasonal.filter(|_| se.season.is_some())
             && !scenes.contains_key(&m.id)
         {
             scenes.insert(m.id, crate::scene::for_media(st, m.id).await?);
         }
-        let scene = seasonal.map_or(&Mapping::Unmapped, |m| &scenes[&m.id]);
+        let scene = seasonal
+            .and_then(|m| scenes.get(&m.id))
+            .unwrap_or(&Mapping::Unmapped);
         out.push(match_one(db, &library, min_age, (entry, scene), &se, coverage, hit).await?);
     }
     Ok(out)

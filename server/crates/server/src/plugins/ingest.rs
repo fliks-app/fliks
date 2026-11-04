@@ -204,6 +204,12 @@ pub async fn run(
         }
         None
     };
+    // Resolved before the media's lock, so a fetch from TheXEM never runs under it.
+    if kind.has_seasons() {
+        crate::scene::for_media(st, media_id)
+            .await
+            .map_err(db_err)?;
+    }
     let guard = st.ingest.media.lock(media_id).await;
     let out = library::ingest(
         st,
@@ -222,6 +228,9 @@ pub async fn run(
     )
     .await
     .map_err(|e| host_err("ERR", e))?;
+    if !out.retry.is_empty() {
+        return Err(host_err("ERR_RETRY_LATER", out.retry.join("; ")));
+    }
     if out.imported.is_empty() && !out.errors.is_empty() {
         return Err(host_err("ERR", out.errors.join("; ")));
     }
@@ -883,6 +892,7 @@ mod tests {
             imported: vec![imported("a")],
             already_present: vec![p("b").to_string_lossy().into_owned()],
             errors: vec!["c.epub: not a book file".into()],
+            retry: vec![],
         };
         assert_eq!(ingested(&sources, &out), ["a.epub", "b.epub"]);
     }

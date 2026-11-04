@@ -157,8 +157,8 @@ fn an_unknown_or_ambiguous_mapping_rejects_numbered_releases() {
     assert!(!s(codes("Show.FRENCH.1080p", unknown)));
     let ambiguous =
         serde_json::json!({ "sceneMap": serde_json::to_value(ambiguous_map()).unwrap() });
-    assert!(s(codes("Show.S01E01.1080p", ambiguous.clone())));
-    assert!(!s(codes("Show.S02E01.1080p", ambiguous)));
+    assert!(s(codes("Show.S02E01.1080p", ambiguous.clone())));
+    assert!(!s(codes("Show.S01E01.1080p", ambiguous)));
 }
 
 fn ambiguous_map() -> SceneMap {
@@ -169,15 +169,26 @@ fn ambiguous_map() -> SceneMap {
 }
 
 #[test]
-fn a_scene_number_with_two_aired_targets_is_not_translated() {
+fn a_double_episode_translates_and_a_cross_season_split_is_refused() {
     let m = ambiguous_map();
-    // The entries missing `scene` or `tvdb` are skipped: 3 of 5 remain.
-    assert_eq!(m.entries.len(), 3);
+    // The entries missing `scene` or `tvdb` are skipped: 8 of 10 remain.
+    assert_eq!(m.entries.len(), 8);
     let t = |title| m.translate(&parse_season_episode(title));
-    assert!(t("Show.S01E01.1080p").is_none());
-    assert!(t("Show.S01E01-E02.1080p").is_none());
-    assert!(t("Show.S01.1080p").is_none());
-    assert_eq!(t("Show.S02E01.1080p").unwrap().episode, Some(3));
+    let double = t("Show.S01E01.1080p").unwrap();
+    assert_eq!(
+        (double.season, double.episode, double.episode_end),
+        (Some(1), Some(1), Some(2))
+    );
+    assert!(t("Show.S02E01.1080p").is_none());
+    assert_eq!(t("Show.S03E01.1080p").unwrap().episode, Some(2));
+    // The middle episode of a range is checked too, not only its ends.
+    assert!(t("Show.S03E01-E03.1080p").is_none());
+    assert!(t("Show.S03.1080p").is_none());
+    let pack = t("Show.S01.1080p").unwrap();
+    assert_eq!(
+        (pack.season, pack.episode, pack.episode_end),
+        (Some(1), Some(1), Some(2))
+    );
 }
 
 #[test]

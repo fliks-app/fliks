@@ -63,6 +63,8 @@ pub struct Outcome {
     pub imported: Vec<Imported>,
     pub already_present: Vec<String>,
     pub errors: Vec<String>,
+    /// Files refused for now (a series' scene mapping not known yet): the caller retries them.
+    pub retry: Vec<String>,
 }
 
 /// An episode row with its season, as rule 20 reads it.
@@ -181,6 +183,7 @@ pub async fn ingest(
             formats: &formats,
             allowed: &allowed,
             req: &req,
+            scene: Default::default(),
         };
         if book {
             let pending: Vec<String> = placed.iter().map(|(p, _)| p.rel.clone()).collect();
@@ -193,6 +196,7 @@ pub async fn ingest(
                     .already_present
                     .push(f.path.to_string_lossy().into_owned()),
                 Placed::Error(e) => out.errors.push(e),
+                Placed::Retry(e) => out.retry.push(e),
                 Placed::Imported(_) => {}
             }
             continue;
@@ -204,6 +208,7 @@ pub async fn ingest(
                 .already_present
                 .push(f.path.to_string_lossy().into_owned()),
             Placed::Error(e) => out.errors.push(e),
+            Placed::Retry(e) => out.retry.push(e),
         }
     }
     let mut family = Family::Video;
@@ -323,9 +328,11 @@ fn clock(secs: f64) -> String {
     format!("{}:{:02}", s / 60, s % 60)
 }
 
-/// Why a file's episode could not be resolved: a retry may succeed, or the import failed.
+/// Why a file's episode could not be resolved: a retry may succeed, the file cannot be placed,
+/// or the import failed.
 enum Refusal {
     Retry(String),
+    Refused(String),
     Failed(String),
 }
 
@@ -340,6 +347,7 @@ enum Placed {
     Book(books::Placed),
     Present,
     Error(String),
+    Retry(String),
 }
 
 struct Ctx<'a> {
@@ -351,6 +359,8 @@ struct Ctx<'a> {
     formats: &'a naming::NamingFormats,
     allowed: &'a [String],
     req: &'a Request,
+    /// The series' scene mapping, read once for the whole pack.
+    scene: tokio::sync::OnceCell<Mapping>,
 }
 
 /// Rule 4: one component, at most 255 bytes, the base truncated at a character boundary.
@@ -554,7 +564,8 @@ impl Ctx<'_> {
         let ep = if self.media.has_seasons() {
             match self.episode(f).await {
                 Ok(ep) => ep,
-                Err(Refusal::Retry(why)) => return Ok(Placed::Error(format!("{name}: {why}"))),
+                Err(Refusal::Retry(why)) => return Ok(Placed::Retry(format!("{name}: {why}"))),
+                Err(Refusal::Refused(why)) => return Ok(Placed::Error(format!("{name}: {why}"))),
                 Err(Refusal::Failed(e)) => return Err(e),
             }
         } else {
@@ -793,7 +804,9 @@ impl Ctx<'_> {
 
     /// The aired numbers of a name's numbers, for a series with a scene mapping.
     async fn aired(&self, n: EpisodeNumbers) -> Result<EpisodeNumbers, Refusal> {
-        let scene = crate::scene::for_media(self.st, self.media.id)
+        let scene = self
+            .scene
+            .get_or_try_init(|| crate::scene::for_media(self.st, self.media.id))
             .await
             .map_err(|e| e.to_string())?;
         let map = match scene {
@@ -813,9 +826,9 @@ impl Ctx<'_> {
             episode_end: n.episode_end,
             is_complete_series: false,
         };
-        let ambiguous =
-            || Refusal::Retry("the scene number is ambiguous in the series' scene mapping".into());
-        let t = map.translate(&p).ok_or_else(ambiguous)?;
+        let t = map.translate(&p).ok_or_else(|| {
+            Refusal::Refused("the scene number is ambiguous in the series' scene mapping".into())
+        })?;
         Ok(EpisodeNumbers {
             season: t.season.unwrap_or(n.season),
             episode: t.episode.unwrap_or(n.episode),

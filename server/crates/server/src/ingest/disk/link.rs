@@ -402,6 +402,7 @@ fn tally(
             *imported += o.imported.len() as i64;
             *present += o.already_present.len() as i64;
             errors.extend(o.errors);
+            errors.extend(o.retry);
             if !o.imported.is_empty() {
                 crate::media_servers::dispatch_detached(st, "library.rescan");
             }

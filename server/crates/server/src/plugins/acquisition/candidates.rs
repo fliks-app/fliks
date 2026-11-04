@@ -154,17 +154,18 @@ pub async fn context(
             .await
             .map_err(db_err);
     }
-    context_of(db, m, season_id, episode_id)
+    context_of(st, m, season_id, episode_id)
         .await
         .map_err(db_err)
 }
 
 async fn context_of(
-    db: &PgPool,
+    st: &AppState,
     m: MediaRow,
     season_id: Option<u32>,
     episode_id: Option<u32>,
 ) -> sqlx::Result<Option<t::Target>> {
+    let db = &st.db;
     let (mut season, mut episode) = (None, None);
     if let Some(eid) = episode_id {
         let e: Option<EpisodeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
@@ -202,7 +203,7 @@ async fn context_of(
             Some(e) => item_unit((sid, number), e, count),
             None => group_unit(sid, number, count),
         };
-        let scene = crate::scene::stored_mapping(db, m.id).await?;
+        let scene = crate::scene::for_media(st, m.id).await?;
         set_scope(&mut tg, unit, &scene);
     }
     Ok(Some(tg))

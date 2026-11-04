@@ -79,6 +79,7 @@ async fn start(
         .env("PORT", port.to_string())
         .envs(extra_env.iter().copied())
         .env("FLIKS_CONF_DIR", conf)
+        .env("FLIKS_XEM_API_URL", "http://127.0.0.1:1")
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let child = cmd.spawn().unwrap();

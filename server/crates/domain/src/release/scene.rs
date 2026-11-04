@@ -110,27 +110,25 @@ impl SceneMap {
         })
     }
 
-    /// A scene episode that two entries map to different aired episodes.
-    fn ambiguous(&self, season: i64, episode: i64) -> bool {
+    /// The aired season and episodes of a scene episode: no entry keeps the number, a scene
+    /// episode mapped to consecutive episodes of one season is that range, any other split of
+    /// it has no reading.
+    pub fn aired(&self, season: i64, episode: i64) -> Option<(i64, i64, i64)> {
+        if season == 0 {
+            return Some((season, episode, episode));
+        }
         let to: BTreeSet<_> = self
             .entries
             .iter()
             .filter(|e| e.scene() == (season, episode))
             .map(Entry::aired)
             .collect();
-        to.len() > 1
-    }
-
-    /// The aired number of a scene episode; no entry keeps the number, an ambiguous one has none.
-    pub fn aired(&self, season: i64, episode: i64) -> Option<(i64, i64)> {
-        if season == 0 {
-            return Some((season, episode));
-        }
-        if self.ambiguous(season, episode) {
-            return None;
-        }
-        let hit = self.entries.iter().find(|e| e.scene() == (season, episode));
-        Some(hit.map_or((season, episode), Entry::aired))
+        let (Some(&(s, lo)), Some(&(_, hi))) = (to.first(), to.last()) else {
+            return Some((season, episode, episode));
+        };
+        let one_season = to.iter().all(|(es, _)| *es == s);
+        let consecutive = hi - lo + 1 == to.len() as i64;
+        (one_season && consecutive).then_some((s, lo, hi))
     }
 
     /// The scene units to search for an aired season or episode; none known searches itself.
@@ -169,13 +167,18 @@ impl SceneMap {
             })
         };
         if let Some(episode) = p.episode {
-            let (s, e) = self.aired(season, episode)?;
-            let end = match p.episode_end {
-                Some(n) => Some(self.aired(season, n)?),
-                None => None,
-            };
-            let end = end.filter(|(es, ee)| *es == s && *ee > e).map(|(_, ee)| ee);
-            return out(s, Some(e), false, None, end);
+            let last = p.episode_end.unwrap_or(episode);
+            let mut reads = vec![];
+            for n in episode..=last {
+                reads.push(self.aired(season, n)?);
+            }
+            let (s, lo, mut hi) = reads[0];
+            for (rs, _, rhi) in &reads[1..] {
+                if *rs == s {
+                    hi = hi.max(*rhi);
+                }
+            }
+            return out(s, Some(lo), false, None, (hi > lo).then_some(hi));
         }
         let aired = self.aired_episodes();
         let mut covered: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
@@ -183,9 +186,7 @@ impl SceneMap {
         for scene in season..=p.season_end.unwrap_or(season) {
             let mut seen = false;
             for e in self.entries.iter().filter(|e| e.scene_season == scene) {
-                if self.ambiguous(e.scene_season, e.scene_episode) {
-                    return None;
-                }
+                self.aired(e.scene_season, e.scene_episode)?;
                 covered.entry(e.season).or_default().insert(e.episode);
                 seen = true;
             }
