@@ -3438,6 +3438,101 @@ mod relink_identified {
         );
     }
 
+    const OTHER_LIBRARY: &str = "Media already belongs to another library";
+    const TAKEN: &str = "This title is already in the library";
+
+    /// The editor reads only the library `other`; `held` is the library holding the title.
+    async fn held_elsewhere_ctx(
+        pool: PgPool,
+        provider: Arc<dyn crate::metadata::MetadataProvider>,
+    ) -> (Ctx, i32, i32) {
+        let c = ctx_with(pool, Some(provider)).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
+        let held = shelf(&c).await;
+        let other = library(&c, "C", &c.dir.join("more"), r#"["book"]"#).await;
+        sqlx::query(
+            r#"INSERT INTO library_user_access ("userId", "libraryId")
+               SELECT id, $1 FROM users WHERE username = 'editor'"#,
+        )
+        .bind(other)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        (c, held, other)
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_of_a_book_held_in_another_library_answers_by_readability(pool: PgPool) {
+        let ol = anchor().find(Namespace::ISBN, ISBN, "OL1W");
+        let (c, held, other) = held_elsewhere_ctx(pool, Arc::new(ol)).await;
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(held, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let editor_pick = pick(other, "Alpha", &file, "googlebooks", "gb1");
+        let (s, b) = call(&c, "POST", URL, &c.editor, editor_pick).await;
+        assert_eq!((s, b["message"].clone()), (409, json!(TAKEN)));
+        for provider in ["googlebooks", "openlibrary"] {
+            let id = if provider == "openlibrary" {
+                "OL1W"
+            } else {
+                "gb1"
+            };
+            let (s, b) = call(
+                &c,
+                "POST",
+                URL,
+                &c.admin,
+                pick(other, "Alpha", &file, provider, id),
+            )
+            .await;
+            assert_eq!(
+                (s, b["message"].clone()),
+                (400, json!(OTHER_LIBRARY)),
+                "{provider}"
+            );
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_video_held_in_another_library_answers_by_readability(pool: PgPool) {
+        let mut tmdb = crate::metadata::books::tests::Fake::new(Namespace::TMDB)
+            .serving(&[fliks_domain::media::kind::MediaKind::Movie]);
+        tmdb.works.insert(
+            "77".into(),
+            json!({"title": "Film", "year": 2001, "tmdbId": 77}),
+        );
+        let (c, held, other) = held_elsewhere_ctx(pool, Arc::new(tmdb)).await;
+        sqlx::query(r#"UPDATE libraries SET "mediaTypes" = '["book","movie"]' WHERE true"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let m = media(&c, held, "Film (2001)", "movie").await;
+        sqlx::query(
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+               VALUES ($1, 'movie', 'tmdb', '77')"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let file = c.dir.join("more/Film (2001)/Film (2001).mkv");
+        touch(&file, b"f");
+        let body = json!({"libraryId": other, "type": "movie", "folderName": "Film (2001)",
+            "provider": "tmdb", "externalId": "77", "files": [{"filePath": file}]});
+        let (s, b) = call(&c, "POST", URL, &c.admin, body.clone()).await;
+        assert_eq!((s, b["message"].clone()), (400, json!(OTHER_LIBRARY)));
+        let (s, b) = call(&c, "POST", URL, &c.editor, body).await;
+        assert_eq!((s, b["message"].clone()), (409, json!(TAKEN)));
+    }
+
     #[sqlx::test(migrations = false)]
     async fn an_edition_the_anchor_does_not_know_makes_an_unmatched_book(pool: PgPool) {
         let c = ctx_with(pool, Some(Arc::new(anchor()))).await;

@@ -23,9 +23,7 @@ pub(super) async fn link_files(
     if let Some(l) = media.library_id
         && l != d.library_id
     {
-        return Err(AppError::bad_request(
-            "Media already belongs to another library",
-        ));
+        return Err(AppError::bad_request(mw::ANOTHER_LIBRARY));
     }
     let guard = st.ingest.media.lock(media.id).await;
     let (mut errors, mut slot) = (vec![], false);
@@ -485,8 +483,7 @@ pub(super) async fn find_or_import(
         Ok(match id {
             Some(id) => load_media(&st.db, id)
                 .await?
-                .filter(|m| m.library_id.is_some_and(|l| readable.contains(&l)))
-                .filter(|m| !on_edition || m.library_id == Some(d.library_id)),
+                .filter(|m| m.library_id.is_some_and(|l| readable.contains(&l))),
             None => None,
         })
     };
@@ -508,7 +505,7 @@ pub(super) async fn find_or_import(
             prio: d.priority,
         };
         match on_edition {
-            true => book_or_held(st, &creation).await,
+            true => book_or_held(st, &creation, &readable).await,
             false => mw::create_identified(st, &creation)
                 .await
                 .map(|id| (id, true)),

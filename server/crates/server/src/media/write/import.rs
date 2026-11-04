@@ -3,7 +3,7 @@
 use super::{
     body::Body,
     entity_or_404, fields,
-    identified::{Creation, create_identified},
+    identified::{Creation, TAKEN, create_identified},
     metadata, resolve_profile,
 };
 use crate::media::{
@@ -133,7 +133,7 @@ async fn duplicate_ref(
         _ => external_ids::holder(&st.db, media_type, ns, value).await?,
     };
     match held {
-        Some(_) => Err(AppError::conflict("This title is already in the library")),
+        Some(_) => Err(AppError::conflict(TAKEN)),
         None => Ok(()),
     }
 }
@@ -189,13 +189,13 @@ pub async fn import_title(
         .await
         .map_err(|e| {
             if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
-                AppError::conflict("This title is already in the library")
+                AppError::conflict(TAKEN)
             } else {
                 e.into()
             }
         })?;
     if !free {
-        return Err(AppError::conflict("This title is already in the library"));
+        return Err(AppError::conflict(TAKEN));
     }
     let mut stills = vec![];
     if imp.media_type.has_seasons() {
