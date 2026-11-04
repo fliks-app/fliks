@@ -15,6 +15,10 @@ function base64(blob: Blob): Promise<string> {
   });
 }
 
+/** A file name from free text: path and control characters become spaces, runs collapse. */
+export const safeFileName = (name: string, fallback: string): string =>
+  name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || fallback;
+
 /** Saves a blob as a file: an anchor download on web and desktop, the native picker in the mobile apps. */
 export async function saveFile(blob: Blob, name: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {

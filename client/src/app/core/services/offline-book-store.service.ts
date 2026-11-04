@@ -4,6 +4,7 @@ import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
 import { AuthService } from './auth.service';
 import { DownloadCacheService, type OfflineBook } from './download-cache.service';
 import { ServerConfigService } from './server-config.service';
+import { scopeHash } from '../utils/scope-hash';
 
 const DB = 'fliks-offline-books';
 const STORE = 'blobs';
@@ -211,9 +212,7 @@ export class OfflineBookStoreService {
 
   /** On-disk file name, prefixed by a hash of the (server, user) scope so two servers' item ids never meet. */
   private diskName(key: string): string {
-    let h = 5381;
-    for (const c of this.cache.scopeSuffix()) h = (Math.imul(h, 33) + c.charCodeAt(0)) >>> 0;
-    return `book-${h.toString(16)}-${key}`;
+    return `book-${scopeHash(this.cache.scopeSuffix())}-${key}`;
   }
 
   private path(key: string): string {

@@ -10,6 +10,7 @@ import {
   computed,
   effect,
   inject,
+  output,
   signal,
   untracked,
   viewChild,
@@ -36,10 +37,8 @@ import {
 import { Layout, Locator, ReadingProgression, type Link, type Publication } from '@readium/shared';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
-import { saveFile } from '../../core/plugins/save-file.plugin';
+import { safeFileName, saveFile } from '../../core/plugins/save-file.plugin';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
-import { TvService } from '../../core/services/tv.service';
-import { NavbarService } from '../../core/services/navbar.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
@@ -69,7 +68,7 @@ import {
   formatMinutes,
 } from './reader-estimates';
 import { provideReaderFonts } from './reader-fonts';
-import { keyGate, readerKeyAction, readerKeyBindings, type ReaderKeyAction } from './reader-keys';
+import { readerKeyAction, readerKeyBindings, type ReaderKeyAction } from './reader-keys';
 import { ReaderProgressService } from './reader-progress.service';
 import {
   SEARCH_MAX_HITS,
@@ -160,6 +159,7 @@ const EXCERPT_MAX = 2000;
 })
 export class ReaderComponent implements OnDestroy {
   readonly target = input.required<ReaderTarget>();
+  readonly closed = output<void>();
   readonly info = input<ReaderBookInfo | null>(null);
 
   private readonly api = inject(ReaderApiService);
@@ -167,11 +167,9 @@ export class ReaderComponent implements OnDestroy {
   private readonly audio = inject(AudioPlayerService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly navbar = inject(NavbarService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly settingsStore = inject(ReaderSettingsService);
   private readonly progress = inject(ReaderProgressService);
-  private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
@@ -185,7 +183,6 @@ export class ReaderComponent implements OnDestroy {
   private searchRun = 0;
   private readonly chapterText = new Map<string, string>();
   private readonly framed = new WeakSet<Window>();
-  private readonly arrowGate = keyGate();
   private opener: HTMLElement | null = null;
   private marking = false;
 
@@ -270,10 +267,6 @@ export class ReaderComponent implements OnDestroy {
 
   private readonly dismissPanel = () => this.closePanel();
   private readonly sidebar = viewChild(ReaderSidebarComponent);
-  /** On a TV the arrows move focus while the bars or a panel are up. */
-  private readonly arrowsTurnPages = computed(
-    () => !(this.tv.isTv() && (this.chromeVisible() || this.panel())),
-  );
 
   constructor() {
     afterNextRender(() => void this.open());
@@ -281,7 +274,6 @@ export class ReaderComponent implements OnDestroy {
       const prefs = toReaderPreferences(this.settings(), this.colors());
       untracked(() => void this.navigator?.submitPreferences(new EpubPreferences(prefs)));
     });
-    effect(() => this.arrowGate.set(this.arrowsTurnPages()));
     effect(() => {
       const highlights = this.annotations().filter((a) => a.kind === 'highlight');
       untracked(() => this.paint(highlights));
@@ -338,7 +330,7 @@ export class ReaderComponent implements OnDestroy {
         {
           preferences: prefs,
           defaults: {},
-          keyboardPeripherals: readerKeyBindings(this.arrowGate),
+          keyboardPeripherals: readerKeyBindings(),
           upgradeInsecureRequests: 'auto',
         },
       );
@@ -417,7 +409,6 @@ export class ReaderComponent implements OnDestroy {
     if (target?.closest('input, select, textarea')) return;
     const action = readerKeyAction(e);
     if (!action) return;
-    if ((action === 'left' || action === 'right') && !this.arrowsTurnPages()) return;
     if (action === 'chrome' && target?.closest('button, a, summary')) return;
     e.preventDefault();
     this.act(action);
@@ -467,14 +458,13 @@ export class ReaderComponent implements OnDestroy {
       case 'close':
         if (this.panel()) this.closePanel();
         else if (this.selection()) this.selection.set(null);
-        else if (this.tv.isTv() && this.chromeVisible()) this.setChrome(false, false);
         else this.back();
         break;
     }
   }
 
   protected back(): void {
-    this.navbar.goBack(['/']);
+    this.closed.emit();
   }
 
   protected toggleChrome(): void {
@@ -493,7 +483,7 @@ export class ReaderComponent implements OnDestroy {
     this.chromeVisible.set(false);
   }
 
-  /** Bars opened from a key put focus on their first control, the way a D-pad needs. */
+  /** Bars opened from a key put focus on their first control. */
   private focusBar(): void {
     afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.rd-bar button')?.focus(), {
       injector: this.injector,
@@ -770,8 +760,7 @@ export class ReaderComponent implements OnDestroy {
     const blob = new Blob([annotationsMarkdown(this.title(), groups, labels)], {
       type: 'text/markdown',
     });
-    const name = this.title().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim() || 'book';
-    void saveFile(blob, `${name}.md`).catch(() =>
+    void saveFile(blob, `${safeFileName(this.title(), 'book')}.md`).catch(() =>
       this.toast.error(this.translate.instant('reader.export_failed')),
     );
   }
