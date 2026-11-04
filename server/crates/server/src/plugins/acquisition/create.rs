@@ -1,9 +1,6 @@
 //! `media.resolveOrCreate` (`plugins.md` rule 57).
 use super::*;
-use crate::media::{
-    external_ids,
-    write::{book_import, import_in},
-};
+use crate::media::{external_ids, write::import_in};
 use crate::metadata::books::ANCHOR;
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
@@ -111,20 +108,16 @@ async fn create(
     (library, folder): (Option<i32>, Option<i32>),
     links: Vec<(Namespace, String)>,
 ) -> Result<i32, HostError> {
-    let created = if kind == MediaKind::Book {
-        book_import::create_for_plugin(st, (ns, value), (library, folder), links).await
-    } else {
-        import_in(
-            st,
-            kind,
-            (ns, value),
-            (None, None),
-            (library, folder),
-            None,
-            (None, links),
-        )
-        .await
-    };
+    let created = import_in(
+        st,
+        kind,
+        (ns, value),
+        (None, None),
+        (library, folder),
+        None,
+        (None, links),
+    )
+    .await;
     match created {
         Ok(id) => Ok(id),
         // Held by an import that does not take the title lock: the media exists now.

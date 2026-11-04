@@ -1,6 +1,7 @@
 //! `POST /api/media/import` for a book (`docs/spec/book-metadata.md` rule 21).
 use super::{
     body::Body,
+    identified::{Creation, create_identified},
     import::{Target, folder_format, resolve_target},
 };
 use crate::{
@@ -80,17 +81,18 @@ pub(super) async fn import_book(
     if let Some(w) = &wants {
         wants::check_profiles(&st.db, w).await?;
     }
-    let id = create_book(
+    let id = create_identified(
         st,
-        &NewBook {
+        &Creation {
+            kind: MediaKind::Book,
+            id: (ANCHOR, &work),
             target: &target,
-            folder,
+            profiles: (None, None),
             user: Some(a.user.id).filter(|u| *u != 0),
-            work: &work,
-            prio: Priority::Interactive,
+            links: vec![],
+            seasons: None,
             wants: wants.as_deref(),
-            discovered: false,
-            links: &[],
+            prio: Priority::Interactive,
         },
     )
     .await?;
@@ -284,32 +286,26 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
     Ok(id)
 }
 
-/// `media.resolveOrCreate` for a book: a work of the anchor goes through `create_book`; one named only by
-/// a plugin namespace is made from that provider's work record, with no anchor id (the plugin's ids and
-/// the caller's own links are the only ones written) and the wants of every family.
-pub(crate) async fn create_for_plugin(
-    st: &AppState,
-    (ns, value): (Namespace, &str),
-    (library, folder): (Option<i32>, Option<i32>),
-    links: Vec<(Namespace, String)>,
-) -> Result<i32, AppError> {
-    let all = super::all_library_ids(&st.db).await?;
-    let target = super::resolve_target_in(st, &all, MediaKind::Book, library, folder).await?;
-    let prio = Priority::Interactive;
+/// A book from the record of its provider id: a work of the anchor goes through `create_book`; one named
+/// only by a plugin namespace is made from that provider's work record, with no anchor id (the plugin's
+/// ids and the caller's own links are the only ones written) and the wants of every family.
+pub(crate) async fn create_book_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
+    let (ns, value) = c.id;
+    let (target, prio) = (c.target, c.prio);
     if ns == ANCHOR {
         let work = work_id(value)
             .ok_or_else(|| AppError::bad_request("an Open Library work id is needed"))?;
         return create_book(
             st,
             &NewBook {
-                target: &target,
-                folder,
-                user: None,
+                target,
+                folder: target.folder_id,
+                user: c.user,
                 work: &work,
                 prio,
-                wants: None,
+                wants: c.wants,
                 discovered: false,
-                links: &links,
+                links: &c.links,
             },
         )
         .await;
@@ -368,8 +364,8 @@ pub(crate) async fn create_for_plugin(
     let mut tx = st.db.begin().await?;
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, overview,
-             "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt")
-           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5, $6, now())
+             "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt", "addedById")
+           VALUES ($1, $1, $2, 'book', 'released', true, $3, $4, $5, $6, now(), $7)
            RETURNING id"#,
     )
     .bind(&title)
@@ -378,6 +374,7 @@ pub(crate) async fn create_for_plugin(
     .bind(target.id)
     .bind(&name)
     .bind(ns.as_str())
+    .bind(c.user)
     .fetch_one(&mut *tx)
     .await?;
     items::create_shell(
@@ -386,11 +383,11 @@ pub(crate) async fn create_for_plugin(
         MediaKind::Book,
         NewWant {
             quality_profile_id: None,
-            folder_id: folder,
+            folder_id: target.folder_id,
         },
     )
     .await?;
-    let own = std::iter::once((ns, value.to_owned())).chain(links);
+    let own = std::iter::once((ns, value.to_owned())).chain(c.links.iter().cloned());
     for (n, v) in own {
         external_ids::link(&mut tx, id, MediaKind::Book, n, &v).await?;
     }
@@ -410,7 +407,7 @@ pub(crate) async fn create_for_plugin(
         external_ids: external_ids::refs(&st.db, id).await?,
         media_type: MediaKind::Book,
         library_id: Some(i64::from(target.id)),
-        added_by_user_id: None,
+        added_by_user_id: c.user.map(i64::from),
     });
     Ok(id)
 }

@@ -1,6 +1,7 @@
 //! `POST /api/media/import` for a comic volume (`docs/spec/comics.md` rule 41).
 use super::{
     body::Body,
+    identified::Creation,
     import::{folder_format, resolve_target},
 };
 use crate::{
@@ -47,8 +48,34 @@ pub(super) async fn import_comic(
         return Err(AppError::conflict(TAKEN));
     }
     let target = resolve_target(st, a, MediaKind::Comic, library, folder).await?;
-    let lang = crate::metadata::comics::language_of_library(st, target.id).await?;
-    let fetched = fetch(st, ns, &id, &lang, Priority::Interactive).await?;
+    let media = create_comic_from(
+        st,
+        &Creation {
+            kind: MediaKind::Comic,
+            id: (ns, &id),
+            target: &target,
+            profiles: (None, None),
+            user: Some(a.user.id).filter(|u| *u != 0),
+            links: vec![],
+            seasons: None,
+            wants: None,
+            prio: Priority::Interactive,
+        },
+    )
+    .await?;
+    let acl = accessible_library_ids(&st.db, a).await?;
+    let mut out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
+        .await?
+        .ok_or_else(|| crate::libraries::media_not_found(media))?;
+    out["comic"] = comics::detail(&st.db, media, a.user.id, &acl).await?;
+    Ok((StatusCode::CREATED, Json(out)))
+}
+
+/// Creates the comic volume from its provider record; a failure after the row exists deletes it.
+pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
+    let (ns, id) = c.id;
+    let lang = crate::metadata::comics::language_of_library(st, c.target.id).await?;
+    let fetched = fetch(st, ns, id, &lang, c.prio).await?;
     let title = fetched.work.title.clone();
     let format = folder_format(&st.db, MediaKind::Comic).await?;
     let folder_name = naming::apply_book_format(
@@ -62,12 +89,11 @@ pub(super) async fn import_comic(
     let folder_name = validate_folder_path(&folder_name)
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
         .to_owned();
-    let user = Some(a.user.id).filter(|u| *u != 0);
-
+    let user = c.user;
     let same: Option<i32> = sqlx::query_scalar(
         r#"SELECT id FROM media WHERE type = 'comic' AND "libraryId" = $1 AND "folderName" = $2 LIMIT 1"#,
     )
-    .bind(target.id)
+    .bind(c.target.id)
     .bind(&folder_name)
     .fetch_optional(&st.db)
     .await?;
@@ -85,7 +111,7 @@ pub(super) async fn import_comic(
     )
     .bind(&title)
     .bind(fetched.work.year)
-    .bind(target.id)
+    .bind(c.target.id)
     .bind(&folder_name)
     .bind(user)
     .bind(ns.as_str())
@@ -104,11 +130,14 @@ pub(super) async fn import_comic(
         MediaKind::Comic,
         NewWant {
             quality_profile_id: None,
-            folder_id: folder,
+            folder_id: c.target.folder_id,
         },
     )
     .await?;
-    let linked = external_ids::link(&mut tx, media, MediaKind::Comic, ns, &id).await?;
+    let linked = external_ids::link(&mut tx, media, MediaKind::Comic, ns, id).await?;
+    for (n, v) in &c.links {
+        external_ids::link(&mut tx, media, MediaKind::Comic, *n, v).await?;
+    }
     tx.commit().await?;
 
     let undo = async |e: AppError| {
@@ -128,19 +157,14 @@ pub(super) async fn import_comic(
     }
     tracing::info!(
         "Imported comic \"{title}\" (#{media}) into library #{}",
-        target.id
+        c.target.id
     );
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(media),
         external_ids: external_ids::refs(&st.db, media).await?,
         media_type: MediaKind::Comic,
-        library_id: Some(i64::from(target.id)),
+        library_id: Some(i64::from(c.target.id)),
         added_by_user_id: user.map(i64::from),
     });
-    let acl = accessible_library_ids(&st.db, a).await?;
-    let mut out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
-        .await?
-        .ok_or_else(|| crate::libraries::media_not_found(media))?;
-    out["comic"] = comics::detail(&st.db, media, a.user.id, &acl).await?;
-    Ok((StatusCode::CREATED, Json(out)))
+    Ok(media)
 }

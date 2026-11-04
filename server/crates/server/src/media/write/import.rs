@@ -1,6 +1,11 @@
 //! Metadata imports (rules 10-17, 19-22): the provider reads happen first, the rows in one
 //! transaction; images and credits follow detached.
-use super::{body::Body, entity_or_404, metadata, resolve_profile};
+use super::{
+    body::Body,
+    entity_or_404,
+    identified::{Creation, create_identified},
+    metadata, resolve_profile,
+};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
     external_ids::{self, Ids},
@@ -495,24 +500,19 @@ pub async fn import_in(
     duplicate_ref(st, media_type, ns, value).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
-    let imp = Import {
-        media_type,
-        library_id: target.id,
-        folder_id: target.folder_id,
-        quality_profile_id: resolve_profile(&st.db, false, profiles.0, target.default_quality)
-            .await?,
-        language_profile_id: resolve_profile(&st.db, true, profiles.1, target.default_language)
-            .await?,
-        added_by,
-        monitored_seasons: seasons,
-        links,
-    };
-    import_title(
+    create_identified(
         st,
-        Some(ns.as_str().into()),
-        value.to_owned(),
-        imp,
-        Priority::Interactive,
+        &Creation {
+            kind: media_type,
+            id: (ns, value),
+            target: &target,
+            profiles,
+            user: added_by,
+            links,
+            seasons,
+            wants: None,
+            prio: Priority::Interactive,
+        },
     )
     .await
 }
@@ -616,8 +616,27 @@ pub async fn import_media(
             external
         }
     };
-    let imp = prepare(&st, &a, &c, seasons).await?;
-    let id = import_title(&st, provider, external, imp, Priority::Interactive).await?;
+    let target = resolve_target(&st, &a, c.media_type, c.library, c.folder).await?;
+    let ns = match plugin {
+        Some(p) => p,
+        None if provider.as_deref() == Some("tvdb") => Namespace::TVDB,
+        None => Namespace::TMDB,
+    };
+    let id = create_identified(
+        &st,
+        &Creation {
+            kind: c.media_type,
+            id: (ns, &external),
+            target: &target,
+            profiles: (c.quality, c.language),
+            user: Some(a.user.id),
+            links: vec![],
+            seasons,
+            wants: None,
+            prio: Priority::Interactive,
+        },
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
 }
 
