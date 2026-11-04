@@ -1,4 +1,5 @@
 //! Release language from keywords (`language.parser.ts`); short words that collide with English are frozen.
+use super::title::tag_region;
 use crate::js::rx;
 use crate::language::{
     APP_LANGUAGES, AppLanguage, ENGLISH_LANGUAGE, UNKNOWN_LANGUAGE, app_language_by_iso,
@@ -8,9 +9,11 @@ fn lang(iso: &str) -> &'static AppLanguage {
     app_language_by_iso(iso).unwrap_or(UNKNOWN_LANGUAGE)
 }
 
-/// Every language the title names, in title order; `dual`, `multi` or an `N lang` count alone give Unknown.
+/// Every language the title's tag region names (`tag_region`), in title order; `dual`, `multi` or an `N lang` count alone give Unknown.
 pub fn parse_release_language(title: &str) -> Vec<&'static AppLanguage> {
-    let t = title.replace(['.', '_', '-'], " ").to_lowercase();
+    let t = tag_region(title)
+        .replace(['.', '_', '-'], " ")
+        .to_lowercase();
     let families: [(&regex::Regex, &str); 18] = [
         (
             rx!(r"\b(french|fre|fra|vff|vfi|vf\b|truefrench|vostfr|vost)\b"),
