@@ -3,6 +3,8 @@
 
 /// The longest a `Retry-After` can pause the limiter.
 pub const MAX_PAUSE_MS: u64 = 300_000;
+/// The longest a plugin's `rate-limited` can pause it: the rest of a daily window.
+pub const MAX_PLUGIN_PAUSE_MS: u64 = 86_400_000;
 const BACKOFF_START_MS: u64 = 1_000;
 const BACKOFF_MAX_MS: u64 = 60_000;
 
@@ -164,7 +166,12 @@ impl Limiter {
     /// Stops every taker until `until`, at most `MAX_PAUSE_MS` from `now`, and empties the buckets so
     /// the pause does not end on a burst.
     pub fn pause_until(&mut self, now: u64, until: u64) {
-        self.paused_until = self.paused_until.max(until.min(now + MAX_PAUSE_MS));
+        self.pause_up_to(now, until, MAX_PAUSE_MS);
+    }
+
+    /// `pause_until` with another ceiling.
+    pub fn pause_up_to(&mut self, now: u64, until: u64, max_ms: u64) {
+        self.paused_until = self.paused_until.max(until.min(now + max_ms));
         self.shared.empty(now);
         self.background.empty(now);
     }
@@ -276,6 +283,15 @@ mod tests {
         assert_eq!(take(&mut l, 3_000, Background), capped);
         l.pause_until(3_000, 4_000);
         assert_eq!(take(&mut l, 3_000, Background), capped);
+    }
+
+    #[test]
+    fn a_pause_can_ask_for_a_longer_ceiling() {
+        let mut l = limiter(10.0, 3, 1.0);
+        l.pause_up_to(0, 3_600_000, MAX_PLUGIN_PAUSE_MS);
+        assert_eq!(take(&mut l, 0, Interactive), Err(Refused::Wait(3_600_000)));
+        l.pause_up_to(0, 10 * MAX_PLUGIN_PAUSE_MS, MAX_PLUGIN_PAUSE_MS);
+        assert_eq!(take(&mut l, 0, Interactive), Err(Refused::Wait(MAX_PLUGIN_PAUSE_MS)));
     }
 
     #[test]

@@ -5,7 +5,7 @@ use crate::sync::MutexExt;
 use bytes::Bytes;
 use fliks_domain::metadata::{
     breaker::{Breaker, Event, Outcome},
-    limiter::{Limiter, Limits, MAX_PAUSE_MS, Priority, Refused as Wait},
+    limiter::{Limiter, Limits, MAX_PAUSE_MS, MAX_PLUGIN_PAUSE_MS, Priority, Refused as Wait},
 };
 use futures_util::future::BoxFuture;
 use http_body_util::{BodyExt, Full};
@@ -279,7 +279,9 @@ impl Gate {
     pub fn pause_secs(&self, secs: u32) {
         let now = self.clock.now_ms();
         let until = now + u64::from(secs) * 1000;
-        self.limiter.lock_clean().pause_until(now, until);
+        self.limiter
+            .lock_clean()
+            .pause_up_to(now, until, MAX_PLUGIN_PAUSE_MS);
     }
 
     /// A record that parsed (`true`) or not: the failure of its export, which the 2xx of the request
@@ -1061,6 +1063,36 @@ mod tests {
         g.pause_secs(3);
         assert_eq!(status(&call(&g, Background, &[], &h, true).await), 200);
         assert_eq!(sleeps(&clock), [3_000]);
+    }
+
+    #[tokio::test]
+    async fn a_plugin_pause_of_hours_is_kept_and_answered_with_its_length() {
+        let (g, _) = gate(fast());
+        let h = AtomicU32::new(0);
+        let go = || {
+            g.run(
+                Background,
+                Duration::from_secs(120),
+                || {
+                    h.fetch_add(1, Ordering::Relaxed);
+                    async {
+                        Ok::<_, ()>(Reply {
+                            status: 200,
+                            retry_after_ms: None,
+                            inner: (),
+                        })
+                    }
+                },
+                || true,
+            )
+        };
+        g.pause_secs(7_200);
+        let d = go().await;
+        assert!(matches!(&d, Done::Refused(r) if r.status == 429 && r.retry_after_secs == Some(7_200)));
+        g.pause_secs(10 * 86_400);
+        let d = go().await;
+        assert!(matches!(&d, Done::Refused(r) if r.retry_after_secs == Some(86_400)));
+        assert_eq!(hits(&h), 0);
     }
 
     #[tokio::test]
