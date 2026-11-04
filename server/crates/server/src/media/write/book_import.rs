@@ -1,7 +1,9 @@
 //! `POST /api/media/import` for a book (`docs/spec/book-metadata.md` rule 21).
 use super::{
     body::Body,
-    identified::{Creation, Row, TAKEN, announce, create_identified, discard, insert_row},
+    identified::{
+        Creation, Row, TAKEN, announce, create_identified, discard, held_elsewhere, insert_row,
+    },
     import::{Target, creation_folder, resolve_target},
 };
 use crate::{
@@ -224,23 +226,31 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         Ok(_) => return Err(undo(AppError::conflict(TAKEN)).await),
         Err(e) => return Err(undo(e.into()).await),
     }
-    announce(st, (id, MediaKind::Book, &title), target.id, user).await?;
+    announce(st, (id, MediaKind::Book, &title), target.id, (user, None)).await?;
     Ok(id)
 }
 
 /// A book from a provider id: an anchor work, an edition under the work its ISBN or ASIN names (else
 /// unmatched), or a plugin work with no anchor id.
 pub(crate) async fn create_book_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
-    Ok(book_from(st, c, false).await?.0)
+    Ok(book_from(st, c, None).await?.0)
 }
 
 /// `create_book_from`, except that an edition whose anchor work a book already holds joins that book;
-/// the flag tells whether the book is new.
-pub(crate) async fn book_or_held(st: &AppState, c: &Creation<'_>) -> Result<(i32, bool), AppError> {
-    book_from(st, c, true).await
+/// the flag tells whether the book is new. `readable` is the caller's libraries.
+pub(crate) async fn book_or_held(
+    st: &AppState,
+    c: &Creation<'_>,
+    readable: &[i32],
+) -> Result<(i32, bool), AppError> {
+    book_from(st, c, Some(readable)).await
 }
 
-async fn book_from(st: &AppState, c: &Creation<'_>, join: bool) -> Result<(i32, bool), AppError> {
+async fn book_from(
+    st: &AppState,
+    c: &Creation<'_>,
+    join: Option<&[i32]>,
+) -> Result<(i32, bool), AppError> {
     let (ns, value) = c.id;
     if ns == ANCHOR {
         let work = work_id(value)
@@ -296,7 +306,7 @@ fn meta_error(ns: Namespace, e: crate::metadata::MetaError) -> AppError {
 async fn create_from_edition(
     st: &AppState,
     c: &Creation<'_>,
-    join: bool,
+    join: Option<&[i32]>,
 ) -> Result<(i32, bool), AppError> {
     let (ns, value) = c.id;
     let pick = edition_id(ns, value)
@@ -328,12 +338,12 @@ async fn create_from_edition(
         || text(record, "format").is_some_and(|f| AUDIO_EXTS.contains(&format!(".{f}").as_str()));
     let family = if audio { Family::Audio } else { Family::Text };
     let work = work_of(st, &hinted, &lang, c.prio).await;
-    let held = match &work {
-        Some(work) if join => external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await?,
+    let held = match (&work, join) {
+        (Some(work), Some(_)) => external_ids::find(&st.db, MediaKind::Book, ANCHOR, work).await?,
         _ => None,
     };
     let id = match (&work, held) {
-        (_, Some(held)) => same_library(&st.db, held, c.target.id)
+        (_, Some(held)) => same_library(&st.db, held, c.target.id, join.unwrap_or_default())
             .await
             .map(|_| held)?,
         (Some(work), None) => create_book(st, &new_book(c, work)).await?,
@@ -353,17 +363,20 @@ async fn create_from_edition(
     Ok((id, held.is_none()))
 }
 
-/// 400 unless the book is in `library`, so an edition never lands on a book of another one.
-async fn same_library(db: &sqlx::PgPool, media: i32, library: i32) -> Result<(), AppError> {
+/// An edition never lands on a book of another library: 400 when the caller can read that library, else 409.
+async fn same_library(
+    db: &sqlx::PgPool,
+    media: i32,
+    library: i32,
+    readable: &[i32],
+) -> Result<(), AppError> {
     let held: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
         .bind(media)
         .fetch_one(db)
         .await?;
     match held == Some(library) {
         true => Ok(()),
-        false => Err(AppError::bad_request(
-            "Media already belongs to another library",
-        )),
+        false => Err(held_elsewhere(held, readable)),
     }
 }
 
@@ -431,7 +444,13 @@ async fn insert_unanchored(
     let authors = people(record, "authors");
     replace_credits(&mut tx, id, None, "author", None, &authors).await?;
     tx.commit().await?;
-    announce(st, (id, MediaKind::Book, &title), target.id, c.user).await?;
+    announce(
+        st,
+        (id, MediaKind::Book, &title),
+        target.id,
+        (c.user, Some(pref)),
+    )
+    .await?;
     Ok(id)
 }
 

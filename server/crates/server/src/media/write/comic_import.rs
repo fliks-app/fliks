@@ -107,6 +107,12 @@ pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result
         discard(st, media, MediaKind::Comic).await;
         return Err(e);
     }
-    announce(st, (media, MediaKind::Comic, &title), c.target.id, c.user).await?;
+    announce(
+        st,
+        (media, MediaKind::Comic, &title),
+        c.target.id,
+        (c.user, None),
+    )
+    .await?;
     Ok(media)
 }

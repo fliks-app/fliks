@@ -23,6 +23,16 @@ use fliks_domain::{
 use sqlx::{Postgres, Transaction};
 
 pub(super) const TAKEN: &str = "This title is already in the library";
+pub(crate) const ANOTHER_LIBRARY: &str = "Media already belongs to another library";
+
+/// A title held in another library: 400 naming nothing new when the caller can read that library,
+/// else the 409 of any taken title, so an unreadable library is never revealed.
+pub(crate) fn held_elsewhere(library: Option<i32>, readable: &[i32]) -> AppError {
+    match library.is_some_and(|l| readable.contains(&l)) {
+        true => AppError::bad_request(ANOTHER_LIBRARY),
+        false => AppError::conflict(TAKEN),
+    }
+}
 
 /// What `create_identified` makes: the `kind` media of the provider id `id` (already normalised), in
 /// `target`, added by `user`.
@@ -90,7 +100,7 @@ pub(super) struct Row<'a> {
 }
 
 /// Inserts the row of a book or a comic with its wants and `links`, in a transaction left open for the
-/// kind's own rows; a taken folder name is 409. `wants` default to one per family.
+/// kind's own rows; `wants` default to one per family.
 pub(super) async fn insert_row(
     st: &AppState,
     row: &Row<'_>,
@@ -117,14 +127,7 @@ pub(super) async fn insert_row(
     .bind(row.refreshed)
     .bind(user)
     .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| {
-        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
-            AppError::conflict(TAKEN)
-        } else {
-            e.into()
-        }
-    })?;
+    .await?;
     let want = NewWant {
         quality_profile_id: None,
         folder_id: target.folder_id,
@@ -151,14 +154,15 @@ pub(super) async fn discard(st: &AppState, id: i32, kind: MediaKind) {
     }
 }
 
-/// Logs and announces a media created in `library`.
+/// Logs and announces a media created in `library`, from `pref` when it came from a provider record.
 pub(super) async fn announce(
     st: &AppState,
     (id, kind, title): (i32, MediaKind, &str),
     library: i32,
-    user: Option<i32>,
+    (user, pref): (Option<i32>, Option<Namespace>),
 ) -> Result<(), AppError> {
-    tracing::info!("Imported {kind} \"{title}\" (#{id}) into library #{library}");
+    let from = pref.map(|p| format!(" from {p}")).unwrap_or_default();
+    tracing::info!("Imported {kind} \"{title}\" (#{id}){from} into library #{library}");
     st.hub.emit_domain(DomainEvent::MediaImported {
         media_id: i64::from(id),
         external_ids: external_ids::refs(&st.db, id).await?,
