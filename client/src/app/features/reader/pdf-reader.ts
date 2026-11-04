@@ -251,7 +251,9 @@ export class PdfReaderComponent implements OnDestroy {
   }
 
   protected onKeydown(e: KeyboardEvent): void {
-    if (e.ctrlKey || e.altKey || e.metaKey || (e.target as HTMLElement | null)?.closest('input, select, textarea')) return;
+    const el = e.target as HTMLElement | null;
+    if (e.ctrlKey || e.altKey || e.metaKey || el?.closest('input, select, textarea')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && el?.closest('button, a, summary')) return;
     const root = this.scroller().nativeElement;
     const last = this.pages().length;
     const keys: Record<string, () => void> = {

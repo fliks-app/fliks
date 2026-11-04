@@ -256,6 +256,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly languageCodes = SUBTITLE_LANGUAGE_CODES;
 
   // ── Series and Authors views (book libraries) ───────────────────────
+  /** Bumped when the library changes, so an answer for the previous one is dropped. */
+  private listsGen = 0;
   readonly seriesList = signal<SeriesSummary[]>([]);
   readonly seriesLoading = signal(true);
   /** Feeds the Authors tab and the author filter. */
@@ -521,11 +523,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
       }
 
       this.navbar.setPageTitle(lib.name);
-      if (this.seriesList().length || this.authorsList().length || this.narratorsList().length) {
-        this.seriesList.set([]);
-        this.authorsList.set([]);
-        this.narratorsList.set([]);
-      }
+      this.listsGen++;
+      this.seriesList.set([]);
+      this.authorsList.set([]);
+      this.narratorsList.set([]);
+      this.genresList.set([]);
+      this.collectionsList.set([]);
+      this.likesList.set([]);
+      this.suggestionsContinueRaw.set([]);
+      this.suggestionsRecommendations.set([]);
+      this.suggestionsFromFollowing.set([]);
       // A fresh instance (never cached, or evicted from the reuse cache) has
       // no attach$ event to trigger keepRouteFresh's own restoreSticky.
       const scrollKey = this.scrollMemoryKey();
@@ -741,39 +748,42 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadSeries(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
+    const gen = this.listsGen;
     if (!this.seriesList().length) this.seriesLoading.set(true);
     try {
       const rows = await this.booksApi.collections({ libraryId: lib.id, kind: 'book' }).catch(() => null);
-      if (rows && this.library()?.id === lib.id) this.seriesList.set(rows);
+      if (rows && gen === this.listsGen) this.seriesList.set(rows);
     } finally {
-      this.seriesLoading.set(false);
+      if (gen === this.listsGen) this.seriesLoading.set(false);
     }
   }
 
   private async loadBookPeople(libraryId: number): Promise<void> {
+    const gen = this.listsGen;
     try {
       const [authors, narrators] = await Promise.all(
         (['author', 'narrator'] as const).map((role) =>
           this.booksApi.persons({ role, libraryId, sortBy: 'name' }).catch(() => null),
         ),
       );
-      if (this.library()?.id !== libraryId) return;
+      if (gen !== this.listsGen) return;
       if (authors) this.authorsList.set(authors);
       if (narrators) this.narratorsList.set(narrators);
     } finally {
-      this.authorsLoading.set(false);
+      if (gen === this.listsGen) this.authorsLoading.set(false);
     }
   }
 
   private async loadCollections(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
+    const gen = this.listsGen;
     if (!this.collectionsList().length) this.collectionsLoading.set(true);
     try {
       const rows = await this.mediaService.getCollections(lib.id).catch(() => null);
-      if (rows) this.collectionsList.set(rows);
+      if (rows && gen === this.listsGen) this.collectionsList.set(rows);
     } finally {
-      this.collectionsLoading.set(false);
+      if (gen === this.listsGen) this.collectionsLoading.set(false);
     }
   }
 
@@ -798,12 +808,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadLikes(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
+    const gen = this.listsGen;
     if (!this.likesList().length) this.likesLoading.set(true);
     try {
       const rows = await this.likesApi.mine(lib.id, { force: true }).catch(() => null);
-      if (rows) this.likesList.set(rows);
+      if (rows && gen === this.listsGen) this.likesList.set(rows);
     } finally {
-      this.likesLoading.set(false);
+      if (gen === this.listsGen) this.likesLoading.set(false);
     }
   }
 
@@ -812,12 +823,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadGenres(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
+    const gen = this.listsGen;
     if (!this.genresList().length) this.genresLoading.set(true);
     try {
       const rows = await this.mediaService.getGenres(lib.id).catch(() => null);
-      if (rows) this.genresList.set(rows);
+      if (rows && gen === this.listsGen) this.genresList.set(rows);
     } finally {
-      this.genresLoading.set(false);
+      if (gen === this.listsGen) this.genresLoading.set(false);
     }
   }
 
@@ -826,6 +838,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadSuggestions(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
+    const gen = this.listsGen;
     if (!this.hasSuggestions()) this.suggestionsLoading.set(true);
     try {
       const [cw, recs, following, forYou] = await Promise.all([
@@ -836,12 +849,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.socialApi.followingRecommendations(lib.id).catch(() => null),
         this.socialApi.receivedRecommendations().catch(() => null),
       ]);
+      if (gen !== this.listsGen) return;
       if (cw) this.suggestionsContinueRaw.set(cw);
       if (recs) this.suggestionsRecommendations.set(recs);
       if (following) this.suggestionsFromFollowing.set(following);
       if (forYou) this.recommendedForYou.set(forYou);
     } finally {
-      this.suggestionsLoading.set(false);
+      if (gen === this.listsGen) this.suggestionsLoading.set(false);
     }
   }
 

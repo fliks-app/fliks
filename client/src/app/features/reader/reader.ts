@@ -409,7 +409,7 @@ export class ReaderComponent implements OnDestroy {
     if (target?.closest('input, select, textarea')) return;
     const action = readerKeyAction(e);
     if (!action) return;
-    if (action === 'chrome' && target?.closest('button, a, summary')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && target?.closest('button, a, summary')) return;
     e.preventDefault();
     this.act(action);
   }

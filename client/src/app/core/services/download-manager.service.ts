@@ -445,11 +445,6 @@ export class DownloadManagerService {
     return task;
   }
 
-  /** True when an edition item of a book is on the device (or on its way), whatever its state but failed. */
-  bookTask(itemId: number): DownloadTask | undefined {
-    return this.cache.load().find((t) => t.book?.itemId === itemId && t.status !== 'failed');
-  }
-
   /** Puts a book edition on the device, in the background: no HLS, the files are kept as they are on the server. */
   async createBookDownload(t: BookDownloadTarget, opts?: { auto?: boolean }): Promise<DownloadTask> {
     if (this.isNative && this.downloadSettings.wifiOnly() && this.network.connectionType() === 'cellular') {

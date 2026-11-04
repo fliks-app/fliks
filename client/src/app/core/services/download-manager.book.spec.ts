@@ -87,7 +87,7 @@ describe('DownloadManagerService, book downloads', () => {
     await settled();
     expect(books.storeEpub).toHaveBeenCalledWith(30, expect.any(Function), expect.any(AbortSignal));
     expect(saved()[0]).toMatchObject({ status: 'ready', progress: 100, sizeBytes: 1234, mediaFileId: 300, quality: 'epub', media: { type: 'book' } });
-    expect(service.bookTask(30)).toBeTruthy();
+    expect(service.tasks().some((t) => t.book?.itemId === 30)).toBe(true);
   });
 
   it('stores each audio part under its own key and records the timeline', async () => {

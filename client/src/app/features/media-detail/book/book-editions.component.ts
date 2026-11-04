@@ -35,8 +35,10 @@ export class BookEditionsComponent implements OnInit {
   protected readonly clock = formatTime;
   protected readonly native = Capacitor.isNativePlatform();
   protected readonly canOffline = (e: BookEdition) => !this.device.isTv() && offlinable(e);
-  protected readonly offlineTask = (e: BookEdition) =>
-    e.itemId == null ? undefined : (this.offline.bookTask(e.itemId) ?? this.offline.tasks().find((t) => t.book?.itemId === e.itemId));
+  protected readonly offlineTask = (e: BookEdition) => {
+    const ts = this.offline.tasks().filter((t) => t.book?.itemId === e.itemId);
+    return ts.find((t) => t.status !== 'failed') ?? ts[0];
+  };
   protected readonly canDeliver = (e: BookEdition) => !this.device.isTv() && e.hasFile && e.fileIds.length > 0;
 
   async ngOnInit(): Promise<void> {

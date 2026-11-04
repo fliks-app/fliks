@@ -12,7 +12,6 @@ describe('BookEditionsComponent', () => {
   const tasks = signal<unknown[]>([]);
   const offline = {
     tasks,
-    bookTask: (id: number) => (tasks() as { book?: { itemId: number }; status: string }[]).find((t) => t.book?.itemId === id && t.status !== 'failed'),
     retryDownload: vi.fn(async () => ({})),
     createBookDownload: vi.fn(async () => ({})),
     deleteDownload: vi.fn(async () => undefined),

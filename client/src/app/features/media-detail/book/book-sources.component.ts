@@ -5,7 +5,6 @@ import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookEdition, BookSources } from '../../../core/services/api/books.models';
 import { editionLabel } from '../../../core/services/api/book-media';
 
-/** Identifier standards, then the namespaces of the installed book providers. */
 const STANDARD_IDS = ['isbn', 'asin'];
 
 /** Where the editions are linked at the providers: link, relink or unlink an identifier. The work is identified by the shared identify modal. */
@@ -28,6 +27,7 @@ export class BookSourcesComponent {
   protected readonly provider = signal(STANDARD_IDS[0]);
   protected readonly value = signal('');
 
+  /** Identifier standards, then the namespaces of the installed book providers. */
   protected readonly providers = computed(() => [
     ...STANDARD_IDS,
     ...this.registry
