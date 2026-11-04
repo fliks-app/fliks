@@ -21,6 +21,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::Action,
+    external_id::Namespace,
     media::release::ReleaseKind,
     metadata::{field::Field, limiter::Priority},
 };
@@ -455,13 +456,54 @@ pub async fn identify(
     ValidJson(v): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let id = gate(&st, &a, Action::Update, id).await?;
-    let b = Body::new(v, &["tmdbId", "tvdbId", "imdbId", "preferredProvider"])?;
-    let (tmdb, tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
+    let b = Body::new(
+        v,
+        &[
+            "tmdbId",
+            "tvdbId",
+            "imdbId",
+            "preferredProvider",
+            "provider",
+            "externalId",
+        ],
+    )?;
+    let (mut tmdb, mut tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
     let imdb = b.str("imdbId")?.flatten();
-    let provider = b.namespace("preferredProvider")?;
+    let mut provider = b.namespace("preferredProvider")?;
+    let named = (
+        b.namespace("provider")?.flatten(),
+        b.str("externalId")?.flatten(),
+    );
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
+    let mut pin = None;
+    match named {
+        (Some(p), Some(ext)) => {
+            let ns = Namespace::parse(&p)
+                .filter(|n| {
+                    st.metadata
+                        .get(*n)
+                        .is_some_and(|m| m.supports(media.media_type))
+                })
+                .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?;
+            let value = ns
+                .normalize(ext.trim())
+                .ok_or_else(|| AppError::bad_request(format!("Invalid id for provider: {p}")))?;
+            match ns {
+                Namespace::TMDB => tmdb = value.parse().ok(),
+                Namespace::TVDB => tvdb = value.parse().ok(),
+                _ => {
+                    provider = Some(Some(p));
+                    pin = Some((ns, value));
+                }
+            }
+        }
+        (None, None) => {}
+        _ => {
+            return Err(AppError::bad_request("provider and externalId go together"));
+        }
+    }
     let key = format!("Identify:{id}");
     let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));
     if !st
@@ -472,7 +514,7 @@ pub async fn identify(
         return Err(already_running());
     }
     let applied = async {
-        apply_identity(&st, &media, tmdb, tvdb, imdb, provider).await?;
+        apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?;
         entity_or_404(&st, &a, id).await
     };
     let body = match applied.await {
@@ -500,12 +542,15 @@ pub async fn identify(
 async fn apply_identity(
     st: &AppState,
     media: &MediaRow,
-    tmdb: Option<i32>,
-    tvdb: Option<i32>,
-    imdb: Option<String>,
+    (tmdb, tvdb, imdb): (Option<i32>, Option<i32>, Option<String>),
+    pin: Option<(Namespace, String)>,
     provider: Option<Option<String>>,
 ) -> Result<(), AppError> {
-    if tmdb.is_none() && tvdb.is_none() && imdb.as_deref().is_none_or(str::is_empty) {
+    if pin.is_none()
+        && tmdb.is_none()
+        && tvdb.is_none()
+        && imdb.as_deref().is_none_or(str::is_empty)
+    {
         return Err(AppError::bad_request(
             "Provide at least one external id to identify this media against",
         ));
@@ -550,7 +595,13 @@ async fn apply_identity(
     .bind(&keep)
     .execute(&mut *tx)
     .await?;
-    let written = ids.replace(&mut tx, media.id, media.media_type).await?;
+    let mut written = ids.replace(&mut tx, media.id, media.media_type).await?;
+    if let Some((ns, v)) = &pin
+        && external_ids::link(&mut tx, media.id, media.media_type, *ns, v).await?
+            == external_ids::Link::Gone
+    {
+        written.gone = true;
+    }
     if written.gone {
         return Err(crate::libraries::media_not_found(media.id));
     }

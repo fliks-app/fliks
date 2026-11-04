@@ -33,6 +33,13 @@ export interface IdentifyModalConfig {
   imdbId: string | null;
 }
 
+/** TMDB and TVDB results identify by their ids; any other provider by its own namespace and id. */
+function identifyTarget(r: MetadataSearchResult) {
+  return r.provider === 'tmdb' || r.provider === 'tvdb' || !r.externalId
+    ? searchResultIds(r)
+    : { provider: r.provider, externalId: r.externalId };
+}
+
 @Component({
   selector: 'app-media-detail-identify-modal',
   imports: [
@@ -61,6 +68,9 @@ export class MediaDetailIdentifyModalComponent {
   readonly formImdbId = signal('');
   readonly formTmdbId = signal<number | null>(null);
   readonly formTvdbId = signal<number | null>(null);
+  /** Providers serving the media's kind; '' searches the first one. */
+  readonly providers = signal<{ provider: string; label: string }[]>([]);
+  readonly formProvider = signal('');
 
   readonly searching = signal(false);
   readonly searched = signal(false);
@@ -79,6 +89,14 @@ export class MediaDetailIdentifyModalComponent {
     this.formTvdbId.set(config.tvdbId);
     this.results.set([]);
     this.searched.set(false);
+    this.formProvider.set('');
+    this.providers.set([]);
+    if (config.mediaType === 'movie' || config.mediaType === 'series') {
+      void this.metadata
+        .providersServing(config.mediaType)
+        .then((p) => this.providers.set(p))
+        .catch(() => undefined);
+    }
     this.dialogEl()?.nativeElement.showModal();
   }
 
@@ -96,7 +114,7 @@ export class MediaDetailIdentifyModalComponent {
       const title = this.formTitle().trim();
       const year = this.formYear();
       const found = title
-        ? await this.metadata.searchByKind(cfg.mediaType, title, year ?? undefined, undefined, cfg.mediaId)
+        ? await this.metadata.searchByKind(cfg.mediaType, title, year ?? undefined, this.formProvider() || undefined, cfg.mediaId)
         : [];
       this.results.set(found);
       this.searched.set(true);
@@ -117,7 +135,7 @@ export class MediaDetailIdentifyModalComponent {
     if (!cfg || this.isTaken(result)) return;
     this.applyingKey.set(searchResultKey(result));
     try {
-      await this.media.identify(cfg.mediaId, searchResultIds(result));
+      await this.media.identify(cfg.mediaId, identifyTarget(result));
       this.toast.success(this.translate.instant('media_detail.identify_success'));
       this.close();
       this.identified.emit();

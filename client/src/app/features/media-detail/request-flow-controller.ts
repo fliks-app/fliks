@@ -1,8 +1,8 @@
 import { computed, signal } from '@angular/core';
 import type { TranslateService } from '@ngx-translate/core';
-import type { MediaType } from '../../core/enums/media-type.enum';
 import type { Media, Season } from '../../core/services/api/media.service';
-import type { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
+import { titleRef } from '../../core/services/api/requests.service';
+import type { RequestsService, TitleKey, TitleRequestState } from '../../core/services/api/requests.service';
 import type { AuthService } from '../../core/services/auth.service';
 import type { ConfirmationService } from '../../core/services/confirmation.service';
 import type { ToastService } from '../../core/services/toast.service';
@@ -21,15 +21,24 @@ export interface RequestFlowDeps {
   translate: TranslateService;
 }
 
+/** The key a library title is requested by: its TMDB id, else a plugin id, else its TVDB id. */
+export function mediaTitleKey(m: Media | null): TitleKey | null {
+  if (!m) return null;
+  if (m.tmdbId != null) return { tmdbId: m.tmdbId };
+  const pin = m.externalIds?.[0];
+  if (pin) return { provider: pin.provider, externalId: pin.value };
+  return m.tvdbId != null ? { provider: 'tvdb', externalId: String(m.tvdbId) } : null;
+}
+
 /** Requesting and deleting through requests: who may, what is already pending, the dialogs. */
 export class RequestFlowController {
-  /** Regular requester (no `media.create`) with a tmdbId to request against;
+  /** Regular requester (no `media.create`) with a key to request against;
    *  an unidentified title has none, so the Demander actions stay hidden. */
   readonly canRequest = computed(
     () =>
       !this.deps.auth.hasPermission('media.create') &&
       this.deps.auth.hasPermission('requests.create') &&
-      this.host.media()?.tmdbId != null,
+      mediaTitleKey(this.host.media()) != null,
   );
 
   /** Requester (no `media.delete`) can ask an admin to delete this library
@@ -38,7 +47,7 @@ export class RequestFlowController {
     () =>
       this.deps.auth.hasPermission('requests.create') &&
       !this.deps.auth.hasPermission('media.delete') &&
-      this.host.media()?.tmdbId != null,
+      mediaTitleKey(this.host.media()) != null,
   );
 
   /** A deletion request is already pending (this session or found on load); hides the deletion entry. */
@@ -68,15 +77,16 @@ export class RequestFlowController {
 
   /** Fetch what the viewer's gates depend on; admins skip the round-trips. */
   load(m: Media): void {
-    if (this.canRequest()) void this.loadTitleState(m.tmdbId, m.type);
-    if (this.canRequestDeletion()) void this.loadDeleteRequestState(m.tmdbId, m.type);
+    const key = mediaTitleKey(m);
+    if (this.canRequest()) void this.loadTitleState(key, m.type);
+    if (this.canRequestDeletion()) void this.loadDeleteRequestState(key, m.type);
   }
 
   /** Fetch the title's active-request state; re-run after submit so gates and profile lock flip without reload. */
-  private async loadTitleState(tmdbId: number | null, mediaType: MediaType) {
-    if (tmdbId == null) return;
+  private async loadTitleState(key: TitleKey | null, mediaType: Media['type']) {
+    if (!key) return;
     try {
-      this.titleState.set(await this.deps.requests.getTitleState({ tmdbId }, mediaType));
+      this.titleState.set(await this.deps.requests.getTitleState(key, mediaType));
     } catch {
       /* swallowed; global interceptor surfaces it */
     }
@@ -84,12 +94,15 @@ export class RequestFlowController {
 
   /** Seed the pending-deletion gate from the viewer's visible requests so the
    *  entry hides when a deletion request already exists on this title. */
-  private async loadDeleteRequestState(tmdbId: number | null, mediaType: MediaType) {
-    if (tmdbId == null) return;
+  private async loadDeleteRequestState(key: TitleKey | null, mediaType: Media['type']) {
+    if (!key) return;
+    const [provider, externalId] = titleRef(key);
     try {
       const res = await this.deps.requests.list({ kind: 'delete', status: 'pending' });
       this.deleteRequestPending.set(
-        res.data.some((r) => r.tmdbId === tmdbId && r.mediaType === mediaType),
+        res.data.some(
+          (r) => r.provider === provider && r.externalId === externalId && r.mediaType === mediaType,
+        ),
       );
     } catch {
       /* swallowed; the backend still rejects a duplicate on submit */
@@ -100,7 +113,8 @@ export class RequestFlowController {
    *  deletion request scoped to the whole title (movie or series). */
   async requestDeletion() {
     const m = this.host.media();
-    if (!m || m.tmdbId == null || m.type === 'book') return;
+    const key = mediaTitleKey(m);
+    if (!m || !key || m.type === 'book') return;
     if (
       !(await this.deps.confirmation.confirm({
         title: this.deps.translate.instant('media_detail.request_deletion_title'),
@@ -116,7 +130,7 @@ export class RequestFlowController {
       await this.deps.requests.create({
         kind: 'delete',
         mediaType: m.type,
-        tmdbId: m.tmdbId,
+        ...key,
         title: m.title,
       });
       this.deleteRequestPending.set(true);
@@ -139,12 +153,13 @@ export class RequestFlowController {
 
   private openModal(extra: { preselectedSeasons?: number[] }) {
     const m = this.host.media();
-    if (!m || m.tmdbId == null || m.type === 'book') return;
+    const key = mediaTitleKey(m);
+    if (!m || !key || m.type === 'book') return;
     const state = this.titleState();
     this.host.requestModal()?.open({
       title: m.title,
       mediaType: m.type,
-      titleKey: { tmdbId: m.tmdbId },
+      titleKey: key,
       alreadyRequestedSeasons: this.requestedSeasons(),
       ...extra,
       profilesLocked: state?.profilesLocked ?? false,
@@ -157,6 +172,6 @@ export class RequestFlowController {
    *  season list flips its already-requested badges. */
   onSubmitted() {
     const m = this.host.media();
-    if (m) void this.loadTitleState(m.tmdbId, m.type);
+    if (m) void this.loadTitleState(mediaTitleKey(m), m.type);
   }
 }

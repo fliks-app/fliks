@@ -853,6 +853,23 @@ async fn relink_in_place_is_contained(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn relink_refuses_a_provider_that_serves_nothing(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
+    let url = "/api/imports/library/orphans/relink";
+    for provider in ["imdb", "org.example.gone:aid"] {
+        let body = json!({"libraryId": l, "type": "movie", "folderName": "Film (2001)",
+            "provider": provider, "externalId": "1",
+            "files": [{"filePath": lib.join("Film (2001)/Film (2001).mkv")}]});
+        let (s, b) = call(&c, "POST", url, &c.admin, body).await;
+        assert_eq!(s, 400, "{provider}: {b}");
+    }
+    assert_eq!(count(&c, "SELECT count(*) FROM media").await, 0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn relink_transfer_copy_then_move(pool: PgPool) {
     let c = ctx(pool).await;
     let scan =

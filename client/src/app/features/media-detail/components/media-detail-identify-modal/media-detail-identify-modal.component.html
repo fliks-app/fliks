@@ -65,6 +65,22 @@
         </label>
       </div>
 
+      @if (providers().length > 1) {
+        <label class="form-control w-full sm:w-1/2">
+          <span class="label-text">{{ 'media_detail.identify_field_provider' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formProvider()"
+            (ngModelChange)="formProvider.set($event)"
+          >
+            <option value="">{{ 'media_detail.identify_provider_auto' | translate }}</option>
+            @for (p of providers(); track p.provider) {
+              <option [value]="p.provider">{{ p.label }}</option>
+            }
+          </select>
+        </label>
+      }
+
       <div class="flex flex-wrap gap-2">
         <button
           type="button"

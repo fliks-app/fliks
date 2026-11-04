@@ -125,6 +125,8 @@ export interface Media {
   /** Resume progress 0-100 (movies only; 0 for series). */
   progressPercent?: number;
   preferredProvider?: 'tmdb' | 'tvdb' | null;
+  /** Plugin namespaces only; absent when the media holds none. */
+  externalIds?: { provider: string; value: string }[];
   imdbId?: string | null;
   tvdbId?: number | null;
   metadata?: MediaMetadataBrief | null;
@@ -576,7 +578,14 @@ export class MediaService {
   /** Synchronous, unlike the refresh above: returns the re-identified media, and an id held by another title is a 409. */
   identify(
     id: number,
-    target: { tmdbId?: number; tvdbId?: number; imdbId?: string; preferredProvider?: string },
+    target: {
+      tmdbId?: number;
+      tvdbId?: number;
+      imdbId?: string;
+      preferredProvider?: string;
+      provider?: string;
+      externalId?: string;
+    },
   ) {
     return firstValueFrom(this.http.post<Media>(`/api/media/${id}/identify`, target));
   }

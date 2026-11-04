@@ -291,7 +291,11 @@ async fn scan_under(
                     guess_title: folder,
                     guess_year: None,
                     nfo: None,
-                    suggested_provider: provider.to_owned(),
+                    suggested_provider: st
+                        .metadata
+                        .resolve(Some(provider), media_type)
+                        .map_or(provider, |n| n.as_str())
+                        .to_owned(),
                     files: vec![entry],
                 });
             }

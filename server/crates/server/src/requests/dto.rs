@@ -128,16 +128,6 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
             None
         }
     };
-    if delete
-        && let Some(k) = &key
-        && !book
-        && !k.provider.is_unique()
-    {
-        c.err(
-            "provider",
-            "a deletion request needs an id unique to one title",
-        );
-    }
     if !o.get("title").is_some_and(Value::is_string) {
         c.err("title", "must be a string");
     }
