@@ -126,7 +126,15 @@ async fn preferred(db: &PgPool, media_id: Option<&str>) -> Result<Option<String>
 /// Fills what a plugin record leaves out from the namespace that answered, so the client can link it.
 fn stamp(records: &mut [Value], ns: Namespace, kind: MediaKind) {
     for r in records {
-        let ext = r["ids"][ns.as_str()].as_str().map(str::to_owned);
+        let native = match ns {
+            Namespace::TMDB => r["tmdbId"].as_i64(),
+            Namespace::TVDB => r["tvdbId"].as_i64(),
+            _ => None,
+        };
+        let ext = r["ids"][ns.as_str()]
+            .as_str()
+            .map(str::to_owned)
+            .or(native.map(|n| n.to_string()));
         let Some(o) = r.as_object_mut() else { continue };
         o.entry("provider").or_insert_with(|| ns.as_str().into());
         o.entry("mediaType").or_insert_with(|| kind.as_str().into());

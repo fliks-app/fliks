@@ -145,6 +145,7 @@ async fn search_marks_media_the_caller_can_read(pool: PgPool) {
     assert_eq!(ids(&admin), [json!(1), json!(2), Value::Null, Value::Null]);
     assert_eq!(admin[0]["existingMediaType"], "movie");
     assert_eq!(admin[0]["year"], 2020);
+    assert_eq!(admin[0]["externalId"], "11");
     assert!(admin[0].get("tvdbId").is_none() && admin[0]["provider"] == "tmdb");
     let (_, reader) = call(&c, "/api/metadata/search/movie?q=sample", Some(&c.reader)).await;
     assert_eq!(
