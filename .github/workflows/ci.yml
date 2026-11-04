@@ -41,7 +41,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
           DRAFT: ${{ github.event.pull_request.draft }}
-          BEFORE: ${{ github.event.before }}
           QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
           out() { printf 'server=%s\nclient=%s\ndesktop=%s\n' "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
@@ -50,9 +49,9 @@ jobs:
           case "$EVENT" in
             pull_request) base=$(git rev-parse HEAD^1) ;;
             merge_group) base=$QUEUE_BASE ;;
-            push) base=${BEFORE#0000000000000000000000000000000000000000} ;;
             *) base= ;;
           esac
+          # A push to main runs every area: a superseded pending run must not skip a commit's jobs.
           if [ -z "$base" ] || ! git fetch -q --depth=1 origin "$base"; then out true; exit 0; fi
           files=$(git diff --name-only "$base" HEAD | grep -v '\.md$' || true)
           if grep -qE '^(\.github/(workflows/ci\.yml|actions/|scripts/)|rust-toolchain\.toml$)' <<< "$files"; then out true; exit 0; fi
@@ -62,6 +61,21 @@ jobs:
             echo "client=$(hit '^client/')"
             echo "desktop=$(hit '^desktop/')"
           } | tee -a "$GITHUB_OUTPUT"
+
+  # Added lines only: older files carry dashes. A data fixture that tests a dash spells it with its escape.
+  no-em-dash:
+    needs: changes
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.server == 'true' || needs.changes.outputs.client == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: no literal em dash in added server and client lines
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git diff -U0 --no-color FETCH_HEAD HEAD -- server client ':!*.md' |
+            awk -v d="$(printf '\342\200\224')" '/^\+\+\+ /{f=$2; next} /^\+/ && index($0,d){print f": "$0; bad=1} END{exit bad}'
 
   lint:
     needs: changes
@@ -95,16 +109,6 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Added lines only: older files carry dashes. A data fixture that tests a dash spells it —.
-      - name: no literal em dash in added server and client lines
-        if: github.event_name == 'pull_request'
-        working-directory: ${{ github.workspace }}
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          git diff -U0 --no-color FETCH_HEAD HEAD -- server client ':!*.md' |
-            awk -v d="$(printf '\342\200\224')" '/^\+\+\+ /{f=$2; next} /^\+/ && index($0,d){print f": "$0; bad=1} END{exit bad}'
       - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
@@ -463,7 +467,7 @@ jobs:
   # The only required check: a skipped job (area untouched, or left out of the merge queue) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, desktop, desktop-win, android, ios]
+    needs: [changes, no-em-dash, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, desktop, desktop-win, android, ios]
     runs-on: ubuntu-latest
     steps:
       - env:

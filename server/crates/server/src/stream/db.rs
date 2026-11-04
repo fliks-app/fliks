@@ -99,6 +99,17 @@ pub async fn item_chapters(
     Ok(chapters)
 }
 
+/// Whether the item's edition is video: only then a file's own timeline is the item's.
+pub async fn is_video(db: &PgPool, item: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
+                          WHERE i.id = $1 AND e.family = 'video')"#,
+    )
+    .bind(item)
+    .fetch_one(db)
+    .await
+}
+
 /// The saved position worth resuming: more than 10 s in and not finished.
 pub async fn resume_position(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<f64>> {
     Ok(find_state(db, user, item)

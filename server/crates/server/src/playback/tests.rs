@@ -255,3 +255,38 @@ async fn a_beat_naming_a_replaced_file_keeps_the_progress(pool: PgPool) {
     let r = find_state(&pool, ids.0, w.item).await.unwrap().unwrap();
     assert_eq!((r.position_seconds, r.media_file_id), (300.0, None));
 }
+
+#[sqlx::test(migrations = false)]
+async fn an_image_item_completes_on_its_progression(pool: PgPool) {
+    let ids = seed(&pool).await;
+    let base = watch(&pool, ids, 0.0, None).await;
+    let beat = |progression| Watch {
+        family: Family::Image,
+        progression: Some(progression),
+        ..base.clone()
+    };
+    record_watch(&pool, ids.0, ids.1, &beat(0.5)).await.unwrap();
+    assert!(!row(&pool, ids.0, ids.1).await.1);
+    record_watch(&pool, ids.0, ids.1, &beat(1.0)).await.unwrap();
+    assert!(row(&pool, ids.0, ids.1).await.1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_replayed_reader_beat_sets_played_at(pool: PgPool) {
+    let ids = seed(&pool).await;
+    let at = ms(Utc::now() - Duration::minutes(5));
+    let w = Watch {
+        family: Family::Text,
+        progression: Some(0.3),
+        ..watch(&pool, ids, 0.0, Some(at)).await
+    };
+    record_watch(&pool, ids.0, ids.1, &w).await.unwrap();
+    let item = sole_item(&pool, ids.1).await.unwrap().unwrap();
+    let played: Option<DateTime<Utc>> =
+        sqlx::query_scalar(r#"SELECT "playedAt" FROM playback_states WHERE "itemId" = $1"#)
+            .bind(item)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(played.is_some());
+}

@@ -534,3 +534,49 @@ fn existing_dummy_page_is_left_alone() {
             .contains("itemref idref=\"kepubify")
     );
 }
+
+#[test]
+fn an_encrypted_content_document_is_refused_but_an_obfuscated_font_is_not() {
+    let enc = |uri: &str| {
+        format!(
+            r#"<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#"><CipherData><CipherReference URI="{uri}"/></CipherData></EncryptedData></encryption>"#
+        )
+    };
+    let with = |uri: &str| {
+        epub(&[
+            ("mimetype", b"application/epub+zip"),
+            ("META-INF/container.xml", CONTAINER.as_bytes()),
+            ("META-INF/encryption.xml", enc(uri).as_bytes()),
+            ("OEBPS/content.opf", opf("ch.xhtml", "").as_bytes()),
+            ("OEBPS/ch.xhtml", b"x"),
+            ("OEBPS/cover.png", b"\x89PNG"),
+        ])
+    };
+    assert!(matches!(
+        convert_bytes(&with("OEBPS/ch.xhtml"), &Limits::default()),
+        Err(Error::Encrypted)
+    ));
+    assert!(convert_bytes(&with("OEBPS/font.otf"), &Limits::default()).is_ok());
+}
+
+#[test]
+fn the_cover_fallback_skips_a_non_image_and_an_already_flagged_cover() {
+    let pkg = |manifest: &str| {
+        format!(
+            r#"<package xmlns="http://www.idpf.org/2007/opf" version="3.0"><manifest>{manifest}</manifest></package>"#
+        )
+    };
+    let run = |manifest: &str| {
+        let mut nodes = dom::parse(&pkg(manifest), false).unwrap();
+        opf::cover_image(opf::root(&mut nodes).unwrap());
+        dom::serialize(&nodes, false)
+    };
+    let page = run(r#"<item id="cover" href="c.xhtml" media-type="application/xhtml+xml"/>"#);
+    assert!(!page.contains("cover-image"), "{page}");
+    let two = run(
+        r#"<item id="img" href="c.png" media-type="image/png" properties="cover-image"/><item id="cover" href="c2.png" media-type="image/png"/>"#,
+    );
+    assert_eq!(two.matches("cover-image").count(), 1, "{two}");
+    let plain = run(r#"<item id="cover" href="c.png" media-type="image/png"/>"#);
+    assert!(plain.contains("cover-image"), "{plain}");
+}
