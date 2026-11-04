@@ -38,7 +38,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          # Restores the Server workflow's test cache (same crate graph); saving is that workflow's.
+          # Restores ci.yml's test cache (same crate graph); saving is that workflow's.
           save-if: false
           shared-key: server-test
           workspaces: server

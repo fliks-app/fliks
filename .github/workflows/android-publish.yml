@@ -88,13 +88,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # Read-only: a tag can't save a cache other refs restore; native-build.yml seeds it from main.
+      # Read-only: a tag can't save a cache other refs restore; ci.yml's android job seeds it from main.
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           build-root-directory: client/android
           cache-read-only: true
 
-      # Only what the build compiles against; the default set pulls the emulator (see native-build.yml).
+      # Only what the build compiles against; the default set pulls the emulator (see ci.yml).
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: 'platform-tools platforms;android-36'
