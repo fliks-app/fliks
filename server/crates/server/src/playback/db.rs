@@ -142,7 +142,20 @@ pub async fn beat_item(
 ) -> Result<Option<i32>, AppError> {
     let id = match item {
         Some(id) => id,
-        None => match named_item(db, media, episode).await? {
+        None => match {
+            let readable: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND "libraryId" = ANY($2))"#,
+            )
+            .bind(media)
+            .bind(acl)
+            .fetch_one(db)
+            .await?;
+            if readable {
+                named_item(db, media, episode).await?
+            } else {
+                None
+            }
+        } {
             Some(id) => id,
             None => return Ok(None),
         },

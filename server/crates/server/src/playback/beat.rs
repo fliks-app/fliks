@@ -347,9 +347,9 @@ pub async fn heartbeat(
     let named = int(&body, "itemId")
         .map(|i| i32::try_from(i).unwrap_or(-1))
         .filter(|i| *i != 0);
-    let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
     let mut resolved = match bound_file {
         Some(bound) => {
+            let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
             let item = super::db::beat_item(&st.db, media, episode, named, &acl).await?;
             check_bound_file(&st, bound, item, int(&body, "mediaFileId")).await?;
             Some(item)
@@ -367,7 +367,10 @@ pub async fn heartbeat(
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
         let item = match resolved {
             Some(item) => item,
-            None => super::db::beat_item(&st.db, media, episode, named, &acl).await?,
+            None => {
+                let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
+                super::db::beat_item(&st.db, media, episode, named, &acl).await?
+            }
         };
         resolved = Some(item);
         let before = st.presence.peek(sid);
@@ -432,7 +435,10 @@ pub async fn heartbeat(
     };
     let item = match resolved {
         Some(item) => item,
-        None => super::db::beat_item(&st.db, media, episode, named, &acl).await?,
+        None => {
+            let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
+            super::db::beat_item(&st.db, media, episode, named, &acl).await?
+        }
     };
     let Some(item) = item else {
         return Ok(reply(lost, Some(None)));

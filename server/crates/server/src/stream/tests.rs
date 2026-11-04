@@ -1385,3 +1385,25 @@ async fn a_book_with_two_editions_is_named_by_its_item_on_the_playback_routes(po
         "the admin still names it"
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn an_audio_item_resumes_on_the_item_route_only(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    sqlx::query(
+        r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", completed)
+           VALUES ($1, $2, 100, false)"#,
+    )
+    .bind(c.user)
+    .bind(b.audio)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    item_info(&c, &c.token, b.audio, "").await;
+    let req = c.fake.seen("POST", "/v1/sessions").pop().unwrap().body;
+    assert_eq!(req["startAtS"].as_f64(), Some(100.0));
+    let uri = format!("/api/stream/{}/playback-info", b.files[1]);
+    call(&c, "POST", &uri, &c.token, Some(device())).await;
+    let req = c.fake.seen("POST", "/v1/sessions").pop().unwrap().body;
+    assert_eq!(req["startAtS"].as_f64(), Some(0.0));
+}

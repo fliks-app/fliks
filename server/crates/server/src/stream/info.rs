@@ -293,12 +293,13 @@ async fn run(
             (file, Some(item))
         }
     };
-    let (position, early_pre_roll) = tokio::join!(start_position(st, a, &q, &file), async {
-        match q.pre_roll_first {
-            true => Some(ask_pre_roll(st, a, &file).await),
-            false => None,
-        }
-    });
+    let (position, early_pre_roll) =
+        tokio::join!(start_position(st, a, &q, &file, item.is_some()), async {
+            match q.pre_roll_first {
+                true => Some(ask_pre_roll(st, a, &file).await),
+                false => None,
+            }
+        });
     let position = position?;
     if let Some(items) = defers_open(early_pre_roll.as_ref(), position) {
         return Ok(json!({"deferred": true, "preRoll": items}));
@@ -459,14 +460,18 @@ async fn start_position(
     a: &crate::http::auth::Authed,
     q: &Params,
     file: &ResolvedFile,
+    item_route: bool,
 ) -> Result<f64, AppError> {
     Ok(match q.start_at {
         Some(p) => p,
+        // A file route's position is the file's own: an audio item's row spans its parts.
         None => match file.item_id {
-            Some(item) => db::resume_position(&st.db, a.user.id, item)
-                .await?
-                .unwrap_or(0.0),
-            None => 0.0,
+            Some(item) if item_route || db::is_video(&st.db, item).await? => {
+                db::resume_position(&st.db, a.user.id, item)
+                    .await?
+                    .unwrap_or(0.0)
+            }
+            _ => 0.0,
         },
     })
 }

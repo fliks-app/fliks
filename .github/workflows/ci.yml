@@ -65,12 +65,11 @@ jobs:
   # Added lines only: older files carry dashes. A data fixture that tests a dash spells it with its escape.
   no-em-dash:
     needs: changes
-    if: needs.changes.outputs.server == 'true' || needs.changes.outputs.client == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.server == 'true' || needs.changes.outputs.client == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: no literal em dash in added server and client lines
-        if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
