@@ -37,6 +37,31 @@ entry() {
         | "\(.version) \(.sha256) \(.zipUrl)"' "$tmp/catalog.json"
 }
 
+# accepts <range> <version>: whether every space-separated comparator (>=, >, <=, <, =) of the range holds.
+accepts() {
+    local c op v
+    for c in $1; do
+        op="${c%%[0-9]*}"; v="${c#"$op"}"
+        case "$op" in
+            '>=') [ "$(printf '%s\n%s\n' "$v" "$2" | sort -V | head -n1)" = "$v" ] ;;
+            '>') [ "$v" != "$2" ] && [ "$(printf '%s\n%s\n' "$v" "$2" | sort -V | head -n1)" = "$v" ] ;;
+            '<=') [ "$(printf '%s\n%s\n' "$v" "$2" | sort -V | tail -n1)" = "$v" ] ;;
+            '<') [ "$v" != "$2" ] && [ "$(printf '%s\n%s\n' "$v" "$2" | sort -V | tail -n1)" = "$v" ] ;;
+            ''|'=') [ "$v" = "$2" ] ;;
+            *) fail "unsupported fliks range comparator \"$c\"" ;;
+        esac || return 1
+    done
+}
+# A bundled archive skips the server's fliks range check, so the range must accept the first release of
+# this major or of the next one (main is versioned ahead of the release that ships the provider).
+major="$(jq -r '.["."]' .github/.release-please-manifest.json | cut -d. -f1)"
+check_range() { # check_range <id> <version>
+    local range
+    range="$(jq -r --arg id "$1" --arg v "$2" '.plugins[] | select(.id == $id) | .versions[] | select(.version == $v) | .fliks' "$tmp/catalog.json" | head -n1)"
+    accepts "$range" "$major.0.0" || accepts "$range" "$((major + 1)).0.0" ||
+        fail "$1 $2: manifest range \"$range\" excludes fliks $major.0.0 and $((major + 1)).0.0"
+}
+
 if [ "${1:-}" = "--check" ]; then
     [ -s "$lock" ] || fail "$lock is empty"
     while read -r id version sha url; do
@@ -65,6 +90,7 @@ declare -A old
         fi
         line="$(entry "$id" "${want[$id]:-}" | sort -V | tail -n1)"
         [ -n "$line" ] || fail "$id${want[$id]:+@${want[$id]}}: no installable version for pluginApi $api in the signed catalog"
+        check_range "$id" "${line%% *}"
         echo "$id $line"
     done
 } > "$tmp/lock"

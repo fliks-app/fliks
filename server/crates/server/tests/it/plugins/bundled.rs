@@ -1,7 +1,7 @@
 //! Bundled archives: installed at boot, never downgraded, never uninstalled.
 use super::harness::*;
 use fliks_server::plugins::{bundled::Archive, packages};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 fn leak(b: Vec<u8>) -> &'static [u8] {
@@ -137,6 +137,43 @@ async fn a_newer_installed_row_becomes_bundled() {
         )
         .await;
     assert_eq!((st, r["code"].as_str()), (409, Some("PLUGIN_BUNDLED")));
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bundled_skips_the_fliks_range_others_do_not() {
+    let Some((s, h, m, w)) = setup("bundled_range", false).await else {
+        return;
+    };
+    let id: &'static str = Box::leak(m["id"].as_str().unwrap().to_owned().into_boxed_str());
+    let key = test_key();
+    let mut future = m.clone();
+    future["fliks"] = json!(">=99.0.0");
+    h.st.plugins
+        .install_archives(&[(id, "0.1.0", leak(pack(&future, "0.1.0", &w, Some(&key))))])
+        .await;
+    h.st.plugins.boot().await;
+    let p = packages::find(&s.pool, id).await.unwrap().unwrap();
+    assert_eq!(p.status, "active", "{:?}", p.status_reason);
+    h.st.plugins.stop_all().await;
+    let mut updated = future.clone();
+    updated["description"] = json!("catalog update");
+    let (_, origin, _) = row(&s, id).await;
+    assert_eq!(origin, "bundled");
+    // a catalog update keeps the bundled origin but is not the embedded archive
+    sqlx::query(r#"UPDATE plugin_packages SET archive = $2 WHERE "pluginId" = $1"#)
+        .bind(id)
+        .bind(pack(&updated, "0.1.0", &w, Some(&key)))
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    h.st.plugins.boot().await;
+    assert_eq!(row(&s, id).await.2, "failed");
+    h.st.plugins.stop_all().await;
+    h.set("plugins.skip_compatibility_check", "true").await;
+    h.st.plugins.boot().await;
+    assert_eq!(row(&s, id).await.2, "active");
     h.finish().await;
     s.finish().await;
 }

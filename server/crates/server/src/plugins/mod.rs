@@ -44,7 +44,7 @@ use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
 use serde_json::Value;
 use sqlx::PgPool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -180,6 +180,8 @@ pub struct Plugins {
     /// Plugins whose registration waits for the database, by generation and `statusReason`.
     db_waits: Mutex<HashMap<String, (u64, String)>>,
     wait_gen: AtomicU64,
+    /// sha256 of the archives embedded in this build, filled by `install_archives`.
+    embedded: Mutex<HashSet<String>>,
 }
 
 const DB_UNAVAILABLE: &str = "db-unavailable";
@@ -223,6 +225,7 @@ impl Plugins {
             fk_warnings: Mutex::default(),
             db_waits: Mutex::default(),
             wait_gen: AtomicU64::new(0),
+            embedded: Mutex::default(),
         }
     }
 

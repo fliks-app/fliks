@@ -13,6 +13,10 @@ impl Plugins {
 
     /// Installs each archive whose id is absent or older than it, never over a newer version.
     pub async fn install_archives(&self, archives: &[Archive]) {
+        self.embedded
+            .lock()
+            .unwrap()
+            .extend(archives.iter().map(|a| super::archive::sha256_hex(a.2)));
         for (id, version, bytes) in archives {
             let Ok(new) = Version::parse(version) else {
                 continue;
