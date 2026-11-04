@@ -1,8 +1,8 @@
-//! Comics in the catalogue (`docs/spec/opds.md` rules 16-22): volume feeds, issue entries, PSE pages.
+//! Comics in the catalogue (`docs/spec/opds.md` rules 16-21): volume feeds, issue entries, PSE pages.
 use super::{OpdsAuthed, PAGE, Params, ROOT, links, missing, nav_entry, page_of, xml};
 use crate::{
     comics::{MAX_WIDTH, serve_page},
-    http::AppError,
+    http::{AppError, validate::PathParams},
     libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
     media::{list::find_ids, params::Search},
     state::AppState,
@@ -46,19 +46,25 @@ fn comic_mime(ext: &str) -> &'static str {
 }
 
 /// Navigation entries of the volumes in `ids` (in that order) with a readable issue.
-pub async fn volumes(db: &PgPool, ids: &[i32], acl: &[i32]) -> Result<Vec<Entry>, sqlx::Error> {
+pub async fn volumes(
+    db: &PgPool,
+    ids: &[i32],
+    acl: &[i32],
+    uid: i32,
+) -> Result<Vec<Entry>, sqlx::Error> {
     let rows: Vec<(i32, String, String, Option<String>, i64)> =
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
             r#"SELECT m.id, m.title, iso_ms(m."updatedAt"), m."posterUrl",
   (SELECT count(*) FROM comic_issues ci JOIN items i ON i.id = ci."itemId"
      JOIN editions e ON e.id = i."editionId" AND e.family = 'image'
-     JOIN media_files f ON f.id = comic_part(i.id, 0)
+     JOIN media_files f ON f.id = comic_part(i.id, $3)
     WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
       AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = f.id))
 FROM media m WHERE m.id = ANY($1) AND m.type = 'comic' AND m."libraryId" = ANY($2)"#
         )))
         .bind(ids)
         .bind(acl)
+        .bind(uid)
         .fetch_all(db)
         .await?;
     let mut by_id: std::collections::HashMap<i32, Entry> = rows
@@ -103,7 +109,7 @@ pub async fn volume_list(
         title,
         updated: super::now(),
         links: links(href, Some(up), NAV_TYPE, page, total > page * PAGE),
-        entries: volumes(&st.db, &ids, acl).await?,
+        entries: volumes(&st.db, &ids, acl, uid).await?,
     };
     Ok(xml(NAV_TYPE, render(&feed)))
 }
@@ -151,14 +157,12 @@ struct Row {
 fn issue_entry(volume: &str, updated: &str, publisher: Option<&String>, r: Row) -> Entry {
     let ext = extname(&r.path);
     let name = ext.trim_start_matches('.').to_uppercase();
-    let mut title = format!(
-        "{volume} {}#{}",
-        if r.kind == "issue" { "" } else { "Annual " },
-        r.label
-    );
-    if r.kind == "special" {
-        title = title.replace("Annual ", "Special ");
-    }
+    let prefix = match r.kind.as_str() {
+        "annual" => "Annual ",
+        "special" => "Special ",
+        _ => "",
+    };
+    let mut title = format!("{volume} {prefix}#{}", r.label);
     if let Some(t) = r.title.as_deref().filter(|t| !t.is_empty()) {
         title = format!("{title}: {t}");
     }
@@ -228,7 +232,7 @@ pub async fn volume(
     let mut rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT i.id AS item, ci.label, ci.kind, i.title, ci."pageCount" AS page_count,
   EXTRACT(year FROM i."airDate")::int AS year, f.id AS file, f."relativePath" AS path, f.size,
-  CASE WHEN jsonb_typeof(ps.locator -> 'page') = 'number' THEN floor((ps.locator ->> 'page')::numeric)::int END AS last_read,
+  CASE WHEN jsonb_typeof(ps.locator -> 'page') = 'number' THEN LEAST(GREATEST(floor((ps.locator ->> 'page')::numeric), 0), 1000000)::int END AS last_read,
   COALESCE(ps.completed, false) AS completed,
   to_char(ps."lastPlayedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_read_date
 FROM items i JOIN comic_issues ci ON ci."itemId" = i.id JOIN media m ON m.id = i."mediaId"
@@ -267,7 +271,7 @@ ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id LIMIT $4 OFFSET $5"#
 
 #[derive(Deserialize)]
 pub struct PageQuery {
-    width: Option<u32>,
+    width: Option<String>,
 }
 
 /// The PSE stream URL: the page route of `comics/pages.rs` under the OPDS credential.
@@ -276,10 +280,15 @@ pub async fn issue_page(
     State(st): State<AppState>,
     OpdsAuthed(a): OpdsAuthed,
     headers: HeaderMap,
-    Path((item, index)): Path<(i32, i64)>,
+    p: Result<PathParams<(i32, i64)>, AppError>,
     Query(q): Query<PageQuery>,
 ) -> Result<Response, AppError> {
-    // A client sends its screen width, which can exceed the cap; an absent one gets the cap (always JPEG).
-    let width = q.width.unwrap_or(MAX_WIDTH).clamp(1, MAX_WIDTH);
+    let PathParams((item, index)) = p?;
+    // A width above the cap is clamped, an absent or unreplaced `{maxWidth}` gets the cap (always JPEG).
+    let width = q
+        .width
+        .and_then(|w| w.parse::<u32>().ok())
+        .unwrap_or(MAX_WIDTH)
+        .clamp(1, MAX_WIDTH);
     serve_page(&st, &a, None, &headers, item, index, Some(width)).await
 }

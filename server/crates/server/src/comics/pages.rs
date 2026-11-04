@@ -430,6 +430,9 @@ fn render(bytes: &[u8], width: Option<u32>) -> Result<(&'static str, Vec<u8>), &
             None => jpeg(&r.decode().map_err(|_| bad)?).map(|b| ("image/jpeg", b)),
         };
     };
+    if kind == Some("image/jpeg") && archive::dimensions(bytes).0 <= width {
+        return Ok(("image/jpeg", bytes.to_vec()));
+    }
     let img = r.decode().map_err(|_| bad)?;
     let img = if img.width() > width {
         let h = (u64::from(img.height()) * u64::from(width) + u64::from(img.width()) / 2)
@@ -465,6 +468,16 @@ mod tests {
         assert_eq!((ct, img.width(), img.height()), ("image/jpeg", 256, 384));
         let (_, body) = render(&png(100, 50), Some(256)).unwrap();
         assert_eq!(image::load_from_memory(&body).unwrap().width(), 100);
+    }
+
+    #[test]
+    fn a_jpeg_within_the_width_is_served_as_is() {
+        let mut jpg = vec![];
+        image::RgbImage::new(100, 50)
+            .write_to(&mut Cursor::new(&mut jpg), ImageFormat::Jpeg)
+            .unwrap();
+        assert_eq!(render(&jpg, Some(256)).unwrap().1, jpg);
+        assert_ne!(render(&jpg, Some(64)).unwrap().1, jpg);
     }
 
     #[test]

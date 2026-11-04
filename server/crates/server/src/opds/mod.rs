@@ -510,7 +510,7 @@ pub async fn search(
         utf8_percent_encode(&term, NON_ALPHANUMERIC)
     );
     let mut entries = entries::read(&st.db, &ids, &acl).await?;
-    entries.extend(comics::volumes(&st.db, &vols, &acl).await?);
+    entries.extend(comics::volumes(&st.db, &vols, &acl, a.user.id).await?);
     let feed = Feed {
         id: "urn:fliks:opds:search".into(),
         title: format!("Search: {term}"),
