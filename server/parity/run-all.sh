@@ -79,16 +79,22 @@ mkdir -p "$RUN"
 rm -rf "$RUN"/{target-*,*.log}
 
 # ---- build once ----
-log "building fliks-server (parity feature) and the parity runner"
-(cd "$SERVER" && $HEAVY cargo build -p fliks-server --features parity) || die "cargo build failed"
-TESTEXE=$(cd "$SERVER" && $HEAVY cargo test -p fliks-server --features parity --test it --no-run --message-format=json 2>/dev/null |
-  python3 -c 'import sys,json
+# PARITY_PREBUILT=<dir> holding fliks-server and it (the parity runner): CI shards reuse one build job's binaries
+if [ -n "${PARITY_PREBUILT:-}" ]; then
+  BIN=$PARITY_PREBUILT/fliks-server TESTEXE=$PARITY_PREBUILT/it
+  [ -x "$BIN" ] && [ -x "$TESTEXE" ] || die "PARITY_PREBUILT lacks fliks-server or it"
+else
+  log "building fliks-server (parity feature) and the parity runner"
+  (cd "$SERVER" && $HEAVY cargo build -p fliks-server --features parity) || die "cargo build failed"
+  TESTEXE=$(cd "$SERVER" && $HEAVY cargo test -p fliks-server --features parity --test it --no-run --message-format=json 2>/dev/null |
+    python3 -c 'import sys,json
 for l in sys.stdin:
     try: m=json.loads(l)
     except ValueError: continue
     if m.get("executable") and m.get("target",{}).get("name")=="it": print(m["executable"])' | tail -1)
-[ -x "$TESTEXE" ] || die "parity runner binary not found"
-BIN=$CARGO_TARGET_DIR/debug/fliks-server
+  [ -x "$TESTEXE" ] || die "parity runner binary not found"
+  BIN=$CARGO_TARGET_DIR/debug/fliks-server
+fi
 
 # ---- engine: the pinned release, checked against engine.lock ----
 ENGVER=${PARITY_ENGINE_VERSION:-$(sed -n 's/^version=//p' "$ROOT/engine.lock")}

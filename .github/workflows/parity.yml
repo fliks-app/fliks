@@ -1,0 +1,140 @@
+# The HTTP parity suite (server/parity/run-all.sh): nightly on main, on a PR labelled `parity`, or by hand
+# (`gh workflow run parity.yml --ref <branch>`). One job builds the server and the runner; the shards only run them.
+name: Parity
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  pull_request:
+    types: [labeled, synchronize, reopened]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: parity-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || (contains(github.event.pull_request.labels.*.name, 'parity') && (github.event.action != 'labeled' || github.event.label.name == 'parity'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
+    env:
+      SQLX_OFFLINE: 'true'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          # Restores the Server workflow's test cache (same crate graph); saving is that workflow's.
+          save-if: false
+          shared-key: server-test
+          workspaces: server
+      - name: build fliks-server and the parity runner
+        run: |
+          cargo build -p fliks-server --features parity
+          mkdir -p "$RUNNER_TEMP/parity-bin"
+          cp target/debug/fliks-server "$RUNNER_TEMP/parity-bin/"
+          cargo test -p fliks-server --features parity --test it --no-run --message-format=json |
+            jq -r 'select(.target.name == "it" and .executable) | .executable' | tail -1 |
+            xargs -I{} cp {} "$RUNNER_TEMP/parity-bin/it"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: parity-bin
+          path: ${{ runner.temp }}/parity-bin
+          retention-days: 1
+
+  run:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: parity (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # up0 and down0 hold nearly every scenario: their groups are split by size over shards (run-all.sh PARITY_SHARD).
+        include:
+          - {name: up0 1/3, modes: up0, shard: 1/3}
+          - {name: up0 2/3, modes: up0, shard: 2/3}
+          - {name: up0 3/3, modes: up0, shard: 3/3}
+          - {name: down0 1/2, modes: down0, shard: 1/2}
+          - {name: down0 2/2, modes: down0, shard: 2/2}
+          - {name: markers and providers, modes: stub0 up1 down1, shard: ''}
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: fliks
+          POSTGRES_PASSWORD: fliks
+          POSTGRES_DB: fliks
+          POSTGRES_INITDB_ARGS: -c max_connections=500 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliks"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    env:
+      # run-all.sh uses the runner's psql and these credentials instead of a docker container.
+      PGHOST: localhost
+      PGUSER: fliks
+      PGPASSWORD: fliks
+      PARITY_MODES: ${{ matrix.modes }}
+      PARITY_SHARD: ${{ matrix.shard }}
+      PARITY_PREBUILT: ${{ runner.temp }}/parity-bin
+      HEAVY: ''
+    steps:
+      # The runner reads the scenarios and fixtures from the checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: parity-bin
+          path: ${{ runner.temp }}/parity-bin
+      # Artifacts drop the exec bit.
+      - run: chmod +x "$PARITY_PREBUILT"/*
+      # The backup scenarios run pg_dump against the Postgres 18 service; the runner image ships 16.
+      - name: PostgreSQL 18 client tools
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
+      # The engine release's own ffmpeg, as in its image (the runner has none).
+      - name: ffmpeg
+        run: |
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/ffmpeg.deb" https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-1/jellyfin-ffmpeg8_8.1.2-1-noble_amd64.deb
+          sudo apt-get install -y -qq "$RUNNER_TEMP/ffmpeg.deb"
+          sudo ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg
+          sudo ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe
+      - name: parity ${{ matrix.name }}
+        run: |
+          set -o pipefail
+          parity/run-all.sh 2>&1 | tee "$RUNNER_TEMP/parity.out"
+      - name: failing scenarios
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### parity ${{ matrix.name }}"
+            echo '```'
+            sed -n '/^MODE /,$p' "$RUNNER_TEMP/parity.out"
+            grep -hE '^FAIL' target/run-all/result-*.log | cut -c1-300
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
+      - name: logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: parity-${{ strategy.job-index }}-logs
+          path: server/target/run-all/*.log
