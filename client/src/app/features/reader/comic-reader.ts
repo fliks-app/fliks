@@ -38,6 +38,7 @@ import {
   type Pan,
 } from './comic-layout';
 import { pdfPageOf, pdfProgression } from './pdf-position';
+import { pageAtProbe, scrollToPageSlot } from './page-scroll';
 import { ReaderApiService, type ReaderTarget } from './reader-api.service';
 import { ReaderProgressService } from './reader-progress.service';
 import { ReaderSettingsService } from './reader-settings.service';
@@ -232,7 +233,7 @@ export class ComicReaderComponent implements OnDestroy {
   }
 
   private scrollToPage(n: number): void {
-    this.stage()!.nativeElement.querySelector(`[data-page="${n}"]`)?.scrollIntoView({ block: 'start' });
+    scrollToPageSlot(this.stage()!.nativeElement, n);
   }
 
   protected onScrub(e: Event): void {
@@ -249,11 +250,7 @@ export class ComicReaderComponent implements OnDestroy {
   protected onScroll(): void {
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(() => {
-      const root = this.stage()!.nativeElement;
-      const probe = root.getBoundingClientRect().top + root.clientHeight / 3;
-      const slots = Array.from(root.querySelectorAll<HTMLElement>('[data-page]'));
-      const hit = slots.filter((s) => s.getBoundingClientRect().top <= probe).pop() ?? slots[0];
-      const n = Number(hit?.dataset['page'] ?? 1);
+      const n = pageAtProbe(this.stage()!.nativeElement);
       if (this.ready() && n !== this.page()) this.report(n);
     });
   }
@@ -379,7 +376,9 @@ export class ComicReaderComponent implements OnDestroy {
   }
 
   protected onKeydown(e: KeyboardEvent): void {
-    if ((e.target as HTMLElement | null)?.closest('input, select, textarea, button, a')) return;
+    const el = e.target as HTMLElement | null;
+    if (el?.closest('input, select, textarea')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && el?.closest('button, a')) return;
     const root = this.stage()!.nativeElement;
     const last = this.total();
     const action = readerKeyAction(e);

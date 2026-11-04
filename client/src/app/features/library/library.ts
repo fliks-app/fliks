@@ -521,6 +521,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
       }
 
       this.navbar.setPageTitle(lib.name);
+      if (this.seriesList().length || this.authorsList().length || this.narratorsList().length) {
+        this.seriesList.set([]);
+        this.authorsList.set([]);
+        this.narratorsList.set([]);
+      }
       // A fresh instance (never cached, or evicted from the reuse cache) has
       // no attach$ event to trigger keepRouteFresh's own restoreSticky.
       const scrollKey = this.scrollMemoryKey();
@@ -739,7 +744,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (!this.seriesList().length) this.seriesLoading.set(true);
     try {
       const rows = await this.booksApi.collections({ libraryId: lib.id, kind: 'book' }).catch(() => null);
-      if (rows) this.seriesList.set(rows);
+      if (rows && this.library()?.id === lib.id) this.seriesList.set(rows);
     } finally {
       this.seriesLoading.set(false);
     }
@@ -752,6 +757,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
           this.booksApi.persons({ role, libraryId, sortBy: 'name' }).catch(() => null),
         ),
       );
+      if (this.library()?.id !== libraryId) return;
       if (authors) this.authorsList.set(authors);
       if (narrators) this.narratorsList.set(narrators);
     } finally {
