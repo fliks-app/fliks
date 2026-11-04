@@ -802,7 +802,9 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
                JOIN media_files f ON f.id = p."mediaFileId"
                WHERE i."editionId" = e.id ORDER BY p."version", p.position LIMIT 1) AS rel
            FROM editions e WHERE e."mediaId" = $1
-             AND NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
+             AND (NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id)
+               OR NOT EXISTS (SELECT 1 FROM media_external_ids w
+                               WHERE w."mediaId" = e."mediaId" AND w.provider = 'openlibrary'))
            ORDER BY e.id"#,
         media
     )
@@ -832,15 +834,16 @@ pub async fn identify_media(st: &AppState, media: i32) -> Result<i32, IdentifyEr
             Ok(m) => m,
             Err(e) => return Err(IdentifyError::of(media, c.edition, "identify", e)),
         };
-        let m = match found {
-            Some(m) => m,
-            None => match link::stored(&st.db, media, None).await {
-                Ok(Some(s)) => identify::BookMatch {
-                    edition: vec![],
-                    ..s
-                },
-                _ => continue,
+        // A work the media already holds wins over the one the file suggests.
+        let held = link::stored(&st.db, media, None).await.ok().flatten();
+        let m = match (found, held) {
+            (Some(f), Some(h)) if f.work == h.work => f,
+            (_, Some(h)) => identify::BookMatch {
+                edition: vec![],
+                ..h
             },
+            (Some(f), None) => f,
+            (None, None) => continue,
         };
         let attached = link::attach_with(
             st,

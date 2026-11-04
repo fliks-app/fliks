@@ -56,6 +56,11 @@ impl Fake {
         self
     }
 
+    pub(crate) fn find(mut self, ns: Namespace, v: &str, work: &str) -> Self {
+        self.finds.insert((ns, v.into()), work.into());
+        self
+    }
+
     fn log(&self, what: &str) {
         self.calls.lock().unwrap().push(what.into());
     }

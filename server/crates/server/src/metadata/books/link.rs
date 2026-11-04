@@ -321,7 +321,7 @@ fn edition_refs(given: &[(Namespace, String)]) -> Vec<(Namespace, String)> {
 }
 
 /// The edition ids the records carry (`isbn13`, `asin`, and `externalId` in the record's own namespace).
-fn discovered(records: &Records) -> Vec<(Namespace, String)> {
+pub(crate) fn discovered(records: &Records) -> Vec<(Namespace, String)> {
     let mut out = vec![];
     for (p, r) in records {
         let own = text(r, "externalId").map(|v| (*p, v));

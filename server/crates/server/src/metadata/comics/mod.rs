@@ -3,7 +3,7 @@
 mod apply;
 pub mod routes;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub(crate) use apply::language_of_library;
 pub use apply::{has_provider_id, refresh, write};

@@ -29,6 +29,18 @@ pub async fn of(db: impl PgExecutor<'_>, edition: i32) -> sqlx::Result<Option<(i
     Ok(row.and_then(|r| Some((r.mediaId, Family::parse(&r.family)?))))
 }
 
+/// The media of the edition holding `value` for `provider`.
+pub async fn media_of_id(
+    db: &sqlx::PgPool,
+    provider: Namespace,
+    value: &str,
+) -> sqlx::Result<Option<i32>> {
+    match super::external_ids::find_edition(db, provider, value).await? {
+        Some(e) => Ok(of(db, e).await?.map(|(media, _)| media)),
+        None => Ok(None),
+    }
+}
+
 /// The fields locked on `edition`.
 pub async fn locked_fields(c: impl PgExecutor<'_>, edition: i32) -> sqlx::Result<Vec<Field>> {
     let names = sqlx::query_scalar!(

@@ -1,6 +1,6 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
-use crate::ingest::books;
+use crate::{ingest::books, media::write::book_import::held_book};
 use fliks_domain::{
     external_id::Namespace,
     media::family::Family,
@@ -455,39 +455,26 @@ fn book_folder(f: &naming::NamingFormats, title: &str, year: Option<i64>) -> Str
     )
 }
 
-/// `findOrImportIdentified` (rule 78: a numeric id).
+/// `findOrImportIdentified` (rule 78): the media of the pick, created when the library has none.
 pub(super) async fn find_or_import(
     st: &AppState,
     a: &Authed,
     d: &RelinkDto,
 ) -> Result<(MediaRow, bool), AppError> {
     let raw = d.external_id.clone().unwrap_or_default();
-    let ns = match d.provider.as_deref() {
-        None | Some("tmdb") => Namespace::TMDB,
-        Some(p) => Namespace::parse(p)
-            .filter(|n| match n.core() {
-                Some(_) => *n == Namespace::TVDB,
-                None => st
-                    .metadata
-                    .get(*n)
-                    .is_some_and(|m| m.supports(d.media_type)),
-            })
-            .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?,
-    };
-    let ext = match ns.core() {
-        Some(_) => raw
-            .trim()
-            .parse::<i32>()
-            .ok()
-            .filter(|n| *n > 0)
-            .map(|n| n.to_string()),
-        None => ns.normalize(raw.trim()),
-    }
-    .ok_or_else(|| {
+    let name = d.provider.as_deref().unwrap_or(Namespace::TMDB.as_str());
+    let unknown = || AppError::bad_request(format!("Unknown provider: {name}"));
+    let ns = Namespace::parse(name).ok_or_else(unknown)?;
+    let ext = ns.normalize(raw.trim()).ok_or_else(|| {
         AppError::bad_request(vec!["externalId is not an id of the provider".to_owned()])
     })?;
+    // An edition provider's id sits on an edition, not on the media.
+    let on_edition =
+        d.media_type == MediaKind::Book && matches!(ns, Namespace::Core(_)) && !ns.is_unique();
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
-        let id = if ns.is_unique() {
+        let id = if on_edition {
+            held_book(&st.db, ns, &ext).await?
+        } else if ns.is_unique() {
             crate::media::external_ids::find(&st.db, d.media_type, ns, &ext).await?
         } else {
             crate::media::external_ids::find_in_library(
@@ -500,40 +487,40 @@ pub(super) async fn find_or_import(
             .await?
         };
         Ok(match id {
-            Some(id) => load_media(&st.db, id).await?,
+            Some(id) => load_media(&st.db, id)
+                .await?
+                .filter(|m| !on_edition || m.library_id == Some(d.library_id)),
             None => None,
         })
     };
     if let Some(m) = lookup().await? {
         return Ok((m, false));
     }
-    let provider = Some(ns.as_str().to_owned());
     let imported = async {
+        if !st
+            .metadata
+            .get(ns)
+            .is_some_and(|p| p.supports(d.media_type))
+        {
+            return Err(unknown());
+        }
         let target =
             mw::resolve_target(st, a, d.media_type, Some(d.library_id), d.folder_id).await?;
-        let imp = mw::Import {
-            media_type: d.media_type,
-            library_id: target.id,
-            folder_id: target.folder_id,
-            quality_profile_id: mw::resolve_profile(
-                &st.db,
-                false,
-                d.quality_profile_id,
-                target.default_quality,
-            )
-            .await?,
-            language_profile_id: mw::resolve_profile(
-                &st.db,
-                true,
-                d.language_profile_id,
-                target.default_language,
-            )
-            .await?,
-            added_by: Some(a.user.id),
-            monitored_seasons: None,
-            links: vec![],
-        };
-        mw::import_title(st, provider, ext.clone(), imp, d.priority).await
+        mw::create_identified(
+            st,
+            &mw::Creation {
+                kind: d.media_type,
+                id: (ns, &ext),
+                target: &target,
+                profiles: (d.quality_profile_id, d.language_profile_id),
+                user: Some(a.user.id),
+                links: vec![],
+                seasons: None,
+                wants: None,
+                prio: d.priority,
+            },
+        )
+        .await
     }
     .await;
     match imported {

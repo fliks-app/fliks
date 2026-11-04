@@ -3070,6 +3070,239 @@ mod book_ingest {
     }
 }
 
+mod relink_identified {
+    use super::*;
+    use crate::{
+        ingest::books,
+        metadata::books::tests::{Fake as Books, ISBN, anchor},
+    };
+    use fliks_domain::external_id::Namespace;
+    use std::sync::Arc;
+
+    const URL: &str = "/api/imports/library/orphans/relink";
+
+    fn pick(l: i32, folder: &str, file: &Path, provider: &str, id: &str) -> Value {
+        json!({"libraryId": l, "type": "book", "folderName": folder, "provider": provider,
+            "externalId": id, "files": [{"filePath": file}]})
+    }
+
+    fn google(isbn: &str) -> Books {
+        Books::new(Namespace::GOOGLEBOOKS).edition(
+            Namespace::GOOGLEBOOKS,
+            "gb1",
+            json!({"externalId": "gb1", "title": "Alpha", "year": 1999, "isbn13": [isbn],
+                   "authors": [{"name": "Una Roe"}]}),
+        )
+    }
+
+    async fn shelf(c: &Ctx) -> i32 {
+        library(c, "B", &c.dir.join("books"), r#"["book"]"#).await
+    }
+
+    async fn work_of(c: &Ctx, media: i32) -> Option<String> {
+        sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'openlibrary'"#,
+        )
+        .bind(media)
+        .fetch_optional(&c.st.db)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_book_is_relinked_by_its_work_and_found_again(pool: PgPool) {
+        let c = ctx_with(pool, Some(Arc::new(anchor()))).await;
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "openlibrary", "OL1W"),
+        )
+        .await;
+        assert_eq!((s, b["linked"].clone()), (201, json!(1)), "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL1W"));
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "openlibrary", "OL1W"),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_pick_is_imported_under_the_work_its_isbn_names(pool: PgPool) {
+        let ol = anchor().find(Namespace::ISBN, ISBN, "OL1W");
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!((s, b["linked"].clone()), (201, json!(1)), "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL1W"));
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT provider || ':' || value FROM edition_external_ids ORDER BY 1",
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["googlebooks:gb1".to_owned(), format!("isbn:{ISBN}")]);
+        assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_edition_the_anchor_does_not_know_makes_an_unmatched_book(pool: PgPool) {
+        let c = ctx_with(pool, Some(Arc::new(anchor()))).await;
+        c.st.metadata.add_plugin(Arc::new(google(ISBN)));
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Alpha", &file, "googlebooks", "gb1"),
+        )
+        .await;
+        assert_eq!((s, b["linked"].clone()), (201, json!(1)), "{b}");
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM media_external_ids WHERE provider = 'openlibrary'"
+            )
+            .await,
+            0
+        );
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT provider || ':' || value FROM edition_external_ids ORDER BY 1",
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["googlebooks:gb1".to_owned(), format!("isbn:{ISBN}")]);
+        assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM media_files").await, 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_explicit_work_survives_the_settle(pool: PgPool) {
+        let mut ol = anchor();
+        ol.works.insert("OL9W".into(), json!({"title": "Other"}));
+        ol.found =
+            vec![json!({"externalId": "OL1W", "title": "Alpha", "authors": [{"name": "Una Roe"}]})];
+        let c = ctx_with(pool, Some(Arc::new(ol))).await;
+        let l = shelf(&c).await;
+        let file = c.dir.join("books/Una Roe/Alpha/Alpha.epub");
+        touch(&file, b"a");
+        let (s, b) = call(
+            &c,
+            "POST",
+            URL,
+            &c.admin,
+            pick(l, "Una Roe/Alpha", &file, "openlibrary", "OL9W"),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let m: i32 = sqlx::query_scalar("SELECT id FROM media WHERE type = 'book'")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(books::identify_media(&c.st, m).await.ok(), Some(m));
+        assert_eq!(work_of(&c, m).await.as_deref(), Some("OL9W"));
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'book'").await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_comic_is_relinked_by_its_plugin_id(pool: PgPool) {
+        use crate::metadata::comics::tests::{NS, fake};
+        let c = ctx_with(pool, None).await;
+        c.st.metadata.add_plugin(Arc::new(fake()));
+        sqlx::raw_sql(
+            r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+                 VALUES ('org.test.comic:vol', 'org.test.comic', '^[0-9]+$', 'preserve', 'Test Comics');
+               INSERT INTO plugin_packages ("pluginId", version, archive, origin, signature, manifest)
+                 VALUES ('org.test.comic', '1.0.0', '\x00', 'manual', 'sig',
+                         '{"id": "org.test.comic", "homepage": "https://cv.test"}');"#,
+        )
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let l = library(&c, "C", &c.dir.join("comics"), r#"["comic"]"#).await;
+        let file = c.dir.join("comics/Alpha Run/Alpha Run 001.cbz");
+        touch(&file, b"a");
+        let mut body = pick(l, "Alpha Run", &file, NS, "42");
+        body["type"] = json!("comic");
+        let (s, b) = call(&c, "POST", URL, &c.admin, body).await;
+        assert_eq!(s, 201, "{b}");
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media_external_ids WHERE provider = 'org.test.comic:vol' AND value = '42'").await,
+            1
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media WHERE type = 'comic'").await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_non_canonical_id_is_refused(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("movies");
+        let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+        touch(&lib.join("Film (2001)/Film (2001).mkv"), b"f");
+        let body = json!({"libraryId": l, "type": "movie", "folderName": "Film (2001)",
+            "provider": "tmdb", "externalId": "007",
+            "files": [{"filePath": lib.join("Film (2001)/Film (2001).mkv")}]});
+        let (s, b) = call(&c, "POST", URL, &c.admin, body).await;
+        assert_eq!(s, 400, "{b}");
+        assert_eq!(count(&c, "SELECT count(*) FROM media").await, 0);
+    }
+}
+
 mod book_import {
     use super::*;
     use crate::{

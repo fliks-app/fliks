@@ -24,14 +24,14 @@ use std::{
 };
 use tower::ServiceExt;
 
-const NS: &str = "org.test.comic:vol";
+pub(crate) const NS: &str = "org.test.comic:vol";
 
-fn ns() -> Namespace {
+pub(crate) fn ns() -> Namespace {
     Namespace::declare(NS, "Test Comics", "^[0-9]{1,9}$", "preserve").unwrap()
 }
 
 #[derive(Default)]
-struct Fake {
+pub(crate) struct Fake {
     works: HashMap<String, Value>,
     children: HashMap<String, Vec<Value>>,
     found: Vec<Value>,
@@ -140,7 +140,7 @@ fn children() -> Vec<Value> {
     ]
 }
 
-fn fake() -> Arc<Fake> {
+pub(crate) fn fake() -> Arc<Fake> {
     let mut f = Fake::default();
     f.works.insert("42".into(), work());
     f.works.insert(

@@ -10,6 +10,7 @@ use fliks_domain::{
     media::{family::Family, kind::MediaKind},
     metadata::{
         book_match::{Candidate, Hints, MIN_CONFIDENCE, score},
+        language::Resolved,
         limiter::Priority,
     },
 };
@@ -32,6 +33,26 @@ pub struct BookMatch {
     pub work: String,
     pub edition: Vec<(Namespace, String)>,
     pub confidence: u8,
+}
+
+/// The anchor work the first provider that knows one of the edition ids names.
+pub async fn work_of(
+    st: &AppState,
+    edition: &[(Namespace, String)],
+    lang: &Resolved,
+    p: Priority,
+) -> Option<String> {
+    let providers = merge::providers(&st.metadata);
+    for (ns, v) in edition {
+        for pr in &providers {
+            match st.metadata.of(*pr).find_by(*ns, v, lang, p).await {
+                Ok(Some((id, _))) if work_id(&id).is_some() => return work_id(&id),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("{pr} lookup of {ns}:{v} skipped: {e}"),
+            }
+        }
+    }
+    None
 }
 
 pub async fn identify(
@@ -69,17 +90,8 @@ pub async fn identify(
         confidence: 100,
     };
 
-    let providers = merge::providers(&st.metadata);
-    for (ns, v) in &edition {
-        for pr in &providers {
-            match st.metadata.of(*pr).find_by(*ns, v, &lang, p).await {
-                Ok(Some((id, _))) if work_id(&id).is_some() => {
-                    return Ok(work_id(&id).map(|w| found(w, &edition)));
-                }
-                Ok(_) => {}
-                Err(e) => tracing::warn!("{pr} lookup of {ns}:{v} skipped: {e}"),
-            }
-        }
+    if let Some(work) = work_of(st, &edition, &lang, p).await {
+        return Ok(Some(found(work, &edition)));
     }
 
     let mut title = h.title.clone().filter(|t| !t.trim().is_empty());
