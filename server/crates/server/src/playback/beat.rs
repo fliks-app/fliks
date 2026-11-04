@@ -347,10 +347,7 @@ pub async fn heartbeat(
     let named = int(&body, "itemId")
         .map(|i| i32::try_from(i).unwrap_or(-1))
         .filter(|i| *i != 0);
-    let acl = match named {
-        Some(_) => crate::libraries::accessible_library_ids(&st.db, &a).await?,
-        None => vec![],
-    };
+    let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
     let mut resolved = match bound_file {
         Some(bound) => {
             let item = super::db::beat_item(&st.db, media, episode, named, &acl).await?;

@@ -49,7 +49,7 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ### Continue watching
 
-11. One statement (SQL below), per media, then ordered and cut in SQL. Movies (ungrouped items): not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), scoped by library; `episodeLabel = null`. Series ("next up"): per media the in-progress item (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`, hidden or not) else the item after the highest completed `(group number, item number)` (groups numbered `> 0`) when it exists and has a part and is not completed; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next item; `lastPlayedAt` = the series' most recent non-hidden state. `mediaType` of every row is the media's kind (`media.type`), never derived from whether the item is grouped. `mediaFileId` is the last file played when it is a part of the item, else the first part of the version the state names, else of the item's highest version; a row whose item has no part is dropped, movies included (a client cannot play it). Post-processing per row: `positionSeconds` and `progressPercent` are set to `0` when `positionSeconds < 10` (the item stays listed). Order: `lastPlayedAt` truncated to the millisecond DESC, then the media's kind name (movie before series), then media id; `LIMIT 20`.
+11. One statement (SQL below), per media, then ordered and cut in SQL. Movies (ungrouped items of a `video` edition; an audio or text item stays out until a mixed row exists): not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), scoped by library; `episodeLabel = null`. Series ("next up"): per media the in-progress item (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`, hidden or not) else the item after the highest completed `(group number, item number)` (groups numbered `> 0`) when it exists and has a part and is not completed; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next item; `lastPlayedAt` = the series' most recent non-hidden state. `mediaType` of every row is the media's kind (`media.type`), never derived from whether the item is grouped. `mediaFileId` is the last file played when it is a part of the item, else the first part of the version the state names, else of the item's highest version; a row whose item has no part is dropped, movies included (a client cannot play it). Post-processing per row: `positionSeconds` and `progressPercent` are set to `0` when `positionSeconds < 10` (the item stays listed). Order: `lastPlayedAt` truncated to the millisecond DESC, then the media's kind name (movie before series), then media id; `LIMIT 20`.
 12. `ContinueWatchingItem` fields: `id, mediaId, mediaFileId (number|null), episodeId (number|null), positionSeconds, durationSeconds, progressPercent, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel`; movies have `stillUrl: null`.
 
 ### History
@@ -76,7 +76,7 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 24. **Candidates**: media with `genres IS NOT NULL AND genres != '[]'`, `id NOT IN (excluded)` (clause omitted when the set is empty), `"libraryId" IN (libs)`; columns `id, title, type, year, posterUrl, fanartUrl, additionalFanartUrls, genres`; **no `ORDER BY`**.
 25. **Score** per candidate with genres: `total = sum(genreWeights[g] ?? 0)`; `topGenre` = the first genre (candidate order) with the strictly greatest weight; candidates with `total <= 0` are dropped; `score = total / sqrt(candidate.genres.length)`. Stable sort by score DESC (ties keep candidate/DB order).
 26. **Stratification**: `TOTAL = limit ?? 15`; `PER_TYPE_CAP = max(10, ceil(TOTAL * 0.7))`; walk `scored`: stop at `TOTAL`; an item whose type already has `PER_TYPE_CAP` items goes to `overflow`, else to `top` and counts for its type; afterwards append `overflow` in order until `TOTAL`. The result is **not** re-sorted after the append.
-27. **Availability**: one query for the `top` ids marks `available = true` when the media has at least one `media_files` row directly (movie) or via `episodes -> seasons` (series) (SQL below).
+27. **Availability**: one query for the `top` ids marks `available = true` when the media has at least one `media_files` row (every file carries its `mediaId`, an episode's included) (SQL below).
 28. **Output item**: `{ media: { id, title, type, year, posterUrl, fanartUrl: m.fanartUrl ?? null, additionalFanartUrls: m.additionalFanartUrls ?? [], genres, available }, becauseTitle: genreSource.get(topGenre) ?? recentMedia[0].media.title, score: Math.round(score * 100) / 100 }`; `year` and `posterUrl` are passed through (JSON `null` when null).
 29. `getTopGenres(userId, limit = 8)` (no route here; used by the social profile): same 15-state window, skip/dedup and weights as rules 21-22 (stops after 10 kept media); returns `[{genre, weight}]` sorted by weight DESC (stable), truncated to `limit`; weights are the raw sums, not rounded.
 
@@ -141,9 +141,10 @@ SELECT i.id,
 WITH st AS (
   SELECT ps.id, ps."itemId", ps."mediaFileId", ps."version", ps."positionSeconds", ps."durationSeconds",
          ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
-         i."mediaId", i."groupId", i."number" AS inum, g."number" AS gnum
+         i."mediaId", i."groupId", i."number" AS inum, g."number" AS gnum, ed.family
   FROM playback_states ps
   JOIN items i ON i.id = ps."itemId"
+  JOIN editions ed ON ed.id = i."editionId"
   LEFT JOIN item_groups g ON g.id = i."groupId"
   WHERE ps."userId" = $1
 ),
@@ -176,7 +177,7 @@ picked AS (
   SELECT st.id, st."mediaId", st."itemId", st."mediaFileId", st."version", st."positionSeconds",
          st."durationSeconds", st."lastPlayedAt"
   FROM st
-  WHERE st."groupId" IS NULL AND NOT st.completed AND NOT st.hidden AND st."positionSeconds" >= 5
+  WHERE st."groupId" IS NULL AND st.family = 'video' AND NOT st.completed AND NOT st.hidden AND st."positionSeconds" >= 5
   UNION ALL
   SELECT ip.id, ip."mediaId", ip."itemId", ip."mediaFileId", ip."version",
          ip."positionSeconds", ip."durationSeconds", us."lastPlayedAt"
@@ -316,13 +317,6 @@ SELECT mf."mediaId" AS "mediaId"
  FROM media_files mf
  WHERE mf."mediaId" = ANY($1)
  GROUP BY mf."mediaId"
- UNION
- SELECT s."mediaId" AS "mediaId"
- FROM media_files mf
- JOIN items e ON e.id = mf."episodeId"
- JOIN item_groups s ON s.id = e."groupId"
- WHERE s."mediaId" = ANY($1)
- GROUP BY s."mediaId"
 ```
 - dismiss: `INSERT INTO recommendation_dismissals ("userId","mediaId") VALUES ($1,$2) ON CONFLICT DO NOTHING` (plus default `createdAt`/`updatedAt`); reset: `DELETE FROM recommendation_dismissals WHERE "userId" = $1`; count: `SELECT COUNT(*) FROM recommendation_dismissals WHERE "userId" = $1`.
 

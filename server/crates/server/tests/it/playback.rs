@@ -423,6 +423,41 @@ async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_audio_item_stays_out_of_continue_watching(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c
+        .id(r#"INSERT INTO libraries (name) VALUES ('l') RETURNING id"#)
+        .await;
+    let media = c
+        .id(&format!(
+            r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', {lib}) RETURNING id"#
+        ))
+        .await;
+    let item = c.shell(media).await;
+    c.id(&format!(
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+             VALUES ({media}, 'm.mkv', 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {media}, 0 FROM f
+           RETURNING "mediaFileId""#
+    ))
+    .await;
+    c.id(&format!(
+        r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
+           VALUES ({}, {item}, 100, 3600, false, now()) RETURNING id"#,
+        c.user
+    ))
+    .await;
+    let (_, got) = c.api("GET", "/api/playback/continue-watching", None).await;
+    assert_eq!(got.as_array().unwrap().len(), 1);
+    c.id(&format!(
+        r#"UPDATE editions SET family = 'audio' WHERE "mediaId" = {media} RETURNING id"#
+    ))
+    .await;
+    let (_, got) = c.api("GET", "/api/playback/continue-watching", None).await;
+    assert!(got.as_array().unwrap().is_empty());
+}
+
+#[sqlx::test(migrations = false)]
 async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let u = c.user;

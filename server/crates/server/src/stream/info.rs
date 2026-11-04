@@ -392,8 +392,12 @@ async fn run(
     let (open, (markers, chapters, pre_roll, edl)) = tokio::join!(
         async {
             let open = st.engine.open_session(&request).await?;
+            let started = item
+                .as_ref()
+                .and_then(|it| it.spans.iter().rev().find(|(_, off)| *off <= position))
+                .map_or(file.id, |(id, _)| *id);
             if let (false, Some(item)) = (q.download, file.item_id)
-                && let Err(e) = db::mark_started(&st.db, a.user.id, item, file.id).await
+                && let Err(e) = db::mark_started(&st.db, a.user.id, item, started).await
             {
                 tracing::warn!("Failed to mark session started: {e}");
             }

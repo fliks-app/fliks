@@ -262,6 +262,7 @@ pub async fn toggle_season_watched(
 }
 
 /// What a heartbeat flush records (`heartbeat.md` rule 15).
+#[derive(Clone)]
 pub struct Watch {
     pub position: f64,
     pub duration: f64,
@@ -423,7 +424,7 @@ pub async fn record_watch(
         if stale {
             Ok(())
         } else if let Some(at) = replay {
-            write_state(db, user, w, file, at, completed, w.position >= 5.0).await
+            write_state(db, user, w, file, at, completed, watched).await
         } else {
             write_state(db, user, w, file, Utc::now(), completed, watched).await
         }

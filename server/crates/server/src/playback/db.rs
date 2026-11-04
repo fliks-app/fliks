@@ -134,25 +134,29 @@ pub async fn named_item(
 /// `named_item`, or the item `item` names when it belongs to `media` and its edition is in `acl`
 /// (`item-delivery.md` rule 15); a hidden item names none.
 pub async fn beat_item(
-    db: impl sqlx::PgExecutor<'_>,
+    db: &PgPool,
     media: i32,
     episode: Option<i32>,
     item: Option<i32>,
     acl: &[i32],
 ) -> Result<Option<i32>, AppError> {
-    match item {
-        Some(id) => Ok(sqlx::query_scalar!(
-            r#"SELECT i.id FROM items i JOIN editions e ON e.id = i."editionId" JOIN media m ON m.id = i."mediaId"
+    let id = match item {
+        Some(id) => id,
+        None => match named_item(db, media, episode).await? {
+            Some(id) => id,
+            None => return Ok(None),
+        },
+    };
+    Ok(sqlx::query_scalar!(
+        r#"SELECT i.id FROM items i JOIN editions e ON e.id = i."editionId" JOIN media m ON m.id = i."mediaId"
                WHERE i.id = $1 AND i."mediaId" = $2 AND m."libraryId" = ANY($3)
                  AND COALESCE(e."libraryId", m."libraryId") = ANY($3)"#,
-            id,
-            media,
-            acl
-        )
-        .fetch_optional(db)
-        .await?),
-        None => named_item(db, media, episode).await,
-    }
+        id,
+        media,
+        acl
+    )
+    .fetch_optional(db)
+    .await?)
 }
 
 pub async fn find_state(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<StateRow>> {
@@ -298,9 +302,11 @@ pub async fn continue_watching(
         r#"WITH st AS (
              SELECT ps.id, ps."itemId", ps."mediaFileId", ps."version", ps."positionSeconds",
                     ps."durationSeconds", ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
-                    i."mediaId", i."groupId", i."number" AS inum, g."number" AS gnum
+                    i."mediaId", i."groupId", i."number" AS inum, g."number" AS gnum,
+                    ed.family
              FROM playback_states ps
              JOIN items i ON i.id = ps."itemId"
+             JOIN editions ed ON ed.id = i."editionId"
              LEFT JOIN item_groups g ON g.id = i."groupId"
              WHERE ps."userId" = $1
            ),
@@ -335,7 +341,7 @@ pub async fn continue_watching(
              SELECT st.id, st."mediaId", st."itemId", st."mediaFileId", st."version",
                     st."positionSeconds", st."durationSeconds", st."lastPlayedAt"
              FROM st
-             WHERE st."groupId" IS NULL AND NOT st.completed AND NOT st.hidden
+             WHERE st."groupId" IS NULL AND st.family = 'video' AND NOT st.completed AND NOT st.hidden
                AND st."positionSeconds" >= 5
              UNION ALL
              SELECT ip.id, ip."mediaId", ip."itemId", ip."mediaFileId", ip."version",

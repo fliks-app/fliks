@@ -30,8 +30,7 @@ pub fn finished(family: Family, s: &Standing) -> bool {
                 || s.last_chapter_start
                     .is_some_and(|c| c > 0.0 && s.position >= c)
         }
-        Family::Text => s.progression.is_some_and(|p| p >= TEXT_SHARE),
-        Family::Image => false,
+        Family::Text | Family::Image => s.progression.is_some_and(|p| p >= TEXT_SHARE),
     }
 }
 
@@ -89,6 +88,7 @@ mod tests {
         assert!(!finished(Family::Text, &read(0.98)));
         assert!(finished(Family::Text, &read(0.99)));
         assert!(!finished(Family::Text, &at(3600.0, 3600.0)));
-        assert!(!finished(Family::Image, &read(1.0)));
+        assert!(finished(Family::Image, &read(1.0)));
+        assert!(!finished(Family::Image, &read(0.5)));
     }
 }

@@ -99,8 +99,19 @@ pub async fn item_chapters(
     Ok(chapters)
 }
 
-/// The saved position worth resuming: more than 10 s in and not finished.
+/// The saved position worth resuming: more than 10 s in and not finished. Only a video item's
+/// timeline is a file's own; an audio item's positions span its parts.
 pub async fn resume_position(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<f64>> {
+    let video = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
+                          WHERE i.id = $1 AND e.family = 'video')"#,
+    )
+    .bind(item)
+    .fetch_one(db)
+    .await?;
+    if !video {
+        return Ok(None);
+    }
     Ok(find_state(db, user, item)
         .await?
         .filter(|r| !r.completed && r.position_seconds > 10.0)
