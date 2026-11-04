@@ -461,9 +461,7 @@
         ],
         "operationId": "pages",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
@@ -474,9 +472,7 @@
         ],
         "operationId": "page",
         "responses": {
-          "200": {
-            "description": ""
-          }
+          "200": {}
         }
       }
     },
