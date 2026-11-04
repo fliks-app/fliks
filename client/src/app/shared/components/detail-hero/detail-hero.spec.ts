@@ -78,13 +78,13 @@ describe('DetailHeroComponent', () => {
     expect(rows.some((r: { labelKey?: string }) => r.labelKey === 'media_detail.refresh_metadata')).toBe(true);
   });
 
-  it('does not offer a refresh for a title no provider knows', () => {
+  it('offers a refresh for a title no provider knows, which reads its files again', () => {
     const register = vi.fn();
     const fixture = hero('book', [{ provide: CardActionsService, useValue: { register, show: vi.fn() } }]);
     fixture.componentRef.setInput('media', { id: 9, type: 'book', title: 'T' } as Media);
     fixture.detectChanges();
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button[aria-label="common.more"]')!.click();
     const rows = register.mock.calls[0][0].actions.flatMap((a: { children?: unknown[] }) => [a, ...(a.children ?? [])]);
-    expect(rows.some((r: { labelKey?: string }) => r.labelKey === 'media_detail.refresh_metadata')).toBe(false);
+    expect(rows.some((r: { labelKey?: string }) => r.labelKey === 'media_detail.refresh_metadata')).toBe(true);
   });
 });
