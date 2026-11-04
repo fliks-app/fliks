@@ -252,7 +252,7 @@ pub fn is_solid(path: &Path) -> Result<bool, Error> {
 #[cfg(target_os = "linux")]
 pub(super) mod local {
     use super::*;
-    use crate::comics::ar::{Fail, Reader};
+    use crate::comics::ar::{Fail, Reader, Src};
 
     fn map(f: Fail) -> Error {
         match f {
@@ -266,13 +266,13 @@ pub(super) mod local {
     /// the ratio allows over the file (an entry can declare 0 and still decode). Every entry is
     /// read to its end through the budget: `Reader` never lets libarchive skip.
     pub(in crate::comics) fn each(
-        path: &Path,
+        src: &Src<'_>,
         budget: u64,
         mut on: impl FnMut(usize, String, u64, &mut Reader) -> Result<bool, Error>,
     ) -> Result<(), Error> {
-        let len = std::fs::metadata(path).map_or(0, |m| m.len());
+        let len = src.len();
         let budget = budget.min(len.saturating_mul(MAX_RATIO).max(RATIO_FLOOR));
-        let mut r = Reader::open(path, budget).map_err(map)?;
+        let mut r = Reader::open(src, budget).map_err(map)?;
         let (mut entries, mut declared) = (0usize, 0u64);
         while let Some(h) = r.next().map_err(map)? {
             entries += 1;
@@ -283,7 +283,7 @@ pub(super) mod local {
             {
                 return Err(Error::TooLarge);
             }
-            if h.dir {
+            if h.dir && h.size == 0 {
                 continue;
             }
             let name = (h.regular && !h.hardlink)
@@ -325,10 +325,10 @@ pub(super) mod local {
         }
     }
 
-    pub fn list(path: &Path) -> Result<Listing, Error> {
+    pub fn list(src: &Src<'_>) -> Result<Listing, Error> {
         let mut found: Vec<(String, usize, Page, Option<Vec<u8>>)> = vec![];
         let mut kept = 0u64;
-        each(path, MAX_TOTAL_BYTES, |ord, name, size, r| {
+        each(src, MAX_TOTAL_BYTES, |ord, name, size, r| {
             let bytes = take(r, size)?;
             let (width, height) = dimensions(&bytes[..bytes.len().min(HEADER_BYTES as usize)]);
             let keep = kept + bytes.capacity() as u64 <= SOLID_CACHE_BYTES;
@@ -354,9 +354,9 @@ pub(super) mod local {
     }
 
     /// `(ordinal, name)` of every page in reading order.
-    pub fn names(path: &Path) -> Result<Vec<(usize, String)>, Error> {
+    pub fn names(src: &Src<'_>) -> Result<Vec<(usize, String)>, Error> {
         let mut out = vec![];
-        each(path, MAX_TOTAL_BYTES, |o, n, _, _| {
+        each(src, MAX_TOTAL_BYTES, |o, n, _, _| {
             out.push((o, n));
             Ok(true)
         })?;
@@ -364,9 +364,9 @@ pub(super) mod local {
     }
 
     /// The page at archive position `ordinal`: one pass.
-    pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
+    pub fn page_at(src: &Src<'_>, ordinal: usize) -> Result<Vec<u8>, Error> {
         let mut found = None;
-        each(path, MAX_TOTAL_BYTES, |o, _, size, r| {
+        each(src, MAX_TOTAL_BYTES, |o, _, size, r| {
             if o != ordinal {
                 return Ok(true);
             }
@@ -377,9 +377,9 @@ pub(super) mod local {
     }
 
     /// Page `index` alone: a pass for the order, then one for the page.
-    pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
-        let at = names(path)?.get(index).ok_or(Error::Missing)?.0;
-        page_at(path, at)
+    pub fn page(src: &Src<'_>, index: usize) -> Result<Vec<u8>, Error> {
+        let at = names(src)?.get(index).ok_or(Error::Missing)?.0;
+        page_at(src, at)
     }
 }
 
@@ -413,13 +413,13 @@ pub(super) mod local {
 #[cfg(target_os = "linux")]
 mod lib {
     use super::*;
-    use crate::comics::sandbox;
+    use crate::comics::{ar::Src, sandbox};
 
     pub fn list(path: &Path) -> Result<Listing, Error> {
         if sandbox::enabled() {
             sandbox::list(path)
         } else {
-            local::list(path)
+            local::list(&Src::Path(path))
         }
     }
 
@@ -427,7 +427,7 @@ mod lib {
         if sandbox::enabled() {
             sandbox::count(path)
         } else {
-            local::names(path).map(|n| n.len())
+            local::names(&Src::Path(path)).map(|n| n.len())
         }
     }
 
@@ -435,7 +435,7 @@ mod lib {
         if sandbox::enabled() {
             sandbox::page_at(path, ordinal)
         } else {
-            local::page_at(path, ordinal)
+            local::page_at(&Src::Path(path), ordinal)
         }
     }
 
@@ -443,7 +443,7 @@ mod lib {
         if sandbox::enabled() {
             sandbox::page(path, index)
         } else {
-            local::page(path, index)
+            local::page(&Src::Path(path), index)
         }
     }
 }
@@ -708,6 +708,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     mod seven {
         use super::*;
+        use crate::comics::ar::Src;
         use libarchive2::{ArchiveFormat, EntryMut, FileType, WriteArchive};
 
         /// The writer converts names through the thread's locale, so it runs under UTF-8; the
@@ -880,13 +881,13 @@ mod tests {
                 &rar5(&[("big.bin", &vec![7u8; 1024 * 1024]), ("p1.png", &png(2, 2))]),
             );
             let mut seen = 0;
-            let r = local::each(&p, 100 * 1024, |_, _, _, _| {
+            let r = local::each(&Src::Path(&p), 100 * 1024, |_, _, _, _| {
                 seen += 1;
                 Ok(true)
             });
             assert_eq!((r, seen), (Err(Error::TooLarge), 0));
             assert_eq!(
-                local::each(&p, 2 * 1024 * 1024, |_, _, _, _| Ok(true)),
+                local::each(&Src::Path(&p), 2 * 1024 * 1024, |_, _, _, _| Ok(true)),
                 Ok(())
             );
         }

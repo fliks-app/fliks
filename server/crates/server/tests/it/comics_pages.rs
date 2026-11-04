@@ -67,7 +67,7 @@ impl Res {
 async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     // 7z and RAR are read by a child of the server binary, as in production.
     #[cfg(target_os = "linux")]
-    comics::sandbox::set_exe(PathBuf::from(env!("CARGO_BIN_EXE_fliks-server")));
+    crate::comic_child();
     fliks_server::db::migrate(&pool).await.unwrap();
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     let dir =

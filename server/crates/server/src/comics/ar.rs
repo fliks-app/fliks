@@ -4,7 +4,7 @@
 use libarchive2_sys as sys;
 use std::{
     ffi::{CStr, CString},
-    os::{raw::c_void, unix::ffi::OsStrExt},
+    os::{fd::AsFd, raw::c_void, unix::ffi::OsStrExt},
     path::Path,
 };
 
@@ -98,10 +98,42 @@ unsafe fn text(p: *const std::os::raw::c_char) -> Option<String> {
     (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
 }
 
+/// Where an archive is read from: a path, or the descriptor the parent opened and passed as stdin
+/// (the sandboxed child has no path to open).
+pub enum Src<'a> {
+    Path(&'a Path),
+    Stdin,
+}
+
+impl Src<'_> {
+    /// The size of the archive file.
+    pub fn len(&self) -> u64 {
+        match self {
+            Src::Path(p) => std::fs::metadata(p).map_or(0, |m| m.len()),
+            Src::Stdin => std::io::stdin()
+                .as_fd()
+                .try_clone_to_owned()
+                .ok()
+                .and_then(|fd| std::fs::File::from(fd).metadata().ok())
+                .map_or(0, |m| m.len()),
+        }
+    }
+}
+
+/// Makes the `C.UTF-8` locale now, so that its absence is logged once by a process that logs.
+pub fn probe_locale() {
+    drop(Utf8::enter());
+}
+
 impl Reader {
-    /// Opens `path` for reading; every byte `read` returns counts against `budget`.
-    pub fn open(path: &Path, budget: u64) -> Result<Self, Fail> {
-        let c = CString::new(path.as_os_str().as_bytes()).map_err(|_| Fail::Corrupt)?;
+    /// Opens the archive for reading; every byte `read` returns counts against `budget`.
+    pub fn open(src: &Src<'_>, budget: u64) -> Result<Self, Fail> {
+        let c = match src {
+            Src::Path(p) => {
+                Some(CString::new(p.as_os_str().as_bytes()).map_err(|_| Fail::Corrupt)?)
+            }
+            Src::Stdin => None,
+        };
         // SAFETY: no arguments; a null result is checked.
         let raw = unsafe { sys::archive_read_new() };
         if raw.is_null() {
@@ -112,12 +144,16 @@ impl Reader {
             budget,
             utf8: Utf8::enter(),
         };
-        // SAFETY: `raw` is a live read handle; `c` is NUL-terminated and outlives the open call.
+        // SAFETY: `raw` is a live read handle; `c` is NUL-terminated and outlives the open call;
+        // descriptor 0 is the archive file the parent passed, left open for the process.
         let opened = unsafe {
             ok(sys::archive_read_support_format_7zip(raw))
                 && ok(sys::archive_read_support_format_rar(raw))
                 && ok(sys::archive_read_support_format_rar5(raw))
-                && ok(sys::archive_read_open_filename(raw, c.as_ptr(), 64 * 1024))
+                && match &c {
+                    Some(c) => ok(sys::archive_read_open_filename(raw, c.as_ptr(), 64 * 1024)),
+                    None => ok(sys::archive_read_open_fd(raw, 0, 64 * 1024)),
+                }
         };
         if opened { Ok(r) } else { Err(Fail::Corrupt) }
     }

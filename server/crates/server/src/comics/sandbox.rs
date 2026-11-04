@@ -1,19 +1,24 @@
 //! The libarchive reads of 7z and RAR in a child process (`docs/spec/comics.md`, rule 22): libarchive
 //! allocates from header counts before the server sees an entry, so a few kilobytes of hostile 7z
 //! can ask for gigabytes, and a memory-safety bug stays in the child. The server re-executes its own
-//! image as a hidden subcommand with address-space and CPU limits, a wall-clock kill, no environment
-//! and no inherited descriptor; budgets, caches and the job slots stay in the parent.
-use super::archive::{Error, Listing, MAX_ENTRY_BYTES, MAX_PAGES, Page, SOLID_CACHE_BYTES, local};
+//! image as a hidden subcommand. Isolated: allocation (`RLIMIT_AS`), CPU (`RLIMIT_CPU` and a
+//! wall-clock kill), crashes, privileges (the child runs as `nobody` when the server is root, with
+//! no new privileges, and is killed with its parent), file writes (`RLIMIT_FSIZE` 0), and the
+//! archive path (the parent opens the file and passes it as stdin). Not isolated: the network and
+//! the rest of the filesystem a `nobody` may read; there is no seccomp filter yet. Budgets, caches
+//! and the job slots stay in the parent.
+use super::{
+    ar::Src,
+    archive::{Error, Listing, MAX_ENTRY_BYTES, MAX_PAGES, Page, SOLID_CACHE_BYTES, local},
+};
 use std::{
     ffi::OsString,
+    fs::File,
     io::{self, BufWriter, Read, Write},
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
-    sync::{
-        Arc, OnceLock,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 
@@ -22,6 +27,8 @@ pub const SUBCOMMAND: &str = "comic-archive";
 const CHILD_MEMORY: u64 = 1024 * 1024 * 1024;
 const CHILD_CPU_SECS: u64 = 120;
 const CHILD_WALL: Duration = Duration::from_secs(120);
+/// The user and group of the child when the server runs as root.
+const NOBODY: u32 = 65534;
 
 static EXE: OnceLock<PathBuf> = OnceLock::new();
 
@@ -35,10 +42,13 @@ pub fn enabled() -> bool {
     !cfg!(test) || EXE.get().is_some()
 }
 
+/// The running image as a real path: a child that dropped its privileges cannot follow
+/// `/proc/self/exe`.
 fn exe() -> PathBuf {
-    EXE.get()
-        .cloned()
-        .unwrap_or_else(crate::plugins::compile::own_image)
+    EXE.get().cloned().unwrap_or_else(|| {
+        std::fs::read_link("/proc/self/exe")
+            .unwrap_or_else(|_| crate::plugins::compile::own_image())
+    })
 }
 
 fn code(e: &Error) -> u8 {
@@ -65,14 +75,15 @@ fn error_of(c: u8) -> Error {
 
 // ---- the child ----
 
-/// The hidden subcommand: `comic-archive <list|count|page|page-at> <path> <n>`, the answer on stdout.
+/// The hidden subcommand: `comic-archive <list|count|page|page-at> <n>`, the archive on stdin, the
+/// answer on stdout.
 pub fn child_main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(2).collect();
-    let [op, path, n] = args.as_slice() else {
+    let [op, n] = args.as_slice() else {
         return ExitCode::from(2);
     };
     let n: usize = n.to_str().and_then(|n| n.parse().ok()).unwrap_or(0);
-    let path = Path::new(path);
+    let path = &Src::Stdin;
     let mut out = BufWriter::new(io::stdout().lock());
     let wrote = match op.to_str() {
         Some("list") => answer(&mut out, local::list(path), write_listing),
@@ -138,13 +149,20 @@ fn limits() -> io::Result<()> {
     set(libc::RLIMIT_AS, CHILD_MEMORY);
     set(libc::RLIMIT_CPU, CHILD_CPU_SECS);
     set(libc::RLIMIT_CORE, 0);
-    // SAFETY: close_range is a plain syscall; failure (an old kernel) leaves the close-on-exec descriptors.
-    unsafe { libc::syscall(libc::SYS_close_range, 3, u32::MAX, 0) };
+    set(libc::RLIMIT_FSIZE, 0);
+    // SAFETY: prctl and close_range are plain syscalls; a failure leaves the close-on-exec
+    // descriptors and the default death signal.
+    unsafe {
+        libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+        libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
+        // CLOEXEC rather than close: std's exec-error pipe survives, so a failed exec is reported.
+        libc::syscall(libc::SYS_close_range, 3, u32::MAX, 4);
+    }
     Ok(())
 }
 
-/// Runs one child and parses its answer from the pipe as it arrives; at most `limit` bytes are
-/// read. A child that is killed, limited or cut short is an unreadable archive.
+/// Runs one child on the archive and parses its answer from the pipe as it arrives; at most
+/// `limit` bytes are read. A child that is killed, limited or cut short is an unreadable archive.
 fn call<T>(
     op: &str,
     path: &Path,
@@ -152,39 +170,56 @@ fn call<T>(
     limit: u64,
     parse: impl FnOnce(&mut dyn Read) -> Result<T, Error>,
 ) -> Result<T, Error> {
+    static LOCALE: std::sync::Once = std::sync::Once::new();
+    // The child has no log subscriber: the parent reports a missing C.UTF-8 once.
+    LOCALE.call_once(super::ar::probe_locale);
+    let archive = File::open(path).map_err(|_| Error::Missing)?;
     let mut cmd = Command::new(exe());
     cmd.arg(SUBCOMMAND)
         .arg(op)
-        .arg(path)
         .arg(n.to_string())
         .env_clear()
-        .stdin(Stdio::null())
+        .stdin(Stdio::from(archive))
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+    // SAFETY: geteuid has no preconditions.
+    if unsafe { libc::geteuid() } == 0 {
+        // std drops the supplementary groups when it changes the user of a root process.
+        cmd.uid(NOBODY).gid(NOBODY);
+    }
     // SAFETY: `limits` makes only async-signal-safe calls between fork and exec.
     unsafe { cmd.pre_exec(limits) };
     let mut child = cmd.spawn().map_err(|_| Error::Corrupt)?;
     let pid = child.id() as libc::pid_t;
-    let done = Arc::new(AtomicBool::new(false));
-    let watch = done.clone();
-    std::thread::spawn(move || {
-        for _ in 0..CHILD_WALL.as_millis() / 100 {
-            if watch.load(Ordering::Relaxed) {
+    // `reaped` is set, under its lock, before the child is waited for: the watcher kills only while
+    // the pid is still ours, so a reused pid is never hit.
+    let reaped = Arc::new(Mutex::new(false));
+    let watch = reaped.clone();
+    let spawned = std::thread::Builder::new().spawn(move || {
+        let deadline = std::time::Instant::now() + CHILD_WALL;
+        while std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+            if *watch.lock().unwrap_or_else(|e| e.into_inner()) {
                 return;
             }
-            std::thread::sleep(Duration::from_millis(100));
         }
-        if !watch.load(Ordering::Relaxed) {
-            // SAFETY: a plain kill of the child's pid; `done` is set right after it is reaped.
+        let gone = watch.lock().unwrap_or_else(|e| e.into_inner());
+        if !*gone {
+            // SAFETY: a plain kill of our own unreaped child.
             unsafe { libc::kill(pid, libc::SIGKILL) };
         }
     });
-    let mut pipe = child.stdout.take().ok_or(Error::Corrupt)?.take(limit);
+    let Some(mut out) = child.stdout.take().filter(|_| spawned.is_ok()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(Error::Corrupt);
+    };
+    let mut pipe = (&mut out).take(limit);
     let parsed = parse(&mut pipe);
     let over = pipe.limit() == 0;
+    *reaped.lock().unwrap_or_else(|e| e.into_inner()) = true;
     let _ = child.kill();
     let _ = child.wait();
-    done.store(true, Ordering::Relaxed);
     match parsed {
         Ok(_) if over => Err(Error::TooLarge),
         r => r,
@@ -260,7 +295,11 @@ pub fn list(path: &Path) -> Result<Listing, Error> {
 pub fn count(path: &Path) -> Result<usize, Error> {
     call("count", path, 0, 64, |r| {
         status(r)?;
-        Ok(u64_of(r)? as usize)
+        let n = u64_of(r)?;
+        if n > MAX_PAGES as u64 {
+            return Err(Error::Corrupt);
+        }
+        Ok(n as usize)
     })
 }
 

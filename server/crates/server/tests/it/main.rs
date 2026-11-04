@@ -45,3 +45,11 @@ fn server_bin() -> std::path::PathBuf {
         .expect("cargo and nextest set CARGO_BIN_EXE_fliks-server")
         .into()
 }
+
+/// The comic archive child of the tests is the server binary Cargo built.
+#[cfg(target_os = "linux")]
+pub(crate) fn comic_child() {
+    fliks_server::comics::sandbox::set_exe(std::path::PathBuf::from(env!(
+        "CARGO_BIN_EXE_fliks-server"
+    )));
+}
