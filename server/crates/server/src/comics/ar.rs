@@ -128,6 +128,18 @@ pub fn probe_locale() {
 impl Reader {
     /// Opens the archive for reading; every byte `read` returns counts against `budget`.
     pub fn open(src: &Src<'_>, budget: u64) -> Result<Self, Fail> {
+        // A descriptor of its own at offset 0: one process may read the archive several times.
+        let fd = match src {
+            Src::Stdin => {
+                // SAFETY: dup and lseek on descriptor 0, the archive file the parent passed.
+                let fd = unsafe { libc::dup(0) };
+                if fd < 0 || unsafe { libc::lseek(fd, 0, libc::SEEK_SET) } < 0 {
+                    return Err(Fail::Corrupt);
+                }
+                fd
+            }
+            Src::Path(_) => -1,
+        };
         let c = match src {
             Src::Path(p) => {
                 Some(CString::new(p.as_os_str().as_bytes()).map_err(|_| Fail::Corrupt)?)
@@ -145,14 +157,14 @@ impl Reader {
             utf8: Utf8::enter(),
         };
         // SAFETY: `raw` is a live read handle; `c` is NUL-terminated and outlives the open call;
-        // descriptor 0 is the archive file the parent passed, left open for the process.
+        // `fd` is a duplicate of the archive file the parent passed as stdin.
         let opened = unsafe {
             ok(sys::archive_read_support_format_7zip(raw))
                 && ok(sys::archive_read_support_format_rar(raw))
                 && ok(sys::archive_read_support_format_rar5(raw))
                 && match &c {
                     Some(c) => ok(sys::archive_read_open_filename(raw, c.as_ptr(), 64 * 1024)),
-                    None => ok(sys::archive_read_open_fd(raw, 0, 64 * 1024)),
+                    None => ok(sys::archive_read_open_fd(raw, fd, 64 * 1024)),
                 }
         };
         if opened { Ok(r) } else { Err(Fail::Corrupt) }

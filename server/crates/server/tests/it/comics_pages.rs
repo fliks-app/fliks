@@ -309,6 +309,11 @@ async fn a_7z_serves_pages_in_reading_order_from_one_decode(pool: PgPool) {
         let p = c.get(Some(&c.admin), "/api/comics/6/pages/1", &[]).await;
         assert_eq!((p.status, p.body), (200, png(16, 24)));
     }
+    // the uncached read takes two passes over the one descriptor the child was given
+    let file = std::env::temp_dir()
+        .join(format!("fliks-comics-it-{}-seven", std::process::id()))
+        .join("one/f.cb7");
+    assert_eq!(comics::archive::page(&file, 1).unwrap(), png(16, 24));
 }
 
 fn crc32(data: &[u8]) -> u32 {
