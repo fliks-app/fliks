@@ -265,7 +265,7 @@ pub fn is_solid(path: &Path) -> Result<bool, Error> {
 }
 
 /// The libarchive reads, in process. In production they run in a child process (`sandbox.rs`).
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "libarchive"))]
 pub(super) mod local {
     use super::*;
     use crate::comics::ar::{Fail, Reader, Src};
@@ -413,8 +413,8 @@ pub(super) mod local {
     }
 }
 
-/// 7z and RAR need libarchive, which only the Linux build links.
-#[cfg(not(target_os = "linux"))]
+/// 7z and RAR need libarchive, which only the Linux build with the `libarchive` feature links.
+#[cfg(not(all(target_os = "linux", feature = "libarchive")))]
 pub(super) mod local {
     use super::*;
 
@@ -444,7 +444,7 @@ pub(super) mod local {
 }
 
 /// 7z and RAR reads: in a child process in production, in process under the unit tests.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "libarchive"))]
 mod lib {
     use super::*;
     use crate::comics::{ar::Src, sandbox};
@@ -490,7 +490,7 @@ mod lib {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(all(target_os = "linux", feature = "libarchive")))]
 use local as lib;
 
 /// The pages in reading order with their dimensions (an unreadable header or a page past the
@@ -800,7 +800,7 @@ mod tests {
         );
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "libarchive"))]
     mod seven {
         use super::*;
         use crate::comics::ar::Src;

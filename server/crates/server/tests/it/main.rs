@@ -48,7 +48,7 @@ fn server_bin() -> std::path::PathBuf {
 
 /// The comic archive child of the tests is the server binary Cargo built: nextest runs from an
 /// extracted archive and gives the remapped path at run time, the compile-time one is the fallback.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "libarchive"))]
 pub(crate) fn comic_child() {
     let path = [
         "NEXTEST_BIN_EXE_fliks-server",

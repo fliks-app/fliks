@@ -66,7 +66,7 @@ impl Res {
 /// Issues: 1 a three page cbz, 2 its twin in a hidden edition, 3 a pdf, 4 a corrupt archive, 5 a text file named `.png`.
 async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     // 7z and RAR are read by a child of the server binary, as in production.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "libarchive"))]
     crate::comic_child();
     fliks_server::db::migrate(&pool).await.unwrap();
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
@@ -89,7 +89,7 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         cbz(&[("p1.png", b"<html><script>x()</script></html>".to_vec())]),
     )
     .unwrap();
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "libarchive"))]
     {
         use libarchive2::{ArchiveFormat, WriteArchive};
         let mut w = WriteArchive::new()
@@ -298,7 +298,7 @@ async fn a_pdf_a_corrupt_archive_and_a_fake_image_answer_errors(pool: PgPool) {
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "libarchive"))]
 #[sqlx::test(migrations = false)]
 async fn a_7z_serves_pages_in_reading_order_from_one_decode(pool: PgPool) {
     let c = ctx(pool, "seven").await;
@@ -337,7 +337,7 @@ fn rss_kb() -> u64 {
 }
 
 /// A few bytes of 7z whose header asks libarchive for `files` entries (72 bytes each) before any is read.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "libarchive"))]
 #[sqlx::test(migrations = false)]
 async fn a_7z_header_asking_for_gigabytes_dies_in_the_child(pool: PgPool) {
     let _c = ctx(pool, "numfiles").await;
