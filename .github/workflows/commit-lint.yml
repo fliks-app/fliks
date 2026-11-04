@@ -8,6 +8,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
 
 concurrency:
   group: commitlint-${{ github.ref }}
@@ -40,12 +41,15 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         # Judge a PR only on what it adds: the event's `base.sha` is frozen at
         # PR creation, so on a long-lived branch it drags in everything already
         # on main and re-reports history nobody can amend. On a push the range
         # is the single new commit — the squash message release-please reads.
         run: |
-          if [ -n "$BASE_REF" ]; then
+          if [ -n "$QUEUE_BASE" ]; then
+            range="$QUEUE_BASE..$HEAD"
+          elif [ -n "$BASE_REF" ]; then
             git fetch -q --depth=1000 origin "$BASE_REF"
             range="origin/$BASE_REF..$HEAD"
           else
