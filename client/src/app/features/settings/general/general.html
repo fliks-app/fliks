@@ -180,6 +180,31 @@
       </div>
     </div>
 
+    <!-- Kobo -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.general.section_kobo' | translate }}</h2>
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="koboStoreProxy() === 'true'"
+            (ngModelChange)="koboStoreProxy.set($event ? 'true' : 'false')"
+          />
+          <span class="label-text">{{ 'settings.general.kobo_store_proxy' | translate }}</span>
+        </label>
+        <div class="label -mt-2">
+          <span class="label-text-alt text-base-content/50">{{ 'settings.general.kobo_store_proxy_hint' | translate }}</span>
+        </div>
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveKobo()" [disabled]="savingKobo()">
+            @if (savingKobo()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     @if (error()) {
       <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
     }

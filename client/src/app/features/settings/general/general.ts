@@ -48,6 +48,10 @@ export class GeneralSettingsComponent implements OnInit {
   readonly companionFileExtensions = signal('');
   readonly savingAutomation = signal(false);
 
+  // Kobo
+  readonly koboStoreProxy = signal('false');
+  readonly savingKobo = signal(false);
+
   async ngOnInit() {
     try {
       const map = await this.api.getAll();
@@ -56,6 +60,7 @@ export class GeneralSettingsComponent implements OnInit {
       this.usersPublicMode.set(map['users_public_mode'] ?? 'everyone');
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
+      this.koboStoreProxy.set(map['kobo_store_proxy'] === 'true' ? 'true' : 'false');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
       this.autoGenerateSpritesOnImport.set(map['sprites_auto_generate_on_import'] ?? 'true');
       this.companionFileExtensions.set(
@@ -102,5 +107,13 @@ export class GeneralSettingsComponent implements OnInit {
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingAutomation.set(false); }
+  }
+
+  async saveKobo() {
+    this.savingKobo.set(true);
+    try {
+      await this.api.setBulk({ kobo_store_proxy: this.koboStoreProxy() });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch { /* interceptor */ } finally { this.savingKobo.set(false); }
   }
 }

@@ -14,6 +14,7 @@ mod fakes;
 mod heartbeat;
 mod importers;
 mod items;
+mod kobo;
 mod kosync;
 mod libraries;
 mod media;

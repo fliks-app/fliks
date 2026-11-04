@@ -447,6 +447,7 @@ fn api() -> Router<AppState> {
         .merge(remote::router())
         .merge(crate::device_tokens::router())
         .merge(crate::email::router())
+        .merge(crate::kobo::router())
         .merge(crate::kosync::router())
         .merge(crate::party::router())
         .merge(playback::router())

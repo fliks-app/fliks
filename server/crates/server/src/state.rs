@@ -32,6 +32,8 @@ pub struct AppState {
     pub plugins: Arc<crate::plugins::Plugins>,
     pub login_throttle: Arc<crate::auth::LoginThrottle>,
     pub sse_tickets: Arc<crate::events::Tickets>,
+    /// Base URL of the Kobo store the proxy forwards to; only a test harness sets another.
+    pub kobo_store: Arc<str>,
 }
 
 impl AppState {
@@ -69,6 +71,7 @@ impl AppState {
             plugins,
             login_throttle: Arc::default(),
             sse_tickets: Arc::default(),
+            kobo_store: crate::kobo::STORE.into(),
             cfg: Arc::new(cfg),
             db,
         }

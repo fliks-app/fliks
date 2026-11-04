@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-export type DeviceTokenKind = 'opds' | 'kosync';
+export type DeviceTokenKind = 'opds' | 'kosync' | 'kobo';
 
 export interface DeviceToken {
   id: number;

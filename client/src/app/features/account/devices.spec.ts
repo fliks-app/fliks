@@ -8,6 +8,7 @@ import {
   DeviceTokensApiService,
 } from '../../core/services/api/device-tokens-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
 import { AccountDevicesComponent } from './devices';
 
 const row = (id: number): DeviceToken => ({
@@ -18,7 +19,7 @@ const row = (id: number): DeviceToken => ({
   lastUsedAt: null,
 });
 
-function setup(confirmed = true) {
+function setup(confirmed = true, base = '') {
   const api = {
     list: vi.fn(async () => [row(1)]),
     create: vi.fn(async (name: string) => ({ ...row(2), name, token: 'fkd_secret' })),
@@ -34,6 +35,7 @@ function setup(confirmed = true) {
       }),
       { provide: DeviceTokensApiService, useValue: api },
       { provide: ConfirmationService, useValue: { confirm: async () => confirmed } },
+      { provide: ServerConfigService, useValue: { resolveUrl: (p: string) => base + p } },
     ],
   });
   const fixture = TestBed.createComponent(AccountDevicesComponent);
@@ -82,5 +84,12 @@ describe('AccountDevicesComponent', () => {
     await cmp.renew(cmp.devices()[0]);
     expect(api.renew).toHaveBeenCalledWith(1);
     expect(cmp.issued()?.token).toBe('fkd_renewed');
+  });
+
+  it('builds the Kobo endpoint line from the app origin and the token', () => {
+    expect(setup().cmp.koboEndpoint('fkd_x')).toBe(`api_endpoint=${location.origin}/kobo/fkd_x`);
+    TestBed.resetTestingModule();
+    const remote = setup(true, 'https://fliks.example').cmp;
+    expect(remote.koboEndpoint('fkd_x')).toBe('api_endpoint=https://fliks.example/kobo/fkd_x');
   });
 });

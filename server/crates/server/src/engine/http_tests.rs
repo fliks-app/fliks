@@ -776,6 +776,7 @@ mod resolve {
         let w = world(pool).await;
         let opds = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
         let kosync = device_token(&w, w.member.0, crate::device_tokens::Kind::Kosync).await;
+        let kobo = device_token(&w, w.member.0, crate::device_tokens::Kind::Kobo).await;
         for (name, credential, source) in [
             ("no source", basic("x", &opds), None),
             ("in the query", opds.clone(), Some("query")),
@@ -787,6 +788,13 @@ mod resolve {
                 Some("cookie"),
             ),
             ("kosync token", basic("x", &kosync), Some("basic")),
+            ("kobo token as basic", basic("x", &kobo), Some("basic")),
+            (
+                "kobo token as bearer",
+                format!("Bearer {kobo}"),
+                Some("bearer"),
+            ),
+            ("kobo token in the query", kobo.clone(), Some("query")),
             (
                 "kosync key",
                 basic("x", &crate::device_tokens::hash(&kosync)),
@@ -809,6 +817,32 @@ mod resolve {
         .await
         .1;
         assert_eq!(live, denied(), "live is out of scope");
+        assert_eq!(
+            ask_device(&w, &kobo, Some("path"), "download").await,
+            denied(),
+            "a kobo token never reads a file that is not a text edition"
+        );
+        sqlx::query(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) SELECT "mediaId", 'text' FROM media_files WHERE id = $1 RETURNING id, "mediaId"),
+                    i AS (INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM e RETURNING id, "mediaId")
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) SELECT id, $1, "mediaId", 0, 0 FROM i"#,
+        )
+        .bind(w.file as i32)
+        .execute(&w.c.pool)
+        .await
+        .unwrap();
+        let b = ask_device(&w, &kobo, Some("path"), "download").await;
+        assert_eq!(
+            b["allow"], true,
+            "a kobo token downloads a text edition from the path"
+        );
+        for purpose in ["stream", "sprite", "subtitle"] {
+            assert_eq!(
+                ask_device(&w, &kobo, Some("path"), purpose).await,
+                denied(),
+                "{purpose} is outside the purposes of a kobo token"
+            );
+        }
         let jwt = w.member.1.clone();
         assert_eq!(
             ask_device(&w, &format!("Bearer {jwt}"), Some("basic"), "stream").await,
