@@ -37,11 +37,11 @@ wasmtime::component::bindgen!({
     require_store_data_send: true,
 });
 
-/// The `provider` world, for the `metadata-provider` export only: its other interfaces are the `plugin` world's.
+/// The `scene-provider` world, for the `metadata-provider` and `scene` exports only: its other interfaces are the `plugin` world's.
 mod provider_world {
     wasmtime::component::bindgen!({
         path: "../plugin-sdk/wit",
-        world: "fliks:plugin/provider",
+        world: "fliks:plugin/scene-provider",
         imports: { default: async },
         exports: { default: async },
         with: {
@@ -65,7 +65,21 @@ pub use fliks::plugin::db::{DbError, Param, RowSet, Value};
 pub use fliks::plugin::types::{
     HealthReport, HostError, HttpRequest, HttpResponse, ManifestCheck, Principal,
 };
-pub use provider_world::exports::fliks::plugin::metadata_provider as wit_provider;
+pub use provider_world::exports::fliks::plugin::{
+    metadata_provider as wit_provider, scene as wit_scene,
+};
+
+/// Whether the manifest's `provider` block declares the `scene` capability.
+fn has_scene(manifest: &Json) -> bool {
+    manifest["provider"]["kinds"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .any(|(_, caps)| {
+            caps.as_array()
+                .is_some_and(|c| c.iter().any(|c| c == "scene"))
+        })
+}
 
 pub const EPOCH_TICK: Duration = Duration::from_millis(100);
 
@@ -353,6 +367,8 @@ pub struct Inst {
     guest: Plugin,
     /// The `metadata-provider` export of a provider's instance.
     prov: Option<wit_provider::Guest>,
+    /// The optional `scene` export, of a provider that declares the capability.
+    scene: Option<wit_scene::Guest>,
     cfg_gen: u64,
 }
 
@@ -360,6 +376,11 @@ impl Inst {
     pub fn provider(&mut self) -> (&wit_provider::Guest, &mut Store<Ctx>) {
         let prov = self.prov.as_ref().expect("a provider instance");
         (prov, &mut self.store)
+    }
+
+    pub fn scene(&mut self) -> (&wit_scene::Guest, &mut Store<Ctx>) {
+        let scene = self.scene.as_ref().expect("a scene provider instance");
+        (scene, &mut self.store)
     }
 }
 
@@ -455,6 +476,7 @@ pub struct PluginRt {
     /// A plugin with a `provider` block only (`provider-plugins.md` rule 50).
     pub provider: Option<Lane>,
     provider_idx: Option<wit_provider::GuestIndices>,
+    scene_idx: Option<wit_scene::GuestIndices>,
     pub jobs: HashMap<String, Lane>,
     sup: Mutex<Sup>,
     state: watch::Sender<State>,
@@ -511,6 +533,9 @@ impl PluginRt {
             .provider
             .then(|| wit_provider::GuestIndices::new(&instance_pre))
             .transpose()?;
+        let scene_idx = (sh.provider && has_scene(&manifest))
+            .then(|| wit_scene::GuestIndices::new(&instance_pre))
+            .transpose()?;
         let pre = PluginPre::new(instance_pre)?;
         let jobs = manifest["jobs"]
             .as_array()
@@ -533,6 +558,7 @@ impl PluginRt {
                 .is_some()
                 .then(|| Lane::new(LaneKind::Provider, PROVIDER_INSTANCES, PROVIDER_QUEUE)),
             provider_idx,
+            scene_idx,
             jobs,
             sup: Mutex::new(Sup {
                 crashes: VecDeque::new(),
@@ -666,12 +692,13 @@ impl PluginRt {
             .unwrap_or_default();
         let fail = |e: String| SpawnError::Failed(e);
         let work = async {
-            let (guest, prov) = match &self.provider_idx {
+            let (guest, prov, scene) = match &self.provider_idx {
                 None => (
                     self.pre
                         .instantiate_async(&mut store)
                         .await
                         .map_err(|e| fail(format!("{e:?}")))?,
+                    None,
                     None,
                 ),
                 Some(idx) => {
@@ -686,7 +713,13 @@ impl PluginRt {
                     let prov = idx
                         .load(&mut store, &instance)
                         .map_err(|e| fail(format!("{e:?}")))?;
-                    (guest, Some(prov))
+                    let scene = self
+                        .scene_idx
+                        .as_ref()
+                        .map(|i| i.load(&mut store, &instance))
+                        .transpose()
+                        .map_err(|e| fail(format!("{e:?}")))?;
+                    (guest, Some(prov), scene)
                 }
             };
             let check = guest
@@ -695,9 +728,9 @@ impl PluginRt {
                 .await
                 .map_err(|e| fail(format!("{e:?}")))?
                 .map_err(fail)?;
-            Ok::<_, SpawnError>((guest, prov, check))
+            Ok::<_, SpawnError>((guest, prov, scene, check))
         };
-        let (guest, prov, check) = match tokio::time::timeout(hello, work).await {
+        let (guest, prov, scene, check) = match tokio::time::timeout(hello, work).await {
             Ok(r) => r?,
             Err(_) => return Err(fail("hello deadline".into())),
         };
@@ -719,6 +752,7 @@ impl PluginRt {
             store,
             guest,
             prov,
+            scene,
             cfg_gen: self.cfg_gen.load(Ordering::SeqCst),
         })
     }

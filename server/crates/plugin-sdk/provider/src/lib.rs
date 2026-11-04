@@ -1,10 +1,11 @@
-//! Provider plugins: the `provider` world, which adds `metadata-provider` to the `plugin` world.
+//! Provider plugins: the `scene-provider` world, which adds `metadata-provider` and `scene` to the
+//! `plugin` world (a provider without the `scene` capability is also a valid `provider` world).
 //! Its imports are those of `fliks_plugin_sdk::bindings`; only the new exports are generated here.
 
 pub mod bindings {
     wit_bindgen::generate!({
         path: "../wit",
-        world: "provider",
+        world: "scene-provider",
         generate_all,
         pub_export_macro: true,
         export_macro_name: "__export_provider_world",
@@ -48,8 +49,9 @@ pub mod bindings {
 }
 
 pub use bindings::exports::fliks::plugin::metadata_provider::{
-    Lang, ProviderError, ScenePair, SearchQuery, UpstreamError,
+    Lang, ProviderError, SearchQuery, UpstreamError,
 };
+pub use bindings::exports::fliks::plugin::scene::ScenePair;
 #[doc(hidden)]
 pub use fliks_plugin_sdk as sdk;
 
@@ -207,6 +209,8 @@ macro_rules! export_provider {
             ) -> Result<String, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::list(kind, name, params, lang)
             }
+        }
+        impl $crate::bindings::exports::fliks::plugin::scene::Guest for __FliksProvider {
             fn scene_mapped_ids(origin: String) -> Result<Vec<String>, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::scene_mapped_ids(origin)
             }
@@ -226,6 +230,7 @@ macro_rules! export_provider {
         const _: () = {
             use $crate::bindings::exports::fliks::plugin::guest::Guest as G;
             use $crate::bindings::exports::fliks::plugin::metadata_provider::Guest as P;
+            use $crate::bindings::exports::fliks::plugin::scene::Guest as S;
             let _ = (
                 <__FliksProvider as G>::hello,
                 <__FliksProvider as G>::health,
@@ -246,8 +251,8 @@ macro_rules! export_provider {
                 <__FliksProvider as P>::fetch_person,
                 <__FliksProvider as P>::person_credits,
                 <__FliksProvider as P>::list,
-                <__FliksProvider as P>::scene_mapped_ids,
-                <__FliksProvider as P>::scene_mapping,
+                <__FliksProvider as S>::scene_mapped_ids,
+                <__FliksProvider as S>::scene_mapping,
             );
         };
     };

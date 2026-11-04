@@ -335,6 +335,12 @@ interface metadata-provider {
   person-credits: func(id: external-id, lang: lang) -> result<json, provider-error>;
   %list: func(kind: kind, name: string, params: list<tuple<string, string>>, lang: lang)
     -> result<json, provider-error>;
+}
+
+/// An optional export of a provider that declares the `scene` capability.
+interface scene {
+  use types.{external-id};
+  use metadata-provider.{provider-error};
 
   /// The scene numbering of a release name and the aired numbering it maps to.
   record scene-pair { scene-season: u32, scene-episode: u32, season: u32, episode: u32 }
@@ -357,4 +363,9 @@ world plugin {
 world provider {
   include plugin;
   export metadata-provider;
+}
+
+world scene-provider {
+  include provider;
+  export scene;
 }

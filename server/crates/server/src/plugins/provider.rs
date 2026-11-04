@@ -563,7 +563,7 @@ impl MetadataProvider for PluginProvider {
             let ids = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
-                        let (g, s) = i.provider();
+                        let (g, s) = i.scene();
                         g.call_scene_mapped_ids(s, "tvdb").await
                     })
                 })
@@ -589,7 +589,7 @@ impl MetadataProvider for PluginProvider {
             let pairs = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
-                        let (g, s) = i.provider();
+                        let (g, s) = i.scene();
                         g.call_scene_mapping(s, &source).await
                     })
                 })
