@@ -268,7 +268,7 @@ mod tests {
     #[tokio::test]
     async fn an_unregistered_provider_answers_503_instead_of_panicking() {
         let db = sqlx::PgPool::connect_lazy("postgres://x@127.0.0.1:1/x").unwrap();
-        let md = super::super::Metadata::new(db);
+        let md = super::super::Metadata::new(db, Default::default());
         let p = md.of(Namespace::TMDB);
         let lang = fliks_domain::metadata::language::resolve(None, None);
         let e = p

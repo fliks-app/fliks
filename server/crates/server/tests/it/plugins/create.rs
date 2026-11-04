@@ -310,6 +310,14 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
     s.finish().await;
 }
 
+/// Declares a plugin namespace as its claim would.
+fn declare(st: &AppState, name: &str, label: &str, pattern: &str) -> Namespace {
+    st.plugins
+        .namespaces
+        .edit(|k| k.declare(name, label, pattern, "preserve"))
+        .unwrap()
+}
+
 /// A third-party provider of a declared namespace, counting its work reads; `extra` is merged into its record.
 struct Fake(Arc<AtomicUsize>, &'static str, Value);
 
@@ -404,13 +412,13 @@ impl fliks_server::metadata::MetadataProvider for Fake {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_plugin_namespace_resolves_to_one_media_that_refreshes() {
-    use fliks_domain::{external_id::Namespace, metadata::limiter::Priority};
+    use fliks_domain::metadata::limiter::Priority;
     let Some(s) = Scratch::create("create_plugin_ns").await else {
         return;
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    let ns = Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    let ns = declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:aid", json!({}))));
@@ -451,7 +459,6 @@ async fn a_plugin_namespace_resolves_to_one_media_that_refreshes() {
 /// A book named by a plugin namespace is made once, from the plugin's record, with no anchor id.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_plugin_namespace_creates_one_book_with_both_wants() {
-    use fliks_domain::external_id::Namespace;
     let Some(s) = Scratch::create("create_plugin_book").await else {
         return;
     };
@@ -463,7 +470,7 @@ async fn a_plugin_namespace_creates_one_book_with_both_wants() {
     .await
     .unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata.add_plugin(Arc::new(Fake(
         reads.clone(),
@@ -545,11 +552,10 @@ fn id(provider: &str, value: &str) -> ExternalId {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_book_of_the_anchor_links_the_callers_own_ids() {
-    use fliks_domain::external_id::Namespace;
     let Some((st, s)) = books_state("create_book_anchor").await else {
         return;
     };
-    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "openlibrary", json!({}))));
@@ -583,11 +589,10 @@ async fn a_book_of_the_anchor_links_the_callers_own_ids() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_book_needs_an_id_the_caller_owns_and_the_anchor_when_named() {
-    use fliks_domain::external_id::Namespace;
     let Some((st, s)) = books_state("create_book_owned").await else {
         return;
     };
-    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
     st.metadata.add_plugin(Arc::new(Fake(
         Arc::new(AtomicUsize::new(0)),
         "org.fake:bid",
@@ -614,11 +619,10 @@ async fn a_book_needs_an_id_the_caller_owns_and_the_anchor_when_named() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_creates_of_one_book_make_one_media() {
-    use fliks_domain::external_id::Namespace;
     let Some((st, s)) = books_state("create_book_race").await else {
         return;
     };
-    Namespace::declare("org.fake:bid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:bid", "Fake id", "^[1-9][0-9]*$");
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:bid", json!({}))));
@@ -635,7 +639,6 @@ async fn concurrent_creates_of_one_book_make_one_media() {
 /// TMDB is registered but unconfigured: the plugin entry creates the media (`plugins.md` rule 57).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
-    use fliks_domain::external_id::Namespace;
     let Some(s) = Scratch::create("create_second_entry").await else {
         return;
     };
@@ -646,7 +649,7 @@ async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
         fliks_server::config::random_hex(6)
     ));
     st.images = Arc::new(ImageStore::with_root(data));
-    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
     st.metadata
         .add_plugin(Arc::new(Fake(Arc::default(), "org.fake:aid", json!({}))));
     let both = vec![
@@ -675,13 +678,12 @@ async fn a_second_entry_creates_when_the_first_provider_is_unavailable() {
 /// A plugin record with a `tvdbId` is not looked up on TMDB: no `tmdb` link, no 409 on a held one.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
-    use fliks_domain::external_id::Namespace;
     let Some(s) = Scratch::create("create_plugin_tvdb").await else {
         return;
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
     st.metadata.add_plugin(Arc::new(Fake(
         Arc::default(),
         "org.fake:aid",
@@ -773,7 +775,7 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
         .unwrap_err();
     assert_eq!(e.code, "namespace-not-owned");
     // `org.fake.x` is not `org.fake`, and one id per namespace counts.
-    Namespace::declare("org.fake.x:aid", "X", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake.x:aid", "X", "^[1-9][0-9]*$");
     st.metadata
         .add_plugin(Arc::new(Fake(Arc::default(), "org.fake.x:aid", json!({}))));
     let x = vec![ExternalId {
@@ -811,14 +813,14 @@ async fn a_plugin_record_never_links_or_collides_on_a_tmdb_id() {
 /// An `idPattern` with letters imports and refreshes, and every served non-unique entry is linked.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_lettered_namespace_refreshes_and_all_entries_are_linked() {
-    use fliks_domain::{external_id::Namespace, metadata::limiter::Priority};
+    use fliks_domain::metadata::limiter::Priority;
     let Some(s) = Scratch::create("create_lettered").await else {
         return;
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
-    let slug = Namespace::declare("org.fake:slug", "Slug", "^[a-z0-9-]+$", "preserve").unwrap();
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
+    let slug = declare(&st, "org.fake:slug", "Slug", "^[a-z0-9-]+$");
     let reads = Arc::new(AtomicUsize::new(0));
     st.metadata
         .add_plugin(Arc::new(Fake(reads.clone(), "org.fake:slug", json!({}))));
@@ -866,7 +868,7 @@ async fn a_pin_to_a_gone_plugin_falls_through() {
     };
     sqlx::raw_sql(LIBRARY).execute(&s.pool).await.unwrap();
     let (st, _) = state_with_tmdb(&s).await;
-    Namespace::declare("org.fake:aid", "Fake id", "^[1-9][0-9]*$", "preserve").unwrap();
+    declare(&st, "org.fake:aid", "Fake id", "^[1-9][0-9]*$");
     sqlx::raw_sql(
         r#"INSERT INTO media (id, title, type, "libraryId", "preferredProvider")
              VALUES (900, 'Pinned', 'movie', 1, 'org.fake:aid');

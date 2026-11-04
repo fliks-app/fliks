@@ -24,7 +24,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::Namespace,
+    external_id::{Namespace, Namespaces},
     media::{kind::MediaKind, release::ReleaseKind},
     metadata::{field::Field, limiter::Priority},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
@@ -194,7 +194,7 @@ pub async fn import_title(
     if let Some(f) = imp.folder_id {
         crate::libraries::assert_folder_in_library(&mut *tx, imp.library_id, f).await?;
     }
-    let (id, free) = insert_media(&mut tx, &imp, &found, &lookup, &folder)
+    let (id, free) = insert_media(&mut tx, &st.namespaces(), &imp, &found, &lookup, &folder)
         .await
         .map_err(|e| {
             if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
@@ -369,6 +369,7 @@ fn day(s: &Option<String>) -> Option<String> {
 /// `buildMediaFieldsFromTmdb` plus the import's own columns (rule 21).
 async fn insert_media(
     tx: &mut PgConnection,
+    known: &Namespaces,
     imp: &Import,
     found: &Found,
     (lookup, lookup_id): &(Namespace, String),
@@ -433,11 +434,11 @@ async fn insert_media(
     let (served, served_id) = &found.provider;
     for (ns, v) in [(lookup, lookup_id), (served, served_id)] {
         if ns.core().is_none() {
-            external_ids::link(tx, id, imp.media_type, *ns, v).await?;
+            external_ids::link(tx, known, id, imp.media_type, *ns, v).await?;
         }
     }
     for (ns, v) in imp.links.iter().filter(|(n, _)| n != lookup && n != served) {
-        external_ids::link(tx, id, imp.media_type, *ns, v).await?;
+        external_ids::link(tx, known, id, imp.media_type, *ns, v).await?;
     }
     if lookup.core().is_none() && served == lookup {
         sqlx::query(r#"UPDATE media SET "preferredProvider" = $2 WHERE id = $1"#)
@@ -582,10 +583,11 @@ pub async fn import_media(
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let c = common(&b)?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;
+    let known = st.namespaces();
     let plugin =
         b.0.get("provider")
             .and_then(Value::as_str)
-            .and_then(Namespace::parse)
+            .and_then(|p| known.parse(p))
             .filter(|p| p.core().is_none());
     let provider = match plugin {
         Some(p) => Some(p.as_str().to_owned()),
@@ -615,7 +617,7 @@ pub async fn import_media(
     };
     let external = match plugin {
         Some(p) => {
-            let id = p.normalize(&external).ok_or_else(|| {
+            let id = known.normalize(p, &external).ok_or_else(|| {
                 AppError::bad_request(vec![format!("externalId is not a {} id", p.as_str())])
             })?;
             duplicate_ref(&st, c.media_type, p, &id).await?;

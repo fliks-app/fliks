@@ -40,8 +40,10 @@ pub async fn persist_credits(
     let all: Vec<&Value> = cast.iter().chain(&crew).collect();
     let mut unique: Vec<i32> = vec![];
     // person_external_ids refuses ids outside 1..=999999999; a plugin's idPattern may refuse more.
-    let valid =
-        |i: &i32| (1..=999_999_999).contains(i) && provider.normalize(&i.to_string()).is_some();
+    let known = st.namespaces();
+    let valid = |i: &i32| {
+        (1..=999_999_999).contains(i) && known.normalize(provider, &i.to_string()).is_some()
+    };
     for id in all.iter().filter_map(|c| ext(c)).filter(valid) {
         if !unique.contains(&id) {
             unique.push(id);

@@ -8,6 +8,7 @@ use tower::ServiceExt;
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 struct Ctx {
+    st: AppState,
     app: Router,
     admin: String,
     plain: String,
@@ -42,7 +43,8 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m/one'), (2, '/m/tw
     Ctx {
         admin: st.jwt.sign_access(1, "admin").unwrap().token,
         plain: st.jwt.sign_access(2, "plain").unwrap().token,
-        app: media::router().with_state(st),
+        app: media::router().with_state(st.clone()),
+        st,
     }
 }
 
@@ -339,10 +341,11 @@ async fn a_kind_without_a_special_case_lists_with_its_watched_state(pool: PgPool
 /// Identify is a new identity: plugin pins of the media and its seasons go, with the id of the
 /// media pin's namespace, except what an explicit `preferredProvider` names.
 async fn identify_with_pins(pool: PgPool, body: Value) -> Vec<(Option<String>, Vec<String>)> {
-    use fliks_domain::external_id::Namespace;
     let c = ctx(pool.clone()).await;
     for n in ["aid", "bid"] {
-        Namespace::declare(&format!("org.idpin:{n}"), n, "^[1-9][0-9]*$", "preserve").unwrap();
+        c.st.plugins
+            .namespaces
+            .edit(|k| k.declare(&format!("org.idpin:{n}"), n, "^[1-9][0-9]*$", "preserve"));
     }
     sqlx::raw_sql(
         r#"UPDATE media SET "preferredProvider" = 'org.idpin:aid' WHERE id = 1;

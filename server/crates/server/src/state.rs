@@ -40,6 +40,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// The plugin namespaces declared now, to parse or normalise an id of one.
+    pub fn namespaces(&self) -> Arc<fliks_domain::external_id::Namespaces> {
+        self.plugins.namespaces.get()
+    }
+
     /// `jwt_secret` is the resolved secret (`jwt_secret::resolve`); TTLs come from `cfg`.
     pub fn new(db: PgPool, cfg: Config, jwt_secret: &str) -> Self {
         let presence = Presence::default();
@@ -65,7 +70,7 @@ impl AppState {
             ingest: Arc::default(),
             folder_moves: Arc::default(),
             busy: crate::busy::Busy::default(),
-            metadata: Arc::new(Metadata::new(db.clone())),
+            metadata: Arc::new(Metadata::new(db.clone(), plugins.namespaces.clone())),
             images: Arc::new(ImageStore::new()),
             xem: Arc::default(),
             system: Arc::default(),

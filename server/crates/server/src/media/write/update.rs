@@ -26,7 +26,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::Namespace,
+    external_id::{Namespace, Namespaces},
     media::{kind::MediaKind, release::ReleaseKind},
     metadata::field::Field,
 };
@@ -111,7 +111,7 @@ impl BodyIds {
         let imdb = self.imdb.as_ref();
         for (p, v) in [(Namespace::TMDB, tmdb), (Namespace::IMDB, imdb.cloned())] {
             let Some(v) = v else { continue };
-            match external_ids::set(c, id, kind, p, v.as_deref()).await? {
+            match external_ids::set(c, &Namespaces::default(), id, kind, p, v.as_deref()).await? {
                 Link::Linked => {}
                 other => return Ok(other),
             }
@@ -121,7 +121,7 @@ impl BodyIds {
 }
 
 /// Columns of `CreateMediaDto` / `UpdateMediaDto` that persist (`path` and the profile ids do not).
-fn columns(b: &Body) -> Result<Columns, AppError> {
+fn columns(b: &Body, known: &Namespaces) -> Result<Columns, AppError> {
     let mut out = vec![];
     macro_rules! put {
         ($col:literal, $v:expr, $wrap:expr) => {
@@ -159,7 +159,9 @@ fn columns(b: &Body) -> Result<Columns, AppError> {
     if b.has("preferredProvider") {
         let v = match b.0.get("preferredProvider") {
             Some(Value::Null) => None,
-            Some(Value::String(s)) if external_ids::preferred(s).is_some() => Some(s.clone()),
+            Some(Value::String(s)) if external_ids::preferred(known, s).is_some() => {
+                Some(s.clone())
+            }
             _ => {
                 return Err(AppError::bad_request(vec![
                     "preferredProvider must be a provider namespace".to_owned(),
@@ -248,7 +250,7 @@ pub async fn create(
     b.required(b.str("title")?, "title", "must be a string")?;
     let media_type = b.required_kind("type")?;
     let ids = body_ids(&b)?;
-    let (cols, release) = columns(&b)?;
+    let (cols, release) = columns(&b, &st.namespaces())?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
     q.push(
         cols.iter()
@@ -461,7 +463,7 @@ pub async fn update(
     let id = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let ids = body_ids(&b)?;
-    let (cols, release) = columns(&b)?;
+    let (cols, release) = columns(&b, &st.namespaces())?;
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
@@ -887,7 +889,9 @@ pub async fn patch_season(
     let provider = match b.0.get("preferredProvider") {
         None => None,
         Some(Value::Null) => Some(None),
-        Some(Value::String(s)) if external_ids::preferred(s).is_some() => Some(Some(s.clone())),
+        Some(Value::String(s)) if external_ids::preferred(&st.namespaces(), s).is_some() => {
+            Some(Some(s.clone()))
+        }
         _ => {
             return Err(AppError::bad_request(vec![
                 "preferredProvider must be a provider namespace".to_owned(),

@@ -157,6 +157,8 @@ pub struct Plugins {
     pub db: PgPool,
     pub opts: Options,
     pub registry: Registry,
+    /// The declared plugin namespaces, read wherever an id of one is parsed or normalised.
+    pub namespaces: Arc<namespaces::Known>,
     pub counts: counts::Counts,
     pub staging: staging::Staging,
     pub logs: Arc<logs::Logs>,
@@ -204,6 +206,7 @@ impl Plugins {
             db,
             opts,
             registry: Registry::default(),
+            namespaces: Arc::default(),
             counts: counts::Counts::default(),
             logs: Arc::default(),
             host: OnceLock::new(),

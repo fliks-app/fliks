@@ -1,5 +1,8 @@
 //! The `provider` manifest block and plugin id namespaces (`docs/spec/provider-plugins.md`).
-use crate::{external_id::Namespace, metadata::field::Field};
+use crate::{
+    external_id::{ExternalProvider, Namespace, Namespaces},
+    metadata::field::Field,
+};
 use regex::{Regex, RegexBuilder};
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
@@ -321,7 +324,12 @@ const NESTED: [&str; 4] = ["cast", "crew", "seasons", "episodes"];
 
 /// Rules 14, 26 and 28 on a record and its nested records: `ids` keeps the namespaces the provider
 /// may write, normalised; a third-party one writes no core id (`tmdbId`, `tvdbId`, `imdbId`, collection keys).
-pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) -> usize {
+pub fn sanitize_ids(
+    rec: &mut Map<String, Value>,
+    official: bool,
+    own: &[&str],
+    known: &Namespaces,
+) -> usize {
     let mut dropped = 0;
     if !official {
         let core = Field::Ids
@@ -334,7 +342,7 @@ pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) 
     for key in NESTED {
         if let Some(Value::Array(items)) = rec.get_mut(key) {
             for item in items.iter_mut().filter_map(Value::as_object_mut) {
-                dropped += sanitize_ids(item, official, own);
+                dropped += sanitize_ids(item, official, own, known);
             }
         }
     }
@@ -347,7 +355,9 @@ pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) 
     dropped += ids.len().saturating_sub(MAX_IDS_NAMESPACES);
     let mut kept = Map::new();
     for (name, v) in ids.into_iter().take(MAX_IDS_NAMESPACES) {
-        let ns = Namespace::parse(&name).filter(|n| official || own.contains(&n.as_str()));
+        let ns = known
+            .parse(&name)
+            .filter(|n| official || own.contains(&n.as_str()));
         let Some(ns) = ns else {
             dropped += 1;
             continue;
@@ -358,7 +368,7 @@ pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) 
         };
         let ok: Vec<Value> = raw
             .into_iter()
-            .filter_map(|x| ns.normalize(x.as_str()?).map(Value::String))
+            .filter_map(|x| known.normalize(ns, x.as_str()?).map(Value::String))
             .collect();
         dropped += usize::from(ok.is_empty());
         if !ok.is_empty() {
@@ -378,13 +388,13 @@ pub fn sanitize_ids(rec: &mut Map<String, Value>, official: bool, own: &[&str]) 
 
 /// An id a provider answers (`find-by`) in `ns`, as stored: OpenLibrary keys may be paths and
 /// are works only; Audible and Audnexus answer ASINs.
-pub fn answered_id(ns: Namespace, value: &str) -> Option<String> {
+pub fn answered_id(known: &Namespaces, ns: Namespace, value: &str) -> Option<String> {
     match ns {
-        Namespace::OPENLIBRARY => ns
+        Namespace::OPENLIBRARY => ExternalProvider::OpenLibrary
             .normalize(value.trim().rsplit('/').next()?)
             .filter(|v| v.ends_with('W')),
-        Namespace::AUDIBLE | Namespace::AUDNEXUS => Namespace::ASIN.normalize(value),
-        _ => ns.normalize(value),
+        Namespace::AUDIBLE | Namespace::AUDNEXUS => ExternalProvider::Asin.normalize(value),
+        _ => known.normalize(ns, value),
     }
 }
 
@@ -430,7 +440,8 @@ mod tests {
 
     #[test]
     fn ids_of_a_third_party_record_keep_only_its_own_and_non_unique_namespaces() {
-        Namespace::declare("org.ids.t:aid", "T", "^[1-9][0-9]*$", "preserve").unwrap();
+        let mut known = Namespaces::default();
+        known.declare("org.ids.t:aid", "T", "^[1-9][0-9]*$", "preserve");
         let rec = |v: Value| v.as_object().unwrap().clone();
         let input = json!({"tmdbId": 5, "title": "t", "tmdbCollectionId": 9, "tmdbCollectionName": "c",
             "tvdbId": 3, "imdbId": "tt2",
@@ -438,7 +449,10 @@ mod tests {
             "tmdb": "603", "imdb": "tt1", "org.ids.t:aid": ["7", "x"], "org.ids.t:nope": "1",
             "tvdb": "012", "openlibrary": "OL1W"}});
         let mut third = rec(input.clone());
-        assert_eq!(sanitize_ids(&mut third, false, &["org.ids.t:aid"]), 14);
+        assert_eq!(
+            sanitize_ids(&mut third, false, &["org.ids.t:aid"], &known),
+            14
+        );
         assert_eq!(third["ids"], json!({"org.ids.t:aid": ["7"]}));
         assert!(!third.contains_key("tmdbId") && third.contains_key("title"));
         assert!(
@@ -446,29 +460,36 @@ mod tests {
         );
         assert_eq!(third["cast"], json!([{"externalId": 1, "ids": {}}]));
         let mut official = rec(input);
-        sanitize_ids(&mut official, true, &[]);
+        sanitize_ids(&mut official, true, &[], &known);
         assert_eq!(official["ids"]["tmdb"], "603");
         assert!(official.contains_key("tmdbId") && official.contains_key("tmdbCollectionId"));
         let many: Map<String, Value> = (0..40).map(|i| (format!("n{i:02}"), json!("1"))).collect();
         let mut over = rec(json!({"ids": many}));
-        assert_eq!(sanitize_ids(&mut over, false, &[]), 40);
+        assert_eq!(sanitize_ids(&mut over, false, &[], &known), 40);
         let mut bad = rec(json!({"ids": ["x"]}));
-        assert_eq!(sanitize_ids(&mut bad, false, &[]), 1);
+        assert_eq!(sanitize_ids(&mut bad, false, &[], &known), 1);
         assert!(!bad.contains_key("ids"));
     }
 
     #[test]
     fn answered_ids_are_normalised_by_their_namespace() {
-        let ol = |v| answered_id(Namespace::OPENLIBRARY, v);
+        let known = Namespaces::default();
+        let ol = |v| answered_id(&known, Namespace::OPENLIBRARY, v);
         assert_eq!(ol("OL45883W").as_deref(), Some("OL45883W"));
         assert_eq!(ol(" /works/OL45883W ").as_deref(), Some("OL45883W"));
         assert_eq!(ol("ol45883w"), None);
         assert_eq!(ol("OL1M"), None, "a work only");
         for ns in [Namespace::AUDIBLE, Namespace::AUDNEXUS] {
-            assert_eq!(answered_id(ns, "B002V0QK4C").as_deref(), Some("B002V0QK4C"));
-            assert_eq!(answered_id(ns, "b002v0qk4c"), None);
+            assert_eq!(
+                answered_id(&known, ns, "B002V0QK4C").as_deref(),
+                Some("B002V0QK4C")
+            );
+            assert_eq!(answered_id(&known, ns, "b002v0qk4c"), None);
         }
-        assert_eq!(answered_id(Namespace::TMDB, "603").as_deref(), Some("603"));
+        assert_eq!(
+            answered_id(&known, Namespace::TMDB, "603").as_deref(),
+            Some("603")
+        );
     }
 
     #[test]

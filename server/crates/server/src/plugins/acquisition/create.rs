@@ -156,12 +156,13 @@ fn served_entries(
     ids: &[t::ExternalId],
 ) -> Result<Vec<(Namespace, String)>, HostError> {
     let served = |ns: Namespace| st.metadata.get(ns).is_some_and(|p| p.supports(kind));
+    let namespaces = st.namespaces();
     let parsed: Vec<(Namespace, Option<String>)> = ids
         .iter()
-        .filter_map(|i| Some((Namespace::parse(&i.provider)?, i.value.as_str())))
+        .filter_map(|i| Some((namespaces.parse(&i.provider)?, i.value.as_str())))
         .filter(|(ns, _)| served(*ns))
         .map(|(ns, v)| (ns.id_namespace(), v))
-        .map(|(ns, v)| (ns, ns.normalize(v)))
+        .map(|(ns, v)| (ns, namespaces.normalize(ns, v)))
         .collect();
     let mut known: Vec<(Namespace, String)> = parsed
         .iter()

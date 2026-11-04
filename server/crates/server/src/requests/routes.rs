@@ -37,7 +37,7 @@ pub async fn create(
     req: Request,
 ) -> Res<(StatusCode, Json<Value>)> {
     a.require(Action::Create, Subject::FliksRequest)?;
-    let dto = dto::create_request(body(req).await?)?;
+    let dto = dto::create_request(&st.namespaces(), body(req).await?)?;
     Ok(created(flow::create(&st, &a, dto).await?))
 }
 
@@ -54,7 +54,9 @@ pub async fn title_state(
     Query(q): Pairs,
 ) -> Res<Json<Value>> {
     a.require(Action::Create, Subject::FliksRequest)?;
-    Ok(Json(flow::title_state(&st, &dto::title_state(&q)?).await?))
+    Ok(Json(
+        flow::title_state(&st, &dto::title_state(&st.namespaces(), &q)?).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/requests/{id}", responses((status = 200)))]

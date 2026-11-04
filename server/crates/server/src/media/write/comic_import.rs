@@ -30,9 +30,10 @@ pub(super) async fn import_comic(
     let name = b.required(b.str("provider")?, "provider", "must be a string")?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;
     let (library, folder) = (b.id("libraryId")?.flatten(), b.id("folderId")?.flatten());
-    let ns = comic_provider(&st.metadata, &name)?;
-    let id = ns
-        .normalize(&external)
+    let ns = comic_provider(st, &name)?;
+    let id = st
+        .namespaces()
+        .normalize(ns, &external)
         .ok_or_else(|| AppError::bad_request(vec![format!("externalId is not a {name} id")]))?;
     if external_ids::find(&st.db, MediaKind::Comic, ns, &id)
         .await?
@@ -99,7 +100,9 @@ pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result
         refreshed: false,
     };
     let (media, mut tx) = insert_row(st, &row, c.target, c.user, &c.links, None).await?;
-    if external_ids::link(&mut tx, media, MediaKind::Comic, ns, id).await? != Link::Linked {
+    if external_ids::link(&mut tx, &st.namespaces(), media, MediaKind::Comic, ns, id).await?
+        != Link::Linked
+    {
         return Err(AppError::conflict(TAKEN));
     }
     tx.commit().await?;

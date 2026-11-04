@@ -27,7 +27,7 @@ pub const ANCHOR: Namespace = Namespace::OPENLIBRARY;
 
 /// `v` as a work id of the anchor.
 pub(crate) fn work_id(v: &str) -> Option<String> {
-    ANCHOR.normalize(v).filter(|w| w.ends_with('W'))
+    ANCHOR.core()?.normalize(v).filter(|w| w.ends_with('W'))
 }
 
 pub(crate) fn text(m: &Map<String, Value>, key: &str) -> Option<String> {

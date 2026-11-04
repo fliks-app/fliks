@@ -477,7 +477,7 @@ pub async fn identify(
     )?;
     let (mut tmdb, mut tvdb) = (b.id("tmdbId")?.flatten(), b.id("tvdbId")?.flatten());
     let imdb = b.str("imdbId")?.flatten();
-    let mut provider = b.namespace("preferredProvider")?;
+    let mut provider = b.namespace("preferredProvider", &st.namespaces())?;
     let named = (b.str("provider")?.flatten(), b.str("externalId")?.flatten());
     let media = load_media(&st.db, id)
         .await?
@@ -490,11 +490,13 @@ pub async fn identify(
             ));
         }
         (Some(p), Some(ext)) => {
-            let ns = Namespace::parse(&p)
+            let known = st.namespaces();
+            let ns = known
+                .parse(&p)
                 .filter(|n| st.metadata.answers(*n) && st.metadata.serves(*n, media.media_type))
                 .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?;
-            let value = ns
-                .normalize(ext.trim())
+            let value = known
+                .normalize(ns, ext.trim())
                 .ok_or_else(|| AppError::bad_request(format!("Invalid id for provider: {p}")))?;
             match ns {
                 Namespace::TMDB | Namespace::TVDB => {
@@ -605,7 +607,7 @@ async fn apply_identity(
                 .await?;
             return Err(AppError::conflict(format!(
                 "\"{title}\" (#{o}) already uses {} id {v} in this library",
-                p.label()
+                st.namespaces().label(p)
             )));
         }
     }
@@ -632,7 +634,15 @@ async fn apply_identity(
     .await?;
     let mut written = ids.replace(&mut tx, media.id, media.media_type).await?;
     if let Some((ns, v)) = &pin
-        && external_ids::link(&mut tx, media.id, media.media_type, *ns, v).await?
+        && external_ids::link(
+            &mut tx,
+            &st.namespaces(),
+            media.id,
+            media.media_type,
+            *ns,
+            v,
+        )
+        .await?
             == external_ids::Link::Gone
     {
         written.gone = true;
@@ -643,7 +653,7 @@ async fn apply_identity(
     if let Some(p) = written.taken.first() {
         return Err(AppError::conflict(format!(
             "Another title already uses this {} id in this library",
-            p.label()
+            st.namespaces().label(*p)
         )));
     }
     sqlx::query!(

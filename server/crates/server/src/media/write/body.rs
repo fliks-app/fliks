@@ -1,7 +1,7 @@
 //! class-validator style checks on a JSON body read as a map: absent = `None`, `null` = `Some(None)`
 //! (`@IsOptional` lets `null` through), messages as the global pipe words them.
 use crate::http::AppError;
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::{external_id::Namespaces, media::kind::MediaKind};
 use serde_json::{Map, Value};
 
 pub type Field<T> = Option<Option<T>>;
@@ -119,12 +119,12 @@ impl Body {
     }
 
     /// A provider namespace: one the core knows or a plugin declared (`external_ids::preferred`).
-    pub fn namespace(&self, k: &str) -> Result<Field<String>, AppError> {
+    pub fn namespace(&self, k: &str, known: &Namespaces) -> Result<Field<String>, AppError> {
         self.get(
             k,
             |v| {
                 v.as_str()
-                    .filter(|s| crate::media::external_ids::preferred(s).is_some())
+                    .filter(|s| crate::media::external_ids::preferred(known, s).is_some())
                     .map(str::to_owned)
             },
             "must be a provider namespace",

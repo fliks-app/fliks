@@ -44,6 +44,8 @@ struct Dynamic {
 /// The providers by registry key (`metadata-orchestrator.md` rules 8-10).
 pub struct Metadata {
     pub lang: LanguageCache,
+    /// A provider is named by a declared namespace only.
+    known: Arc<crate::plugins::namespaces::Known>,
     dynamic: RwLock<Dynamic>,
     db: sqlx::PgPool,
     flights: orchestrator::Flights,
@@ -52,9 +54,10 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    pub fn new(db: sqlx::PgPool) -> Self {
+    pub fn new(db: sqlx::PgPool, known: Arc<crate::plugins::namespaces::Known>) -> Self {
         Self {
             lang: LanguageCache::new(db.clone()),
+            known,
             db,
             flights: Default::default(),
             stale: Mutex::default(),
@@ -127,7 +130,7 @@ impl Metadata {
         wanted: impl Fn(&dyn MetadataProvider) -> bool,
     ) -> Option<Namespace> {
         let usable = |p: &Namespace| self.available(*p) && wanted(&*self.of(*p));
-        name.and_then(Namespace::parse)
+        name.and_then(|n| self.known.get().parse(n))
             .filter(usable)
             .or_else(|| order.into_iter().find(usable))
     }
@@ -178,14 +181,17 @@ impl Metadata {
 
     /// The named provider iff it is available.
     pub fn named(&self, name: Option<&str>) -> Option<Namespace> {
-        name.and_then(Namespace::parse)
+        name.and_then(|n| self.known.get().parse(n))
             .filter(|p| self.available(*p))
     }
 
     /// The named provider (TMDB when unnamed): 400 when unknown, 503 naming it when not available.
     pub fn require(&self, name: Option<&str>) -> Result<Namespace, AppError> {
         let name = name.unwrap_or(Namespace::TMDB.as_str());
-        let ns = Namespace::parse(name)
+        let ns = self
+            .known
+            .get()
+            .parse(name)
             .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {name}")))?;
         match self.answers(ns) {
             true => Ok(ns),
@@ -214,13 +220,14 @@ impl Metadata {
         .bind(ORDER_PREFIX)
         .fetch_all(&self.db)
         .await?;
+        let known = self.known.get();
         let orders = rows
             .into_iter()
             .filter_map(|(k, v)| {
                 let kind = MediaKind::parse(k.strip_prefix(ORDER_PREFIX)?)?;
                 let names: Vec<String> = serde_json::from_str(&v?).ok()?;
                 let mut order: Vec<Namespace> = vec![];
-                for p in names.iter().filter_map(|n| Namespace::parse(n)) {
+                for p in names.iter().filter_map(|n| known.parse(n)) {
                     if !order.contains(&p) {
                         order.push(p);
                     }

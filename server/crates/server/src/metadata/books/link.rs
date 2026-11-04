@@ -19,7 +19,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::Namespace,
+    external_id::{ExternalProvider, Namespace, Namespaces},
     language::normalize_language_code,
     media::{family::Family, kind::MediaKind, release::ReleaseKind},
     metadata::{
@@ -84,9 +84,10 @@ pub async fn attach_with(
         }
         None => Map::new(),
     };
+    let known = st.namespaces();
     let refs = match (edition, m) {
-        (Some(_), Some(m)) => edition_refs(&m.edition),
-        (Some(e), None) => edition_refs(&external_ids::edition_ids(&st.db, e).await?),
+        (Some(_), Some(m)) => edition_refs(&known, &m.edition),
+        (Some(e), None) => edition_refs(&known, &external_ids::edition_ids(&st.db, e).await?),
         _ => vec![],
     };
     let mut records = merge::edition_records(st, &refs, &lang, prio).await?;
@@ -96,7 +97,10 @@ pub async fn attach_with(
     let provider_backed = work.is_some() || !records.is_empty();
     records.extend(file.map(|f| (Namespace::FILE, f.clone())));
     let mut ids = refs;
-    for id in discovered(&records).into_iter().filter(|_| work.is_some()) {
+    for id in discovered(&known, &records)
+        .into_iter()
+        .filter(|_| work.is_some())
+    {
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -146,7 +150,9 @@ pub async fn attach_with(
     }
 
     let linked = match &work {
-        Some(work) => external_ids::link(&mut tx, media, MediaKind::Book, ANCHOR, work).await?,
+        Some(work) => {
+            external_ids::link(&mut tx, &known, media, MediaKind::Book, ANCHOR, work).await?
+        }
         None => Link::Linked,
     };
     match linked {
@@ -184,7 +190,7 @@ pub async fn attach_with(
     }
     if let Some(e) = edition {
         for (ns, value) in &ids {
-            external_ids::link_edition(&mut tx, e, media, *ns, value).await?;
+            external_ids::link_edition(&mut tx, &known, e, media, *ns, value).await?;
         }
     }
 
@@ -334,10 +340,10 @@ async fn context(st: &AppState, media: i32) -> sqlx::Result<Option<Ctx>> {
 }
 
 /// The refs of a match an edition can be looked up by, normalised and deduplicated.
-fn edition_refs(given: &[(Namespace, String)]) -> Vec<(Namespace, String)> {
+fn edition_refs(known: &Namespaces, given: &[(Namespace, String)]) -> Vec<(Namespace, String)> {
     let mut out = vec![];
     for (ns, v) in given {
-        if let Some(v) = edition_id(*ns, v)
+        if let Some(v) = edition_id(known, *ns, v)
             && !out.contains(&(*ns, v.clone()))
         {
             out.push((*ns, v));
@@ -347,7 +353,7 @@ fn edition_refs(given: &[(Namespace, String)]) -> Vec<(Namespace, String)> {
 }
 
 /// The edition ids the records carry (`isbn13`, `asin`, and `externalId` in the record's own namespace).
-pub(crate) fn discovered(records: &Records) -> Vec<(Namespace, String)> {
+pub(crate) fn discovered(known: &Namespaces, records: &Records) -> Vec<(Namespace, String)> {
     let mut out = vec![];
     for (p, r) in records {
         let own = text(r, "externalId").map(|v| (*p, v));
@@ -358,6 +364,7 @@ pub(crate) fn discovered(records: &Records) -> Vec<(Namespace, String)> {
         let listed = isbns.into_iter().map(|v| (Namespace::ISBN, v.to_owned()));
         let asin = text(r, "asin").map(|v| (Namespace::ASIN, v));
         out.extend(edition_refs(
+            known,
             &own.into_iter()
                 .chain(listed)
                 .chain(asin)
@@ -395,12 +402,12 @@ fn full_date(s: &str) -> Option<String> {
 /// The id of `provider` for a person, in the namespace `person_external_ids` keeps it under.
 fn person_id(provider: Namespace, id: &str) -> Option<(&'static str, String)> {
     match provider {
-        Namespace::OPENLIBRARY => ANCHOR
+        Namespace::OPENLIBRARY => ExternalProvider::OpenLibrary
             .normalize(id)
             .filter(|v| v.ends_with('A'))
             .map(|v| ("openlibrary", v)),
         Namespace::AUDIBLE | Namespace::AUDNEXUS => {
-            Namespace::ASIN.normalize(id).map(|v| ("asin", v))
+            ExternalProvider::Asin.normalize(id).map(|v| ("asin", v))
         }
         Namespace::BNF => (6..=12)
             .contains(&id.len())
@@ -557,9 +564,11 @@ async fn set_series(
         };
         let ext = match (provider, e.get("id").and_then(Value::as_str)) {
             (Some(Namespace::AUDIBLE), Some(i)) => {
-                Namespace::ASIN.normalize(i).map(|v| ("asin", v))
+                ExternalProvider::Asin.normalize(i).map(|v| ("asin", v))
             }
-            (Some(Namespace::BNF), Some(i)) => Namespace::BNF.normalize(i).map(|v| ("bnf", v)),
+            (Some(Namespace::BNF), Some(i)) => {
+                ExternalProvider::Bnf.normalize(i).map(|v| ("bnf", v))
+            }
             _ => None,
         };
         let id = collection(c, media, name, ext.as_ref()).await?;

@@ -64,7 +64,7 @@ impl TryFrom<RawReq> for Req {
             user_id: r.user_id,
             media_type: crate::db::kind(&r.media_type)?,
             kind: r.kind,
-            provider: Namespace::stored(&r.provider).ok_or_else(|| {
+            provider: Namespace::parse(&r.provider).ok_or_else(|| {
                 sqlx::Error::Decode(format!("unknown provider {}", r.provider).into())
             })?,
             external_id: r.external_id,

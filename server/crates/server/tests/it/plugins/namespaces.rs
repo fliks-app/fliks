@@ -1,6 +1,6 @@
 //! `provider_namespaces`: claims by signer and what `deleteData` clears (`provider-plugins.md` 5.1).
 use fliks_domain::external_id::Namespace;
-use fliks_server::plugins::namespaces::{Declared, check_install, claim, delete_data};
+use fliks_server::plugins::namespaces::{Declared, Known, check_install, claim, delete_data, load};
 use sqlx::PgPool;
 
 fn ns(name: &str) -> Declared<'_> {
@@ -29,24 +29,29 @@ async fn count(db: &PgPool, q: &str) -> i64 {
 #[sqlx::test(migrations = false)]
 async fn claims_follow_the_signer_rule(db: PgPool) {
     fliks_server::db::migrate(&db).await.unwrap();
+    let known = Known::default();
     assert_eq!(
-        claim(&db, "org.x", None, &[ns("org.x:a")]).await.unwrap(),
+        claim(&db, &known, "org.x", None, &[ns("org.x:a")])
+            .await
+            .unwrap(),
         Ok(())
     );
     assert_eq!(
-        claim(&db, "org.x", None, &[ns("org.x:a")]).await.unwrap(),
+        claim(&db, &known, "org.x", None, &[ns("org.x:a")])
+            .await
+            .unwrap(),
         Ok(())
     );
     // a signed package takes over an unsigned row
     assert_eq!(
-        claim(&db, "org.x", Some("k1"), &[ns("org.x:a")])
+        claim(&db, &known, "org.x", Some("k1"), &[ns("org.x:a")])
             .await
             .unwrap(),
         Ok(())
     );
     // an unsigned or another key may not, and nothing of the batch is written
     for s in [None, Some("k2")] {
-        let r = claim(&db, "org.x", s, &[ns("org.x:b"), ns("org.x:a")]).await;
+        let r = claim(&db, &known, "org.x", s, &[ns("org.x:b"), ns("org.x:a")]).await;
         assert_eq!(r.unwrap(), Err("org.x:a".into()));
         assert_eq!(
             count(
@@ -72,11 +77,12 @@ async fn claims_follow_the_signer_rule(db: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn delete_data_clears_one_plugin_only(db: PgPool) {
     fliks_server::db::migrate(&db).await.unwrap();
-    claim(&db, "org.dx", None, &[ns("org.dx:a")])
+    let known = Known::default();
+    claim(&db, &known, "org.dx", None, &[ns("org.dx:a")])
         .await
         .unwrap()
         .unwrap();
-    claim(&db, "org.dy", None, &[ns("org.dy:a")])
+    claim(&db, &known, "org.dy", None, &[ns("org.dy:a")])
         .await
         .unwrap()
         .unwrap();
@@ -96,7 +102,7 @@ async fn delete_data_clears_one_plugin_only(db: PgPool) {
              ('movie', 'add', 'org.dx:a', '3', 'done', 'available', 1)"#,
     )
     .await;
-    delete_data(&db, "org.dx").await.unwrap();
+    delete_data(&db, &known, "org.dx").await.unwrap();
     assert_eq!(
         count(&db, "SELECT COUNT(*) FROM provider_namespaces").await,
         1
@@ -151,15 +157,22 @@ async fn delete_data_clears_one_plugin_only(db: PgPool) {
         2
     );
     // the process forgets the deleted namespace and keeps the other
-    assert_eq!(Namespace::parse("org.dx:a"), None);
-    assert!(Namespace::parse("org.dy:a").is_some());
+    let after = known.get();
+    assert_eq!(after.parse("org.dx:a"), None);
+    assert!(after.parse("org.dy:a").is_some());
+    let gone = Namespace::parse("org.dx:a").unwrap();
+    assert_eq!(
+        (after.normalize(gone, "1"), after.label(gone)),
+        (None, "org.dx:a".to_owned())
+    );
 }
 
 #[sqlx::test(migrations = false)]
 async fn a_changed_pattern_counts_the_stored_ids_it_no_longer_accepts(db: PgPool) {
     use fliks_server::plugins::namespaces::stale;
     fliks_server::db::migrate(&db).await.unwrap();
-    claim(&db, "org.sp", None, &[ns("org.sp:a")])
+    let known = Known::default();
+    claim(&db, &known, "org.sp", None, &[ns("org.sp:a")])
         .await
         .unwrap()
         .unwrap();
@@ -170,16 +183,44 @@ async fn a_changed_pattern_counts_the_stored_ids_it_no_longer_accepts(db: PgPool
     )
     .await;
     let n = Namespace::parse("org.sp:a").unwrap();
-    assert_eq!(stale(&db, n).await.unwrap(), 0);
+    assert_eq!(stale(&db, &known.get(), n).await.unwrap(), 0);
     let numeric = Declared {
         id_pattern: "^[0-9]+$",
         ..ns("org.sp:a")
     };
-    claim(&db, "org.sp", None, &[numeric])
+    claim(&db, &known, "org.sp", None, &[numeric])
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(stale(&db, n).await.unwrap(), 1, "abc fails the new pattern");
+    assert_eq!(
+        stale(&db, &known.get(), n).await.unwrap(),
+        1,
+        "abc fails the new pattern"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn load_declares_every_stored_namespace_with_its_label_and_pattern(db: PgPool) {
+    fliks_server::db::migrate(&db).await.unwrap();
+    let numeric = Declared {
+        label: "Numeric",
+        id_pattern: "^[0-9]+$",
+        ..ns("org.ld:a")
+    };
+    claim(&db, &Known::default(), "org.ld", None, &[numeric])
+        .await
+        .unwrap()
+        .unwrap();
+    let known = Known::default();
+    assert_eq!(known.get().parse("org.ld:a"), None);
+    load(&db, &known).await.unwrap();
+    let k = known.get();
+    let n = k.parse("org.ld:a").unwrap();
+    assert_eq!(k.label(n), "Numeric");
+    assert_eq!(
+        (k.normalize(n, " 42 ").as_deref(), k.normalize(n, "x")),
+        (Some("42"), None)
+    );
 }
 
 #[sqlx::test(migrations = false)]

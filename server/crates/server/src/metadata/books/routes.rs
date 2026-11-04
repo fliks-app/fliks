@@ -30,7 +30,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::Namespace,
+    external_id::{Namespace, Namespaces},
     media::{AUDIO_EXTS, kind::MediaKind},
     metadata::limiter::Priority,
 };
@@ -93,12 +93,12 @@ fn opt(v: Option<String>) -> Value {
 }
 
 /// A book hit without its `existingMediaId`; `None` for a hit with no title or no id of its namespace.
-pub(crate) fn hit(p: Namespace, v: &Value) -> Option<Value> {
+pub(crate) fn hit(known: &Namespaces, p: Namespace, v: &Value) -> Option<Value> {
     let r = v.as_object()?;
     let ns = p.id_namespace();
     let mut h = hit_core(
         ns,
-        &ns.normalize(&text(r, "externalId")?)?,
+        &known.normalize(ns, &text(r, "externalId")?)?,
         MediaKind::Book,
         &text(r, "title")?,
         r.get("year").and_then(Value::as_i64),
@@ -181,7 +181,7 @@ pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
         .collect();
     let mut head = record.clone();
     head.insert("externalId".into(), work.clone().into());
-    let mut out = hit(ANCHOR, &Value::Object(head)).ok_or_else(|| {
+    let mut out = hit(&st.namespaces(), ANCHOR, &Value::Object(head)).ok_or_else(|| {
         unavailable(
             "request",
             ANCHOR,
@@ -280,7 +280,7 @@ enum Level {
 }
 
 /// The level, provider and normalised value of a PUT body or DELETE query (rules 23-25).
-fn parse(b: &Body) -> Result<(Level, Namespace, String), AppError> {
+fn parse(b: &Body, known: &Namespaces) -> Result<(Level, Namespace, String), AppError> {
     let bad = |m: String| AppError::bad_request(vec![m]);
     let level = b.required(
         b.one_of("level", &["work", "edition"])?,
@@ -305,7 +305,11 @@ fn parse(b: &Body) -> Result<(Level, Namespace, String), AppError> {
         return Ok((Level::Work, ANCHOR, work));
     }
     let edition = edition.ok_or_else(|| bad("editionId must be an integer number".into()))?;
-    let allowed = EDITION_NAMESPACES.map(Namespace::as_str).join(", ");
+    let allowed = EDITION_NAMESPACES
+        .iter()
+        .map(Namespace::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
     let provider = Namespace::parse(&provider)
         .filter(|p| EDITION_NAMESPACES.contains(p))
         .ok_or_else(|| {
@@ -313,7 +317,7 @@ fn parse(b: &Body) -> Result<(Level, Namespace, String), AppError> {
                 "provider must be one of the following values: {allowed}"
             ))
         })?;
-    let value = edition_id(provider, &value)
+    let value = edition_id(known, provider, &value)
         .ok_or_else(|| bad(format!("value is not a {provider} edition id")))?;
     Ok((Level::Edition(edition), provider, value))
 }
@@ -348,7 +352,7 @@ pub async fn sources_put(
 ) -> Res {
     let g = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &["level", "editionId", "provider", "value"])?;
-    let (level, provider, value) = parse(&b)?;
+    let (level, provider, value) = parse(&b, &st.namespaces())?;
     let Level::Edition(edition) = level else {
         return Err(AppError::bad_request(vec![
             "level must be one of the following values: edition".to_owned(),
@@ -372,7 +376,8 @@ async fn put_edition(
         if replace {
             external_ids::unlink_edition(&mut tx, edition, provider, None).await?;
         }
-        external_ids::link_edition(&mut tx, edition, media, provider, &value).await?;
+        external_ids::link_edition(&mut tx, &st.namespaces(), edition, media, provider, &value)
+            .await?;
         tx.commit().await?;
         return Ok(());
     };
@@ -418,7 +423,7 @@ pub(crate) async fn identify_to(
             .ok_or_else(|| AppError::bad_request("value must be an Open Library work id"))?;
         (Some(w), None)
     } else {
-        let v = edition_id(provider, value).ok_or_else(|| {
+        let v = edition_id(&st.namespaces(), provider, value).ok_or_else(|| {
             AppError::bad_request(format!("value is not a {provider} edition id"))
         })?;
         let work = identify::work_of(st, &[(provider, v.clone())], &lang, GO).await;
@@ -487,7 +492,7 @@ pub async fn sources_delete(
         Value::Object(map),
         &["level", "editionId", "provider", "value"],
     )?;
-    let (level, provider, value) = parse(&b)?;
+    let (level, provider, value) = parse(&b, &st.namespaces())?;
     let mut c = st.db.acquire().await?;
     match level {
         Level::Work => {

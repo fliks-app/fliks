@@ -425,10 +425,12 @@ pub(super) async fn find_or_import(
     let raw = d.external_id.clone().unwrap_or_default();
     let name = d.provider.as_deref().unwrap_or(Namespace::TMDB.as_str());
     let unknown = || AppError::bad_request(format!("Unknown provider: {name}"));
-    let ns = Namespace::parse(name)
+    let known = st.namespaces();
+    let ns = known
+        .parse(name)
         .filter(|ns| st.metadata.serves(*ns, d.media_type))
         .ok_or_else(unknown)?;
-    let ext = ns.normalize(raw.trim()).ok_or_else(|| {
+    let ext = known.normalize(ns, raw.trim()).ok_or_else(|| {
         AppError::bad_request(vec!["externalId is not an id of the provider".to_owned()])
     })?;
     // An edition provider's id sits on an edition, not on the media.

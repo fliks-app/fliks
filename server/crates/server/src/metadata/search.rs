@@ -16,7 +16,7 @@ use axum::{
     extract::{Query, State},
 };
 use fliks_domain::{
-    external_id::Namespace,
+    external_id::{Namespace, Namespaces},
     media::{
         kind::MediaKind,
         query::{js_number, js_parse_int},
@@ -90,9 +90,9 @@ pub(crate) fn hit_core(
 
 /// A video record as a hit: the provider's own fields, the core filled in and `externalId` normalised;
 /// `None` for a record that names no id of a namespace.
-fn video_hit(mut r: Value) -> Option<Value> {
-    let ns = Namespace::parse(r["provider"].as_str()?)?;
-    let id = ns.normalize(r["externalId"].as_str()?.trim())?;
+fn video_hit(known: &Namespaces, mut r: Value) -> Option<Value> {
+    let ns = known.parse(r["provider"].as_str()?)?;
+    let id = known.normalize(ns, r["externalId"].as_str()?.trim())?;
     let o = r.as_object_mut()?;
     o.insert("externalId".into(), id.into());
     for k in ["title", "year", "posterUrl"] {
@@ -102,15 +102,15 @@ fn video_hit(mut r: Value) -> Option<Value> {
     Some(r)
 }
 
-pub(crate) fn hit(kind: MediaKind, ns: Namespace, v: &Value) -> Option<Value> {
+pub(crate) fn hit(known: &Namespaces, kind: MediaKind, ns: Namespace, v: &Value) -> Option<Value> {
     match kind {
-        MediaKind::Book => book_hits::hit(ns, v),
-        MediaKind::Comic => comic_hits::hit(ns, v),
+        MediaKind::Book => book_hits::hit(known, ns, v),
+        MediaKind::Comic => comic_hits::hit(known, ns, v),
         MediaKind::Movie | MediaKind::Series => {
             let mut one = [v.clone()];
             stamp(&mut one, ns, kind);
             let [r] = one;
-            video_hit(r)
+            video_hit(known, r)
         }
     }
 }
@@ -253,9 +253,11 @@ pub async fn search_hits(
     };
     let page = page(&q)?;
     let md = &st.metadata;
+    let known = st.namespaces();
     let named = field("provider")
         .map(|n| {
-            Namespace::parse(&n)
+            known
+                .parse(&n)
                 .filter(|p| md.get(*p).is_some_and(|x| x.supports(kind)))
                 .ok_or_else(|| unknown_provider(&n))
         })
@@ -286,7 +288,7 @@ pub async fn search_hits(
     for p in order {
         match md.of(p).search(&search, &lang, Priority::Interactive).await {
             Ok(r) => {
-                hits = r.iter().filter_map(|v| hit(kind, p, v)).collect();
+                hits = r.iter().filter_map(|v| hit(&known, kind, p, v)).collect();
                 if !hits.is_empty() {
                     break;
                 }

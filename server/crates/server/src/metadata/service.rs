@@ -6,7 +6,7 @@ use crate::{
     media::{external_ids, field_sources::locked_fields},
     state::AppState,
 };
-use fliks_domain::external_id::Namespace;
+use fliks_domain::external_id::{Namespace, Namespaces};
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::metadata::{
     field::Field,
@@ -197,12 +197,12 @@ fn ext_i64(external_id: &str) -> Result<i64, AppError> {
 
 /// A caller's `external_id` as `p` stores it: numeric for a core namespace, its `idPattern` for a
 /// plugin's. Ids read from storage are not revalidated (`provider-plugins.md` rule 28).
-fn checked_id(p: Namespace, external_id: &str) -> Result<String, AppError> {
+fn checked_id(known: &Namespaces, p: Namespace, external_id: &str) -> Result<String, AppError> {
     if p.core().is_some() {
         ext_i64(external_id)?;
         return Ok(external_id.to_owned());
     }
-    p.normalize(external_id).ok_or_else(|| {
+    known.normalize(p, external_id).ok_or_else(|| {
         AppError::bad_request(format!(
             "externalId is not valid for provider {}",
             p.as_str()
@@ -336,7 +336,7 @@ async fn read_for_library(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<(Namespace, String, Details, Provenance), AppError> {
-    let external_id = &checked_id(found, external_id)?;
+    let external_id = &checked_id(&st.namespaces(), found, external_id)?;
     let record = read_record(st, found, kind, external_id, lang, prio).await?;
     let details = Details::from_value(&Value::Object(record.clone()));
     let keep = |record| {
@@ -484,7 +484,7 @@ pub type Source = (Namespace, String);
 /// Links a cross-referenced id; one another media of the kind holds stays with that media.
 async fn set_external(st: &AppState, m: &Row, p: Namespace, ext: i32) -> Result<(), sqlx::Error> {
     let mut c = st.db.acquire().await?;
-    match external_ids::link(&mut c, m.id, m.kind, p, &ext.to_string()).await? {
+    match external_ids::link(&mut c, &st.namespaces(), m.id, m.kind, p, &ext.to_string()).await? {
         external_ids::Link::Taken => tracing::warn!(
             "crossRef: {} - {} id {ext} belongs to another title",
             m.label(),

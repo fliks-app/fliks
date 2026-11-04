@@ -99,9 +99,12 @@ fn max_len(field: &str, v: Option<&str>, max: usize) -> Result<(), AppError> {
 
 /// An empty name clears the preference; any other is a namespace a provider serves, or the value
 /// already stored (a form sends it back as it got it).
-fn check_preferred(v: Option<&str>, stored: Option<&str>) -> Result<(), AppError> {
+fn check_preferred(st: &AppState, v: Option<&str>, stored: Option<&str>) -> Result<(), AppError> {
+    let known = st.namespaces();
     match v.filter(|p| !p.is_empty()) {
-        Some(p) if Some(p) != stored && crate::media::external_ids::preferred(p).is_none() => {
+        Some(p)
+            if Some(p) != stored && crate::media::external_ids::preferred(&known, p).is_none() =>
+        {
             Err(bad("preferredProvider must be a provider namespace"))
         }
         _ => Ok(()),
@@ -195,7 +198,7 @@ pub async fn create(
 ) -> Result<Response, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     let dto: CreateDto = body(req).await?;
-    check_preferred(dto.preferred_provider.as_deref(), None)?;
+    check_preferred(&st, dto.preferred_provider.as_deref(), None)?;
     max_len("icon", dto.icon.as_deref(), 48)?;
     max_len("color", dto.color.as_deref(), 32)?;
     max_len("metadataLanguage", dto.metadata_language.as_deref(), 8)?;
@@ -297,6 +300,7 @@ pub async fn update(
             .fetch_one(&mut *tx)
             .await?;
     check_preferred(
+        &st,
         dto.preferred_provider.clone().flatten().as_deref(),
         stored.as_deref(),
     )?;

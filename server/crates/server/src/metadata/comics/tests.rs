@@ -27,7 +27,7 @@ use tower::ServiceExt;
 pub(crate) const NS: &str = "org.test.comic:vol";
 
 pub(crate) fn ns() -> Namespace {
-    Namespace::declare(NS, "Test Comics", "^[0-9]{1,9}$", "preserve").unwrap()
+    Namespace::parse(NS).unwrap()
 }
 
 #[derive(Default)]
@@ -172,6 +172,9 @@ async fn ctx_with(pool: PgPool, provider: Option<Arc<Fake>>, registered: bool) -
         Config::from_lookup(|_| None),
         "0123456789abcdef0123456789abcdef",
     );
+    st.plugins
+        .namespaces
+        .edit(|k| k.declare(NS, "Test Comics", "^[0-9]{1,9}$", "preserve"));
     let fake = provider.unwrap_or_else(fake);
     if registered {
         st.metadata.add_plugin(Arc::new(fake.clone()));

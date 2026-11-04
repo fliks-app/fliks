@@ -5,7 +5,7 @@ use crate::http::{
 };
 use crate::metadata::books::{ANCHOR, work_id};
 use fliks_domain::{
-    external_id::{MAX_NUMERIC_ID, Namespace},
+    external_id::{MAX_NUMERIC_ID, Namespace, Namespaces},
     language::parse_language_code,
     media::{
         family::Family,
@@ -106,7 +106,7 @@ const BOOK_KEYS: [&str; 7] = [
     "folderId",
 ];
 
-pub fn create_request(v: Value) -> Res<CreateRequest> {
+pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
     let o = object(v);
     let book = o.get("mediaType").and_then(Value::as_str) == Some(MediaKind::Book.as_str());
     let mut c = Check::new(&o, if book { &BOOK_KEYS } else { &VIDEO_KEYS }, "");
@@ -122,9 +122,9 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
             );
             None
         }
-        Some(m) => video_key(&mut c, &o, m),
+        Some(m) => video_key(known, &mut c, &o, m),
         None => {
-            video_key(&mut c, &o, MediaKind::Movie);
+            video_key(known, &mut c, &o, MediaKind::Movie);
             None
         }
     };
@@ -187,6 +187,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
 
 /// A video title: `tmdbId`, or the `provider` and `externalId` of a search result, never both.
 fn video_key(
+    known: &Namespaces,
     c: &mut Check,
     o: &Map<String, Value>,
     media_type: MediaKind,
@@ -203,7 +204,7 @@ fn video_key(
     }
     let text = |k: &str| o.get(k).and_then(Value::as_str);
     match (text("provider"), text("externalId")) {
-        (Some(p), Some(id)) => match provider_key(media_type, p, id) {
+        (Some(p), Some(id)) => match provider_key(known, media_type, p, id) {
             Ok(k) => Some(k),
             Err(m) => {
                 c.err("provider", &m);
@@ -225,11 +226,13 @@ fn video_key(
 /// A video title of a provider that serves video: TMDB and TVDB ids are canonical integers, a plugin
 /// namespace's id is in its own normal form.
 fn provider_key(
+    known: &Namespaces,
     media_type: MediaKind,
     provider: &str,
     id: &str,
 ) -> Result<super::TitleKey, String> {
-    let p = Namespace::parse(provider)
+    let p = known
+        .parse(provider)
         .filter(|p| p.core().is_none() || *p == Namespace::TMDB || *p == Namespace::TVDB)
         .ok_or_else(|| format!("Unknown provider: {provider}"))?;
     let external_id = match p.core() {
@@ -239,7 +242,7 @@ fn provider_key(
             .ok()
             .filter(|n| (1..=MAX_NUMERIC_ID).contains(n))
             .map(|n| n.to_string()),
-        None => p.normalize(id),
+        None => known.normalize(p, id),
     }
     .ok_or_else(|| format!("Invalid id for provider: {provider}"))?;
     Ok(super::TitleKey {
@@ -476,7 +479,7 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
 }
 
 /// The title `title-state` asks about: `tmdbId` of a video kind (canonical integer) or `externalId` of a book.
-pub fn title_state(q: &[(String, String)]) -> Res<super::TitleKey> {
+pub fn title_state(known: &Namespaces, q: &[(String, String)]) -> Res<super::TitleKey> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
     if one("mediaType") == Some(MediaKind::Book.as_str()) {
         let work = one("externalId").and_then(work_id).ok_or_else(|| {
@@ -500,7 +503,7 @@ pub fn title_state(q: &[(String, String)]) -> Res<super::TitleKey> {
             ]));
         }
         let m = video.ok_or_else(bad_type)?;
-        return provider_key(m, p, e)
+        return provider_key(known, m, p, e)
             .map_err(|m| AppError::bad_request(vec![format!("provider {m}")]));
     }
     let tmdb =
@@ -657,6 +660,7 @@ mod tests {
     #[test]
     fn a_comic_cannot_be_requested() {
         let m = msgs(create_request(
+            &Namespaces::default(),
             json!({"mediaType": "comic", "tmdbId": 1, "title": "t"}),
         ));
         assert_eq!(
@@ -668,7 +672,7 @@ mod tests {
     #[test]
     fn create_messages_follow_nest() {
         assert_eq!(
-            msgs(create_request(json!({}))),
+            msgs(create_request(&Namespaces::default(), json!({}))),
             json!([
                 "mediaType must be one of the following values: movie, series, book, comic",
                 "tmdbId must not be less than 1",
@@ -678,6 +682,7 @@ mod tests {
         );
         assert_eq!(
             msgs(create_request(
+                &Namespaces::default(),
                 json!({"mediaType":"movie","tmdbId":"5","title":"t","extra":1})
             )),
             json!([
@@ -690,10 +695,13 @@ mod tests {
 
     #[test]
     fn create_coerces_numeric_strings_and_keeps_null_as_absent() {
-        let c = create_request(json!({
-            "mediaType":"series","tmdbId":7,"title":"","seasons":["2",3],
-            "libraryId":"4","qualityProfileId":null
-        }))
+        let c = create_request(
+            &Namespaces::default(),
+            json!({
+                "mediaType":"series","tmdbId":7,"title":"","seasons":["2",3],
+                "libraryId":"4","qualityProfileId":null
+            }),
+        )
         .unwrap();
         assert_eq!(c.seasons, Some(vec![2, 3]));
         assert_eq!((c.library_id, c.quality_profile_id), (Some(4), None));
@@ -701,9 +709,12 @@ mod tests {
 
     #[test]
     fn a_video_names_its_title_by_tmdb_id_or_by_provider_and_id() {
-        let by = create_request(json!({
-            "mediaType":"series","provider":"tvdb","externalId":"81189","title":"t"
-        }))
+        let by = create_request(
+            &Namespaces::default(),
+            json!({
+                "mediaType":"series","provider":"tvdb","externalId":"81189","title":"t"
+            }),
+        )
         .unwrap();
         assert_eq!(by.key.provider, Namespace::TVDB);
         assert_eq!(by.key.external_id, "81189");
@@ -711,11 +722,12 @@ mod tests {
             "mediaType":"movie","tmdbId":5,"provider":"tmdb","externalId":"5","title":"t"
         });
         assert_eq!(
-            msgs(create_request(both)),
+            msgs(create_request(&Namespaces::default(), both)),
             json!(["tmdbId must not be combined with provider and externalId"])
         );
         let bad = |p: &str, e: &str| {
             msgs(create_request(
+                &Namespaces::default(),
                 json!({"mediaType":"movie","provider":p,"externalId":e,"title":"t"}),
             ))
         };
@@ -735,11 +747,14 @@ mod tests {
         let q = |s: &[(&str, &str)]| -> Vec<(String, String)> {
             s.iter().map(|(a, b)| ((*a).into(), (*b).into())).collect()
         };
-        let k = title_state(&q(&[
-            ("mediaType", "movie"),
-            ("provider", "tmdb"),
-            ("externalId", "9"),
-        ]))
+        let k = title_state(
+            &Namespaces::default(),
+            &q(&[
+                ("mediaType", "movie"),
+                ("provider", "tmdb"),
+                ("externalId", "9"),
+            ]),
+        )
         .unwrap();
         assert_eq!(k, super::super::TitleKey::tmdb(MediaKind::Movie, 9));
         let l = list(&q(&[("tmdbId", "9")])).unwrap();
@@ -747,6 +762,27 @@ mod tests {
         let l = list(&q(&[("provider", "tvdb"), ("externalId", "3")])).unwrap();
         assert_eq!(l.title, Some(("tvdb".into(), "3".into())));
         assert!(list(&q(&[("provider", "tvdb")])).is_err());
+    }
+
+    #[test]
+    fn a_plugin_provider_is_known_once_declared() {
+        let q = [
+            ("mediaType", "movie"),
+            ("provider", "org.x:aid"),
+            ("externalId", " 7 "),
+        ]
+        .map(|(a, b)| (a.to_owned(), b.to_owned()));
+        let mut known = Namespaces::default();
+        assert_eq!(
+            msgs(title_state(&known, &q)),
+            json!(["provider Unknown provider: org.x:aid"])
+        );
+        known.declare("org.x:aid", "Aid", "^[1-9][0-9]*$", "preserve");
+        let k = title_state(&known, &q).unwrap();
+        assert_eq!(
+            (k.provider.as_str(), k.external_id.as_str()),
+            ("org.x:aid", "7")
+        );
     }
 
     #[test]
@@ -810,17 +846,42 @@ mod tests {
             s.iter().map(|(a, b)| ((*a).into(), (*b).into())).collect()
         };
         assert_eq!(
-            title_state(&q(&[("tmdbId", "9"), ("mediaType", "movie")])).unwrap(),
+            title_state(
+                &Namespaces::default(),
+                &q(&[("tmdbId", "9"), ("mediaType", "movie")])
+            )
+            .unwrap(),
             super::super::TitleKey::tmdb(MediaKind::Movie, 9)
         );
         assert_eq!(
-            title_state(&q(&[("externalId", "OL9W"), ("mediaType", "book")]))
-                .unwrap()
-                .external_id,
+            title_state(
+                &Namespaces::default(),
+                &q(&[("externalId", "OL9W"), ("mediaType", "book")])
+            )
+            .unwrap()
+            .external_id,
             "OL9W"
         );
-        assert!(title_state(&q(&[("tmdbId", "9"), ("mediaType", "book")])).is_err());
-        assert!(title_state(&q(&[("tmdbId", "09"), ("mediaType", "movie")])).is_err());
-        assert!(title_state(&q(&[("tmdbId", "9"), ("mediaType", "x")])).is_err());
+        assert!(
+            title_state(
+                &Namespaces::default(),
+                &q(&[("tmdbId", "9"), ("mediaType", "book")])
+            )
+            .is_err()
+        );
+        assert!(
+            title_state(
+                &Namespaces::default(),
+                &q(&[("tmdbId", "09"), ("mediaType", "movie")])
+            )
+            .is_err()
+        );
+        assert!(
+            title_state(
+                &Namespaces::default(),
+                &q(&[("tmdbId", "9"), ("mediaType", "x")])
+            )
+            .is_err()
+        );
     }
 }

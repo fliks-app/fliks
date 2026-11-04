@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn a_third_party_record_gives_no_core_id_or_collection() {
-        let third = Namespace::declare("org.merge.t:aid", "T", "^.+$", "preserve").unwrap();
+        let third = Namespace::parse("org.merge.t:aid").unwrap();
         let r = rec(
             json!({"title": "A", "tmdbId": 5, "tvdbId": 6, "imdbId": "tt1", "tmdbCollectionId": 9, "tmdbCollectionName": "c"}),
         );
