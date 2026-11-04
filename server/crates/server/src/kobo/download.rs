@@ -19,8 +19,7 @@ use tower_http::services::ServeFile;
 const CACHE_MAX_BYTES: u64 = 1 << 30;
 const STALE_TMP: Duration = Duration::from_secs(3600);
 
-/// One conversion at a time: each holds a whole document in memory. The guard moves into the
-/// blocking job, so it outlives a download that is dropped mid-conversion.
+/// One conversion at a time: each holds a whole document in memory.
 fn gate() -> Arc<tokio::sync::Mutex<()>> {
     static G: OnceLock<Arc<tokio::sync::Mutex<()>>> = OnceLock::new();
     G.get_or_init(Default::default).clone()

@@ -1,12 +1,5 @@
-//! The libarchive reads of 7z and RAR in a child process (`docs/spec/comics.md`, rule 22): libarchive
-//! allocates from header counts before the server sees an entry, so a few kilobytes of hostile 7z
-//! can ask for gigabytes, and a memory-safety bug stays in the child. The server re-executes its own
-//! image as a hidden subcommand. Isolated: allocation (`RLIMIT_AS`), CPU (`RLIMIT_CPU` and a
-//! wall-clock kill), crashes, privileges (the child runs as `nobody` when the server is root, with
-//! no new privileges, and is killed with its parent), file writes (`RLIMIT_FSIZE` 0), and the
-//! archive path (the parent opens the file and passes it as stdin). Not isolated: the network and
-//! the rest of the filesystem a `nobody` may read; there is no seccomp filter yet. Budgets, caches
-//! and the job slots stay in the parent.
+//! libarchive reads of 7z and RAR in a hidden child process of the server (`docs/spec/comics.md`, rule 22).
+//! Budgets, caches and job slots stay in the parent.
 use super::{
     ar::Src,
     archive::{
