@@ -41,6 +41,9 @@ export function leadFamily(book: BookDetail | null): BookFormatFamily | undefine
 const isVideo = (m: Media) => m.type !== 'book' && m.type !== 'comic';
 
 /** Starts any media by kind: the video player, the audio player, the reader, else the detail page. */
+/** A list row is enough: the book/comic details and the video files are fetched when missing. */
+export type StartTarget = Pick<Media, 'id' | 'type'> & { files?: Media['files'] };
+
 @Injectable({ providedIn: 'root' })
 export class MediaStartService {
   private readonly router = inject(Router);
@@ -55,7 +58,7 @@ export class MediaStartService {
   /** Resumes a continue-watching row: the video player, or the book/comic from its own saved state. */
   resume(item: ContinueWatchingItem): Promise<void> {
     return item.mediaType === 'book' || item.mediaType === 'comic'
-      ? this.start({ id: item.mediaId, type: item.mediaType } as Media)
+      ? this.start({ id: item.mediaId, type: item.mediaType })
       : this.playable.resume(item);
   }
 
@@ -72,7 +75,7 @@ export class MediaStartService {
   }
 
   /** `media` may be a list row: the book/comic details are fetched when missing. A start in flight ignores another. */
-  async start(media: Media, opts: { backdropUrl?: string | null } = {}): Promise<void> {
+  async start(media: StartTarget, opts: { backdropUrl?: string | null } = {}): Promise<void> {
     if (this.starting) return;
     this.starting = true;
     try {
@@ -82,11 +85,11 @@ export class MediaStartService {
     }
   }
 
-  private async startNow(media: Media, opts: { backdropUrl?: string | null }): Promise<void> {
+  private async startNow(media: StartTarget, opts: { backdropUrl?: string | null }): Promise<void> {
     const url = this.router.url;
     if (media.type === 'book') return this.startBook(media, url);
     if (media.type === 'comic') return this.startComic(media, url);
-    const full = media.files?.length ? media : await this.mediaService.getOne(media.id);
+    const full = media.files?.length ? (media as Media) : await this.mediaService.getOne(media.id);
     const file = full.files?.[0];
     if (!file) return void this.openDetail(full);
     await this.playable.play(
@@ -128,8 +131,8 @@ export class MediaStartService {
     });
   }
 
-  private async startBook(media: Media, url: string): Promise<void> {
-    const full = asBookMedia(media) ?? asBookMedia(await this.mediaService.getOne(media.id));
+  private async startBook(media: StartTarget, url: string): Promise<void> {
+    const full = asBookMedia(media as Media) ?? asBookMedia(await this.mediaService.getOne(media.id));
     if (this.router.url !== url) return;
     if (!full) return void this.openDetail(media);
     const lead = leadFamily(full.book);
@@ -140,15 +143,15 @@ export class MediaStartService {
     this.openDetail(full);
   }
 
-  private async startComic(media: Media, url: string): Promise<void> {
-    const full = asComicMedia(media) ?? asComicMedia(await this.mediaService.getOne(media.id));
+  private async startComic(media: StartTarget, url: string): Promise<void> {
+    const full = asComicMedia(media as Media) ?? asComicMedia(await this.mediaService.getOne(media.id));
     const issue = full && nextIssue(full.comic.issues);
     if (this.router.url !== url) return;
     if (!full || !issue) return void this.openDetail(media);
     void this.router.navigate(readRoute(full.id, issue.itemId));
   }
 
-  private openDetail(media: Media): void {
+  private openDetail(media: StartTarget): void {
     void this.router.navigate(mediaDetailLink(media.type, media.id));
   }
 }

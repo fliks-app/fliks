@@ -605,7 +605,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Plays the first playable file (full media fetched on demand, the lean DTO has no file ids); falls back to detail. */
   async playRecommendation(rec: RecommendationItem) {
     try {
-      await this.mediaStart.start(rec.media as Media);
+      await this.mediaStart.start(rec.media);
     } catch {
       /* error handled by global interceptor */
     }
