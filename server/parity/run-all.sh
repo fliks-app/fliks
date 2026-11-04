@@ -159,8 +159,6 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     api.audible.it api.audible.es api.audible.ca api.audible.com.au api.audible.co.jp api.audible.in; do over+=,$h=$S/books; done
   penv+=(FLIKS_PLUGIN_UPSTREAM_OVERRIDE=$over FLIKS_SUBTITLE_PROVIDERS_URL=$S)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
-  # the bundled providers require fliks 6.0.0; the row sits far from the sequence so seeded ids stay put
-  psql_admin -d "$DB" -c "INSERT INTO app_settings (id, key, value) VALUES (1000, 'plugins.skip_compatibility_check', 'true')"
   [ "$prov" = 1 ] && psql_admin -d "$DB" -c "INSERT INTO app_settings (key, value) VALUES ('plugin.fliks.tmdb.apiKey', 'tmdb-parity'), ('plugin.fliks.tvdb.apiKey', 'tvdb-parity')"
   # The runner recreates the database from a template, so the template holds what a first boot writes
   # (bundled installs, registrations) and the keys: one boot, then the database becomes the template.
@@ -171,7 +169,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   kill -TERM -- "-$prime" 2>/dev/null; sleep 2; kill -KILL -- "-$prime" 2>/dev/null
   unset 'PIDS[-1]'
   # the import marker is not part of the seeded state: drop it and give its id back to the sequence
-  psql_admin -d "$DB" -c "DELETE FROM app_settings WHERE key = 'metadata.env_keys_imported'" -c "SELECT setval(pg_get_serial_sequence('app_settings', 'id'), (SELECT max(id) FROM app_settings WHERE id < 1000))" >/dev/null
+  psql_admin -d "$DB" -c "DELETE FROM app_settings WHERE key = 'metadata.env_keys_imported'" -c "SELECT setval(pg_get_serial_sequence('app_settings', 'id'), (SELECT max(id) FROM app_settings))" >/dev/null
   local PTPL=${DBPFX}tplp
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $PTPL WITH (FORCE)" -c "CREATE DATABASE $PTPL TEMPLATE $DB" -c "DROP DATABASE $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $PTPL"
   start "target-$1-$2" "$d" "${tenv[@]}"

@@ -152,7 +152,8 @@ impl Plugins {
             ));
         }
         let range = m["fliks"].as_str().unwrap_or_default();
-        if !manifest::fliks_satisfied(range, &self.opts.version) {
+        // bundled archives are pinned by providers.lock for this build; bump-providers.sh checks the range
+        if pkg.origin != "bundled" && !manifest::fliks_satisfied(range, &self.opts.version) {
             let detail = format!(
                 "manifest requires fliks \"{range}\", running {}",
                 self.opts.version

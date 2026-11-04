@@ -27,8 +27,7 @@
           "a_key": "1",
           "parity_flag": "off",
           "parity_json": "{\"a\":1}",
-          "parity_null": null,
-          "plugins.skip_compatibility_check": "true"
+          "parity_null": null
         },
         "status": 200
       },
