@@ -1,7 +1,7 @@
 //! TheXEM scene mappings: storage, refresh and the per-media loader (`docs/spec/scene-numbering.md`).
-use crate::{ingest::KeyedLocks, metadata::Guarded, state::AppState, sync::MutexExt};
+use crate::{ingest::KeyedLocks, outbound, state::AppState, sync::MutexExt};
 use fliks_domain::{
-    metadata::limiter::{Limits, Priority},
+    metadata::breaker::{Breaker, Outcome},
     release::scene::{SceneMap, parse_havemap},
 };
 use serde_json::Value;
@@ -24,49 +24,70 @@ pub enum Mapping {
     Unknown,
 }
 
-/// The TheXEM client and the per-id lock of an on-demand fetch.
+/// The TheXEM client: one request a second, a breaker after three failures in a row, and the
+/// per-id lock of an on-demand fetch.
 pub struct Xem {
-    http: Guarded,
+    base: String,
+    started: Instant,
+    last: tokio::sync::Mutex<Option<Instant>>,
+    breaker: Mutex<Breaker>,
     flights: KeyedLocks<i32>,
     /// The last failed on-demand fetch per id, so a down TheXEM is asked once per window.
     failed: Mutex<HashMap<i32, Instant>>,
 }
 
 const RETRY_AFTER_FAILURE: Duration = Duration::from_secs(30 * 60);
+const REQUEST_GAP: Duration = Duration::from_secs(1);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 impl Xem {
     pub fn new(base: &str) -> Self {
         Self {
-            http: Guarded::new(
-                "TheXEM",
-                base,
-                Duration::from_secs(20),
-                vec![],
-                Limits::new(1.0, 1),
-            ),
+            base: outbound::base_url(base, true),
+            started: Instant::now(),
+            last: Default::default(),
+            breaker: Mutex::new(Breaker::new(3, 30_000)),
             flights: KeyedLocks::default(),
             failed: Mutex::default(),
         }
     }
 
-    async fn get(
-        &self,
-        path: &str,
-        query: &[(String, String)],
-        p: Priority,
-    ) -> Result<Value, String> {
-        self.http
-            .get_json(path, query, p)
-            .await
-            .map_err(|e| e.to_string())
+    async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, String> {
+        let now_ms = || self.started.elapsed().as_millis() as u64;
+        if !self.breaker.lock_clean().allow(now_ms()) {
+            return Err("TheXEM circuit open".into());
+        }
+        {
+            let mut last = self.last.lock().await;
+            if let Some(wait) = last.and_then(|at| REQUEST_GAP.checked_sub(at.elapsed())) {
+                tokio::time::sleep(wait).await;
+            }
+            *last = Some(Instant::now());
+        }
+        let sent = outbound::client()
+            .get(format!("{}{path}", self.base))
+            .query(query)
+            .timeout(REQUEST_TIMEOUT)
+            .send()
+            .await;
+        let (outcome, out) = match sent {
+            Err(e) => (Outcome::Transient, Err(outbound::error_text(e))),
+            Ok(r) if !r.status().is_success() => {
+                let status = r.status().as_u16();
+                (Outcome::of_status(status), Err(format!("HTTP {status}")))
+            }
+            Ok(r) => match r.json::<Value>().await {
+                Ok(v) => (Outcome::Ok, Ok(v)),
+                Err(_) => (Outcome::Transient, Err("invalid JSON response".to_owned())),
+            },
+        };
+        self.breaker.lock_clean().record(now_ms(), outcome);
+        out
     }
 
-    async fn map(&self, tvdb: i32, p: Priority) -> Result<SceneMap, String> {
-        let query = [
-            ("origin".to_owned(), "tvdb".to_owned()),
-            ("id".into(), tvdb.to_string()),
-        ];
-        SceneMap::from_xem(&self.get("/map/all", &query, p).await?)
+    async fn map(&self, tvdb: i32) -> Result<SceneMap, String> {
+        let query = [("origin", "tvdb".to_owned()), ("id", tvdb.to_string())];
+        SceneMap::from_xem(&self.get("/map/all", &query).await?)
     }
 }
 
@@ -148,7 +169,7 @@ pub async fn for_media(st: &AppState, media_id: i32) -> sqlx::Result<Mapping> {
     if held_off {
         return Ok(Mapping::Unknown);
     }
-    let fetched = st.xem.map(tvdb, Priority::Interactive).await;
+    let fetched = st.xem.map(tvdb).await;
     let failed = fetched.is_err();
     keep_or_store(db, tvdb, fetched).await;
     if failed {
@@ -183,13 +204,10 @@ async fn keep_or_store(db: &PgPool, tvdb: i32, fetched: Result<SceneMap, String>
 /// Lists the mapped TVDB ids, then fetches the mapping of each one a library series carries.
 pub async fn refresh(st: &AppState) -> sqlx::Result<()> {
     let (db, xem) = (&st.db, &st.xem);
-    let origin = ("origin".to_owned(), "tvdb".to_owned());
-    let listed = xem.get(
-        "/map/havemap",
-        std::slice::from_ref(&origin),
-        Priority::Background,
-    );
-    match listed.await.and_then(|v| parse_havemap(&v)) {
+    let listed = xem
+        .get("/map/havemap", &[("origin", "tvdb".to_owned())])
+        .await;
+    match listed.and_then(|v| parse_havemap(&v)) {
         Ok(ids) => {
             let ids: Vec<i32> = ids
                 .into_iter()
@@ -220,7 +238,7 @@ pub async fn refresh(st: &AppState) -> sqlx::Result<()> {
     .await?;
     for id in wanted {
         let _flight = xem.flights.lock(id).await;
-        keep_or_store(db, id, xem.map(id, Priority::Background).await).await;
+        keep_or_store(db, id, xem.map(id).await).await;
     }
     Ok(())
 }
