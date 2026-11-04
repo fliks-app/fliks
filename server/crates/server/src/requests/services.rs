@@ -171,7 +171,7 @@ pub async fn assert_import_target(
 }
 
 /// The libraries a user reaches: the requester's, or the approver's when the request has no requester.
-async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, sqlx::Error> {
+pub(super) async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, sqlx::Error> {
     let Some((row, role)) = load_users(&st.db, Some(user), false).await?.pop() else {
         return Ok(vec![]);
     };

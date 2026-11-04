@@ -253,6 +253,9 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       if (this.destroyed) return;
       this.media.set(details);
       this.navbar.enterHeroPage(details.title, details.logoUrl);
+      this.tmdbReady =
+        this.provider() === 'tmdb' ||
+        (!!details.tmdbId && (await this.metadata.isTmdbAvailable().catch(() => false)));
       // Only relevant when the Request button could show: admins who can
       // import never see the "déjà demandé" badge anyway.
       if (this.canRequest()) {
@@ -279,9 +282,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   /** Global active-request state for this title — drives the "déjà demandé"
    *  gate (any user) and the series profile lock. */
-  /** The page's own provider and id; the TMDB form only when the page is TMDB's. */
+  private tmdbReady = false;
+
+  /** The TMDB id when the details carry one and TMDB answers, else the page's own provider and id. */
   private titleKey(m: MetadataDetails): TitleKey {
-    return this.provider() === 'tmdb' && m.tmdbId && m.tmdbId > 0
+    return this.tmdbReady && m.tmdbId && m.tmdbId > 0
       ? { tmdbId: m.tmdbId }
       : { provider: this.provider(), externalId: this.externalId() };
   }

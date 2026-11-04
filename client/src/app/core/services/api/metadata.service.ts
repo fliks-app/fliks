@@ -247,6 +247,12 @@ export class MetadataService {
 
   /** Season numbers + episode counts only: one provider call, unlike
    *  {@link getSeasons} which fetches every episode of every season. */
+  /** Whether TMDB answers: a request is keyed by `tmdbId` only then. */
+  async isTmdbAvailable(): Promise<boolean> {
+    const r = await firstValueFrom(this.http.get<{ tmdb: boolean }>('/api/metadata/providers'));
+    return r.tmdb;
+  }
+
   getSeasonStubs(provider: string, externalId: string) {
     return firstValueFrom(
       this.http.get<SeasonStub[]>(`/api/metadata/${provider}/tv/${encodeURIComponent(externalId)}/season-stubs`),

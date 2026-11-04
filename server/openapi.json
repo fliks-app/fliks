@@ -2763,6 +2763,20 @@
         }
       }
     },
+    "/api/metadata/providers": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Whether the TMDB provider answers: a client keys a request by `tmdbId` only then.",
+        "operationId": "providers",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/metadata/search/book": {
       "get": {
         "tags": [

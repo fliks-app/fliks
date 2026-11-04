@@ -117,35 +117,14 @@ pub async fn resolve_target_in(
     })
 }
 
-async fn duplicate(
-    st: &AppState,
-    media_type: MediaKind,
-    tvdb: bool,
-    id: i32,
-) -> Result<(), AppError> {
-    let p = if tvdb {
-        Namespace::TVDB
-    } else {
-        Namespace::TMDB
-    };
-    let hit = external_ids::find_numeric(&st.db, media_type, p, id).await?;
-    match hit {
-        Some(_) => Err(AppError::conflict("This title is already in the library")),
-        None => Ok(()),
-    }
-}
-
-/// 409 when the library already holds the id; TVDB ids are not unique, so they never refuse.
+/// 409 when exactly one library title holds the id.
 async fn duplicate_ref(
     st: &AppState,
     media_type: MediaKind,
     ns: Namespace,
     value: &str,
 ) -> Result<(), AppError> {
-    if ns == Namespace::TVDB {
-        return Ok(());
-    }
-    match external_ids::find(&st.db, media_type, ns, value).await? {
+    match external_ids::holder(&st.db, media_type, ns, value).await? {
         Some(_) => Err(AppError::conflict("This title is already in the library")),
         None => Ok(()),
     }
@@ -550,7 +529,7 @@ pub async fn import_tmdb(
     let c = common(&b)?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
     st.metadata.require(None)?;
-    duplicate(&st, c.media_type, false, tmdb).await?;
+    duplicate_ref(&st, c.media_type, Namespace::TMDB, &tmdb.to_string()).await?;
     let imp = prepare(&st, &a, &c, None).await?;
     let id = import_title(
         &st,
@@ -625,7 +604,12 @@ pub async fn import_media(
                 .ok_or_else(|| {
                     AppError::bad_request(vec!["externalId must be a number string".to_owned()])
                 })?;
-            duplicate(&st, c.media_type, provider.as_deref() == Some("tvdb"), n).await?;
+            let ns = if provider.as_deref() == Some("tvdb") {
+                Namespace::TVDB
+            } else {
+                Namespace::TMDB
+            };
+            duplicate_ref(&st, c.media_type, ns, &n.to_string()).await?;
             external
         }
     };

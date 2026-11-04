@@ -259,6 +259,13 @@ pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Optio
 
 /// The library media holding the title (rule 8); 409 when a non-unique id names several.
 pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> Result<Option<MediaRow>, AppError> {
+    media_by_ref_on(&mut *db.acquire().await?, t).await
+}
+
+pub async fn media_by_ref_on(
+    db: &mut PgConnection,
+    t: &TitleKey,
+) -> Result<Option<MediaRow>, AppError> {
     let held: Vec<i32> = sqlx::query_scalar(
         r#"SELECT "mediaId" FROM media_external_ids
            WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 2"#,
@@ -266,36 +273,41 @@ pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> Result<Option<MediaRow>,
     .bind(t.media_type.as_str())
     .bind(t.provider.as_str())
     .bind(&t.external_id)
-    .fetch_all(db)
+    .fetch_all(&mut *db)
     .await?;
     match held.as_slice() {
         [] => Ok(None),
-        [id] => Ok(media_by_id(db, *id).await?),
+        [id] => Ok(media_by_id(&mut *db, *id).await?),
         _ => Err(AppError::conflict(
             "This title id names several titles in the library",
         )),
     }
 }
 
-/// The title's own key and the unique ids the library media holding it carries, so one title is one key.
-pub async fn title_keys(db: &PgPool, t: &TitleKey) -> sqlx::Result<Vec<TitleKey>> {
+/// The title's own key and the other ids of the one library media holding it, so a title is one key.
+pub async fn title_keys(db: &mut PgConnection, t: &TitleKey) -> sqlx::Result<Vec<TitleKey>> {
     let mut keys = vec![t.clone()];
     if t.media_type == MediaKind::Book {
         return Ok(keys);
     }
-    let Some(id) = external_ids::find(db, t.media_type, t.provider, &t.external_id).await? else {
+    let kind = t.media_type;
+    let Some(id) = external_ids::holder(&mut *db, kind, t.provider, &t.external_id).await? else {
         return Ok(keys);
     };
-    for e in external_ids::refs(db, id).await? {
-        let Some(provider) = Namespace::parse(&e.provider).filter(|p| p.is_unique()) else {
+    for e in external_ids::refs(&mut *db, id).await? {
+        let Some(provider) = Namespace::parse(&e.provider)
+            .filter(|p| p.core().is_none() || *p == Namespace::TMDB || *p == Namespace::TVDB)
+        else {
             continue;
         };
         let k = TitleKey {
-            media_type: t.media_type,
+            media_type: kind,
             provider,
             external_id: e.value,
         };
-        if !keys.contains(&k) {
+        if !keys.contains(&k)
+            && external_ids::holder(&mut *db, kind, provider, &k.external_id).await? == Some(id)
+        {
             keys.push(k);
         }
     }

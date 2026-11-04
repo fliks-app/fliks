@@ -64,6 +64,56 @@ async fn with_no_provider_lists_and_search_answer_empty_and_a_request_waits() {
     s.finish().await;
 }
 
+async fn held(h: &H, id: i32, ids: &[(&str, &str)]) {
+    sqlx::query(
+        r#"INSERT INTO media (id, title, type, "libraryId") VALUES ($1, 'm', 'series', 1)"#,
+    )
+    .bind(id)
+    .execute(&h.st.db)
+    .await
+    .unwrap();
+    for (p, v) in ids {
+        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'series', $2, $3)"#)
+            .bind(id)
+            .bind(p)
+            .bind(v)
+            .execute(&h.st.db)
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_library_title_is_one_request_whichever_key_asks_and_a_double_hold_is_no_error() {
+    let Some(s) = Scratch::create("notmdbkeys").await else {
+        return;
+    };
+    let h = harness(&s, "notmdbkeys", |_| {}).await;
+    series_library(&h).await;
+    held(&h, 100, &[("tmdb", "1396"), ("tvdb", "81189")]).await;
+    held(&h, 101, &[("tmdb", "2"), ("tvdb", "20")]).await;
+    held(&h, 102, &[("tmdb", "3"), ("tvdb", "555")]).await;
+    held(&h, 103, &[("tmdb", "4"), ("tvdb", "555")]).await;
+    let ask = |body: Value| h.call("POST", "/api/requests", Some(&h.admin), Some(body));
+    let tmdb = |id: i64| json!({"mediaType": "series", "tmdbId": id, "title": "T"});
+    let tvdb = |id: &str| json!({"mediaType": "series", "provider": "tvdb", "externalId": id, "title": "T"});
+    assert_eq!(ask(tmdb(1396)).await.0, 201);
+    assert_eq!(ask(tvdb("81189")).await.0, 409, "tmdb first, then tvdb");
+    assert_eq!(ask(tvdb("20")).await.0, 201);
+    assert_eq!(ask(tmdb(2)).await.0, 409, "tvdb first, then tmdb");
+    let (st, state) = get(
+        &h,
+        "/api/requests/title-state?mediaType=series&provider=tvdb&externalId=555",
+    )
+    .await;
+    assert_eq!(
+        st, 200,
+        "a tvdb id held twice names no library row: {state}"
+    );
+    h.finish().await;
+    s.finish().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
     let Some(w) = wasm("fixture_provider") else {
@@ -154,6 +204,58 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
         .unwrap();
     assert_eq!(media, 1, "one media row for the title");
 
+    sqlx::query(r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (2, 'Other', '["series"]'::jsonb)"#)
+        .execute(&h.st.db)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE media SET "libraryId" = 2"#)
+        .execute(&h.st.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE requests SET status = 'declined'")
+        .execute(&h.st.db)
+        .await
+        .unwrap();
+    let role: i32 = sqlx::query_scalar(
+        r#"INSERT INTO roles (name, permissions) VALUES ('limited', '["media.read","requests.create"]') RETURNING id"#,
+    )
+    .fetch_one(&h.st.db)
+    .await
+    .unwrap();
+    let uid: i32 = sqlx::query_scalar(
+        r#"INSERT INTO users (username, "isAdmin", "roleId") VALUES ('limited', false, $1) RETURNING id"#,
+    )
+    .bind(role)
+    .fetch_one(&h.st.db)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, $1)"#)
+        .bind(uid)
+        .execute(&h.st.db)
+        .await
+        .unwrap();
+    let limited = h.st.jwt.sign_access(uid, "limited").unwrap().token;
+    let (st, _) = h
+        .call(
+            "POST",
+            "/api/auto-approval-rules",
+            Some(&h.admin),
+            Some(json!({"name": "r", "criteria": {}})),
+        )
+        .await;
+    assert_eq!(st, 201);
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/requests",
+            Some(&limited),
+            Some(json!({"mediaType": "series", "provider": NS, "externalId": "1", "title": "T", "libraryId": 1})),
+        )
+        .await;
+    assert_eq!(
+        st, 403,
+        "a library the user cannot reach is not adopted: {r}"
+    );
     let (st, r) = h
         .call(
             "POST",

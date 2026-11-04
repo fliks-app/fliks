@@ -31,6 +31,7 @@ pub(crate) type Res = Result<Json<Value>, AppError>;
 pub fn router() -> Router<AppState> {
     let m = "/api/metadata";
     super::books::routes::routes(Router::new())
+        .route(&format!("{m}/providers"), get(providers))
         .route(&format!("{m}/search/movie"), get(search_movie))
         .route(&format!("{m}/search/tv"), get(search_tv))
         .route(&format!("{m}/trending/movie"), get(trending_movie))
@@ -268,6 +269,14 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
     let mut results = found.map_err(|e| unavailable("search", answered, &e))?;
     stamp(&mut results, answered, kind);
     Ok(Json(enrich(&st.db, &a, results, tv).await?))
+}
+
+/// Whether the TMDB provider answers: a client keys a request by `tmdbId` only then.
+#[utoipa::path(get, path = "/api/metadata/providers", responses((status = 200)))]
+pub async fn providers(State(st): State<AppState>, _a: Authed) -> Res {
+    Ok(Json(
+        json!({"tmdb": st.metadata.available(Namespace::TMDB)}),
+    ))
 }
 
 #[utoipa::path(get, path = "/api/metadata/search/movie", responses((status = 200)))]
