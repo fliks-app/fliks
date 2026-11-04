@@ -553,6 +553,9 @@ pub async fn import_media(
     if v.get("type").and_then(Value::as_str) == Some(MediaKind::Book.as_str()) {
         return super::book_import::import_book(&st, &a, v).await;
     }
+    if v.get("type").and_then(Value::as_str) == Some(MediaKind::Comic.as_str()) {
+        return super::comic_import::import_comic(&st, &a, v).await;
+    }
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let c = common(&b)?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;

@@ -30,7 +30,7 @@ pub(crate) type Res = Result<Json<Value>, AppError>;
 
 pub fn router() -> Router<AppState> {
     let m = "/api/metadata";
-    super::books::routes::routes(Router::new())
+    super::comics::routes::routes(super::books::routes::routes(Router::new()))
         .route(&format!("{m}/providers"), get(providers))
         .route(&format!("{m}/search/movie"), get(search_movie))
         .route(&format!("{m}/search/tv"), get(search_tv))
@@ -284,7 +284,8 @@ pub async fn providers(State(st): State<AppState>, _a: Authed) -> Res {
     };
     Ok(Json(json!({
         "tmdb": st.metadata.available(Namespace::TMDB),
-        "serving": {"movie": serving(MediaKind::Movie), "series": serving(MediaKind::Series)},
+        "serving": {"movie": serving(MediaKind::Movie), "series": serving(MediaKind::Series),
+                    "comic": super::comics::routes::serving(&st).await?},
     })))
 }
 

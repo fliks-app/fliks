@@ -1,5 +1,6 @@
 //! The provider registry and `/api/metadata/*` (`docs/spec/metadata.md`); other domains call `Metadata` in process.
 pub mod books;
+pub mod comics;
 mod credits;
 mod language;
 mod lists;

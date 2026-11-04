@@ -291,7 +291,10 @@ mod tests {
         l.pause_up_to(0, 3_600_000, MAX_PLUGIN_PAUSE_MS);
         assert_eq!(take(&mut l, 0, Interactive), Err(Refused::Wait(3_600_000)));
         l.pause_up_to(0, 10 * MAX_PLUGIN_PAUSE_MS, MAX_PLUGIN_PAUSE_MS);
-        assert_eq!(take(&mut l, 0, Interactive), Err(Refused::Wait(MAX_PLUGIN_PAUSE_MS)));
+        assert_eq!(
+            take(&mut l, 0, Interactive),
+            Err(Refused::Wait(MAX_PLUGIN_PAUSE_MS))
+        );
     }
 
     #[test]

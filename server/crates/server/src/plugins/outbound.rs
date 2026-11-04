@@ -1088,7 +1088,9 @@ mod tests {
         };
         g.pause_secs(7_200);
         let d = go().await;
-        assert!(matches!(&d, Done::Refused(r) if r.status == 429 && r.retry_after_secs == Some(7_200)));
+        assert!(
+            matches!(&d, Done::Refused(r) if r.status == 429 && r.retry_after_secs == Some(7_200))
+        );
         g.pause_secs(10 * 86_400);
         let d = go().await;
         assert!(matches!(&d, Done::Refused(r) if r.retry_after_secs == Some(86_400)));

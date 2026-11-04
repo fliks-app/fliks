@@ -2391,6 +2391,18 @@
         }
       }
     },
+    "/api/metadata/search/comic": {
+      "get": {
+        "tags": [
+          "metadata::comics::routes"
+        ],
+        "summary": "`GET /api/metadata/search/comic` (rule 39).",
+        "operationId": "search_comic",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/metadata/search/movie": {
       "get": {
         "tags": [
@@ -2486,6 +2498,18 @@
         ],
         "summary": "`GET /api/metadata/{provider}/book/{externalId}` (rule 20).",
         "operationId": "preview_book",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/metadata/{provider}/comic/{externalId}": {
+      "get": {
+        "tags": [
+          "metadata::comics::routes"
+        ],
+        "summary": "`GET /api/metadata/{provider}/comic/{externalId}` (rule 40).",
+        "operationId": "preview_comic",
         "responses": {
           "200": {}
         }
