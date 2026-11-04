@@ -180,6 +180,58 @@ impl El {
     }
 }
 
+const BLOCKS: [&str; 13] = [
+    "p",
+    "div",
+    "br",
+    "li",
+    "ul",
+    "ol",
+    "tr",
+    "blockquote",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "hr",
+];
+
+fn blocks_to_text(e: &El, out: &mut String) {
+    for n in &e.nodes {
+        match n {
+            Node::Text(t) => out.push_str(t),
+            Node::El(k) => {
+                let block = BLOCKS.contains(&k.name.as_str());
+                if block {
+                    out.push('\n');
+                }
+                blocks_to_text(k, out);
+                if block {
+                    out.push('\n');
+                }
+            }
+        }
+    }
+}
+
+/// A description as plain text: the inline XHTML form and the entity-escaped one (markup that
+/// survives the XML decode) both lose their tags, block tags become line breaks.
+fn plain_description(e: &El) -> String {
+    let mut s = String::new();
+    blocks_to_text(e, &mut s);
+    if rx!(r"<[A-Za-z/!][^>]*>").is_match(&s) {
+        let s2 = rx!(r"(?i)<br\s*/?>|</?(?:p|div|li|ul|ol|tr|blockquote|h[1-6])\b[^>]*>")
+            .replace_all(&s, "\n");
+        let s2 = rx!(r"<[A-Za-z/!][^>]*>").replace_all(&s2, "");
+        s = decode_entities(&s2);
+    }
+    s.lines()
+        .map(collapse)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub(super) fn collapse(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -533,7 +585,7 @@ pub fn parse(bytes: &[u8]) -> OpfMetadata {
     out.description = metadata
         .elems()
         .filter(|k| k.name == "description")
-        .map(|k| k.raw_text().trim().to_owned())
+        .map(plain_description)
         .find(|t| !t.is_empty());
     let mut seen_subjects = HashSet::new();
     for k in metadata.elems().filter(|k| k.name == "subject") {

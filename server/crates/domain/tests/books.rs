@@ -92,3 +92,14 @@ fn many_repeated_values_are_deduplicated() {
     );
     assert!(started.elapsed() < Duration::from_secs(5));
 }
+
+#[test]
+fn description_is_plain_text_in_both_forms() {
+    let want = Some("First &".to_owned() + " line\nSecond line");
+    let escaped = "<package><metadata><dc:description>&lt;div&gt;&lt;p&gt;First &amp;amp; line&lt;/p&gt;\
+                   &lt;p&gt;Second&lt;br/&gt;line&lt;/p&gt;&lt;/div&gt;</dc:description></metadata></package>";
+    let inline = "<package><metadata><dc:description><div><p>First &amp; line</p>\
+                  <p>Second<br/>line</p></div></dc:description></metadata></package>";
+    assert_eq!(opf::parse(escaped.as_bytes()).description, want);
+    assert_eq!(opf::parse(inline.as_bytes()).description, want);
+}
