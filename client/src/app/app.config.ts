@@ -38,7 +38,6 @@ import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { cacheInterceptor } from './core/interceptors/cache.interceptor';
-import { booksMockInterceptor } from './core/services/api/books-mock.interceptor';
 import { CachingReuseStrategy } from './core/services/route-reuse.strategy';
 import { AuthService } from './core/services/auth.service';
 import { ServerConfigService } from './core/services/server-config.service';
@@ -200,7 +199,6 @@ export const appConfig: ApplicationConfig = {
       withXhr(),
       // cacheInterceptor must run BEFORE serverUrlInterceptor: the cache keys on logical /api/... paths, which serverUrl rewrites to absolute URLs on native.
       withInterceptors([
-        booksMockInterceptor,
         cacheInterceptor,
         serverUrlInterceptor,
         credentialsInterceptor,

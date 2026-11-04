@@ -22,6 +22,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 import { pdfPageOf, pdfProgression } from './pdf-position';
+import { pageAtProbe, scrollToPageSlot } from './page-scroll';
 import { ReaderApiService, type ReaderTarget } from './reader-api.service';
 import { OfflineBookStoreService } from '../../core/services/offline-book-store.service';
 import { ReaderProgressService } from './reader-progress.service';
@@ -120,7 +121,7 @@ export class PdfReaderComponent implements OnDestroy {
       pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs/pdf.worker.min.mjs', document.baseURI).href;
       const target = this.target();
       const token = this.auth.accessToken;
-      const local = await this.books.fileUrl({ family: 'text' }, String(target.fileId));
+      const local = target.localKey ? await this.books.fileUrl({ family: 'text' }, target.localKey) : null;
       const task = pdfjs.getDocument({
         url: local ?? new URL(this.serverConfig.resolveUrl(`/api/stream/${target.fileId}`), document.baseURI).href,
         httpHeaders: !local && this.serverConfig.isNative && token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -204,11 +205,7 @@ export class PdfReaderComponent implements OnDestroy {
   protected onScroll(): void {
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(() => {
-      const root = this.scroller().nativeElement;
-      const probe = root.getBoundingClientRect().top + root.clientHeight / 3;
-      const slots = Array.from(root.querySelectorAll<HTMLElement>('[data-page]'));
-      const hit = slots.filter((s) => s.getBoundingClientRect().top <= probe).pop() ?? slots[0];
-      const n = Number(hit?.dataset['page'] ?? 1);
+      const n = pageAtProbe(this.scroller().nativeElement);
       if (n === this.page()) return;
       this.page.set(n);
       this.reportPage(n);
@@ -223,7 +220,7 @@ export class PdfReaderComponent implements OnDestroy {
   }
 
   private scrollToPage(n: number): void {
-    this.scroller().nativeElement.querySelector(`[data-page="${n}"]`)?.scrollIntoView({ block: 'start' });
+    scrollToPageSlot(this.scroller().nativeElement, n);
   }
 
   protected zoom(delta: number): void {
@@ -254,7 +251,9 @@ export class PdfReaderComponent implements OnDestroy {
   }
 
   protected onKeydown(e: KeyboardEvent): void {
-    if (e.ctrlKey || e.altKey || e.metaKey || (e.target as HTMLElement | null)?.closest('input, select, textarea')) return;
+    const el = e.target as HTMLElement | null;
+    if (e.ctrlKey || e.altKey || e.metaKey || el?.closest('input, select, textarea')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && el?.closest('button, a, summary')) return;
     const root = this.scroller().nativeElement;
     const last = this.pages().length;
     const keys: Record<string, () => void> = {

@@ -11,7 +11,7 @@ import { MediaService } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { SearchStateService } from '../../core/services/search-state.service';
-import { bookSearchResultFixture, collectionSummaryFixture, personListItemFixture } from '../../core/services/api/books.fixtures';
+import { bookSearchResultFixture, collectionSummaryFixture, personListItemFixture } from '../../testing/books.fixtures';
 
 function setup() {
   TestBed.configureTestingModule({

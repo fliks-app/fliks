@@ -7,7 +7,7 @@ import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { BookPreviewComponent } from './book-preview.component';
-import { bookPreviewFixture } from '../../../../core/services/api/books.fixtures';
+import { bookPreviewFixture } from '../../../../testing/books.fixtures';
 import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';

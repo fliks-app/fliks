@@ -18,7 +18,7 @@ import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-regis
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
 import type { BookListInfo } from '../../../core/services/api/books.models';
-import { bookListInfoFixture } from '../../../core/services/api/books.fixtures';
+import { bookListInfoFixture } from '../../../testing/books.fixtures';
 
 /**
  * Characterisation test for the card's contextual actions menu. Captures the

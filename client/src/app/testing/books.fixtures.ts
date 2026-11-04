@@ -1,7 +1,7 @@
 import type {
   BookChapter, BookDetail, BookEdition, BookListInfo, BookPreview, BookSearchResult, BookSources,
   CollectionDetail, CollectionSummary, PersonListItem, PersonRef, PersonWorks, SeriesRef,
-} from './books.models';
+} from '../core/services/api/books.models';
 
 export const personRefFixture: PersonRef = { id: 1, name: 'Author One', sortName: 'One, Author' };
 export const narratorRefFixture: PersonRef = { id: 2, name: 'Narrator One', sortName: 'One, Narrator' };

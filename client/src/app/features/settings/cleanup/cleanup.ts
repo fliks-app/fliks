@@ -29,6 +29,7 @@ import {
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import { safeFileName, saveFile } from '../../../core/plugins/save-file.plugin';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { formatBytes } from '../../../shared/utils/download-format';
 import { cleanCriteria, daysLeft, scopeLabel } from '../../../shared/utils/cleanup.util';
@@ -514,12 +515,7 @@ export class CleanupSettingsComponent implements OnInit {
   async exportRule(rule: CleanupRule) {
     try {
       const json = JSON.stringify(await this.api.exportRule(rule.id), null, 2);
-      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${rule.name.replace(/[\\/:*?"<>|]+/g, '_')}.fliks-rule.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await saveFile(new Blob([json], { type: 'application/json' }), `${safeFileName(rule.name, 'rule')}.fliks-rule.json`);
     } catch {
       // handled by global error interceptor
     }

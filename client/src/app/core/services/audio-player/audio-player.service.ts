@@ -9,7 +9,7 @@ import { NetworkService } from '../network.service';
 import { OfflineBookStoreService } from '../offline-book-store.service';
 import { OfflinePlaybackSyncService } from '../offline-playback-sync.service';
 import { StorageScopeService } from '../storage-scope.service';
-import { asBookMedia } from '../../../features/media-detail/book/book-media';
+import { asBookMedia } from '../api/book-media';
 import { mediaKeyAction } from '../../../features/player/player-keymap';
 import {
   chapterAt,
@@ -27,8 +27,6 @@ export interface AudioRequest {
   title: string;
   artist?: string;
   coverUrl?: string | null;
-  /** Seconds on the item timeline; absent resumes at the saved position. */
-  startAt?: number;
 }
 
 export interface AudioBookmark {
@@ -123,17 +121,17 @@ export class AudioPlayerService {
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
   }
 
-  /** Starts the item, or toggles it when it is the one loaded. */
+  /** Starts the item, or resumes it when it is the one loaded. */
   async play(req: AudioRequest): Promise<void> {
     if (this._track()?.itemId === req.itemId && this.info) {
-      this.toggle();
+      if (this.el()?.paused) this.toggle();
       return;
     }
     const generation = ++this.generation;
     await this.release();
     this._track.set(req);
     this._loading.set(true);
-    this._position.set(req.startAt ?? 0);
+    this._position.set(0);
     this._duration.set(0);
     this._chapters.set([]);
     this._bookmarks.set(this.readBookmarks(req.itemId));
@@ -143,7 +141,7 @@ export class AudioPlayerService {
       let opened: PlaybackInfoResponse | null = null;
       if (!local || this.network.isOnline()) {
         opened = await this.streaming
-          .getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: req.startAt })
+          .getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile())
           .catch((e) => {
             if (!local) throw e;
             return null;
@@ -169,7 +167,7 @@ export class AudioPlayerService {
       this._duration.set(info.durationSeconds ?? this.parts.reduce((s, p) => s + p.duration, 0));
       this._chapters.set(this.chaptersOf(info));
       this.setupMediaSession(req);
-      const start = req.startAt ?? info.startAtSeconds ?? 0;
+      const start = info.startAtSeconds ?? 0;
       await this.load(start, true);
     } catch {
       if (generation === this.generation) await this.close();

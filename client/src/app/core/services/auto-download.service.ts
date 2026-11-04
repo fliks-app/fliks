@@ -14,7 +14,7 @@ import { StorageScopeService } from './storage-scope.service';
 import { MediaService } from './api/media.service';
 import { pickNextEpisodes } from './auto-download-series';
 import { StreamingApiService } from './api/streaming-api.service';
-import { asBookMedia, bookDownloadTarget, offlinable } from '../../features/media-detail/book/book-media';
+import { asBookMedia, bookDownloadTarget, offlinable } from './api/book-media';
 import {
   PlaylistsApiService,
   PlaylistItem,

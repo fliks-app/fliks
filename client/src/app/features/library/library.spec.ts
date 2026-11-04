@@ -15,7 +15,7 @@ import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { BooksApiService } from '../../core/services/api/books-api.service';
-import { bookListInfoFixture, collectionSummaryFixture, personListItemFixture } from '../../core/services/api/books.fixtures';
+import { bookListInfoFixture, collectionSummaryFixture, personListItemFixture } from '../../testing/books.fixtures';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { NavbarService } from '../../core/services/navbar.service';

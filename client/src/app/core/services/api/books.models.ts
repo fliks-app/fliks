@@ -39,7 +39,7 @@ export interface BookEdition {
 }
 
 // GET /api/media/:id/editions/:editionId/chapters : the version timeline (sum of part durations)
-export interface BookChapter { title: string | null; startSeconds: number; endSeconds: number; source: 'file' | 'audnexus' }
+export interface BookChapter { title: string | null; startSeconds: number; endSeconds: number; source: string }
 
 // GET /api/collections?libraryId=&kind=book&q=&page=&limit=
 export interface CollectionSummary { id: number; name: string; count: number; maxPosition: number | null; posters: string[] }

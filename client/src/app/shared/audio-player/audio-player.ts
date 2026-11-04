@@ -21,7 +21,7 @@ import {
   type AudioBookmark,
 } from '../../core/services/audio-player/audio-player.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { formatClock } from '../../features/media-detail/book/book-media';
+import { formatTime } from '../../core/utils/player.utils';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
@@ -56,7 +56,7 @@ export class AudioPlayerComponent {
   protected readonly audio = inject(AudioPlayerService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
-  protected readonly clock = formatClock;
+  protected readonly clock = formatTime;
   protected readonly percent = computed(() => {
     const d = this.audio.duration();
     return d ? Math.min(100, (this.audio.position() / d) * 100) : 0;

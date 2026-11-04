@@ -58,4 +58,12 @@ describe('ComicReaderComponent', () => {
     const { el } = await open({ locator: { page: 2 } }, { mode: 'manga', spread: true });
     expect([...el.querySelectorAll('img')].map((i) => i.getAttribute('src')?.split('?')[0])).toEqual(['/p/7/2', '/p/7/1']);
   });
+
+  it('keeps turning pages with the keyboard while a toolbar button has focus', async () => {
+    const { fixture, el } = await open({ locator: { page: 1 } });
+    const button = el.querySelector('button')!;
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39, bubbles: true }));
+    await fixture.whenStable();
+    expect(el.querySelector('img')?.getAttribute('src')).toContain('/p/7/2');
+  });
 });

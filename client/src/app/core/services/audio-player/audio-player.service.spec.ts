@@ -62,11 +62,21 @@ describe('AudioPlayerService', () => {
   it('opens the item session and lays its parts on one timeline with a chapter per part', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.play(req);
-    expect(getItemPlaybackInfo).toHaveBeenCalledWith(5, {}, { startAt: undefined });
+    expect(getItemPlaybackInfo).toHaveBeenCalledWith(5, {});
     expect(audio.duration()).toBe(30);
     expect(audio.chapters().map((c) => c.start)).toEqual([0, 10]);
     expect(audio.track()?.title).toBe('Book');
     expect(audio.loading()).toBe(false);
+  });
+
+  it('never pauses an item that is already playing when asked to play it again', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play(req);
+    const el = (audio as unknown as { els: HTMLAudioElement[] }).els[0];
+    vi.spyOn(el, 'paused', 'get').mockReturnValue(false);
+    (HTMLMediaElement.prototype.pause as unknown as { mockClear(): void }).mockClear?.();
+    await audio.play(req);
+    expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
   });
 
   it('seeks across parts onto the active element and saves the position with the item id', async () => {

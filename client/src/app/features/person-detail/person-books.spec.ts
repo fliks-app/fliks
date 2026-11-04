@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { PersonBooksComponent } from './person-books';
-import { bookSearchResultFixture, personWorksFixture } from '../../core/services/api/books.fixtures';
+import { bookSearchResultFixture, personWorksFixture } from '../../testing/books.fixtures';
 
 describe('PersonBooksComponent', () => {
   it('lists owned works and only the provider credits not in a library', async () => {

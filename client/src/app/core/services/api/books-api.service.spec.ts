@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { describe, expect, it } from 'vitest';
 import { BooksApiService } from './books-api.service';
-import { collectionDetailFixture, bookSourcesFixture } from './books.fixtures';
+import { collectionDetailFixture, bookSourcesFixture } from '../../../testing/books.fixtures';
 
 describe('BooksApiService', () => {
   function setup() {

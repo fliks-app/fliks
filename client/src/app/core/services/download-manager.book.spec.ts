@@ -87,7 +87,7 @@ describe('DownloadManagerService, book downloads', () => {
     await settled();
     expect(books.storeEpub).toHaveBeenCalledWith(30, expect.any(Function), expect.any(AbortSignal));
     expect(saved()[0]).toMatchObject({ status: 'ready', progress: 100, sizeBytes: 1234, mediaFileId: 300, quality: 'epub', media: { type: 'book' } });
-    expect(service.bookTask(30)).toBeTruthy();
+    expect(service.tasks().some((t) => t.book?.itemId === 30)).toBe(true);
   });
 
   it('stores each audio part under its own key and records the timeline', async () => {
@@ -180,5 +180,18 @@ describe('DownloadManagerService, book downloads', () => {
     expect(removed.every((k) => k.startsWith(`${first.id}-`))).toBe(true);
     expect(removed.length).toBeGreaterThan(0);
     expect(saved().find((t) => t.id === second.id)?.book?.files[0].key).toBe(`${second.id}-40-0`);
+  });
+
+  it('deleting a failed task keeps the EPUB a ready task of the same item still uses', async () => {
+    const { service, books, settled } = setup();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    books.storeEpub.mockRejectedValueOnce(new Error('network'));
+    const failed = await service.createBookDownload(text);
+    await settled();
+    await service.createBookDownload(text);
+    await settled();
+    books.remove.mockClear();
+    await service.deleteDownload(failed);
+    expect(books.remove).not.toHaveBeenCalled();
   });
 });

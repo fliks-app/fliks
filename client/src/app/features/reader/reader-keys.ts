@@ -1,32 +1,9 @@
 export type ReaderKeyAction = 'left' | 'right' | 'next' | 'prev' | 'start' | 'end' | 'toc' | 'settings' | 'notes' | 'search' | 'bookmark' | 'chrome' | 'close';
 
-/** A condition the toolkit subscribes to; it fires at once with the current value, then on each change. */
-export interface KeyGate {
-  set(open: boolean): void;
-  subscribe(cb: (open: boolean) => void): () => void;
-}
-
-export function keyGate(initial = true): KeyGate {
-  let value = initial;
-  const subs = new Set<(open: boolean) => void>();
-  return {
-    set(open) {
-      value = open;
-      subs.forEach((cb) => cb(open));
-    },
-    subscribe(cb) {
-      cb(value);
-      subs.add(cb);
-      return () => subs.delete(cb);
-    },
-  };
-}
-
 interface KeyCombo {
   keyCode: number;
   shift?: boolean;
   suppressOnInteractiveElement: boolean | string[];
-  condition?: KeyGate;
 }
 
 interface KeyBinding {
@@ -36,7 +13,7 @@ interface KeyBinding {
 
 const TEXT_FIELDS = ['input', 'textarea', 'select'];
 /** Enter and Space belong to a focused control; the other keys to a focused text field or slider. */
-const typed = (keyCode: number, extra: { shift?: boolean; condition?: KeyGate } = {}): KeyCombo => ({
+const typed = (keyCode: number, extra: { shift?: boolean } = {}): KeyCombo => ({
   keyCode,
   suppressOnInteractiveElement: keyCode === 13 || keyCode === 32 ? true : TEXT_FIELDS,
   ...extra,
@@ -44,11 +21,10 @@ const typed = (keyCode: number, extra: { shift?: boolean; condition?: KeyGate } 
 
 /**
  * Arrows turn toward their screen side, whatever the reading direction; Page and Space keys step along it.
- * `arrows` closes the arrow keys while a remote's D-pad has to move focus instead.
  */
-export const readerKeyBindings = (arrows?: KeyGate): KeyBinding[] => [
-  { type: 'left', keyCombos: [typed(37, { condition: arrows })] },
-  { type: 'right', keyCombos: [typed(39, { condition: arrows })] },
+export const readerKeyBindings = (): KeyBinding[] => [
+  { type: 'left', keyCombos: [typed(37)] },
+  { type: 'right', keyCombos: [typed(39)] },
   { type: 'next', keyCombos: [typed(34), typed(32)] },
   { type: 'prev', keyCombos: [typed(33), typed(32, { shift: true })] },
   { type: 'start', keyCombos: [typed(36)] },

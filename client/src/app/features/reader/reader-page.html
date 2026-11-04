@@ -4,7 +4,7 @@
   } @else if (o.format === 'comic' && o.pages) {
     <app-comic-reader [target]="o.target" [title]="o.title" [pages]="o.pages" (closed)="back()" />
   } @else {
-    <app-reader [target]="o.target" [info]="o.info ?? null" />
+    <app-reader [target]="o.target" [info]="o.info ?? null" (closed)="back()" />
   }
 } @else {
   <div class="fixed inset-0 flex items-center justify-center">

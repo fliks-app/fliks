@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { audioEditionFixture, bookDetailFixture, textEditionFixture } from '../../../core/services/api/books.fixtures';
+import { audioEditionFixture, bookDetailFixture, textEditionFixture } from '../../../testing/books.fixtures';
 import { DeviceService } from '../../../core/services/device.service';
 import { DownloadManagerService } from '../../../core/services/download-manager.service';
 import { BookEditionsComponent } from './book-editions.component';
@@ -10,7 +10,12 @@ import { bookSpecProviders } from './book-test-setup';
 
 describe('BookEditionsComponent', () => {
   const tasks = signal<unknown[]>([]);
-  const offline = { tasks, createBookDownload: vi.fn(async () => ({})), deleteDownload: vi.fn(async () => undefined) };
+  const offline = {
+    tasks,
+    retryDownload: vi.fn(async () => ({})),
+    createBookDownload: vi.fn(async () => ({})),
+    deleteDownload: vi.fn(async () => undefined),
+  };
   const providers = () => bookSpecProviders({ provide: DownloadManagerService, useValue: offline });
 
   function render(editions = bookDetailFixture.editions) {

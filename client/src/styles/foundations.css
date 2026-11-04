@@ -231,7 +231,8 @@ body.native.hero-page {
 /* Chromium 85 TV WebView lacks `aspect-ratio`; a `::before` ratio box reserves the poster height (not `height: 0` + padding, which breaks the overflow/radius clip). */
 @supports not (aspect-ratio: 1 / 1) {
   app-media-card figure.aspect-2\/3::before,
-  .animate-pulse .aspect-2\/3::before {
+  .animate-pulse .aspect-2\/3::before,
+  app-collection-detail .aspect-\[2\/3\]::before {
     content: '';
     display: block;
     padding-bottom: 150%;

@@ -7,7 +7,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ComicsApiService } from '../../core/services/api/comics-api.service';
 import type { ComicPageSize } from '../../core/services/api/comics.models';
-import { asBookMedia } from '../media-detail/book/book-media';
+import { asBookMedia } from '../../core/services/api/book-media';
 import { asComicMedia, type ComicMedia } from '../media-detail/comic/comic-media';
 import { PdfReaderComponent } from './pdf-reader';
 import { ComicReaderComponent } from './comic-reader';
@@ -59,12 +59,13 @@ export class ReaderPageComponent {
       if (comic) return await this.openComic(comic, itemId);
       const book = asBookMedia(loaded);
       const downloaded = this.downloads.tasks().find((t) => t.book?.family === 'text' && t.book.itemId === itemId && t.status === 'ready');
+      const localKey = downloaded?.book?.files[0]?.key;
       if (!book && downloaded?.book?.format && ['epub', 'pdf'].includes(downloaded.book.format)) {
         // The work page is out of reach offline: the download carries what the reader needs.
         this.opened.set({
           format: downloaded.book.format as Opened['format'],
           title: downloaded.media?.title ?? '',
-          target: { mediaId, itemId, fileId: downloaded.mediaFileId },
+          target: { mediaId, itemId, fileId: downloaded.mediaFileId, localKey },
         });
         return;
       }
@@ -77,7 +78,7 @@ export class ReaderPageComponent {
         coverUrl: edition.coverUrl ?? book.posterUrl,
         listen: audio?.itemId != null ? { itemId: audio.itemId, coverUrl: audio.coverUrl } : null,
       };
-      this.opened.set({ format, title: book.title, target: { mediaId, itemId, fileId: edition.fileIds[0] }, info });
+      this.opened.set({ format, title: book.title, target: { mediaId, itemId, fileId: edition.fileIds[0], localKey }, info });
     } catch {
       this.toast.error(this.translate.instant('reader.open_failed'));
       this.back();
