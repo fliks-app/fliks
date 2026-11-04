@@ -396,7 +396,7 @@ export class OrphanScanPanelComponent {
 
   /** The "add as is" pseudo-option: always sets an unmatched pick, no toggle. */
   pickUnmatched(index: number) {
-    this.patch(index, { pick: null, fromFile: false });
+    this.patch(index, { pick: null, fromFile: !!bookFileId(this.groups()[index].group) });
   }
 
   /** Why the reorganize toggle is ignored for this group's link button, or '' when it applies. */
@@ -495,9 +495,8 @@ export class OrphanScanPanelComponent {
     if (generation !== this.scanGeneration || !vm || vm.done || vm.linking) return;
     if (!vm.searched) await this.search(index);
     if (generation !== this.scanGeneration || this.groups()[index].error) return;
-    // No provider match: still add it, unmatched, rather than leave it behind.
-    const best = this.bestMatch(this.groups()[index]);
-    this.patch(index, { pick: best });
+    // A file id already chose; otherwise a best match, or none: add it unmatched rather than leave it behind.
+    if (!this.groups()[index].fromFile) this.patch(index, { pick: this.bestMatch(this.groups()[index]) });
     await this.link(index);
   }
 

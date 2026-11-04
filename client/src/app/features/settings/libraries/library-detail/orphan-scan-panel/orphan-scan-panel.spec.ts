@@ -177,6 +177,22 @@ describe('OrphanScanPanelComponent.importAll', () => {
     expect(relinked[0].title).toBe('Alpha');
   });
 
+  it('keeps the file-id choice on autoImportAll and on re-clicking the identify option', async () => {
+    const { panel, linked } = setup(['Alpha'], {}, [{ provider: 'isbn', externalId: '9780000000002' }], 'book');
+    await panel.scanPath('/medias', ['book'], 'openlibrary');
+    panel.pickUnmatched(0);
+    expect(panel.groups()[0].fromFile).toBe(true);
+    await panel.autoImportAll();
+    expect(linked[0].externalId).toBeUndefined();
+  });
+
+  it('keeps an nfo auto-pick on autoImportAll', async () => {
+    const { panel, linked } = setup(['Alpha'], {}, [{ provider: 'tmdb', externalId: '22' }]);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    await panel.autoImportAll();
+    expect(linked[0].externalId).toBe('22');
+  });
+
   it('keeps an explicit pick over the first result', async () => {
     const { panel, relinked } = setup(['Alpha']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
