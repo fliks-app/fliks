@@ -123,6 +123,16 @@ fn full_anchor() -> Fake {
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_providers_route_lists_the_book_providers(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![anchor()]).await;
+    let (_, v) = c.get("/api/metadata/providers").await;
+    assert_eq!(
+        v["serving"]["book"],
+        json!([{"provider": "openlibrary", "label": "Open Library"}])
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn search_maps_hits_and_marks_owned_works(pool: PgPool) {
     let (c, _) = ctx(pool, vec![full_anchor()]).await;
     let owned = c.book(1).await;

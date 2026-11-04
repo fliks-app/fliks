@@ -142,6 +142,14 @@ impl Metadata {
         all
     }
 
+    /// The available providers of the kind's order that support it.
+    pub fn serving(&self, kind: MediaKind) -> Vec<Namespace> {
+        self.order(kind)
+            .into_iter()
+            .filter(|p| self.available(*p) && self.of(*p).supports(kind))
+            .collect()
+    }
+
     /// The named provider iff it is available and supports `kind`, else the first of the kind's order.
     pub fn resolve(&self, name: Option<&str>, kind: MediaKind) -> Option<Namespace> {
         self.pick(name, self.order(kind), |p| p.supports(kind))

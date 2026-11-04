@@ -184,9 +184,8 @@ pub async fn preview_comic(State(st): State<AppState>, a: Authed, ids: Ids) -> R
 pub async fn serving(st: &AppState) -> Result<Vec<Value>, sqlx::Error> {
     let md = &st.metadata;
     let names: Vec<String> = md
-        .order(MediaKind::Comic)
+        .serving(MediaKind::Comic)
         .into_iter()
-        .filter(|p| md.available(*p) && md.of(*p).supports(MediaKind::Comic))
         .map(|p| p.as_str().to_owned())
         .collect();
     let described = describe(&st.db, &names).await?;
