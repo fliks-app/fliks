@@ -124,10 +124,9 @@ pub async fn resolve_file(
     let meta = tokio::fs::metadata(&absolute).await.map_err(|_| {
         AppError::not_found(format!("File not found on disk: {}", absolute.display()))
     })?;
-    let real = dunce::canonicalize(&absolute).map_err(|_| invalid())?;
-    if !dunce::canonicalize(&row.folder_path).is_ok_and(|root| real.starts_with(root)) {
-        return Err(invalid());
-    }
+    let real = crate::ingest::fsx::contained(&row.folder_path, absolute.clone())
+        .await
+        .ok_or_else(invalid)?;
     let root = lexical_resolve(Path::new(&row.folder_path), "");
     let ext = extname(&row.relative_path);
     let info = row.stream_info.and_then(|v| {

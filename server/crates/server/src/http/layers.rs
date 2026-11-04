@@ -132,7 +132,8 @@ pub fn apply(
         .and(NotForContentType::const_new("audio/"))
         .and(NotForContentType::const_new("application/octet-stream"))
         .and(NotForContentType::const_new("application/sql"))
-        .and(NotForContentType::const_new("application/zip"));
+        .and(NotForContentType::const_new("application/zip"))
+        .and(NotForContentType::const_new("application/epub"));
     router
         .layer(from_fn_with_state((body_limit_bytes, exempt), body_limit))
         .layer(from_fn(no_store_on_error))
@@ -159,6 +160,10 @@ mod tests {
             .route(
                 "/video",
                 get(|| async { ([(CONTENT_TYPE, "video/mp4")], vec![0u8; 4096]) }),
+            )
+            .route(
+                "/epub",
+                get(|| async { ([(CONTENT_TYPE, "application/epub+zip")], vec![0u8; 4096]) }),
             )
             .route(
                 "/json",
@@ -210,6 +215,9 @@ mod tests {
         assert_eq!(list.headers()["content-encoding"], "gzip");
         let video = app(None).oneshot(get("/video")).await.unwrap();
         assert!(video.headers().get("content-encoding").is_none());
+        let epub = app(None).oneshot(get("/epub")).await.unwrap();
+        assert!(epub.headers().get("content-encoding").is_none());
+        assert_eq!(epub.headers()["content-length"], "4096");
     }
 
     #[test]

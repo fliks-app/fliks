@@ -492,12 +492,9 @@ async fn resolve_file(
     tokio::fs::metadata(&absolute)
         .await
         .map_err(|_| Fail::Denied)?;
-    let real = dunce::canonicalize(&absolute).map_err(|_| Fail::Denied)?;
-    let root = dunce::canonicalize(&row.folder_path).map_err(|_| Fail::Denied)?;
-    if !real.starts_with(&root) {
-        return Err(Fail::Denied);
-    }
-    Ok(real)
+    crate::ingest::fsx::contained(&row.folder_path, absolute)
+        .await
+        .ok_or(Fail::Denied)
 }
 
 /// The edition gate of a file: its editions' libraries must be in the user's scope.

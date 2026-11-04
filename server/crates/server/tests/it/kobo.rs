@@ -1222,6 +1222,24 @@ async fn a_kepub_download_converts_once_per_file_version(pool: PgPool) {
     let (status, _, part) = download(&c, &c.token, &book(1), Some("bytes=0-3")).await;
     assert_eq!((status, part.as_slice()), (206, &body[..4]));
 
+    // a hit refreshes the file's mtime, which is what eviction orders by
+    let cached = c.cache.join(&kepubs(&c)[0]);
+    let day_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(86400);
+    std::fs::File::options()
+        .append(true)
+        .open(&cached)
+        .unwrap()
+        .set_modified(day_ago)
+        .unwrap();
+    download(&c, &c.token, &book(1), None).await;
+    let age = std::fs::metadata(&cached)
+        .unwrap()
+        .modified()
+        .unwrap()
+        .elapsed()
+        .unwrap();
+    assert!(age < std::time::Duration::from_secs(3600));
+
     // a replaced file is a new version; the old one is dropped
     std::fs::write(
         dir.join("a.epub"),
@@ -1233,19 +1251,20 @@ async fn a_kepub_download_converts_once_per_file_version(pool: PgPool) {
     assert_eq!(kepubs(&c).len(), 1);
 }
 
+fn dup(c: &Ctx) -> Ctx {
+    Ctx {
+        app: c.app.clone(),
+        pool: c.pool.clone(),
+        token: c.token.clone(),
+        cache: c.cache.clone(),
+    }
+}
+
 async fn futures_join(c: &Ctx) -> Vec<Vec<u8>> {
     let mut set = tokio::task::JoinSet::new();
     for _ in 0..8 {
-        let (c2, t) = (
-            Ctx {
-                app: c.app.clone(),
-                pool: c.pool.clone(),
-                token: c.token.clone(),
-                cache: c.cache.clone(),
-            },
-            book(1),
-        );
-        set.spawn(async move { download(&c2, &c2.token, &t, None).await.2 });
+        let c2 = dup(c);
+        set.spawn(async move { download(&c2, &c2.token, &book(1), None).await.2 });
     }
     let mut out = vec![];
     while let Some(r) = set.join_next().await {
@@ -1284,4 +1303,27 @@ async fn the_kepub_download_follows_the_book_rules(pool: PgPool) {
     let other = token(&c.pool, 1, Kind::Opds).await;
     assert_eq!(download(&c, &other, &book(1), None).await.0, 401);
     assert!(kepubs(&c).is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_download_dropped_mid_conversion_does_not_corrupt_the_retry(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let last = "Last sentence here.";
+    let chapter = format!(
+        "<html><body><p>{}{last}</p></body></html>",
+        "A sentence. ".repeat(60_000)
+    );
+    place(&c, &epub(&chapter)).await;
+    let first = {
+        let c2 = dup(&c);
+        tokio::spawn(async move { download(&c2, &c2.token, &book(1), None).await })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    first.abort();
+    let (status, _, body) = download(&c, &c.token, &book(1), None).await;
+    assert_eq!(status, 200);
+    assert!(text_of(&body, "c1.xhtml").contains(last));
+    let files = kepubs(&c);
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(files[0].ends_with(".kepub.epub"));
 }
