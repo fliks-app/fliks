@@ -130,6 +130,10 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::email::send,
         crate::email::recent,
         crate::email::test_send,
+        crate::annotations::list,
+        crate::annotations::create,
+        crate::annotations::update,
+        crate::annotations::remove,
         playback::recommendations,
         playback::dismiss,
         playback::dismissed_count,
@@ -460,6 +464,7 @@ fn api() -> Router<AppState> {
         .merge(crate::kobo::router())
         .merge(crate::kosync::router())
         .merge(crate::party::router())
+        .merge(crate::annotations::router())
         .merge(playback::router())
         .merge(qoe::router())
         .merge(crate::stream::router())

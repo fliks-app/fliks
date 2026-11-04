@@ -1,0 +1,131 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO annotations (\"userId\", \"itemId\", kind, colour, note, locator, excerpt)\n           SELECT $1, $2, $3, $4, $5, $6, $7\n           WHERE (SELECT count(*) FROM annotations WHERE \"userId\" = $1 AND \"itemId\" = $2) < $8\n           RETURNING id, \"itemId\" AS item_id, kind, colour, note, locator, excerpt,\n                     \"createdAt\" AS created_at, \"updatedAt\" AS updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "item_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "itemId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "colour",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "colour"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "locator",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "locator"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "excerpt",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "excerpt"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "annotations",
+            "name": "updatedAt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "36ab2b99fd30f01a0be1f89c58dd15c1c99bf391cbb2f5290191c2f43707bf57"
+}

@@ -1,3 +1,4 @@
+pub mod annotations;
 pub mod app;
 pub mod atomic_file;
 pub mod auth;

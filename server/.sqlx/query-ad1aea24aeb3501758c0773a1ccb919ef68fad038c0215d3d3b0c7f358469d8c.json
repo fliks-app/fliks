@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM annotations WHERE id = $1 AND \"userId\" = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ad1aea24aeb3501758c0773a1ccb919ef68fad038c0215d3d3b0c7f358469d8c"
+}

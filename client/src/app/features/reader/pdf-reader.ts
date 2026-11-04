@@ -29,6 +29,7 @@ import {
   READER_THEMES,
   ReaderSettingsService,
   ZOOM_RANGE,
+  isDarkTheme,
   readerThemeColors,
   type ReaderTheme,
 } from './reader-settings.service';
@@ -229,6 +230,14 @@ export class PdfReaderComponent implements OnDestroy {
     const n = this.page();
     this.settingsStore.save({ zoom: this.settings().zoom + delta });
     afterNextRender(() => this.scrollToPage(n), { injector: this.injector });
+  }
+
+  protected isDark(): boolean {
+    return isDarkTheme(this.settings().theme);
+  }
+
+  protected swatch(theme: ReaderTheme): string {
+    return readerThemeColors(theme).background;
   }
 
   protected setTheme(theme: ReaderTheme): void {

@@ -11,7 +11,7 @@ import { asBookMedia } from '../media-detail/book/book-media';
 import { asComicMedia, type ComicMedia } from '../media-detail/comic/comic-media';
 import { PdfReaderComponent } from './pdf-reader';
 import { ComicReaderComponent } from './comic-reader';
-import { ReaderComponent } from './reader';
+import { ReaderComponent, type ReaderBookInfo } from './reader';
 import type { ReaderTarget } from './reader-api.service';
 
 interface Opened {
@@ -20,6 +20,7 @@ interface Opened {
   pages?: ComicPageSize[];
   title: string;
   target: ReaderTarget;
+  info?: ReaderBookInfo;
 }
 
 /** `/read/:mediaId/:itemId`: finds the item's file among the book's editions and hands it to the reader of its format. */
@@ -70,7 +71,13 @@ export class ReaderPageComponent {
       const edition = book?.book.editions.find((e) => e.itemId === itemId && e.family === 'text' && e.fileIds.length);
       const format = edition?.format?.toLowerCase();
       if (!book || !edition || (format !== 'epub' && format !== 'pdf')) throw new Error('not readable');
-      this.opened.set({ format, title: book.title, target: { mediaId, itemId, fileId: edition.fileIds[0] } });
+      const audio = book.book.editions.find((e) => e.family === 'audio' && e.hasFile && e.itemId != null);
+      const info: ReaderBookInfo = {
+        author: book.book.authors.map((a) => a.name).join(', '),
+        coverUrl: edition.coverUrl ?? book.posterUrl,
+        listen: audio?.itemId != null ? { itemId: audio.itemId, coverUrl: audio.coverUrl } : null,
+      };
+      this.opened.set({ format, title: book.title, target: { mediaId, itemId, fileId: edition.fileIds[0] }, info });
     } catch {
       this.toast.error(this.translate.instant('reader.open_failed'));
       this.back();

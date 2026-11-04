@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id FROM items i\n           JOIN media m ON m.id = i.\"mediaId\" AND m.\"libraryId\" = ANY($2)\n           JOIN editions e ON e.id = i.\"editionId\" AND e.family = 'text'\n             AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2)\n           WHERE i.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "27d3a242893a67cb68f517cbf935a5c04a223c47d9eb83e7ef8af0214c4a6e3e"
+}

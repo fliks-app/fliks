@@ -1,11 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
-import type { IEpubPreferences } from '@readium/navigator';
+import { TextAlignment, type IEpubPreferences } from '@readium/navigator';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { COMIC_MODES, COMIC_PREFS_DEFAULT, type ComicPrefs } from './comic-layout';
 
-export type ReaderTheme = 'light' | 'sepia' | 'dark';
-export type ReaderFont = 'publisher' | 'serif' | 'sans';
+export type ReaderTheme = 'original' | 'sepia' | 'calm' | 'slate' | 'night' | 'black';
+export type ReaderFont = 'publisher' | 'literata' | 'sans' | 'atkinson';
 export type ReaderMargins = 'narrow' | 'normal' | 'wide';
+export type ReaderColumns = 'auto' | '1' | '2';
 
 export interface ReaderSettings {
   /** Multiplier of the publication's font size. */
@@ -17,6 +18,8 @@ export interface ReaderSettings {
   margins: ReaderMargins;
   /** Continuous scroll instead of pages. */
   scroll: boolean;
+  columns: ReaderColumns;
+  justify: boolean;
   /** PDF page width as a multiple of the fit-to-width size. */
   zoom: number;
 }
@@ -27,47 +30,66 @@ export interface ThemeColors {
   link: string;
 }
 
+/** A theme is a page colour pair plus the font and line height it reads best with. */
+export interface ThemePreset extends ThemeColors {
+  fontFamily: ReaderFont;
+  lineHeight: number;
+}
+
 export const FONT_SIZE_RANGE = { min: 0.8, max: 2, step: 0.1 } as const;
 export const LINE_HEIGHT_RANGE = { min: 1.2, max: 2.2, step: 0.1 } as const;
 export const ZOOM_RANGE = { min: 0.5, max: 3, step: 0.25 } as const;
-export const READER_THEMES: readonly ReaderTheme[] = ['light', 'sepia', 'dark'];
-export const READER_FONTS: readonly ReaderFont[] = ['publisher', 'serif', 'sans'];
+export const READER_THEMES: readonly ReaderTheme[] = ['original', 'sepia', 'calm', 'slate', 'night', 'black'];
+export const READER_FONTS: readonly ReaderFont[] = ['publisher', 'literata', 'sans', 'atkinson'];
 export const READER_MARGINS: readonly ReaderMargins[] = ['narrow', 'normal', 'wide'];
+export const READER_COLUMNS: readonly ReaderColumns[] = ['auto', '1', '2'];
 
 export const READER_DEFAULTS: ReaderSettings = {
   fontSize: 1,
   fontFamily: 'publisher',
-  theme: 'dark',
+  theme: 'night',
   lineHeight: 1.5,
   margins: 'normal',
   scroll: false,
+  columns: 'auto',
+  justify: false,
   zoom: 1,
 };
 
 const GUTTER_PX: Record<ReaderMargins, number> = { narrow: 12, normal: 32, wide: 64 };
 
-const FONT_STACKS: Record<ReaderFont, string | null> = {
+export const FONT_STACKS: Record<ReaderFont, string | null> = {
   publisher: null,
-  serif: 'Georgia, "Times New Roman", serif',
+  literata: '"Literata Variable", Georgia, serif',
   sans: 'system-ui, "Helvetica Neue", Arial, sans-serif',
+  atkinson: '"Atkinson Hyperlegible", system-ui, sans-serif',
 };
 
-const FIXED_THEMES: Record<'light' | 'sepia', ThemeColors> = {
-  light: { background: '#ffffff', text: '#1f2937', link: '#2563eb' },
-  sepia: { background: '#f4ecd8', text: '#433422', link: '#8a4b14' },
+export const THEME_PRESETS: Record<ReaderTheme, ThemePreset> = {
+  original: { background: '#fbfaf7', text: '#1f2328', link: '#2563eb', fontFamily: 'publisher', lineHeight: 1.5 },
+  sepia: { background: '#f4ecd8', text: '#3b2f22', link: '#8a4b14', fontFamily: 'literata', lineHeight: 1.7 },
+  calm: { background: '#ecebe6', text: '#2b2b2b', link: '#2f6b4f', fontFamily: 'sans', lineHeight: 1.6 },
+  slate: { background: '#2b3036', text: '#dfe3e8', link: '#8ab4ff', fontFamily: 'literata', lineHeight: 1.7 },
+  night: { background: '#15191e', text: '#c9d1da', link: '#8a88ff', fontFamily: 'publisher', lineHeight: 1.5 },
+  black: { background: '#000000', text: '#a7adb5', link: '#8a88ff', fontFamily: 'atkinson', lineHeight: 1.6 },
 };
 
-/** Dark follows the app's own tokens, so the page matches the chrome around it. */
-export function readerThemeColors(theme: ReaderTheme, root: Element = document.documentElement): ThemeColors {
-  if (theme !== 'dark') return FIXED_THEMES[theme];
-  const css = getComputedStyle(root);
-  const token = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  return {
-    background: token('--color-base-100', '#1d232a'),
-    text: token('--color-base-content', '#e5e7eb'),
-    link: token('--color-primary', '#7a3ff2'),
-  };
-}
+export const isDarkTheme = (theme: ReaderTheme): boolean => theme === 'slate' || theme === 'night' || theme === 'black';
+
+export const readerThemeColors = (theme: ReaderTheme): ThemeColors => THEME_PRESETS[theme];
+
+/** The settings a preset sets, for one tap on its swatch. */
+export const presetPatch = (theme: ReaderTheme): Partial<ReaderSettings> => ({
+  theme,
+  fontFamily: THEME_PRESETS[theme].fontFamily,
+  lineHeight: THEME_PRESETS[theme].lineHeight,
+});
+
+/** The reset button: the current theme's own preset, and the defaults of the size, margins, columns and justification. */
+export const resetPatch = (theme: ReaderTheme): Partial<ReaderSettings> => {
+  const { fontSize, margins, columns, justify } = READER_DEFAULTS;
+  return { ...presetPatch(theme), fontSize, margins, columns, justify };
+};
 
 export function toReaderPreferences(settings: ReaderSettings, colors: ThemeColors): IEpubPreferences {
   const gutter = GUTTER_PX[settings.margins];
@@ -76,6 +98,9 @@ export function toReaderPreferences(settings: ReaderSettings, colors: ThemeColor
     fontFamily: FONT_STACKS[settings.fontFamily],
     lineHeight: settings.lineHeight,
     scroll: settings.scroll,
+    columnCount: settings.columns === 'auto' ? null : Number(settings.columns),
+    textAlign: settings.justify ? TextAlignment.justify : null,
+    hyphens: settings.justify ? true : null,
     pageGutter: gutter,
     scrollPaddingLeft: gutter,
     scrollPaddingRight: gutter,
@@ -94,16 +119,21 @@ const clamp = (value: unknown, range: { min: number; max: number }, fallback: nu
 const oneOf = <T extends string>(allowed: readonly T[], value: unknown, fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
 
+/** Names a stored blob may carry for a theme or a font, mapped to the current ones. */
+const ALIASES: Record<string, string> = { light: 'original', dark: 'night', serif: 'literata' };
+
 /** Anything a stored blob got wrong falls back to its default, field by field. */
 export function sanitizeReaderSettings(raw: unknown): ReaderSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   return {
     fontSize: clamp(r['fontSize'], FONT_SIZE_RANGE, READER_DEFAULTS.fontSize),
-    fontFamily: oneOf(READER_FONTS, r['fontFamily'], READER_DEFAULTS.fontFamily),
-    theme: oneOf(READER_THEMES, r['theme'], READER_DEFAULTS.theme),
+    fontFamily: oneOf(READER_FONTS, ALIASES[String(r['fontFamily'])] ?? r['fontFamily'], READER_DEFAULTS.fontFamily),
+    theme: oneOf(READER_THEMES, ALIASES[String(r['theme'])] ?? r['theme'], READER_DEFAULTS.theme),
     lineHeight: clamp(r['lineHeight'], LINE_HEIGHT_RANGE, READER_DEFAULTS.lineHeight),
     margins: oneOf(READER_MARGINS, r['margins'], READER_DEFAULTS.margins),
     scroll: typeof r['scroll'] === 'boolean' ? r['scroll'] : READER_DEFAULTS.scroll,
+    columns: oneOf(READER_COLUMNS, r['columns'], READER_DEFAULTS.columns),
+    justify: typeof r['justify'] === 'boolean' ? r['justify'] : READER_DEFAULTS.justify,
     zoom: clamp(r['zoom'], ZOOM_RANGE, READER_DEFAULTS.zoom),
   };
 }

@@ -11,19 +11,39 @@
       <svg lucideArrowLeft class="h-5 w-5"></svg>
     </button>
     <h1 class="min-w-0 flex-1 truncate px-2 text-sm font-medium">{{ title() }}</h1>
-    <div class="join">
+    <div class="join max-sm:hidden">
       @for (theme of themes; track theme) {
         <button
           type="button"
-          class="btn btn-sm join-item"
+          class="btn btn-sm join-item size-11"
           [class.btn-active]="settings().theme === theme"
           [attr.aria-pressed]="settings().theme === theme"
+          [attr.aria-label]="'reader.theme_' + theme | translate"
           (click)="setTheme(theme)"
         >
-          {{ 'reader.theme_' + theme | translate }}
+          <span class="inline-block h-4 w-4 rounded-full border border-base-content/30" [style.background-color]="swatch(theme)"></span>
         </button>
       }
     </div>
+    <details #themeMenu class="dropdown dropdown-end sm:hidden">
+      <summary class="btn btn-ghost btn-circle" [attr.aria-label]="'reader.theme' | translate">
+        <span class="inline-block h-4 w-4 rounded-full border border-base-content/30" [style.background-color]="swatch(settings().theme)"></span>
+      </summary>
+      <div class="dropdown-content z-40 mt-1 grid grid-cols-3 gap-1 rounded-box bg-base-100 p-2 shadow-lg">
+        @for (theme of themes; track theme) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-circle size-11"
+            [class.btn-active]="settings().theme === theme"
+            [attr.aria-pressed]="settings().theme === theme"
+            [attr.aria-label]="'reader.theme_' + theme | translate"
+            (click)="setTheme(theme); themeMenu.open = false"
+          >
+            <span class="inline-block h-4 w-4 rounded-full border border-base-content/30" [style.background-color]="swatch(theme)"></span>
+          </button>
+        }
+      </div>
+    </details>
     <button
       type="button"
       class="btn btn-ghost btn-circle"
@@ -54,7 +74,7 @@
       @for (n of pages(); track n) {
         <div
           class="pdf-page bg-white shadow"
-          [class.pdf-page-dark]="settings().theme === 'dark'"
+          [class.pdf-page-dark]="isDark()"
           [class.pdf-page-sepia]="settings().theme === 'sepia'"
           [attr.data-page]="n"
           [style.width.px]="pageWidth()"
