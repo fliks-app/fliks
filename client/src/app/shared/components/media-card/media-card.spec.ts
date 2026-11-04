@@ -787,6 +787,17 @@ describe('MediaCardComponent download indicator', () => {
   });
 });
 
+describe('MediaCardComponent progress bar', () => {
+  it('shows for a started title and hides once finished', async () => {
+    const h = await createFixture(FULL_MEMBER, { aspect: 'landscape', progressPercent: 40 });
+    const bar = () => (h.fixture.nativeElement as HTMLElement).querySelector('.bg-primary');
+    expect(bar()).not.toBeNull();
+    h.fixture.componentRef.setInput('progressPercent', 100);
+    h.fixture.detectChanges();
+    expect(bar()).toBeNull();
+  });
+});
+
 describe('MediaCardComponent: selectOnly', () => {
   it('a mouse click only emits clicked: no link, play button, actions or navigation', async () => {
     const h = await createFixture(FULL_MEMBER, { media: makeMedia({ files: [{ id: 1 } as never] }), selectOnly: true });
