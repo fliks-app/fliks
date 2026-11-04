@@ -34,7 +34,7 @@ fn tag_region_start(decoded: &str) -> usize {
         .find(|m| is_tag(m.as_str(), false))
         .map(|m| {
             let at = base + m.start();
-            rx!(i r"(?:[\s.\-_]+(?:fre|fra|vf|eng|ger|deu|esp|spa|ita|ptbr|por|jap|jpn|kor|chi|chn|rus|ara|nlx?|pol|pl|tur|swe|sv|dan|dk|nor|no|fin))+$")
+            rx!(i r"(?:[\s.\-_]+(?:fre|fra|vf|eng|ger|deu|esp|spa|ita|ptbr|por|jap|jpn|kor|chi|chn|rus|ara|nlx?|pol|pl|tur|swe|sv|dan|dk|nor|no|fin))+[\s.\-_]*$")
                 .find(&decoded[..at])
                 .map_or(at, |c| c.start())
         });
