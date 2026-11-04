@@ -11,6 +11,7 @@ const issue = (n: number, over: Partial<ComicIssue> = {}): ComicIssue => ({
   kind: 'issue',
   annual: false,
   title: null,
+  overview: null,
   releaseDate: null,
   pageCount: 20,
   progression: null,

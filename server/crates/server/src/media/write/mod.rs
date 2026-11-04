@@ -2,6 +2,7 @@
 pub(crate) mod body;
 pub(crate) mod book_import;
 pub use book_import::import_book_for_request;
+mod comic_edit;
 mod companions;
 mod delete;
 mod import;
@@ -10,6 +11,7 @@ mod relocate;
 mod tasks;
 mod update;
 
+pub use comic_edit::*;
 pub use companions::*;
 pub use delete::*;
 pub use import::*;
@@ -51,6 +53,8 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
             post(refresh_episode),
         )
         .route("/api/media/{id}/rescan", post(rescan))
+        .route("/api/media/{id}/comic", patch(patch_volume))
+        .route("/api/comics/issues/{itemId}", patch(patch_issue))
         .route("/api/media/{id}/analyze", post(analyze))
         .route(
             "/api/media/{id}/files/{fileId}/companions",

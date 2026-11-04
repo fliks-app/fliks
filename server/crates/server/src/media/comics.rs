@@ -62,7 +62,7 @@ pub(crate) async fn detail(
       'mediaFileId', pf.id,
       'format', CASE WHEN lower(pf.ext) IN ('cbz', 'cb7', 'cbr', 'pdf') THEN lower(pf.ext) END,
       'number', ci.label, 'sort', ci."sortNumber"::float8, 'annual', ci.kind <> 'issue', 'kind', ci.kind,
-      'title', i.title, 'releaseDate', i."airDate"::text, 'pageCount', ci."pageCount",
+      'title', i.title, 'overview', i.overview, 'releaseDate', i."airDate"::text, 'pageCount', ci."pageCount",
       'progression', CASE WHEN ps.id IS NULL THEN NULL
           WHEN ps.completed THEN 1.0::float8
           WHEN ps.progression IS NOT NULL THEN ps.progression

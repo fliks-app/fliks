@@ -3835,4 +3835,117 @@ mod comic_ingest {
         assert_eq!(labels.iter().filter(|i| i.0 == "0").count(), 1);
         assert_eq!(count(&c, "SELECT count(*) FROM item_parts").await, 4);
     }
+
+    fn cbz_with_info(path: &Path, xml: &str) {
+        cbz(path, 1);
+        let mut z = zip::ZipWriter::new_append(
+            fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(path)
+                .unwrap(),
+        )
+        .unwrap();
+        z.start_file("ComicInfo.xml", SimpleFileOptions::default())
+            .unwrap();
+        z.write_all(xml.as_bytes()).unwrap();
+        z.finish().unwrap();
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn comic_info_fills_the_issue_and_the_volume_before_the_file_name(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Moon Tales").await;
+        let d = c.dir.join("comics/Moon Tales");
+        cbz_with_info(
+            &d.join("Moon Tales 05.cbz"),
+            "<ComicInfo><Number>7</Number><Title>Seven</Title><Summary>Sum</Summary><Publisher>Pub</Publisher>\
+             <Volume>2016</Volume><Year>2017</Year><Month>3</Month><Day>9</Day></ComicInfo>",
+        );
+        cbz_with_info(&d.join("Moon Tales 06.cbz"), "<ComicInfo><Number>");
+        cbz_with_info(
+            &d.join("Moon Tales 08.cbz"),
+            "<!DOCTYPE x [<!ENTITY y \"z\">]><ComicInfo><Title>&y;</Title></ComicInfo>",
+        );
+        let refs = [
+            "Moon Tales/Moon Tales 05.cbz",
+            "Moon Tales/Moon Tales 06.cbz",
+            "Moon Tales/Moon Tales 08.cbz",
+        ];
+        comics::register(&c.st, m, &placed(&c, &refs))
+            .await
+            .unwrap();
+        type Got = (String, Option<String>, Option<String>, Option<String>);
+        let got: Vec<Got> = sqlx::query_as(
+            r#"SELECT ci.label, i.title, i.overview, i."airDate"::text FROM comic_issues ci
+               JOIN items i ON i.id = ci."itemId" WHERE ci."mediaId" = $1 ORDER BY ci."sortNumber""#,
+        )
+        .bind(m)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        let s = |v: &str| Some(v.to_owned());
+        assert_eq!(
+            got,
+            [
+                ("6".to_owned(), None, None, None),
+                ("7".to_owned(), s("Seven"), s("Sum"), s("2017-03-09")),
+                ("8".to_owned(), None, None, None),
+            ]
+        );
+        let d: (Option<String>, Option<i32>, Option<i32>) = sqlx::query_as(
+            r#"SELECT publisher, "startYear", volume FROM comic_details WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(d, (s("Pub"), Some(2016), None));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_locked_field_is_not_filled_by_a_new_version(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Moon Tales").await;
+        let d = c.dir.join("comics/Moon Tales");
+        cbz(&d.join("Moon Tales 01.cbz"), 1);
+        comics::register(&c.st, m, &placed(&c, &["Moon Tales/Moon Tales 01.cbz"]))
+            .await
+            .unwrap();
+        sqlx::query(r#"UPDATE comic_issues SET "lockedFields" = '{title}' WHERE "mediaId" = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO media_field_sources ("mediaId", field, locked) VALUES ($1, 'publisher', true)"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        cbz_with_info(
+            &d.join("Moon Tales 01 (Variant).cbz"),
+            "<ComicInfo><Title>New</Title><Summary>S</Summary><Publisher>P</Publisher></ComicInfo>",
+        );
+        comics::register(
+            &c.st,
+            m,
+            &placed(&c, &["Moon Tales/Moon Tales 01 (Variant).cbz"]),
+        )
+        .await
+        .unwrap();
+        let (title, overview): (Option<String>, Option<String>) =
+            sqlx::query_as(r#"SELECT title, overview FROM items WHERE "mediaId" = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!((title, overview), (None, Some("S".to_owned())));
+        let p: Option<String> =
+            sqlx::query_scalar(r#"SELECT publisher FROM comic_details WHERE "mediaId" = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(p, None);
+    }
 }

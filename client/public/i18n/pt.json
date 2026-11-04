@@ -4098,6 +4098,26 @@
     "finished": "Lida",
     "progress": "Progresso de leitura",
     "special_number": "Especial {{n}}",
-    "specials": "Especiais"
+    "specials": "Especiais",
+    "edit": {
+      "volume": "Editar volume",
+      "issue": "Editar número",
+      "title": "Título",
+      "publisher": "Editora",
+      "start_year": "Ano de início",
+      "volume_number": "Número do volume",
+      "overview": "Sinopse",
+      "number": "Número",
+      "sort": "Posição de ordenação",
+      "kind": "Tipo",
+      "kind_issue": "Número",
+      "kind_annual": "Anual",
+      "kind_special": "Especial",
+      "release_date": "Data de lançamento",
+      "saved": "Guardado",
+      "invalid_number": "O número é obrigatório.",
+      "invalid_sort": "A posição de ordenação deve ser um número entre -9999 e 9999.",
+      "reset": "Repor para automático"
+    }
   }
 }

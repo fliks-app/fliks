@@ -20,6 +20,7 @@ export interface ComicIssue {
   kind: 'issue' | 'annual' | 'special';
   annual: boolean;
   title: string | null;
+  overview: string | null;
   releaseDate: string | null;
   pageCount: number | null;
   /** The caller's 0..1; null when never opened. */
@@ -40,4 +41,26 @@ export interface ComicDetail {
 export interface ComicPageSize {
   width: number;
   height: number;
+}
+
+// PATCH /api/media/:id/comic: each key present is set and locked
+export interface ComicVolumePatch {
+  title?: string;
+  overview?: string | null;
+  publisher?: string | null;
+  startYear?: number | null;
+  volume?: number | null;
+  /** Removes the lock of these fields: a scan fills them again. */
+  unlock?: ('title' | 'overview' | 'publisher' | 'startYear' | 'volume')[];
+}
+
+// PATCH /api/comics/issues/:itemId
+export interface ComicIssuePatch {
+  number?: string;
+  sort?: number;
+  kind?: ComicIssue['kind'];
+  title?: string | null;
+  overview?: string | null;
+  releaseDate?: string | null;
+  unlock?: ('number' | 'sort' | 'kind' | 'title' | 'overview' | 'releaseDate')[];
 }

@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
-import type { ComicPageSize } from './comics.models';
+import type { ComicDetail, ComicIssuePatch, ComicPageSize, ComicVolumePatch } from './comics.models';
 
 @Injectable({ providedIn: 'root' })
 export class ComicsApiService {
@@ -20,6 +20,15 @@ export class ComicsApiService {
       }),
     );
     return res.pages;
+  }
+
+  /** Edits the volume; the fields sent are locked against scans. `null` clears the optional ones. */
+  patchVolume(mediaId: number, body: ComicVolumePatch): Promise<ComicDetail> {
+    return firstValueFrom(this.http.patch<ComicDetail>(`/api/media/${mediaId}/comic`, body));
+  }
+
+  patchIssue(itemId: number, body: ComicIssuePatch): Promise<ComicDetail> {
+    return firstValueFrom(this.http.patch<ComicDetail>(`/api/comics/issues/${itemId}`, body));
   }
 
   /** Mints or renews the stream token of the issue's file, which the native page URLs carry. */
