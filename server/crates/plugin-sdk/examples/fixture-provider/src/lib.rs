@@ -1,6 +1,7 @@
 //! Test fixture: a metadata provider answering canned records.
 
-use fliks_plugin_sdk::{ExternalId, HttpRequest, HttpResponse, Plugin, host, json_response};
+use fliks_plugin_sdk::bindings::wasi::http::types::Method;
+use fliks_plugin_sdk::{ExternalId, HttpRequest, HttpResponse, Plugin, host, http, json_response};
 use fliks_plugin_sdk_provider::{
     Lang, MetadataProvider, ProviderError, SearchQuery, UpstreamError, export_provider,
 };
@@ -9,8 +10,22 @@ use serde_json::json;
 struct Fixture;
 
 impl Plugin for Fixture {
-    /// Answers the plugin's own config keys, to test what `config-get` lets a provider read.
-    fn http(_req: HttpRequest) -> Result<HttpResponse, String> {
+    /// `/fetch?url=` gets the url, to test the pacing of route calls; anything else answers the
+    /// plugin's own config keys, to test what `config-get` lets a provider read.
+    fn http(req: HttpRequest) -> Result<HttpResponse, String> {
+        if req.path.ends_with("/fetch") {
+            let url = req
+                .query
+                .iter()
+                .find(|(k, _)| k == "url")
+                .map(|(_, v)| v.clone());
+            let r = http::Request::new(Method::Get, url.unwrap_or_default()).send();
+            let body = match r {
+                Ok(r) => json!({ "status": r.status }),
+                Err(e) => json!({ "error": format!("{e:?}") }),
+            };
+            return Ok(json_response(200, body.to_string()));
+        }
         let body = match host::config_get(None) {
             Ok(v) => json!(v.into_iter().collect::<std::collections::BTreeMap<_, _>>()),
             Err(e) => json!({ "error": e.code }),

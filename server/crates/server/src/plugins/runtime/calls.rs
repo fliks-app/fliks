@@ -98,6 +98,7 @@ impl PluginRt {
                 self,
                 budget,
                 call_fn(move |i| {
+                    i.store.data_mut().set_priority(Priority::Interactive);
                     Box::pin(async move {
                         i.guest
                             .fliks_plugin_guest()
