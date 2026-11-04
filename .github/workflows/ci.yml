@@ -1,5 +1,5 @@
 # Every PR check in one workflow. `changes` picks the areas a change touches; `ci-ok`, the one required check,
-# passes when every job it needs succeeded or was skipped. The merge queue runs only the compile-level jobs (lint, tizen).
+# passes when every job it needs succeeded or was skipped.
 name: CI
 
 on:
@@ -8,7 +8,6 @@ on:
     branches: [main]
   push:
     branches: [main]
-  merge_group:
   workflow_dispatch:
 
 # A newer PR push supersedes a running one; a main run must finish to save the caches.
@@ -41,14 +40,12 @@ jobs:
           EVENT: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
           DRAFT: ${{ github.event.pull_request.draft }}
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
           out() { printf 'server=%s\nclient=%s\ndesktop=%s\n' "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
           # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
           if [[ "$HEAD_REF" == release-please--* || "$DRAFT" == true ]]; then out false; exit 0; fi
           case "$EVENT" in
             pull_request) base=$(git rev-parse HEAD^1) ;;
-            merge_group) base=$QUEUE_BASE ;;
             *) base= ;;
           esac
           # A push to main runs every area: a superseded pending run must not skip a commit's jobs.
@@ -161,7 +158,7 @@ jobs:
   # Compiles the test binaries once; the `test-shard` jobs run them, so no shard pays the 4 minute compile.
   build:
     needs: changes
-    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -237,7 +234,7 @@ jobs:
 
   plugin-sdk:
     needs: changes
-    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -288,7 +285,7 @@ jobs:
 
   client:
     needs: changes
-    if: needs.changes.outputs.client == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -325,7 +322,7 @@ jobs:
 
   desktop:
     needs: changes
-    if: needs.changes.outputs.desktop == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -347,7 +344,7 @@ jobs:
   # The Windows media-controls addon (C++/WinRT) only compiles on Windows.
   desktop-win:
     needs: changes
-    if: needs.changes.outputs.desktop == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: windows-latest
     timeout-minutes: 15
     defaults:
@@ -369,7 +366,7 @@ jobs:
 
   android:
     needs: changes
-    if: needs.changes.outputs.client == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     defaults:
@@ -422,7 +419,7 @@ jobs:
 
   ios:
     needs: changes
-    if: needs.changes.outputs.client == 'true' && github.event_name != 'merge_group'
+    if: needs.changes.outputs.client == 'true'
     runs-on: macos-15
     timeout-minutes: 40
     defaults:
@@ -464,7 +461,7 @@ jobs:
             build
         working-directory: client/ios/App
 
-  # The only required check: a skipped job (area untouched, or left out of the merge queue) counts as passed.
+  # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
     needs: [changes, no-em-dash, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, desktop, desktop-win, android, ios]
