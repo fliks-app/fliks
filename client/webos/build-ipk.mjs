@@ -2,7 +2,7 @@
 /**
  * Bundle the Angular webOS build into an `.ipk`.
  *
- * Uses `ares-package` from `@webos-tools/cli` (devDependency). The
+ * Uses `ares-package` from `@webos-tools/cli` (run through npx). The
  * resulting `.ipk` is sideloadable on LG TVs in developer mode, and is
  * the same artifact format that goes through LG Content Manager for
  * Smart Hub publication.
@@ -54,19 +54,11 @@ if (existsSync(splashSrc)) copyFileSync(splashSrc, resolve(stage, 'splash.png'))
 
 const distDir = resolve(clientRoot, resolution ? `dist/webos-${resolution}` : 'dist');
 mkdirSync(distDir, { recursive: true });
-// `ares-package` is the per-binary entry of `@webos-tools/cli`
-// (not a subcommand of an `ares` umbrella). Resolve it from the local
-// node_modules so this script works the same way locally and in CI.
-const aresPackage = resolve(clientRoot, 'node_modules/.bin/ares-package');
-if (!existsSync(aresPackage)) {
-  console.error(
-    `[webos] missing ${aresPackage}. Run \`npm ci\` to install @webos-tools/cli.`,
-  );
-  process.exit(1);
-}
+// Run on demand, pinned: the CLI ships a shrinkwrap with vulnerable transitive deps, so it stays out of the lockfile.
+const ARES_CLI = '@webos-tools/cli@3.2.6';
 // Angular's optimizer already minified the bundle; `-n` (`--no-minify`, unlisted in --help) skips a
 // second terser pass.
-execSync(`"${aresPackage}" -n -o "${distDir}" "${stage}"`, {
+execSync(`npx --yes -p ${ARES_CLI} ares-package -n -o "${distDir}" "${stage}"`, {
   stdio: 'inherit',
   cwd: clientRoot,
 });
