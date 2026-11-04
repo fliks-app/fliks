@@ -75,9 +75,10 @@ impl MetadataProvider for Fixture {
     fn fetch_children(
         _kind: String,
         _id: ExternalId,
+        season: Option<u32>,
         _lang: Lang,
     ) -> Result<String, ProviderError> {
-        Ok(json!([{ "seasonNumber": 1, "episodes": [] }]).to_string())
+        Ok(json!([{ "seasonNumber": season.unwrap_or(1), "episodes": [] }]).to_string())
     }
     fn list(
         kind: String,

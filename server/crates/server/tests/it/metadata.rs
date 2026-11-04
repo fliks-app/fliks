@@ -345,6 +345,32 @@ async fn details_seasons_and_stubs_pass_the_provider_records_through(pool: PgPoo
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_season_override_asks_its_provider_for_that_season_only(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    media(&pool, 5, "series", Some(500), Some(81189), 1).await;
+    sqlx::query(r#"INSERT INTO item_groups ("number", "mediaId", "preferredProvider") VALUES (2, 5, 'tvdb')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    c.stub
+        .ok("children/500", json!([{"seasonNumber": 1, "episodes": []}]));
+    c.tvdb.ok(
+        "children/81189",
+        json!([{"seasonNumber": 1, "episodes": []}, {"seasonNumber": 2, "overview": "v", "episodes": []}]),
+    );
+    let seasons = fliks_server::metadata::service::seasons_for_media(
+        &c.st,
+        5,
+        fliks_domain::metadata::limiter::Priority::Interactive,
+    )
+    .await
+    .unwrap();
+    assert_eq!(seasons.len(), 2);
+    assert_eq!(c.stub.seen("children/"), ["children/500"]);
+    assert_eq!(c.tvdb.seen("children/"), ["children/81189?season=2"]);
+}
+
+#[sqlx::test(migrations = false)]
 async fn discover_params_and_language_reach_the_provider(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     c.stub.ok("list/movie/discover", json!([]));

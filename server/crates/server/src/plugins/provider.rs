@@ -398,6 +398,7 @@ impl MetadataProvider for PluginProvider {
         &'a self,
         kind: MediaKind,
         id: &'a str,
+        season: Option<u32>,
         lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Vec<Value>> {
@@ -408,7 +409,7 @@ impl MetadataProvider for PluginProvider {
                 .call(true, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
-                        g.call_fetch_children(s, &kind.as_str().to_owned(), &id, &lang)
+                        g.call_fetch_children(s, &kind.as_str().to_owned(), &id, season, &lang)
                             .await
                     })
                 })

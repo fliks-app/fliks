@@ -71,10 +71,11 @@ async fn a_provider_plugin_answers_through_the_trait() {
         assert_eq!(e.status, Some(404), "{id}");
     }
     let kids = p
-        .fetch_children(MediaKind::Series, "1", &lang, GO)
+        .fetch_children(MediaKind::Series, "1", Some(2), &lang, GO)
         .await
         .unwrap();
     assert_eq!(kids.len(), 1);
+    assert_eq!(kids[0]["seasonNumber"], 2);
     let by = |source, id| p.find_by(source, id, &lang, GO);
     assert_eq!(
         by(Ns::IMDB, "tt1").await.unwrap(),

@@ -359,6 +359,7 @@ impl fliks_server::metadata::MetadataProvider for Fake {
         &'a self,
         _: fliks_domain::media::kind::MediaKind,
         _: &'a str,
+        _: Option<u32>,
         _: &'a fliks_domain::metadata::language::Resolved,
         _: fliks_domain::metadata::limiter::Priority,
     ) -> fliks_server::metadata::Call<'a, Vec<Value>> {

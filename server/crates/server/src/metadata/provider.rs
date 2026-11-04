@@ -79,11 +79,12 @@ pub trait MetadataProvider: Send + Sync {
         lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Value>;
-    /// Every season of a series with its episodes.
+    /// The seasons of a series with their episodes, only `season` when given (a provider may return more).
     fn fetch_children<'a>(
         &'a self,
         kind: MediaKind,
         id: &'a str,
+        season: Option<u32>,
         lang: &'a Resolved,
         p: Priority,
     ) -> Call<'a, Vec<Value>>;
@@ -223,6 +224,7 @@ impl MetadataProvider for Absent {
         &'a self,
         _: MediaKind,
         _: &'a str,
+        _: Option<u32>,
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Vec<Value>> {

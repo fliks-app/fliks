@@ -3169,6 +3169,7 @@ mod book_import {
             &'a self,
             _: MediaKind,
             _: &'a str,
+            _: Option<u32>,
             _: &'a Resolved,
             _: Priority,
         ) -> Call<'a, Vec<Value>> {

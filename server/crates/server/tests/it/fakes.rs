@@ -28,7 +28,7 @@ use std::{
 type Answer = Result<Value, u16>;
 type Fallback = Arc<dyn Fn(&str) -> Option<Answer> + Send + Sync>;
 
-/// A provider answering from a table. Keys: `search/<kind>`, `work/<kind>/<id>`, `children/<id>`,
+/// A provider answering from a table. Keys: `search/<kind>`, `work/<kind>/<id>`, `children/<id>` (logged with `?season=<n>` when asked for one),
 /// `stubs/<id>`, `list/<kind>/<name>`, `person/<id>`, `credits/<id>`. A missing key answers 404.
 pub struct Scripted {
     id: Namespace,
@@ -146,11 +146,13 @@ impl MetadataProvider for Scripted {
         &'a self,
         _: MediaKind,
         id: &'a str,
+        season: Option<u32>,
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Vec<Value>> {
         let key = format!("children/{id}");
-        self.answer(key.clone(), key, items)
+        let logged = season.map_or(key.clone(), |n| format!("{key}?season={n}"));
+        self.answer(key, logged, items)
     }
     fn child_stubs<'a>(
         &'a self,
