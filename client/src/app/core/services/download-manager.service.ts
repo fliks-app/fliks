@@ -39,10 +39,10 @@ export interface DownloadTarget {
   type: string;
 }
 
-/** An edition of a book to put on the device: the readable file of a text edition, or the parts of an audio item. */
 /** A book download the device or the settings rule out; its message is already translated for a toast. */
 export class BookDownloadRefused extends Error {}
 
+/** An edition of a book to put on the device: the readable file of a text edition, or the parts of an audio item. */
 export interface BookDownloadTarget {
   mediaId: number;
   itemId: number;
@@ -593,7 +593,7 @@ export class DownloadManagerService {
       if (task.book) {
         this.bookRuns.get(task.id)?.abort();
         this.bookRuns.delete(task.id);
-        await this.books.remove(task.book);
+        await this.dropBookFiles(task);
         this.cache.remove(task.id);
         return;
       }
@@ -838,10 +838,11 @@ export class DownloadManagerService {
     return false;
   }
 
-  /** Leftovers of a dead task, unless a live task holds the same item's files. */
+  /** The files of a task; an EPUB is keyed by item, so a live task of the same item keeps it. */
   private async dropBookFiles(t: DownloadTask) {
+    const epub = t.book!.family === 'text' && t.book!.format === 'epub';
     const shared = this.cache.load().some((x) => x.id !== t.id && x.book?.itemId === t.book!.itemId && x.status !== 'failed');
-    if (!shared) await this.books.remove(t.book!);
+    if (!(epub && shared)) await this.books.remove(t.book!);
   }
 
   /** A book download runs in this page (no OS daemon): one still marked in flight at start-up was killed with the previous page. */

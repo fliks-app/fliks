@@ -8,7 +8,8 @@ import { BookDownloadRefused, DownloadManagerService } from '../../../core/servi
 import { DeviceService } from '../../../core/services/device.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { deliverFiles } from '../../../core/plugins/save-file.plugin';
-import { bookDownloadTarget, editionFileNames, formatClock, offlinable } from './book-media';
+import { bookDownloadTarget, editionFileNames, offlinable } from '../../../core/services/api/book-media';
+import { formatTime } from '../../../core/utils/player.utils';
 
 @Component({
   selector: 'app-book-editions',
@@ -31,10 +32,11 @@ export class BookEditionsComponent implements OnInit {
   readonly artist = input('');
   readonly devices = signal<EmailDevice[]>([]);
 
-  protected readonly clock = formatClock;
+  protected readonly clock = formatTime;
   protected readonly native = Capacitor.isNativePlatform();
   protected readonly canOffline = (e: BookEdition) => !this.device.isTv() && offlinable(e);
-  protected readonly offlineTask = (e: BookEdition) => this.offline.tasks().find((t) => t.book?.itemId === e.itemId);
+  protected readonly offlineTask = (e: BookEdition) =>
+    e.itemId == null ? undefined : (this.offline.bookTask(e.itemId) ?? this.offline.tasks().find((t) => t.book?.itemId === e.itemId));
   protected readonly canDeliver = (e: BookEdition) => !this.device.isTv() && e.hasFile && e.fileIds.length > 0;
 
   async ngOnInit(): Promise<void> {
@@ -69,8 +71,8 @@ export class BookEditionsComponent implements OnInit {
     const names = editionFileNames(this.title(), e);
     try {
       await deliverFiles(e.fileIds.map((id, i) => ({ url: this.streaming.getOriginalDownloadUrl(id), name: names[i] })));
-    } catch (err) {
-      this.toast.error(err instanceof BookDownloadRefused ? err.message : this.translate.instant('books_work.download_failed'));
+    } catch {
+      this.toast.error(this.translate.instant('books_work.download_failed'));
     }
   }
 
@@ -78,8 +80,9 @@ export class BookEditionsComponent implements OnInit {
   async toggleOffline(e: BookEdition): Promise<void> {
     const task = this.offlineTask(e);
     try {
-      if (task) await this.offline.deleteDownload(task);
-      if (task?.status !== 'ready') {
+      if (task?.status === 'failed') await this.offline.retryDownload(task);
+      else if (task) await this.offline.deleteDownload(task);
+      else {
         await this.offline.createBookDownload(
           bookDownloadTarget({ mediaId: this.mediaId(), title: this.title(), artist: this.artist() }, e),
         );

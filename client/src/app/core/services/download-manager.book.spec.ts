@@ -181,4 +181,17 @@ describe('DownloadManagerService, book downloads', () => {
     expect(removed.length).toBeGreaterThan(0);
     expect(saved().find((t) => t.id === second.id)?.book?.files[0].key).toBe(`${second.id}-40-0`);
   });
+
+  it('deleting a failed task keeps the EPUB a ready task of the same item still uses', async () => {
+    const { service, books, settled } = setup();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    books.storeEpub.mockRejectedValueOnce(new Error('network'));
+    const failed = await service.createBookDownload(text);
+    await settled();
+    await service.createBookDownload(text);
+    await settled();
+    books.remove.mockClear();
+    await service.deleteDownload(failed);
+    expect(books.remove).not.toHaveBeenCalled();
+  });
 });
