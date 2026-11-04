@@ -147,7 +147,9 @@ pub async fn candidates(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<C
     let mut rules = db::rules_enabled(&st.db).await?;
     rules.retain(|r| could_match(&r.criteria.0, a, dto.media_type));
     let scoped = dto.seasons.as_deref().is_some_and(|s| !s.is_empty());
-    let facts = if rules.iter().any(|r| reads_metadata(&r.criteria.0, scoped)) {
+    let facts = if dto.media_type.is_video()
+        && rules.iter().any(|r| reads_metadata(&r.criteria.0, scoped))
+    {
         match services::title_facts(st, &dto.key).await {
             Ok(f) => Some(f),
             Err(e) => {
