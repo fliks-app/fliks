@@ -21,6 +21,7 @@
           {
             "existingMediaId": 18,
             "existingMediaType": "series",
+            "externalId": "81189",
             "genres": [
               "Drama"
             ],
@@ -39,6 +40,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "999",
             "genres": [],
             "imdbId": null,
             "mediaType": "series",
@@ -65,6 +67,7 @@
           {
             "existingMediaId": 18,
             "existingMediaType": "series",
+            "externalId": "2000",
             "fanartUrl": null,
             "genreIds": [
               18
@@ -83,6 +86,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "1396",
             "fanartUrl": null,
             "genreIds": [
               18
@@ -111,6 +115,7 @@
           {
             "existingMediaId": 18,
             "existingMediaType": "series",
+            "externalId": "2000",
             "fanartUrl": null,
             "genreIds": [
               18
@@ -129,6 +134,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "1396",
             "fanartUrl": null,
             "genreIds": [
               18
@@ -157,38 +163,38 @@
           {
             "existingMediaId": 18,
             "existingMediaType": "series",
-            "fanartUrl": null,
-            "genreIds": [
-              18
+            "externalId": "81189",
+            "genres": [
+              "Drama"
             ],
-            "genres": [],
+            "imdbId": "tt0903747",
             "mediaType": "series",
-            "originalTitle": "Breaking Bad (orig)",
-            "overview": "Overview of Breaking Bad",
-            "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
-            "provider": "tmdb",
-            "rating": 8.1,
+            "originalTitle": "Breaking Bad",
+            "overview": "TVDB overview",
+            "posterUrl": "https://artworks.thetvdb.com/p.jpg",
+            "provider": "tvdb",
+            "rating": 0,
             "title": "Breaking Bad",
-            "tmdbId": 2000,
+            "tmdbId": 1396,
+            "tvdbId": 81189,
             "year": 2008
           },
           {
             "existingMediaId": null,
             "existingMediaType": null,
-            "fanartUrl": null,
-            "genreIds": [
-              18
-            ],
+            "externalId": "999",
             "genres": [],
+            "imdbId": null,
             "mediaType": "series",
-            "originalTitle": "Better Call (orig)",
-            "overview": "Overview of Better Call",
-            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1396.jpg",
-            "provider": "tmdb",
-            "rating": 8.1,
-            "title": "Better Call",
-            "tmdbId": 1396,
-            "year": 2015
+            "originalTitle": "Other",
+            "overview": "",
+            "posterUrl": "https://artworks.thetvdb.com/o.jpg",
+            "provider": "tvdb",
+            "rating": 0,
+            "title": "Other",
+            "tmdbId": 0,
+            "tvdbId": 999,
+            "year": null
           }
         ],
         "status": 200
@@ -203,6 +209,7 @@
           {
             "existingMediaId": 18,
             "existingMediaType": "series",
+            "externalId": "2000",
             "fanartUrl": null,
             "genreIds": [
               18
@@ -221,6 +228,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "1396",
             "fanartUrl": null,
             "genreIds": [
               18
@@ -245,45 +253,12 @@
     {
       "as": "admin",
       "expect": {
-        "body": [
-          {
-            "existingMediaId": 18,
-            "existingMediaType": "series",
-            "fanartUrl": null,
-            "genreIds": [
-              18
-            ],
-            "genres": [],
-            "mediaType": "series",
-            "originalTitle": "Breaking Bad (orig)",
-            "overview": "Overview of Breaking Bad",
-            "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
-            "provider": "tmdb",
-            "rating": 8.1,
-            "title": "Breaking Bad",
-            "tmdbId": 2000,
-            "year": 2008
-          },
-          {
-            "existingMediaId": null,
-            "existingMediaType": null,
-            "fanartUrl": null,
-            "genreIds": [
-              18
-            ],
-            "genres": [],
-            "mediaType": "series",
-            "originalTitle": "Better Call (orig)",
-            "overview": "Overview of Better Call",
-            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1396.jpg",
-            "provider": "tmdb",
-            "rating": 8.1,
-            "title": "Better Call",
-            "tmdbId": 1396,
-            "year": 2015
-          }
-        ],
-        "status": 200
+        "body": {
+          "error": "Bad Request",
+          "message": "Unknown provider: foo",
+          "statusCode": 400
+        },
+        "status": 400
       },
       "method": "GET",
       "path": "/api/metadata/search/tv?q=breaking&provider=foo"

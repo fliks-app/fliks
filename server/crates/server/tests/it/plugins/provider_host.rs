@@ -100,7 +100,6 @@ async fn a_provider_plugin_answers_through_the_trait() {
     assert_eq!(md.resolve(None, MediaKind::Series), Some(Ns::TMDB));
     assert_eq!(md.resolve(Some("tvdb"), MediaKind::Series), Some(Ns::TMDB));
     assert_eq!(md.resolve(None, MediaKind::Movie), None);
-    assert_eq!(md.fallback(Ns::TMDB, MediaKind::Series), None);
     h.finish().await;
     s.finish().await;
 }

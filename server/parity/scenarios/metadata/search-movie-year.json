@@ -21,6 +21,7 @@
           {
             "existingMediaId": 1,
             "existingMediaType": "movie",
+            "externalId": "1001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
             "genreIds": [
               28,
@@ -40,6 +41,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603001.jpg",
             "genreIds": [
               28,
@@ -59,6 +61,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603002",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603002.jpg",
             "genreIds": [
               28,
@@ -102,6 +105,7 @@
           {
             "existingMediaId": 1,
             "existingMediaType": "movie",
+            "externalId": "1001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
             "genreIds": [
               28,
@@ -121,6 +125,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603001.jpg",
             "genreIds": [
               28,
@@ -140,6 +145,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603002",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603002.jpg",
             "genreIds": [
               28,
@@ -182,6 +188,7 @@
           {
             "existingMediaId": 1,
             "existingMediaType": "movie",
+            "externalId": "1001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
             "genreIds": [
               28,
@@ -201,6 +208,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603001.jpg",
             "genreIds": [
               28,
@@ -220,6 +228,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603002",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603002.jpg",
             "genreIds": [
               28,

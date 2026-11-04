@@ -9,6 +9,7 @@ mod provider;
 mod routes;
 #[cfg(any(test, feature = "parity"))]
 pub mod scene_stub;
+mod search;
 pub mod service;
 #[cfg(test)]
 pub(crate) mod stub;
@@ -19,6 +20,7 @@ pub use orchestrator::{Key, prune_snapshots};
 use provider::Absent;
 pub use provider::{Call, EditionRef, MetadataProvider, Search};
 pub use routes::*;
+pub use search::*;
 pub use types::{Credits, MetaError, PersonDetails, Upstream};
 
 use crate::{http::AppError, sync::RwLockExt};
@@ -92,7 +94,7 @@ impl Metadata {
         self.slot(id).map(|(_, p)| p)
     }
 
-    /// A provider `resolve` or `fallback` returned; one that is not registered answers every call 503.
+    /// A provider `resolve` returned; one that is not registered answers every call 503.
     pub fn of(&self, id: Namespace) -> Arc<dyn MetadataProvider> {
         self.get(id).unwrap_or_else(|| Arc::new(Absent(id)))
     }
@@ -193,16 +195,6 @@ impl Metadata {
                 format!("The {} provider is not available", ns.as_str()),
             )),
         }
-    }
-
-    /// The first other provider of the kind's order that is available and supports `kind`.
-    pub fn fallback(&self, id: Namespace, kind: MediaKind) -> Option<Namespace> {
-        let order = self.order(kind);
-        self.pick(
-            None,
-            order.into_iter().filter(|o| *o != id).collect(),
-            |p| p.supports(kind),
-        )
     }
 
     /// The first other provider, over the orders of every kind, that is available and describes people.

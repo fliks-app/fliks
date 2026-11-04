@@ -1,13 +1,11 @@
-//! `/api/metadata/*` (`docs/spec/metadata.md` rules 1-16, 38-39).
-use super::{Metadata, Search, Upstream};
+//! `/api/metadata/*` except the search (`docs/spec/metadata.md` rules 1-16, 38-39).
+use super::{Metadata, Upstream, mark_existing, search_hits};
 use crate::{
     http::{
         AppError,
         auth::Authed,
         validate::{PathParams, int_param},
     },
-    libraries::accessible_library_ids,
-    media::external_ids,
     state::AppState,
 };
 use axum::{
@@ -18,12 +16,8 @@ use axum::{
 };
 use fliks_domain::external_id::Namespace;
 use fliks_domain::media::kind::MediaKind;
-use fliks_domain::{
-    media::query::js_parse_int,
-    metadata::{language::Resolved, limiter::Priority},
-};
+use fliks_domain::metadata::{language::Resolved, limiter::Priority};
 use serde_json::{Value, json};
-use sqlx::PgPool;
 
 pub(crate) type Pairs = Query<Vec<(String, String)>>;
 pub(crate) type Res = Result<Json<Value>, AppError>;
@@ -32,8 +26,7 @@ pub fn router() -> Router<AppState> {
     let m = "/api/metadata";
     super::comics::routes::routes(super::books::routes::routes(Router::new()))
         .route(&format!("{m}/providers"), get(providers))
-        .route(&format!("{m}/search/movie"), get(search_movie))
-        .route(&format!("{m}/search/tv"), get(search_tv))
+        .route(&format!("{m}/search/{{kind}}"), get(search_hits))
         .route(&format!("{m}/trending/movie"), get(trending_movie))
         .route(&format!("{m}/popular/movie"), get(popular_movie))
         .route(&format!("{m}/upcoming/movie"), get(upcoming_movie))
@@ -104,27 +97,8 @@ pub(crate) fn year(raw: Option<&str>) -> Option<i64> {
     Some(f as i64)
 }
 
-/// Rule 7: media override, then library, else no preference; a bad id is no preference.
-async fn preferred(db: &PgPool, media_id: Option<&str>) -> Result<Option<String>, sqlx::Error> {
-    let Some(id) = media_id
-        .and_then(js_parse_int)
-        .and_then(|n| i32::try_from(n).ok())
-        .filter(|n| *n >= 1)
-    else {
-        return Ok(None);
-    };
-    let row = sqlx::query!(
-        r#"SELECT m."preferredProvider" AS media_pref, l."preferredProvider" AS library_pref
-           FROM media m LEFT JOIN libraries l ON l.id = m."libraryId" WHERE m.id = $1"#,
-        id
-    )
-    .fetch_optional(db)
-    .await?;
-    Ok(row.and_then(|r| r.media_pref.or(r.library_pref)))
-}
-
 /// Fills what a plugin record leaves out from the namespace that answered, so the client can link it.
-fn stamp(records: &mut [Value], ns: Namespace, kind: MediaKind) {
+pub(crate) fn stamp(records: &mut [Value], ns: Namespace, kind: MediaKind) {
     for r in records {
         let native = match ns {
             Namespace::TMDB => r["tmdbId"].as_i64(),
@@ -144,139 +118,8 @@ fn stamp(records: &mut [Value], ns: Namespace, kind: MediaKind) {
     }
 }
 
-/// The `(provider, externalId)` a record names.
-fn title_ref(r: &Value) -> Option<(&str, &str)> {
-    Some((r["provider"].as_str()?, r["externalId"].as_str()?))
-}
-
-/// Rule 12: `existingMediaId` / `existingMediaType`, only for libraries the caller can read.
-async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Result<Value, AppError> {
-    if results.is_empty() {
-        return Ok(Value::Array(results));
-    }
-    let ids = |k: &str| -> Vec<String> {
-        results
-            .iter()
-            .filter_map(|r| r.get(k).and_then(Value::as_i64))
-            .filter_map(|n| i32::try_from(n).ok())
-            .filter(|n| *n > 0)
-            .map(|n| n.to_string())
-            .collect()
-    };
-    let (tmdb, tvdb) = (ids("tmdbId"), ids("tvdbId"));
-    let kind = MediaKind::from_tv(tv);
-    let mut rows: Vec<MediaIds> = vec![];
-    if !tmdb.is_empty() || !tvdb.is_empty() {
-        let libs = accessible_library_ids(db, a).await?;
-        rows = sqlx::query!(
-            r#"SELECT m.id AS "id!", ids.tmdb AS tmdb_id, ids.tvdb AS tvdb_id
-               FROM media m
-               LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $5)::int AS tmdb,
-                 max(value) FILTER (WHERE provider = $6)::int AS tvdb,
-                 max(value) FILTER (WHERE provider = $7) AS imdb
-                 FROM media_external_ids WHERE "mediaId" = m.id) ids ON true
-               WHERE m.type = $3 AND m."libraryId" = ANY($4)
-                 AND m.id IN (SELECT "mediaId" FROM media_external_ids WHERE kind = $3
-                              AND ((provider = $5 AND value = ANY($1)) OR (provider = $6 AND value = ANY($2))))
-               ORDER BY m.id ASC"#,
-            &tmdb,
-            &tvdb,
-            kind.as_str(),
-            &libs,
-            external_ids::TMDB,
-            external_ids::TVDB,
-            external_ids::IMDB
-        )
-        .fetch_all(db)
-        .await?
-        .into_iter()
-        .map(|r| (r.id, r.tmdb_id, r.tvdb_id))
-        .collect();
-    }
-    let refs: Vec<(&str, &str)> = results.iter().filter_map(title_ref).collect();
-    let held: Vec<(i32, String, String)> = if refs.is_empty() {
-        vec![]
-    } else {
-        let libs = accessible_library_ids(db, a).await?;
-        let (ps, vs): (Vec<&str>, Vec<&str>) = refs.into_iter().unzip();
-        sqlx::query_as(
-            r#"SELECT m.id, e.provider::text, e.value FROM media m
-               JOIN media_external_ids e ON e."mediaId" = m.id AND e.kind = m.type
-               WHERE m.type = $1 AND m."libraryId" = ANY($2)
-                 AND (e.provider::text, e.value) IN (SELECT * FROM unnest($3::text[], $4::text[]))
-               ORDER BY m.id ASC"#,
-        )
-        .bind(kind.as_str())
-        .bind(&libs)
-        .bind(&ps)
-        .bind(&vs)
-        .fetch_all(db)
-        .await?
-    };
-    let out = results
-        .into_iter()
-        .map(|mut r| {
-            let find = |k: &str, col: fn(&MediaIds) -> Option<i32>| {
-                let want = r.get(k).and_then(Value::as_i64).filter(|n| *n > 0)?;
-                rows.iter()
-                    .rfind(|m| col(m).map(i64::from) == Some(want))
-                    .map(|m| m.0)
-            };
-            let named = || {
-                let (p, e) = title_ref(&r)?;
-                held.iter().rfind(|h| h.1 == p && h.2 == e).map(|h| h.0)
-            };
-            let hit = find("tmdbId", |m| m.1)
-                .or_else(|| find("tvdbId", |m| m.2))
-                .or_else(named);
-            r["existingMediaId"] = hit.map_or(Value::Null, Value::from);
-            r["existingMediaType"] = hit.map_or(Value::Null, |_| kind.as_str().into());
-            r
-        })
-        .collect();
-    Ok(Value::Array(out))
-}
-
-type MediaIds = (i32, Option<i32>, Option<i32>);
-
 pub(crate) async fn lang(st: &AppState) -> Result<Resolved, AppError> {
     Ok(st.metadata.lang.resolve(None).await?)
-}
-
-async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> Res {
-    let mut qs = q.iter().filter(|(k, _)| k == "q");
-    let query = match (qs.next(), qs.next()) {
-        (_, Some(_)) => return Err(AppError::bad_request(vec!["q must be a string"])),
-        (Some((_, v)), None) => v.trim(),
-        _ => "",
-    };
-    if query.is_empty() {
-        return Ok(Json(json!([])));
-    }
-    let md = &st.metadata;
-    let name = match bare(&q, "provider") {
-        Some(p) => Some(p),
-        None => preferred(&st.db, bare(&q, "mediaId").as_deref()).await?,
-    };
-    let kind = MediaKind::from_tv(tv);
-    let Some(primary) = md.resolve(name.as_deref(), kind) else {
-        return Ok(Json(json!([])));
-    };
-    let search = Search::text(kind, query, year(bare(&q, "year").as_deref()));
-    let lang = lang(&st).await?;
-    let go = Priority::Interactive;
-    let mut answered = primary;
-    let mut found = md.of(primary).search(&search, &lang, go).await;
-    if let (Ok(r), Some(other)) = (&found, md.fallback(primary, search.kind))
-        && r.is_empty()
-    {
-        tracing::info!("no {} result, trying {}", primary.as_str(), other.as_str());
-        answered = other;
-        found = md.of(other).search(&search, &lang, go).await;
-    }
-    let mut results = found.map_err(|e| unavailable("search", answered, &e))?;
-    stamp(&mut results, answered, kind);
-    Ok(Json(enrich(&st.db, &a, results, tv).await?))
 }
 
 /// Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available
@@ -302,16 +145,6 @@ pub async fn providers(State(st): State<AppState>, _a: Authed) -> Res {
     })))
 }
 
-#[utoipa::path(get, path = "/api/metadata/search/movie", responses((status = 200)))]
-pub async fn search_movie(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
-    search(st, a, q, false).await
-}
-
-#[utoipa::path(get, path = "/api/metadata/search/tv", responses((status = 200)))]
-pub async fn search_tv(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
-    search(st, a, q, true).await
-}
-
 async fn listed(
     st: &AppState,
     a: &Authed,
@@ -331,7 +164,8 @@ async fn listed(
         .map_err(|(p, e)| fail(p, &e, false))?;
     let mut items = v.as_array().cloned().unwrap_or_default();
     stamp(&mut items, id, kind);
-    Ok(Json(enrich(&st.db, a, items, tv).await?))
+    mark_existing(&st.db, a, kind, &mut items).await?;
+    Ok(Json(Value::Array(items)))
 }
 
 /// Exactly `day`, else `week`; a repeated key is an array and so `week`.

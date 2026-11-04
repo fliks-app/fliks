@@ -30,6 +30,21 @@
       "stub": true
     },
     {
+      "body": {
+        "prefix": "/tvdb/v4/search",
+        "status": 500
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__fail",
+      "stub": true
+    },
+    {
       "as": "admin",
       "expect": {
         "body": {
@@ -127,6 +142,7 @@
           {
             "existingMediaId": 1,
             "existingMediaType": "movie",
+            "externalId": "1001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
             "genreIds": [
               28,
@@ -146,6 +162,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603001",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603001.jpg",
             "genreIds": [
               28,
@@ -165,6 +182,7 @@
           {
             "existingMediaId": null,
             "existingMediaType": null,
+            "externalId": "603002",
             "fanartUrl": "https://image.tmdb.org/t/p/original/back603002.jpg",
             "genreIds": [
               28,

@@ -3,7 +3,7 @@ use super::{
     ANCHOR,
     identify::BookMatch,
     link::{attach, stored},
-    merge, people, text, work_id,
+    people, text, work_id,
 };
 use crate::{
     http::{
@@ -17,8 +17,9 @@ use crate::{
         write::body::Body,
     },
     metadata::{
-        MetaError, Metadata,
-        routes::{Ids, Pairs, Res, bare, fail, lang, unavailable},
+        MetaError,
+        routes::{Ids, Pairs, Res, fail, lang, unavailable},
+        {hit_core, mark_existing},
     },
     state::AppState,
 };
@@ -39,15 +40,14 @@ use sqlx::PgPool;
 const GO: Priority = Priority::Interactive;
 
 pub fn routes(r: Router<AppState>) -> Router<AppState> {
-    r.route("/api/metadata/search/book", get(search_book))
-        .route(
-            "/api/metadata/{provider}/book/{externalId}",
-            get(preview_book),
-        )
-        .route(
-            "/api/media/{id}/sources",
-            get(sources_get).put(sources_put).delete(sources_delete),
-        )
+    r.route(
+        "/api/metadata/{provider}/book/{externalId}",
+        get(preview_book),
+    )
+    .route(
+        "/api/media/{id}/sources",
+        get(sources_get).put(sources_put).delete(sources_delete),
+    )
 }
 
 fn meta_fail(p: Namespace, e: MetaError) -> AppError {
@@ -59,34 +59,6 @@ fn meta_fail(p: Namespace, e: MetaError) -> AppError {
 
 pub(crate) fn unknown_provider(name: &str) -> AppError {
     AppError::bad_request(format!("Unknown provider: {name}"))
-}
-
-/// A registered provider that supports books.
-fn book_provider(md: &Metadata, name: &str) -> Result<Namespace, AppError> {
-    Namespace::parse(name)
-        .filter(|p| md.get(*p).is_some_and(|x| x.supports(MediaKind::Book)))
-        .ok_or_else(|| unknown_provider(name))
-}
-
-pub(crate) fn page(q: &[(String, String)]) -> Result<u32, AppError> {
-    let Some(raw) = bare(q, "page").filter(|p| !p.is_empty()) else {
-        return Ok(1);
-    };
-    let n = fliks_domain::media::query::js_number(&raw)
-        .filter(|n| n.fract() == 0.0 && n.is_finite())
-        .ok_or_else(|| AppError::bad_request("page must be an integer number"))?;
-    if n < 1.0 {
-        return Err(AppError::bad_request("page must not be less than 1"));
-    }
-    Ok(n.min(f64::from(u32::MAX)) as u32)
-}
-
-/// The namespace a provider names its ids in when they name an edition (`asin` for Audible).
-fn namespace(p: Namespace) -> &'static str {
-    match p {
-        Namespace::AUDIBLE => Namespace::ASIN.as_str(),
-        p => p.as_str(),
-    }
 }
 
 /// The first series entry of a record as `{name, position}`.
@@ -120,141 +92,23 @@ fn opt(v: Option<String>) -> Value {
     v.map_or(Value::Null, Value::from)
 }
 
-/// A `BookSearchResult` without its `mediaId`; `None` for a hit with no id or title.
-fn hit(p: Namespace, v: &Value) -> Option<Value> {
+/// A book hit without its `existingMediaId`; `None` for a hit with no title or no id of its namespace.
+pub(crate) fn hit(p: Namespace, v: &Value) -> Option<Value> {
     let r = v.as_object()?;
-    Some(json!({
-        "provider": p.as_str(),
-        "externalId": text(r, "externalId")?,
-        "kind": "book",
-        "title": text(r, "title")?,
-        "subtitle": opt(text(r, "subtitle")),
-        "authors": names(r, "authors"),
-        "year": r.get("year").and_then(Value::as_i64).map_or(Value::Null, Value::from),
-        "coverUrl": opt(text(r, "posterUrl")),
-        "series": first_series(r),
-        "editionCount": count(r, "editionCount"),
-        "mediaId": Value::Null,
-    }))
-}
-
-/// Sets `mediaId` of each result: the lowest readable book holding its id (rule 19).
-async fn with_media_ids(db: &PgPool, acl: &[i32], hits: &mut [Value]) -> Result<(), sqlx::Error> {
-    let key = |h: &Value| {
-        let p = h["provider"].as_str().and_then(Namespace::parse);
-        (
-            p.map_or("", namespace).to_owned(),
-            h["externalId"].as_str().unwrap_or_default().to_owned(),
-        )
-    };
-    let (ns, ids): (Vec<_>, Vec<_>) = hits.iter().map(key).unzip();
-    let rows = sqlx::query!(
-        r#"SELECT q.i::int AS "i!", min(m.id) AS media
-           FROM UNNEST($1::text[], $2::text[]) WITH ORDINALITY AS q(p, v, i)
-           JOIN media m ON m.type = 'book' AND m."libraryId" = ANY($3)
-           WHERE EXISTS (SELECT 1 FROM media_external_ids w WHERE w."mediaId" = m.id AND w.kind = 'book'
-                           AND w.provider = q.p AND w.value = q.v)
-              OR EXISTS (SELECT 1 FROM edition_external_ids x JOIN editions e ON e.id = x."editionId"
-                         WHERE x."mediaId" = m.id AND x.provider = q.p AND x.value = q.v
-                           AND COALESCE(e."libraryId", m."libraryId") = ANY($3))
-           GROUP BY q.i"#,
-        &ns,
-        &ids,
-        acl
-    )
-    .fetch_all(db)
-    .await?;
-    for r in rows {
-        if let (Some(h), Some(m)) = (hits.get_mut(r.i as usize - 1), r.media) {
-            h["mediaId"] = m.into();
-        }
-    }
-    Ok(())
-}
-
-/// `GET /api/metadata/search/book` (rules 18-19).
-#[utoipa::path(get, path = "/api/metadata/search/book", responses((status = 200)))]
-pub async fn search_book(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
-    let field = |k: &str| {
-        bare(&q, k)
-            .map(|v| v.trim().to_owned())
-            .filter(|v| !v.is_empty())
-    };
-    let (title, author, isbn) = (field("title"), field("author"), field("isbn"));
-    let query = field("q")
-        .or_else(|| {
-            let t = [title.as_deref(), author.as_deref()].iter().flatten().fold(
-                String::new(),
-                |acc, s| {
-                    if acc.is_empty() {
-                        (*s).into()
-                    } else {
-                        format!("{acc} {s}")
-                    }
-                },
-            );
-            (!t.is_empty()).then_some(t)
-        })
-        .or_else(|| isbn.clone());
-    let page = page(&q)?;
-    let named = field("provider")
-        .map(|p| book_provider(&st.metadata, &p))
-        .transpose()?;
-    let Some(query) = query else {
-        return Ok(Json(json!([])));
-    };
-    let mut order = merge::providers(&st.metadata);
-    if let Some(p) = named.filter(|p| st.metadata.available(*p)) {
-        order.retain(|o| *o != p);
-        order.insert(0, p);
-    }
-    let language = field("language");
-    let search = crate::metadata::Search {
-        kind: MediaKind::Book,
-        query: &query,
-        year: None,
-        title: title.as_deref(),
-        author: author.as_deref(),
-        author_id: None,
-        isbn: isbn.as_deref(),
-        language: language.as_deref(),
-        page,
-    };
-    let lang = lang(&st).await?;
-    let (mut found, mut answered, mut failed) = (None, false, None);
-    for p in order {
-        let provider = st.metadata.of(p);
-        if !provider.has_search(MediaKind::Book) {
-            continue;
-        }
-        match provider.search(&search, &lang, GO).await {
-            Ok(r) if r.is_empty() => answered = true,
-            Ok(r) => {
-                found = Some((p, r));
-                break;
-            }
-            Err(e) => {
-                tracing::warn!("{p} book search skipped: {e}");
-                failed = Some((p, e));
-            }
-        }
-    }
-    let mut hits: Vec<Value> = match found {
-        Some((p, r)) => r.iter().filter_map(|v| hit(p, v)).collect(),
-        None if answered => vec![],
-        None => {
-            return Err(match failed {
-                Some((p, e)) => unavailable("search", p, &e),
-                None => AppError::with_message(
-                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
-                    "No book metadata provider is available",
-                ),
-            });
-        }
-    };
-    let acl = accessible_library_ids(&st.db, &a).await?;
-    with_media_ids(&st.db, &acl, &mut hits).await?;
-    Ok(Json(Value::Array(hits)))
+    let ns = p.id_namespace();
+    let mut h = hit_core(
+        ns,
+        &ns.normalize(&text(r, "externalId")?)?,
+        MediaKind::Book,
+        &text(r, "title")?,
+        r.get("year").and_then(Value::as_i64),
+        text(r, "posterUrl").as_deref(),
+    );
+    h.insert("subtitle".into(), opt(text(r, "subtitle")));
+    h.insert("authors".into(), names(r, "authors").into());
+    h.insert("series".into(), first_series(r));
+    h.insert("editionCount".into(), count(r, "editionCount"));
+    Some(Value::Object(h))
 }
 
 fn edition_entry(p: Namespace, r: &Value) -> Option<Value> {
@@ -343,9 +197,8 @@ pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
     out["language"] = opt(text(&record, "language"));
     out["editions"] = editions.into();
     out["unofficial"] = false.into();
-    let acl = accessible_library_ids(&st.db, &a).await?;
     let mut one = [out];
-    with_media_ids(&st.db, &acl, &mut one).await?;
+    mark_existing(&st.db, &a, MediaKind::Book, &mut one).await?;
     let [out] = one;
     Ok(Json(out))
 }

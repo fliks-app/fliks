@@ -2419,54 +2419,20 @@
         "tags": [
           "metadata"
         ],
-        "summary": "Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available providers serving each video kind.",
+        "summary": "Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available\nproviders serving each kind, in the admin's order.",
         "operationId": "providers",
         "responses": {
           "200": {}
         }
       }
     },
-    "/api/metadata/search/book": {
-      "get": {
-        "tags": [
-          "metadata::books::routes"
-        ],
-        "summary": "`GET /api/metadata/search/book` (rules 18-19).",
-        "operationId": "search_book",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/search/comic": {
-      "get": {
-        "tags": [
-          "metadata::comics::routes"
-        ],
-        "summary": "`GET /api/metadata/search/comic` (rule 39).",
-        "operationId": "search_comic",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/search/movie": {
+    "/api/metadata/search/{kind}": {
       "get": {
         "tags": [
           "metadata"
         ],
-        "operationId": "search_movie",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/search/tv": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "operationId": "search_tv",
+        "summary": "`GET /api/metadata/search/{kind}` with `kind` one of `movie`, `tv`, `book`, `comic`.",
+        "operationId": "search_hits",
         "responses": {
           "200": {}
         }

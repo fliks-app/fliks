@@ -584,9 +584,9 @@ async fn search_and_preview_answer_cards_and_the_issue_list(pool: PgPool) {
     assert_eq!(s, 200, "{v}");
     assert_eq!(
         v,
-        json!([{"provider": NS, "externalId": "42", "kind": "comic", "title": "Alpha Run", "year": 2016,
+        json!([{"provider": NS, "externalId": "42", "mediaType": "comic", "title": "Alpha Run", "year": 2016,
                 "publisher": "Pub House", "volume": 2, "issueCount": 3, "overview": "A run.",
-                "coverUrl": "https://img.test/a.jpg", "sourceUrl": "https://cv.test/42", "mediaId": null}])
+                "posterUrl": "https://img.test/a.jpg", "sourceUrl": "https://cv.test/42", "existingMediaId": null}])
     );
     assert_eq!(c.get("/api/metadata/search/comic").await.1, json!([]));
     assert_eq!(
@@ -615,11 +615,11 @@ async fn search_and_preview_answer_cards_and_the_issue_list(pool: PgPool) {
     let (s, _) = c.import(json!({"libraryId": 2})).await;
     assert_eq!(s, 201);
     let (_, v) = c.get("/api/metadata/search/comic?q=alpha").await;
-    assert!(v[0]["mediaId"].is_i64());
+    assert!(v[0]["existingMediaId"].is_i64());
     let (_, v) = c
         .call(&c.reader, "GET", "/api/metadata/search/comic?q=alpha", None)
         .await;
-    assert_eq!(v[0]["mediaId"], Value::Null);
+    assert_eq!(v[0]["existingMediaId"], Value::Null);
 }
 
 #[sqlx::test(migrations = false)]
