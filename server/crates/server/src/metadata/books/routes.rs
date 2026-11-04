@@ -108,6 +108,11 @@ pub(crate) fn hit(p: Namespace, v: &Value) -> Option<Value> {
     h.insert("authors".into(), names(r, "authors").into());
     h.insert("series".into(), first_series(r));
     h.insert("editionCount".into(), count(r, "editionCount"));
+    h.insert(
+        "publisher".into(),
+        opt(text(r, "publisher").map(|p| p.chars().take(200).collect())),
+    );
+    h.insert("pageCount".into(), count(r, "pageCount"));
     Some(Value::Object(h))
 }
 

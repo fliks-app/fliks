@@ -33,6 +33,7 @@ export interface SearchHit {
   series?: { name: string; position: string | null } | null;
   editionCount?: number | null;
   publisher?: string | null;
+  pageCount?: number | null;
   volume?: number | null;
   issueCount?: number | null;
   sourceUrl?: string | null;

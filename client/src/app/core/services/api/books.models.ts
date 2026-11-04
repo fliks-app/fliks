@@ -67,6 +67,7 @@ export interface BookSearchResult extends SearchHit {
   mediaType: 'book';
   subtitle: string | null; authors: string[];
   series: { name: string; position: string | null } | null; editionCount: number | null;
+  publisher: string | null; pageCount: number | null;
 }
 // GET /api/metadata/{provider}/book/{externalId} : the add preview
 export interface BookPreview extends BookSearchResult {

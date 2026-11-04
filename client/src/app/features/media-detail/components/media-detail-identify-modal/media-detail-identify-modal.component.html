@@ -149,10 +149,13 @@
                     }
                   </div>
                   <span class="text-sm leading-tight line-clamp-2">{{ r.title }}</span>
+                  @if (r.mediaType === 'book' && bookFacts(r); as facts) {
+                    <span class="text-xs text-base-content/70 line-clamp-2">{{ facts }}</span>
+                  }
                   <span class="text-xs text-base-content/50">
-                    @if (r.year) { {{ r.year }} }
+                    @if (r.mediaType !== 'book' && r.year) { {{ r.year }} }
                     @if (isTaken(r)) {
-                      @if (r.year) { · } {{ 'media_detail.identify_already_in_library' | translate }}
+                      @if (r.mediaType !== 'book' && r.year) { · } {{ 'media_detail.identify_already_in_library' | translate }}
                     }
                   </span>
                 </button>

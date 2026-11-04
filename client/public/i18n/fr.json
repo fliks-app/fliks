@@ -1073,6 +1073,7 @@
     "identify_results": "Résultats de la recherche",
     "identify_no_results": "Aucun résultat pour ces critères.",
     "identify_already_in_library": "Déjà dans la bibliothèque",
+    "identify_pages": "{{count}} p.",
     "identify_success": "Média ré-identifié.",
     "edit_profiles": "Profils",
     "edit_subtitles": "Modifier les sous-titres",
