@@ -25,7 +25,7 @@ import { RecommendService } from '../../../core/services/recommend.service';
 import { TvService } from '../../../core/services/tv.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
-import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
@@ -83,7 +83,7 @@ export class MediaCardComponent {
   private readonly trackingModal = inject(TrackingModalService);
   private readonly recommend = inject(RecommendService);
   private readonly auth = inject(AuthService);
-  private readonly playableMedia = inject(PlayableMediaService);
+  private readonly mediaStart = inject(MediaStartService);
   private readonly navbar = inject(NavbarService);
   private readonly pluginUi = inject(PluginUiRegistryService);
   protected readonly device = inject(DeviceService);
@@ -419,6 +419,7 @@ export class MediaCardComponent {
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
     const m = this.media();
+    if (m?.type === 'book' && this.bookInfo()) return !!this.bookInfo()!.formats.length;
     return m ? !!(m.files?.length) : false;
   });
   protected readonly _topLeftBadge = computed(() => {
@@ -488,15 +489,7 @@ export class MediaCardComponent {
     this.played.emit();
     this.clicked.emit();
     const m = this.media();
-    if (!m?.files?.length) return;
-    const file = m.files[0];
-    void this.playableMedia.play({
-      fileId: file.id,
-      mediaId: m.id,
-      episodeId: file.episodeId ?? undefined,
-      backdropUrl: m.fanartUrl ?? this._img() ?? null,
-      streamInfo: (file as any).streamInfo,
-    }, false);
+    if (m && this._playable()) void this.mediaStart.start(m, { backdropUrl: m.fanartUrl ?? this._img() ?? null });
   }
 
   // ── card.actions: the contextual panel, rendered from the contribution registry ──

@@ -48,7 +48,7 @@ import { PartyApiService } from '../../../core/services/api/party-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { NavbarService } from '../../../core/services/navbar.service';
-import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { MediaStartService } from '../../../core/services/media-start.service';
 import { QueueItem } from '../../../core/services/playback-queue.service';
 import {
   Playlist,
@@ -126,7 +126,7 @@ export class PlaylistDetailComponent {
   readonly navbar = inject(NavbarService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly autoDownload = inject(AutoDownloadService);
-  private readonly playable = inject(PlayableMediaService);
+  private readonly mediaStart = inject(MediaStartService);
   private readonly social = inject(SocialApiService);
   private readonly party = inject(PartyService);
   protected readonly partyApi = inject(PartyApiService);
@@ -304,8 +304,8 @@ export class PlaylistDetailComponent {
   private async launchQueue(startIndex: number): Promise<void> {
     const p = this.playlist();
     if (!p) return;
-    const queue = this.orderedItems().map((i) => this.toQueueItem(i));
-    const launched = await this.playable.playFromPlaylist(p.id, queue, startIndex, p.autoPlay);
+    const items = this.orderedItems().map((i) => ({ media: i.media, queue: this.toQueueItem(i) }));
+    const launched = await this.mediaStart.startFromPlaylist(p.id, items, startIndex, p.autoPlay);
     if (!launched) {
       this.toast.error(this.translate.instant('playlists.item_unavailable'));
     }
