@@ -55,7 +55,7 @@ pub(crate) fn comic_child() {
         "NEXTEST_BIN_EXE_fliks_server",
     ]
     .iter()
-    .find_map(|k| std::env::var_os(k))
+    .find_map(std::env::var_os)
     .unwrap_or_else(|| env!("CARGO_BIN_EXE_fliks-server").into());
     fliks_server::comics::sandbox::set_exe(std::path::PathBuf::from(path));
 }
