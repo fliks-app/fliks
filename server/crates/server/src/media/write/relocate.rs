@@ -66,6 +66,11 @@ struct Move {
     from: PathBuf,
     to: PathBuf,
     keep: bool,
+    /// The destination folder and whether this run creates `to`, for the boot sweep to undo it.
+    #[serde(default)]
+    dest_folder: String,
+    #[serde(default)]
+    created: bool,
 }
 
 struct Journal {
@@ -210,6 +215,8 @@ async fn run(
             from: i.src.clone(),
             to: i.dest.clone(),
             keep: i.keep,
+            dest_folder: dest.path.clone(),
+            created: !i.present,
         })
         .collect();
     let listing: Vec<String> = moves
@@ -342,6 +349,64 @@ async fn finish_pending(st: &AppState, id: i32) {
         }
     }
     settle_journal(st, id, unlink_sources(id, todo)).await;
+}
+
+/// Boot sweep of `media_moves`: a committed move unlinks its leftover sources, an uncommitted one
+/// removes the copies it made (its rows still point at the sources).
+pub async fn recover(st: &AppState) {
+    let ids = sqlx::query_scalar::<_, i32>(r#"SELECT "mediaId" FROM media_moves"#)
+        .fetch_all(&st.db)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Move journals not listed: {e}");
+            vec![]
+        });
+    for id in ids {
+        let _guard = st.ingest.media.lock(id).await;
+        let _moves = st.folder_moves.write().await;
+        finish_pending(st, id).await;
+        discard_uncommitted(st, id).await;
+    }
+}
+
+async fn discard_uncommitted(st: &AppState, id: i32) {
+    let Ok(Some(moves)) = sqlx::query_scalar::<_, sqlx::types::Json<Vec<Move>>>(
+        r#"SELECT plan FROM media_moves WHERE "mediaId" = $1 AND NOT committed"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await
+    else {
+        return;
+    };
+    for m in moves.0.iter().filter(|m| m.created) {
+        let held = sqlx::query_scalar::<_, bool>(
+            r#"SELECT EXISTS (SELECT 1 FROM media_files f JOIN library_folders lf ON lf.id = f."folderId"
+               WHERE lf.path = $1 AND f."relativePath" = $2)"#,
+        )
+        .bind(&m.dest_folder)
+        .bind(&m.rel)
+        .fetch_one(&st.db)
+        .await
+        .unwrap_or(true);
+        if held || !same_copy(m.from.clone(), m.to.clone()).await {
+            continue;
+        }
+        let gone =
+            fsx::Root::open(&m.dest_folder).and_then(|root| fsx::unlink_contained(&root, &m.to));
+        match gone {
+            Ok(_) => {
+                if let Some(dir) = m.to.parent() {
+                    fsx::prune_empty(Path::new(&m.dest_folder), dir);
+                }
+            }
+            Err(e) => tracing::warn!(
+                "Move of media #{id} interrupted, copy kept: {}: {e}",
+                m.to.display()
+            ),
+        }
+    }
+    settle_journal(st, id, vec![]).await;
 }
 
 /// Drops the journal once every source is gone, else keeps the sources still to unlink.

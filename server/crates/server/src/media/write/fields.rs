@@ -101,15 +101,16 @@ pub async fn apply(c: &mut PgConnection, media: i32, f: &Fields) -> sqlx::Result
     Ok(())
 }
 
+/// The shared columns of `media` a merge or an edit reasons about, as `jsonb_build_object` arguments.
+pub(super) const SHARED_COLUMNS: &str = r#"'title', title, 'originalTitle', "originalTitle", 'year', year,
+    'overview', overview, 'posterUrl', "posterUrl", 'fanartUrl', "fanartUrl", 'logoUrl', "logoUrl",
+    'rating', rating, 'genres', genres, 'runtime', runtime, 'alternativeTitles', "alternativeTitles""#;
+
 /// The shared columns that hold a value no source row accounts for: a hand edit, a creation guess.
 pub(crate) async fn unsourced(c: &mut PgConnection, media: i32) -> sqlx::Result<Vec<Field>> {
-    let current: Option<Value> = sqlx::query_scalar(
-        r#"SELECT jsonb_build_object('title', title, 'originalTitle', "originalTitle", 'year', year,
-             'overview', overview, 'posterUrl', "posterUrl", 'fanartUrl', "fanartUrl",
-             'logoUrl', "logoUrl", 'rating', rating, 'genres', genres, 'runtime', runtime,
-             'alternativeTitles', "alternativeTitles")
-           FROM media WHERE id = $1"#,
-    )
+    let current: Option<Value> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT jsonb_build_object({SHARED_COLUMNS}) FROM media WHERE id = $1"
+    )))
     .bind(media)
     .fetch_optional(&mut *c)
     .await?;

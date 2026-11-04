@@ -324,14 +324,24 @@ pub async fn register_to(
         let Some((family, format)) = classify(&name) else {
             continue;
         };
-        let meta = tokio::fs::metadata(&f.abs)
-            .await
-            .map_err(|e| format!("{name}: {e}"))?;
+        let meta = match tokio::fs::metadata(&f.abs).await {
+            Ok(m) => m,
+            Err(e) => {
+                conflicts.push(format!("{name}: {e}"));
+                continue;
+            }
+        };
         let mtime = super::rescan::mtime_ms(&meta);
         let mut found = None;
         let mut found_cover = None;
         let (info, version) = if family == Family::Audio {
-            let p = probe(st, &f.abs, false).await?;
+            let p = match probe(st, &f.abs, false).await {
+                Ok(p) => p,
+                Err(e) => {
+                    conflicts.push(format!("{name}: {e}"));
+                    continue;
+                }
+            };
             found = Some(tag_facts(p.info.tags.as_ref()));
             (
                 Some(serde_json::to_value(&p.info).map_err(|e| e.to_string())?),

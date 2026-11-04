@@ -133,7 +133,7 @@ impl Queue {
             );
             let book = subject
                 .as_ref()
-                .is_some_and(|s| s.media_type.is_some_and(super::comics::registers));
+                .is_some_and(|s| s.media_type.is_some_and(super::registers));
             progress(st, done, total, subject);
             if let Err(e) = enrich(st, id).await {
                 tracing::warn!("Post-import enrich of file #{id} failed: {e}");

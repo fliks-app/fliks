@@ -120,7 +120,7 @@ pub async fn ingest(
     if req.files.is_empty() {
         return Ok(out);
     }
-    let book = super::comics::registers(media.media_type);
+    let book = super::registers(media.media_type);
     let root = fsx::Root::open(&folder.path)
         .map_err(|e| format!("Library root \"{}\": {e}", folder.path))?;
     let mdir = media.dir_in(&root)?;
@@ -221,7 +221,7 @@ pub async fn ingest(
                 abs: p.abs.clone(),
             })
             .collect();
-        let reg = super::comics::register_files(
+        let reg = super::register_files(
             st,
             media.media_type,
             media.id,
@@ -290,7 +290,7 @@ pub async fn ingest(
 
 /// Rule 19 (largest file by its real size; on a tie the later one) unless a series season pack.
 async fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
-    if (media.has_seasons() && files.len() > 1) || super::comics::registers(media.media_type) {
+    if (media.has_seasons() && files.len() > 1) || super::registers(media.media_type) {
         return files;
     }
     let mut best: Option<(u64, File)> = None;
@@ -456,12 +456,8 @@ impl Ctx<'_> {
             )));
         };
         if !books::owns(self.media.media_type, &name) {
-            let what = if self.media.media_type == MediaKind::Comic {
-                "comic"
-            } else {
-                "book"
-            };
-            return Ok(Placed::Error(format!("{name}: not a {what} file")));
+            let why = super::not_owned_message(self.media.media_type);
+            return Ok(Placed::Error(format!("{name}: {why}")));
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();

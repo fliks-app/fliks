@@ -2675,6 +2675,34 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn an_orphan_of_a_second_library_folder_imports_as_unmatched(pool: PgPool) {
+        let c = ctx(pool).await;
+        let (first, second) = (c.dir.join("films"), c.dir.join("films-b"));
+        let l = library(&c, "F", &first, r#"["movie"]"#).await;
+        fs::create_dir_all(&second).unwrap();
+        let folder: i32 = sqlx::query_scalar(
+            r#"INSERT INTO library_folders ("libraryId", path) VALUES ($1, $2) RETURNING id"#,
+        )
+        .bind(l)
+        .bind(second.to_string_lossy().as_ref())
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        let file = second.join("Placeholder Film (2001)/Placeholder Film (2001).mkv");
+        touch(&file, b"x");
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            json!({"libraryId": l, "folderId": folder, "type": "movie",
+                   "folderName": "Placeholder Film (2001)", "files": [{"filePath": file}]}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn an_unmatched_video_shows_its_nfo_and_a_refresh_without_id_merges_it_again(
         pool: PgPool,
     ) {
@@ -3140,6 +3168,24 @@ mod book_ingest {
         .await
         .unwrap();
         assert_eq!((reg.files.len(), reg.conflicts.len()), (0, 2));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unreadable_file_leaves_the_rest_of_the_batch_registered(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = shelf(&c).await;
+        let m = media(&c, l, "Mirelune", "book").await;
+        epub(&lib.join("Mirelune/Mirelune.epub"));
+        let reg = books::register(
+            &c.st,
+            m,
+            &placed(&c, &["Mirelune/Gone.epub", "Mirelune/Mirelune.epub"]),
+        )
+        .await
+        .unwrap();
+        assert_eq!((reg.files.len(), reg.conflicts.len()), (1, 1));
+        assert_eq!(parts(&c, m).await.len(), 1);
     }
 
     #[sqlx::test(migrations = false)]
@@ -3705,6 +3751,29 @@ mod comic_ingest {
         .fetch_all(&c.st.db)
         .await
         .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn deleting_a_comic_keeps_the_files_it_does_not_own(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = comic(&c, "Shared").await;
+        let d = c.dir.join("comics/Shared");
+        cbz(&d.join("One.cbz"), 2);
+        cbz(&d.join("Sub/Other 001.cbz"), 2);
+        comics::register(&c.st, m, &placed(&c, &["Shared/One.cbz"]))
+            .await
+            .unwrap();
+        let (s, _) = call(
+            &c,
+            "DELETE",
+            &format!("/api/media/{m}"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 200);
+        assert!(eventually(|| !d.join("One.cbz").exists()).await);
+        assert!(d.join("Sub/Other 001.cbz").exists());
     }
 
     #[sqlx::test(migrations = false)]

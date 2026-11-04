@@ -4,11 +4,7 @@ use crate::{
     ingest::books,
     media::write::book_import::{book_or_held, held_book_in},
 };
-use fliks_domain::{
-    external_id::Namespace,
-    media::family::Family,
-    naming::{BookNameTokens, apply_book_format},
-};
+use fliks_domain::{external_id::Namespace, media::family::Family};
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -29,25 +25,23 @@ pub(super) async fn link_files(
     }
     let guard = st.ingest.media.lock(media.id).await;
     let (mut errors, mut slot) = (vec![], false);
-    let (linked, present) =
-        if d.reorganize || d.transfer.is_some() {
-            relink_moved(st, &guard, d, lib, media, &mut errors, &mut slot).await?
-        } else {
-            let linked =
-                match relink_in_place(st, &guard, d, lib, media, folder, &mut errors, &mut slot)
-                    .await
-                {
-                    Ok(l) => l,
-                    Err(e) => {
-                        drop(guard);
-                        if let Some(key) = unmatched_key.filter(|_| created) {
-                            drop_unmatched_if_empty(st, media.id, key).await?;
-                        }
-                        return Err(e);
-                    }
-                };
-            (linked, 0)
-        };
+    let moved = if d.reorganize || d.transfer.is_some() {
+        relink_moved(st, &guard, d, lib, media, &mut errors, &mut slot).await
+    } else {
+        relink_in_place(st, &guard, d, lib, media, folder, &mut errors, &mut slot)
+            .await
+            .map(|linked| (linked, 0))
+    };
+    let (linked, present) = match moved {
+        Ok(n) => n,
+        Err(e) => {
+            drop(guard);
+            if let Some(key) = unmatched_key.filter(|_| created) {
+                drop_unmatched_if_empty(st, media.id, key).await?;
+            }
+            return Err(e);
+        }
+    };
     let identified = media.tmdb_id.is_some()
         || media.tvdb_id.is_some()
         || media.imdb_id.is_some()
@@ -81,7 +75,7 @@ async fn relink_moved(
         let name = file_name(Path::new(&f.path));
         // An in-place reorganize moves files that are already in this library, nothing else.
         if d.transfer.is_none()
-            && !fsx::Root::open(&lib.path)
+            && !fsx::Root::open(lib.root_of(d.folder_id))
                 .is_ok_and(|r| dunce::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false)))
         {
             errors.push(format!("{name}: file outside the library root"));
@@ -178,7 +172,7 @@ async fn relink_in_place(
         crate::media::items::point_wants_at_default_folder(&st.db, media.id).await?;
         current = load_media(&st.db, media.id).await?.unwrap_or(current);
     }
-    if crate::ingest::comics::registers(current.media_type) {
+    if crate::ingest::registers(current.media_type) {
         let mut placed = vec![];
         for f in &d.files {
             let abs = PathBuf::from(resolve(&f.path, "/"));
@@ -192,14 +186,8 @@ async fn relink_in_place(
             }
         }
         if !placed.is_empty() {
-            match crate::ingest::comics::register_files(
-                st,
-                current.media_type,
-                media.id,
-                &placed,
-                None,
-            )
-            .await
+            match crate::ingest::register_files(st, current.media_type, media.id, &placed, None)
+                .await
             {
                 Ok(done) => {
                     linked += done.files.len() as i64;
@@ -281,7 +269,6 @@ pub(super) async fn confirm_import(
 ) -> Result<(i64, i64, Vec<String>), AppError> {
     let (mut imported, mut present, mut errors) = (0i64, 0i64, vec![]);
     let mut book_files: Vec<library::File> = vec![];
-    let formats = naming_formats(&st.db).await?;
     for (path, episode_id, quality) in entries {
         let name = file_name(Path::new(&path));
         let Some(media) = load_media(&st.db, media_id).await? else {
@@ -295,12 +282,8 @@ pub(super) async fn confirm_import(
             }
             Ok(m) if !m.is_file() || !books::owns(media.media_type, &name) => {
                 errors.push(format!(
-                    "{name}: not a {} file",
-                    match media.media_type {
-                        MediaKind::Book => "book",
-                        MediaKind::Comic => "comic",
-                        _ => "video",
-                    }
+                    "{name}: {}",
+                    crate::ingest::not_owned_message(media.media_type)
                 ));
                 continue;
             }
@@ -320,7 +303,7 @@ pub(super) async fn confirm_import(
             }
             Some(_) => {}
             None => {
-                let folder = pin_folder(&formats, &media);
+                let folder = pin_folder(st, &media).await?;
                 if folder_error(media.media_type, &folder) {
                     errors.push(format!("{name}: invalid folder name \"{folder}\""));
                     continue;
@@ -341,7 +324,7 @@ pub(super) async fn confirm_import(
             episode_id,
         };
         // A book's files are ingested together: the parts of one audiobook are one version.
-        if crate::ingest::comics::registers(media.media_type) {
+        if crate::ingest::registers(media.media_type) {
             book_files.push(file);
             continue;
         }
@@ -404,29 +387,18 @@ fn tally(
     }
 }
 
-pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
-    let (year, tmdb_id) = (m.year.map(i64::from), m.tmdb_id.map(i64::from));
-    match m.media_type {
-        MediaKind::Series => naming::apply_series_folder_format(
-            &f.series_folder,
-            &SeriesFolder {
-                series_title: m.title.clone(),
-                original_title: m.original_title.clone(),
-                year,
-                tmdb_id,
-            },
-        ),
-        MediaKind::Book | MediaKind::Comic => book_folder(f, &m.title, year),
-        MediaKind::Movie => naming::apply_movie_folder_format(
-            &f.movie_folder,
-            &MovieFolder {
-                title: m.title.clone(),
-                original_title: m.original_title.clone(),
-                year,
-                tmdb_id,
-            },
-        ),
-    }
+pub(super) async fn pin_folder(st: &AppState, m: &MediaRow) -> Result<String, sqlx::Error> {
+    mw::folder_for(
+        &st.db,
+        m.media_type,
+        &mw::FolderOf {
+            title: &m.title,
+            original_title: m.original_title.as_deref(),
+            year: m.year.map(i64::from),
+            tmdb_id: m.tmdb_id.map(i64::from),
+        },
+    )
+    .await
 }
 
 /// Whether `name` is no valid `folderName` for a media of `kind` (a book's may hold several components).
@@ -435,17 +407,6 @@ fn folder_error(kind: MediaKind, name: &str) -> bool {
         MediaKind::Book | MediaKind::Comic => naming::validate_folder_path(name).is_err(),
         _ => validate_folder_name(name).is_err(),
     }
-}
-
-fn book_folder(f: &naming::NamingFormats, title: &str, year: Option<i64>) -> String {
-    apply_book_format(
-        &f.book_folder,
-        &BookNameTokens {
-            title: title.to_owned(),
-            year,
-            ..Default::default()
-        },
-    )
 }
 
 /// `findOrImportIdentified` (rule 78): the media of the pick, created when the library has none.
@@ -592,28 +553,17 @@ async fn target_folder(
     year: Option<i32>,
 ) -> Result<String, AppError> {
     Ok(if d.transfer.is_some() {
-        let f = naming_formats(&st.db).await?;
-        let named = match d.media_type {
-            MediaKind::Series => naming::apply_series_folder_format(
-                &f.series_folder,
-                &SeriesFolder {
-                    series_title: title.to_owned(),
-                    original_title: None,
-                    year: year.map(i64::from),
-                    tmdb_id: None,
-                },
-            ),
-            MediaKind::Book | MediaKind::Comic => book_folder(&f, title, year.map(i64::from)),
-            MediaKind::Movie => naming::apply_movie_folder_format(
-                &f.movie_folder,
-                &MovieFolder {
-                    title: title.to_owned(),
-                    original_title: None,
-                    year: year.map(i64::from),
-                    tmdb_id: None,
-                },
-            ),
-        };
+        let named = mw::folder_for(
+            &st.db,
+            d.media_type,
+            &mw::FolderOf {
+                title,
+                original_title: None,
+                year: year.map(i64::from),
+                tmdb_id: None,
+            },
+        )
+        .await?;
         if folder_error(d.media_type, &named) {
             return Err(AppError::bad_request(format!(
                 "Invalid folder name for \"{title}\""
@@ -688,7 +638,7 @@ pub(super) async fn find_or_create_unmatched(
         MediaKind::Series if d.transfer.is_some() => {
             series_folder_of(&sample, &d.folder_name, d.scan_root.as_deref())
         }
-        MediaKind::Series => PathBuf::from(&lib.path).join(&d.folder_name),
+        MediaKind::Series => PathBuf::from(lib.root_of(d.folder_id)).join(&d.folder_name),
     };
     let root_movie = d.folder_name.is_empty();
     let art_base = match d.media_type {
@@ -698,7 +648,7 @@ pub(super) async fn find_or_create_unmatched(
         MediaKind::Series => None,
     };
     let root = d.scan_root.as_deref().map_or_else(
-        || PathBuf::from(&lib.path),
+        || PathBuf::from(lib.root_of(d.folder_id)),
         |r| PathBuf::from(resolve(&crate::libraries::sanitize_path(r), "/")),
     );
     let record = record::of_group(&record::Group {
@@ -730,7 +680,7 @@ pub(super) async fn find_or_create_unmatched(
         None => {
             if d.transfer.is_none() {
                 let outside = || AppError::bad_request("File outside the library root");
-                let root = fsx::Root::open(&lib.path).map_err(|_| outside())?;
+                let root = fsx::Root::open(lib.root_of(d.folder_id)).map_err(|_| outside())?;
                 let real = dunce::canonicalize(&sample).map_err(|_| outside())?;
                 if !root.contains(&real, false) || !root.contains(&art_dir, true) {
                     return Err(outside());
@@ -761,13 +711,13 @@ pub(super) async fn find_or_create_unmatched(
             (id, true)
         }
     };
+    let media = load_media(&st.db, id)
+        .await?
+        .ok_or_else(|| AppError::bad_request("Media not found after import"))?;
     *st.ingest
         .unmatched_holders
         .lock_clean()
         .entry(id)
         .or_default() += 1;
-    let media = load_media(&st.db, id)
-        .await?
-        .ok_or_else(|| AppError::bad_request("Media not found after import"))?;
     Ok((media, created, key))
 }
