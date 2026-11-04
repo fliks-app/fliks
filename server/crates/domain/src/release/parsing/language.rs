@@ -1,5 +1,5 @@
 //! Release language from keywords (`language.parser.ts`); short words that collide with English are frozen.
-use super::title::tag_region;
+use super::title::decoded_with_tag_start;
 use crate::js::rx;
 use crate::language::{
     APP_LANGUAGES, AppLanguage, ENGLISH_LANGUAGE, UNKNOWN_LANGUAGE, app_language_by_iso,
@@ -9,43 +9,64 @@ fn lang(iso: &str) -> &'static AppLanguage {
     app_language_by_iso(iso).unwrap_or(UNKNOWN_LANGUAGE)
 }
 
-/// Every language the title's tag region names (`tag_region`), in title order; `dual`, `multi` or an `N lang` count alone give Unknown.
+/// Languages named in the title in title order: full words anywhere, short codes only in the tag
+/// region (after the work title). `dual`, `multi` or an `N lang` count alone give Unknown.
 pub fn parse_release_language(title: &str) -> Vec<&'static AppLanguage> {
-    let t = tag_region(title)
-        .replace(['.', '_', '-'], " ")
-        .to_lowercase();
-    let families: [(&regex::Regex, &str); 18] = [
+    let (decoded, tag_start) = decoded_with_tag_start(title);
+    let norm = |s: &str| s.replace(['.', '_', '-'], " ").to_lowercase();
+    let t = norm(&decoded);
+    let tag_at = norm(&decoded[..tag_start]).len();
+    let families: [(&regex::Regex, &regex::Regex, &str); 18] = [
         (
-            rx!(r"\b(french|fre|fra|vff|vfi|vf\b|truefrench|vostfr|vost)\b"),
+            rx!(r"\b(french|vff|vfi|truefrench|vostfr|vost)\b"),
+            rx!(r"\b(fre|fra|vf)\b"),
             "fr",
         ),
-        (rx!(r"\b(english|eng)\b"), "en"),
-        (rx!(r"\b(german|deutsch|ger|deu)\b"), "de"),
-        (rx!(r"\b(spanish|espanol|esp\b|spa\b|latino)\b"), "es"),
-        (rx!(r"\b(italian|italiano|ita\b)\b"), "it"),
+        (rx!(r"\b(english)\b"), rx!(r"\b(eng)\b"), "en"),
+        (rx!(r"\b(german|deutsch)\b"), rx!(r"\b(ger|deu)\b"), "de"),
         (
-            rx!(r"\b(portuguese|portugu[eê]s|pt[\- ]br|ptbr|por\b)\b"),
+            rx!(r"\b(spanish|espanol|latino)\b"),
+            rx!(r"\b(esp|spa)\b"),
+            "es",
+        ),
+        (rx!(r"\b(italian|italiano)\b"), rx!(r"\b(ita)\b"), "it"),
+        (
+            rx!(r"\b(portuguese|portugu[eê]s)\b"),
+            rx!(r"\b(pt[\- ]br|ptbr|por)\b"),
             "pt",
         ),
-        (rx!(r"\b(japanese|japon[ae]s|jap\b|jpn\b)\b"), "ja"),
-        (rx!(r"\b(korean|cor[eé]en|kor\b)\b"), "ko"),
         (
-            rx!(r"\b(chinese|chinois|chi\b|chn\b|mandarin|cantonese)\b"),
+            rx!(r"\b(japanese|japon[ae]s)\b"),
+            rx!(r"\b(jap|jpn)\b"),
+            "ja",
+        ),
+        (rx!(r"\b(korean|cor[eé]en)\b"), rx!(r"\b(kor)\b"), "ko"),
+        (
+            rx!(r"\b(chinese|chinois|mandarin|cantonese)\b"),
+            rx!(r"\b(chi|chn)\b"),
             "zh",
         ),
-        (rx!(r"\b(russian|russe|rus\b)\b"), "ru"),
-        (rx!(r"\b(arabic|arabe|ara\b)\b"), "ar"),
-        (rx!(r"\b(dutch|nl\b|nlx|flemish)\b"), "nl"),
-        (rx!(r"\b(polish|polonais|pol\b|pl\b)\b"), "pl"),
-        (rx!(r"\b(turkish|turc|tur\b)\b"), "tr"),
-        (rx!(r"\b(swedish|su[eè]dois|swe\b|sv\b)\b"), "sv"),
-        (rx!(r"\b(danish|danois|dan\b|dk\b)\b"), "da"),
-        (rx!(r"\b(norwegian|norv[eé]gien|nor\b|no\b)\b"), "no"),
-        (rx!(r"\b(finnish|finlandais|fin\b)\b"), "fi"),
+        (rx!(r"\b(russian|russe)\b"), rx!(r"\b(rus)\b"), "ru"),
+        (rx!(r"\b(arabic|arabe)\b"), rx!(r"\b(ara)\b"), "ar"),
+        (rx!(r"\b(dutch|flemish)\b"), rx!(r"\b(nl|nlx)\b"), "nl"),
+        (rx!(r"\b(polish|polonais)\b"), rx!(r"\b(pol|pl)\b"), "pl"),
+        (rx!(r"\b(turkish|turc)\b"), rx!(r"\b(tur)\b"), "tr"),
+        (rx!(r"\b(swedish|su[eè]dois)\b"), rx!(r"\b(swe|sv)\b"), "sv"),
+        (rx!(r"\b(danish|danois)\b"), rx!(r"\b(dan|dk)\b"), "da"),
+        (
+            rx!(r"\b(norwegian|norv[eé]gien)\b"),
+            rx!(r"\b(nor|no)\b"),
+            "no",
+        ),
+        (rx!(r"\b(finnish|finlandais)\b"), rx!(r"\b(fin)\b"), "fi"),
     ];
     let mut found: Vec<(usize, &str)> = families
         .iter()
-        .filter_map(|(r, iso)| r.find(&t).map(|m| (m.start(), *iso)))
+        .filter_map(|(long, short, iso)| {
+            let word = long.find(&t).map(|m| m.start());
+            let code = short.find(&t[tag_at..]).map(|m| tag_at + m.start());
+            word.into_iter().chain(code).min().map(|at| (at, *iso))
+        })
         .collect();
     found.sort_by_key(|(at, _)| *at);
     if !found.is_empty() {

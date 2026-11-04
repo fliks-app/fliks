@@ -201,14 +201,12 @@ fn title_slot(decoded: &str) -> (&str, Option<usize>, Option<u32>) {
     (slot, cut, year)
 }
 
-/// What follows the work title (tags, language words); the whole name when no marker ends the title.
-pub fn tag_region(raw_name: &str) -> String {
+/// The decoded name and the byte offset where its tag region starts (0 when no marker ends the title).
+pub fn decoded_with_tag_start(raw_name: &str) -> (String, usize) {
     let decoded = decode_name(raw_name);
     let end = title_slot(&decoded).0.len();
-    if end == decoded.len() {
-        return decoded;
-    }
-    decoded[end..].to_owned()
+    let start = if end == decoded.len() { 0 } else { end };
+    (decoded, start)
 }
 
 pub fn extract_media_title(raw_name: &str) -> ExtractedRelease {

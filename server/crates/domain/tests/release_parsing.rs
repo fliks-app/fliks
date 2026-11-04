@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn release_parsing_reproduces_expected() {
-    replay("release-parsing", 3445, |i| {
+    replay("release-parsing", 3446, |i| {
         let s = |k: &str| i[k].as_str().unwrap();
         let dim = |k: &str| i[k].as_f64();
         match s("fn") {
