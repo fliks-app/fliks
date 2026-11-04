@@ -83,9 +83,9 @@ pub type Provenance = Vec<(Field, Namespace)>;
 
 type Record = (Namespace, Map<String, Value>);
 
-/// A third-party provider owns no core id or collection (`provider-plugins.md` rule 26).
+/// A third-party provider or the files own no core id or collection (`provider-plugins.md` rule 26).
 fn unowned(p: Namespace, key: &str) -> bool {
-    p.core().is_none()
+    (p.core().is_none() || p == Namespace::FILE)
         && (Field::Ids.keys().contains(&key) || Field::Collection.keys().contains(&key))
 }
 
@@ -166,6 +166,17 @@ mod tests {
         let (m, _) = merge(
             &[(third, r)],
             &FieldOrder::new(MediaKind::Movie, &[third]),
+            &[],
+        );
+        assert_eq!(m, rec(json!({"title": "A"})));
+    }
+
+    #[test]
+    fn a_file_record_gives_no_core_id_or_collection() {
+        let r = rec(json!({"title": "A", "tmdbId": 5, "imdbId": "tt1", "tmdbCollectionId": 9}));
+        let (m, _) = merge(
+            &[(Namespace::FILE, r)],
+            &FieldOrder::new(MediaKind::Movie, &[]),
             &[],
         );
         assert_eq!(m, rec(json!({"title": "A"})));

@@ -1,8 +1,8 @@
-//! File tags and package metadata to hints and `file` records (`docs/spec/book-ingest.md` rule 12). Pure.
+//! File tags and package metadata to `file` records and the hints read back from them (`docs/spec/book-ingest.md` rule 12). Pure.
 use crate::metadata::books::identify::BookHints;
 use fliks_domain::{
     books::{
-        filename::{BookNameGuess, parse_path},
+        filename::parse_path,
         isbn,
         opf::{OpfMetadata, Role},
     },
@@ -36,91 +36,6 @@ fn position_text(p: f64) -> String {
     p.to_string()
 }
 
-fn guess_series(g: &BookNameGuess) -> Option<(String, Option<String>)> {
-    g.series
-        .clone()
-        .map(|s| (s, g.series_position.map(position_text)))
-}
-
-pub fn name_hints(family: Family, name_path: &str) -> BookHints {
-    let g = parse_path(name_path);
-    BookHints {
-        family,
-        isbns: vec![],
-        asin: None,
-        title: g.title.clone(),
-        authors: g.authors.clone(),
-        narrators: g.narrators.clone(),
-        language: None,
-        series: guess_series(&g),
-        year: g.year,
-    }
-}
-
-/// An audio file: the tags first, the name of the file for what they lack.
-pub fn audio_hints(tags: Option<&MediaTags>, name_path: &str) -> BookHints {
-    let mut h = name_hints(Family::Audio, name_path);
-    let Some(t) = tags else { return h };
-    let pick = |a: &Option<String>, b: &Option<String>| a.clone().or_else(|| b.clone());
-    h.title = pick(&t.album, &t.title).or(h.title);
-    let authors = pick(&t.artist, &t.album_artist).map(|a| split_people(&a));
-    h.authors = authors.filter(|a| !a.is_empty()).unwrap_or(h.authors);
-    let narrators = t.narrator.as_deref().map(split_people);
-    h.narrators = narrators.filter(|a| !a.is_empty()).unwrap_or(h.narrators);
-    h.language = language(t.language.as_deref());
-    if let Some(s) = &t.series {
-        h.series = Some((s.clone(), t.series_part.clone()));
-    }
-    h.year = t.year.and_then(|y| i32::try_from(y).ok()).or(h.year);
-    h.isbns = t
-        .isbn
-        .as_deref()
-        .and_then(isbn::parse)
-        .map(|i| vec![i.isbn13])
-        .unwrap_or_default();
-    h.asin = t
-        .asin
-        .as_deref()
-        .and_then(|a| ExternalProvider::Asin.normalize(a));
-    h
-}
-
-/// An EPUB: the package first, the name of the file for what it lacks.
-pub fn epub_hints(m: &OpfMetadata, name_path: &str) -> BookHints {
-    let mut h = name_hints(Family::Text, name_path);
-    let named = |role| -> Vec<String> {
-        m.creators
-            .iter()
-            .filter(|c| c.role == role)
-            .map(|c| c.name.clone())
-            .collect()
-    };
-    h.title = m.title.clone().or(h.title);
-    let authors = named(Role::Aut);
-    h.authors = if authors.is_empty() {
-        h.authors
-    } else {
-        authors
-    };
-    let narrators = named(Role::Nrt);
-    h.narrators = if narrators.is_empty() {
-        h.narrators
-    } else {
-        narrators
-    };
-    h.language = language(m.language.as_deref());
-    if let Some(s) = &m.series {
-        h.series = Some((s.name.clone(), s.position.map(position_text)));
-    }
-    h.year = m.year.or(h.year);
-    h.isbns = m.isbns.iter().map(|i| i.isbn13.clone()).collect();
-    h.asin = m
-        .asin
-        .as_deref()
-        .and_then(|a| ExternalProvider::Asin.normalize(a));
-    h
-}
-
 fn put(m: &mut Map<String, Value>, k: &str, v: Option<Value>) {
     if let Some(v) = v {
         m.insert(k.into(), v);
@@ -131,27 +46,59 @@ fn names(v: &[String]) -> Option<Value> {
     (!v.is_empty()).then(|| json!(v))
 }
 
-fn series_value(s: &Option<(String, Option<String>)>) -> Option<Value> {
-    s.as_ref().map(|(n, p)| json!([{"name": n, "position": p}]))
+fn series_value(name: &str, position: Option<String>) -> Value {
+    json!([{"name": name, "position": position}])
 }
 
-/// The `file` record of an audio file for `attach_with`.
-pub fn audio_record(tags: &MediaTags, h: &BookHints, duration: Option<f64>) -> Map<String, Value> {
+/// The record the name of a file gives: title, people, series, year.
+pub fn name_record(name_path: &str) -> Map<String, Value> {
+    let g = parse_path(name_path);
     let mut m = Map::new();
-    put(&mut m, "title", h.title.clone().map(Value::from));
-    put(&mut m, "authors", names(&h.authors));
-    put(&mut m, "narrators", names(&h.narrators));
-    put(&mut m, "language", h.language.clone().map(Value::from));
-    put(&mut m, "publisher", tags.publisher.clone().map(Value::from));
-    put(&mut m, "year", h.year.map(Value::from));
+    put(&mut m, "title", g.title.map(Value::from));
+    put(&mut m, "authors", names(&g.authors));
+    put(&mut m, "narrators", names(&g.narrators));
     put(
         &mut m,
-        "overview",
-        tags.description.clone().map(Value::from),
+        "series",
+        g.series
+            .map(|s| series_value(&s, g.series_position.map(position_text))),
     );
-    put(&mut m, "series", series_value(&h.series));
-    put(&mut m, "isbn13", names(&h.isbns));
-    put(&mut m, "asin", h.asin.clone().map(Value::from));
+    put(&mut m, "year", g.year.map(Value::from));
+    m
+}
+
+/// An audio file: the tags first, the name of the file for what they lack.
+pub fn audio_record(
+    tags: Option<&MediaTags>,
+    name_path: &str,
+    duration: Option<f64>,
+) -> Map<String, Value> {
+    let mut m = name_record(name_path);
+    let Some(t) = tags else { return m };
+    let pick = |a: &Option<String>, b: &Option<String>| a.clone().or_else(|| b.clone());
+    put(&mut m, "title", pick(&t.album, &t.title).map(Value::from));
+    let authors = pick(&t.artist, &t.album_artist).map(|a| split_people(&a));
+    put(&mut m, "authors", authors.as_deref().and_then(names));
+    let narrators = t.narrator.as_deref().map(split_people);
+    put(&mut m, "narrators", narrators.as_deref().and_then(names));
+    put(
+        &mut m,
+        "language",
+        language(t.language.as_deref()).map(Value::from),
+    );
+    put(&mut m, "publisher", t.publisher.clone().map(Value::from));
+    put(
+        &mut m,
+        "year",
+        t.year.and_then(|y| i32::try_from(y).ok()).map(Value::from),
+    );
+    put(&mut m, "overview", t.description.clone().map(Value::from));
+    if let Some(s) = &t.series {
+        m.insert("series".into(), series_value(s, t.series_part.clone()));
+    }
+    let isbn = t.isbn.as_deref().and_then(isbn::parse);
+    put(&mut m, "isbn13", isbn.map(|i| json!([i.isbn13])));
+    put(&mut m, "asin", asin(t.asin.as_deref()));
     put(
         &mut m,
         "durationSeconds",
@@ -162,28 +109,83 @@ pub fn audio_record(tags: &MediaTags, h: &BookHints, duration: Option<f64>) -> M
     m
 }
 
-/// The `file` record of an EPUB for `attach_with`.
-pub fn epub_record(meta: &OpfMetadata, h: &BookHints, format: &str) -> Map<String, Value> {
-    let mut m = Map::new();
-    put(&mut m, "title", h.title.clone().map(Value::from));
-    put(&mut m, "subtitle", meta.subtitle.clone().map(Value::from));
-    put(&mut m, "authors", names(&h.authors));
-    put(&mut m, "narrators", names(&h.narrators));
-    put(&mut m, "language", h.language.clone().map(Value::from));
-    put(&mut m, "publisher", meta.publisher.clone().map(Value::from));
-    put(&mut m, "year", h.year.map(Value::from));
+fn asin(raw: Option<&str>) -> Option<Value> {
+    raw.and_then(|a| ExternalProvider::Asin.normalize(a))
+        .map(Value::from)
+}
+
+/// An EPUB: the package first, the name of the file for what it lacks.
+pub fn epub_record(m: &OpfMetadata, name_path: &str, format: &str) -> Map<String, Value> {
+    let mut r = name_record(name_path);
+    let named = |role| -> Vec<String> {
+        m.creators
+            .iter()
+            .filter(|c| c.role == role)
+            .map(|c| c.name.clone())
+            .collect()
+    };
+    put(&mut r, "title", m.title.clone().map(Value::from));
+    put(&mut r, "subtitle", m.subtitle.clone().map(Value::from));
+    put(&mut r, "authors", names(&named(Role::Aut)));
+    put(&mut r, "narrators", names(&named(Role::Nrt)));
     put(
-        &mut m,
-        "overview",
-        meta.description.clone().map(Value::from),
+        &mut r,
+        "language",
+        language(m.language.as_deref()).map(Value::from),
     );
-    put(&mut m, "subjects", names(&meta.subjects));
-    put(&mut m, "series", series_value(&h.series));
-    put(&mut m, "isbn13", names(&h.isbns));
-    put(&mut m, "asin", h.asin.clone().map(Value::from));
-    put(&mut m, "releaseDate", meta.date.clone().map(Value::from));
-    m.insert("format".into(), format.into());
-    m
+    put(&mut r, "publisher", m.publisher.clone().map(Value::from));
+    put(&mut r, "year", m.year.map(Value::from));
+    put(&mut r, "overview", m.description.clone().map(Value::from));
+    put(&mut r, "subjects", names(&m.subjects));
+    if let Some(s) = &m.series {
+        r.insert(
+            "series".into(),
+            series_value(&s.name, s.position.map(position_text)),
+        );
+    }
+    let isbns: Vec<String> = m.isbns.iter().map(|i| i.isbn13.clone()).collect();
+    put(&mut r, "isbn13", names(&isbns));
+    put(&mut r, "asin", asin(m.asin.as_deref()));
+    put(&mut r, "releaseDate", m.date.clone().map(Value::from));
+    r.insert("format".into(), format.into());
+    r
+}
+
+impl BookHints {
+    /// What identifies a book, read back from its file record.
+    pub fn of_record(family: Family, r: &Map<String, Value>) -> Self {
+        let text = |k: &str| r.get(k).and_then(Value::as_str).map(str::to_owned);
+        let list = |k: &str| -> Vec<String> {
+            r.get(k)
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        Self {
+            family,
+            isbns: list("isbn13"),
+            asin: text("asin"),
+            title: text("title"),
+            authors: list("authors"),
+            narrators: list("narrators"),
+            language: text("language"),
+            series: r.get("series").and_then(|s| s.get(0)).and_then(|s| {
+                let position = s.get("position").and_then(Value::as_str);
+                Some((
+                    s.get("name")?.as_str()?.to_owned(),
+                    position.map(str::to_owned),
+                ))
+            }),
+            year: r
+                .get("year")
+                .and_then(Value::as_i64)
+                .and_then(|y| i32::try_from(y).ok()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -212,10 +214,12 @@ mod tests {
         for (i, c) in cases.iter().enumerate() {
             let tags: Option<MediaTags> =
                 serde_json::from_value(c["input"]["tags"].clone()).unwrap();
-            let got = json_of(&audio_hints(
+            let record = audio_record(
                 tags.as_ref(),
                 c["input"]["namePath"].as_str().unwrap(),
-            ));
+                None,
+            );
+            let got = json_of(&BookHints::of_record(Family::Audio, &record));
             if bless {
                 fx["cases"][i]["expected"] = got;
             } else {
@@ -236,18 +240,22 @@ mod tests {
             <dc:creator>Olympe Faucheval</dc:creator><dc:language>fre</dc:language>
             <dc:identifier>urn:isbn:9791234567896</dc:identifier></metadata></package>"#,
         );
-        let h = epub_hints(&meta, "Autre Nom - Autre Titre.epub");
+        let rec = epub_record(&meta, "Autre Nom - Autre Titre.epub", "epub");
+        let h = BookHints::of_record(Family::Text, &rec);
         assert_eq!(h.title.as_deref(), Some("Mirelune"));
         assert_eq!(h.authors, ["Olympe Faucheval"]);
         assert_eq!(h.language.as_deref(), Some("fr"));
         assert_eq!(h.isbns, ["9791234567896"]);
-        let bare = epub_hints(
-            &OpfMetadata::default(),
-            "Aldric Vexmoor - Le Phare des Brumes.epub",
+        let bare = BookHints::of_record(
+            Family::Text,
+            &epub_record(
+                &OpfMetadata::default(),
+                "Aldric Vexmoor - Le Phare des Brumes.epub",
+                "epub",
+            ),
         );
         assert_eq!(bare.title.as_deref(), Some("Le Phare des Brumes"));
         assert_eq!(bare.authors, ["Aldric Vexmoor"]);
-        let rec = epub_record(&meta, &h, "epub");
         assert_eq!(rec["format"], "epub");
         assert_eq!(rec["isbn13"], json!(["9791234567896"]));
     }

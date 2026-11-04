@@ -561,20 +561,20 @@ async fn the_detail_names_the_providers_that_contributed(pool: PgPool) {
     let (s, v) = c.get(&format!("/api/media/{id}")).await;
     assert_eq!(s, 200);
     assert_eq!(
-        v["comic"]["providers"],
+        v["providers"],
         json!([{"provider": NS, "name": "Test Comics", "url": "https://cv.test"}])
     );
     // a volume nobody enriched carries none
     let local = c.local_volume().await;
     let (_, v) = c.get(&format!("/api/media/{local}")).await;
-    assert_eq!(v["comic"]["providers"], json!([]));
+    assert_eq!(v["providers"], json!([]));
     // the package leaves: the name stays, the link does not
     sqlx::query("DELETE FROM plugin_packages")
         .execute(&c.pool)
         .await
         .unwrap();
     let (_, v) = c.get(&format!("/api/media/{id}")).await;
-    assert_eq!(v["comic"]["providers"][0]["url"], Value::Null);
+    assert_eq!(v["providers"][0]["url"], Value::Null);
 }
 
 #[sqlx::test(migrations = false)]
@@ -825,7 +825,7 @@ async fn identify_links_the_volume_and_refreshes_it(pool: PgPool) {
     let (s, _) = c
         .call(&c.admin, "POST", &format!("/api/media/{m}/refresh"), None)
         .await;
-    assert_eq!(s, 400);
+    assert_eq!(s, 201);
     let (s, v) = c
         .call(
             &c.admin,
@@ -914,7 +914,7 @@ async fn a_homepage_that_is_not_https_is_not_a_link(pool: PgPool) {
         .await
         .unwrap();
     let (_, v) = c.import(json!({})).await;
-    assert_eq!(v["comic"]["providers"][0]["url"], Value::Null);
+    assert_eq!(v["providers"][0]["url"], Value::Null);
 }
 
 #[sqlx::test(migrations = false)]

@@ -11,7 +11,6 @@ use fliks_domain::{
         name,
     },
     media::family::Family,
-    metadata::field::Field,
 };
 use sqlx::{PgConnection, PgPool};
 use std::path::Path;
@@ -199,8 +198,6 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
     .execute(&mut *tx)
     .await?;
     let edition = edition(&mut tx, media).await?;
-    let locked = crate::media::field_sources::locked_fields(&mut *tx, media).await?;
-    let free = |f: Field| !locked.contains(&f);
     for r in rows {
         let placed: bool = sqlx::query_scalar(
             r#"SELECT EXISTS (SELECT 1 FROM item_parts WHERE "mediaFileId" = $1)"#,
@@ -213,16 +210,6 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
         }
         let n = name::parse_path(r.rel.rsplit('/').next().unwrap_or(&r.rel));
         let n = info::resolve(&n, r.info.as_ref());
-        sqlx::query(
-            r#"UPDATE comic_details SET publisher = COALESCE(publisher, $2),
-                 "startYear" = COALESCE("startYear", $3), volume = COALESCE(volume, $4) WHERE "mediaId" = $1"#,
-        )
-        .bind(media)
-        .bind(n.publisher.as_deref().filter(|_| free(Field::Publisher)))
-        .bind(n.start_year.filter(|_| free(Field::Year)))
-        .bind(n.volume_no.filter(|_| free(Field::Details)))
-        .execute(&mut *tx)
-        .await?;
         let item: Option<i32> = sqlx::query_scalar(
             r#"SELECT "itemId" FROM comic_issues WHERE "mediaId" = $1 AND kind = $2
                AND CASE WHEN kind = 'special' OR $3::text IS NULL THEN label = $4

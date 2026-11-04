@@ -4,8 +4,12 @@ use super::{Fetched, fetch};
 use crate::{
     http::AppError,
     images::paths::{Target, Variant},
-    ingest::comics::edition,
-    media::{field_sources, items::lock_versions},
+    ingest::{comics::edition, record::file_records},
+    media::{
+        field_sources,
+        items::lock_versions,
+        write::fields::{Fields, apply, merge_unmatched},
+    },
     metadata::Override,
     state::AppState,
 };
@@ -13,8 +17,13 @@ use fliks_domain::comics::provider::Issue;
 use fliks_domain::{
     external_id::Namespace,
     media::kind::MediaKind,
-    metadata::{field::Field, limiter::Priority},
+    metadata::{
+        field::Field,
+        limiter::Priority,
+        merge::{FieldOrder, merge},
+    },
 };
+use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
 /// The metadata language of the media's library.
@@ -66,59 +75,53 @@ pub async fn write(st: &AppState, media: i32, ns: Namespace, f: &Fetched) -> Res
         return Ok(());
     }
     let locked = field_sources::locked_fields(&mut *tx, media).await?;
-    let free = |f: Field| !locked.contains(&f);
-    let mut provenance = vec![];
-    let mut take = |field: Field, given: bool| {
-        let on = given && free(field);
-        if on {
-            provenance.push((field, ns));
+    let mut provided = Map::new();
+    for (k, v) in [
+        ("title", Some(Value::from(w.title.clone()))),
+        ("overview", w.overview.clone().map(Value::from)),
+        ("year", w.year.map(Value::from)),
+        ("posterUrl", stored.map(Value::from)),
+        ("publisher", w.publisher.clone().map(Value::from)),
+        ("volume", w.volume.map(Value::from)),
+    ] {
+        if let Some(v) = v {
+            provided.insert(k.into(), v);
         }
-        on
+    }
+    let mut records = vec![(ns, provided)];
+    let files = file_records(st, media).await;
+    records.extend(files.into_iter().map(|r| (Namespace::FILE, r)));
+    let (merged, provenance) = merge(&records, &FieldOrder::new(MediaKind::Comic, &[ns]), &locked);
+    apply(&mut tx, media, &Fields::from_map(MediaKind::Comic, &merged)).await?;
+    set_details(&mut tx, media, &merged).await?;
+    field_sources::merge_field_sources(&mut tx, media, &provenance).await?;
+    merge_issues(&mut tx, media, &f.issues).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// The volume's `comic_details` from a merged record: a key the merge left out leaves its column.
+pub(crate) async fn set_details(
+    c: &mut sqlx::PgConnection,
+    media: i32,
+    m: &Map<String, Value>,
+) -> sqlx::Result<()> {
+    let int = |k: &str| {
+        m.get(k)
+            .and_then(Value::as_i64)
+            .and_then(|n| i32::try_from(n).ok())
     };
-    let (title, overview) = (
-        take(Field::Title, true).then(|| w.title.clone()),
-        take(Field::Overview, w.overview.is_some())
-            .then(|| w.overview.clone())
-            .flatten(),
-    );
-    let year = take(Field::Year, w.year.is_some())
-        .then_some(w.year)
-        .flatten();
-    let poster = take(Field::PosterUrl, stored.is_some())
-        .then_some(stored)
-        .flatten();
-    let publisher = take(Field::Publisher, w.publisher.is_some())
-        .then(|| w.publisher.clone())
-        .flatten();
-    let volume = take(Field::Details, w.volume.is_some())
-        .then_some(w.volume)
-        .flatten();
-    sqlx::query(
-        r#"UPDATE media SET title = COALESCE($2, title), overview = COALESCE($3, overview),
-             year = COALESCE($4, year), "posterUrl" = COALESCE($5, "posterUrl"),
-             "metadataRefreshedAt" = now() WHERE id = $1"#,
-    )
-    .bind(media)
-    .bind(&title)
-    .bind(&overview)
-    .bind(year)
-    .bind(&poster)
-    .execute(&mut *tx)
-    .await?;
     sqlx::query(
         r#"INSERT INTO comic_details ("mediaId", publisher, "startYear", volume) VALUES ($1, $2, $3, $4)
            ON CONFLICT ("mediaId") DO UPDATE SET publisher = COALESCE($2, comic_details.publisher),
              "startYear" = COALESCE($3, comic_details."startYear"), volume = COALESCE($4, comic_details.volume)"#,
     )
     .bind(media)
-    .bind(&publisher)
-    .bind(year)
-    .bind(volume)
-    .execute(&mut *tx)
+    .bind(m.get("publisher").and_then(Value::as_str))
+    .bind(int("year"))
+    .bind(int("volume"))
+    .execute(c)
     .await?;
-    field_sources::merge_field_sources(&mut tx, media, &provenance).await?;
-    merge_issues(&mut tx, media, &f.issues).await?;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -288,15 +291,11 @@ async fn linked(st: &AppState, media: i32) -> Result<Option<(Namespace, String)>
     Ok(held.into_iter().next().map(|(_, ns, v)| (ns, v)))
 }
 
-/// Whether the media holds the id of a comic provider.
-pub async fn has_provider_id(st: &AppState, media: i32) -> Result<bool, AppError> {
-    Ok(linked(st, media).await?.is_some())
-}
-
 /// Reads the provider the media is linked to again and writes it (rule 43); `false` when the media
-/// holds no comic provider id.
+/// holds no comic provider id, its files are merged alone then.
 pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, AppError> {
     let Some((ns, id)) = linked(st, media).await? else {
+        merge_unmatched(st, media).await?;
         return Ok(false);
     };
     let library: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)

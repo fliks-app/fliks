@@ -2640,8 +2640,8 @@ mod book_ingest {
         let groups = b["groups"].as_array().unwrap();
         let show = groups.iter().find(|g| g["mediaType"] == "series").unwrap();
         assert_eq!(
-            (&show["guessTitle"], &show["nfo"]),
-            (&json!("Placeholder Show"), &Value::Null)
+            (&show["guessTitle"], &show["fileIds"]),
+            (&json!("Placeholder Show"), &json!([]))
         );
         let film = groups.iter().find(|g| g["mediaType"] == "movie").unwrap();
         assert_eq!(
@@ -2650,7 +2650,7 @@ mod book_ingest {
         );
         touch(
             &lib.join("Placeholder Show/tvshow.nfo"),
-            b"<tvshow><title>Show NFO</title></tvshow>",
+            b"<tvshow><title>Show NFO</title><uniqueid type='tmdb'>4242</uniqueid></tvshow>",
         );
         let (_, b) = call(
             &c,
@@ -2668,6 +2668,74 @@ mod book_ingest {
             .unwrap()
             .clone();
         assert_eq!(show["guessTitle"], "Show NFO");
+        assert_eq!(
+            show["fileIds"],
+            json!([{"provider": "tmdb", "externalId": "4242"}])
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unmatched_video_shows_its_nfo_and_a_refresh_without_id_merges_it_again(
+        pool: PgPool,
+    ) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("films");
+        let l = library(&c, "F", &lib, r#"["movie"]"#).await;
+        let file = lib.join("Placeholder Film (2001)/Placeholder Film (2001).mkv");
+        touch(&file, b"x");
+        let nfo = lib.join("Placeholder Film (2001)/movie.nfo");
+        touch(
+            &nfo,
+            b"<movie><title>Placeholder Film</title><plot>A plot.</plot><genre>Drama</genre>\
+              <runtime>93</runtime><premiered>2001-05-04</premiered></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            json!({"libraryId": l, "type": "movie", "folderName": "Placeholder Film (2001)",
+                   "files": [{"filePath": file}]}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let id = b["mediaId"].as_i64().unwrap();
+        let (overview, runtime, genres): (Option<String>, Option<i32>, Value) =
+            sqlx::query_as("SELECT overview, runtime, genres FROM media WHERE id = $1")
+                .bind(id as i32)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(
+            (overview.as_deref(), runtime, genres),
+            (Some("A plot."), Some(93), json!(["Drama"]))
+        );
+        let sources = "SELECT count(*) FROM media_field_sources WHERE provider = 'file'";
+        assert!(count(&c, sources).await > 0);
+        touch(
+            &nfo,
+            b"<movie><title>Placeholder Film</title><plot>Another plot.</plot></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/media/{id}/refresh"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let q =
+            format!("SELECT count(*) FROM media WHERE id = {id} AND overview = 'Another plot.'");
+        let mut merged = false;
+        for _ in 0..50 {
+            merged = count(&c, &q).await == 1;
+            if merged {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(merged);
     }
 
     #[sqlx::test(migrations = false)]
@@ -3668,14 +3736,14 @@ mod comic_ingest {
             "<ComicInfo><Number>7</Number><Title>Seven</Title><Summary>Sum</Summary><Publisher>Pub</Publisher>\
              <Volume>2016</Volume><Year>2017</Year><Month>3</Month><Day>9</Day></ComicInfo>",
         );
-        cbz_with_info(&d.join("Moon Tales 06.cbz"), "<ComicInfo><Number>");
+        cbz_with_info(&d.join("Moon Tales 09.cbz"), "<ComicInfo><Number>");
         cbz_with_info(
             &d.join("Moon Tales 08.cbz"),
             "<!DOCTYPE x [<!ENTITY y \"z\">]><ComicInfo><Title>&y;</Title></ComicInfo>",
         );
         let refs = [
             "Moon Tales/Moon Tales 05.cbz",
-            "Moon Tales/Moon Tales 06.cbz",
+            "Moon Tales/Moon Tales 09.cbz",
             "Moon Tales/Moon Tales 08.cbz",
         ];
         comics::register(&c.st, m, &placed(&c, &refs))
@@ -3694,11 +3762,22 @@ mod comic_ingest {
         assert_eq!(
             got,
             [
-                ("6".to_owned(), None, None, None),
                 ("7".to_owned(), s("Seven"), s("Sum"), s("2017-03-09")),
                 ("8".to_owned(), None, None, None),
+                ("9".to_owned(), None, None, None),
             ]
         );
+        let d: (Option<String>, Option<i32>, Option<i32>) = sqlx::query_as(
+            r#"SELECT publisher, "startYear", volume FROM comic_details WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(d, (None, None, None));
+        crate::media::write::fields::merge_unmatched(&c.st, m)
+            .await
+            .unwrap();
         let d: (Option<String>, Option<i32>, Option<i32>) = sqlx::query_as(
             r#"SELECT publisher, "startYear", volume FROM comic_details WHERE "mediaId" = $1"#,
         )
@@ -3746,6 +3825,9 @@ mod comic_ingest {
                 .await
                 .unwrap();
         assert_eq!((title, overview), (None, Some("S".to_owned())));
+        crate::media::write::fields::merge_unmatched(&c.st, m)
+            .await
+            .unwrap();
         let p: Option<String> =
             sqlx::query_scalar(r#"SELECT publisher FROM comic_details WHERE "mediaId" = $1"#)
                 .bind(m)

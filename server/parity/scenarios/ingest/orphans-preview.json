@@ -79,7 +79,7 @@
               "guessTitle": "Some Movie",
               "guessYear": 2010,
               "mediaType": "movie",
-              "nfo": null,
+              "fileIds": [],
               "suggestedProvider": "tmdb"
             }
           ],

@@ -6,6 +6,7 @@ mod comic_edit;
 mod comic_import;
 mod companions;
 mod delete;
+pub mod fields;
 mod identified;
 mod import;
 mod metadata;

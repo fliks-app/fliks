@@ -695,12 +695,19 @@ pub(super) async fn find_or_create_unmatched(
         }
         MediaKind::Series => None,
     };
-    let nfo = group_nfo(d.media_type, &art_dir, &sample, root_movie).await;
     let root = d.scan_root.as_deref().map_or_else(
         || PathBuf::from(&lib.path),
         |r| PathBuf::from(resolve(&crate::libraries::sanitize_path(r), "/")),
     );
-    let (guessed_title, guessed_year) = guess(d.media_type, &root, &sample, nfo.as_ref());
+    let record = record::of_group(&record::Group {
+        kind: d.media_type,
+        root: &root,
+        dir: &art_dir,
+        sample: &sample,
+        at_root: root_movie,
+    })
+    .await;
+    let (guessed_title, guessed_year) = record::title_year(record.as_ref());
     let typed = d
         .title
         .as_deref()
@@ -741,20 +748,13 @@ pub(super) async fn find_or_create_unmatched(
                     language_profile_id: d.language_profile_id,
                     library_default_quality: lib.dq,
                     library_default_language: lib.dl,
-                    nfo,
+                    record,
+                    lock_title: typed.is_some(),
                     artwork,
                 },
                 user,
             )
             .await?;
-            if typed.is_some() {
-                crate::media::field_sources::lock(
-                    &st.db,
-                    id,
-                    fliks_domain::metadata::field::Field::Title,
-                )
-                .await?;
-            }
             (id, true)
         }
     };

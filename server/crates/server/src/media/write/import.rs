@@ -2,7 +2,7 @@
 //! transaction; images and credits follow detached.
 use super::{
     body::Body,
-    entity_or_404,
+    entity_or_404, fields,
     identified::{Creation, create_identified},
     metadata, resolve_profile,
 };
@@ -26,11 +26,10 @@ use fliks_domain::{
     acl::{Action, Subject},
     external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
-    metadata::limiter::Priority,
+    metadata::{field::Field, limiter::Priority},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
-    nfo::NfoData,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sqlx::PgConnection;
 use std::path::PathBuf;
 
@@ -652,7 +651,10 @@ pub struct Unmatched {
     pub language_profile_id: Option<i32>,
     pub library_default_quality: Option<i32>,
     pub library_default_language: Option<i32>,
-    pub nfo: Option<NfoData>,
+    /// What the files say (`metadata-orchestrator.md` rule 39), merged once the shell exists.
+    pub record: Option<Map<String, Value>>,
+    /// The title was typed by the caller: it is locked.
+    pub lock_title: bool,
     pub artwork: Artwork,
 }
 
@@ -679,29 +681,16 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         u.library_default_language,
     )
     .await?;
-    let nfo = u.nfo.unwrap_or_default();
     let title = u.title;
-    let original = nfo
-        .original_title
-        .clone()
-        .filter(|o| !o.is_empty())
-        .unwrap_or_else(|| title.clone());
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles", overview,
-             genres, runtime, rating, "libraryId", "folderName",
-             "languageProfileId", "addedById")
-           VALUES ($1, $2, $3, $4, 'released', false, '[]', $5, $6, $7, $8,
-             $9, $10, $11, $12)
+        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles",
+             genres, "libraryId", "folderName", "languageProfileId", "addedById")
+           VALUES ($1, $1, $2, $3, 'released', false, '[]', '[]', $4, $5, $6, $7)
            RETURNING id"#,
         title,
-        original,
         u.year,
         u.media_type.as_str(),
-        nfo.plot,
-        json!(nfo.genres.clone().unwrap_or_default()),
-        nfo.runtime.and_then(|r| i32::try_from(r).ok()),
-        nfo.rating,
         u.library_id,
         u.folder_name,
         l,
@@ -709,13 +698,18 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     )
     .fetch_one(&mut *tx)
     .await?;
-    set_release_dates(
-        &mut tx,
-        id,
-        &[(ReleaseKind::Release, nfo.premiered.clone())],
-        false,
-    )
-    .await?;
+    if u.lock_title {
+        crate::media::field_sources::lock(&mut *tx, id, Field::Title).await?;
+    }
+    // A book's file record is merged by its settle, with the credits and the series.
+    if let Some(mut record) = u.record.filter(|_| u.media_type != MediaKind::Book) {
+        record.insert("title".into(), title.clone().into());
+        match u.year {
+            Some(y) => record.insert("year".into(), y.into()),
+            None => record.remove("year"),
+        };
+        fields::merge_files(&mut tx, id, u.media_type, &[record]).await?;
+    }
     if let Some(f) = u.folder_id {
         crate::libraries::assert_folder_in_library(&mut *tx, u.library_id, f).await?;
     }

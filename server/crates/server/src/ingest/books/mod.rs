@@ -849,7 +849,9 @@ async fn merge_editions(
         else {
             continue;
         };
-        let (hints, record) = hints_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
+        let record = record_of(c.family, &path, &rel, info.and_then(|i| i.tags)).await;
+        let hints = identify::BookHints::of_record(c.family, &record);
+        let record = Some(record);
         let stored = if all {
             link::stored(&st.db, media, Some(c.edition))
                 .await
@@ -908,16 +910,15 @@ async fn merge_editions(
     Ok(media)
 }
 
-async fn hints_of(
+/// The file record of a book file: an EPUB's package, an audio file's tags, else its name.
+pub(crate) async fn record_of(
     family: Family,
     path: &Path,
     rel: &str,
     tags: Option<MediaTags>,
-) -> (identify::BookHints, Option<Map<String, Value>>) {
+) -> Map<String, Value> {
     if family == Family::Audio {
-        let h = tags::audio_hints(tags.as_ref(), rel);
-        let record = tags.as_ref().map(|t| tags::audio_record(t, &h, None));
-        return (h, record);
+        return tags::audio_record(tags.as_ref(), rel, None);
     }
     let p = path.to_path_buf();
     let epub = tokio::task::spawn_blocking(move || archive::read_epub(&p))
@@ -925,12 +926,8 @@ async fn hints_of(
         .ok()
         .flatten();
     match epub {
-        Some(e) => {
-            let h = tags::epub_hints(&e.meta, rel);
-            let record = tags::epub_record(&e.meta, &h, "epub");
-            (h, Some(record))
-        }
-        None => (tags::name_hints(family, rel), None),
+        Some(e) => tags::epub_record(&e.meta, rel, "epub"),
+        None => tags::name_record(rel),
     }
 }
 

@@ -13,6 +13,7 @@ use crate::{
         editions::{self, Facts},
         external_ids::{self, Link, edition_id},
         field_sources,
+        write::fields::{Fields, apply},
     },
     metadata::{MetaError, Override, Upstream},
     state::AppState,
@@ -161,25 +162,7 @@ pub async fn attach_with(
 
     let title = text(&wmap, "title");
     let poster = text(&wmap, "posterUrl");
-    sqlx::query!(
-        r#"UPDATE media SET title = COALESCE($2, title), year = COALESCE($3, year),
-             overview = COALESCE($4, overview), "posterUrl" = COALESCE($5, "posterUrl"),
-             rating = COALESCE($6, rating), "metadataRefreshedAt" = now()
-           WHERE id = $1"#,
-        media,
-        title,
-        wmap.get("year")
-            .and_then(Value::as_i64)
-            .filter(|y| (1..=9999).contains(y))
-            .map(|y| y as i32),
-        text(&wmap, "overview"),
-        poster,
-        wmap.get("rating")
-            .and_then(Value::as_f64)
-            .filter(|r| r.is_finite())
-    )
-    .execute(&mut *tx)
-    .await?;
+    apply(&mut tx, media, &Fields::from_map(MediaKind::Book, &wmap)).await?;
     let subjects = match wmap.get("subjects") {
         Some(Value::Array(a)) if !a.is_empty() => Some(Value::Array(a.clone())),
         _ => None,

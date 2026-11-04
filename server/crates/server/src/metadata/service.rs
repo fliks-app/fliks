@@ -761,7 +761,10 @@ pub async fn for_media(st: &AppState, media_id: i32, prio: Priority) -> Result<F
     );
     let record = read_record(st, media.0, m.kind, &media.1, &lang, prio).await?;
     let locked = locked_fields(&st.db, m.id).await?;
-    let (details, provenance) = merged(m.kind, &[(media.0, record)], media.0, &locked);
+    let mut records = vec![(media.0, record)];
+    let files = crate::ingest::record::file_records(st, m.id).await;
+    records.extend(files.into_iter().map(|r| (Namespace::FILE, r)));
+    let (details, provenance) = merged(m.kind, &records, media.0, &locked);
     let seasons = if m.kind.has_seasons() {
         seasons_of(st, &m, lib.as_ref(), &lang, &media, prio).await?
     } else {

@@ -2,7 +2,7 @@
 use super::{
     MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
-    load_media, naming_formats,
+    load_media, naming_formats, record,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
     transfer::{Method, split_ext},
 };
@@ -14,7 +14,6 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
-    importers::nfo,
     libraries::{accessible_library_ids, paths_visible},
     media::write::{self as mw, body::Body},
     state::AppState,
@@ -32,11 +31,7 @@ use fliks_domain::{
         self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
         validate_folder_name, validate_folder_path,
     },
-    nfo::NfoData,
-    release::parsing::{
-        quality::parse_release_quality,
-        title::{ExtractedRelease, extract_media_title},
-    },
+    release::parsing::quality::parse_release_quality,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -136,7 +131,7 @@ struct Group {
     folder_name: String,
     guess_title: String,
     guess_year: Option<i64>,
-    nfo: Option<NfoData>,
+    file_ids: Vec<record::FileId>,
     suggested_provider: String,
     files: Vec<FileEntry>,
 }
@@ -305,7 +300,7 @@ async fn scan_under(
                     folder_name: folder.clone(),
                     guess_title: folder,
                     guess_year: None,
-                    nfo: None,
+                    file_ids: vec![],
                     suggested_provider: suggested(st, provider, media_type),
                     files: vec![entry],
                 });
@@ -314,11 +309,19 @@ async fn scan_under(
     }
     for g in &mut groups {
         let sample = PathBuf::from(&g.files[0].file_path);
-        let show_dir = root_p.join(&g.folder_name);
-        g.nfo = group_nfo(g.media_type, &show_dir, &sample, g.folder_name.is_empty()).await;
-        let (title, year) = guess(g.media_type, root_p, &sample, g.nfo.as_ref());
+        let dir = root_p.join(&g.folder_name);
+        let record = record::of_group(&record::Group {
+            kind: g.media_type,
+            root: root_p,
+            dir: &dir,
+            sample: &sample,
+            at_root: g.folder_name.is_empty(),
+        })
+        .await;
+        let (title, year) = record::title_year(record.as_ref());
         g.guess_title = title.unwrap_or_else(|| g.folder_name.clone());
         g.guess_year = year;
+        g.file_ids = record.as_ref().map(record::file_ids).unwrap_or_default();
     }
     let works = book_groups(
         root_p,
@@ -347,60 +350,6 @@ async fn scan_under(
         scanned_files: all.len(),
         orphan_count,
     }
-}
-
-/// The `.nfo` describing a group's work: a series' `tvshow.nfo` (`show_dir` is its folder), a movie
-/// at the scan root its own `<stem>.nfo` only, so the root's other `.nfo` files never name it.
-async fn group_nfo(
-    kind: MediaKind,
-    show_dir: &Path,
-    sample: &Path,
-    at_root: bool,
-) -> Option<NfoData> {
-    match kind {
-        MediaKind::Series => nfo::for_show(show_dir, sample).await,
-        _ if at_root => nfo::file(&sample.with_extension("nfo")).await,
-        _ => nfo::for_video(sample).await,
-    }
-}
-
-/// A group's title and year: the `.nfo`'s, else the path's; `None` title when both are empty.
-fn guess(
-    kind: MediaKind,
-    root: &Path,
-    sample: &Path,
-    nfo: Option<&NfoData>,
-) -> (Option<String>, Option<i64>) {
-    let (title, year) = match kind {
-        MediaKind::Book => {
-            let p = fliks_domain::books::filename::parse_path(&sample.to_string_lossy());
-            (p.title, p.year.map(i64::from))
-        }
-        _ => {
-            let ex = guess_from_path(root, sample);
-            (Some(ex.title), ex.year.map(i64::from))
-        }
-    };
-    let nonempty = |t: Option<String>| t.map(|t| t.trim().to_owned()).filter(|t| !t.is_empty());
-    (
-        nonempty(nfo.and_then(|n| n.title.clone())).or(nonempty(title)),
-        nfo.and_then(|n| n.year).or(year),
-    )
-}
-
-/// The file name's title, unless it has no year and a folder between it and `root` has one
-/// (`00000.m2ts` in `Title (2024)/`, a disc's `BDMV/STREAM`).
-fn guess_from_path(root: &Path, file: &Path) -> ExtractedRelease {
-    let ex = extract_media_title(&file_name(file));
-    if ex.year.is_some() {
-        return ex;
-    }
-    file.ancestors()
-        .skip(1)
-        .take_while(|d| d.starts_with(root) && *d != root)
-        .map(|d| extract_media_title(&file_name(d)))
-        .find(|f| f.year.is_some())
-        .unwrap_or(ex)
 }
 
 /// The works the book files make, one orphan group each for the works that have a file still
@@ -433,14 +382,24 @@ async fn book_groups(
                 episode_end: None,
             });
         }
+        let sample = PathBuf::from(&entries[0].file_path);
+        let record = record::of_group(&record::Group {
+            kind: MediaKind::Book,
+            root,
+            dir: root,
+            sample: &sample,
+            at_root: false,
+        })
+        .await;
+        let (title, year) = record::title_year(record.as_ref());
         out.push(Group {
             folder_id,
             group_key: format!("book:{}", w.name_path),
             media_type: MediaKind::Book,
             folder_name: w.anchor.unwrap_or_default(),
-            guess_title: w.title,
-            guess_year: w.year.map(i64::from),
-            nfo: None,
+            guess_title: title.unwrap_or(w.title),
+            guess_year: year.or(w.year.map(i64::from)),
+            file_ids: record.as_ref().map(record::file_ids).unwrap_or_default(),
             suggested_provider: provider.to_owned(),
             files: entries,
         });
@@ -487,20 +446,23 @@ async fn comic_groups(
             });
         }
         let first = PathBuf::from(&entries[0].file_path);
-        let guess = fliks_domain::comics::name::parse_path(
-            &fsx::rel_under(root, &first).unwrap_or_default(),
-        );
-        let format = comics::format_of(&file_name(&first)).unwrap_or("cbz");
-        let info = comics::read_info(&first, format).await;
-        let guess = fliks_domain::comics::info::resolve(&guess, info.as_ref());
+        let record = record::of_group(&record::Group {
+            kind: MediaKind::Comic,
+            root,
+            dir: root,
+            sample: &first,
+            at_root,
+        })
+        .await;
+        let (title, year) = record::title_year(record.as_ref());
         out.push(Group {
             folder_id,
             group_key: format!("comic:{dir}"),
             media_type: MediaKind::Comic,
             folder_name: if at_root { String::new() } else { dir },
-            guess_title: guess.series,
-            guess_year: guess.start_year.map(i64::from),
-            nfo: None,
+            guess_title: title.unwrap_or_default(),
+            guess_year: year,
+            file_ids: vec![],
             suggested_provider: provider.to_owned(),
             files: entries,
         });
@@ -876,7 +838,7 @@ use relink_dto::*;
 
 #[cfg(test)]
 mod tests {
-    use super::{guess_from_path, parse_relink};
+    use super::{parse_relink, record::guess_from_path};
     use std::path::Path;
 
     #[test]
