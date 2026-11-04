@@ -205,8 +205,10 @@ pub async fn similar_media(
     id: Result<PathParams<i32>, AppError>,
     Query(q): Pairs,
 ) -> Result<Json<Vec<Value>>, AppError> {
-    let (id, _) = gate(&st, &a, id).await?;
-    Ok(Json(related::similar(&st.db, id, similar_limit(&q)).await?))
+    let (id, acl) = gate(&st, &a, id).await?;
+    Ok(Json(
+        related::similar(&st.db, id, similar_limit(&q), &acl).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/media/{id}/collection", responses((status = 200)))]

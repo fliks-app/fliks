@@ -549,3 +549,31 @@ async fn file_filters_and_sorts_ignore_hidden_editions_files(pool: PgPool) {
         assert_eq!(has, shown);
     }
 }
+
+#[sqlx::test(migrations = false)]
+async fn similar_books_share_subjects_in_readable_libraries(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO book_details ("mediaId", subjects) VALUES
+           (10, '["Fantasy", "Dragons"]'), (11, '["fantasy"]'), (12, '["Dragons", "FANTASY"]'),
+           (13, '["Fantasy"]'), (14, '["History"]')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let ids = |v: &Value| {
+        nums(&json!(
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|m| m["id"].clone())
+                .collect::<Vec<_>>()
+        ))
+    };
+    let (s, v) = c.get(&c.plain, "/api/media/10/similar").await;
+    assert_eq!((s, ids(&v)), (200, vec![12, 11]));
+    let (_, v) = c.get(&c.admin, "/api/media/10/similar?limit=2").await;
+    assert_eq!(ids(&v), [12, 11]);
+    let (_, v) = c.get(&c.admin, "/api/media/14/similar").await;
+    assert!(ids(&v).is_empty());
+}

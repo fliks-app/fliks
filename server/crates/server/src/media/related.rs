@@ -32,7 +32,52 @@ fn item(
         "genres": genres, "hasFile": has_file})
 }
 
-pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, AppError> {
+/// A book's neighbours (`media-query.md` rule 52b): other books of `acl` libraries sharing a subject, most shared first.
+async fn similar_books(
+    db: &PgPool,
+    id: i32,
+    limit: usize,
+    acl: &[i32],
+) -> Result<Vec<Value>, AppError> {
+    let rows = sqlx::query!(
+        r#"WITH src AS (SELECT DISTINCT lower(s) AS s FROM book_details d, jsonb_array_elements_text(d.subjects) s WHERE d."mediaId" = $1)
+           SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
+                  m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!",
+                  COUNT(DISTINCT lower(c)) AS "overlap!"
+           FROM media m JOIN book_details d ON d."mediaId" = m.id, jsonb_array_elements_text(d.subjects) c
+           WHERE m.type = 'book' AND m.id != $1 AND m."libraryId" = ANY($2) AND lower(c) IN (SELECT s FROM src)
+           GROUP BY m.id
+           ORDER BY "overlap!" DESC, m.rating DESC NULLS LAST, m.id
+           LIMIT $3"#,
+        id,
+        acl,
+        limit as i64
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            item(
+                r.id,
+                &r.title,
+                r.year,
+                r.poster_url,
+                r.fanart_url,
+                r.rating,
+                strings(r.genres),
+                r.has_file,
+            )
+        })
+        .collect())
+}
+
+pub async fn similar(
+    db: &PgPool,
+    id: i32,
+    limit: usize,
+    acl: &[i32],
+) -> Result<Vec<Value>, AppError> {
     let Some(src) = sqlx::query!(
         r#"SELECT m.type AS "kind!", m."libraryId" AS library_id, m.genres, m.year, coll.tmdb_id AS "collection_id?",
                   mm.keywords AS "keywords?"
@@ -50,7 +95,8 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
     };
     let library = match crate::db::kind(&src.kind)? {
         MediaKind::Movie => src.library_id,
-        MediaKind::Series | MediaKind::Book | MediaKind::Comic => None,
+        MediaKind::Book => return similar_books(db, id, limit, acl).await,
+        MediaKind::Series | MediaKind::Comic => None,
     };
     let Some(library) = library else {
         return Ok(vec![]);
