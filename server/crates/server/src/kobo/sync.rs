@@ -230,7 +230,7 @@ pub async fn archive(
     req: Request,
 ) -> Result<Response, AppError> {
     if super::proxy::store_book(&st, &id).await? {
-        return Ok(super::proxy::forward(req).await);
+        return Ok(super::proxy::forward(&st, req).await);
     }
     let Some(b) = books::find(&st.db, &k, &id).await? else {
         return Ok(books::not_found());

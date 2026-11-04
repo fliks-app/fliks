@@ -119,7 +119,7 @@ pub async fn get(
     req: Request,
 ) -> Result<Response, AppError> {
     if proxy::store_book(&st, &id).await? {
-        return Ok(proxy::forward(req).await);
+        return Ok(proxy::forward(&st, req).await);
     }
     let Some(b) = books::find(&st.db, &k, &id).await? else {
         return Ok(not_found());
@@ -142,7 +142,7 @@ pub async fn put(
     req: Request,
 ) -> Result<Response, AppError> {
     if proxy::store_book(&st, &id).await? {
-        return Ok(proxy::forward(req).await);
+        return Ok(proxy::forward(&st, req).await);
     }
     let Some(b) = books::find(&st.db, &k, &id).await? else {
         return Ok(not_found());

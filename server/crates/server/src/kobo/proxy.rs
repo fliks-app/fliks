@@ -11,8 +11,6 @@ use reqwest::{Client, redirect};
 use serde_json::{Map, Value, json};
 use std::{sync::OnceLock, time::Duration};
 
-const STORE: &str = "https://storeapi.kobo.com";
-const STORE_ENV: &str = "FLIKS_KOBO_STORE_URL";
 const CDN: &str = "https://cdn.kobo.com/book-images";
 const SETTING: &str = "kobo_store_proxy";
 const FORWARDED: [&str; 4] = ["authorization", "content-type", "accept", "user-agent"];
@@ -38,11 +36,6 @@ pub fn store_cover(id: &str, w: &str, h: &str) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     }
     Redirect::temporary(&format!("{CDN}/{id}/{w}/{h}/false/image.jpg")).into_response()
-}
-
-/// The store; the operator can point it elsewhere (a test double), a user never.
-fn store() -> String {
-    std::env::var(STORE_ENV).unwrap_or_else(|_| STORE.to_owned())
 }
 
 /// No redirect is followed: the host is fixed.
@@ -93,10 +86,10 @@ async fn send(r: reqwest::RequestBuilder) -> Option<(StatusCode, Option<HeaderVa
 }
 
 /// The store's own `Resources`, for the keys this server does not serve.
-pub async fn store_resources(headers: &HeaderMap) -> Option<Map<String, Value>> {
+pub async fn store_resources(st: &AppState, headers: &HeaderMap) -> Option<Map<String, Value>> {
     let (status, _, body) = send(request(
         Method::GET,
-        &format!("{}/v1/initialization", store()),
+        &format!("{}/v1/initialization", st.kobo_store),
         headers,
         5,
     ))
@@ -111,7 +104,7 @@ pub async fn store_resources(headers: &HeaderMap) -> Option<Map<String, Value>> 
 }
 
 /// The request, path after the token and all, sent to the store; a redirect or a failure is a 502.
-pub async fn forward(req: Request) -> Response {
+pub async fn forward(st: &AppState, req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let path = original_path(&parts);
     let tail = path
@@ -119,8 +112,8 @@ pub async fn forward(req: Request) -> Response {
         .and_then(|p| p.split_once('/'))
         .map_or("v1", |(_, t)| t);
     let url = match parts.uri.query() {
-        Some(q) => format!("{}/{tail}?{q}", store()),
-        None => format!("{}/{tail}", store()),
+        Some(q) => format!("{}/{tail}?{q}", st.kobo_store),
+        None => format!("{}/{tail}", st.kobo_store),
     };
     let Ok(body) = to_bytes(body, MAX_BODY).await else {
         return StatusCode::PAYLOAD_TOO_LARGE.into_response();
@@ -163,7 +156,7 @@ pub async fn fallback(
     req: Request,
 ) -> Result<Response, AppError> {
     if enabled(&st).await? {
-        return Ok(forward(req).await);
+        return Ok(forward(&st, req).await);
     }
     let (parts, body) = req.into_parts();
     let path = original_path(&parts);

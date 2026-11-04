@@ -24,6 +24,8 @@ use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 
+/// The Kobo store the proxy forwards to.
+pub const STORE: &str = "https://storeapi.kobo.com";
 const BOOK_PREFIX: &str = "f11c5b00";
 const SHELF_PREFIX: &str = "f11c5a60";
 /// No username can hold a NUL, so this bucket of the login limiter is never a user's.
@@ -207,7 +209,11 @@ async fn initialization(
     // The native map, or the store's own when the proxy is on, then ours on top.
     let mut resources = resources::native();
     if proxy::enabled(&st).await? {
-        resources.extend(proxy::store_resources(&headers).await.unwrap_or_default());
+        resources.extend(
+            proxy::store_resources(&st, &headers)
+                .await
+                .unwrap_or_default(),
+        );
     }
     resources.extend(ours.as_object().cloned().unwrap_or_default());
     let mut res = json_response(StatusCode::OK, json!({ "Resources": resources }));

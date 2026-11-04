@@ -933,7 +933,7 @@ async fn the_auth_stub_echoes_the_user_key(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn with_the_proxy_on_store_books_state_and_deletes_reach_the_store(pool: PgPool) {
     use std::sync::{Arc, Mutex};
-    let (c, _) = ctx(pool).await;
+    let (mut c, _) = ctx(pool).await;
     let seen: Arc<Mutex<Vec<String>>> = Arc::default();
     let log = seen.clone();
     let store = Router::new().fallback(move |req: Request<Body>| {
@@ -962,8 +962,9 @@ async fn with_the_proxy_on_store_books_state_and_deletes_reach_the_store(pool: P
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, store).await.unwrap() });
-    // SAFETY: the only test that sets it; the others never read a proxy answer.
-    unsafe { std::env::set_var("FLIKS_KOBO_STORE_URL", format!("http://{addr}")) };
+    let mut st = AppState::new(c.pool.clone(), Config::from_lookup(|_| None), SECRET);
+    st.kobo_store = format!("http://{addr}").into();
+    c.app = kobo::router().with_state(st);
     sqlx::query("INSERT INTO app_settings (key, value) VALUES ('kobo_store_proxy', 'true')")
         .execute(&c.pool)
         .await

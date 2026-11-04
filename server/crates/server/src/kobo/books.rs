@@ -199,7 +199,7 @@ pub async fn metadata(
     req: Request,
 ) -> Result<Response, AppError> {
     if proxy::store_book(&st, &id).await? {
-        return Ok(proxy::forward(req).await);
+        return Ok(proxy::forward(&st, req).await);
     }
     Ok(match find(&st.db, &k, &id).await? {
         Some(b) => json_response(StatusCode::OK, json!([book_metadata(&k, &b)])),
