@@ -181,13 +181,14 @@ pub fn progress_gates() -> &'static Progress {
     P.get_or_init(Progress::default)
 }
 
-/// The season and episode of an event's unit, once its family is served; a book has no unit.
+/// The season and episode of an event's unit; a book has no unit and a comic's issue is no episode.
 fn event_unit(
     family: t::Family,
     unit: Option<&t::UnitRef>,
 ) -> Result<(Option<u32>, Option<u32>), HostError> {
     match super::served(family)? {
         Family::Video => units::video(unit),
+        Family::Image => Ok((None, None)),
         other if unit.is_some() => Err(super::imports::host_err(
             "ERR_VALIDATION",
             format!("a \"{other}\" event has no unit"),

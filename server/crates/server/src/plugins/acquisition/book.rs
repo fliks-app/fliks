@@ -3,7 +3,9 @@ use super::release::{Inputs, custom_formats, wit_languages, wit_rejections};
 use super::*;
 use fliks_domain::profiles::{default_allowed, default_sizes};
 use fliks_domain::release::audio::quality::parse_audio_release;
-use fliks_domain::release::scoring::{BookScoreOptions, score_and_sort_book_releases};
+use fliks_domain::release::scoring::{
+    BookScoreOptions, ExpectedIssue, score_and_sort_book_releases,
+};
 use fliks_domain::release::text::quality::parse_text_release;
 
 /// A want of a book with its profile and whether it is satisfied.
@@ -53,7 +55,7 @@ fn want_sql(filter: &str) -> String {
   LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
   LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d."editionId" IS NULL
       ORDER BY (d.kind = 'release') DESC, d.date LIMIT 1) rel ON true
-  WHERE m.type = 'book' AND w."mediaId" = ANY($1) AND w.family = ANY($2) {filter}
+  WHERE m.type IN ('book', 'comic') AND w."mediaId" = ANY($1) AND w.family = ANY($2) {filter}
   ORDER BY w."mediaId", CASE w.family WHEN 'text' THEN 0 ELSE 1 END, w.language NULLS FIRST, w.id"#,
         sat = crate::media::wants::satisfied_sql()
     )
@@ -239,7 +241,7 @@ pub(super) async fn targets(
 ) -> sqlx::Result<Vec<t::Target>> {
     let families = family.map_or_else(|| MediaKind::Book.families().to_vec(), |f| vec![f]);
     let rows: Vec<WantRow> = sqlx::query_as(sqlx::AssertSqlSafe(want_sql(
-        "AND m.monitored AND (rel.date IS NULL OR rel.date <= $3)",
+        "AND m.type = 'book' AND m.monitored AND (rel.date IS NULL OR rel.date <= $3)",
     )))
     .bind(ids)
     .bind(names(&families))
@@ -359,12 +361,14 @@ async fn sizes(db: &PgPool, family: Family) -> sqlx::Result<BTreeMap<u32, SizeLi
     Ok(out)
 }
 
-/// `releases.score` of `audio` or `text` by the want of `language` (the first when none), `[]` for an unknown media.
+/// `releases.score` of `audio`, `text` or `image` by the want of `language` (the first when none), `[]` for an
+/// unknown media; `issue` is the comic issue a search wants.
 pub async fn score(
     st: &AppState,
     media_id: u32,
     family: Family,
     language: Option<&str>,
+    issue: Option<ExpectedIssue>,
     releases: Vec<t::CandidateRelease>,
 ) -> sqlx::Result<Vec<t::ScoredRelease>> {
     let db = &st.db;
@@ -403,6 +407,7 @@ pub async fn score(
             .and_then(|w| w.qp_id.map(|_| i64::from(w.qp_min_cf.unwrap_or(0)))),
         min_rank_exclusive: None,
         max_rank_inclusive: None,
+        expected_issue: issue,
     };
     let (blocked, ids, candidates) = (inp.blocked, inp.ids, inp.candidates);
     let scored = tokio::task::spawn_blocking(move || {
@@ -625,7 +630,7 @@ mod tests {
             ("mp3", "Mirelune.FR.MP3.128kbps"),
         ];
         let releases = names.map(|(id, t)| release(id, t, 2_000_000)).to_vec();
-        let scored = score(&st, 1, Family::Text, None, releases.clone())
+        let scored = score(&st, 1, Family::Text, None, None, releases.clone())
             .await
             .unwrap();
         let by = |id: &str| scored.iter().find(|s| s.id == id).unwrap();
@@ -633,14 +638,23 @@ mod tests {
         assert!(by("epub").language_allowed && !by("epub").whole_group);
         assert!(by("pdf").allowed && !by("en").language_allowed);
         assert!(!by("mp3").allowed, "an audio release has no text quality");
-        let audio = score(&st, 1, Family::Audio, None, releases).await.unwrap();
+        let audio = score(&st, 1, Family::Audio, None, None, releases)
+            .await
+            .unwrap();
         let mp3 = audio.iter().find(|s| s.id == "mp3").unwrap();
         assert_eq!((mp3.quality_id, mp3.allowed), (103, true));
         assert!(
-            score(&st, 99, Family::Text, None, vec![release("x", "x", 1)])
-                .await
-                .unwrap()
-                .is_empty()
+            score(
+                &st,
+                99,
+                Family::Text,
+                None,
+                None,
+                vec![release("x", "x", 1)]
+            )
+            .await
+            .unwrap()
+            .is_empty()
         );
     }
 
@@ -739,11 +753,13 @@ mod tests {
         assert!(ctx(Some("de")).await.unwrap().is_none());
         assert_eq!(ctx(Some("zz zz")).await.unwrap_err().code, "ERR_VALIDATION");
         let plain = vec![release("x", "Mirelune.EPUB", 2_000_000)];
-        let fr = score(&st, 1, Family::Text, Some("fr"), plain.clone())
+        let fr = score(&st, 1, Family::Text, Some("fr"), None, plain.clone())
             .await
             .unwrap();
         assert!(!fr[0].language_allowed, "scored against the want of fr");
-        let any = score(&st, 1, Family::Text, None, plain).await.unwrap();
+        let any = score(&st, 1, Family::Text, None, None, plain)
+            .await
+            .unwrap();
         assert!(any[0].language_allowed, "scored against the first want");
     }
 

@@ -139,6 +139,118 @@ ORDER BY ep."airDate" ASC, ep.id ASC"#,
                 "episodeTitle": e.title, "hasFile": e.on_disk})
         }));
     }
+    if p.media_type.is_none_or(|t| t == MediaKind::Comic) {
+        #[derive(sqlx::FromRow)]
+        struct Issue {
+            id: i32,
+            media_id: i32,
+            media_title: String,
+            poster_url: Option<String>,
+            fanart_url: Option<String>,
+            status: String,
+            year: Option<i32>,
+            label: String,
+            title: Option<String>,
+            date: String,
+            on_disk: bool,
+        }
+        let rows: Vec<Issue> = sqlx::query_as(
+            r#"SELECT i.id, m.id AS media_id, m.title AS media_title, m."posterUrl" AS poster_url,
+  m."fanartUrl" AS fanart_url, m.status::text AS status, m.year, ci.label, i.title,
+  to_char(i."airDate", 'YYYY-MM-DD') AS date,
+  EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id) AS on_disk
+FROM items i JOIN comic_issues ci ON ci."itemId" = i.id JOIN media m ON m.id = i."mediaId"
+WHERE i."airDate" BETWEEN $1::text::date AND $2::text::date
+  AND ($3::bool IS NOT TRUE OR (m.monitored = true AND i.monitored = true))
+  AND ($4::int IS NULL OR m."addedById" = $4) AND m."libraryId" = ANY($5)
+ORDER BY i."airDate", i.id"#,
+        )
+        .bind(&start)
+        .bind(&end)
+        .bind(p.monitored_only)
+        .bind(added_by)
+        .bind(ids)
+        .fetch_all(db)
+        .await
+        .map_err(date_error)?;
+        out.extend(rows.into_iter().map(|e| {
+            json!({"id": e.id, "mediaId": e.media_id, "title": e.media_title, "type": "comic", "event": "release",
+                "date": e.date, "posterUrl": e.poster_url, "fanartUrl": e.fanart_url, "status": e.status,
+                "year": e.year, "issueNumber": e.label, "issueTitle": e.title, "hasFile": e.on_disk})
+        }));
+    }
     out.sort_by(|a, b| a["date"].as_str().cmp(&b["date"].as_str()));
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn comic_issues_with_a_release_date_are_entries(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'C', '["comic"]');
+               INSERT INTO library_folders ("libraryId", path) VALUES (1, '/c');
+               INSERT INTO media (id, title, year, type, "libraryId", monitored)
+                 VALUES (1, 'Star Gardens', 2024, 'comic', 1, true);
+               WITH e AS (INSERT INTO editions ("mediaId", family) VALUES (1, 'image') RETURNING id),
+                    i AS (INSERT INTO items ("mediaId", "editionId", monitored, title, "airDate")
+                          SELECT 1, id, v.m, v.t, v.d::date FROM e,
+                            (VALUES (true, 'First', '2024-03-05'), (false, 'Second', '2024-03-12'),
+                                    (true, 'Undated', NULL), (true, 'Later', '2024-04-02')) AS v(m, t, d)
+                          RETURNING id, title)
+               INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label)
+                 SELECT id, 1, 'issue', row_number() OVER (ORDER BY id), row_number() OVER (ORDER BY id)::text FROM i"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let params = |media_type, monitored_only| Calendar {
+            start: Some("2024-03-01".into()),
+            end: Some("2024-03-31".into()),
+            media_type,
+            monitored_only,
+            requested_by_me: false,
+        };
+        let all = calendar(&db, &params(None, false), &[1], 1).await.unwrap();
+        let got: Vec<_> = all
+            .iter()
+            .map(|e| {
+                (
+                    e["type"].as_str(),
+                    e["event"].as_str(),
+                    e["date"].as_str(),
+                    e["issueNumber"].as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    Some("comic"),
+                    Some("release"),
+                    Some("2024-03-05"),
+                    Some("1")
+                ),
+                (
+                    Some("comic"),
+                    Some("release"),
+                    Some("2024-03-12"),
+                    Some("2")
+                ),
+            ]
+        );
+        assert_eq!(all[0]["hasFile"], false);
+        let monitored = calendar(&db, &params(Some(MediaKind::Comic), true), &[1], 1)
+            .await
+            .unwrap();
+        assert_eq!(monitored.len(), 1);
+        let none = calendar(&db, &params(Some(MediaKind::Movie), false), &[1], 1)
+            .await
+            .unwrap();
+        assert!(none.is_empty());
+    }
 }

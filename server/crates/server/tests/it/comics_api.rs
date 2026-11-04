@@ -450,3 +450,36 @@ async fn an_edit_waits_for_the_versions_lock_of_the_volume(pool: PgPool) {
     assert!(waiting.is_err(), "the edit must wait for the lock");
     tx.commit().await.unwrap();
 }
+
+#[sqlx::test(migrations = false)]
+async fn deleting_the_last_file_of_an_issue_unmonitors_it(pool: PgPool) {
+    let (app, admin, _) = ctx(&pool).await;
+    let delete = |media: i32, file: i32| {
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(format!("/api/media/{media}/files/{file}"))
+            .header("authorization", format!("Bearer {admin}"))
+            .body(Body::empty())
+            .unwrap();
+        let app = app.clone();
+        async move { app.oneshot(req).await.unwrap().status().as_u16() }
+    };
+    let monitored = |item: i32| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, bool>("SELECT monitored FROM items WHERE id = $1")
+                .bind(item)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(delete(10, 4).await, 200);
+    assert!(monitored(1).await, "another version of the issue remains");
+    assert_eq!(delete(10, 1).await, 200);
+    assert!(!monitored(1).await, "the last file is gone");
+    assert!(
+        monitored(2).await,
+        "an issue that never had a file is untouched"
+    );
+}

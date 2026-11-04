@@ -4,6 +4,7 @@ mod common;
 use common::replay;
 use fliks_domain::media::family::Family;
 use fliks_domain::release::audio::quality::*;
+use fliks_domain::release::image::quality::*;
 use fliks_domain::release::scoring::*;
 use fliks_domain::release::text::quality::*;
 use serde_json::{Map, Value, json};
@@ -23,7 +24,15 @@ fn text_releases_reproduce_expected() {
 }
 
 #[test]
+fn comic_releases_reproduce_expected() {
+    replay("release-comics", 29, |i| {
+        json!(parse_image_release(i["title"].as_str().unwrap()))
+    });
+}
+
+#[test]
 fn quality_tables_reproduce_expected() {
+    replay("image-qualities", 1, |_| json!(IMAGE_QUALITIES));
     replay("audio-qualities", 1, |_| json!(AUDIO_QUALITIES));
     replay("text-qualities", 1, |_| json!(TEXT_QUALITIES));
 }

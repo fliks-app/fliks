@@ -493,6 +493,7 @@ async fn seed_is_idempotent_under_concurrency(pool: PgPool) {
     };
     let seeded = [
         ("audio".to_owned(), 15),
+        ("image".to_owned(), 5),
         ("text".to_owned(), 7),
         ("video".to_owned(), 24),
     ];
@@ -511,6 +512,7 @@ async fn seed_is_idempotent_under_concurrency(pool: PgPool) {
         counts().await,
         [
             ("audio".to_owned(), 15),
+            ("image".to_owned(), 5),
             ("text".to_owned(), 7),
             ("video".to_owned(), 1)
         ]

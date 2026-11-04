@@ -1331,6 +1331,7 @@
       "SEQUEL_MISMATCH": "Sequel {{number}}, non il film cercato",
       "YEAR_MISMATCH": "Anno {{actual}}, atteso {{expected}}",
       "COLLECTION_PACK": "Pacchetto multi-film ({{word}})",
+      "COLLECTED_EDITION": "Edizione raccolta, non un singolo numero",
       "CUSTOM_FORMAT_SCORE_TOO_LOW": "Punteggio dei formati troppo basso ({{actual}} < {{min}})",
       "RANK_NOT_AN_UPGRADE": "Non migliora il file presente",
       "RANK_ABOVE_CUTOFF": "Sopra la soglia del profilo"

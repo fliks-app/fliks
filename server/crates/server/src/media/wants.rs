@@ -41,6 +41,11 @@ pub fn satisfied_sql() -> String {
     WHERE ms."mediaId" = m.id AND ms."number" > 0 AND ms.monitored = true AND me.monitored = true
       AND me."airDate" <= (now() AT TIME ZONE 'UTC')::date
       AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = me.id))
+  WHEN w.family = 'image' AND m.type = 'comic' THEN NOT EXISTS (
+    SELECT 1 FROM items ci JOIN comic_issues cx ON cx."itemId" = ci.id
+    WHERE ci."mediaId" = m.id AND ci.monitored
+      AND ci."airDate" <= (now() AT TIME ZONE 'UTC')::date
+      AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ci.id))
   ELSE EXISTS (SELECT 1 FROM editions e JOIN items i ON i."editionId" = e.id
                JOIN item_parts ip ON ip."itemId" = i.id
                WHERE e."mediaId" = m.id AND e.family = w.family

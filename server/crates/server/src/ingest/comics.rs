@@ -225,7 +225,8 @@ async fn lay_out(db: &PgPool, media: i32, rows: &[Row]) -> sqlx::Result<()> {
         .await?;
         let item: Option<i32> = sqlx::query_scalar(
             r#"SELECT "itemId" FROM comic_issues WHERE "mediaId" = $1 AND kind = $2
-               AND CASE WHEN $3::text IS NULL THEN label = $4 ELSE "sortNumber" = $3::text::numeric END
+               AND CASE WHEN kind = 'special' OR $3::text IS NULL THEN label = $4
+                        ELSE "sortNumber" = $3::text::numeric END
                ORDER BY "itemId" LIMIT 1"#,
         )
         .bind(media)

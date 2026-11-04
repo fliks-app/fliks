@@ -312,6 +312,16 @@ pub async fn delete_media_file(
             }
         }
     }
+    // An issue whose file is deleted stays unmonitored: it is not downloaded again behind the user's back.
+    sqlx::query(
+        r#"UPDATE items SET monitored = false WHERE id IN (
+             SELECT p."itemId" FROM item_parts p JOIN comic_issues ci ON ci."itemId" = p."itemId"
+              WHERE p."mediaFileId" = $1)
+           AND NOT EXISTS (SELECT 1 FROM item_parts o WHERE o."itemId" = items.id AND o."mediaFileId" <> $1)"#,
+    )
+    .bind(file_id)
+    .execute(&st.db)
+    .await?;
     sqlx::query!("DELETE FROM media_files WHERE id = $1", file_id)
         .execute(&st.db)
         .await?;

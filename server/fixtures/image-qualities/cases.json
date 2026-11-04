@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "expected": [
+        {
+          "id": 301,
+          "name": "Unknown-image",
+          "rank": 5,
+          "resolution": 0,
+          "source": "unknown"
+        },
+        {
+          "id": 302,
+          "name": "CBZ",
+          "rank": 30,
+          "resolution": 0,
+          "source": "cbz"
+        },
+        {
+          "id": 303,
+          "name": "CBR",
+          "rank": 20,
+          "resolution": 0,
+          "source": "cbr"
+        },
+        {
+          "id": 304,
+          "name": "CB7",
+          "rank": 25,
+          "resolution": 0,
+          "source": "cb7"
+        },
+        {
+          "id": 305,
+          "name": "PDF",
+          "rank": 10,
+          "resolution": 0,
+          "source": "pdf"
+        }
+      ],
+      "input": {}
+    }
+  ]
+}

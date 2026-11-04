@@ -1,10 +1,11 @@
 //! Default quality-definition sizes (`docs/spec/profiles.md` rules 25-26).
 use crate::media::family::Family;
 use crate::release::audio::quality::{AUDIO_QUALITIES, audio_quality_by_id};
+use crate::release::image::quality::{IMAGE_QUALITIES, image_quality_by_id};
 use crate::release::parsing::quality::{APP_QUALITIES, AppQuality, app_quality_by_id};
 use crate::release::text::quality::{TEXT_QUALITIES, text_quality_by_id};
 
-/// MB per hour of content (video, audio) or MB of file (text); `0` on min or max means no limit.
+/// MB per hour of content (video, audio) or MB of file (text, image); `0` on min or max means no limit.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sizes {
     pub min: f64,
@@ -66,13 +67,23 @@ fn text_sizes(id: u32) -> Sizes {
     }
 }
 
+/// Image MB per file (one issue) by `IMAGE_QUALITIES` id.
+fn image_sizes(id: u32) -> Sizes {
+    match image_quality_by_id(i64::from(id)).map(|q| q.source) {
+        Some("cb7") => s(2.0, 30.0, 250.0),
+        Some("pdf") => s(0.0, 60.0, 400.0),
+        _ => s(2.0, 40.0, 250.0),
+    }
+}
+
 /// Sizes of the quality of the family, the `"0"` defaults for an id outside its table.
 pub fn default_sizes(family: Family, quality_id: i64) -> Sizes {
     let id = u32::try_from(quality_id).unwrap_or(0);
     match family {
         Family::Audio => audio_sizes(id),
         Family::Text => text_sizes(id),
-        Family::Video | Family::Image => video_sizes(quality_id),
+        Family::Image => image_sizes(id),
+        Family::Video => video_sizes(quality_id),
     }
 }
 
@@ -92,7 +103,7 @@ pub fn table(family: Family) -> &'static [AppQuality] {
         Family::Video => &APP_QUALITIES,
         Family::Audio => &AUDIO_QUALITIES,
         Family::Text => &TEXT_QUALITIES,
-        Family::Image => &[],
+        Family::Image => &IMAGE_QUALITIES,
     }
 }
 
@@ -149,14 +160,14 @@ mod tests {
         );
         assert_eq!(default_allowed(Family::Audio).len(), 14);
         assert!(!default_allowed(Family::Audio).contains(&101));
-        assert!(default_allowed(Family::Image).is_empty());
+        assert_eq!(default_allowed(Family::Image), [302, 303, 304, 305]);
     }
 
     #[test]
     fn seeds_one_row_per_quality() {
         assert_eq!(seed_rows(Family::Audio).count(), 15);
         assert_eq!(seed_rows(Family::Text).count(), 7);
-        assert_eq!(seed_rows(Family::Image).count(), 0);
+        assert_eq!(seed_rows(Family::Image).count(), 5);
         let rows: Vec<_> = seed_rows(Family::Video).collect();
         assert_eq!(rows.len(), 24);
         assert_eq!(rows[17].1, "Bluray-1080p");
@@ -170,6 +181,9 @@ mod tests {
         assert_eq!(default_sizes(Family::Text, 202), s(0.0, 8.0, 150.0));
         assert_eq!(default_sizes(Family::Text, 205), s(0.0, 2.0, 80.0));
         assert_eq!(default_sizes(Family::Text, 999), s(0.0, 2.0, 50.0));
+        assert_eq!(default_sizes(Family::Image, 302), s(2.0, 40.0, 250.0));
+        assert_eq!(default_sizes(Family::Image, 304), s(2.0, 30.0, 250.0));
+        assert_eq!(default_sizes(Family::Image, 305), s(0.0, 60.0, 400.0));
     }
 
     #[test]
@@ -178,6 +192,6 @@ mod tests {
             .into_iter()
             .flat_map(|f| table(f).iter().map(|q| q.id))
             .collect();
-        assert_eq!(ids.len(), 24 + 15 + 7);
+        assert_eq!(ids.len(), 24 + 15 + 7 + 5);
     }
 }

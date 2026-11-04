@@ -1,4 +1,4 @@
-//! Score, reject and sort audio and text search hits (`docs/spec/release.md` rules 63-64).
+//! Score, reject and sort audio, text and image search hits (`docs/spec/release.md` rules 63-64).
 use super::pipeline::{Blocked, FormatScore, ReleaseCandidate};
 use super::rejection::{
     ExpectedTitle, Param, RejectionInput, ReleaseRejection, compute_rejections,
@@ -10,6 +10,8 @@ use crate::js::round;
 use crate::language::AppLanguage;
 use crate::media::family::Family;
 use crate::release::audio::quality::parse_audio_release;
+use crate::release::comic::ComicRelease;
+use crate::release::image::quality::parse_image_release;
 use crate::release::parsing::language::resolve_unknown_languages;
 use crate::release::parsing::quality::AppQuality;
 use crate::release::parsing::season_episode::Span;
@@ -78,12 +80,25 @@ impl Sortable for ScoredBookRelease {
     }
 }
 
+/// The issue of a comic a search wants: `kind` (`issue`, `annual`, `special`) and its canonical number.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExpectedIssue {
+    pub kind: String,
+    pub number: String,
+    /// The year the volume started: an earlier release names another volume.
+    #[serde(default)]
+    pub start_year: Option<i32>,
+    /// The year the issue came out: a release more than a year away is another run of the number.
+    #[serde(default)]
+    pub air_year: Option<i32>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookScoreOptions {
     pub allowed: BTreeSet<u32>,
     pub allowed_langs: BTreeSet<u32>,
-    /// MB per hour for audio, MB for text.
+    /// MB per hour for audio, MB for text and image.
     pub size_by_quality: BTreeMap<u32, SizeLimits>,
     pub source_min_seeders: BTreeMap<i64, i64>,
     pub source_unknown_lang: BTreeMap<i64, Option<String>>,
@@ -99,6 +114,9 @@ pub struct BookScoreOptions {
     pub min_rank_exclusive: Option<i64>,
     #[serde(default)]
     pub max_rank_inclusive: Option<i64>,
+    /// Image only: a release naming another issue, or no single one, is rejected.
+    #[serde(default)]
+    pub expected_issue: Option<ExpectedIssue>,
 }
 
 struct Parsed {
@@ -106,6 +124,7 @@ struct Parsed {
     languages: Vec<&'static AppLanguage>,
     retail: bool,
     names: BookNameGuess,
+    comic: Option<ComicRelease>,
 }
 
 /// `None` for a family without release parsing.
@@ -118,6 +137,7 @@ fn parse(family: Family, title: &str) -> Option<Parsed> {
                 languages: a.languages,
                 retail: false,
                 names: a.names,
+                comic: None,
             })
         }
         Family::Text => {
@@ -127,9 +147,25 @@ fn parse(family: Family, title: &str) -> Option<Parsed> {
                 languages: t.languages,
                 retail: t.retail,
                 names: t.names,
+                comic: None,
             })
         }
-        Family::Video | Family::Image => None,
+        Family::Image => {
+            let i = parse_image_release(title);
+            Some(Parsed {
+                quality: i.quality,
+                languages: i.languages,
+                // A digital release is the clean copy, as a retail ebook is.
+                retail: i.comic.digital,
+                names: BookNameGuess {
+                    title: Some(i.comic.series.clone()).filter(|t| !t.is_empty()),
+                    year: i.comic.year,
+                    ..Default::default()
+                },
+                comic: Some(i.comic),
+            })
+        }
+        Family::Video => None,
     }
 }
 
@@ -154,6 +190,54 @@ fn text_size_rejections(size_bytes: f64, limits: Option<&SizeLimits>) -> Vec<Rel
         out.push(rej("SIZE_TOO_HIGH", "max", l.max));
     }
     out
+}
+
+fn show(kind: &str, number: &str) -> String {
+    match kind {
+        "issue" => format!("#{number}"),
+        k => format!("{k} #{number}"),
+    }
+}
+
+/// `YEAR_MISMATCH` for a release older than the volume or far from the issue's own year.
+fn year_rejection(want: &ExpectedIssue, got: &ComicRelease) -> Option<ReleaseRejection> {
+    let year = got.year?;
+    let expected = match (want.start_year, want.air_year) {
+        (Some(s), _) if year < s => s,
+        (_, Some(a)) if (year - a).abs() > 1 => a,
+        _ => return None,
+    };
+    Some(ReleaseRejection {
+        code: "YEAR_MISMATCH".to_owned(),
+        params: Some(BTreeMap::from([
+            ("actual", Param::Num(year.into())),
+            ("expected", Param::Num(expected.into())),
+        ])),
+    })
+}
+
+/// `EPISODE_MISMATCH` for another issue (or none), `COLLECTED_EDITION` for a trade or a run.
+fn issue_rejections(want: &ExpectedIssue, got: &ComicRelease) -> Vec<ReleaseRejection> {
+    if got.collected {
+        return vec![ReleaseRejection {
+            code: "COLLECTED_EDITION".to_owned(),
+            params: None,
+        }];
+    }
+    if got.number.as_deref() == Some(want.number.as_str()) && got.kind == want.kind {
+        return year_rejection(want, got).into_iter().collect();
+    }
+    let actual = got
+        .number
+        .as_deref()
+        .map_or_else(|| "?".to_owned(), |n| show(got.kind, n));
+    vec![ReleaseRejection {
+        code: "EPISODE_MISMATCH".to_owned(),
+        params: Some(BTreeMap::from([
+            ("expected", Param::Str(show(&want.kind, &want.number))),
+            ("actual", Param::Str(actual)),
+        ])),
+    }]
 }
 
 pub fn score_and_sort_book_releases(
@@ -201,6 +285,9 @@ pub fn score_and_sort_book_releases(
                 min_rank_exclusive: opts.min_rank_exclusive,
                 max_rank_inclusive: opts.max_rank_inclusive,
             });
+            if let (Some(want), Some(got)) = (&opts.expected_issue, &p.comic) {
+                rejections.extend(issue_rejections(want, got));
+            }
             let limits = opts.size_by_quality.get(&p.quality.id);
             let size_deviation = if is_audio {
                 compute_size_deviation(&r.title, r.size, opts.duration_minutes, limits)

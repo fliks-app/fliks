@@ -21,9 +21,9 @@ interface types {
 
   /// A kind of work is a string of the documented set `movie`, `series`, `book`, `comic`, `album`
   /// (a person, an artist included, is not a work); the host answers `unsupported-kind` for any
-  /// it does not serve, and serves `movie`, `series` and `book`.
+  /// it does not serve, and serves `movie`, `series`, `book` and `comic`, but `media.resolve-or-create` only `movie`, `series` and `book`.
   type kind = string;
-  /// Each family has its own quality table; the host serves every family but `image`.
+  /// Each family has its own quality table; the host serves every family.
   enum family { video, audio, text, image }
 
   /// An id in an outside system; the provider set is open (tmdb, tvdb, imdb, isbn, asin, ...).
