@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/persons/search", get(search))
         .route("/api/persons/{id}", get(detail))
         .route("/api/persons/{id}/provider-credits", get(provider_credits))
+        .route("/api/persons/{id}/bibliography", get(bibliography))
         .route("/api/persons/{id}/works", get(works))
 }
 
@@ -61,6 +62,16 @@ pub async fn provider_credits(
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
     Ok(Json(service::provider_credits(&st, &a, id?.0).await?))
+}
+
+#[utoipa::path(get, path = "/api/persons/{id}/bibliography", responses((status = 200)))]
+pub async fn bibliography(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Res {
+    a.require(Action::Read, Subject::Media)?;
+    Ok(Json(service::bibliography(&st, &a, id?.0).await?))
 }
 
 const ROLES: [&str; 2] = ["author", "narrator"];

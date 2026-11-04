@@ -60,7 +60,7 @@ export interface PersonWorks {
   series: { collection: { id: number; name: string }; works: (CollectionDetail['entries'][number])[] }[];
   standalone: CollectionDetail['entries'][number]['media'][];
 }
-// GET /api/persons/:id/provider-credits for a person with an openlibrary/asin id answers BookSearchResult[]
+// GET /api/persons/:id/bibliography answers BookSearchResult[] ([] for a person with no openlibrary id)
 
 // GET /api/metadata/search/book?q=&title=&author=&isbn=&language=&page=: a SearchHit with the book extras
 export interface BookSearchResult extends SearchHit {

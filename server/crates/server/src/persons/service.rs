@@ -3,7 +3,11 @@ use crate::{
     images::{ImageStore, paths::Target},
     libraries::{accessible_library_ids, paths_visible},
     media::{books, hydrate},
-    metadata::{Credits, Metadata, Upstream},
+    metadata::{
+        Credits, Metadata, Upstream,
+        books::{ANCHOR, author_works, routes::hit as book_hit},
+        mark_existing, unavailable,
+    },
     state::AppState,
 };
 use fliks_domain::{
@@ -354,6 +358,34 @@ pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Valu
     })?;
     let (cast, crew) = link_credits(st, a, served, credits).await?;
     Ok(json!({"provider": p.provider, "cast": cast, "crew": crew}))
+}
+
+/// `GET /api/persons/:id/bibliography` (`persons.md` rule 23).
+pub async fn bibliography(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
+    let p = find(&st.db, id).await?;
+    let olid: Option<String> = sqlx::query_scalar(
+        r#"SELECT value FROM person_external_ids WHERE "personId" = $1 AND provider = 'openlibrary'"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let md = &st.metadata;
+    let (Some(olid), true) = (
+        olid,
+        md.available(ANCHOR) && md.of(ANCHOR).has_search(MediaKind::Book),
+    ) else {
+        return Ok(json!([]));
+    };
+    let lang = md.lang.resolve(None).await?;
+    let works = author_works(st, &lang, &p.name, Some(&olid), Priority::Interactive)
+        .await
+        .map_err(|e| unavailable("search", ANCHOR, &e))?;
+    let mut hits: Vec<Value> = works
+        .into_iter()
+        .filter_map(|r| book_hit(ANCHOR, &Value::Object(r)))
+        .collect();
+    mark_existing(&st.db, a, MediaKind::Book, &mut hits).await?;
+    Ok(Value::Array(hits))
 }
 
 /// `books-api.md` A9: the people credited in `role` (`author` or `narrator`) on readable books.

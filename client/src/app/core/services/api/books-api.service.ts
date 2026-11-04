@@ -36,8 +36,8 @@ export class BooksApiService {
     return firstValueFrom(this.http.get<PersonWorks>(`/api/persons/${id}/works`, { params: { role } }));
   }
 
-  personProviderCredits(id: number) {
-    return firstValueFrom(this.http.get<BookSearchResult[]>(`/api/persons/${id}/provider-credits`));
+  personBibliography(id: number) {
+    return firstValueFrom(this.http.get<BookSearchResult[]>(`/api/persons/${id}/bibliography`));
   }
 
   preview(provider: string, externalId: string) {

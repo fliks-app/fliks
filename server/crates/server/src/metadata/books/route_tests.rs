@@ -49,6 +49,7 @@ async fn ctx(pool: PgPool, fakes: Vec<Fake>) -> (Ctx, AppState) {
         reader: st.jwt.sign_access(2, "reader").unwrap().token,
         app: crate::metadata::router()
             .merge(media::router())
+            .merge(crate::persons::router())
             .with_state(st.clone()),
         pool,
     };
@@ -167,7 +168,11 @@ async fn search_hides_a_work_held_in_an_unreadable_library(pool: PgPool) {
     let (_, v) = c
         .call(&c.reader, "GET", "/api/metadata/search/book?q=a", None)
         .await;
-    assert_eq!(v[0]["existingMediaId"], Value::Null);
+    assert_eq!(
+        v[0]["existingMediaId"],
+        Value::Null,
+        "library 2 is hidden from the reader"
+    );
     let (_, v) = c.get("/api/metadata/search/book?q=a").await;
     assert_eq!(v[0]["existingMediaId"], hidden);
 }
@@ -217,7 +222,11 @@ async fn search_names_an_audible_hit_by_its_asin_and_finds_the_held_edition(pool
         (v[0]["provider"].as_str(), v[0]["externalId"].as_str()),
         (Some("asin"), Some("B000000001"))
     );
-    assert_eq!(v[0]["existingMediaId"], Value::Null);
+    assert_eq!(
+        v[0]["existingMediaId"],
+        Value::Null,
+        "library 2 is hidden from the reader"
+    );
     let owned = c.book(1).await;
     let e = c.edition(owned, "audio").await;
     sqlx::query(r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES ($1, $2, 'asin', 'B000000001')"#)
@@ -700,4 +709,63 @@ async fn search_goes_on_to_the_next_provider_when_every_hit_is_dropped(pool: PgP
     let (c, _) = ctx(pool, vec![ol, gb]).await;
     let (_, v) = c.get("/api/metadata/search/book?q=a").await;
     assert_eq!(v[0]["provider"], "googlebooks");
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_bibliography_lists_the_anchor_works_of_an_author(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol.found
+        .push(json!({"externalId": "OL3W", "title": "Homonym",
+        "authors": [{"name": "Una Roe", "id": "OL9A"}]}));
+    let calls = ol.calls.clone();
+    let (c, _) = ctx(pool, vec![ol]).await;
+    let owned = c.book(2).await;
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO persons (id, name) VALUES (1, 'Una Roe'), (2, 'Asin Only'), (3, 'No Id');
+        INSERT INTO person_external_ids ("personId", provider, value) VALUES
+          (1, 'openlibrary', 'OL7A'), (2, 'asin', 'B000000001');
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'book', 'openlibrary', 'OL1W')"#)
+        .bind(owned)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, v) = c.get("/api/persons/1/bibliography").await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v.as_array().unwrap().len(), 1, "the homonym is dropped");
+    assert_eq!(v[0]["externalId"], "OL1W");
+    assert_eq!(v[0]["existingMediaId"], owned);
+    let (_, v) = c
+        .call(&c.reader, "GET", "/api/persons/1/bibliography", None)
+        .await;
+    assert_eq!(
+        v[0]["existingMediaId"],
+        Value::Null,
+        "library 2 is hidden from the reader"
+    );
+    let searches = calls.lock().unwrap().len();
+    assert_eq!(c.get("/api/persons/2/bibliography").await, (200, json!([])));
+    assert_eq!(c.get("/api/persons/3/bibliography").await, (200, json!([])));
+    assert_eq!(c.get("/api/persons/9/bibliography").await.0, 404);
+    assert_eq!(calls.lock().unwrap().len(), searches, "no provider call");
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_bibliography_fails_with_the_anchor(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol.broken = true;
+    let (c, _) = ctx(pool, vec![ol]).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO persons (id, name) VALUES (1, 'Una Roe');
+        INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'openlibrary', 'OL7A');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.get("/api/persons/1/bibliography").await.0, 503);
 }

@@ -42,7 +42,7 @@ pub(crate) struct Fake {
     /// The kinds served besides books, none by default.
     kinds: Vec<MediaKind>,
     pub(crate) delay: std::time::Duration,
-    calls: Mutex<Vec<String>>,
+    pub(crate) calls: Arc<Mutex<Vec<String>>>,
 }
 
 impl Fake {

@@ -36,19 +36,15 @@ export class PersonBooksComponent {
     return mediaDetailLink(m.type, m.id);
   }
 
-  /** The provider bibliography is best effort: a person without a provider id has none. */
   private async load(id: number, role: 'author' | 'narrator') {
     this.loading.set(true);
+    this.credits.set([]);
     try {
-      const [works, credits] = await Promise.all([
-        this.api.personWorks(id, role),
-        this.api.personProviderCredits(id).catch(() => []),
-      ]);
-      this.works.set(works);
-      // Until the server serves book bibliographies it answers a person's `{provider, cast, crew}` object.
-      this.credits.set(Array.isArray(credits) ? credits : []);
+      this.works.set(await this.api.personWorks(id, role));
     } finally {
       this.loading.set(false);
     }
+    // The bibliography lists an author's works: a narrator view has none.
+    if (role === 'author') this.credits.set(await this.api.personBibliography(id));
   }
 }

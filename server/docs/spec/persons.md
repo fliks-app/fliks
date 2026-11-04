@@ -1,10 +1,10 @@
 # Spec: persons (`/api/persons/*`)
 
-Scope: the three persons routes. Provider clients and the language cache are `metadata.md` (cited "meta rule N"); the image pipeline is `image-store.md` ("img rule N"); the serialised `Media` entity is `media-query.md` rules 30-31; auth, validation and error-body rules are in `auth.md` ("auth rule N"); library ACL is `libraries.md` rules 30-36. 4xx/5xx `Cache-Control: no-store` = `bootstrap.md` rule 7. Client: `client/src/app/core/services/api/persons-api.service.ts` (all three routes, behind `authGuard`).
+Scope: the four persons routes (the book `list` and `works` routes are `books-api.md` A9). Provider clients and the language cache are `metadata.md` (cited "meta rule N"); the image pipeline is `image-store.md` ("img rule N"); the serialised `Media` entity is `media-query.md` rules 30-31; auth, validation and error-body rules are in `auth.md` ("auth rule N"); library ACL is `libraries.md` rules 30-36. 4xx/5xx `Cache-Control: no-store` = `bootstrap.md` rule 7. Client: `client/src/app/core/services/api/persons-api.service.ts` (search, detail and provider credits) and `books-api.service.ts` (bibliography), behind `authGuard`.
 
 ## Routes
 
-3 routes. All require authentication (`Authed`, no policy, like `AnyAuthenticatedUser`): anonymous 401 (auth rule 14), `scope:'stream'` token 401 (stream tokens are accepted only on media delivery routes, `auth.md`). No success status override (GET = 200). `search` is a static segment, so it is never read as an id (axum static-over-param).
+4 routes. All require authentication (`Authed`, no policy, like `AnyAuthenticatedUser`): anonymous 401 (auth rule 14), `scope:'stream'` token 401 (stream tokens are accepted only on media delivery routes, `auth.md`). No success status override (GET = 200). `search` is a static segment, so it is never read as an id (axum static-over-param).
 
 `Person` = the `persons` row without `searchVector`, plus the id it is shown with (view `person_ids`, section "Credits and person ids"): `{id, createdAt, updatedAt, provider: string|null, tmdbId: number|null, name: string, avatarUrl: string|null, biography: string|null, birthday: string|null ('YYYY-MM-DD'), deathday: string|null, placeOfBirth: string|null, knownForDepartment: string|null, departments: string[], metadataRefreshedAt: string|null (ISO)}`; timestamps in the `%Y-%m-%dT%H:%M:%S%.3fZ` form (media-query rule 30). `MediaRow` = `Media` as `media-query.md` rule 30 (all columns, `path`, joined `library`, `qualityProfile`, `languageProfile`) plus `metadata` (rule 31, `media_details_json`, bigints as strings); no `files`, `seasons`, `cast`, `crew`, `addedBy`, `episodeStats`, `watched`, `progressPercent` (rule 17).
 
@@ -13,6 +13,7 @@ Scope: the three persons routes. Provider clients and the language cache are `me
 | `GET /api/persons/search` | authenticated, no policy | query `q?` string, unknown keys ignored (rules 2-6) | 200 `Person[]` (rule 7) | 401; 400 when `q` is repeated (rule 2) | none |
 | `GET /api/persons/:id` | same | path `id`: canonical `i32` (rule 8) | 200 `{person: Person, cast: CastRow[], crew: CrewRow[]}` (rules 9-17) | 400 `Validation failed (numeric string is expected)`; 404 `Person #<id> not found` `{message, error:"Not Found", statusCode:404}`; provider and image failures never surface (rule 13) | may UPDATE `persons` and write 2 image files (rules 9-12) |
 | `GET /api/persons/:id/provider-credits` | same | path `id` as above | 200 `{provider: string|null, cast: Credit[], crew: Credit[]}` (rules 19-21) | 400 / 404 as above; upstream failure 503 `Metadata request failed on <provider>: <reason>` | may UPDATE `person_external_ids.provider` (rule 11) |
+| `GET /api/persons/:id/bibliography` | `media.read` (403 without) | path `id` as above | 200 `BookSearchResult[]` (rule 23) | 400 / 404 as above; upstream failure 503 `Metadata search failed on openlibrary: <reason>` | none |
 
 `CastRow` = `{id, createdAt, updatedAt, character: string, order: number, media: MediaRow, person: Person}`; `CrewRow` = `{id, createdAt, updatedAt, job: string, department: string, media: MediaRow, person: Person}` (every row repeats the full person, including its refreshed fields). `Credit` = `{externalId: number, title: string, mediaType: 'movie'|'series', character?: string, job?: string, department?: string, posterUrl: string|null, fanartUrl?: string|null, releaseDate: string|null, rating: number, mediaId: number|null}` (`character` on cast items, `job` + `department` on crew items; absent keys are absent, see meta rule 34).
 
@@ -20,7 +21,7 @@ Scope: the three persons routes. Provider clients and the language cache are `me
 
 ### A. Search
 
-1. Authentication is required on all three routes. The client sends a credential on each; Apple TV, Cast and Electron main do not call these routes.
+1. Authentication is required on all four routes. The client sends a credential on each; Apple TV, Cast and Electron main do not call these routes.
 2. `q` is an optional query string: a missing, empty or whitespace-only `q` lists persons (rule 3); a repeated `q` is 400 (standard validation body).
 3. Empty or blank `q`: the first 1000 persons ordered by `name ASC, id ASC`, no pagination, so a large catalog does not ship every biography in one response (a person past the cap is still found by name).
 4. Non-empty `q`: the trimmed `q` is split on whitespace; each word is a prefix term, all words ANDed, `p."searchVector" @@ to_tsquery('simple', $1)`, config `simple` (no stemming, no stop words, lowercase).
@@ -48,6 +49,10 @@ Scope: the three persons routes. Provider clients and the language cache are `me
 20. Credits are mapped to `{...item, mediaId: null}` then linked to owned media (SQL Q5): ids = distinct truthy `externalId`s of cast + crew; none → no query; `provider = person.provider` (`tvdb` or `tmdb`, the **pinned** provider, after rule 11); the media holding one of `ids` for that provider are read from `media_external_ids` with their kind and value; the link is keyed `(type, id)` using the credit's `mediaType`, so a TMDB movie and series that share a numeric id link to the right media. No match → `mediaId: null`.
 21. Library ACL: `mediaId` in provider credits, and `media` in `CastRow`/`CrewRow` (rule 17), only for media in libraries the caller can read (`libraries.md` rules 30-36; admin and `manage:all` see all); credits for other media keep `mediaId: null`, cast/crew rows for other media are omitted, and `media.path` / `media.library.path` are omitted for callers who cannot manage libraries (same predicate as `media-query.md` rule 73), as on `metadata.md` rule 38.
 22. `searchVector` maintenance: a `BEFORE INSERT OR UPDATE OF name` trigger sets `"searchVector" = to_tsvector('simple', name)`, with a backfill at migration time, and `idx_persons_search_vector` (GIN on `"searchVector"`) serves the search. The media metadata import creates persons and never writes `searchVector` itself; a name changed by `GET :id` is re-indexed by the same trigger.
+
+### D. Book bibliography (`GET :id/bibliography`)
+
+23. A person can hold a video id (`tmdb`/`tvdb`) and a book id (`openlibrary`, `asin`) at once, so the book bibliography is its own route and `provider-credits` stays the video object. The anchor provider (`book-metadata.md` rule 1) is asked, at interactive priority, `search` of kind `book` with the person's name and `author_id` = their `openlibrary` id, pages 1 to 3 (stopping at an empty page), the same discovery as the author follow of `wants-follows.md` rule 10: only hits whose `authors` hold that id are kept, deduplicated by work id (the provider may answer homonyms). Hits are built and marked with `existingMediaId` exactly as `GET /api/metadata/search/book` (`book-metadata.md` rules 18-19). A person with no `openlibrary` id, including one with only an `asin` id (Audible cannot list an author's works), answers `[]` with no provider call, as does an anchor that is not available or has no book search; 404 for an unknown person. A failing anchor is a 503.
 
 ## SQL
 

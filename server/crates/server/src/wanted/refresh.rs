@@ -9,10 +9,7 @@ use crate::{
             resolve_target_in,
         },
     },
-    metadata::{
-        Search,
-        books::{ANCHOR, people, text, work_id},
-    },
+    metadata::books::{ANCHOR, author_works, series_works, text, work_id},
     state::AppState,
 };
 use chrono::NaiveDate;
@@ -20,14 +17,13 @@ use fliks_domain::{
     acl::{Action, Subject},
     media::{
         kind::MediaKind,
-        wants::{default_wants, is_new, parse_release_end, parse_wants, same_name},
+        wants::{default_wants, is_new, parse_release_end, parse_wants},
     },
     metadata::limiter::Priority,
 };
-use serde_json::{Map, Value};
+use serde_json::Value;
 use sqlx::{FromRow, types::Json as Jsonb};
 
-const PAGES: u32 = 3;
 const BACKGROUND: Priority = Priority::Background;
 /// Backstop for the connection that holds a work's advisory lock while the book is created.
 const LOCK_IDLE: &str = "10min";
@@ -156,71 +152,30 @@ async fn allowed(st: &AppState, user: i32, library: i32) -> Result<bool, AppErro
         && accessible_library_ids(&st.db, &a).await?.contains(&library))
 }
 
-/// The work id and release of a provider hit that belongs to the job's author or series.
-fn belongs(source: &Source, r: &Map<String, Value>) -> Option<(String, Option<NaiveDate>)> {
-    let work = work_id(&text(r, "externalId")?)?;
-    let ok = match source {
-        Source::Author {
-            olid: Some(olid), ..
-        } => people(r, "authors")
-            .iter()
-            .any(|(_, id)| id.as_deref().is_some_and(|i| i.eq_ignore_ascii_case(olid))),
-        Source::Author { name, .. } => people(r, "authors").iter().any(|(n, _)| same_name(n, name)),
-        Source::Series { name, .. } => r
-            .get("series")
-            .and_then(|s| s.as_array()?.first()?.get("name")?.as_str())
-            .is_some_and(|n| same_name(n, name)),
-    };
-    let release = text(r, "releaseDate")
-        .or_else(|| r.get("year")?.as_i64().map(|y| y.to_string()))
-        .and_then(|d| parse_release_end(&d));
-    ok.then_some((work, release))
-}
-
 async fn discover(
     st: &AppState,
     job: &Job,
     lang: &fliks_domain::metadata::language::Resolved,
 ) -> Result<Vec<(String, Option<NaiveDate>)>, String> {
-    let mut found: Vec<(String, Option<NaiveDate>)> = vec![];
-    for page in 1..=PAGES {
-        let (query, title, author, author_id) = match &job.source {
-            Source::Author { name, olid, .. } => {
-                (name.as_str(), None, Some(name.as_str()), olid.as_deref())
-            }
-            Source::Series { name, author, .. } => {
-                (name.as_str(), Some(name.as_str()), author.as_deref(), None)
-            }
-        };
-        let search = Search {
-            kind: MediaKind::Book,
-            query,
-            year: None,
-            title,
-            author,
-            author_id,
-            isbn: None,
-            language: None,
-            page,
-        };
-        let hits = st
-            .metadata
-            .of(ANCHOR)
-            .search(&search, lang, BACKGROUND)
-            .await
-            .map_err(|e| e.to_string())?;
-        if hits.is_empty() {
-            break;
+    let hits = match &job.source {
+        Source::Author { name, olid, .. } => {
+            author_works(st, lang, name, olid.as_deref(), BACKGROUND).await
         }
-        for h in &hits {
-            if let Some((w, r)) = h.as_object().and_then(|r| belongs(&job.source, r))
-                && !found.iter().any(|(f, _)| *f == w)
-            {
-                found.push((w, r));
-            }
+        Source::Series { name, author, .. } => {
+            series_works(st, lang, name, author.as_deref(), BACKGROUND).await
         }
     }
-    Ok(found)
+    .map_err(|e| e.to_string())?;
+    Ok(hits
+        .iter()
+        .filter_map(|r| {
+            let work = work_id(&text(r, "externalId")?)?;
+            let release = text(r, "releaseDate")
+                .or_else(|| r.get("year")?.as_i64().map(|y| y.to_string()))
+                .and_then(|d| parse_release_end(&d));
+            Some((work, release))
+        })
+        .collect())
 }
 
 /// Adds the work for the follow when nobody has; `Ok(false)` when it is known, the follow gone or off,

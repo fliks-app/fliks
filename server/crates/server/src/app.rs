@@ -331,6 +331,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         persons::search,
         persons::detail,
         persons::provider_credits,
+        persons::bibliography,
         persons::list,
         persons::works,
         wanted::wants_get,
