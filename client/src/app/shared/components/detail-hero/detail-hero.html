@@ -10,9 +10,9 @@
   [class.items-center]="!desktopLayout()"
   [class.lg:gap-10]="desktopLayout()"
   [class.gap-6]="desktopLayout()"
-  [style.padding-top]="!desktopLayout() || !navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
+  [style.padding-top]="desktopLayout() ? navbar.heroPaddingTop() : null"
 >
-  <app-hero-poster [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
+  <app-hero-poster [kind]="mediaType()" [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
 
   <div class="min-w-0 self-stretch flex-1 flex flex-col gap-2 md:pt-2">
     <h1 class="text-3xl md:text-2xl lg:text-4xl font-bold tracking-tight">{{ title() }}</h1>
@@ -20,7 +20,7 @@
 
     <div appTvRow class="flex flex-wrap items-center gap-2 mt-4">
       <ng-content select="[heroActions]" />
-      <button type="button" class="btn btn-ghost btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" (click)="toggleLike()">
+      <button type="button" class="btn btn-ghost btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="liked()" (click)="toggleLike()">
         <svg lucideHeart class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
       </button>
       <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist()">
@@ -42,5 +42,5 @@
 </div>
 
 @if (media(); as m) {
-  <app-media-library-dialog [media]="m" />
+  <app-media-library-dialog [media]="m" (updated)="onLibrarySaved($event)" />
 }

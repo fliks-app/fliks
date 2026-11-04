@@ -1,8 +1,8 @@
 <!-- Hidden below `md` so phones keep their inline `mobile-fanart-hero` instead of a second fanart image. -->
 <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
-  @for (url of layers(); track $index) {
+  @for (layer of layers(); track $index) {
     <img
-      [cachedSrc]="url | resolveUrl:(blur() ? 'thumb' : 'medium')"
+      [cachedSrc]="layer.url | resolveUrl:(layer.blur ? 'thumb' : 'medium')"
       alt=""
       loading="lazy"
       decoding="async"
@@ -10,8 +10,8 @@
       (load)="onLoad($index, $event)"
       class="absolute inset-0 w-full h-full object-cover object-[50%_25%]"
       [class]="layerClass($index)"
-      [style.filter]="blur() ? 'blur(40px)' : null"
-      [style.transform]="blur() ? 'scale(1.15)' : null"
+      [style.filter]="layer.blur ? 'blur(' + radius + 'px)' : null"
+      [style.transform]="layer.blur ? 'scale(1.15)' : null"
     />
   }
   <!-- Permanent veil: a no-op over the solid base-100 and constant while an image fades. A custom class, not `bg-base-100/N`:

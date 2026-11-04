@@ -68,26 +68,24 @@
                     <span class="font-medium truncate">{{ r.name }}</span>
                     <span class="font-mono text-xs text-base-content/50">{{ r.namespace }}</span>
                   </span>
-                  @if (tv.isTv()) {
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === 0"
-                      (click)="reorder(kind, i, i - 1)"
-                      [attr.aria-label]="'settings.metadata.move_up' | translate"
-                    >
-                      <svg lucideArrowUp class="h-4 w-4"></svg>
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="last"
-                      (click)="reorder(kind, i, i + 1)"
-                      [attr.aria-label]="'settings.metadata.move_down' | translate"
-                    >
-                      <svg lucideArrowDown class="h-4 w-4"></svg>
-                    </button>
-                  }
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="i === 0"
+                    (click)="reorder(kind, i, i - 1)"
+                    [attr.aria-label]="'settings.metadata.move_up' | translate"
+                  >
+                    <svg lucideArrowUp class="h-4 w-4"></svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="last"
+                    (click)="reorder(kind, i, i + 1)"
+                    [attr.aria-label]="'settings.metadata.move_down' | translate"
+                  >
+                    <svg lucideArrowDown class="h-4 w-4"></svg>
+                  </button>
                 </div>
               }
             </div>

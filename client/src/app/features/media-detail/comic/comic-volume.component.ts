@@ -68,7 +68,7 @@ export class ComicVolumeComponent {
   protected readonly progressLabel = computed(() =>
     this.comic() ? this.translate.instant('comic.read_count', { read: this.readCount(), total: this.issues().length }) : null,
   );
-  protected readonly actions = computed<MediaActionHandlers>(() => (this.canEdit() ? { 'media.edit': () => this.openVolume() } : {}));
+  protected readonly actions = computed<MediaActionHandlers>(() => (this.canEdit() && this.comic() ? { 'media.edit': () => this.openVolume() } : {}));
   protected readonly editingVolume = signal(false);
   protected readonly editingIssue = signal<ComicIssue | null>(null);
   protected readonly saving = signal(false);

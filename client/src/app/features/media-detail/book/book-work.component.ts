@@ -10,7 +10,6 @@ import { mediaDetailLink } from '../../../core/media-kinds';
 import type { Media } from '../../../core/services/api/media.service';
 import { remainingLabel } from '../../../core/utils/player.utils';
 import { MediaService } from '../../../core/services/api/media.service';
-import { MediaAdminService } from '../../../core/services/media-admin.service';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
@@ -61,7 +60,6 @@ export class BookWorkComponent {
   private readonly audio = inject(AudioPlayerService);
   private readonly queue = inject(PlaybackQueueService);
   private readonly translate = inject(TranslateService);
-  private readonly admin = inject(MediaAdminService);
 
   protected readonly book = computed(() => asBookMedia(this.media())?.book ?? null);
   protected readonly canEdit = computed(() => this.auth.hasPermission('media.edit'));
@@ -117,14 +115,9 @@ export class BookWorkComponent {
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
   private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
 
-  /** Profiles are the wants dialog for a book; identify is the shared modal. */
+  /** Profiles are the wants dialog for a book, offered once the dialog is rendered. */
   protected readonly actions = computed<MediaActionHandlers>(() =>
-    this.canEdit()
-      ? {
-          'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()),
-          'media.identify': () => this.admin.identify(this.media()),
-        }
-      : {},
+    this.canEdit() && this.book() ? { 'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()) } : {},
   );
 
   protected readonly seriesItems = signal<WorkItem[]>([]);

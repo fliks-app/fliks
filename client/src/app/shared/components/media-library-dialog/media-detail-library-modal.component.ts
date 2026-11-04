@@ -13,16 +13,16 @@ import { TranslatePipe } from '@ngx-translate/core';
 import {
   LibraryFolderChoice,
   LibrarySummary,
-} from '../../../../core/services/api/libraries-api.service';
+} from '../../../core/services/api/libraries-api.service';
 import {
   MetadataService,
   ServingProvider,
   withStoredProvider,
-} from '../../../../core/services/api/metadata.service';
-import type { MediaType } from '../../../../core/enums/media-type.enum';
-import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
-import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
-import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+} from '../../../core/services/api/metadata.service';
+import type { MediaType } from '../../../core/enums/media-type.enum';
+import { TvSelectDirective } from '../../directives/tv-select.directive';
+import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 @Component({
   selector: 'app-media-detail-library-modal',

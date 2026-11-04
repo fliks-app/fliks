@@ -3,7 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { LibrariesApiService, type LibrarySummary } from '../../../core/services/api/libraries-api.service';
 import { MediaService, type Media } from '../../../core/services/api/media.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { MediaDetailLibraryModalComponent } from '../../../features/media-detail/components/media-detail-library-modal/media-detail-library-modal.component';
+import { MediaDetailLibraryModalComponent } from './media-detail-library-modal.component';
 
 /** Moves a title to another library or folder and pins its metadata provider; shared by every title page. */
 @Component({

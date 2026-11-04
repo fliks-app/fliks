@@ -45,7 +45,8 @@ export class PersonBooksComponent {
         this.api.personProviderCredits(id).catch(() => []),
       ]);
       this.works.set(works);
-      this.credits.set(credits);
+      // Until the server serves book bibliographies it answers a person's `{provider, cast, crew}` object.
+      this.credits.set(Array.isArray(credits) ? credits : []);
     } finally {
       this.loading.set(false);
     }

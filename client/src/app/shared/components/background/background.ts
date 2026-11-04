@@ -1,4 +1,5 @@
 import { Component, effect, inject, signal } from '@angular/core';
+import { TvService } from '../../../core/services/tv.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -6,6 +7,11 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
 /** Page-wide background, mounted above the route outlet (the player is a top-level route and would take a layout-level one with it).
  *  Crossfade ring of three layers: the next url fades in over the opaque outgoing image once decoded; only a fade to nothing dims a layer. */
 const LAYERS = 3;
+
+interface Layer {
+  url: string | null;
+  blur: boolean;
+}
 
 @Component({
   selector: 'app-background',
@@ -15,8 +21,11 @@ const LAYERS = 3;
 export class BackgroundComponent {
   private readonly bg = inject(BackgroundService);
 
-  readonly blur = this.bg.blur;
-  readonly layers = signal<readonly (string | null)[]>(Array<string | null>(LAYERS).fill(null));
+  private readonly tv = inject(TvService);
+
+  /** Blur radius in px; smaller on TV where the large blur costs too much to composite. */
+  readonly radius = this.tv.isTv() ? 16 : 40;
+  readonly layers = signal<readonly Layer[]>(Array<Layer>(LAYERS).fill({ url: null, blur: false }));
   /** Layer fading in on top; `null` while the backdrop fades out to nothing. */
   readonly active = signal<number | null>(null);
   /** Layer held opaque under the fade: the image the viewer is leaving. */
@@ -25,24 +34,25 @@ export class BackgroundComponent {
   private pending: number | null = null;
 
   constructor() {
-    let last: string | null = null;
+    let last: Layer = { url: null, blur: false };
     effect(() => {
-      const next = this.bg.url();
-      if (next === last) return;
+      const next = { url: this.bg.url(), blur: this.bg.blur() };
+      if (next.url === last.url && next.blur === last.blur) return;
       last = next;
       this.pending = null;
-      if (next === null) {
+      if (next.url === null) {
         this.show(null);
         return;
       }
       const target = this.freeLayer();
       // The same image already sits there, so no load event will come.
-      if (this.layers()[target] === next) {
+      const held = this.layers()[target];
+      if (held.url === next.url && held.blur === next.blur) {
         this.show(target);
         return;
       }
       this.pending = target;
-      this.layers.update((ls) => ls.map((url, i) => (i === target ? next : url)));
+      this.layers.update((ls) => ls.map((l, i) => (i === target ? next : l)));
     });
   }
 

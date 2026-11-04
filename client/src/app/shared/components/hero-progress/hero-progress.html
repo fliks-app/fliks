@@ -1,8 +1,8 @@
 @if (percent() > 0 && percent() < 100) {
-  <div class="w-full bg-base-300 rounded-full h-1.5" role="progressbar" [attr.aria-valuenow]="percent()" aria-valuemin="0" aria-valuemax="100">
+  <div class="w-full bg-base-300 rounded-full h-1.5" role="progressbar" [attr.aria-label]="'common.progress' | translate" [attr.aria-valuetext]="label()" [attr.aria-valuenow]="percent()" aria-valuemin="0" aria-valuemax="100">
     <div class="bg-primary rounded-full h-1.5 transition-all" [style.width.%]="percent()"></div>
   </div>
-  @if (label()) {
-    <p class="text-sm text-base-content/50 mt-1" [class.text-center]="centered()">{{ label() }}</p>
-  }
+}
+@if (label()) {
+  <p class="text-sm text-base-content/50 mt-1" [class.text-center]="centered()">{{ label() }}</p>
 }

@@ -70,7 +70,8 @@ import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-regis
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
-import { CORE_MEDIA_ACTIONS, sectionOf } from './core-media-actions';
+import { CORE_MEDIA_ACTIONS } from './core-media-actions';
+import { openMediaMenu } from '../../utils/media-menu';
 import {
   resolveMenuContributions,
   type ResolvedMenuRow,
@@ -772,40 +773,33 @@ export class MediaInfoHeaderComponent {
 
   /** Hands the rows to the shared card actions panel anchored to the clicked button; the panel owns the chrome per form factor. */
   openActionsMenu(anchor: HTMLElement) {
-    const items = this.menuItems();
-    if (!items.length) return;
-    this.cardActions.register({
-      actions: items.map((item) => this.toCardAction(item)),
+    openMediaMenu(
+      this.cardActions,
+      this.menuItems(),
       anchor,
-      title: this.title(),
-      subtitle: this.dateLabel() ?? '',
-      imageUrl: this.posterUrl(),
-      imageAspect: this.episodeId() ? 'landscape' : 'portrait',
-      placement: 'button',
-    });
-    this.cardActions.show();
+      {
+        title: this.title(),
+        subtitle: this.dateLabel() ?? '',
+        imageUrl: this.posterUrl(),
+        imageAspect: this.episodeId() ? 'landscape' : 'portrait',
+      },
+      (r) => this.rowOverrides(r as ResolvedMediaAction),
+    );
   }
 
-  /** One resolved row as a panel row. Recursive: a submenu's children go through
-   *  the same label/icon resolution as any other row. */
   private autoKeepOf(item: ResolvedMediaAction): number | null {
     const m = item.actionId?.match(/^media\.auto-download-(\d+)$/);
     return m ? Number(m[1]) : null;
   }
 
-  private toCardAction(item: ResolvedMediaAction): CardAction {
+  private rowOverrides(item: ResolvedMediaAction): Partial<CardAction> {
     const keep = this.autoKeepOf(item);
     return {
-      ...(keep ? { label: this.translate.instant('downloads.auto_next', { count: keep }) } : { labelKey: this.displayLabelKey(item) }),
+      ...(keep
+        ? { labelKey: undefined, label: this.translate.instant('downloads.auto_next', { count: keep }) }
+        : { labelKey: this.displayLabelKey(item) }),
       icon: this.displayIcon(item),
-      tone: item.tone,
-      section: sectionOf(item.weight),
       disabled: this.isItemDisabled(item),
-      ...(item.route ? { route: item.route } : {}),
-      ...(item.children?.length
-        ? { children: item.children.map((c) => this.toCardAction({ ...c, handler: c.run })) }
-        : {}),
-      run: () => item.handler?.(),
     };
   }
 

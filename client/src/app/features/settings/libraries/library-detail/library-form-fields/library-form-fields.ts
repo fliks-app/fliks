@@ -53,9 +53,10 @@ export class LibraryFormFieldsComponent {
   /** Per selected kind, the providers in the order a refresh reads them. */
   readonly readOrders = computed(() => {
     const serving = this.serving();
+    if (!serving) return [];
     return this.state.mediaTypes().map((kind) => ({
       kind,
-      labels: readOrder(serving?.[kind] ?? [], this.state.formProvider()).map((p) => p.label),
+      labels: readOrder(serving[kind] ?? [], this.state.formProvider()).map((p) => p.label),
     }));
   });
   readonly metadataLanguageOptions = METADATA_LANGUAGE_OPTIONS;

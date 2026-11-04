@@ -28,20 +28,15 @@
     "row_series": "In {{series}}",
     "row_author": "Altro di {{author}}",
     "sources": "Fonti",
-    "source_work": "Opera",
     "source_edition": "Edizione",
-    "not_linked": "Non collegato",
     "relink": "Ricollega",
     "unlink": "Scollega",
     "link": "Collega",
-    "level": "Livello",
     "provider": "Provider",
     "value": "Identificativo",
     "edition": "Edizione",
     "cancel": "Annulla",
     "save": "Salva",
-    "level_work": "Opera",
-    "level_edition": "Edizione",
     "sources_hint": "Collegare un identificativo aggiorna i metadati da quella fonte.",
     "send_to": "Invia a…",
     "send_queued": "Invio a {{name}}",
@@ -53,6 +48,7 @@
     "offline_retry": "Riprova",
     "offline_audio_unplayable": "Questo audiolibro non può essere riprodotto così com'è su questo dispositivo, quindi non può essere salvato offline",
     "offline_wifi_only": "I download sono limitati al Wi-Fi",
-    "row_similar": "Libri simili"
+    "row_similar": "Libri simili",
+    "edit_profiles": "Formati e lingue"
   }
 }

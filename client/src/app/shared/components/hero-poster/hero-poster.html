@@ -25,7 +25,11 @@
       [class.aspect-2/3]="mode() === 'poster'"
       [class.aspect-video]="mode() === 'still'"
     >
-      <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>
+      @if (bookLike()) {
+        <svg lucideBookOpen class="h-20 w-20" [strokeWidth]="1.5"></svg>
+      } @else {
+        <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>
+      }
     </div>
   }
 </div>

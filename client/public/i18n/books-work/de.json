@@ -28,20 +28,15 @@
     "row_series": "In {{series}}",
     "row_author": "Mehr von {{author}}",
     "sources": "Quellen",
-    "source_work": "Werk",
     "source_edition": "Ausgabe",
-    "not_linked": "Nicht verknüpft",
     "relink": "Neu verknüpfen",
     "unlink": "Trennen",
     "link": "Verknüpfen",
-    "level": "Ebene",
     "provider": "Anbieter",
     "value": "Kennung",
     "edition": "Ausgabe",
     "cancel": "Abbrechen",
     "save": "Speichern",
-    "level_work": "Werk",
-    "level_edition": "Ausgabe",
     "sources_hint": "Das Verknüpfen einer Kennung aktualisiert die Metadaten aus dieser Quelle.",
     "send_to": "Senden an…",
     "send_queued": "Wird an {{name}} gesendet",
@@ -53,6 +48,7 @@
     "offline_retry": "Erneut versuchen",
     "offline_audio_unplayable": "Dieses Hörbuch lässt sich auf diesem Gerät nicht unverändert abspielen und kann daher nicht offline gespeichert werden",
     "offline_wifi_only": "Downloads sind auf WLAN beschränkt",
-    "row_similar": "Ähnliche Bücher"
+    "row_similar": "Ähnliche Bücher",
+    "edit_profiles": "Formate und Sprachen"
   }
 }

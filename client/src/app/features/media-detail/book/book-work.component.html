@@ -1,7 +1,7 @@
 @let m = media();
 @let b = book();
 
-<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [media]="m" [actions]="actions()" [exclude]="['media.refresh-metadata']" [posterUrl]="m.posterUrl" [overview]="m.overview" [progressPercent]="percent() ?? 0" [progressLabel]="progressLabel()">
+<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="m.overview" [progressPercent]="percent() ?? 0" [progressLabel]="progressLabel()">
   @if (b) {
     <div heroMeta class="flex flex-col gap-2">
       @if (b.subtitle) {

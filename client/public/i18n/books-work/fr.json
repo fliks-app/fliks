@@ -28,20 +28,15 @@
     "row_series": "Dans {{series}}",
     "row_author": "Autres livres de {{author}}",
     "sources": "Sources",
-    "source_work": "Œuvre",
     "source_edition": "Édition",
-    "not_linked": "Non lié",
     "relink": "Relier à nouveau",
     "unlink": "Délier",
     "link": "Lier",
-    "level": "Niveau",
     "provider": "Fournisseur",
     "value": "Identifiant",
     "edition": "Édition",
     "cancel": "Annuler",
     "save": "Enregistrer",
-    "level_work": "Œuvre",
-    "level_edition": "Édition",
     "sources_hint": "Lier un identifiant actualise les métadonnées depuis cette source.",
     "send_to": "Envoyer à…",
     "send_queued": "Envoi vers {{name}}",
@@ -53,6 +48,7 @@
     "offline_retry": "Réessayer",
     "offline_audio_unplayable": "Cet audiolivre ne peut pas être lu tel quel sur cet appareil, il ne peut donc pas être enregistré hors ligne",
     "offline_wifi_only": "Les téléchargements sont limités au Wi-Fi",
-    "row_similar": "Livres similaires"
+    "row_similar": "Livres similaires",
+    "edit_profiles": "Formats et langues"
   }
 }

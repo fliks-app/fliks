@@ -51,6 +51,7 @@ const baseMovie: Media = {
  *  (folder removed vs. DB row only) before the user commits to it. */
 function createHarness(downloadManager: object = {}) {
   const confirm = vi.fn().mockResolvedValue(false);
+  const background = { set: vi.fn(), release: vi.fn(), suspend: vi.fn(), url: signal(null) };
 
   TestBed.configureTestingModule({
     providers: [
@@ -73,7 +74,7 @@ function createHarness(downloadManager: object = {}) {
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
       { provide: NavbarService, useValue: { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn() } },
-      { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), suspend: vi.fn(), url: signal(null) } },
+      { provide: BackgroundService, useValue: background },
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SseService, useValue: { lastEvent: signal(null) } },
@@ -101,7 +102,7 @@ function createHarness(downloadManager: object = {}) {
   const fixture = TestBed.createComponent(MediaDetailComponent);
   fixture.detectChanges();
 
-  return { fixture, confirm };
+  return { fixture, confirm, background };
 }
 
 describe('MediaDetailComponent.deleteMedia - confirm message', () => {
@@ -127,6 +128,40 @@ describe('MediaDetailComponent.deleteMedia - confirm message', () => {
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'media_detail.delete_no_folder' }),
     );
+  });
+});
+
+describe('MediaDetailComponent.deleteMedia - loading state', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('shows no spinner while the confirmation is open', async () => {
+    const { fixture, confirm } = createHarness();
+    let during: boolean | undefined;
+    confirm.mockImplementation(async () => {
+      during = fixture.componentInstance.deleteLoading();
+      return false;
+    });
+    fixture.componentInstance.media.set({ ...baseMovie, folderName: 'x' });
+
+    await fixture.componentInstance.deleteMedia();
+
+    expect(during).toBe(false);
+  });
+});
+
+describe('MediaDetailComponent backdrop', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('claims the blurred cover only once the full title is loaded', async () => {
+    const { fixture, background } = createHarness();
+    const c = fixture.componentInstance;
+    c.media.set({ ...baseMovie, posterUrl: '/cover.jpg' });
+    fixture.detectChanges();
+    expect(background.set).not.toHaveBeenCalledWith(expect.anything(), '/cover.jpg', expect.anything());
+
+    c.fullLoaded.set(true);
+    fixture.detectChanges();
+    expect(background.set).toHaveBeenCalledWith(expect.anything(), '/cover.jpg', { blur: true });
   });
 });
 

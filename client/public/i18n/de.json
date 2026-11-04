@@ -1803,6 +1803,7 @@
     "unofficial": "Einige Angaben stammen aus inoffiziellen Quellen (Audible, Audnexus)."
   },
   "common": {
+    "progress": "Fortschritt",
     "unexpected_error": "Ein Fehler ist aufgetreten. Laden Sie die Seite neu, wenn er erneut auftritt.",
     "browse": "Durchsuchen…",
     "item_count_one": "{{count}} Element",

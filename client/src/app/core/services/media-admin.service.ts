@@ -40,18 +40,27 @@ export class MediaAdminService {
     }
   }
 
-  /** Confirms, deletes and leaves the page; false when the user declined. */
-  async deleteMedia(m: Media): Promise<boolean> {
+  /** Asks whether to delete the title; false when the user declined. */
+  confirmDelete(m: Media): Promise<boolean> {
     const messageKey = m.folderName ? 'media_detail.confirm_delete' : 'media_detail.delete_no_folder';
-    const ok = await this.confirmation.confirm({
+    return this.confirmation.confirm({
       title: this.translate.instant('common.confirm'),
       message: this.translate.instant(messageKey, { title: m.title }),
       variant: 'danger',
     });
-    if (!ok) return false;
+  }
+
+  /** Deletes the title and leaves its page. */
+  async removeMedia(m: Media): Promise<void> {
     await this.media.delete(m.id);
     this.toast.success(this.translate.instant('media_detail.delete_success'));
     void this.router.navigate(['/']);
+  }
+
+  /** Confirms, deletes and leaves the page; false when the user declined. */
+  async deleteMedia(m: Media): Promise<boolean> {
+    if (!(await this.confirmDelete(m))) return false;
+    await this.removeMedia(m);
     return true;
   }
 }

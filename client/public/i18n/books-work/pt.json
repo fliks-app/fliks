@@ -28,20 +28,15 @@
     "row_series": "Em {{series}}",
     "row_author": "Mais de {{author}}",
     "sources": "Fontes",
-    "source_work": "Obra",
     "source_edition": "Edição",
-    "not_linked": "Não ligado",
     "relink": "Religar",
     "unlink": "Desligar",
     "link": "Ligar",
-    "level": "Nível",
     "provider": "Fornecedor",
     "value": "Identificador",
     "edition": "Edição",
     "cancel": "Cancelar",
     "save": "Guardar",
-    "level_work": "Obra",
-    "level_edition": "Edição",
     "sources_hint": "Ligar um identificador atualiza os metadados a partir dessa fonte.",
     "send_to": "Enviar para…",
     "send_queued": "A enviar para {{name}}",
@@ -53,6 +48,7 @@
     "offline_retry": "Tentar novamente",
     "offline_audio_unplayable": "Este audiolivro não pode ser reproduzido tal como está neste dispositivo, por isso não pode ser guardado offline",
     "offline_wifi_only": "As transferências estão limitadas a Wi-Fi",
-    "row_similar": "Livros semelhantes"
+    "row_similar": "Livros semelhantes",
+    "edit_profiles": "Formatos e idiomas"
   }
 }

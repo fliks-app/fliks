@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, forwardRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
 import { MediaAdminService } from '../../core/services/media-admin.service';
@@ -79,7 +79,8 @@ import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 import { ReleaseGrabController } from './release-grab-controller';
-import { LikeController } from './like-controller';
+import { MEDIA_SAVED_HOST } from '../../shared/components/detail-hero/detail-hero';
+import { LikeController } from '../../shared/utils/like-controller';
 import { AnalyzeController } from './analyze-controller';
 import { RequestFlowController } from './request-flow-controller';
 import { WatchedController } from './watched-controller';
@@ -136,6 +137,7 @@ interface HandedEpisode {
     TvSectionDirective,
   ],
   templateUrl: './media-detail.html',
+  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }],
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
   protected readonly kinds = KIND_REGISTRY;
@@ -182,7 +184,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   );
   readonly like = new LikeController(
     {
-      media: () => this.media(),
+      // A book or comic page owns its likes through the shared hero.
+      media: () => (this.kindPage ? null : this.media()),
       episodeMode: () => this.episodeMode(),
       focusedEpisode: () => this.focusedEpisode(),
     },
@@ -371,6 +374,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
     const fanart = m ? pickFanart(m) : null;
+    if (!fanart && !this.fullLoaded()) return;
     this.fanartIsCover = !fanart;
     this.fanartUrl = fanart ?? m?.posterUrl ?? null;
     this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
@@ -474,6 +478,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   );
 
   readonly loading = signal(true);
+  /** False while only a list handover is shown: it carries no `fanartUrl`, so its cover must not stand in for fanart yet. */
+  readonly fullLoaded = signal(false);
   readonly notFound = signal(false);
   /** Card-known episode data painted into the header while the media request is in flight, so the poster morph has a target. */
   readonly episodeSeed = signal<HandedEpisode | null>(this.handedEpisode());
@@ -652,6 +658,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
     // Nothing here survives a switch to another title.
     this.notFound.set(false);
+    this.fullLoaded.set(false);
     this.cast.set([]);
     this.crew.set([]);
     this.similar.set([]);
@@ -680,6 +687,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         return;
       }
       this.media.set(m);
+      this.fullLoaded.set(true);
       // Paint from the cache-served media immediately; the uncacheable
       // playback-state calls below must not gate first paint.
       this.loading.set(false);
@@ -902,10 +910,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   async deleteMedia() {
     const m = this.media();
-    if (!m) return;
+    if (!m || !(await this.admin.confirmDelete(m))) return;
     this.deleteLoading.set(true);
     try {
-      await this.admin.deleteMedia(m);
+      await this.admin.removeMedia(m);
     } finally {
       this.deleteLoading.set(false);
     }
