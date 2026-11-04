@@ -405,9 +405,8 @@ pub async fn score(
     };
     let (blocked, ids, candidates) = (inp.blocked, inp.ids, inp.candidates);
     let scored = tokio::task::spawn_blocking(move || {
-        let formats = |title: &str, flags: &[String]| {
-            fliks_domain::release::scoring::score_release_with(&formats, title, flags)
-        };
+        let compiled = fliks_domain::release::scoring::CompiledFormats::new(&formats);
+        let formats = |title: &str, flags: &[String]| compiled.score(title, flags);
         let blocked = |_: &str, source_id: i64| blocked.get(&source_id).copied().unwrap_or(false);
         score_and_sort_book_releases(family, candidates, &opts, &formats, &blocked)
     })
