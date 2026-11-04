@@ -5,9 +5,12 @@ const SUBSETS = [
   ['latin-ext', LATIN_EXT],
 ] as const;
 
+/** The directory of the self-hosted faces, which a book frame's CSP has to let in by name. */
+export const readerFontsDir = (): string => new URL('reader-fonts/', document.baseURI).href;
+
 const face = (family: string, file: string, weight: string, style: string, range: string): string =>
   `@font-face{font-family:"${family}";font-style:${style};font-weight:${weight};font-display:swap;` +
-  `src:url("${new URL(`reader-fonts/${file}.woff2`, document.baseURI).href}") format("woff2");unicode-range:${range}}`;
+  `src:url("${readerFontsDir()}${file}.woff2") format("woff2");unicode-range:${range}}`;
 
 /** The two self-hosted reading faces, each in its latin and latin-ext subset; a book frame is a blob document and cannot see the app's own CSS. */
 export const readerFontCss = (): string =>

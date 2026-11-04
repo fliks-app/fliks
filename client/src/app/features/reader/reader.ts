@@ -49,7 +49,7 @@ import {
   type AnnotationColour,
 } from './annotations-api.service';
 import { bookProgression } from './book-progress';
-import { provideCssSelectorGenerator, sandboxContentFrames, selectorOf } from './frame-hardening';
+import { destroyNavigator, provideCssSelectorGenerator, sandboxContentFrames, selectorOf } from './frame-hardening';
 import { allowedExternalLink } from './link-scheme';
 import {
   COLOUR_HEX,
@@ -67,7 +67,7 @@ import {
   chapterMinutesLeft,
   formatMinutes,
 } from './reader-estimates';
-import { provideReaderFonts } from './reader-fonts';
+import { provideReaderFonts, readerFontsDir } from './reader-fonts';
 import { readerKeyAction, readerKeyBindings, type ReaderKeyAction } from './reader-keys';
 import { ReaderProgressService } from './reader-progress.service';
 import {
@@ -286,7 +286,8 @@ export class ReaderComponent implements OnDestroy {
     this.stopSandbox?.();
     if (this.hideTimer) clearTimeout(this.hideTimer);
     void this.progress.flush();
-    void this.navigator?.destroy();
+    if (this.navigator) void destroyNavigator(this.navigator, this.pageHost().nativeElement);
+    this.api.release(this.target().itemId);
   }
 
   private async open(): Promise<void> {
@@ -332,6 +333,7 @@ export class ReaderComponent implements OnDestroy {
           defaults: {},
           keyboardPeripherals: readerKeyBindings(),
           upgradeInsecureRequests: 'auto',
+          injectables: { rules: [], allowedDomains: [readerFontsDir()] },
         },
       );
       this.navigator.registerDecorationObserver('annotations', {
@@ -779,7 +781,7 @@ export class ReaderComponent implements OnDestroy {
         const href = pathOf(link.href);
         let text = this.chapterText.get(href);
         if (text === undefined) {
-          text = textOfMarkup((await pub.get(link).readAsString()) ?? '');
+          text = textOfMarkup(await this.api.markup(this.target().itemId, link));
           this.chapterText.set(href, text);
         }
         const chapter = this.toc().find((r) => pathOf(r.link.href) === href)?.title ?? '';
