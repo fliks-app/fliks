@@ -14,14 +14,16 @@
 "year": 2024
 },
 "format": "cbz",
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -49,14 +51,16 @@
 "year": 2023
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -83,14 +87,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -118,14 +124,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -152,14 +160,16 @@
 "year": 2023
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -185,14 +195,16 @@
 "year": 2022
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -219,14 +231,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -253,14 +267,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -286,14 +302,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -320,14 +338,16 @@
 "year": 2021
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -352,14 +372,16 @@
 "year": 2021
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -384,14 +406,16 @@
 "series": "Moon Tales"
 },
 "format": "cbr",
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 303,
 "name": "CBR",
@@ -416,14 +440,16 @@
 "series": "Moon Tales"
 },
 "format": "pdf",
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 305,
 "name": "PDF",
@@ -450,14 +476,16 @@
 "year": 2020
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -483,14 +511,16 @@
 "year": 2019
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -515,14 +545,16 @@
 "year": 2020
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -547,14 +579,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -581,14 +615,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -614,14 +650,16 @@
 "year": 2024
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
@@ -647,14 +685,16 @@
 "year": 2020
 },
 "format": null,
-"language": {
+"languages": [
+{
 "id": 1,
 "iso639_2": [
 "eng"
 ],
 "isoCode": "en",
 "name": "English"
-},
+}
+],
 "quality": {
 "id": 302,
 "name": "CBZ",
