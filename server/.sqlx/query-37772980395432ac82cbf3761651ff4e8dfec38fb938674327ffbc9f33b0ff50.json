@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM editions WHERE \"mediaId\" = $1 ORDER BY id LIMIT 1",
+  "query": "SELECT e.id FROM editions e JOIN media m ON m.id = e.\"mediaId\"\n               WHERE e.\"mediaId\" = $1 AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2)\n               ORDER BY e.family <> $3, e.id LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -17,12 +17,14 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Int4Array",
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "9f1c671391b795625375151ef7b43b40e6be116203e0da38a02b1f5d79190e5f"
+  "hash": "37772980395432ac82cbf3761651ff4e8dfec38fb938674327ffbc9f33b0ff50"
 }

@@ -11,9 +11,14 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .fetch_all(&mut *c)
     .await?;
+    // An edition with no library follows its work: pin it when the work changes library.
     // One statement: the composite foreign keys on (id, "mediaId") are checked at its end.
     sqlx::query!(
-        r#"WITH e AS (UPDATE editions SET "mediaId" = $2 WHERE "mediaId" = $1),
+        r#"WITH e AS (UPDATE editions SET "mediaId" = $2,
+                    "libraryId" = COALESCE("libraryId", (SELECT s."libraryId" FROM media s
+                      WHERE s.id = $1 AND s."libraryId" IS DISTINCT FROM
+                            (SELECT t."libraryId" FROM media t WHERE t.id = $2)))
+                    WHERE "mediaId" = $1),
              g AS (UPDATE item_groups SET "mediaId" = $2 WHERE "mediaId" = $1),
              i AS (UPDATE items SET "mediaId" = $2 WHERE "mediaId" = $1),
              p AS (UPDATE item_parts SET "mediaId" = $2 WHERE "mediaId" = $1),
@@ -212,5 +217,27 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(counts, (1, 3, 1, 2, 2, 0));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn absorb_across_libraries_pins_the_moved_editions(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'a'), (2, 'b');
+               INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'Dup', 'book', 1), (2, 'Held', 'book', 2);
+               INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'text'), (2, 2, 'text');"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut tx = db.begin().await.unwrap();
+        absorb(&mut tx, 1, 2).await.unwrap();
+        tx.commit().await.unwrap();
+        let libs: Vec<Option<i32>> =
+            sqlx::query_scalar(r#"SELECT "libraryId" FROM editions ORDER BY id"#)
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        assert_eq!(libs, vec![Some(1), None]);
     }
 }
