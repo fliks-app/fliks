@@ -2,7 +2,7 @@
 use super::*;
 use crate::{
     ingest::books,
-    media::write::book_import::{book_or_held, held_book},
+    media::write::book_import::{book_or_held, held_book_in},
 };
 use fliks_domain::{
     external_id::Namespace,
@@ -466,9 +466,10 @@ pub(super) async fn find_or_import(
     // An edition provider's id sits on an edition, not on the media.
     let on_edition =
         d.media_type == MediaKind::Book && matches!(ns, Namespace::Core(_)) && !ns.is_unique();
+    let readable = crate::libraries::accessible_library_ids(&st.db, a).await?;
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
         let id = if on_edition {
-            held_book(&st.db, ns, &ext).await?
+            held_book_in(&st.db, ns, &ext, &readable).await?
         } else if ns.is_unique() {
             crate::media::external_ids::find(&st.db, d.media_type, ns, &ext).await?
         } else {
@@ -484,6 +485,7 @@ pub(super) async fn find_or_import(
         Ok(match id {
             Some(id) => load_media(&st.db, id)
                 .await?
+                .filter(|m| m.library_id.is_some_and(|l| readable.contains(&l)))
                 .filter(|m| !on_edition || m.library_id == Some(d.library_id)),
             None => None,
         })

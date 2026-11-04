@@ -242,7 +242,7 @@ pub async fn attach_with(
             )
             .await?;
         }
-        editions::set_field_sources(&mut tx, e, eprov).await?;
+        editions::merge_field_sources(&mut tx, e, eprov).await?;
     }
     tx.commit().await?;
 

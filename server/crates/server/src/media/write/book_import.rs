@@ -85,7 +85,8 @@ pub(super) async fn import_book(
             .ok_or_else(|| bad(&format!("externalId is not a {provider} id")))?,
     };
     let (library, folder) = (b.id("libraryId")?.flatten(), b.id("folderId")?.flatten());
-    if held_book(&st.db, ns, &id).await?.is_some() {
+    let readable = accessible_library_ids(&st.db, a).await?;
+    if held_book_in(&st.db, ns, &id, &readable).await?.is_some() {
         return Err(AppError::conflict(TAKEN));
     }
     let target = resolve_target(st, a, MediaKind::Book, library, folder).await?;
@@ -675,4 +676,22 @@ pub(crate) async fn held_book(
         Namespace::Core(_) if ns != ANCHOR => editions::media_of_id(db, ns, id).await,
         _ => external_ids::find(db, MediaKind::Book, ns, id).await,
     }
+}
+
+/// `held_book` limited to the books of `readable` libraries, so an answer never names another one.
+pub(crate) async fn held_book_in(
+    db: &sqlx::PgPool,
+    ns: Namespace,
+    id: &str,
+    readable: &[i32],
+) -> sqlx::Result<Option<i32>> {
+    let Some(media) = held_book(db, ns, id).await? else {
+        return Ok(None);
+    };
+    let library: Option<i32> = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+        .bind(media)
+        .fetch_optional(db)
+        .await?
+        .flatten();
+    Ok(library.filter(|l| readable.contains(l)).map(|_| media))
 }

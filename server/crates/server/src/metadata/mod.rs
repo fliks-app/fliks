@@ -187,7 +187,7 @@ impl Metadata {
         let name = name.unwrap_or(Namespace::TMDB.as_str());
         let ns = Namespace::parse(name)
             .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {name}")))?;
-        match self.available(ns) {
+        match self.answers(ns) {
             true => Ok(ns),
             false => Err(AppError::with_message(
                 StatusCode::SERVICE_UNAVAILABLE,

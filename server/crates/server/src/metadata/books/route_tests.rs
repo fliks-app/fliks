@@ -669,3 +669,19 @@ async fn attaching_a_work_another_book_holds_writes_nothing(pool: PgPool) {
             .is_none()
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_held_book_is_named_only_to_a_reader_of_its_library(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![full_anchor()]).await;
+    let hidden = c.book(2).await;
+    sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'book', 'openlibrary', 'OL1W')"#)
+        .bind(hidden)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let held = |readable: &'static [i32]| {
+        crate::media::write::book_import::held_book_in(&c.pool, Namespace::OPENLIBRARY, "OL1W", readable)
+    };
+    assert_eq!(held(&[1]).await.unwrap(), None);
+    assert_eq!(held(&[1, 2]).await.unwrap(), Some(hidden));
+}

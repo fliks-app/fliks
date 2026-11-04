@@ -128,7 +128,11 @@ async fn duplicate_ref(
     ns: Namespace,
     value: &str,
 ) -> Result<(), AppError> {
-    match external_ids::holder(&st.db, media_type, ns, value).await? {
+    let held = match media_type {
+        MediaKind::Book => super::book_import::held_book(&st.db, ns, value).await?,
+        _ => external_ids::holder(&st.db, media_type, ns, value).await?,
+    };
+    match held {
         Some(_) => Err(AppError::conflict("This title is already in the library")),
         None => Ok(()),
     }
