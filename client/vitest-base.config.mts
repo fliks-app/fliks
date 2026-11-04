@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    isolate: true,
+    isolate: false,
     restoreMocks: true,
     unstubGlobals: true,
     unstubEnvs: true,
