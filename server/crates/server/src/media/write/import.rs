@@ -9,7 +9,7 @@ use super::{
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
     external_ids::{self, Ids},
-    field_sources::set_field_sources,
+    field_sources::merge_field_sources,
     items::{self, NewWant},
 };
 use crate::{
@@ -409,7 +409,7 @@ async fn insert_media(
             .execute(&mut *tx)
             .await?;
     }
-    set_field_sources(tx, id, &found.provenance).await?;
+    merge_field_sources(tx, id, &found.provenance).await?;
     Ok((id, free))
 }
 

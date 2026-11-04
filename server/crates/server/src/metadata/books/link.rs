@@ -208,7 +208,7 @@ pub async fn attach_with(
     )
     .await?;
     set_series(&mut tx, media, &wmap, provider_of(&wprov, Field::Series)).await?;
-    field_sources::set_field_sources(&mut tx, media, &wprov).await?;
+    field_sources::merge_field_sources(&mut tx, media, &wprov).await?;
 
     if let (Some(e), Some((emap, eprov))) = (edition, &emerged) {
         let work_title = title.clone().unwrap_or(ctx.title);

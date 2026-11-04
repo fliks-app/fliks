@@ -2,7 +2,7 @@
 use super::{already_running, body::Body, entity_or_404, gate};
 use crate::media::{
     details::{set_release_dates, set_tmdb_collection},
-    field_sources::set_field_sources,
+    field_sources::merge_field_sources,
     items,
 };
 use crate::{
@@ -345,7 +345,7 @@ pub async fn refresh_metadata(
     if free(Field::Collection) {
         set_tmdb_collection(&mut tx, id, d.tmdb_collection()).await?;
     }
-    set_field_sources(&mut tx, id, &found.provenance).await?;
+    merge_field_sources(&mut tx, id, &found.provenance).await?;
     tx.commit().await?;
     let ids = Ids {
         tmdb: d.tmdb_id,
