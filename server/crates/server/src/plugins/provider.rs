@@ -45,7 +45,6 @@ struct Block {
     chapters: Vec<String>,
     scene: Vec<String>,
     image_hosts: Vec<String>,
-    limits: Limits,
     /// `snapshotTtlSecs`: a resource it does not name is zero.
     ttl: HashMap<String, Option<Duration>>,
 }
@@ -63,7 +62,6 @@ impl Block {
                 .filter_map(|n| n.as_str().map(str::to_owned))
                 .collect()
         };
-        let l = &b["limits"];
         let namespaces: Vec<String> = b["namespaces"]
             .as_array()
             .into_iter()
@@ -74,12 +72,7 @@ impl Block {
             official: namespaces
                 .iter()
                 .any(|n| matches!(provider::classify(n), Some(provider::Class::Core(_)))),
-            namespaces: b["namespaces"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|n| n["name"].as_str().map(str::to_owned))
-                .collect(),
+            namespaces,
             kinds: b["kinds"]
                 .as_object()
                 .into_iter()
@@ -91,16 +84,6 @@ impl Block {
             chapters: strs(&b["chapterNamespaces"]),
             scene: strs(&b["sceneNamespaces"]),
             image_hosts: strs(&b["imageHosts"]),
-            limits: Limits {
-                rate_per_sec: l["ratePerSec"].as_f64().unwrap_or(1.0),
-                burst: l["burst"]
-                    .as_u64()
-                    .and_then(|b| u32::try_from(b).ok())
-                    .filter(|b| *b >= 1)
-                    .unwrap_or(1),
-                daily_quota: l["dailyQuota"].as_u64().and_then(|q| u32::try_from(q).ok()),
-                background_share: l["backgroundShare"].as_f64().unwrap_or(0.75),
-            },
             ttl: b["snapshotTtlSecs"]
                 .as_object()
                 .into_iter()
@@ -115,6 +98,7 @@ pub struct PluginProvider {
     rt: Arc<PluginRt>,
     key: Namespace,
     block: Block,
+    gate: Arc<super::outbound::Gate>,
 }
 
 fn bad(why: &str) -> Upstream {
@@ -180,7 +164,13 @@ impl PluginProvider {
         let b = rt.manifest.get("provider")?;
         let block = Block::parse(b);
         let key = Namespace::parse(block.namespaces.first()?)?;
-        Some(Self { rt, key, block })
+        let gate = rt.sh.gate.clone()?;
+        Some(Self {
+            rt,
+            key,
+            block,
+            gate,
+        })
     }
 
     /// `provider.imageHosts`: where the core may download this provider's images from.
@@ -344,8 +334,7 @@ impl MetadataProvider for PluginProvider {
     }
 
     fn limits(&self) -> Limits {
-        let held = self.rt.sh.gate.as_ref().map(|g| g.limits());
-        held.unwrap_or(self.block.limits)
+        self.gate.limits()
     }
 
     fn available(&self) -> bool {
@@ -812,9 +801,13 @@ impl Plugins {
                 delay = every;
                 let pending = {
                     let _l = me.lock(&id).await;
-                    // Still our failed runtime, or gone because our last attempt failed.
+                    // Still our runtime (a late start still settling waits a round), or gone.
                     match (&ours, me.rt(&id)) {
-                        (Some(o), Some(l)) if Arc::ptr_eq(o, &l) => {}
+                        (Some(o), Some(l)) if Arc::ptr_eq(o, &l) => match *l.watch().borrow() {
+                            State::Failed => {}
+                            State::Ready | State::Degraded | State::Stopped => return,
+                            _ => continue,
+                        },
                         (None, None) => {}
                         _ => return,
                     }
@@ -826,7 +819,6 @@ impl Plugins {
                     }
                     me.register(&pkg).await
                 };
-                ours = None;
                 match pending {
                     Ok(p) => {
                         if me.settle(p).await.is_ok() {
@@ -837,6 +829,7 @@ impl Plugins {
                         tracing::warn!("provider \"{id}\" not registered again: {}", f.reason)
                     }
                 }
+                ours = me.rt(&id);
             }
         });
     }
