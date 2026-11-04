@@ -21,6 +21,7 @@ import {
   CdkDropList,
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
+import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import {
   LucideArrowDown,
   LucideArrowUp,
@@ -88,6 +89,7 @@ type PlaylistGroupedEntry =
     NgTemplateOutlet,
     RouterLink,
     CdkDropList,
+    DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
     LucideArrowDown,

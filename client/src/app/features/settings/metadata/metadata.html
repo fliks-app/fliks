@@ -45,16 +45,52 @@
         @if (rows(kind).length) {
           <div class="space-y-1">
             <h3 class="text-sm font-medium">{{ 'settings.metadata.kind.' + kind | translate }}</h3>
-            <ol class="flex flex-col gap-1 px-1 -mx-1 py-1">
+            <div cdkDropList (cdkDropListDropped)="reorder(kind, $event.previousIndex, $event.currentIndex)" class="flex flex-col gap-2">
               @for (r of rows(kind); track r.namespace; let i = $index; let last = $last) {
-                <li class="flex items-center gap-2 rounded-lg border border-base-200 px-3 py-2">
+                <div
+                  cdkDrag
+                  [cdkDragDisabled]="tv.isTv()"
+                  class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+                >
+                  <div *cdkDragPlaceholder class="h-[2.625rem] w-full rounded-lg bg-base-300"></div>
+                  @if (!tv.isTv()) {
+                    <button
+                      type="button"
+                      cdkDragHandle
+                      class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                      [attr.aria-label]="'settings.metadata.drag' | translate"
+                    >
+                      <svg lucideGripVertical class="h-4 w-4"></svg>
+                    </button>
+                  }
                   <span class="w-5 text-sm text-base-content/50">{{ i + 1 }}</span>
-                  <span class="flex-1 text-sm"><span class="font-mono">{{ r.namespace }}</span> <span class="text-base-content/50">{{ r.name }}</span></span>
-                  <button type="button" class="btn btn-ghost btn-xs" [disabled]="i === 0" [attr.aria-label]="'settings.metadata.move_up' | translate" (click)="move(kind, i, -1)">&uarr;</button>
-                  <button type="button" class="btn btn-ghost btn-xs" [disabled]="last" [attr.aria-label]="'settings.metadata.move_down' | translate" (click)="move(kind, i, 1)">&darr;</button>
-                </li>
+                  <span class="flex flex-1 min-w-0 items-baseline gap-2">
+                    <span class="font-medium truncate">{{ r.name }}</span>
+                    <span class="font-mono text-xs text-base-content/50">{{ r.namespace }}</span>
+                  </span>
+                  @if (tv.isTv()) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === 0"
+                      (click)="reorder(kind, i, i - 1)"
+                      [attr.aria-label]="'settings.metadata.move_up' | translate"
+                    >
+                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="last"
+                      (click)="reorder(kind, i, i + 1)"
+                      [attr.aria-label]="'settings.metadata.move_down' | translate"
+                    >
+                      <svg lucideArrowDown class="h-4 w-4"></svg>
+                    </button>
+                  }
+                </div>
               }
-            </ol>
+            </div>
           </div>
         }
       }

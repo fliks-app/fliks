@@ -15,6 +15,7 @@ import {
   CdkDragDrop,
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
+import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import {
   LucideGripVertical,
   LucideArrowUp,
@@ -47,6 +48,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
     TranslatePipe,
     FormsModule,
     CdkDropList,
+    DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
     LucideGripVertical,

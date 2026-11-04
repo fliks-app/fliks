@@ -1,4 +1,5 @@
 import { CdkDrag, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
+import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -27,7 +28,7 @@ interface Section {
 /** Reaction settings, opened from the player's settings menu; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
-  imports: [FormsModule, NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
+  imports: [FormsModule, NgTemplateOutlet, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
   templateUrl: './party-reaction-settings.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

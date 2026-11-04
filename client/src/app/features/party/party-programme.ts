@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRend
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
+import { DropListSettleDirective } from '../../shared/directives/drop-list-settle.directive';
 import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
 import { type Media } from '../../core/services/api/media.service';
@@ -31,7 +32,7 @@ export const sameItem = (a: { mediaId: number; episodeId: number | null }, b: { 
 /** The party's ordered programme: everyone sees it, the host reorders, removes and appends. */
 @Component({
   selector: 'app-party-programme',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
+  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
   templateUrl: './party-programme.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

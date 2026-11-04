@@ -7,6 +7,7 @@ import {
   CdkDragHandle,
   CdkDropList,
 } from '@angular/cdk/drag-drop';
+import { DropListSettleDirective } from '../../../../../shared/directives/drop-list-settle.directive';
 import {
   LucideArrowDown,
   LucideArrowUp,
@@ -39,6 +40,7 @@ const isFolderInUse = (err: unknown): boolean => {
     FormsModule,
     TranslatePipe,
     CdkDropList,
+    DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
     LucideArrowDown,
