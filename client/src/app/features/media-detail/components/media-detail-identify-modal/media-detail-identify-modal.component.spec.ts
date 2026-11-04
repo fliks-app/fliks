@@ -84,6 +84,19 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     expect(searchTv).toHaveBeenCalledWith('A Series', undefined, undefined, 795);
   });
 
+  it('identifies a TVDB result by its provider and external id', async () => {
+    const { cmp, identify } = setup();
+
+    await cmp.apply({ ...tvdbOnly, externalId: '4242' });
+
+    expect(identify).toHaveBeenCalledWith(795, {
+      tvdbId: 4242,
+      imdbId: 'tt0499308',
+      provider: 'tvdb',
+      externalId: '4242',
+    });
+  });
+
   it('identifies a plugin result by its namespace and id', async () => {
     const { cmp, identify } = setup();
 

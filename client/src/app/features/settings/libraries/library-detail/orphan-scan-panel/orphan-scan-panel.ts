@@ -271,10 +271,7 @@ export class OrphanScanPanelComponent {
       type: group.mediaType,
       ...(pick
         ? {
-            externalId:
-              pick.provider === 'tvdb' && pick.tvdbId != null
-                ? String(pick.tvdbId)
-                : String(pick.tmdbId),
+            externalId: pick.externalId,
             provider: pick.provider,
           }
         : {
@@ -305,7 +302,8 @@ export class OrphanScanPanelComponent {
       'settings.libraries.scan_error',
     );
     const status = (err as { status?: number })?.status;
-    return status ? `${message} (HTTP ${status})` : message;
+    if (status) return `${message} (HTTP ${status})`;
+    return err instanceof Error ? `${message} (${err.message})` : message;
   }
 
   private patch(index: number, partial: Partial<GroupVM>) {

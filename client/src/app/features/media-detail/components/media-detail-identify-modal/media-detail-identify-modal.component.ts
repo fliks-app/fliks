@@ -33,9 +33,9 @@ export interface IdentifyModalConfig {
   imdbId: string | null;
 }
 
-/** TMDB and TVDB results identify by their ids; any other provider by its own namespace and id. */
+/** A result identifies by its provider and external id. */
 function identifyTarget(r: MetadataSearchResult) {
-  return r.provider === 'tmdb' || r.provider === 'tvdb' || !r.externalId
+  return !r.externalId
     ? searchResultIds(r)
     : { ...searchResultIds(r), provider: r.provider, externalId: r.externalId };
 }

@@ -21,6 +21,7 @@ const result = (
   extra: Partial<MetadataSearchResult> = {},
 ): MetadataSearchResult => ({
   tmdbId,
+  externalId: String(tmdbId),
   provider: 'tmdb',
   title,
   originalTitle: title,
@@ -409,7 +410,15 @@ describe('OrphanScanPanelComponent: a group whose search errored', () => {
 /** A TVDB work TheMovieDB does not know is reported with `tmdbId: 0`, so every
  *  such row would answer to the same identity. */
 describe('OrphanScanPanelComponent — picking among TVDB-only results', () => {
-  const tvdb = (tvdbId: number, title: string) => result(0, title, { provider: 'tvdb', tvdbId });
+  it('links a TVDB pick by the hit externalId', async () => {
+    const { panel, relinked } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tvdb');
+    panel.pick(0, result(0, 'First', { provider: 'tvdb', tvdbId: 101, externalId: '101' }));
+    await panel.importAll(7);
+    expect(relinked[0]).toMatchObject({ provider: 'tvdb', externalId: '101' });
+  });
+
+  const tvdb = (tvdbId: number, title: string) => result(0, title, { provider: 'tvdb', tvdbId, externalId: String(tvdbId) });
 
   it('VERDICT: switches the pick between two results that share tmdbId 0', async () => {
     const { panel } = setup(['Alpha']);
