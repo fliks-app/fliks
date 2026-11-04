@@ -14,6 +14,7 @@ import { DetailHeroComponent } from '../../../shared/components/detail-hero/deta
 import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { readRoute } from '../../../core/services/media-start.service';
 import { asComicMedia, nextIssue } from './comic-media';
 import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
 
@@ -74,7 +75,7 @@ export class ComicVolumeComponent {
   protected readonly saving = signal(false);
   protected readonly kinds: ComicIssue['kind'][] = ['issue', 'annual', 'special'];
 
-  protected readonly readLink = (itemId: number) => ['/read', this.media().id, itemId];
+  protected readonly readLink = (itemId: number) => readRoute(this.media().id, itemId);
   protected percent(p: number | null): number {
     return Math.round((p ?? 0) * 100);
   }

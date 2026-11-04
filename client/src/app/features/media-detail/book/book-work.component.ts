@@ -2,8 +2,7 @@ import { Component, ElementRef, computed, effect, inject, input, signal, untrack
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
-import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
-import { PlaybackQueueService } from '../../../core/services/playback-queue.service';
+import { MediaStartService, readEdition, readRoute } from '../../../core/services/media-start.service';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookFormatFamily, CollectionDetail } from '../../../core/services/api/books.models';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -57,8 +56,7 @@ export class BookWorkComponent {
   private readonly api = inject(BooksApiService);
   private readonly mediaApi = inject(MediaService);
   private readonly auth = inject(AuthService);
-  private readonly audio = inject(AudioPlayerService);
-  private readonly queue = inject(PlaybackQueueService);
+  private readonly start = inject(MediaStartService);
   private readonly translate = inject(TranslateService);
 
   protected readonly book = computed(() => asBookMedia(this.media())?.book ?? null);
@@ -73,14 +71,9 @@ export class BookWorkComponent {
     return lead ? [lead.family, ...all.filter((f) => f !== lead.family)] : [];
   });
 
-  /** The reader route of the text edition last read, else the first readable one. */
   protected readonly readLink = computed(() => {
-    const { editions, progress } = this.book() ?? { editions: [], progress: null };
-    const readable = editions.filter(
-      (e) => e.family === 'text' && e.itemId != null && e.fileIds.length && ['epub', 'pdf'].includes(e.format ?? ''),
-    );
-    const e = readable.find((x) => x.id === progress?.editionId) ?? readable[0];
-    return e ? ['/read', this.media().id, e.itemId] : null;
+    const e = readEdition(this.book());
+    return e ? readRoute(this.media().id, e.itemId!) : null;
   });
 
   protected readonly narrators = computed(() => [
@@ -144,31 +137,9 @@ export class BookWorkComponent {
     });
   }
 
-  /** Plays the audio edition last listened to, else the first one with a file; the next volumes of the series queue behind it. */
   protected listen(): void {
-    const { editions, progress, series } = this.book() ?? { editions: [], progress: null, series: [] };
-    const playable = editions.filter((e) => e.family === 'audio' && e.hasFile && e.itemId != null);
-    const edition = playable.find((e) => e.id === progress?.editionId) ?? playable[0];
-    if (!edition?.itemId) return;
-    const m = this.media();
-    const volumes = this.seriesItems();
-    const at = volumes.findIndex((v) => v.id === m.id);
-    if (at >= 0 && series[0]) {
-      this.queue.start(
-        volumes.map((v) => ({ mediaId: v.id, title: v.title })),
-        at,
-        { source: 'series', sourceId: series[0].id, autoplay: true },
-      );
-    } else {
-      this.queue.clear();
-    }
-    void this.audio.play({
-      mediaId: m.id,
-      itemId: edition.itemId,
-      title: m.title,
-      artist: (this.book()?.authors ?? []).map((a) => a.name).join(', '),
-      coverUrl: edition.coverUrl ?? m.posterUrl,
-    });
+    const m = asBookMedia(this.media());
+    if (m) void this.start.listen(m, this.seriesItems());
   }
 
   protected openDialog(open: { set(v: boolean): void }, dialog: ElementRef<HTMLDialogElement> | undefined): void {

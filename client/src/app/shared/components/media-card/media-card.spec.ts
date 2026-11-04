@@ -12,7 +12,7 @@ import { RecommendService } from '../../../core/services/recommend.service';
 import { TvService } from '../../../core/services/tv.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
-import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
@@ -47,7 +47,7 @@ interface Harness {
   router: Router;
   addToPlaylist: { open: ReturnType<typeof vi.fn> };
   recommend: { open: ReturnType<typeof vi.fn> };
-  playableMedia: { play: ReturnType<typeof vi.fn> };
+  playableMedia: { start: ReturnType<typeof vi.fn> };
 }
 
 async function createFixture(
@@ -57,7 +57,7 @@ async function createFixture(
 ): Promise<Harness> {
   const addToPlaylist = { open: vi.fn() };
   const recommend = { open: vi.fn() };
-  const playableMedia = { play: vi.fn().mockResolvedValue(undefined) };
+  const playableMedia = { start: vi.fn().mockResolvedValue(undefined) };
   const navbar = { markAsBackNavigation: vi.fn() };
 
   TestBed.resetTestingModule();
@@ -81,7 +81,7 @@ async function createFixture(
       { provide: DeviceService, useValue: { input: () => 'mouse', isTouch: () => false, isTv: () => !!role.isTv, isDesktopNative: () => false } },
       { provide: AddToPlaylistService, useValue: addToPlaylist },
       { provide: RecommendService, useValue: recommend },
-      { provide: PlayableMediaService, useValue: playableMedia },
+      { provide: MediaStartService, useValue: playableMedia },
       { provide: NavbarService, useValue: navbar },
       {
         provide: PluginUiRegistryService,
@@ -332,7 +332,16 @@ describe('MediaCardComponent — card action handlers do what their row promises
       media: makeMedia({ files: [{ id: 42, quality: '1080p', relativePath: 'x', size: 1 }] }),
     });
     findAction(h, 'media_card.action_play').run();
-    expect(h.playableMedia.play).toHaveBeenCalled();
+    expect(h.playableMedia.start).toHaveBeenCalled();
+  });
+
+  it('Play on a book delegates to the kind-aware start, and a book with no part has no Play', async () => {
+    const book = { authors: [], series: null, formats: ['text'], lastFamily: null };
+    const h = await createFixture(FULL_MEMBER, { media: { ...makeMedia({ type: 'book' }), book } as Media });
+    findAction(h, 'media_card.action_play').run();
+    expect(h.playableMedia.start).toHaveBeenCalled();
+    const none = await createFixture(FULL_MEMBER, { media: { ...makeMedia({ type: 'book' }), book: { ...book, formats: [] } } as Media });
+    expect(labels(none)).not.toContain('media_card.action_play');
   });
 
   it('Open navigates to the detail link', async () => {
@@ -812,7 +821,7 @@ describe('MediaCardComponent: selectOnly', () => {
     host.querySelector<HTMLElement>('figure')!.click();
     expect(clicks).toBe(1);
     expect(navigate).not.toHaveBeenCalled();
-    expect(h.playableMedia.play).not.toHaveBeenCalled();
+    expect(h.playableMedia.start).not.toHaveBeenCalled();
   });
 });
 

@@ -29,6 +29,7 @@ import { DownloadDetailModalComponent } from '../../shared/components/download-d
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
+import { MediaStartService } from '../../core/services/media-start.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -85,6 +86,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);
   private readonly playableMedia = inject(PlayableMediaService);
+  private readonly mediaStart = inject(MediaStartService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly storageScope = inject(StorageScopeService);
   private readonly playlistsApi = inject(PlaylistsApiService);
@@ -606,19 +608,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   async playRecommendation(rec: RecommendationItem) {
     try {
       const media = await this.mediaService.getOne(rec.media.id);
-      const file = media.files?.[0];
-      if (!file) {
-        void this.router.navigate(mediaDetailLink(media.type, media.id));
-        return;
-      }
-      await this.playableMedia.play({
-        fileId: file.id,
-        mediaId: media.id,
-        episodeId: file.episodeId ?? undefined,
-        media,
-        backdropUrl: media.fanartUrl ?? media.posterUrl ?? null,
-        streamInfo: (file as any).streamInfo,
-      }, false);
+      await this.mediaStart.start(media);
     } catch {
       /* error handled by global interceptor */
     }
