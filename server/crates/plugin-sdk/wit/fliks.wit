@@ -326,7 +326,8 @@ interface metadata-provider {
   /// A record is a `json` document of the shape the metadata specs name, validated by the host.
   search: func(q: search-query, lang: lang) -> result<json, provider-error>;
   fetch-work: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
-  fetch-children: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
+  /// `season` narrows a series to that season; a provider that cannot filter returns every child and the host filters.
+  fetch-children: func(kind: kind, id: external-id, season: option<u32>, lang: lang) -> result<json, provider-error>;
   child-stubs: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
   find-by: func(source: external-id, lang: lang) -> result<option<tuple<external-id, kind>>, provider-error>;
   fetch-edition: func(edition: external-id, lang: lang) -> result<option<json>, provider-error>;

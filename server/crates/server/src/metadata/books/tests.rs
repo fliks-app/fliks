@@ -110,6 +110,7 @@ impl MetadataProvider for Fake {
         &'a self,
         _: MediaKind,
         id: &'a str,
+        _: Option<u32>,
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Vec<Value>> {

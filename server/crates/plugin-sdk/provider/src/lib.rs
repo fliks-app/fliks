@@ -71,6 +71,7 @@ pub trait MetadataProvider {
     fn fetch_children(
         _kind: String,
         _id: fliks_plugin_sdk::ExternalId,
+        _season: Option<u32>,
         _lang: Lang,
     ) -> Result<String, ProviderError> {
         Err(ProviderError::Unsupported)
@@ -160,9 +161,10 @@ macro_rules! export_provider {
             fn fetch_children(
                 kind: String,
                 id: $crate::sdk::ExternalId,
+                season: Option<u32>,
                 lang: $crate::Lang,
             ) -> Result<String, $crate::ProviderError> {
-                <$t as $crate::MetadataProvider>::fetch_children(kind, id, lang)
+                <$t as $crate::MetadataProvider>::fetch_children(kind, id, season, lang)
             }
             fn child_stubs(
                 kind: String,

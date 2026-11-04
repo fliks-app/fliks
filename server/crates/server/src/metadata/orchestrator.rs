@@ -86,11 +86,13 @@ impl Metadata {
     }
 
     /// The children of `id` (the seasons of a series, the editions of a book), from its snapshot or the provider.
+    /// `season` asks for that season alone; its snapshot key is apart from the whole series'.
     pub async fn children(
         &self,
         p: Namespace,
         kind: MediaKind,
         id: &str,
+        season: Option<u32>,
         lang: &Resolved,
         prio: Priority,
     ) -> Result<Vec<Value>, MetaError> {
@@ -100,13 +102,16 @@ impl Metadata {
         let call = move || {
             async move {
                 let all = provider
-                    .fetch_children(kind, &id_owned, &lang_owned, prio)
+                    .fetch_children(kind, &id_owned, season, &lang_owned, prio)
                     .await?;
                 Ok(Value::Array(all))
             }
             .boxed()
         };
-        let key = self.key(p, "children", kind, id, lang);
+        let mut key = self.key(p, "children", kind, id, lang);
+        if let Some(n) = season {
+            key.id = format!("{id}/s{n}");
+        }
         match self.snapshot(key, prio, ttl, call).await? {
             Value::Array(all) => Ok(all),
             _ => Ok(vec![]),

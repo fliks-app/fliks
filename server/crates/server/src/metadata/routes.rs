@@ -440,7 +440,7 @@ async fn seasons_of(st: &AppState, p: Namespace, id: &str, stubs: bool) -> Res {
     let found = if stubs {
         provider.child_stubs(series, id, &l, go).await
     } else {
-        provider.fetch_children(series, id, &l, go).await
+        provider.fetch_children(series, id, None, &l, go).await
     };
     Ok(Json(Value::Array(found.map_err(|e| fail(p, &e, true))?)))
 }

@@ -15,7 +15,6 @@ use fliks_domain::metadata::{
     merge::{FieldOrder, Provenance, merge},
 };
 use serde_json::{Map, Value};
-use std::collections::HashMap;
 
 pub use super::credits::persist_credits;
 
@@ -276,6 +275,7 @@ async fn read_seasons(
     st: &AppState,
     p: Namespace,
     external_id: &str,
+    season: Option<u32>,
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Vec<SeasonDetails>, AppError> {
@@ -284,7 +284,7 @@ async fn read_seasons(
     }
     let v = st
         .metadata
-        .children(p, MediaKind::Series, external_id, lang, prio)
+        .children(p, MediaKind::Series, external_id, season, lang, prio)
         .await
         .map_err(|e| fail_meta(p, e))?;
     Ok(v.iter().map(SeasonDetails::from_value).collect())
@@ -403,7 +403,7 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
         read_for_library(st, kind, finder, &l.external_id, lib.as_ref(), &lang, prio).await?;
     let core_found = finder.core().is_some() && p.core().is_some();
     let seasons = if kind.has_seasons() {
-        read_seasons(st, p, &id, &lang, prio).await?
+        read_seasons(st, p, &id, None, &lang, prio).await?
     } else {
         vec![]
     };
@@ -671,24 +671,20 @@ async fn resolve_provider(
     ))
 }
 
-/// `fetchSingleSeason`: one season out of the provider's full list (cached per run).
+/// `fetchSingleSeason`: one season, asked of the provider alone and still picked by number
+/// since a provider may ignore the filter.
 async fn single_season(
     st: &AppState,
     (p, ext): &Source,
     number: i32,
     lang: &Resolved,
-    cache: &mut HashMap<String, Vec<SeasonDetails>>,
     prio: Priority,
 ) -> Result<Option<SeasonDetails>, AppError> {
-    let key = format!("{}:{ext}", p.as_str());
-    if !cache.contains_key(&key) {
-        let all = read_seasons(st, *p, ext, lang, prio).await?;
-        cache.insert(key.clone(), all);
-    }
-    Ok(cache[&key]
-        .iter()
-        .find(|s| s.season_number == number)
-        .cloned())
+    let Ok(n) = u32::try_from(number) else {
+        return Ok(None);
+    };
+    let all = read_seasons(st, *p, ext, Some(n), lang, prio).await?;
+    Ok(all.into_iter().find(|s| s.season_number == number))
 }
 
 /// Rule 56: the media provider's seasons, a season with its own override replaced by that provider's data
@@ -701,7 +697,7 @@ async fn seasons_of(
     media: &Source,
     prio: Priority,
 ) -> Result<Vec<SeasonDetails>, AppError> {
-    let mut seasons = read_seasons(st, media.0, &media.1, lang, prio).await?;
+    let mut seasons = read_seasons(st, media.0, &media.1, None, lang, prio).await?;
     let overridden: Vec<(i32, String)> = sqlx::query!(
         r#"SELECT "number" AS n, "preferredProvider" AS "pref!" FROM item_groups
            WHERE "mediaId" = $1 AND "preferredProvider" IS NOT NULL AND "preferredProvider" <> ''
@@ -714,7 +710,6 @@ async fn seasons_of(
     .filter(|r| r.pref != media.0.as_str())
     .map(|r| (r.n, r.pref))
     .collect();
-    let mut cache = HashMap::new();
     for (number, pref) in overridden {
         let resolved = match resolve_provider(st, m, lib, lang, Some(&pref), prio).await {
             Ok(r) => r,
@@ -725,7 +720,7 @@ async fn seasons_of(
                 continue;
             }
         };
-        let Some(data) = single_season(st, &resolved, number, lang, &mut cache, prio).await? else {
+        let Some(data) = single_season(st, &resolved, number, lang, prio).await? else {
             tracing::warn!(
                 "refreshSeriesEpisodes: season S{number} override \"{pref}\" returned no matching season (numbering mismatch?). Falling back to media-level data."
             );
@@ -800,7 +795,7 @@ pub async fn episode(
     let lib = library(st, m.library_id).await?;
     let lang = language(st, lib.as_ref()).await?;
     let resolved = resolve_provider(st, &m, lib.as_ref(), &lang, row.pref.as_deref(), prio).await?;
-    let season = single_season(st, &resolved, row.season, &lang, &mut HashMap::new(), prio).await?;
+    let season = single_season(st, &resolved, row.season, &lang, prio).await?;
     Ok(season.and_then(|s| {
         s.episodes
             .into_iter()

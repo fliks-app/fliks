@@ -5,7 +5,7 @@ Scope: how the server reaches a metadata provider. The per-provider mappings liv
 ## Provider trait
 
 1. `MetadataProvider` (`crates/server/src/metadata/provider.rs`) is the only surface the media, persons, requests and route code uses to ask a provider something. It is dyn-safe: every async method returns a `BoxFuture`, like `net::guard::Net`.
-2. Methods: `id()` (the registry key, an `ExternalProvider`, as `preferredProvider` stores it), `supports(kind)` (TMDB and TVDB: the kinds wished in the `video` family, so not `book`), `has_persons()`, `limits()`, `search`, `fetch_work`, `fetch_children`, `child_stubs`, `find_by`, `fetch_person`, `person_credits`. Each call carries the resolved language and a `Priority`. `limits()` is the limits the provider's limiter holds now.
+2. Methods: `id()` (the registry key, an `ExternalProvider`, as `preferredProvider` stores it), `supports(kind)` (TMDB and TVDB: the kinds wished in the `video` family, so not `book`), `has_persons()`, `limits()`, `search`, `fetch_work`, `fetch_children` (with an optional season: that season alone), `child_stubs`, `find_by`, `fetch_person`, `person_credits`. Each call carries the resolved language and a `Priority`. `limits()` is the limits the provider's limiter holds now.
 3. Records are the JSON shapes `metadata.md` rules 24, 25, 31, 32 and 34 already describe: nothing about the wire or the mappings changes. `find_by(source, id)` answers `(id, kind)` or `None`; a source the provider cannot look up is `None` without a call (TMDB looks up IMDb and TVDB ids, TVDB looks up IMDb ids).
 4. A provider id is a string. TMDB and TVDB parse it as an integer; callers validate it before the call (`metadata.md` rule 39), so an unparsable id never reaches a provider.
 5. `metadata::types::Provider` does not exist: `ExternalProvider` is the provider name everywhere (`tmdb`, `tvdb`).
@@ -22,6 +22,7 @@ Scope: how the server reaches a metadata provider. The per-provider mappings liv
 
 11. `Priority` is `Interactive` or `Background`. A caller a person waits for is interactive: the `/api/metadata/*` routes, the person detail refresh and provider credits, `POST /api/media/import`, `POST /api/media/import/tmdb`, identify and the refresh routes, `POST /api/requests` (the auto-approval facts, the artwork and the auto-approve import), the admin approval of a request, and the single orphan relink (its import and its episode refresh). Everything else is background: the `RefreshMetadata` and `RefreshMissingMetadata` jobs, the importers, the batch orphan relink, the rescan episode refresh.
 12. `service::import`, `for_media`, `seasons_for_media` and `episode` take the priority of their caller.
+    The one season of a season override (`seasons_for_media`) and of `episode` is asked of the provider alone (`fetch_children` with `Some(season)`) and picked by number from the answer, so a provider that ignores the filter stays correct. The snapshot of a season is keyed `<id>/s<season>`, apart from the whole series'. The whole-series reads and the `/api/metadata/*` routes pass no season.
 
 ## Limiter
 

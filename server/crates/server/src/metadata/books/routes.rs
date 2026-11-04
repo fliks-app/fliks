@@ -313,7 +313,7 @@ pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
         ));
     };
     let children = md
-        .children(ANCHOR, MediaKind::Book, &work, &lang, GO)
+        .children(ANCHOR, MediaKind::Book, &work, None, &lang, GO)
         .await
         .map_err(|e| meta_fail(ANCHOR, e))?;
     let editions: Vec<Value> = children
