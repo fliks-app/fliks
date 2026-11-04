@@ -750,6 +750,7 @@ pub(super) async fn find_or_create_unmatched(
                     library_default_language: lib.dl,
                     record,
                     lock_title: typed.is_some(),
+                    lock_year: d.year.is_some(),
                     artwork,
                 },
                 user,

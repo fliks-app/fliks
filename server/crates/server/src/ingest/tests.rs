@@ -2739,6 +2739,80 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_file_merge_keeps_what_was_set_by_hand_and_a_typed_year(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("films");
+        let l = library(&c, "F", &lib, r#"["movie"]"#).await;
+        let file = lib.join("Placeholder Film (2001)/Placeholder Film (2001).mkv");
+        touch(&file, b"x");
+        let nfo = lib.join("Placeholder Film (2001)/movie.nfo");
+        touch(
+            &nfo,
+            b"<movie><title>Placeholder Film</title><year>2001</year><plot>A plot.</plot></movie>",
+        );
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            json!({"libraryId": l, "type": "movie", "folderName": "Placeholder Film (2001)",
+                   "year": 1999, "files": [{"filePath": file}]}),
+        )
+        .await;
+        assert_eq!(s, 201, "{b}");
+        let id = b["mediaId"].as_i64().unwrap() as i32;
+        let (s, b) = call(
+            &c,
+            "PUT",
+            &format!("/api/media/{id}"),
+            &c.admin,
+            json!({"title": "Hand Title"}),
+        )
+        .await;
+        assert_eq!(s, 200, "{b}");
+        touch(
+            &nfo,
+            b"<movie><title>Other Title</title><year>2005</year><plot>Plot two.</plot></movie>",
+        );
+        assert!(
+            crate::media::write::fields::merge_unmatched(&c.st, id)
+                .await
+                .unwrap()
+        );
+        let (title, year, overview): (String, Option<i32>, Option<String>) =
+            sqlx::query_as("SELECT title, year, overview FROM media WHERE id = $1")
+                .bind(id)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(
+            (title.as_str(), year, overview.as_deref()),
+            ("Hand Title", Some(1999), Some("Plot two."))
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_file_merge_reads_nothing_of_an_offline_file(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("films");
+        let l = library(&c, "F", &lib, r#"["movie"]"#).await;
+        let m = media(&c, l, "Offline Film", "movie").await;
+        file_row(&c, m, "Offline Film.mkv").await;
+        assert!(
+            !crate::media::write::fields::merge_unmatched(&c.st, m)
+                .await
+                .unwrap()
+        );
+        let stamped: Option<chrono::DateTime<chrono::Utc>> =
+            sqlx::query_scalar(r#"SELECT "metadataRefreshedAt" FROM media WHERE id = $1"#)
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert!(stamped.is_none());
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_orphan_scan_groups_book_files_into_works(pool: PgPool) {
         let c = ctx(pool).await;
         let lib = c.dir.join("shelf");

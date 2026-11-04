@@ -653,8 +653,9 @@ pub struct Unmatched {
     pub library_default_language: Option<i32>,
     /// What the files say (`metadata-orchestrator.md` rule 39), merged once the shell exists.
     pub record: Option<Map<String, Value>>,
-    /// The title was typed by the caller: it is locked.
+    /// The title or year was typed by the caller: it is locked.
     pub lock_title: bool,
+    pub lock_year: bool,
     pub artwork: Artwork,
 }
 
@@ -698,8 +699,17 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     )
     .fetch_one(&mut *tx)
     .await?;
-    if u.lock_title {
-        crate::media::field_sources::lock(&mut *tx, id, Field::Title).await?;
+    // The shell's values come from the files, so a later file merge may replace them.
+    let from_file: Vec<_> = [Field::Title, Field::OriginalTitle]
+        .into_iter()
+        .chain(u.year.map(|_| Field::Year))
+        .map(|f| (f, Namespace::FILE))
+        .collect();
+    crate::media::field_sources::merge_field_sources(&mut tx, id, &from_file).await?;
+    for (typed, field) in [(u.lock_title, Field::Title), (u.lock_year, Field::Year)] {
+        if typed {
+            crate::media::field_sources::lock(&mut *tx, id, field).await?;
+        }
     }
     // A book's file record is merged by its settle, with the credits and the series.
     if let Some(mut record) = u.record.filter(|_| u.media_type != MediaKind::Book) {

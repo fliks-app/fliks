@@ -166,7 +166,8 @@ pub fn file_ids(r: &Record) -> Vec<FileId> {
     .collect()
 }
 
-/// The file records of a media's files: what its first file (a comic's lowest issue) says.
+/// The file records of a media's files: what its first file (a comic's lowest issue) says; none
+/// when that file is unreachable.
 pub async fn file_records(st: &AppState, media: i32) -> Vec<Record> {
     let row = sqlx::query!(
         r#"SELECT m.type AS "kind!", COALESCE(m."folderName", '') AS "folder!",
@@ -187,6 +188,9 @@ pub async fn file_records(st: &AppState, media: i32) -> Vec<Record> {
     };
     let root = PathBuf::from(&r.root);
     let sample = root.join(rel);
+    if !tokio::fs::try_exists(&sample).await.unwrap_or(false) {
+        return vec![];
+    }
     let dir = root.join(&r.folder);
     let group = Group {
         kind,

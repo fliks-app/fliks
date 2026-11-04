@@ -8,7 +8,10 @@ use crate::{
 use fliks_domain::{
     external_id::Namespace,
     media::{kind::MediaKind, release::ReleaseKind},
-    metadata::merge::{FieldOrder, merge},
+    metadata::{
+        field::Field,
+        merge::{FieldOrder, merge},
+    },
 };
 use serde_json::{Map, Value};
 use sqlx::PgConnection;
@@ -98,26 +101,59 @@ pub async fn apply(c: &mut PgConnection, media: i32, f: &Fields) -> sqlx::Result
     Ok(())
 }
 
-/// Merges the file records of a media that has no provider id and writes the result: the shared
-/// columns, the kind's own, and the sources.
+/// The shared columns that hold a value no source row accounts for: a hand edit, a creation guess.
+async fn unsourced(c: &mut PgConnection, media: i32) -> sqlx::Result<Vec<Field>> {
+    let current: Option<Value> = sqlx::query_scalar(
+        r#"SELECT jsonb_build_object('title', title, 'originalTitle', "originalTitle", 'year', year,
+             'overview', overview, 'posterUrl', "posterUrl", 'fanartUrl', "fanartUrl",
+             'logoUrl', "logoUrl", 'rating', rating, 'genres', genres, 'runtime', runtime,
+             'alternativeTitles', "alternativeTitles")
+           FROM media WHERE id = $1"#,
+    )
+    .bind(media)
+    .fetch_optional(&mut *c)
+    .await?;
+    let sourced: Vec<String> =
+        sqlx::query_scalar(r#"SELECT field FROM media_field_sources WHERE "mediaId" = $1"#)
+            .bind(media)
+            .fetch_all(&mut *c)
+            .await?;
+    let filled = |v: &Value| match v {
+        Value::Null => false,
+        Value::String(s) => !s.trim().is_empty(),
+        Value::Array(a) => !a.is_empty(),
+        _ => true,
+    };
+    Ok(current
+        .and_then(|v| v.as_object().cloned())
+        .into_iter()
+        .flatten()
+        .filter(|(k, v)| filled(v) && !sourced.contains(k))
+        .filter_map(|(k, _)| Field::parse(&k))
+        .collect())
+}
+
+/// Merges the file records into `media` and writes the result: the shared columns, the kind's own,
+/// and the sources. A file only fills a field that is empty or already attributed to `file`.
 pub async fn merge_files(
     c: &mut PgConnection,
     media: i32,
     kind: MediaKind,
     records: &[Map<String, Value>],
 ) -> sqlx::Result<()> {
-    let locked = field_sources::locked_fields(&mut *c, media).await?;
+    let mut held = field_sources::not_from_file(&mut *c, media).await?;
+    held.extend(unsourced(c, media).await?);
     let records: Vec<_> = records
         .iter()
         .map(|r| (Namespace::FILE, r.clone()))
         .collect();
-    let (m, provenance) = merge(&records, &FieldOrder::new(kind, &[]), &locked);
+    let (m, provenance) = merge(&records, &FieldOrder::new(kind, &[]), &held);
     apply(c, media, &Fields::from_map(kind, &m)).await?;
     let date = m
         .get("releaseDate")
         .and_then(Value::as_str)
         .map(|d| d.chars().take(10).collect::<String>());
-    if kind.is_video() {
+    if kind.is_video() && !held.contains(&Field::ReleaseDates) {
         set_release_dates(c, media, &[(ReleaseKind::Release, date)], true).await?;
     }
     if kind == MediaKind::Comic {
@@ -126,8 +162,8 @@ pub async fn merge_files(
     field_sources::merge_field_sources(c, media, &provenance).await
 }
 
-/// Reads the files of a media that holds no provider id and merges them; no row is written
-/// when it holds an id (the provider's refresh merges the files with its record) or has no files.
+/// Reads the files of a media and merges them; nothing is written when a video holds an id (the
+/// provider's refresh merges the files with its record) or when no file could be read.
 pub async fn merge_unmatched(st: &AppState, media: i32) -> sqlx::Result<bool> {
     let kind = sqlx::query_scalar!(r#"SELECT type FROM media WHERE id = $1"#, media)
         .fetch_optional(&st.db)
@@ -138,14 +174,20 @@ pub async fn merge_unmatched(st: &AppState, media: i32) -> sqlx::Result<bool> {
     else {
         return Ok(false);
     };
-    if crate::media::external_ids::any(&st.db, media).await? {
-        return Ok(false);
-    }
     let records = file_records(st, media).await;
     if records.is_empty() {
         return Ok(false);
     }
     let mut tx = st.db.begin().await?;
+    // An identify that links an id meanwhile waits here, then its refresh merges the files.
+    let live = sqlx::query_scalar!("SELECT id FROM media WHERE id = $1 FOR UPDATE", media)
+        .fetch_optional(&mut *tx)
+        .await?;
+    // A comic that holds an id still takes what its new files fill; the merge spares provider fields.
+    let held_id = kind != MediaKind::Comic && crate::media::external_ids::any(&mut *tx, media).await?;
+    if live.is_none() || held_id {
+        return Ok(false);
+    }
     merge_files(&mut tx, media, kind, &records).await?;
     tx.commit().await?;
     Ok(true)
