@@ -4,6 +4,7 @@ use crate::{
         AppError,
         static_files::{matches_etag, weak_etag},
     },
+    images::paths::{Size, Target},
     paths::data_dir,
     state::AppState,
 };
@@ -67,6 +68,16 @@ fn size_of(query: Option<&str>) -> &'static str {
         (Some("medium"), None) => "medium",
         _ => "full",
     }
+}
+
+/// The stored image at `size`, else the full one.
+pub async fn read(t: &Target, size: Size) -> Option<Vec<u8>> {
+    for s in [size, Size::Full] {
+        if let Ok(b) = tokio::fs::read(t.file(data_dir(), s)).await {
+            return Some(b);
+        }
+    }
+    None
 }
 
 async fn serve(

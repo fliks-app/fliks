@@ -54,6 +54,8 @@ pub fn book_format(ext: &str) -> Option<&'static str> {
         ".mobi" => "application/x-mobipocket-ebook",
         ".fb2" => "application/x-fictionbook+xml",
         ".cbz" => "application/vnd.comicbook+zip",
+        ".cb7" => "application/x-cb7",
+        ".cbr" => "application/vnd.comicbook-rar",
         _ => return None,
     })
 }

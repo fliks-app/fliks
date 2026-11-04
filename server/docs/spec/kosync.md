@@ -24,7 +24,7 @@ Every body is JSON. An error carries `{"message": ...}`. The `Accept: applicatio
 
 3. `x-auth-key` is the MD5, in hexadecimal, of the password the user typed in KOReader, and that password is the `kosync` token (`device-tokens.md` rule 3). A key that is not 32 hexadecimal characters is 401 with no lookup (a raw `fkd_...` token pasted as the key is such a key); a valid one is lower-cased, hashed (`device_tokens::hash`) and looked up among the rows of kind `kosync` only. An `opds` row never answers, nor does a token on the data plane (`device-tokens.md` rule 9).
 4. `x-auth-user` is a free label: not read, not stored, not required. The token alone names the owner.
-5. The owner must be an enabled user; a disabled or deleted one is 401. A hit sets `lastUsedAt` (`device-tokens.md` rule 11), on every call.
+5. The owner must be an enabled user whose role grants `read:media`; a disabled or deleted one, or one without it, is 401. A hit sets `lastUsedAt` (`device-tokens.md` rule 11), on every call.
 6. The three sync routes authenticate on every call and carry no throttle: a key is 256 bits of randomness and many devices share a network. `GET /users/auth` is throttled like the login (`auth.md` rule 39, the same in-process limiter, the client network of `auth.md` rule 63): the attempt is counted before the lookup under a fixed key (never the client's `x-auth-user`, which it could vary to dodge the limit), and a success clears it.
 7. Every route answers 401 for any credential failure with the same body `{"message":"Unauthorized"}`: it does not tell a wrong key from a revoked or disabled one.
 
@@ -32,7 +32,7 @@ Every body is JSON. An error carries `{"message": ...}`. The `Accept: applicatio
 
 8. `document` names a file by the KOReader partial MD5 (`media_file_hashes`, kind `koreader`): 32 lowercase hexadecimal characters; anything else names nothing and costs no query. KOReader's "file name" mode sends the MD5 of the file name, also valid hexadecimal: it matches no file hash and is an unknown document, so that mode is not supported.
 9. The hash is computed at ingest, never in a request: `book-ingest.md` rule 13 writes it when a text file is registered and again when its size or mtime changes. A request-time hash would mean reading the whole library on the first sync, and the `(kind, hash)` index is what makes the lookup one query. No backfill is needed: every text file enters through `register`. A file that was unreadable at ingest has no hash until it changes or a rescan reads it.
-10. A document resolves, in one query, to the lowest-id file with that hash (then the lowest item id) that is the part of an item of a `text` edition, whose edition's library is readable by the token's owner and that no edition outside the owner's libraries links (`libraries::HIDDEN_FILES_FROM`, `books.md` rule 22). A hidden copy is skipped for the next readable one; an unreadable library is "unknown", indistinguishable from a hash no file has.
+10. A document resolves, in one query, to the lowest-id file with that hash (then the lowest item id) that is the part of an item of a `text` edition, whose work and edition libraries are readable by the token's owner (`libraries::readable_file`, shared with the reader, OPDS and Kobo) and that no edition outside the owner's libraries links (`libraries::HIDDEN_FILES_FROM`, `books.md` rule 22). A hidden copy is skipped for the next readable one; an unreadable library is "unknown", indistinguishable from a hash no file has.
 
 ## PUT /syncs/progress
 

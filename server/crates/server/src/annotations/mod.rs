@@ -171,9 +171,8 @@ pub async fn create(
     }
     // The per-(user, item) lock serialises the count and the insert across concurrent posts.
     let mut tx = st.db.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
-        .bind(a.user.id)
-        .bind(item)
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('annotations'), hashtext($1))")
+        .bind(format!("{}:{item}", a.user.id))
         .execute(&mut *tx)
         .await?;
     let row = sqlx::query_as!(

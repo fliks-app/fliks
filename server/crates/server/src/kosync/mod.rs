@@ -4,10 +4,10 @@ use crate::{
     device_tokens,
     http::{
         AppError,
-        auth::load_enabled,
+        auth::Authed,
         validate::{PathParams, ValidJson},
     },
-    libraries::{self, HIDDEN_FILES_FROM},
+    libraries::{accessible_library_ids, readable_file},
     playback::{Watch, finish_context, record_watch},
     state::AppState,
 };
@@ -19,7 +19,7 @@ use axum::{
     routing::{get, post, put},
 };
 use chrono::{DateTime, Utc};
-use fliks_domain::acl::{Action, Permissions, Subject};
+use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 
@@ -67,20 +67,14 @@ async fn authenticate(st: &AppState, headers: &HeaderMap) -> Result<Caller, Box<
         .await
         .map_err(fail)?
         .ok_or_else(|| Box::new(unauthorized()))?;
-    let (user, role) = load_enabled(&st.db, owner)
+    let a = Authed::load(&st.db, owner)
         .await
         .map_err(fail)?
+        .filter(|a| a.require(Action::Read, Subject::Media).is_ok())
         .ok_or_else(|| Box::new(unauthorized()))?;
-    let perms = Permissions::from(
-        role.as_ref().map_or(&[][..], |r| &r.permissions),
-        user.is_admin,
-    );
-    let libraries =
-        libraries::library_ids_of(&st.db, user.id, perms.can(Action::Manage, &Subject::All))
-            .await
-            .map_err(fail)?;
+    let libraries = accessible_library_ids(&st.db, &a).await.map_err(fail)?;
     Ok(Caller {
-        user: user.id,
+        user: a.user.id,
         libraries,
     })
 }
@@ -137,9 +131,9 @@ async fn resolve(
            JOIN editions e ON e.id = i."editionId"
            JOIN media m ON m.id = i."mediaId"
            WHERE h.kind = 'koreader' AND h.hash = $1 AND e.family = 'text'
-             AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-             AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = h."mediaFileId")
-           ORDER BY h."mediaFileId", i.id LIMIT 1"#
+             AND {}
+           ORDER BY h."mediaFileId", i.id LIMIT 1"#,
+        readable_file("$2", r#"h."mediaFileId""#)
     )))
     .bind(document)
     .bind(libraries)

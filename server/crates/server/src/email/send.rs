@@ -67,6 +67,7 @@ pub async fn send(
     ValidJson(dto): ValidJson<SendDto>,
 ) -> Result<(StatusCode, Json<BookSend>), AppError> {
     a.require(Action::Create, Subject::EmailDevice)?;
+    a.require(Action::Read, Subject::Media)?;
     let smtp = config::load(&st.db)
         .await?
         .ok_or_else(|| AppError::bad_request("send_to_device.error_not_configured"))?;
