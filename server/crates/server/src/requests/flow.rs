@@ -144,8 +144,12 @@ async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -
 }
 
 /// Rule 12a.
-async fn assert_no_active_duplicate(tx: &mut PgConnection, dto: &CreateRequest) -> Res<()> {
-    let existing = db::active_adds(&mut *tx, &dto.key()).await?;
+async fn assert_no_active_duplicate(
+    tx: &mut PgConnection,
+    dto: &CreateRequest,
+    keys: &[TitleKey],
+) -> Res<()> {
+    let existing = db::active_adds_of(&mut *tx, keys).await?;
     if existing.is_empty() {
         return Ok(());
     }
@@ -234,7 +238,9 @@ type Profiles = (Option<i32>, Option<i32>);
 
 /// Rule 12b: the profiles of the earliest active request, else of the library row.
 async fn existing_series_profiles(st: &AppState, key: &TitleKey) -> Res<Option<Profiles>> {
-    if let Some(r) = db::active_adds(&st.db, key).await?.first() {
+    let keys = db::title_keys(&st.db, key).await?;
+    let mut conn = st.db.acquire().await?;
+    if let Some(r) = db::active_adds_of(&mut conn, &keys).await?.first() {
         return Ok(Some((r.quality_profile_id, r.language_profile_id)));
     }
     Ok(db::media_by_ref(&st.db, key)
@@ -243,7 +249,8 @@ async fn existing_series_profiles(st: &AppState, key: &TitleKey) -> Res<Option<P
 }
 
 pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
-    let active = db::active_adds(&st.db, key).await?;
+    let keys = db::title_keys(&st.db, key).await?;
+    let active = db::active_adds_of(&mut *st.db.acquire().await?, &keys).await?;
     let series = key.media_type.has_seasons();
     let whole = series && active.iter().any(|r| r.scope().is_none());
     let mut seasons: Vec<i64> = active
@@ -483,6 +490,16 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         return create_delete(st, a, &dto).await;
     }
     let key = dto.key();
+    if let Some(p) = st.metadata.get(key.provider)
+        && key.media_type.is_video()
+        && !p.supports(key.media_type)
+    {
+        return Err(AppError::bad_request(format!(
+            "The {} provider does not serve {}",
+            key.provider, key.media_type
+        )));
+    }
+    let keys = db::title_keys(&st.db, &key).await?;
     // network first: no lock, no connection held while TMDB answers
     let candidates = rules::candidates(st, a, &dto).await?;
     let limited = a.user.quotas.limit(dto.media_type) != 0;
@@ -501,10 +518,10 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             .map_err(|e| lock_err(e, false))?;
     }
     check_quota(&mut tx, a, dto.media_type).await?;
-    db::lock_title(&mut tx, &key)
+    db::lock_titles(&mut tx, &keys)
         .await
         .map_err(|e| lock_err(e, true))?;
-    assert_no_active_duplicate(&mut tx, &dto).await?;
+    assert_no_active_duplicate(&mut tx, &dto, &keys).await?;
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
         assert_exist(st, None, None, Some(l)).await?;

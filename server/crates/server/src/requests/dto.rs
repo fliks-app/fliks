@@ -128,6 +128,16 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
             None
         }
     };
+    if delete
+        && let Some(k) = &key
+        && !book
+        && !k.provider.is_unique()
+    {
+        c.err(
+            "provider",
+            "a deletion request needs an id unique to one title",
+        );
+    }
     if !o.get("title").is_some_and(Value::is_string) {
         c.err("title", "must be a string");
     }
@@ -447,6 +457,9 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
     let tmdb_id = int("tmdbId", None, None).filter(|t| *t != 0);
     let page = int("page", Some(1), None);
     let limit = int("limit", Some(1), Some(500));
+    if tmdb_id.is_some() && !all("provider").is_empty() {
+        errs.push("tmdbId must not be combined with provider and externalId".into());
+    }
     let pair = match (all("provider").as_slice(), all("externalId").as_slice()) {
         ([p], [e]) => Some(((*p).to_owned(), (*e).to_owned())),
         ([], []) => None,
@@ -491,6 +504,11 @@ pub fn title_state(q: &[(String, String)]) -> Res<super::TitleKey> {
     let bad_type =
         || AppError::bad_request(vec![format!("mediaType {}", MediaKind::one_of_message())]);
     if let (Some(p), Some(e)) = (one("provider"), one("externalId")) {
+        if one("tmdbId").is_some() {
+            return Err(AppError::bad_request(vec![
+                "tmdbId must not be combined with provider and externalId",
+            ]));
+        }
         let m = video.ok_or_else(bad_type)?;
         return provider_key(m, p, e)
             .map_err(|m| AppError::bad_request(vec![format!("provider {m}")]));

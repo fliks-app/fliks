@@ -135,6 +135,22 @@ async fn duplicate(
     }
 }
 
+/// 409 when the library already holds the id; TVDB ids are not unique, so they never refuse.
+async fn duplicate_ref(
+    st: &AppState,
+    media_type: MediaKind,
+    ns: Namespace,
+    value: &str,
+) -> Result<(), AppError> {
+    if ns == Namespace::TVDB {
+        return Ok(());
+    }
+    match external_ids::find(&st.db, media_type, ns, value).await? {
+        Some(_) => Err(AppError::conflict("This title is already in the library")),
+        None => Ok(()),
+    }
+}
+
 /// What an import persists besides the provider data.
 pub struct Import {
     pub media_type: MediaKind,
@@ -497,11 +513,7 @@ pub async fn import_in(
         return Err(AppError::bad_request("the provider describes video only"));
     }
     st.metadata.require(Some(ns.as_str()))?;
-    if ns == Namespace::TMDB
-        && let Ok(tmdb) = value.parse()
-    {
-        duplicate(st, media_type, false, tmdb).await?;
-    }
+    duplicate_ref(st, media_type, ns, value).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
     let imp = Import {
@@ -597,9 +609,13 @@ pub async fn import_media(
         }
     };
     let external = match plugin {
-        Some(p) => p.normalize(&external).ok_or_else(|| {
-            AppError::bad_request(vec![format!("externalId is not a {} id", p.as_str())])
-        })?,
+        Some(p) => {
+            let id = p.normalize(&external).ok_or_else(|| {
+                AppError::bad_request(vec![format!("externalId is not a {} id", p.as_str())])
+            })?;
+            duplicate_ref(&st, c.media_type, p, &id).await?;
+            id
+        }
         None => {
             let n: i32 = external
                 .trim()

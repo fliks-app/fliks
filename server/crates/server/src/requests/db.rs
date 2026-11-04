@@ -1,5 +1,6 @@
 //! Queries of the `requests`, `request_comments` and `auto_approval_rules` tables (`requests.md` SQL section).
 use super::TitleKey;
+use crate::http::AppError;
 use crate::media::external_ids;
 use fliks_domain::{
     external_id::Namespace,
@@ -256,12 +257,59 @@ pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Optio
     .transpose()
 }
 
-/// The library media holding the title (rule 8).
-pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> sqlx::Result<Option<MediaRow>> {
-    match external_ids::find(db, t.media_type, t.provider, &t.external_id).await? {
-        Some(id) => media_by_id(db, id).await,
-        None => Ok(None),
+/// The library media holding the title (rule 8); 409 when a non-unique id names several.
+pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> Result<Option<MediaRow>, AppError> {
+    let held: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT "mediaId" FROM media_external_ids
+           WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 2"#,
+    )
+    .bind(t.media_type.as_str())
+    .bind(t.provider.as_str())
+    .bind(&t.external_id)
+    .fetch_all(db)
+    .await?;
+    match held.as_slice() {
+        [] => Ok(None),
+        [id] => Ok(media_by_id(db, *id).await?),
+        _ => Err(AppError::conflict(
+            "This title id names several titles in the library",
+        )),
     }
+}
+
+/// The title's own key and the unique ids the library media holding it carries, so one title is one key.
+pub async fn title_keys(db: &PgPool, t: &TitleKey) -> sqlx::Result<Vec<TitleKey>> {
+    let mut keys = vec![t.clone()];
+    if t.media_type == MediaKind::Book {
+        return Ok(keys);
+    }
+    let Some(id) = external_ids::find(db, t.media_type, t.provider, &t.external_id).await? else {
+        return Ok(keys);
+    };
+    for e in external_ids::refs(db, id).await? {
+        let Some(provider) = Namespace::parse(&e.provider).filter(|p| p.is_unique()) else {
+            continue;
+        };
+        let k = TitleKey {
+            media_type: t.media_type,
+            provider,
+            external_id: e.value,
+        };
+        if !keys.contains(&k) {
+            keys.push(k);
+        }
+    }
+    Ok(keys)
+}
+
+/// `active_adds` of every key of one title, oldest first.
+pub async fn active_adds_of(db: &mut PgConnection, keys: &[TitleKey]) -> sqlx::Result<Vec<Req>> {
+    let mut all = vec![];
+    for k in keys {
+        all.extend(active_adds(&mut *db, k).await?);
+    }
+    all.sort_by_key(|r| r.id);
+    Ok(all)
 }
 
 /// Libraries accepting `media_type`, by name, limited to `ids` when given (`findAccepting`).

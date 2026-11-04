@@ -279,9 +279,9 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   /** Global active-request state for this title — drives the "déjà demandé"
    *  gate (any user) and the series profile lock. */
-  /** The TMDB id when known (it dedupes with requests keyed by it), else the page's provider and id. */
+  /** The page's own provider and id; the TMDB form only when the page is TMDB's. */
   private titleKey(m: MetadataDetails): TitleKey {
-    return m.tmdbId && m.tmdbId > 0
+    return this.provider() === 'tmdb' && m.tmdbId && m.tmdbId > 0
       ? { tmdbId: m.tmdbId }
       : { provider: this.provider(), externalId: this.externalId() };
   }

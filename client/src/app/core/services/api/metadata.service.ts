@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
@@ -261,10 +262,11 @@ export class MetadataService {
   }
 
   /** Provider-aware detail fetch */
-  getDetails(provider: string, mediaType: MediaType, externalId: string) {
+  getDetails(provider: string, mediaType: MediaType, externalId: string, opts: { silent?: boolean } = {}) {
     const segment = KIND_REGISTRY[mediaType].providerSegment;
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent);
     return firstValueFrom(
-      this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${encodeURIComponent(externalId)}`),
+      this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${encodeURIComponent(externalId)}`, { context }),
     );
   }
 

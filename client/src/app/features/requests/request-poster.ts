@@ -62,7 +62,7 @@ export class RequestPosterComponent implements OnInit {
     let promise = detailsCache.get(key);
     if (!promise) {
       promise = this.metadata
-        .getDetails(provider, this.mediaType(), externalId)
+        .getDetails(provider, this.mediaType(), externalId, { silent: true })
         .then((d) => ({ posterUrl: d.posterUrl, fanartUrl: d.fanartUrl }))
         .catch(() => ({ posterUrl: null, fanartUrl: null }));
       detailsCache.set(key, promise);

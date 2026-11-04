@@ -142,6 +142,21 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
     let (st, r) = h
         .call(
             "POST",
+            "/api/media/import",
+            Some(&h.admin),
+            Some(json!({"type": "series", "provider": NS, "externalId": "1"})),
+        )
+        .await;
+    assert_eq!(st, 409, "the plugin title is already held: {r}");
+    let media: i64 = sqlx::query_scalar("SELECT count(*) FROM media")
+        .fetch_one(&h.st.db)
+        .await
+        .unwrap();
+    assert_eq!(media, 1, "one media row for the title");
+
+    let (st, r) = h
+        .call(
+            "POST",
             "/api/requests",
             Some(&h.admin),
             Some(json!({"mediaType": "series", "provider": "org.example.gone:aid", "externalId": "1", "title": "T"})),
