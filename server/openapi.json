@@ -2081,7 +2081,7 @@
         "tags": [
           "metadata::books::routes"
         ],
-        "summary": "`PUT /api/media/{id}/sources` (rules 23-24).",
+        "summary": "`PUT /api/media/{id}/sources` (rules 23-24): an edition level only, the work is identified.",
         "operationId": "sources_put",
         "responses": {
           "200": {}
