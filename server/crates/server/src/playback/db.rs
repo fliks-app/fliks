@@ -131,6 +131,26 @@ pub async fn named_item(
     Ok(row.item)
 }
 
+async fn readable_named_item(
+    db: &PgPool,
+    media: i32,
+    episode: Option<i32>,
+    acl: &[i32],
+) -> Result<Option<i32>, AppError> {
+    let readable: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND "libraryId" = ANY($2))"#,
+    )
+    .bind(media)
+    .bind(acl)
+    .fetch_one(db)
+    .await?;
+    if readable {
+        named_item(db, media, episode).await
+    } else {
+        Ok(None)
+    }
+}
+
 /// `named_item`, or the item `item` names when it belongs to `media` and its edition is in `acl`
 /// (`item-delivery.md` rule 15); a hidden item names none.
 pub async fn beat_item(
@@ -142,20 +162,7 @@ pub async fn beat_item(
 ) -> Result<Option<i32>, AppError> {
     let id = match item {
         Some(id) => id,
-        None => match {
-            let readable: bool = sqlx::query_scalar(
-                r#"SELECT EXISTS (SELECT 1 FROM media WHERE id = $1 AND "libraryId" = ANY($2))"#,
-            )
-            .bind(media)
-            .bind(acl)
-            .fetch_one(db)
-            .await?;
-            if readable {
-                named_item(db, media, episode).await?
-            } else {
-                None
-            }
-        } {
+        None => match readable_named_item(db, media, episode, acl).await? {
             Some(id) => id,
             None => return Ok(None),
         },

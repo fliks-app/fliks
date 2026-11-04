@@ -128,7 +128,7 @@ async fn toggles_check_the_media_and_the_season(pool: PgPool) {
 async fn toggle_watched_round_trip_and_state(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let item = c.shell(m).await;
     let f = c
