@@ -54,7 +54,7 @@ import { ImportProgressBannerComponent } from '../../shared/components/import-pr
 import { NgTemplateOutlet } from '@angular/common';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { viewTransitionDone } from '../../shared/utils/view-transition';
-import { PlayableMediaService } from '../../core/services/playable-media.service';
+import { MediaStartService } from '../../core/services/media-start.service';
 import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
@@ -166,7 +166,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly booksApi = inject(BooksApiService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
-  private readonly playableMedia = inject(PlayableMediaService);
+  private readonly mediaStart = inject(MediaStartService);
   private readonly socialApi = inject(SocialApiService);
   private readonly likesApi = inject(LikesApiService);
   private readonly profilesService = inject(ProfilesService);
@@ -801,7 +801,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {
-    await this.playableMedia.resume(item);
+    await this.mediaStart.resume(item);
   }
 
   /** Fetches the viewer's liked content scoped to the active library. */

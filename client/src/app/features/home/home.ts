@@ -28,7 +28,6 @@ import {
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
-import { PlayableMediaService } from '../../core/services/playable-media.service';
 import { MediaStartService } from '../../core/services/media-start.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
@@ -85,7 +84,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);
-  private readonly playableMedia = inject(PlayableMediaService);
   private readonly mediaStart = inject(MediaStartService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly storageScope = inject(StorageScopeService);
@@ -607,8 +605,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Plays the first playable file (full media fetched on demand, the lean DTO has no file ids); falls back to detail. */
   async playRecommendation(rec: RecommendationItem) {
     try {
-      const media = await this.mediaService.getOne(rec.media.id);
-      await this.mediaStart.start(media);
+      await this.mediaStart.start(rec.media as Media);
     } catch {
       /* error handled by global interceptor */
     }
@@ -644,7 +641,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {
-    await this.playableMedia.resume(item);
+    await this.mediaStart.resume(item);
   }
 
   /** Needs a movie with a file or a series (bulk endpoint); lean rows without a file keep it hidden. */

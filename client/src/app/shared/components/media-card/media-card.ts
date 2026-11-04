@@ -419,7 +419,7 @@ export class MediaCardComponent {
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
     const m = this.media();
-    if (m?.type === 'book') return !!this.bookInfo()?.formats.length;
+    if (m?.type === 'book' && this.bookInfo()) return !!this.bookInfo()!.formats.length;
     return m ? !!(m.files?.length) : false;
   });
   protected readonly _topLeftBadge = computed(() => {

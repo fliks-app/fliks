@@ -5,8 +5,10 @@ import { asComicMedia, nextIssue } from '../../features/media-detail/comic/comic
 import { AudioPlayerService } from './audio-player/audio-player.service';
 import { asBookMedia, type BookMedia } from './api/book-media';
 import { BooksApiService } from './api/books-api.service';
-import type { BookDetail, BookEdition } from './api/books.models';
+import type { BookDetail, BookEdition, BookFormatFamily } from './api/books.models';
 import { Media, MediaService } from './api/media.service';
+import type { ContinueWatchingItem } from './api/streaming-api.service';
+import type { QueueItem } from './playback-queue.service';
 import { PlayableMediaService } from './playable-media.service';
 import { PlaybackQueueService } from './playback-queue.service';
 
@@ -24,14 +26,19 @@ export function readEdition(book: BookDetail | null): BookEdition | null {
 }
 
 /** The audio edition last listened to, else the first one with a file. */
-export function listenEdition(book: BookDetail | null): BookEdition | null {
+function listenEdition(book: BookDetail | null): BookEdition | null {
   const { editions, progress } = book ?? emptyBook;
   const playable = editions.filter((e) => e.family === 'audio' && e.hasFile && e.itemId != null);
   return playable.find((e) => e.id === progress?.editionId) ?? playable[0] ?? null;
 }
 
-/** Whether starting the book opens something: a readable or listenable edition. */
-export const bookStartable = (book: BookDetail | null): boolean => !!(readEdition(book) || listenEdition(book));
+/** The family last read or listened to, else the first edition that has a file. */
+export function leadFamily(book: BookDetail | null): BookFormatFamily | undefined {
+  const { editions, progress } = book ?? emptyBook;
+  return (editions.find((e) => e.id === progress?.editionId) ?? editions.find((e) => e.hasFile) ?? editions[0])?.family;
+}
+
+const isVideo = (m: Media) => m.type !== 'book' && m.type !== 'comic';
 
 /** Starts any media by kind: the video player, the audio player, the reader, else the detail page. */
 @Injectable({ providedIn: 'root' })
@@ -43,10 +50,42 @@ export class MediaStartService {
   private readonly audio = inject(AudioPlayerService);
   private readonly queue = inject(PlaybackQueueService);
 
-  /** `media` may be a list row: the book/comic details are fetched when missing. */
+  private starting = false;
+
+  /** Resumes a continue-watching row: the video player, or the book/comic from its own saved state. */
+  resume(item: ContinueWatchingItem): Promise<void> {
+    return item.mediaType === 'book' || item.mediaType === 'comic'
+      ? this.start({ id: item.mediaId, type: item.mediaType } as Media)
+      : this.playable.resume(item);
+  }
+
+  /** Starts a playlist at `startIndex`: a book/comic start opens its reader or audio player; the video queue skips them. */
+  async startFromPlaylist(playlistId: number, items: { media: Media; queue: QueueItem }[], startIndex: number, autoplay: boolean): Promise<boolean> {
+    const at = items[startIndex];
+    if (!at) return false;
+    if (!isVideo(at.media)) {
+      await this.start(at.media);
+      return true;
+    }
+    const video = items.filter((i) => isVideo(i.media));
+    return this.playable.playFromPlaylist(playlistId, video.map((i) => i.queue), video.indexOf(at), autoplay);
+  }
+
+  /** `media` may be a list row: the book/comic details are fetched when missing. A start in flight ignores another. */
   async start(media: Media, opts: { backdropUrl?: string | null } = {}): Promise<void> {
-    if (media.type === 'book') return this.startBook(media);
-    if (media.type === 'comic') return this.startComic(media);
+    if (this.starting) return;
+    this.starting = true;
+    try {
+      await this.startNow(media, opts);
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  private async startNow(media: Media, opts: { backdropUrl?: string | null }): Promise<void> {
+    const url = this.router.url;
+    if (media.type === 'book') return this.startBook(media, url);
+    if (media.type === 'comic') return this.startComic(media, url);
     const full = media.files?.length ? media : await this.mediaService.getOne(media.id);
     const file = full.files?.[0];
     if (!file) return void this.openDetail(full);
@@ -89,11 +128,11 @@ export class MediaStartService {
     });
   }
 
-  private async startBook(media: Media): Promise<void> {
+  private async startBook(media: Media, url: string): Promise<void> {
     const full = asBookMedia(media) ?? asBookMedia(await this.mediaService.getOne(media.id));
+    if (this.router.url !== url) return;
     if (!full) return void this.openDetail(media);
-    const { editions, progress } = full.book;
-    const lead = (editions.find((e) => e.id === progress?.editionId) ?? editions.find((e) => e.hasFile) ?? editions[0])?.family;
+    const lead = leadFamily(full.book);
     const read = readEdition(full.book);
     const audible = listenEdition(full.book);
     if (read && (lead !== 'audio' || !audible)) return void this.router.navigate(readRoute(full.id, read.itemId!));
@@ -101,9 +140,10 @@ export class MediaStartService {
     this.openDetail(full);
   }
 
-  private async startComic(media: Media): Promise<void> {
+  private async startComic(media: Media, url: string): Promise<void> {
     const full = asComicMedia(media) ?? asComicMedia(await this.mediaService.getOne(media.id));
     const issue = full && nextIssue(full.comic.issues);
+    if (this.router.url !== url) return;
     if (!full || !issue) return void this.openDetail(media);
     void this.router.navigate(readRoute(full.id, issue.itemId));
   }

@@ -18,7 +18,7 @@ const issue = (o: Record<string, unknown>) => ({ itemId: 1, mediaFileId: 1, kind
 
 function setup(full?: unknown) {
   const router = { navigate: vi.fn().mockResolvedValue(true) };
-  const playable = { play: vi.fn().mockResolvedValue(undefined) };
+  const playable = { play: vi.fn().mockResolvedValue(undefined), resume: vi.fn().mockResolvedValue(undefined), playFromPlaylist: vi.fn().mockResolvedValue(true) };
   const audio = { play: vi.fn().mockResolvedValue(undefined) };
   const queue = { start: vi.fn(), clear: vi.fn() };
   const media = { getOne: vi.fn().mockResolvedValue(full) };
@@ -92,5 +92,51 @@ describe('MediaStartService', () => {
     const h = setup(full);
     await h.svc.start(full as any);
     expect(h.router.navigate).toHaveBeenCalledWith(['/comics', '8']);
+  });
+
+  it('reads when text leads, even with an audio edition available', async () => {
+    const full = book([edition({ id: 1, itemId: 10 }), edition({ id: 2, itemId: 11, family: 'audio', format: 'mp3' })]);
+    const h = setup(full);
+    await h.svc.start(full as any);
+    expect(h.router.navigate).toHaveBeenCalledWith(['/read', 7, 10]);
+    expect(h.audio.play).not.toHaveBeenCalled();
+  });
+
+  it('resumes a video row in the player and a book row through start', async () => {
+    const full = book([edition({})]);
+    const h = setup(full);
+    await h.svc.resume({ mediaType: 'movie', mediaId: 3 } as any);
+    expect(h.playable.resume).toHaveBeenCalled();
+    await h.svc.resume({ mediaType: 'book', mediaId: 7 } as any);
+    expect(h.router.navigate).toHaveBeenCalledWith(['/read', 7, 10]);
+  });
+
+  it('ignores a start while another runs', async () => {
+    const full = book([edition({})]);
+    const h = setup(full);
+    await Promise.all([h.svc.start({ id: 7, type: 'book' } as any), h.svc.start({ id: 7, type: 'book' } as any)]);
+    expect(h.media.getOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not navigate when the route changed during the fetch', async () => {
+    const h = setup(book([edition({})]));
+    let url = '/a';
+    Object.defineProperty(h.router, 'url', { get: () => url });
+    h.media.getOne.mockImplementation(async () => {
+      url = '/b';
+      return book([edition({})]);
+    });
+    await h.svc.start({ id: 7, type: 'book' } as any);
+    expect(h.router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('starts a book playlist item in its own player and keeps books out of the video queue', async () => {
+    const h = setup(book([edition({})]));
+    const row = (id: number, type: string) => ({ media: { id, type } as any, queue: { mediaId: id, title: 't' } });
+    await h.svc.startFromPlaylist(1, [row(7, 'book'), row(3, 'movie')], 0, true);
+    expect(h.router.navigate).toHaveBeenCalledWith(['/read', 7, 10]);
+    expect(h.playable.playFromPlaylist).not.toHaveBeenCalled();
+    await h.svc.startFromPlaylist(1, [row(7, 'book'), row(3, 'movie'), row(4, 'movie')], 2, true);
+    expect(h.playable.playFromPlaylist).toHaveBeenCalledWith(1, [{ mediaId: 3, title: 't' }, { mediaId: 4, title: 't' }], 1, true);
   });
 });

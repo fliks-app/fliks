@@ -2,7 +2,7 @@ import { Component, ElementRef, computed, effect, inject, input, signal, untrack
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
-import { MediaStartService, readEdition, readRoute } from '../../../core/services/media-start.service';
+import { MediaStartService, leadFamily, readEdition, readRoute } from '../../../core/services/media-start.service';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookFormatFamily, CollectionDetail } from '../../../core/services/api/books.models';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -65,10 +65,9 @@ export class BookWorkComponent {
 
   /** The family last read or listened to, else the first edition that has a file. */
   protected readonly families = computed<BookFormatFamily[]>(() => {
-    const { editions, progress } = this.book() ?? { editions: [], progress: null };
-    const lead = editions.find((e) => e.id === progress?.editionId) ?? editions.find((e) => e.hasFile) ?? editions[0];
-    const all = [...new Set(editions.map((e) => e.family))];
-    return lead ? [lead.family, ...all.filter((f) => f !== lead.family)] : [];
+    const lead = leadFamily(this.book());
+    const all = [...new Set((this.book()?.editions ?? []).map((e) => e.family))];
+    return lead ? [lead, ...all.filter((f) => f !== lead)] : [];
   });
 
   protected readonly readLink = computed(() => {

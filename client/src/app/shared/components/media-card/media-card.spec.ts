@@ -47,7 +47,7 @@ interface Harness {
   router: Router;
   addToPlaylist: { open: ReturnType<typeof vi.fn> };
   recommend: { open: ReturnType<typeof vi.fn> };
-  playableMedia: { start: ReturnType<typeof vi.fn> };
+  mediaStart: { start: ReturnType<typeof vi.fn> };
 }
 
 async function createFixture(
@@ -57,7 +57,7 @@ async function createFixture(
 ): Promise<Harness> {
   const addToPlaylist = { open: vi.fn() };
   const recommend = { open: vi.fn() };
-  const playableMedia = { start: vi.fn().mockResolvedValue(undefined) };
+  const mediaStart = { start: vi.fn().mockResolvedValue(undefined) };
   const navbar = { markAsBackNavigation: vi.fn() };
 
   TestBed.resetTestingModule();
@@ -81,7 +81,7 @@ async function createFixture(
       { provide: DeviceService, useValue: { input: () => 'mouse', isTouch: () => false, isTv: () => !!role.isTv, isDesktopNative: () => false } },
       { provide: AddToPlaylistService, useValue: addToPlaylist },
       { provide: RecommendService, useValue: recommend },
-      { provide: MediaStartService, useValue: playableMedia },
+      { provide: MediaStartService, useValue: mediaStart },
       { provide: NavbarService, useValue: navbar },
       {
         provide: PluginUiRegistryService,
@@ -100,7 +100,7 @@ async function createFixture(
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, router, addToPlaylist, recommend, playableMedia };
+  return { fixture, router, addToPlaylist, recommend, mediaStart };
 }
 
 function makeMedia(overrides: Partial<Media> = {}): Media {
@@ -332,14 +332,14 @@ describe('MediaCardComponent — card action handlers do what their row promises
       media: makeMedia({ files: [{ id: 42, quality: '1080p', relativePath: 'x', size: 1 }] }),
     });
     findAction(h, 'media_card.action_play').run();
-    expect(h.playableMedia.start).toHaveBeenCalled();
+    expect(h.mediaStart.start).toHaveBeenCalled();
   });
 
   it('Play on a book delegates to the kind-aware start, and a book with no part has no Play', async () => {
     const book = { authors: [], series: null, formats: ['text'], lastFamily: null };
     const h = await createFixture(FULL_MEMBER, { media: { ...makeMedia({ type: 'book' }), book } as Media });
     findAction(h, 'media_card.action_play').run();
-    expect(h.playableMedia.start).toHaveBeenCalled();
+    expect(h.mediaStart.start).toHaveBeenCalled();
     const none = await createFixture(FULL_MEMBER, { media: { ...makeMedia({ type: 'book' }), book: { ...book, formats: [] } } as Media });
     expect(labels(none)).not.toContain('media_card.action_play');
   });
@@ -821,7 +821,7 @@ describe('MediaCardComponent: selectOnly', () => {
     host.querySelector<HTMLElement>('figure')!.click();
     expect(clicks).toBe(1);
     expect(navigate).not.toHaveBeenCalled();
-    expect(h.playableMedia.start).not.toHaveBeenCalled();
+    expect(h.mediaStart.start).not.toHaveBeenCalled();
   });
 });
 
