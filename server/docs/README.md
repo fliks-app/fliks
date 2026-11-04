@@ -8,6 +8,8 @@ Watch party: [`spec/watch-party.md`](spec/watch-party.md) (routes, state machine
 
 Books: [`spec/books.md`](spec/books.md) (the `book` kind, editions and their facts, ids, series, sort keys), [`spec/books-api.md`](spec/books-api.md) (routes and wire shapes), [`spec/book-metadata.md`](spec/book-metadata.md) (trait semantics, record mapping, identify and attach seams), [`spec/book-ingest.md`](spec/book-ingest.md) (ingest seams), [`spec/book-import.md`](spec/book-import.md) (bulk import job, manual queue), [`spec/books-reader.md`](spec/books-reader.md) (EPUB manifest, sanitised resources, CSP).
 
+Reader annotations: [`spec/annotations.md`](spec/annotations.md) (bookmarks and highlights of a text item, routes, limits).
+
 Item delivery: [`spec/item-delivery.md`](spec/item-delivery.md) (audio and text items: item resolve and playback-info, resolver parts, `itemId` on playback routes, progression, finished rules).
 
 Comics: [`spec/comics.md`](spec/comics.md) (the `comic` kind, volumes and issues, `comic_details`, `comic_issues`, the detail and list shapes, archive ingest, the page routes and local metadata).
