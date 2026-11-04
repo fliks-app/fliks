@@ -63,7 +63,7 @@ pub async fn fetch(
     })?;
     let children = st
         .metadata
-        .children(ns, kind, id, lang, prio)
+        .children(ns, kind, id, None, lang, prio)
         .await
         .map_err(|e| meta_fail(ns, e))?;
     let got = provider::issues(&children);
