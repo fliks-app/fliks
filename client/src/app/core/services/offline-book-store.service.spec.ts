@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { AuthService } from './auth.service';
 import { DownloadCacheService } from './download-cache.service';
 import { OfflineBookStoreService } from './offline-book-store.service';
@@ -12,6 +12,8 @@ const BASE = new URL('/api/books/7/pub/', document.baseURI).href;
 describe('OfflineBookStoreService', () => {
   const blobs = new Map<string, Blob>();
   let svc: OfflineBookStoreService;
+  let created: MockInstance<typeof URL.createObjectURL>;
+  let revoked: MockInstance<typeof URL.revokeObjectURL>;
 
   beforeEach(() => {
     blobs.clear();
@@ -24,8 +26,13 @@ describe('OfflineBookStoreService', () => {
     });
     svc = TestBed.inject(OfflineBookStoreService);
     (svc as unknown as Priv).get = async (key) => blobs.get(key) ?? null;
+    // jsdom has no object URLs: spyOn needs a property to wrap.
+    for (const k of ['createObjectURL', 'revokeObjectURL'] as const) {
+      if (!URL[k]) Object.defineProperty(URL, k, { configurable: true, writable: true, value: () => '' });
+    }
     let n = 0;
-    URL.createObjectURL = vi.fn(() => `blob:local/${++n}`);
+    created = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:local/${++n}`);
+    revoked = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -48,7 +55,7 @@ describe('OfflineBookStoreService', () => {
     expect(html).toContain('https://elsewhere/x.png');
     expect(html).not.toContain('img/a.png');
     // The stylesheet was rewritten before it got its object URL: the font and the image are stored ones.
-    const css = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as Blob).find((b) => b.type === 'text/css')!;
+    const css = created.mock.calls.map((c) => c[0] as Blob).find((b) => b.type === 'text/css')!;
     const text = await css.text();
     expect(text).toContain('url("blob:local/');
     expect(text).not.toContain('f.woff');
@@ -92,7 +99,9 @@ describe('OfflineBookStoreService', () => {
     expect(html).toContain('src="/api/users/me"');
     expect(net.mock.calls.map((c) => String(c[0]).replace(BASE, '')).sort()).toEqual(['OEBPS/a.png', 'OEBPS/ch1.xhtml', 'f.woff', 's.css']);
     for (const [, init] of net.mock.calls) expect(new Headers(init?.headers).get('authorization')).toBe('Bearer tok');
-    const css = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as Blob).find((b) => b.type === 'text/css')!;
+    // The resources: a redirect would carry the token elsewhere.
+    expect(net.mock.calls.filter(([, init]) => init?.redirect === 'error')).toHaveLength(3);
+    const css = created.mock.calls.map((c) => c[0] as Blob).find((b) => b.type === 'text/css')!;
     expect(await css.text()).toContain('url("blob:local/');
   });
 
@@ -112,10 +121,9 @@ describe('OfflineBookStoreService', () => {
   it('revokes the object URLs of a book on release and makes them again on the next read', async () => {
     keep('ch1.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><body><img src="a.png"/></body></html>', 'application/xhtml+xml');
     keep('a.png', 'png', 'image/png');
-    URL.revokeObjectURL = vi.fn();
     await svc.fetch(`${BASE}ch1.xhtml`);
     svc.release(7);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local/1');
+    await vi.waitFor(() => expect(revoked).toHaveBeenCalledWith('blob:local/1'));
     expect(await (await svc.fetch(`${BASE}ch1.xhtml`)).text()).toContain('blob:local/2');
   });
 
@@ -139,6 +147,38 @@ describe('OfflineBookStoreService', () => {
     vi.unstubAllGlobals();
   });
 
+  it('makes one object URL for a stylesheet two chapters ask for at once', async () => {
+    const chapter = '<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="s.css"/></head><body/></html>';
+    keep('ch1.xhtml', chapter, 'application/xhtml+xml');
+    keep('ch2.xhtml', chapter, 'application/xhtml+xml');
+    keep('s.css', 'p{color:red}', 'text/css');
+    await Promise.all([svc.fetch(`${BASE}ch1.xhtml`), svc.fetch(`${BASE}ch2.xhtml`)]);
+    expect(created).toHaveBeenCalledOnce();
+  });
+
+  it('makes no object URL for a book released while its chapter is being inlined', async () => {
+    keep('ch1.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><body><img src="a.png"/></body></html>', 'application/xhtml+xml');
+    keep('a.png', 'png', 'image/png');
+    const read = (svc as unknown as Priv).get;
+    (svc as unknown as Priv).get = async (key) => {
+      if (key.endsWith('a.png')) svc.release(7);
+      return read(key);
+    };
+    expect(await (await svc.fetch(`${BASE}ch1.xhtml`)).text()).toContain('src="a.png"');
+    expect(created).not.toHaveBeenCalled();
+  });
+
+  it('resolves the string form of @import and keeps a fragment on the object URL', async () => {
+    keep('a.css', '@import "b.css"; @IMPORT \'c.css\'; p{background:URL(sprite.svg#dot)}', 'text/css');
+    keep('b.css', 'b{}', 'text/css');
+    keep('c.css', 'c{}', 'text/css');
+    keep('sprite.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>', 'image/svg+xml');
+    const css = await (await svc.fetch(`${BASE}a.css`)).text();
+    expect(css).not.toMatch(/b\.css|c\.css|sprite\.svg/);
+    expect(css).toMatch(/@import "blob:local\/\d"; @import "blob:local\/\d"/);
+    expect(css).toMatch(/url\("blob:local\/\d#dot"\)/);
+  });
+
   it('ends an @import cycle between two stored stylesheets', async () => {
     keep('a.css', '@import url("b.css"); p{color:red}', 'text/css');
     keep('b.css', '@import url("a.css"); i{color:blue}', 'text/css');
@@ -152,9 +192,8 @@ describe('OfflineBookStoreService', () => {
     const bytes = await svc.storeFile({ family: 'audio' }, '9-0', '/api/stream/9/parts/0?token=t', vi.fn());
     expect(bytes).toBe(11);
     expect([...blobs.keys()].sort()).toEqual(['s|file|9-0', 's|file|9-0|000000']);
-    const created: Blob[] = [];
-    URL.createObjectURL = vi.fn((b: Blob | MediaSource) => (created.push(b as Blob), 'blob:local/file'));
+    created.mockImplementation(() => 'blob:local/file');
     expect(await svc.fileUrl({ family: 'audio' }, '9-0')).toBe('blob:local/file');
-    expect(await created[0].text()).toBe('hello world');
+    expect(await (created.mock.calls[0][0] as Blob).text()).toBe('hello world');
   });
 });

@@ -11,7 +11,8 @@ const STORE = 'blobs';
 const PARALLEL = 6;
 const CHUNK_BYTES = 8 << 20;
 const BOOK_DIR = /^.*?\/api\/books\/\d+\/pub\//;
-const CSS_URL = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+/** `url(ref)` (group 2) or the string form `@import "ref"` (group 4). */
+const CSS_URL = /url\(\s*(['"]?)(.*?)\1\s*\)|@import\s+(['"])(.*?)\3/gi;
 /** Attributes of a chapter that load a resource the toolkit does not route through its fetcher. */
 const RESOURCE_ATTRS: [string, string][] = [
   ['img', 'src'], ['source', 'src'], ['audio', 'src'], ['video', 'src'], ['video', 'poster'],
@@ -30,7 +31,11 @@ export class OfflineBookStoreService {
   private db: Promise<IDBDatabase> | null = null;
   private persisted = false;
   /** Object URLs handed to chapters (by resource URL) and to players (by file key), so each is made once and revoked with its book. */
-  private readonly urls = new Map<string, string>();
+  private readonly urls = new Map<string, Promise<string | null>>();
+  /** Bumped by `release`, so inlining still running for a closed book makes no object URL. */
+  private readonly generations = new Map<string, number>();
+  /** The resources each chapter or stylesheet being inlined is waiting on, to break `@import` cycles. */
+  private readonly waits = new Map<string, string[]>();
   private readonly fileUrls = new Map<string, string>();
 
   manifestUrl(itemId: number): string {
@@ -42,24 +47,31 @@ export class OfflineBookStoreService {
   async fetch(input: RequestInfo | URL, init?: RequestInit, inline = true): Promise<Response> {
     const url = input instanceof Request ? input.url : String(input);
     const get = (init?.method ?? 'GET') === 'GET';
+    const generation = this.generation(url);
+    const stale = () => this.generation(url) !== generation;
     if (get) {
       const blob = await this.stored(url).catch(() => null);
-      if (blob) return this.response(inline ? await this.inline(url, blob) : blob);
+      if (blob) return this.response(inline ? await this.inline(url, blob, stale) : blob);
     }
     const res = await this.network(input, init);
     // An app's frame is cross-origin to the server and has no cookie to send.
     if (!inline || !get || !res.ok || !this.serverConfig.isNative || !/html|css/.test(res.headers.get('content-type') ?? '')) return res;
-    return this.response(await this.inline(url, await res.blob()));
+    return this.response(await this.inline(url, await res.blob(), stale));
   }
 
   /** Revokes the object URLs handed to a book's chapters; the next open makes them again. */
   release(itemId: number): void {
     const dir = this.manifestUrl(itemId).replace(/manifest\.json$/, '');
+    this.generations.set(dir, this.generation(dir) + 1);
     for (const [abs, u] of this.urls) {
       if (!abs.startsWith(dir)) continue;
-      URL.revokeObjectURL(u);
+      void u.then((made) => made && URL.revokeObjectURL(made));
       this.urls.delete(abs);
     }
+  }
+
+  private generation(url: string): number {
+    return this.generations.get(BOOK_DIR.exec(url)?.[0] ?? '') ?? 0;
   }
 
   /** Stores the sanitised publication of an EPUB: its manifest and every resource the manifest names. Returns the bytes kept. */
@@ -299,54 +311,88 @@ export class OfflineBookStoreService {
   }
 
   /** A chapter or stylesheet whose resources point at the stored copies: the toolkit loads them from the page's base URL, which has no network. */
-  private async inline(url: string, blob: Blob, seen: Set<string> = new Set([url])): Promise<Blob> {
-    if (/css/.test(blob.type)) return new Blob([await this.css(url, await blob.text(), seen)], { type: blob.type });
+  private async inline(url: string, blob: Blob, stale: () => boolean, owner = url): Promise<Blob> {
+    if (/css/.test(blob.type)) return new Blob([await this.css(url, await blob.text(), stale, owner)], { type: blob.type });
     if (!/html/.test(blob.type)) return blob;
     const doc = new DOMParser().parseFromString(await blob.text(), 'application/xhtml+xml');
     if (doc.querySelector('parsererror')) return blob;
-    for (const [tag, attr] of RESOURCE_ATTRS) {
-      for (const el of Array.from(doc.querySelectorAll(tag))) {
-        const local = await this.objectUrl(el.getAttribute(attr), url, seen);
+    const attrs = RESOURCE_ATTRS.flatMap(([tag, attr]) =>
+      Array.from(doc.querySelectorAll(tag), async (el) => {
+        const local = await this.objectUrl(el.getAttribute(attr), url, stale, owner);
         if (local) el.setAttribute(attr, local);
-      }
-    }
-    for (const style of Array.from(doc.querySelectorAll('style'))) style.textContent = await this.css(url, style.textContent ?? '', seen);
+      }),
+    );
+    const styles = Array.from(doc.querySelectorAll('style'), async (style) => {
+      style.textContent = await this.css(url, style.textContent ?? '', stale, owner);
+    });
+    await Promise.all([...attrs, ...styles]);
     return new Blob([new XMLSerializer().serializeToString(doc)], { type: blob.type });
   }
 
-  private async css(url: string, text: string, seen: Set<string>): Promise<string> {
-    const local = new Map<string, string>();
-    for (const ref of new Set(Array.from(text.matchAll(CSS_URL), (m) => m[2]))) {
-      const u = await this.objectUrl(ref, url, seen);
-      if (u) local.set(ref, u);
-    }
-    return text.replace(CSS_URL, (m, _q, ref: string) => (local.has(ref) ? `url("${local.get(ref)}")` : m));
+  private async css(url: string, text: string, stale: () => boolean, owner: string): Promise<string> {
+    const refs = [...new Set(Array.from(text.matchAll(CSS_URL), (m) => m[2] ?? m[4]))];
+    const local = new Map(await Promise.all(refs.map(async (ref) => [ref, await this.objectUrl(ref, url, stale, owner)] as const)));
+    return text.replace(CSS_URL, (m, _q, ref: string | undefined, _q2, imported: string | undefined) => {
+      const u = local.get(ref ?? imported ?? '');
+      if (!u) return m;
+      return ref === undefined ? `@import "${u}"` : `url("${u}")`;
+    });
   }
 
   /** A resource of the same book from the server, in the apps only: anything else would get the app's token. */
   private async served(abs: string, base: string): Promise<Blob | null> {
     const dir = BOOK_DIR.exec(base)?.[0];
     if (!this.serverConfig.isNative || !dir || !abs.startsWith(dir)) return null;
-    const res = await this.network(abs).catch(() => null);
-    return res?.ok ? res.blob() : null;
+    // A redirect would carry the token to wherever it points.
+    const res = await this.network(abs, { redirect: 'error' }).catch(() => null);
+    return res?.ok ? res.blob().catch(() => null) : null;
   }
 
-  /** `seen` is the chain of stylesheets being inlined, so an `@import` cycle ends instead of recursing. */
-  private async objectUrl(ref: string | null, base: string, seen: Set<string>): Promise<string | null> {
+  /** One object URL per resource, shared by the chapters being inlined at once, its `#fragment` kept on the URL
+   *  handed out. `owner` is the chapter or stylesheet asking: waiting on its own importer would never end. */
+  private async objectUrl(ref: string | null, base: string, stale: () => boolean, owner: string): Promise<string | null> {
     if (!ref || /^(data:|blob:|#)/.test(ref)) return null;
-    let abs: string;
+    let parsed: URL;
     try {
-      abs = new URL(ref, base).href.split('#')[0];
+      parsed = new URL(ref, base);
     } catch {
       return null;
     }
-    const known = this.urls.get(abs);
-    if (known) return known;
-    if (seen.has(abs)) return null;
+    const hash = parsed.hash;
+    parsed.hash = '';
+    const abs = parsed.href;
+    if (stale() || this.waitsOn(abs, owner)) return null;
+    let made = this.urls.get(abs);
+    if (!made) {
+      made = this.make(abs, base, stale).catch(() => null);
+      this.urls.set(abs, made);
+    }
+    const waiting = this.waits.get(owner) ?? [];
+    this.waits.set(owner, waiting);
+    waiting.push(abs);
+    let u: string | null;
+    try {
+      u = await made;
+    } finally {
+      waiting.splice(waiting.indexOf(abs), 1);
+      if (!waiting.length) this.waits.delete(owner);
+    }
+    if (!u && this.urls.get(abs) === made) this.urls.delete(abs);
+    return u && u + hash;
+  }
+
+  private async make(abs: string, base: string, stale: () => boolean): Promise<string | null> {
     const blob = (await this.stored(abs).catch(() => null)) ?? (await this.served(abs, base));
     if (!blob) return null;
-    const u = URL.createObjectURL(await this.inline(abs, blob, new Set(seen).add(abs)));
-    this.urls.set(abs, u);
-    return u;
+    const inlined = await this.inline(abs, blob, stale);
+    return stale() ? null : URL.createObjectURL(inlined);
+  }
+
+  /** Whether `from` is, through the resources it waits on, waiting on `to`. */
+  private waitsOn(from: string, to: string, visited = new Set<string>()): boolean {
+    if (from === to) return true;
+    if (visited.has(from)) return false;
+    visited.add(from);
+    return (this.waits.get(from) ?? []).some((next) => this.waitsOn(next, to, visited));
   }
 }
