@@ -13,7 +13,7 @@ fn main() -> ExitCode {
     if first.as_deref() == Some(fliks_server::plugins::compile::SUBCOMMAND) {
         return fliks_server::plugins::compile::child_main();
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "libarchive"))]
     if first.as_deref() == Some(fliks_server::comics::sandbox::SUBCOMMAND) {
         return fliks_server::comics::sandbox::child_main();
     }

@@ -13,6 +13,9 @@ name = "fliks-server"
 path = "src/main.rs"
 
 [features]
+default = ["libarchive"]
+# 7z and RAR comics; needs cmake, libclang and system libs, so plugin tooling opts out.
+libarchive = ["dep:libarchive2-sys"]
 # Test seams for the parity runs; never enabled in a release build.
 parity = []
 
@@ -97,5 +100,4 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mimalloc = "0.1"
-# libarchive links system libraries and needs cmake and libclang: only the Linux (Docker) build carries it.
-libarchive2-sys = "0.2"
+libarchive2-sys = { version = "0.2", optional = true }

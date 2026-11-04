@@ -38,7 +38,7 @@ harness = [
 ]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-fliks-server = { path = "../server", optional = true }
+fliks-server = { path = "../server", default-features = false, optional = true }
 wit-parser = { version = "0.261", optional = true }
 ed25519-dalek = { version = "3", optional = true }
 base64 = { version = "0.23", optional = true }
