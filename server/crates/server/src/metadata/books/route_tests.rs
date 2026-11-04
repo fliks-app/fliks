@@ -17,7 +17,7 @@ struct Ctx {
 fn work_hit() -> Value {
     json!({"externalId": "OL1W", "title": "Alpha", "subtitle": "Sub", "authors": [{"name": "Una Roe", "id": "OL7A"}],
            "year": 1999, "posterUrl": "http://img/a.jpg", "series": [{"name": "Cycle", "position": 2}],
-           "editionCount": 7})
+           "editionCount": 7, "publisher": "Pub", "pageCount": 320})
 }
 
 fn editions() -> Vec<Value> {
@@ -147,7 +147,7 @@ async fn search_maps_hits_and_marks_owned_works(pool: PgPool) {
         v,
         json!([{"provider": "openlibrary", "externalId": "OL1W", "mediaType": "book", "title": "Alpha",
                 "subtitle": "Sub", "authors": ["Una Roe"], "year": 1999, "posterUrl": "http://img/a.jpg",
-                "series": {"name": "Cycle", "position": "2"}, "editionCount": 7, "existingMediaId": owned}])
+                "series": {"name": "Cycle", "position": "2"}, "editionCount": 7, "publisher": "Pub", "pageCount": 320, "existingMediaId": owned}])
     );
     let (_, v) = c
         .get("/api/metadata/search/book?title=alpha&author=roe")

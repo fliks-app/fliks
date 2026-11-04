@@ -132,6 +132,14 @@ export class MediaDetailIdentifyModalComponent {
     return result.existingMediaId != null && result.existingMediaId !== cfg?.mediaId;
   }
 
+  /** `publisher · year · N p.` of a book hit, the facts that tell its editions apart. */
+  bookFacts(r: SearchHit): string {
+    const pages = r.pageCount
+      ? this.translate.instant('media_detail.identify_pages', { count: r.pageCount })
+      : null;
+    return [r.publisher, r.year, pages].filter(Boolean).join(' · ');
+  }
+
   async apply(result: SearchHit) {
     const cfg = this.config();
     if (!cfg || this.isTaken(result)) return;

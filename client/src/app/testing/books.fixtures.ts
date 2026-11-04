@@ -75,7 +75,7 @@ export const personWorksFixture: PersonWorks = {
 export const bookSearchResultFixture: BookSearchResult = {
   provider: 'openlibrary', externalId: 'OL1W', mediaType: 'book', title: 'Book One', subtitle: null,
   authors: ['Author One'], year: 2020, posterUrl: null, series: { name: 'Series One', position: '1' },
-  editionCount: 2, existingMediaId: null,
+  editionCount: 2, publisher: null, pageCount: null, existingMediaId: null,
 };
 
 export const bookPreviewFixture: BookPreview = {
