@@ -20,6 +20,8 @@ pub struct Header {
     /// UTF-8, whatever the process locale; `None` when the archive has no name for the entry.
     pub name: Option<String>,
     pub regular: bool,
+    /// A directory: rar5 refuses to read one, so it is skipped.
+    pub dir: bool,
     pub hardlink: bool,
     pub encrypted: bool,
     /// The size the header declares.
@@ -35,36 +37,43 @@ pub struct Reader {
 /// A thread-local UTF-8 locale for as long as the reader lives: libarchive converts 7z and RAR
 /// names to the current locale, and under the image's C locale it drops the non-ASCII ones.
 struct Utf8 {
-    loc: libc::locale_t,
     prev: libc::locale_t,
 }
 
+/// The `C.UTF-8` locale, made once and never freed (0 when the system has none).
+static UTF8_LOCALE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
 impl Utf8 {
     fn enter() -> Option<Self> {
-        // SAFETY: static NUL-terminated name; a null result is checked.
-        let loc = unsafe {
-            libc::newlocale(
-                libc::LC_CTYPE_MASK,
-                c"C.UTF-8".as_ptr(),
-                std::ptr::null_mut(),
-            )
-        };
-        if loc.is_null() {
+        let loc = *UTF8_LOCALE.get_or_init(|| {
+            // SAFETY: static NUL-terminated name; a null result is checked.
+            let loc = unsafe {
+                libc::newlocale(
+                    libc::LC_CTYPE_MASK,
+                    c"C.UTF-8".as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            };
+            if loc.is_null() {
+                tracing::warn!(
+                    "no C.UTF-8 locale: non-ASCII names in 7z and RAR archives are lost"
+                );
+            }
+            loc as usize
+        });
+        if loc == 0 {
             return None;
         }
-        // SAFETY: `loc` is a valid locale; the previous one is restored in `drop`, on this thread.
-        let prev = unsafe { libc::uselocale(loc) };
-        Some(Self { loc, prev })
+        // SAFETY: `loc` is a valid locale that lives for the process; `prev` is restored on drop.
+        let prev = unsafe { libc::uselocale(loc as libc::locale_t) };
+        Some(Self { prev })
     }
 }
 
 impl Drop for Utf8 {
     fn drop(&mut self) {
-        // SAFETY: restores the locale this thread had and frees the one `enter` made, once.
-        unsafe {
-            libc::uselocale(self.prev);
-            libc::freelocale(self.loc);
-        }
+        // SAFETY: restores the locale this thread had.
+        unsafe { libc::uselocale(self.prev) };
     }
 }
 
@@ -132,6 +141,7 @@ impl Reader {
             Ok(Some(Header {
                 name,
                 regular: sys::archive_entry_filetype(entry) & 0o170000 == 0o100000,
+                dir: sys::archive_entry_filetype(entry) & 0o170000 == 0o040000,
                 hardlink: !sys::archive_entry_hardlink(entry).is_null(),
                 encrypted: sys::archive_entry_is_encrypted(entry) != 0,
                 size: u64::try_from(sys::archive_entry_size(entry)).unwrap_or(0),

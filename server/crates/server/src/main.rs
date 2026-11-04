@@ -11,6 +11,10 @@ async fn main() -> ExitCode {
     if std::env::args().nth(1).as_deref() == Some(fliks_server::plugins::compile::SUBCOMMAND) {
         return fliks_server::plugins::compile::child_main();
     }
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some(fliks_server::comics::sandbox::SUBCOMMAND) {
+        return fliks_server::comics::sandbox::child_main();
+    }
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
         .with(

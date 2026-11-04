@@ -72,11 +72,8 @@ pub(crate) async fn detail(
       ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id)
     FROM items i JOIN comic_issues ci ON ci."itemId" = i.id JOIN editions e ON e.id = i."editionId"
     LEFT JOIN playback_states ps ON ps."itemId" = i.id AND ps."userId" = $2
-    LEFT JOIN LATERAL (SELECT ip."mediaFileId" AS id, substring(f."relativePath" FROM '\.([A-Za-z0-9]+)$') AS ext FROM item_parts ip
-        JOIN media_files f ON f.id = ip."mediaFileId"
-        WHERE ip."itemId" = i.id
-        ORDER BY (ip."mediaFileId" = ps."mediaFileId") DESC NULLS LAST, (ip.version = ps.version) DESC NULLS LAST,
-          ip.version DESC, ip.position, ip."mediaFileId" LIMIT 1) pf ON true
+    LEFT JOIN LATERAL (SELECT f.id, substring(f."relativePath" FROM '\.([A-Za-z0-9]+)$') AS ext
+        FROM media_files f WHERE f.id = comic_part(i.id, $2)) pf ON true
     WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)), '[]'::jsonb)) AS "json!: Value"
 FROM media m LEFT JOIN comic_details cd ON cd."mediaId" = m.id WHERE m.id = $1"#,
         id,

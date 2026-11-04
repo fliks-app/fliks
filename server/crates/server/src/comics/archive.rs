@@ -234,10 +234,12 @@ fn zip_read(z: &mut ZipFile, i: usize, head: bool, budget: &Cell<u64>) -> Result
     )
 }
 
-/// What one pass over an archive learns: the pages in reading order and, for a solid format when
-/// they fit `SOLID_CACHE_BYTES`, the pages themselves.
+/// What one pass over an archive learns: the pages in reading order, for a solid format the
+/// archive position of each (`ordinals`) and, when the pages fit `SOLID_CACHE_BYTES`, the pages
+/// themselves.
 pub struct Listing {
     pub pages: Vec<Page>,
+    pub ordinals: Option<Vec<usize>>,
     pub solid: Option<Vec<Vec<u8>>>,
 }
 
@@ -246,8 +248,9 @@ pub fn is_solid(path: &Path) -> Result<bool, Error> {
     Ok(sniff(path)? == Kind::Lib)
 }
 
+/// The libarchive reads, in process. In production they run in a child process (`sandbox.rs`).
 #[cfg(target_os = "linux")]
-mod lib {
+pub(super) mod local {
     use super::*;
     use crate::comics::ar::{Fail, Reader};
 
@@ -258,15 +261,17 @@ mod lib {
         }
     }
 
-    /// One pass over the entries in archive order: `on(ordinal, name, reader)` runs for each page
-    /// and returns `false` to stop; at most `budget` bytes are decoded. Every entry is read to its end through the budget (`Reader`
-    /// never lets libarchive skip), and the declared sizes are capped before any of it.
-    pub(super) fn each(
+    /// One pass over the entries in archive order: `on(ordinal, name, size, reader)` runs for each
+    /// page and returns `false` to stop; at most `budget` bytes are decoded, and never more than
+    /// the ratio allows over the file (an entry can declare 0 and still decode). Every entry is
+    /// read to its end through the budget: `Reader` never lets libarchive skip.
+    pub(in crate::comics) fn each(
         path: &Path,
         budget: u64,
-        mut on: impl FnMut(usize, String, &mut Reader) -> Result<bool, Error>,
+        mut on: impl FnMut(usize, String, u64, &mut Reader) -> Result<bool, Error>,
     ) -> Result<(), Error> {
         let len = std::fs::metadata(path).map_or(0, |m| m.len());
+        let budget = budget.min(len.saturating_mul(MAX_RATIO).max(RATIO_FLOOR));
         let mut r = Reader::open(path, budget).map_err(map)?;
         let (mut entries, mut declared) = (0usize, 0u64);
         while let Some(h) = r.next().map_err(map)? {
@@ -277,6 +282,9 @@ mod lib {
                 || declared > len.saturating_mul(MAX_RATIO).max(RATIO_FLOOR)
             {
                 return Err(Error::TooLarge);
+            }
+            if h.dir {
+                continue;
             }
             let name = (h.regular && !h.hardlink)
                 .then(|| h.name.as_deref().and_then(page_name))
@@ -291,7 +299,7 @@ mod lib {
             if h.size > MAX_ENTRY_BYTES {
                 return Err(Error::TooLarge);
             }
-            if !on(entries - 1, name, &mut r)? {
+            if !on(entries - 1, name, h.size, &mut r)? {
                 return Ok(());
             }
             r.drain().map_err(map)?;
@@ -299,12 +307,15 @@ mod lib {
         Ok(())
     }
 
-    /// The current entry's bytes, `TooLarge` past the entry cap.
-    fn take(r: &mut Reader) -> Result<Vec<u8>, Error> {
-        let (mut out, mut buf) = (vec![], vec![0u8; 64 * 1024]);
+    /// The current entry's bytes (`size` is its declared size, already under the entry cap), sized
+    /// to fit: `TooLarge` past the entry cap.
+    fn take(r: &mut Reader, size: u64) -> Result<Vec<u8>, Error> {
+        let mut out = Vec::with_capacity(size as usize);
+        let mut buf = vec![0u8; 64 * 1024];
         loop {
             let n = r.read(&mut buf).map_err(map)?;
             if n == 0 {
+                out.shrink_to_fit();
                 return Ok(out);
             }
             out.extend_from_slice(&buf[..n]);
@@ -315,16 +326,16 @@ mod lib {
     }
 
     pub fn list(path: &Path) -> Result<Listing, Error> {
-        let mut found: Vec<(String, Page, Option<Vec<u8>>)> = vec![];
+        let mut found: Vec<(String, usize, Page, Option<Vec<u8>>)> = vec![];
         let mut kept = 0u64;
-        each(path, MAX_TOTAL_BYTES, |_, name, r| {
-            let bytes = take(r)?;
+        each(path, MAX_TOTAL_BYTES, |ord, name, size, r| {
+            let bytes = take(r, size)?;
             let (width, height) = dimensions(&bytes[..bytes.len().min(HEADER_BYTES as usize)]);
-            let keep = kept + bytes.len() as u64 <= SOLID_CACHE_BYTES;
+            let keep = kept + bytes.capacity() as u64 <= SOLID_CACHE_BYTES;
             if keep {
-                kept += bytes.len() as u64;
+                kept += bytes.capacity() as u64;
             }
-            found.push((name, Page { width, height }, keep.then_some(bytes)));
+            found.push((name, ord, Page { width, height }, keep.then_some(bytes)));
             Ok(true)
         })?;
         found.sort_by(|a, b| natural(&a.0, &b.0));
@@ -333,10 +344,11 @@ mod lib {
         }
         let solid = found
             .iter()
-            .all(|f| f.2.is_some())
-            .then(|| found.iter_mut().filter_map(|f| f.2.take()).collect());
+            .all(|f| f.3.is_some())
+            .then(|| found.iter_mut().filter_map(|f| f.3.take()).collect());
         Ok(Listing {
-            pages: found.into_iter().map(|f| f.1).collect(),
+            ordinals: Some(found.iter().map(|f| f.1).collect()),
+            pages: found.into_iter().map(|f| f.2).collect(),
             solid,
         })
     }
@@ -344,31 +356,36 @@ mod lib {
     /// `(ordinal, name)` of every page in reading order.
     pub fn names(path: &Path) -> Result<Vec<(usize, String)>, Error> {
         let mut out = vec![];
-        each(path, MAX_TOTAL_BYTES, |o, n, _| {
+        each(path, MAX_TOTAL_BYTES, |o, n, _, _| {
             out.push((o, n));
             Ok(true)
         })?;
         sorted(out)
     }
 
-    /// Page `index` alone: two passes, the cache of decoded archives is `pages.rs`'s.
-    pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
-        let at = names(path)?.get(index).ok_or(Error::Missing)?.0;
+    /// The page at archive position `ordinal`: one pass.
+    pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
         let mut found = None;
-        each(path, MAX_TOTAL_BYTES, |o, _, r| {
-            if o != at {
+        each(path, MAX_TOTAL_BYTES, |o, _, size, r| {
+            if o != ordinal {
                 return Ok(true);
             }
-            found = Some(take(r)?);
+            found = Some(take(r, size)?);
             Ok(false)
         })?;
-        found.ok_or(Error::Corrupt)
+        found.ok_or(Error::Missing)
+    }
+
+    /// Page `index` alone: a pass for the order, then one for the page.
+    pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
+        let at = names(path)?.get(index).ok_or(Error::Missing)?.0;
+        page_at(path, at)
     }
 }
 
 /// 7z and RAR need libarchive, which only the Linux build links.
 #[cfg(not(target_os = "linux"))]
-mod lib {
+pub(super) mod local {
     use super::*;
 
     pub fn list(_: &Path) -> Result<Listing, Error> {
@@ -379,10 +396,60 @@ mod lib {
         Err(Error::Unsupported("libarchive"))
     }
 
+    pub fn count(_: &Path) -> Result<usize, Error> {
+        Err(Error::Unsupported("libarchive"))
+    }
+
+    pub fn page_at(_: &Path, _: usize) -> Result<Vec<u8>, Error> {
+        Err(Error::Unsupported("libarchive"))
+    }
+
     pub fn page(_: &Path, _: usize) -> Result<Vec<u8>, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 }
+
+/// 7z and RAR reads: in a child process in production, in process under the unit tests.
+#[cfg(target_os = "linux")]
+mod lib {
+    use super::*;
+    use crate::comics::sandbox;
+
+    pub fn list(path: &Path) -> Result<Listing, Error> {
+        if sandbox::enabled() {
+            sandbox::list(path)
+        } else {
+            local::list(path)
+        }
+    }
+
+    pub fn count(path: &Path) -> Result<usize, Error> {
+        if sandbox::enabled() {
+            sandbox::count(path)
+        } else {
+            local::names(path).map(|n| n.len())
+        }
+    }
+
+    pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
+        if sandbox::enabled() {
+            sandbox::page_at(path, ordinal)
+        } else {
+            local::page_at(path, ordinal)
+        }
+    }
+
+    pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
+        if sandbox::enabled() {
+            sandbox::page(path, index)
+        } else {
+            local::page(path, index)
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+use local as lib;
 
 /// The pages in reading order with their dimensions (an unreadable header or a page past the
 /// probe budget gives `0 x 0`, the page keeps its index).
@@ -408,7 +475,11 @@ pub fn list(path: &Path) -> Result<Listing, Error> {
                 };
                 pages.push(Page { width, height });
             }
-            Listing { pages, solid: None }
+            Listing {
+                pages,
+                ordinals: None,
+                solid: None,
+            }
         }
         Kind::Lib => lib::list(path)?,
     };
@@ -426,9 +497,14 @@ pub fn pages(path: &Path) -> Result<Vec<Page>, Error> {
 pub fn page_count(path: &Path) -> Result<usize, Error> {
     let n = match sniff(path)? {
         Kind::Zip => zip_names(&mut open_zip(path)?)?.len(),
-        Kind::Lib => lib::names(path)?.len(),
+        Kind::Lib => lib::count(path)?,
     };
     if n == 0 { Err(Error::NoPages) } else { Ok(n) }
+}
+
+/// The page at archive position `ordinal` (from a `Listing`'s `ordinals`) of a solid archive.
+pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
+    lib::page_at(path, ordinal)
 }
 
 /// The original bytes of page `index` (0-based, reading order).
@@ -728,6 +804,24 @@ mod tests {
             let mut out = b"Rar!\x1A\x07\x01\x00".to_vec();
             out.extend(block([vint(1), vint(0), vint(0)].concat()));
             for (name, data) in files {
+                if let Some(dir) = name.strip_suffix('/') {
+                    // A directory entry: an empty data area, DIRECTORY file flag, no CRC.
+                    let body = [
+                        vint(2),
+                        vint(0x0002),
+                        vint(0),
+                        vint(0x0001),
+                        vint(0),
+                        vint(0o040_755),
+                        vint(0),
+                        vint(1),
+                        vint(dir.len() as u64),
+                        dir.as_bytes().to_vec(),
+                    ]
+                    .concat();
+                    out.extend(block(body));
+                    continue;
+                }
                 let body = [
                     vint(2),
                     vint(0x0002),
@@ -770,6 +864,15 @@ mod tests {
         }
 
         #[test]
+        fn a_rar5_with_a_directory_entry_reads() {
+            let t = Tmp::new("rardir");
+            let a = png(5, 7);
+            let p = t.file("a.cbr", &rar5(&[("issue/", b""), ("issue/p1.png", &a)]));
+            assert_eq!(page_count(&p), Ok(1));
+            assert_eq!(page(&p, 0).unwrap(), a);
+        }
+
+        #[test]
         fn a_non_page_entry_counts_against_the_budget_too() {
             let t = Tmp::new("budget");
             let p = t.file(
@@ -777,12 +880,15 @@ mod tests {
                 &rar5(&[("big.bin", &vec![7u8; 1024 * 1024]), ("p1.png", &png(2, 2))]),
             );
             let mut seen = 0;
-            let r = lib::each(&p, 100 * 1024, |_, _, _| {
+            let r = local::each(&p, 100 * 1024, |_, _, _, _| {
                 seen += 1;
                 Ok(true)
             });
             assert_eq!((r, seen), (Err(Error::TooLarge), 0));
-            assert_eq!(lib::each(&p, 2 * 1024 * 1024, |_, _, _| Ok(true)), Ok(()));
+            assert_eq!(
+                local::each(&p, 2 * 1024 * 1024, |_, _, _, _| Ok(true)),
+                Ok(())
+            );
         }
 
         #[test]

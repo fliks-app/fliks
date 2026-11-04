@@ -65,6 +65,9 @@ impl Res {
 
 /// Issues: 1 a three page cbz, 2 its twin in a hidden edition, 3 a pdf, 4 a corrupt archive, 5 a text file named `.png`.
 async fn ctx(pool: PgPool, tag: &str) -> Ctx {
+    // 7z and RAR are read by a child of the server binary, as in production.
+    #[cfg(target_os = "linux")]
+    comics::sandbox::set_exe(PathBuf::from(env!("CARGO_BIN_EXE_fliks-server")));
     fliks_server::db::migrate(&pool).await.unwrap();
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     let dir =
@@ -306,4 +309,52 @@ async fn a_7z_serves_pages_in_reading_order_from_one_decode(pool: PgPool) {
         let p = c.get(Some(&c.admin), "/api/comics/6/pages/1", &[]).await;
         assert_eq!((p.status, p.body), (200, png(16, 24)));
     }
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for b in data {
+        crc ^= u32::from(*b);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xEDB8_8320 & 0u32.wrapping_sub(crc & 1));
+        }
+    }
+    !crc
+}
+
+fn rss_kb() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .unwrap()
+        .lines()
+        .find_map(|l| l.strip_prefix("VmRSS:"))
+        .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+        .unwrap_or(0)
+}
+
+/// A few bytes of 7z whose header asks libarchive for `files` entries (72 bytes each) before any is read.
+#[cfg(target_os = "linux")]
+#[sqlx::test(migrations = false)]
+async fn a_7z_header_asking_for_gigabytes_dies_in_the_child(pool: PgPool) {
+    let _c = ctx(pool, "numfiles").await;
+    let dir = Dir(std::env::temp_dir().join(format!("fliks-comics-bomb-{}", std::process::id())));
+    std::fs::create_dir_all(&dir.0).unwrap();
+    let mut header = vec![0x01, 0x05, 0xFF];
+    header.extend(50_000_000u64.to_le_bytes());
+    let mut start = 0u64.to_le_bytes().to_vec();
+    start.extend((header.len() as u64).to_le_bytes());
+    start.extend(crc32(&header).to_le_bytes());
+    let mut file = b"7z\xBC\xAF\x27\x1C\x00\x04".to_vec();
+    file.extend(crc32(&start).to_le_bytes());
+    file.extend(&start);
+    file.extend(&header);
+    let p = dir.0.join("bomb.cb7");
+    std::fs::write(&p, &file).unwrap();
+    let before = rss_kb();
+    let out = comics::archive::page_count(&p);
+    assert!(out.is_err(), "{out:?}");
+    assert!(
+        rss_kb() < before + 200 * 1024,
+        "the parent grew by {} kB",
+        rss_kb() - before
+    );
 }

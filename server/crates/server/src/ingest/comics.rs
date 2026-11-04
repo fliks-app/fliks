@@ -29,7 +29,7 @@ async fn count_pages(abs: &Path, format: &str) -> Option<i32> {
         return None;
     }
     let p = abs.to_path_buf();
-    crate::comics::blocking(move || archive::page_count(&p))
+    crate::comics::blocking_ingest(move || archive::page_count(&p))
         .await?
         .ok()
         .and_then(|n| i32::try_from(n).ok())
@@ -129,7 +129,7 @@ async fn cover(st: &AppState, media: i32, files: &[Placed], rows: &[Row]) {
     paged.sort_by(|a, b| a.0.total_cmp(&b.0));
     for (_, f) in paged {
         let p = f.abs.clone();
-        let jpeg = crate::comics::blocking(move || {
+        let jpeg = crate::comics::blocking_ingest(move || {
             let first = archive::page(&p, 0).ok()?;
             crate::comics::cover(&first, COVER_WIDTH)
         })

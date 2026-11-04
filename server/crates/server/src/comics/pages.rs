@@ -1,7 +1,7 @@
 //! `GET /api/comics/:itemId/pages` and `/pages/:index` (`docs/spec/comics.md`, pages rules).
 use super::{
     archive::{self, Error},
-    cache::{self, Key},
+    cache::{self, Entry, Key},
 };
 use crate::{
     http::{AppError, auth::FileBoundAuthed, validate::PathParams},
@@ -33,8 +33,8 @@ use std::{
 };
 use tokio::sync::Semaphore;
 
-/// Pages decoded at once. One decode holds at most `MAX_ALLOC` (200 MB) plus the JPEG and the
-/// page bytes (64 MiB), so the peak is about 3 x 270 MB.
+/// Pages decoded at once. One job holds at most the page bytes (64 MiB), the decoder's `MAX_ALLOC`
+/// (200 MB) and its RGB copy (75 MB), so the peak is about 3 x 340 MB.
 const PAGE_JOBS: usize = 3;
 const MAX_PIXELS: u64 = 25_000_000;
 const MAX_ALLOC: u64 = MAX_PIXELS * 8;
@@ -46,6 +46,8 @@ const IMAGE_CSP: &str = "default-src 'none'; sandbox";
 const CORP: HeaderName = HeaderName::from_static("cross-origin-resource-policy");
 
 static JOBS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(PAGE_JOBS)));
+/// Archive work of the ingest has its own slot, so a library scan cannot starve the readers.
+static INGEST_JOB: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(1)));
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -79,7 +81,8 @@ struct Source {
 impl Source {
     /// Changes with the file's bytes: the file row, its size and mtime.
     fn tag(&self) -> String {
-        format!("{}-{}-{}", self.key.file, self.key.size, self.key.mtime)
+        let k = &self.key;
+        format!("{}-{}-{}-{}-{}", k.file, k.size, k.mtime, k.ino, k.ctime)
     }
 }
 
@@ -91,13 +94,12 @@ async fn source(st: &AppState, a: &FileBoundAuthed, item: i32) -> Result<Source,
            JOIN comic_issues ci ON ci."itemId" = i.id
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
            JOIN editions e ON e.id = i."editionId" AND e.family = 'image'
-           JOIN item_parts ip ON ip."itemId" = i.id
-           JOIN media_files mf ON mf.id = ip."mediaFileId"
-           WHERE i.id = $1 AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = mf.id)
-           ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1"#
+           JOIN media_files mf ON mf.id = comic_part(i.id, $3)
+           WHERE i.id = $1 AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = mf.id)"#
     )))
     .bind(item)
     .bind(&acl)
+    .bind(a.auth.user.id)
     .fetch_optional(&st.db)
     .await?;
     let (file, rel) = row.ok_or_else(|| item_missing(item))?;
@@ -117,18 +119,32 @@ async fn source(st: &AppState, a: &FileBoundAuthed, item: i32) -> Result<Source,
             e
         }
     })?;
-    let mtime = tokio::fs::metadata(&f.absolute)
-        .await
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_millis());
+    let meta = tokio::fs::metadata(&f.absolute).await.ok();
+    let since_epoch = |t: Option<std::time::SystemTime>| {
+        t.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_millis())
+    };
+    let mtime = since_epoch(meta.as_ref().and_then(|m| m.modified().ok()));
+    #[cfg(unix)]
+    let (ino, ctime) = {
+        use std::os::unix::fs::MetadataExt;
+        meta.as_ref().map_or((0, 0), |m| {
+            (
+                m.ino(),
+                i128::from(m.ctime()) * 1_000_000_000 + i128::from(m.ctime_nsec()),
+            )
+        })
+    };
+    #[cfg(not(unix))]
+    let (ino, ctime) = (0, 0);
     Ok(Source {
         path: f.absolute,
         key: Key {
             file,
             size: f.size,
             mtime,
+            ino,
+            ctime,
         },
     })
 }
@@ -169,18 +185,14 @@ pub async fn pages(
         return Ok(r);
     }
     let key = src.key;
-    let list = match cache::list(key) {
-        Some(l) => l,
+    let entry = match cache::list(key) {
+        Some(e) => e,
         None => {
-            let listing = run(move || archive::list(&src.path).map_err(Failed::from), item).await?;
-            let list = Arc::new(listing.pages);
-            cache::put_list(key, list.clone());
-            if let Some(s) = listing.solid {
-                cache::put_solid(key, Arc::new(s));
-            }
-            list
+            let path = src.path.clone();
+            run(move || fill(&path, key), item).await?
         }
     };
+    let list = &entry.pages;
     let body = json!({"pages": list.iter().map(|p| json!({"width": p.width, "height": p.height})).collect::<Vec<_>>()});
     Ok((
         [(ETAG, etag), (CACHE_CONTROL, NO_CACHE.to_owned())],
@@ -194,20 +206,47 @@ pub struct PageQuery {
     width: Option<u32>,
 }
 
-/// A solid archive is decoded once and kept (`cache.rs`); the others read the one entry.
+/// One pass over the archive: the list is cached and, for a solid archive, so are the pages when
+/// they fit. One fill per archive at a time, the others wait for it.
+fn fill(path: &Path, key: Key) -> Result<Arc<Entry>, Failed> {
+    let flight = cache::flight(key);
+    let _one = flight.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(e) = cache::list(key) {
+        return Ok(e);
+    }
+    let listing = archive::list(path)?;
+    let entry = Arc::new(Entry {
+        pages: listing.pages,
+        ordinals: listing.ordinals,
+    });
+    cache::put_list(key, entry.clone());
+    if let Some(s) = listing.solid {
+        cache::put_solid(key, Arc::new(s));
+    }
+    Ok(entry)
+}
+
+/// A solid archive is decoded once and kept (`cache.rs`), or, over the cache cap, read in one pass
+/// per page; the others read the one entry.
 fn read_page(path: &Path, key: Key, index: usize) -> Result<Vec<u8>, Failed> {
     let missing = || Failed::App(AppError::not_found("Page not found"));
     if let Some(s) = cache::solid(key) {
         return s.get(index).cloned().ok_or_else(missing);
     }
     if archive::is_solid(path)? {
-        let listing = archive::list(path)?;
-        cache::put_list(key, Arc::new(listing.pages));
-        if let Some(s) = listing.solid {
-            let s = Arc::new(s);
-            cache::put_solid(key, s.clone());
+        let entry = match cache::list(key) {
+            Some(e) => e,
+            None => fill(path, key)?,
+        };
+        if let Some(s) = cache::solid(key) {
             return s.get(index).cloned().ok_or_else(missing);
         }
+        let at = entry
+            .ordinals
+            .as_ref()
+            .and_then(|o| o.get(index))
+            .ok_or_else(missing)?;
+        return archive::page_at(path, *at).map_err(Failed::from);
     }
     archive::page(path, index).map_err(|e| match e {
         Error::Missing => missing(),
@@ -268,7 +307,21 @@ pub async fn page(
 pub(crate) async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> T + Send + 'static,
 ) -> Option<T> {
-    let slot = JOBS.clone().acquire_owned().await.ok()?;
+    run_in(&JOBS, work).await
+}
+
+/// `blocking` on the ingest's own single slot.
+pub(crate) async fn blocking_ingest<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    run_in(&INGEST_JOB, work).await
+}
+
+async fn run_in<T: Send + 'static>(
+    slots: &Arc<Semaphore>,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let slot = slots.clone().acquire_owned().await.ok()?;
     tokio::task::spawn_blocking(move || {
         let _slot = slot;
         work()
