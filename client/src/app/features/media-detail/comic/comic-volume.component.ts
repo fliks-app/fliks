@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePencil } from '@lucide/angular';
+import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { ComicsApiService } from '../../../core/services/api/comics-api.service';
 import type { Media } from '../../../core/services/api/media.service';
 import type { ComicDetail, ComicIssue, ComicIssuePatch } from '../../../core/services/api/comics.models';
@@ -65,6 +66,7 @@ export class ComicVolumeComponent {
   protected readonly progressLabel = computed(() =>
     this.comic() ? this.translate.instant('comic.read_count', { read: this.readCount(), total: this.issues().length }) : null,
   );
+  protected readonly actions = computed<MediaActionHandlers>(() => (this.canEdit() ? { 'media.edit': () => this.openVolume() } : {}));
   protected readonly editingVolume = signal(false);
   protected readonly editingIssue = signal<ComicIssue | null>(null);
   protected readonly saving = signal(false);

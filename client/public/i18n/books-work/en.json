@@ -53,6 +53,7 @@
     "offline_remove": "Remove from device",
     "offline_retry": "Retry",
     "offline_audio_unplayable": "This audiobook cannot be played as is on this device, so it cannot be saved offline",
-    "offline_wifi_only": "Downloads are set to Wi-Fi only"
+    "offline_wifi_only": "Downloads are set to Wi-Fi only",
+    "row_similar": "Similar books"
   }
 }

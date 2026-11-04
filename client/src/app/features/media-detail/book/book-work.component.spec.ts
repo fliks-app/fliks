@@ -36,7 +36,7 @@ describe('BookWorkComponent', () => {
     play.mockClear();
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
-        { provide: AuthService, useValue: { hasPermission: (p: string) => canEdit && p === 'media.edit' } },
+        { provide: AuthService, useValue: { user: () => null, hasPermission: (p: string) => canEdit && p === 'media.edit' } },
         { provide: AudioPlayerService, useValue: { play } },
         { provide: StreamingApiService, useValue: {} },
         { provide: DownloadManagerService, useValue: { tasks: signal([]) } },
@@ -52,6 +52,7 @@ describe('BookWorkComponent', () => {
     const http = TestBed.inject(HttpTestingController);
     http.match('/api/email-devices').forEach((r) => r.flush({ enabled: false, canSend: false, maxBytes: null, devices: [] }));
     http.match('/api/likes/state/1').forEach((r) => r.flush({ media: false, seasonIds: [], episodeIds: [] }));
+    http.match('/api/media/1/similar').forEach((r) => r.flush([{ id: 7, title: 'Book Seven', year: 2001, posterUrl: null, rating: null, genres: [], hasFile: true }]));
     return { fixture, http, el: fixture.nativeElement as HTMLElement };
   }
 
@@ -108,7 +109,7 @@ describe('BookWorkComponent', () => {
   it('renders the title and cover from a card handoff before the editions arrive', async () => {
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
-        { provide: AuthService, useValue: { hasPermission: () => false } },
+        { provide: AuthService, useValue: { user: () => null, hasPermission: () => false } },
         { provide: AudioPlayerService, useValue: { play } },
         { provide: StreamingApiService, useValue: {} },
         { provide: DownloadManagerService, useValue: { tasks: signal([]) } },
@@ -132,17 +133,17 @@ describe('BookWorkComponent', () => {
     await settle(fixture);
 
     const rows = fixture.debugElement.queryAll((d) => d.name === 'app-book-works-row').map((d) => d.componentInstance as RowStub);
-    expect(rows.map((r) => r.heading())).toEqual(['books_work.row_series', 'books_work.row_author']);
-    expect(rows.map((r) => r.items().map((i) => i.id))).toEqual([[1, 3], [4]]);
+    expect(rows.map((r) => r.heading())).toEqual(['books_work.row_series', 'books_work.row_author', 'books_work.row_similar']);
+    expect(rows.map((r) => r.items().map((i) => i.id))).toEqual([[1, 3], [4], [7]]);
     expect(rows[0].currentId()).toBe(1);
-    expect(el.querySelectorAll('app-book-works-row')).toHaveLength(2);
+    expect(el.querySelectorAll('app-book-works-row')).toHaveLength(3);
   });
 
   it('asks for no row and no chapters without a series, an author or an audio file', async () => {
     const { fixture, http, el } = await setup({ series: [], authors: [], editions: [textEditionFixture], progress: null });
     await settle(fixture);
     http.verify();
-    expect(el.querySelector('app-book-works-row')).toBeNull();
+    expect(el.querySelectorAll('app-book-works-row')).toHaveLength(1);
     expect(el.querySelector('[data-testid="authors"]')).toBeNull();
     expect(Array.from(el.querySelectorAll('[data-testid="format-button"]'))).toHaveLength(1);
   });
@@ -159,14 +160,15 @@ describe('BookWorkComponent', () => {
     expect(flagged.el.querySelector('[data-testid="unofficial"]')).not.toBeNull();
   });
 
-  it('shows the Sources panel to editors only', async () => {
+  it('offers the Sources and wants dialogs to editors only, loaded when opened', async () => {
     const viewer = await setup({ series: [], authors: [], editions: [textEditionFixture] });
     viewer.http.verify();
-    expect(viewer.el.querySelector('app-book-sources')).toBeNull();
+    expect(viewer.el.querySelector('[data-testid="sources-dialog"]')).toBeNull();
 
     TestBed.resetTestingModule();
     const editor = await setup({ series: [], authors: [], editions: [textEditionFixture] }, true);
-    editor.http.expectOne('/api/media/1/sources').flush(bookSourcesFixture);
-    expect(editor.el.querySelector('app-book-sources')).not.toBeNull();
+    editor.http.verify();
+    expect(editor.el.querySelectorAll('[data-testid$="-dialog"]')).toHaveLength(2);
+    expect(editor.el.querySelector('app-book-sources')).toBeNull();
   });
 });

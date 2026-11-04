@@ -1,8 +1,3 @@
-<app-collapsible-section
-  [heading]="'books_work.sources' | translate"
-  persistKey="book-sources"
-  [defaultOpen]="false"
->
   @if (sources(); as s) {
     <ul class="flex flex-col divide-y divide-base-300 mb-4">
       <li class="flex flex-wrap items-center gap-2 py-2" data-testid="source-row">
@@ -102,4 +97,3 @@
     </button>
   </form>
   <p class="mt-2 text-xs text-base-content/60">{{ 'books_work.sources_hint' | translate }}</p>
-</app-collapsible-section>

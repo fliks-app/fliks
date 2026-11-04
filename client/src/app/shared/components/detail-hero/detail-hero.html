@@ -40,3 +40,7 @@
     <ng-content />
   </div>
 </div>
+
+@if (media(); as m) {
+  <app-media-library-dialog [media]="m" />
+}

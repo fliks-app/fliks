@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Non riuscito",
     "subtitle_sync_failed": "Sincronizzazione non riuscita",
     "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco.",
-    "delete_success": "Titolo rimosso dalla libreria."
+    "delete_success": "Titolo rimosso dalla libreria.",
+    "edit_details": "Modifica dettagli"
   },
   "requests": {
     "title": "Richieste",

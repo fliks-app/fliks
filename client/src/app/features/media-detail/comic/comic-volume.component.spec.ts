@@ -13,7 +13,7 @@ const issue = (n: number, over: Partial<ComicIssue> = {}): ComicIssue =>
 function setup(media: Partial<Media>, isTv = false) {
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
-      { provide: AuthService, useValue: { hasPermission: () => true } },
+      { provide: AuthService, useValue: { user: () => null, hasPermission: () => true } },
       { provide: TvService, useValue: { isTv: () => isTv } },
     ),
   });

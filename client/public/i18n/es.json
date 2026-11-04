@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Error",
     "subtitle_sync_failed": "Sincronización fallida",
     "delete_no_folder": "Este título no tiene una carpeta propia: solo se eliminará la entrada de la biblioteca, el archivo permanece en el disco.",
-    "delete_success": "Título eliminado de la biblioteca."
+    "delete_success": "Título eliminado de la biblioteca.",
+    "edit_details": "Editar detalles"
   },
   "requests": {
     "title": "Solicitudes",

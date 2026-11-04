@@ -1,4 +1,3 @@
-<app-collapsible-section [heading]="'wants.title' | translate" persistKey="book-wants" [defaultOpen]="false">
   <ul class="flex flex-col divide-y divide-base-300 mb-4">
     @for (w of saved(); track w.id) {
       <li class="flex flex-wrap items-center gap-2 py-2" data-testid="want-state">
@@ -14,4 +13,3 @@
   <button type="button" class="btn btn-primary btn-sm mt-3" data-testid="wants-save" [disabled]="busy()" (click)="save()">
     {{ 'wants.save' | translate }}
   </button>
-</app-collapsible-section>

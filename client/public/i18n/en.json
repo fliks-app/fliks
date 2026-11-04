@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Failed",
     "subtitle_sync_failed": "Sync failed",
     "delete_no_folder": "This title has no folder of its own: only the library entry will be removed, the file stays on disk.",
-    "delete_success": "Title removed from the library."
+    "delete_success": "Title removed from the library.",
+    "edit_details": "Edit details"
   },
   "requests": {
     "title": "Requests",

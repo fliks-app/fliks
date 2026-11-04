@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
@@ -9,6 +9,9 @@ import type { BookFormatFamily, CollectionDetail } from '../../../core/services/
 import { mediaDetailLink } from '../../../core/media-kinds';
 import type { Media } from '../../../core/services/api/media.service';
 import { remainingLabel } from '../../../core/utils/player.utils';
+import { MediaService } from '../../../core/services/api/media.service';
+import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
@@ -41,6 +44,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
     BookWorksRowComponent,
     BookSourcesComponent,
     BookWantsComponent,
+    ModalHeaderComponent,
   ],
   templateUrl: './book-work.component.html',
   host: { class: 'block' },
@@ -50,6 +54,7 @@ export class BookWorkComponent {
   readonly media = input.required<Media>();
 
   private readonly api = inject(BooksApiService);
+  private readonly mediaApi = inject(MediaService);
   private readonly auth = inject(AuthService);
   private readonly audio = inject(AudioPlayerService);
   private readonly queue = inject(PlaybackQueueService);
@@ -108,7 +113,23 @@ export class BookWorkComponent {
     !!this.book()?.editions.some((e) => e.fieldSources.some((f) => f.provider && UNOFFICIAL_PROVIDERS.includes(f.provider))),
   );
 
+  protected readonly wantsOpen = signal(false);
+  protected readonly sourcesOpen = signal(false);
+  private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
+  private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
+
+  /** Profiles are the wants dialog for a book; identify opens the work-level sources until books have a provider search. */
+  protected readonly actions = computed<MediaActionHandlers>(() =>
+    this.canEdit()
+      ? {
+          'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()),
+          'media.identify': () => this.openDialog(this.sourcesOpen, this.sourcesDialog()),
+        }
+      : {},
+  );
+
   protected readonly seriesItems = signal<WorkItem[]>([]);
+  protected readonly similarItems = signal<WorkItem[]>([]);
   protected readonly authorItems = signal<WorkItem[]>([]);
 
   private readonly id = computed(() => this.media().id);
@@ -123,6 +144,8 @@ export class BookWorkComponent {
       untracked(() => {
         this.seriesItems.set([]);
         this.authorItems.set([]);
+        this.similarItems.set([]);
+        void this.loadSimilar(id);
         void this.loadSeries(id, seriesId);
         void this.loadAuthor(id, authorId);
       });
@@ -154,6 +177,19 @@ export class BookWorkComponent {
       artist: (this.book()?.authors ?? []).map((a) => a.name).join(', '),
       coverUrl: edition.coverUrl ?? m.posterUrl,
     });
+  }
+
+  private openDialog(open: { set(v: boolean): void }, dialog: ElementRef<HTMLDialogElement> | undefined): void {
+    open.set(true);
+    dialog?.nativeElement.showModal();
+  }
+
+  private async loadSimilar(id: number): Promise<void> {
+    const items = await this.mediaApi.getSimilar(id).then(
+      (r) => r.map((m): WorkItem => ({ id: m.id, title: m.title, posterUrl: m.posterUrl ?? null, label: null, progressPercent: 0 })),
+      () => [],
+    );
+    if (this.id() === id) this.similarItems.set(items);
   }
 
   private async loadSeries(id: number, seriesId: number | null): Promise<void> {

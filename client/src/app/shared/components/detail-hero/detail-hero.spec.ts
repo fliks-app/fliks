@@ -18,7 +18,7 @@ describe('DetailHeroComponent', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
-        { provide: AuthService, useValue: { hasPermission: () => false, sharingDisabled: () => false } },
+        { provide: AuthService, useValue: { user: () => null, hasPermission: () => false, sharingDisabled: () => false } },
       ],
     });
     const fixture = TestBed.createComponent(DetailHeroComponent);

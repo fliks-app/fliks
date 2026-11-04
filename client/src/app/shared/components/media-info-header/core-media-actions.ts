@@ -248,6 +248,16 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
   },
   {
+    // Edits the title's own fields (a comic volume); each kind supplies the handler.
+    id: 'core.edit',
+    slot: 'media.actions',
+    weight: 650,
+    labelKey: 'media_detail.edit_details',
+    icon: 'pencil',
+    when: ['hasPermission:media.edit', '!isTv', 'surface:detail'],
+    action: { kind: 'action', actionId: 'media.edit' },
+  },
+  {
     id: 'core.request_deletion',
     slot: 'media.actions',
     weight: 1400,

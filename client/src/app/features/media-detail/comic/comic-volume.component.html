@@ -1,7 +1,7 @@
 @let m = media();
 @let c = comic();
 
-<app-detail-hero [title]="title()" [mediaId]="m.id" mediaType="comic" [posterUrl]="m.posterUrl" [overview]="overview()" [progressPercent]="progressPercent()" [progressLabel]="progressLabel()">
+<app-detail-hero [title]="title()" [mediaId]="m.id" mediaType="comic" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="overview()" [progressPercent]="progressPercent()" [progressLabel]="progressLabel()">
   @if (c) {
     <p heroMeta class="flex flex-wrap gap-x-3 text-base-content/70" data-testid="facts">
       @if (c.publisher) {
@@ -20,11 +20,6 @@
       {{ (started() ? 'comic.continue' : 'comic.read') | translate }}
       <span class="opacity-70">{{ 'comic.issue_number' | translate: { n: n.number } }}</span>
     </a>
-  }
-  @if (canEdit()) {
-    <button ngProjectAs="[heroActions]" type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'comic.edit.volume' | translate" (click)="openVolume()" data-testid="edit-volume">
-      <svg lucidePencil class="size-4"></svg>
-    </button>
   }
 </app-detail-hero>
 

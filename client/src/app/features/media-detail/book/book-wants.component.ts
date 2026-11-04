@@ -2,14 +2,13 @@ import { Component, effect, inject, input, signal, untracked } from '@angular/co
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { WantsApiService, type Want, type WantSpec } from '../../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
-import { CollapsibleSectionComponent } from '../../../shared/components/collapsible-section/collapsible-section';
 import { WantsEditorComponent } from '../../../shared/components/wants-editor/wants-editor';
 import { ToastService } from '../../../core/services/toast.service';
 
 /** The formats and languages a work is wished in, and which of them are already owned. */
 @Component({
   selector: 'app-book-wants',
-  imports: [TranslatePipe, CollapsibleSectionComponent, WantsEditorComponent],
+  imports: [TranslatePipe, WantsEditorComponent],
   templateUrl: './book-wants.component.html',
   host: { class: 'block' },
 })

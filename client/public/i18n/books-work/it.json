@@ -53,6 +53,7 @@
     "offline_remove": "Rimuovi dal dispositivo",
     "offline_retry": "Riprova",
     "offline_audio_unplayable": "Questo audiolibro non può essere riprodotto così com'è su questo dispositivo, quindi non può essere salvato offline",
-    "offline_wifi_only": "I download sono limitati al Wi-Fi"
+    "offline_wifi_only": "I download sono limitati al Wi-Fi",
+    "row_similar": "Libri simili"
   }
 }

@@ -2,7 +2,6 @@ import { Component, computed, effect, inject, input, signal, untracked } from '@
 import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookEdition, BookSources } from '../../../core/services/api/books.models';
-import { CollapsibleSectionComponent } from '../../../shared/components/collapsible-section/collapsible-section';
 import { editionLabel } from './book-media';
 
 type Level = 'work' | 'edition';
@@ -13,7 +12,7 @@ const EDITION_PROVIDERS = ['isbn', 'asin', 'openlibrary', 'googlebooks', 'bnf'];
 /** Where the work and its editions are linked at the providers: link, relink or unlink an identifier. */
 @Component({
   selector: 'app-book-sources',
-  imports: [TranslatePipe, CollapsibleSectionComponent],
+  imports: [TranslatePipe],
   templateUrl: './book-sources.component.html',
   host: { class: 'block' },
 })

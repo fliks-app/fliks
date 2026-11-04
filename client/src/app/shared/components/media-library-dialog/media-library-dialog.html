@@ -1,0 +1,15 @@
+<app-media-detail-library-modal
+  [kind]="media().type"
+  [libraries]="libraries()"
+  [selectedLibraryId]="selectedLibraryId()"
+  [folders]="folders()"
+  [selectedFolderId]="selectedFolderId()"
+  [libraryChanged]="selectedLibraryId() !== media().libraryId"
+  [selectedProvider]="selectedProvider()"
+  [saving]="saving()"
+  [saved]="saved()"
+  (selectedLibraryIdChange)="onLibraryChange($event)"
+  (selectedFolderIdChange)="selectedFolderId.set($event)"
+  (selectedProviderChange)="selectedProvider.set($event)"
+  (save)="save()"
+/>

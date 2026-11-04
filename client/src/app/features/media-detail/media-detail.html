@@ -225,7 +225,7 @@
           (openDownload)="openDownloadModal()"
           (downloadSeries)="downloadSeries()"
           (openProfiles)="openProfilesModal()"
-          (openLibrary)="openLibraryModal()"
+          (openLibrary)="libraryDialog()?.open()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
           (deleteMedia)="deleteMedia()"
@@ -415,21 +415,7 @@
         (save)="saveProfiles()"
       />
 
-      <app-media-detail-library-modal
-        [kind]="m.type"
-        [libraries]="libraries()"
-        [selectedLibraryId]="selectedLibraryId()"
-        [folders]="selectedLibraryFolders()"
-        [selectedFolderId]="selectedFolderId()"
-        [libraryChanged]="selectedLibraryId() !== media()?.libraryId"
-        [selectedProvider]="selectedProvider()"
-        [saving]="libraryPatchSaving()"
-        [saved]="libraryPatchSaved()"
-        (selectedLibraryIdChange)="onLibraryChange($event)"
-        (selectedFolderIdChange)="selectedFolderId.set($event)"
-        (selectedProviderChange)="selectedProvider.set($event)"
-        (save)="saveLibrary()"
-      />
+      <app-media-library-dialog [media]="m" (updated)="onLibrarySaved($event)" />
       <app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
       <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
     </div>

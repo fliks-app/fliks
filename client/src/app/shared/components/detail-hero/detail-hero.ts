@@ -1,7 +1,10 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideEllipsisVertical, LucideHeart, LucideListPlus } from '@lucide/angular';
+import { MediaAdminService } from '../../../core/services/media-admin.service';
+import type { Media } from '../../../core/services/api/media.service';
+import { MediaLibraryDialogComponent } from '../media-library-dialog/media-library-dialog';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
@@ -13,7 +16,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
-import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
+import { resolveMediaAction, type CoreMediaActionId, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { resolveMenuContributions, type ResolvedMenuRow } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 import { TvRowDirective } from '../../directives/tv-row.directive';
@@ -30,6 +33,7 @@ import { SynopsisComponent } from '../synopsis/synopsis';
   imports: [
     HeroPosterComponent,
     HeroProgressComponent,
+    MediaLibraryDialogComponent,
     MobileFanartHeroComponent,
     SynopsisComponent,
     TranslatePipe,
@@ -49,6 +53,12 @@ export class DetailHeroComponent {
   readonly overview = input<string | null>(null);
   readonly progressPercent = input(0);
   readonly progressLabel = input<string | null>(null);
+  /** The full row: enables the shared admin entries (identify, refresh, library, delete). */
+  readonly media = input<Media | null>(null);
+  /** The page's own handlers; they win over the shared ones. */
+  readonly actions = input<MediaActionHandlers>({});
+  /** Shared entries this kind does not support. */
+  readonly exclude = input<CoreMediaActionId[]>([]);
 
   protected readonly navbar = inject(NavbarService);
   protected readonly tv = inject(TvService);
@@ -79,11 +89,25 @@ export class DetailHeroComponent {
     this.recommendations.open({ mediaId: this.mediaId() });
   }
 
-  private readonly handlers: MediaActionHandlers = {
-    'media.toggle-like': () => this.toggleLike(),
-    'media.add-to-playlist': () => this.addToPlaylist(),
-    'media.recommend': () => this.recommend(),
-  };
+  private readonly admin = inject(MediaAdminService);
+  private readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
+
+  private readonly handlers = computed<MediaActionHandlers>(() => {
+    const m = this.media();
+    const shared: MediaActionHandlers = {
+      'media.toggle-like': () => this.toggleLike(),
+      'media.add-to-playlist': () => this.addToPlaylist(),
+      'media.recommend': () => this.recommend(),
+      ...(m && {
+        'media.identify': () => this.admin.identify(m),
+        'media.refresh-metadata': () => void this.admin.refreshMetadata(m.id),
+        'media.edit-library': () => this.libraryDialog()?.open(),
+        'media.delete': () => void this.admin.deleteMedia(m),
+      }),
+    };
+    for (const id of this.exclude()) delete shared[id];
+    return { ...shared, ...this.actions() };
+  });
 
   private readonly menu = computed(() =>
     resolveMenuContributions({
@@ -101,7 +125,7 @@ export class DetailHeroComponent {
         surface: 'detail',
       },
       guards: { 'core.recommend': () => !this.auth.sharingDisabled() },
-      resolveAction: (id) => resolveMediaAction(id, this.handlers),
+      resolveAction: (id) => resolveMediaAction(id, this.handlers()),
       navigate: (path) => void this.router.navigate([path]),
     }),
   );

@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Échec",
     "subtitle_sync_failed": "Échec de la synchro",
     "delete_no_folder": "Ce titre n'a pas de dossier propre : seule l'entrée de la bibliothèque sera supprimée, le fichier reste sur le disque.",
-    "delete_success": "Titre supprimé de la bibliothèque."
+    "delete_success": "Titre supprimé de la bibliothèque.",
+    "edit_details": "Modifier les détails"
   },
   "requests": {
     "title": "Demandes",
@@ -3743,7 +3744,7 @@
     "reaction_section_bar": "Dans la barre",
     "reaction_section_animated": "Animés",
     "reaction_no_result": "Aucun emoji trouvé",
-    "chat_name_sep": "\u00a0: ",
+    "chat_name_sep": " : ",
     "tab_members": "Membres",
     "host_badge": "Hôte",
     "status_ready": "Prêt",

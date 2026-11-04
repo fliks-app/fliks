@@ -1344,7 +1344,8 @@
     "subtitle_failed": "Fehlgeschlagen",
     "subtitle_sync_failed": "Sync fehlgeschlagen",
     "delete_no_folder": "Dieser Titel hat keinen eigenen Ordner: Nur der Bibliothekseintrag wird entfernt, die Datei bleibt auf der Festplatte.",
-    "delete_success": "Titel aus der Bibliothek entfernt."
+    "delete_success": "Titel aus der Bibliothek entfernt.",
+    "edit_details": "Details bearbeiten"
   },
   "requests": {
     "title": "Anfragen",

@@ -1,7 +1,7 @@
 @let m = media();
 @let b = book();
 
-<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [posterUrl]="m.posterUrl" [overview]="m.overview" [progressPercent]="percent() ?? 0" [progressLabel]="progressLabel()">
+<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [media]="m" [actions]="actions()" [exclude]="['media.refresh-metadata']" [posterUrl]="m.posterUrl" [overview]="m.overview" [progressPercent]="percent() ?? 0" [progressLabel]="progressLabel()">
   @if (b) {
     <div heroMeta class="flex flex-col gap-2">
       @if (b.subtitle) {
@@ -112,12 +112,14 @@
       [heading]="'books_work.row_series' | translate: { series: s.name }"
       [items]="seriesItems()"
       [currentId]="m.id"
+      persistKey="book-series"
     />
   }
   @if (authorItems().length && b.authors[0]; as a) {
     <app-book-works-row
       [heading]="'books_work.row_author' | translate: { author: a.name }"
       [items]="authorItems()"
+      persistKey="book-author"
     />
   }
 
@@ -131,9 +133,33 @@
     <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
   }
 
-  @if (canEdit()) {
-    <app-book-wants [mediaId]="m.id" />
-    <app-book-sources [mediaId]="m.id" [editions]="b.editions" />
+  @if (similarItems().length) {
+    <app-book-works-row
+      [heading]="'books_work.row_similar' | translate"
+      [items]="similarItems()"
+      persistKey="book-similar"
+    />
   }
 </div>
+}
+
+@if (canEdit() && b) {
+  <dialog #wantsDialog class="modal" data-testid="wants-dialog" (close)="wantsOpen.set(false)">
+    <div class="modal-box max-w-lg">
+      <app-modal-header [title]="'wants.title' | translate" />
+      @if (wantsOpen()) {
+        <app-book-wants [mediaId]="m.id" />
+      }
+    </div>
+    <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+  </dialog>
+  <dialog #sourcesDialog class="modal" data-testid="sources-dialog" (close)="sourcesOpen.set(false)">
+    <div class="modal-box max-w-2xl">
+      <app-modal-header [title]="'books_work.sources' | translate" />
+      @if (sourcesOpen()) {
+        <app-book-sources [mediaId]="m.id" [editions]="b.editions" />
+      }
+    </div>
+    <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+  </dialog>
 }
