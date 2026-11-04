@@ -157,8 +157,14 @@ async fn bundled_skips_the_fliks_range_others_do_not() {
     let p = packages::find(&s.pool, id).await.unwrap().unwrap();
     assert_eq!(p.status, "active", "{:?}", p.status_reason);
     h.st.plugins.stop_all().await;
-    sqlx::query(r#"UPDATE plugin_packages SET origin = 'catalog' WHERE "pluginId" = $1"#)
+    let mut updated = future.clone();
+    updated["description"] = json!("catalog update");
+    let (_, origin, _) = row(&s, id).await;
+    assert_eq!(origin, "bundled");
+    // a catalog update keeps the bundled origin but is not the embedded archive
+    sqlx::query(r#"UPDATE plugin_packages SET archive = $2 WHERE "pluginId" = $1"#)
         .bind(id)
+        .bind(pack(&updated, "0.1.0", &w, Some(&key)))
         .execute(&s.pool)
         .await
         .unwrap();
