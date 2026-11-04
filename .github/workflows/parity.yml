@@ -45,15 +45,15 @@ jobs:
       - name: build fliks-server and the parity runner
         run: |
           cargo build -p fliks-server --features parity
-          mkdir -p "$RUNNER_TEMP/parity-bin"
-          cp target/debug/fliks-server "$RUNNER_TEMP/parity-bin/"
+          mkdir -p "$GITHUB_WORKSPACE/parity-bin"
+          cp target/debug/fliks-server "$GITHUB_WORKSPACE/parity-bin/"
           cargo test -p fliks-server --features parity --test it --no-run --message-format=json |
             jq -r 'select(.target.name == "it" and .executable) | .executable' | tail -1 |
-            xargs -I{} cp {} "$RUNNER_TEMP/parity-bin/it"
+            xargs -I{} cp {} "$GITHUB_WORKSPACE/parity-bin/it"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: parity-bin
-          path: ${{ runner.temp }}/parity-bin
+          path: ${{ github.workspace }}/parity-bin
           retention-days: 1
 
   run:
@@ -97,7 +97,7 @@ jobs:
       PGPASSWORD: fliks
       PARITY_MODES: ${{ matrix.modes }}
       PARITY_SHARD: ${{ matrix.shard }}
-      PARITY_PREBUILT: ${{ runner.temp }}/parity-bin
+      PARITY_PREBUILT: ${{ github.workspace }}/parity-bin
       HEAVY: ''
     steps:
       # The runner reads the scenarios and fixtures from the checkout.
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: parity-bin
-          path: ${{ runner.temp }}/parity-bin
+          path: ${{ github.workspace }}/parity-bin
       # Artifacts drop the exec bit.
       - run: chmod +x "$PARITY_PREBUILT"/*
       # The backup scenarios run pg_dump against the Postgres 18 service; the runner image ships 16.
