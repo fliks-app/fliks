@@ -338,6 +338,26 @@ async fn a_kind_without_a_special_case_lists_with_its_watched_state(pool: PgPool
     assert_eq!(find(&list).unwrap()["watched"], true);
 }
 
+#[sqlx::test(migrations = false)]
+async fn external_ids_list_declared_plugin_namespaces_only(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+             VALUES ('org.live:a', 'org.live', '^[0-9]+$', 'preserve', 'A');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             VALUES (1, 'movie', 'org.live:a', '7'), (1, 'movie', 'org.gone:a', '8');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (s, m) = c.get(&c.admin, "/api/media/1").await;
+    assert_eq!(s, 200, "{m}");
+    assert_eq!(
+        m["externalIds"],
+        json!([{"provider": "org.live:a", "value": "7"}])
+    );
+}
+
 /// Identify is a new identity: plugin pins of the media and its seasons go, with the id of the
 /// media pin's namespace, except what an explicit `preferredProvider` names.
 async fn identify_with_pins(pool: PgPool, body: Value) -> Vec<(Option<String>, Vec<String>)> {

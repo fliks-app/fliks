@@ -167,7 +167,7 @@ mod tests {
     #[tokio::test]
     async fn a_failed_list_serves_its_last_copy_but_discover_never() {
         let pool = sqlx::PgPool::connect_lazy("postgres://unused").unwrap();
-        let md = Metadata::new(pool, Default::default());
+        let md = Metadata::new(pool);
         let down = Arc::new(Lists(AtomicBool::new(false)));
         md.add_plugin(down.clone());
         let lang = fliks_domain::metadata::language::resolve(None, None);

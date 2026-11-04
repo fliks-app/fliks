@@ -53,6 +53,9 @@ pub enum Class<'a> {
     Plugin { plugin_id: &'a str, name: &'a str },
 }
 
+/// The longest name a plugin namespace has after its `<plugin id>:`.
+pub const MAX_NAMESPACE_NAME: usize = 32;
+
 /// `^[a-z][a-z0-9]{1,31}$` (core) or `<plugin id>:^[a-z][a-z0-9-]{0,31}$`; anything else is no namespace.
 pub fn classify(name: &str) -> Option<Class<'_>> {
     match name.split_once(':') {
@@ -65,7 +68,7 @@ pub fn classify(name: &str) -> Option<Class<'_>> {
             ok.then_some(Class::Core(name))
         }
         Some((plugin_id, local)) => {
-            let ok = (1..=32).contains(&local.len())
+            let ok = (1..=MAX_NAMESPACE_NAME).contains(&local.len())
                 && local.as_bytes()[0].is_ascii_lowercase()
                 && local
                     .bytes()

@@ -178,11 +178,12 @@ pub async fn load(db: &PgPool, known: &Known) -> sqlx::Result<()> {
 /// source under them, in one transaction; the process forgets them once it commits.
 pub async fn delete_data(db: &PgPool, known: &Known, plugin_id: &str) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
-    let names: Vec<String> =
-        sqlx::query_scalar(r#"SELECT name FROM provider_namespaces WHERE "pluginId" = $1"#)
-            .bind(plugin_id)
-            .fetch_all(&mut *tx)
-            .await?;
+    let names: Vec<String> = sqlx::query_scalar(
+        r#"SELECT name FROM provider_namespaces WHERE "pluginId" = $1 FOR UPDATE"#,
+    )
+    .bind(plugin_id)
+    .fetch_all(&mut *tx)
+    .await?;
     if names.is_empty() {
         return tx.commit().await;
     }

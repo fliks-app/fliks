@@ -380,9 +380,10 @@ pub async fn bibliography(st: &AppState, a: &Authed, id: i32) -> Result<Value, A
     let works = author_works(st, &lang, &p.name, Some(&olid), Priority::Interactive)
         .await
         .map_err(|e| unavailable("search", ANCHOR, &e))?;
+    let known = st.namespaces();
     let mut hits: Vec<Value> = works
         .into_iter()
-        .filter_map(|r| book_hit(&st.namespaces(), ANCHOR, &Value::Object(r)))
+        .filter_map(|r| book_hit(&known, ANCHOR, &Value::Object(r)))
         .collect();
     mark_existing(&st.db, a, MediaKind::Book, &mut hits).await?;
     Ok(Value::Array(hits))

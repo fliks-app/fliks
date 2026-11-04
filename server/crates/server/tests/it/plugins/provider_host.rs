@@ -254,13 +254,13 @@ async fn id_reads_stay_in_the_named_namespace() {
         return;
     };
     let md = &h.st.metadata;
-    assert_eq!(md.require(None).unwrap(), Ns::TMDB);
+    assert_eq!(md.require(&h.st.namespaces(), None).unwrap(), Ns::TMDB);
     assert_eq!(md.named(Some("tvdb")), None, "tvdb has no key");
     let e = work(&h, MediaKind::Series, "unauthorized", &lang)
         .await
         .unwrap_err();
     assert_eq!(e.status, Some(401));
-    let e = md.require(None).unwrap_err();
+    let e = md.require(&h.st.namespaces(), None).unwrap_err();
     assert_eq!(
         e.status().as_u16(),
         503,

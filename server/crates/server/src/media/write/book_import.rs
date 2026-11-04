@@ -307,7 +307,8 @@ async fn create_from_edition(
     join: Option<&[i32]>,
 ) -> Result<(i32, bool), AppError> {
     let (ns, value) = c.id;
-    let pick = edition_id(&st.namespaces(), ns, value)
+    let known = st.namespaces();
+    let pick = edition_id(&known, ns, value)
         .ok_or_else(|| AppError::bad_request(format!("{ns} names no book edition")))?;
     let lang = crate::metadata::library_language(st, c.target.id).await?;
     let mut ids = vec![(ns, pick)];
@@ -319,7 +320,7 @@ async fn create_from_edition(
             "the provider does not know this edition",
         ));
     };
-    for id in discovered(&st.namespaces(), &records) {
+    for id in discovered(&known, &records) {
         if !ids.contains(&id) {
             ids.push(id);
         }

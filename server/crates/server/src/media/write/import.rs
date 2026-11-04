@@ -161,7 +161,7 @@ pub async fn import_title(
     prio: Priority,
 ) -> Result<i32, AppError> {
     let lookup = (
-        st.metadata.require(provider.as_deref())?,
+        st.metadata.require(&st.namespaces(), provider.as_deref())?,
         external_id.clone(),
     );
     let found = service::import(
@@ -513,7 +513,7 @@ pub async fn import_in(
     if matches!(ns, Namespace::TMDB | Namespace::TVDB) && !media_type.is_video() {
         return Err(AppError::bad_request("the provider describes video only"));
     }
-    st.metadata.require(Some(ns.as_str()))?;
+    st.metadata.require(&st.namespaces(), Some(ns.as_str()))?;
     duplicate_ref(st, media_type, ns, value).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
@@ -545,7 +545,7 @@ pub async fn import_tmdb(
     let b = Body::new(v, &TMDB_FIELDS)?;
     let c = common(&b)?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
-    st.metadata.require(None)?;
+    st.metadata.require(&st.namespaces(), None)?;
     duplicate_ref(&st, c.media_type, Namespace::TMDB, &tmdb.to_string()).await?;
     let target = resolve_target(&st, &a, c.media_type, c.library, c.folder).await?;
     let id = create_identified(

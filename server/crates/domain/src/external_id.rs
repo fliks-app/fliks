@@ -4,7 +4,10 @@ use std::{collections::HashMap, fmt, sync::Arc};
 use crate::{
     books::isbn,
     js::rx,
-    plugins::provider::{Class, IdRule, classify},
+    plugins::{
+        MAX_PLUGIN_ID,
+        provider::{Class, IdRule, MAX_NAMESPACE_NAME, classify},
+    },
 };
 
 /// The largest id of a numeric provider: nine digits, as `media_external_ids` checks.
@@ -109,8 +112,9 @@ impl ExternalProvider {
     }
 }
 
-/// The longest `<pluginId>:<name>`: a 51-byte plugin id, `:`, a 32-byte name.
-const PLUGIN_NAME_MAX: usize = 51 + 1 + 32;
+/// The longest `<pluginId>:<name>`.
+const PLUGIN_NAME_MAX: usize = MAX_PLUGIN_ID + 1 + MAX_NAMESPACE_NAME;
+const _: () = assert!(PLUGIN_NAME_MAX <= u8::MAX as usize);
 
 /// A plugin's `<pluginId>:<name>`, as `classify` accepts it; stored inline so `Namespace` stays `Copy`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -295,8 +299,8 @@ mod tests {
     use super::ExternalProvider as P;
 
     #[test]
-    fn plugin_namespaces_parse_once_declared_and_are_never_unique() {
-        use super::{Namespace as N, Namespaces};
+    fn plugin_namespaces_parse_by_shape_and_declared_ones_carry_rule_and_label() {
+        use super::{MAX_NAMESPACE_NAME, MAX_PLUGIN_ID, Namespace as N, Namespaces};
         let mut known = Namespaces::default();
         assert_eq!(known.parse("tmdb"), Some(N::TMDB));
         assert_eq!(known.parse("org.ns.test:aid"), None);
@@ -333,7 +337,11 @@ mod tests {
         );
         assert_eq!(N::parse("nope"), None);
         assert_eq!(N::parse("org.ns.test:Bad"), None);
-        let longest = format!("{}:{}", "a".repeat(51), "b".repeat(32));
+        let longest = format!(
+            "{}:{}",
+            "a".repeat(MAX_PLUGIN_ID),
+            "b".repeat(MAX_NAMESPACE_NAME)
+        );
         assert_eq!(
             N::parse(&longest).map(|n| n.as_str().to_owned()),
             Some(longest)

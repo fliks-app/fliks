@@ -14,7 +14,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::Namespace,
+    external_id::{ExternalProvider, Namespace},
     media::{kind::MediaKind, wants::same_name},
     metadata::{language::Resolved, limiter::Priority},
 };
@@ -27,7 +27,9 @@ pub const ANCHOR: Namespace = Namespace::OPENLIBRARY;
 
 /// `v` as a work id of the anchor.
 pub(crate) fn work_id(v: &str) -> Option<String> {
-    ANCHOR.core()?.normalize(v).filter(|w| w.ends_with('W'))
+    ExternalProvider::OpenLibrary
+        .normalize(v)
+        .filter(|w| w.ends_with('W'))
 }
 
 pub(crate) fn text(m: &Map<String, Value>, key: &str) -> Option<String> {

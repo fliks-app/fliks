@@ -24,7 +24,11 @@ pub use types::{Credits, MetaError, PersonDetails, Upstream};
 
 use crate::{http::AppError, sync::RwLockExt};
 use axum::http::StatusCode;
-use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::merge::FieldOrder};
+use fliks_domain::{
+    external_id::{Namespace, Namespaces},
+    media::kind::MediaKind,
+    metadata::merge::FieldOrder,
+};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
@@ -44,8 +48,6 @@ struct Dynamic {
 /// The providers by registry key (`metadata-orchestrator.md` rules 8-10).
 pub struct Metadata {
     pub lang: LanguageCache,
-    /// A provider is named by a declared namespace only.
-    known: Arc<crate::plugins::namespaces::Known>,
     dynamic: RwLock<Dynamic>,
     db: sqlx::PgPool,
     flights: orchestrator::Flights,
@@ -54,10 +56,9 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    pub fn new(db: sqlx::PgPool, known: Arc<crate::plugins::namespaces::Known>) -> Self {
+    pub fn new(db: sqlx::PgPool) -> Self {
         Self {
             lang: LanguageCache::new(db.clone()),
-            known,
             db,
             flights: Default::default(),
             stale: Mutex::default(),
@@ -130,7 +131,7 @@ impl Metadata {
         wanted: impl Fn(&dyn MetadataProvider) -> bool,
     ) -> Option<Namespace> {
         let usable = |p: &Namespace| self.available(*p) && wanted(&*self.of(*p));
-        name.and_then(|n| self.known.get().parse(n))
+        name.and_then(Namespace::parse)
             .filter(usable)
             .or_else(|| order.into_iter().find(usable))
     }
@@ -181,16 +182,14 @@ impl Metadata {
 
     /// The named provider iff it is available.
     pub fn named(&self, name: Option<&str>) -> Option<Namespace> {
-        name.and_then(|n| self.known.get().parse(n))
+        name.and_then(Namespace::parse)
             .filter(|p| self.available(*p))
     }
 
     /// The named provider (TMDB when unnamed): 400 when unknown, 503 naming it when not available.
-    pub fn require(&self, name: Option<&str>) -> Result<Namespace, AppError> {
+    pub fn require(&self, known: &Namespaces, name: Option<&str>) -> Result<Namespace, AppError> {
         let name = name.unwrap_or(Namespace::TMDB.as_str());
-        let ns = self
-            .known
-            .get()
+        let ns = known
             .parse(name)
             .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {name}")))?;
         match self.answers(ns) {
@@ -213,14 +212,13 @@ impl Metadata {
     }
 
     /// Reads `metadata.provider_order.<kind>` of every kind; an entry that names no known provider is skipped.
-    pub async fn load_orders(&self) -> sqlx::Result<()> {
+    pub async fn load_orders(&self, known: &Namespaces) -> sqlx::Result<()> {
         let rows: Vec<(String, Option<String>)> = sqlx::query_as(
             r#"SELECT "key"::text, "value" FROM app_settings WHERE starts_with("key", $1)"#,
         )
         .bind(ORDER_PREFIX)
         .fetch_all(&self.db)
         .await?;
-        let known = self.known.get();
         let orders = rows
             .into_iter()
             .filter_map(|(k, v)| {
@@ -239,9 +237,9 @@ impl Metadata {
         Ok(())
     }
 
-    pub async fn settings_changed(&self, keys: &[String]) {
+    pub async fn settings_changed(&self, known: &Namespaces, keys: &[String]) {
         if keys.iter().any(|k| k.starts_with(ORDER_PREFIX))
-            && let Err(e) = self.load_orders().await
+            && let Err(e) = self.load_orders(known).await
         {
             tracing::warn!("metadata provider order not reloaded: {e}");
         }

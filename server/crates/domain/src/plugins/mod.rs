@@ -70,9 +70,11 @@ pub fn legal_permission_name(n: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
 }
 
-/// `^[a-z][a-z0-9]*(\.[a-z0-9]+)*$`, at most 51 chars.
+pub const MAX_PLUGIN_ID: usize = 51;
+
+/// `^[a-z][a-z0-9]*(\.[a-z0-9]+)*$`, at most `MAX_PLUGIN_ID` chars.
 pub fn legal_plugin_id(id: &str) -> bool {
-    id.len() <= 51
+    id.len() <= MAX_PLUGIN_ID
         && id.starts_with(|c: char| c.is_ascii_lowercase())
         && id.split('.').all(|p| {
             !p.is_empty()

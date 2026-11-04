@@ -70,7 +70,7 @@ impl AppState {
             ingest: Arc::default(),
             folder_moves: Arc::default(),
             busy: crate::busy::Busy::default(),
-            metadata: Arc::new(Metadata::new(db.clone(), plugins.namespaces.clone())),
+            metadata: Arc::new(Metadata::new(db.clone())),
             images: Arc::new(ImageStore::new()),
             xem: Arc::default(),
             system: Arc::default(),

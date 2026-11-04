@@ -174,23 +174,30 @@ pub async fn link(
     if provider == Namespace::OPENLIBRARY && !value.ends_with('W') {
         return Ok(Link::Linked);
     }
-    let done = sqlx::query!(
-        r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value)
-           SELECT $1::int4, $2::text, $3::text, $4::text
-           WHERE NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids
+    // The key share holds `delete_data` (which locks the rows first) off until this commits.
+    let done = sqlx::query_scalar!(
+        r#"WITH declared AS (SELECT 1 FROM provider_namespaces WHERE name = $3 FOR KEY SHARE),
+           ns AS (SELECT $3::text NOT LIKE '%:%' OR EXISTS (SELECT 1 FROM declared) AS live),
+           ins AS (
+             INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+             SELECT $1::int4, $2::text, $3::text, $4::text FROM ns
+             WHERE ns.live AND NOT ($5 AND EXISTS (SELECT 1 FROM media_external_ids
                                      WHERE kind = $2 AND provider = $3 AND value = $4 AND "mediaId" <> $1))
-           ON CONFLICT ("mediaId", provider) DO UPDATE SET value = EXCLUDED.value"#,
+             ON CONFLICT ("mediaId", provider) DO UPDATE SET value = EXCLUDED.value
+             RETURNING 1)
+           SELECT CASE WHEN (SELECT live FROM ns) THEN EXISTS (SELECT 1 FROM ins) END AS "linked""#,
         media_id,
         kind.as_str(),
         provider.as_str(),
         value,
         provider.is_unique()
     )
-    .execute(c)
+    .fetch_one(c)
     .await;
     match done {
-        Ok(r) if r.rows_affected() > 0 => Ok(Link::Linked),
-        Ok(_) => Ok(Link::Taken),
+        // `None`: the plugin namespace was deleted meanwhile, nothing is stored.
+        Ok(None) | Ok(Some(true)) => Ok(Link::Linked),
+        Ok(Some(false)) => Ok(Link::Taken),
         // The foreign key: the media is gone. The tmdb unique index: a concurrent writer took the id.
         Err(e) if db_code(&e).as_deref() == Some("23503") => Ok(Link::Gone),
         Err(e) if db_code(&e).as_deref() == Some("23505") => Ok(Link::Taken),
@@ -515,6 +522,40 @@ mod tests {
             link(&mut c, movie, MediaKind::Movie, tmdb, "604").await,
             Link::Gone
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_link_stores_nothing_for_a_namespace_deleted_meanwhile(db: sqlx::PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let movie = media(&db, MediaKind::Movie).await;
+        // a snapshot taken before `delete_data` removed the row
+        let mut stale = Namespaces::default();
+        let ns = stale
+            .declare("org.del:a", "A", "^[0-9]+$", "preserve")
+            .unwrap();
+        let l = link(&mut c, &stale, movie, MediaKind::Movie, ns, "7").await;
+        assert_eq!(l.unwrap(), Link::Linked);
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media_external_ids")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(n, 0);
+        sqlx::query(
+            r#"INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+               VALUES ('org.del:a', 'org.del', '^[0-9]+$', 'preserve', 'A')"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let l = link(&mut c, &stale, movie, MediaKind::Movie, ns, "7").await;
+        assert_eq!(l.unwrap(), Link::Linked);
+        let held: Vec<(String, String)> =
+            sqlx::query_as("SELECT provider::text, value FROM media_external_ids")
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        assert_eq!(held, [("org.del:a".to_owned(), "7".to_owned())]);
     }
 
     #[sqlx::test(migrations = false)]
