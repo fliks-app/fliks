@@ -293,6 +293,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         jobs::book_import::start,
         jobs::book_import::latest,
         jobs::book_import::queue,
+        metadata::providers,
         metadata::search_movie,
         metadata::search_tv,
         metadata::trending_movie,

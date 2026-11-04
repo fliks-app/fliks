@@ -26,6 +26,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import {
   RequestsService,
+  TitleKey,
   TitleRequestState,
   FliksRequestRow,
 } from '../../core/services/api/requests.service';
@@ -252,13 +253,16 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       if (this.destroyed) return;
       this.media.set(details);
       this.navbar.enterHeroPage(details.title, details.logoUrl);
+      this.tmdbReady =
+        this.provider() === 'tmdb' ||
+        (!!details.tmdbId && (await this.metadata.isTmdbAvailable().catch(() => false)));
       // Only relevant when the Request button could show: admins who can
       // import never see the "déjà demandé" badge anyway.
       if (this.canRequest()) {
-        await this.loadTitleState(details.tmdbId);
+        await this.loadTitleState(this.titleKey(details));
       }
       if (this.canManageRequests()) {
-        await this.loadPendingRequests(details.tmdbId);
+        await this.loadPendingRequests(this.titleKey(details));
       }
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
@@ -278,10 +282,19 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   /** Global active-request state for this title — drives the "déjà demandé"
    *  gate (any user) and the series profile lock. */
-  private async loadTitleState(tmdbId: number) {
+  private tmdbReady = false;
+
+  /** The TMDB id when the details carry one and TMDB answers, else the page's own provider and id. */
+  private titleKey(m: MetadataDetails): TitleKey {
+    return this.tmdbReady && m.tmdbId && m.tmdbId > 0
+      ? { tmdbId: m.tmdbId }
+      : { provider: this.provider(), externalId: this.externalId() };
+  }
+
+  private async loadTitleState(key: TitleKey) {
     try {
       this.titleState.set(
-        await this.requestsApi.getTitleState(tmdbId, this.type()),
+        await this.requestsApi.getTitleState(key, this.type()),
       );
     } catch { /* ignore */ }
   }
@@ -290,7 +303,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
    *  flips to the "déjà demandé" state without a manual refresh. */
   protected refreshExistingRequests() {
     const m = this.media();
-    if (m) void this.loadTitleState(m.tmdbId);
+    if (m) void this.loadTitleState(this.titleKey(m));
   }
 
   openImportModal() {
@@ -306,11 +319,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   }
 
   /** Pending requests on this title; bypasses the cache so an approve/decline shows on the next visit. */
-  private async loadPendingRequests(tmdbId: number) {
+  private async loadPendingRequests(key: TitleKey) {
     try {
       const page = await this.requestsApi.list(
         {
-          tmdbId,
+          ...key,
           mediaType: this.type(),
           status: 'pending',
           kind: 'add',
@@ -326,7 +339,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   private refreshPendingRequests() {
     const m = this.media();
-    if (m) void this.loadPendingRequests(m.tmdbId);
+    if (m) void this.loadPendingRequests(this.titleKey(m));
   }
 
   /** Approval imports the title, so this page's "not in the library yet" view
@@ -411,7 +424,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     this.requestModal()?.open({
       title: m.title,
       mediaType: type,
-      tmdbId: m.tmdbId,
+      titleKey: this.titleKey(m),
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,
       lockedQualityProfileId: state?.lockedQualityProfileId ?? null,

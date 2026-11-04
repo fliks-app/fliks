@@ -1046,7 +1046,7 @@ async fn write_routes_apply_the_library_acl(pool: PgPool) {
     .await;
     assert_eq!(
         (s, b["message"].clone()),
-        (400, json!("TMDB API key is not configured"))
+        (503, json!("The tmdb provider is not available"))
     );
     let (s, b) = call(
         &c,

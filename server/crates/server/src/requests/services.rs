@@ -1,11 +1,11 @@
-//! The media services the request flows call: TMDB, the image store, `importFromTmdb`, the media delete and the notifications.
+//! The media services the request flows call: the metadata providers, the image store, `importFromTmdb`, the media delete and the notifications.
 use super::{Art, ImportSpec, PortError, Removed, TitleFacts, TitleKey};
 use crate::{
     http::{AppError, auth::load_users},
     images::paths::{Target, Variant},
     libraries::library_ids_of,
     media::write::{
-        all_library_ids, import_book_for_request, import_for_request, remove_media_with_dir,
+        all_library_ids, import_book_for_request, import_in, remove_media_with_dir,
         resolve_target_in,
     },
     metadata::{books::ANCHOR, service::Details},
@@ -14,7 +14,6 @@ use crate::{
 };
 use fliks_domain::{
     acl::{Action, Permissions, Subject},
-    external_id::Namespace,
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -27,10 +26,10 @@ fn port(e: AppError) -> PortError {
     }
 }
 
-async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Result<Value, String> {
-    if !st.metadata.available(Namespace::TMDB) {
-        return Err("TMDB API key is not configured".into());
-    }
+async fn details_of(st: &AppState, key: &TitleKey) -> Result<Value, String> {
+    st.metadata
+        .require(Some(key.provider.as_str()))
+        .map_err(|e| e.text())?;
     let lang = st
         .metadata
         .lang
@@ -38,10 +37,10 @@ async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Res
         .await
         .map_err(|e| e.to_string())?;
     st.metadata
-        .of(Namespace::TMDB)
+        .of(key.provider)
         .fetch_work(
-            media_type,
-            &tmdb_id.to_string(),
+            key.media_type,
+            &key.external_id,
             &lang,
             Priority::Interactive,
         )
@@ -49,13 +48,10 @@ async fn tmdb_details(st: &AppState, media_type: MediaKind, tmdb_id: i32) -> Res
         .map_err(|e| e.to_string())
 }
 
-/// TMDB details of a title; an error fails the auto-approval criteria that need them closed.
-pub async fn title_facts(
-    st: &AppState,
-    media_type: MediaKind,
-    tmdb_id: i32,
-) -> Result<TitleFacts, String> {
-    let d = tmdb_details(st, media_type, tmdb_id).await?;
+/// The provider's details of a title; an error fails the auto-approval criteria that need them closed.
+/// `genreIds` is read when the provider serves them, else the genre criteria cannot match.
+pub async fn title_facts(st: &AppState, key: &TitleKey) -> Result<TitleFacts, String> {
+    let d = details_of(st, key).await?;
     let n = |k: &str| {
         d.get(k)
             .and_then(Value::as_i64)
@@ -98,12 +94,7 @@ pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
             continue;
         }
         if details.is_none() {
-            let tmdb_id = key
-                .tmdb_id()
-                .ok_or_else(|| format!("no metadata provider for {}", key.provider))?;
-            details = Some(Details::from_value(
-                &tmdb_details(st, media_type, tmdb_id).await?,
-            ));
+            details = Some(Details::from_value(&details_of(st, key).await?));
         }
         let d = details.as_ref().expect("read above");
         let url = if field == "posterUrl" {
@@ -180,7 +171,7 @@ pub async fn assert_import_target(
 }
 
 /// The libraries a user reaches: the requester's, or the approver's when the request has no requester.
-async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, sqlx::Error> {
+pub(super) async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, sqlx::Error> {
     let Some((row, role)) = load_users(&st.db, Some(user), false).await?.pop() else {
         return Ok(vec![]);
     };
@@ -217,18 +208,14 @@ pub async fn import_title(
             .filter_map(|n| i32::try_from(n).ok())
             .collect()
     });
-    let tmdb_id = spec.title.tmdb_id().ok_or_else(|| PortError {
-        status: 400,
-        message: format!("No metadata provider for {}", spec.title.provider),
-    })?;
-    import_for_request(
+    import_in(
         st,
         spec.title.media_type,
-        tmdb_id,
+        (spec.title.provider, &spec.title.external_id),
         (spec.quality_profile_id, spec.language_profile_id),
         (spec.library_id, spec.folder_id),
         added_by,
-        seasons,
+        (seasons, vec![]),
     )
     .await
     .map_err(port)

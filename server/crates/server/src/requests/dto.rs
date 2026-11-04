@@ -5,7 +5,7 @@ use crate::http::{
 };
 use crate::metadata::books::{ANCHOR, work_id};
 use fliks_domain::{
-    external_id::MAX_NUMERIC_ID,
+    external_id::{MAX_NUMERIC_ID, Namespace},
     language::parse_language_code,
     media::{
         family::Family,
@@ -82,10 +82,12 @@ impl CreateRequest {
     }
 }
 
-const VIDEO_KEYS: [&str; 9] = [
+const VIDEO_KEYS: [&str; 11] = [
     "mediaType",
     "kind",
     "tmdbId",
+    "provider",
+    "externalId",
     "title",
     "seasons",
     "qualityProfileId",
@@ -120,12 +122,22 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
             );
             None
         }
-        Some(m) => tmdb_key(&mut c, &o, m),
+        Some(m) => video_key(&mut c, &o, m),
         None => {
-            tmdb_key(&mut c, &o, MediaKind::Movie);
+            video_key(&mut c, &o, MediaKind::Movie);
             None
         }
     };
+    if delete
+        && let Some(k) = &key
+        && !book
+        && !k.provider.is_unique()
+    {
+        c.err(
+            "provider",
+            "a deletion request needs an id unique to one title",
+        );
+    }
     if !o.get("title").is_some_and(Value::is_string) {
         c.err("title", "must be a string");
     }
@@ -180,6 +192,70 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         language_profile_id: language.value(),
         library_id: library.value(),
         folder_id: folder.value(),
+    })
+}
+
+/// A video title: `tmdbId`, or the `provider` and `externalId` of a search result, never both.
+fn video_key(
+    c: &mut Check,
+    o: &Map<String, Value>,
+    media_type: MediaKind,
+) -> Option<super::TitleKey> {
+    if !o.contains_key("provider") && !o.contains_key("externalId") {
+        return tmdb_key(c, o, media_type);
+    }
+    if o.contains_key("tmdbId") {
+        c.err(
+            "tmdbId",
+            "must not be combined with provider and externalId",
+        );
+        return None;
+    }
+    let text = |k: &str| o.get(k).and_then(Value::as_str);
+    match (text("provider"), text("externalId")) {
+        (Some(p), Some(id)) => match provider_key(media_type, p, id) {
+            Ok(k) => Some(k),
+            Err(m) => {
+                c.err("provider", &m);
+                None
+            }
+        },
+        (p, e) => {
+            if p.is_none() {
+                c.err("provider", "must be a string");
+            }
+            if e.is_none() {
+                c.err("externalId", "must be a string");
+            }
+            None
+        }
+    }
+}
+
+/// A video title of a provider that serves video: TMDB and TVDB ids are canonical integers, a plugin
+/// namespace's id is in its own normal form.
+fn provider_key(
+    media_type: MediaKind,
+    provider: &str,
+    id: &str,
+) -> Result<super::TitleKey, String> {
+    let p = Namespace::parse(provider)
+        .filter(|p| p.core().is_none() || *p == Namespace::TMDB || *p == Namespace::TVDB)
+        .ok_or_else(|| format!("Unknown provider: {provider}"))?;
+    let external_id = match p.core() {
+        Some(_) => id
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|n| (1..=MAX_NUMERIC_ID).contains(n))
+            .map(|n| n.to_string()),
+        None => p.normalize(id),
+    }
+    .ok_or_else(|| format!("Invalid id for provider: {provider}"))?;
+    Ok(super::TitleKey {
+        media_type,
+        provider: p,
+        external_id,
     })
 }
 
@@ -305,7 +381,7 @@ pub struct List {
     pub status: Option<String>,
     pub kind: Option<String>,
     pub user_id: Option<i32>,
-    pub tmdb_id: Option<i32>,
+    pub title: Option<(String, String)>,
     pub media_type: Option<MediaKind>,
     pub page: i64,
     pub limit: i64,
@@ -313,11 +389,13 @@ pub struct List {
 
 /// `ListRequestsDto`: a repeated key is an array, which every validator rejects.
 pub fn list(q: &[(String, String)]) -> Res<List> {
-    const KNOWN: [&str; 7] = [
+    const KNOWN: [&str; 9] = [
         "status",
         "kind",
         "userId",
         "tmdbId",
+        "provider",
+        "externalId",
         "mediaType",
         "page",
         "limit",
@@ -376,9 +454,23 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
         }
     };
     let user_id = int("userId", None, None);
-    let tmdb_id = int("tmdbId", None, None);
+    let tmdb_id = int("tmdbId", None, None).filter(|t| *t != 0);
     let page = int("page", Some(1), None);
     let limit = int("limit", Some(1), Some(500));
+    if tmdb_id.is_some() && !all("provider").is_empty() {
+        errs.push("tmdbId must not be combined with provider and externalId".into());
+    }
+    let pair = match (all("provider").as_slice(), all("externalId").as_slice()) {
+        ([p], [e]) => Some(((*p).to_owned(), (*e).to_owned())),
+        ([], []) => None,
+        _ => {
+            errs.push("provider and externalId must be given once, together".into());
+            None
+        }
+    };
+    let title = tmdb_id
+        .map(|t| (Namespace::TMDB.as_str().to_owned(), t.to_string()))
+        .or(pair);
     if !errs.is_empty() {
         return Err(AppError::bad_request(errs));
     }
@@ -386,7 +478,7 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
         status,
         kind,
         user_id,
-        tmdb_id,
+        title,
         media_type,
         page: i64::from(page.unwrap_or(1)),
         limit: i64::from(limit.unwrap_or(25)),
@@ -406,17 +498,28 @@ pub fn title_state(q: &[(String, String)]) -> Res<super::TitleKey> {
             external_id: work,
         });
     }
+    let video = one("mediaType")
+        .and_then(MediaKind::parse)
+        .filter(|m| m.is_video());
+    let bad_type =
+        || AppError::bad_request(vec![format!("mediaType {}", MediaKind::one_of_message())]);
+    if let (Some(p), Some(e)) = (one("provider"), one("externalId")) {
+        if one("tmdbId").is_some() {
+            return Err(AppError::bad_request(vec![
+                "tmdbId must not be combined with provider and externalId",
+            ]));
+        }
+        let m = video.ok_or_else(bad_type)?;
+        return provider_key(m, p, e)
+            .map_err(|m| AppError::bad_request(vec![format!("provider {m}")]));
+    }
     let tmdb =
         int_param(one("tmdbId").ok_or_else(|| {
             AppError::bad_request("Validation failed (numeric string is expected)")
         })?)?;
-    match one("mediaType").and_then(MediaKind::parse) {
-        Some(m) if m.is_video() => Ok(super::TitleKey::tmdb(m, tmdb)),
-        _ => Err(AppError::bad_request(vec![format!(
-            "mediaType {}",
-            MediaKind::one_of_message()
-        )])),
-    }
+    video
+        .map(|m| super::TitleKey::tmdb(m, tmdb))
+        .ok_or_else(bad_type)
 }
 
 #[derive(Debug)]
@@ -604,6 +707,56 @@ mod tests {
         .unwrap();
         assert_eq!(c.seasons, Some(vec![2, 3]));
         assert_eq!((c.library_id, c.quality_profile_id), (Some(4), None));
+    }
+
+    #[test]
+    fn a_video_names_its_title_by_tmdb_id_or_by_provider_and_id() {
+        let by = create_request(json!({
+            "mediaType":"series","provider":"tvdb","externalId":"81189","title":"t"
+        }))
+        .unwrap();
+        assert_eq!(by.key.provider, Namespace::TVDB);
+        assert_eq!(by.key.external_id, "81189");
+        let both = json!({
+            "mediaType":"movie","tmdbId":5,"provider":"tmdb","externalId":"5","title":"t"
+        });
+        assert_eq!(
+            msgs(create_request(both)),
+            json!(["tmdbId must not be combined with provider and externalId"])
+        );
+        let bad = |p: &str, e: &str| {
+            msgs(create_request(
+                json!({"mediaType":"movie","provider":p,"externalId":e,"title":"t"}),
+            ))
+        };
+        assert_eq!(bad("nope", "1"), json!(["provider Unknown provider: nope"]));
+        assert_eq!(
+            bad("tmdb", "007x"),
+            json!(["provider Invalid id for provider: tmdb"])
+        );
+        assert_eq!(
+            bad("openlibrary", "1"),
+            json!(["provider Unknown provider: openlibrary"])
+        );
+    }
+
+    #[test]
+    fn title_state_and_list_take_either_key() {
+        let q = |s: &[(&str, &str)]| -> Vec<(String, String)> {
+            s.iter().map(|(a, b)| ((*a).into(), (*b).into())).collect()
+        };
+        let k = title_state(&q(&[
+            ("mediaType", "movie"),
+            ("provider", "tmdb"),
+            ("externalId", "9"),
+        ]))
+        .unwrap();
+        assert_eq!(k, super::super::TitleKey::tmdb(MediaKind::Movie, 9));
+        let l = list(&q(&[("tmdbId", "9")])).unwrap();
+        assert_eq!(l.title, Some(("tmdb".into(), "9".into())));
+        let l = list(&q(&[("provider", "tvdb"), ("externalId", "3")])).unwrap();
+        assert_eq!(l.title, Some(("tvdb".into(), "3".into())));
+        assert!(list(&q(&[("provider", "tvdb")])).is_err());
     }
 
     #[test]

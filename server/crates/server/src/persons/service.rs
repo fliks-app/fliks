@@ -104,7 +104,7 @@ async fn call_provider<T, Fut>(
 where
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
-    let primary = md.named(p.provider.as_deref());
+    let primary = md.named(p.provider.as_deref()).unwrap_or(Namespace::TMDB);
     let e = match call(primary).await {
         Ok(v) => return Ok((v, primary)),
         Err(e) => e,

@@ -1,5 +1,6 @@
 //! Queries of the `requests`, `request_comments` and `auto_approval_rules` tables (`requests.md` SQL section).
 use super::TitleKey;
+use crate::http::AppError;
 use crate::media::external_ids;
 use fliks_domain::{
     external_id::Namespace,
@@ -256,12 +257,71 @@ pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Optio
     .transpose()
 }
 
-/// The library media holding the title (rule 8).
-pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> sqlx::Result<Option<MediaRow>> {
-    match external_ids::find(db, t.media_type, t.provider, &t.external_id).await? {
-        Some(id) => media_by_id(db, id).await,
-        None => Ok(None),
+/// The library media holding the title (rule 8); 409 when a non-unique id names several.
+pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> Result<Option<MediaRow>, AppError> {
+    media_by_ref_on(&mut *db.acquire().await?, t).await
+}
+
+pub async fn media_by_ref_on(
+    db: &mut PgConnection,
+    t: &TitleKey,
+) -> Result<Option<MediaRow>, AppError> {
+    let held: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT "mediaId" FROM media_external_ids
+           WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 2"#,
+    )
+    .bind(t.media_type.as_str())
+    .bind(t.provider.as_str())
+    .bind(&t.external_id)
+    .fetch_all(&mut *db)
+    .await?;
+    match held.as_slice() {
+        [] => Ok(None),
+        [id] => Ok(media_by_id(&mut *db, *id).await?),
+        _ => Err(AppError::conflict(
+            "This title id names several titles in the library",
+        )),
     }
+}
+
+/// The title's own key and the other ids of the one library media holding it, so a title is one key.
+pub async fn title_keys(db: &mut PgConnection, t: &TitleKey) -> sqlx::Result<Vec<TitleKey>> {
+    let mut keys = vec![t.clone()];
+    if t.media_type == MediaKind::Book {
+        return Ok(keys);
+    }
+    let kind = t.media_type;
+    let Some(id) = external_ids::holder(&mut *db, kind, t.provider, &t.external_id).await? else {
+        return Ok(keys);
+    };
+    for e in external_ids::refs(&mut *db, id).await? {
+        let Some(provider) = Namespace::parse(&e.provider)
+            .filter(|p| p.core().is_none() || *p == Namespace::TMDB || *p == Namespace::TVDB)
+        else {
+            continue;
+        };
+        let k = TitleKey {
+            media_type: kind,
+            provider,
+            external_id: e.value,
+        };
+        if !keys.contains(&k)
+            && external_ids::holder(&mut *db, kind, provider, &k.external_id).await? == Some(id)
+        {
+            keys.push(k);
+        }
+    }
+    Ok(keys)
+}
+
+/// `active_adds` of every key of one title, oldest first.
+pub async fn active_adds_of(db: &mut PgConnection, keys: &[TitleKey]) -> sqlx::Result<Vec<Req>> {
+    let mut all = vec![];
+    for k in keys {
+        all.extend(active_adds(&mut *db, k).await?);
+    }
+    all.sort_by_key(|r| r.id);
+    Ok(all)
 }
 
 /// Libraries accepting `media_type`, by name, limited to `ids` when given (`findAccepting`).
@@ -775,7 +835,7 @@ pub struct Filter<'a> {
     pub libraries: Option<&'a [i32]>,
     pub status: Option<&'a str>,
     pub kind: Option<&'a str>,
-    pub tmdb_id: Option<i32>,
+    pub title: Option<(&'a str, &'a str)>,
     pub media_type: Option<MediaKind>,
 }
 
@@ -785,16 +845,16 @@ pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
         WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
         AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
         AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-        AND ($6::text IS NULL OR (r.provider = $8 AND r."externalId" = $6))
+        AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $8))
         AND ($7::text IS NULL OR r."mediaType" = $7)"#,
         f.id,
         f.user_id,
         f.libraries,
         f.status,
         f.kind,
-        f.tmdb_id.map(|t| t.to_string()),
+        f.title.map(|t| t.0),
         f.media_type.map(MediaKind::as_str),
-        external_ids::TMDB
+        f.title.map(|t| t.1)
     )
     .fetch_one(db)
     .await
@@ -835,8 +895,8 @@ pub async fn rows(
       'minimumAvailability', w."minimumAvailability", 'qualityProfileId', w."qualityProfileId",
       'languageProfileId', m."languageProfileId", 'addedById', m."addedById", 'path', NULL) END,
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
-) || CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('provider', r.provider,
-  'externalId', r."externalId", 'wants', r.wants) ELSE '{}'::jsonb END AS "json!: Value"
+) || jsonb_build_object('provider', r.provider, 'externalId', r."externalId")
+|| CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('wants', r.wants) ELSE '{}'::jsonb END AS "json!: Value"
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"
@@ -860,7 +920,7 @@ LEFT JOIN LATERAL (SELECT max(date) FILTER (WHERE kind = 'cinema') AS cinema_dat
 WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r."userId" = $2)
 AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
-AND ($6::text IS NULL OR (r.provider = $10 AND r."externalId" = $6))
+AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $13))
 AND ($7::text IS NULL OR r."mediaType" = $7)
 ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.id,
@@ -868,13 +928,14 @@ ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.libraries,
         f.status,
         f.kind,
-        f.tmdb_id.map(|t| t.to_string()),
+        f.title.map(|t| t.0),
         f.media_type.map(MediaKind::as_str),
         limit,
         offset,
         external_ids::TMDB,
         external_ids::TVDB,
-        external_ids::IMDB
+        external_ids::IMDB,
+        f.title.map(|t| t.1)
     )
     .fetch_all(db)
     .await

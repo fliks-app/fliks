@@ -23,6 +23,7 @@
           "approvedBy": null,
           "approvedById": null,
           "declinedReason": null,
+          "externalId": "9004",
           "fanartUrl": null,
           "id": 11,
           "kind": "add",
@@ -38,6 +39,7 @@
           "mediaId": null,
           "mediaType": "series",
           "posterUrl": null,
+          "provider": "tmdb",
           "qualityProfile": {
             "id": 1
           },

@@ -101,7 +101,7 @@ export class SearchStateService {
   readonly filteredExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
     const rows = this.externalResults().filter(
-      (r) => r.existingMediaId == null && !localTmdbIds.has(r.tmdbId),
+      (r) => r.existingMediaId == null && (r.tmdbId == null || !localTmdbIds.has(r.tmdbId)),
     );
     return this.applyPanelFilters(rows);
   });
@@ -110,7 +110,7 @@ export class SearchStateService {
   readonly ownedExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
     const rows = this.externalResults().filter(
-      (r) => r.existingMediaId != null && !localTmdbIds.has(r.tmdbId),
+      (r) => r.existingMediaId != null && (r.tmdbId == null || !localTmdbIds.has(r.tmdbId)),
     );
     return this.applyPanelFilters(rows);
   });

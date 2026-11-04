@@ -117,19 +117,14 @@ pub async fn resolve_target_in(
     })
 }
 
-async fn duplicate(
+/// 409 when exactly one library title holds the id.
+async fn duplicate_ref(
     st: &AppState,
     media_type: MediaKind,
-    tvdb: bool,
-    id: i32,
+    ns: Namespace,
+    value: &str,
 ) -> Result<(), AppError> {
-    let p = if tvdb {
-        Namespace::TVDB
-    } else {
-        Namespace::TMDB
-    };
-    let hit = external_ids::find_numeric(&st.db, media_type, p, id).await?;
-    match hit {
+    match external_ids::holder(&st.db, media_type, ns, value).await? {
         Some(_) => Err(AppError::conflict("This title is already in the library")),
         None => Ok(()),
     }
@@ -157,7 +152,10 @@ pub async fn import_title(
     imp: Import,
     prio: Priority,
 ) -> Result<i32, AppError> {
-    let lookup = (st.metadata.named(provider.as_deref()), external_id.clone());
+    let lookup = (
+        st.metadata.require(provider.as_deref())?,
+        external_id.clone(),
+    );
     let found = service::import(
         st,
         Lookup {
@@ -479,29 +477,8 @@ pub async fn all_library_ids(db: &sqlx::PgPool) -> Result<Vec<i32>, sqlx::Error>
         .await
 }
 
-/// `importFromTmdb` for a request approval (rules 11, 25): no caller ACL, the requester is `addedBy`.
-pub async fn import_for_request(
-    st: &AppState,
-    media_type: MediaKind,
-    tmdb_id: i32,
-    profiles: (Option<i32>, Option<i32>),
-    target: (Option<i32>, Option<i32>),
-    added_by: Option<i32>,
-    seasons: Option<Vec<i32>>,
-) -> Result<i32, AppError> {
-    import_in(
-        st,
-        media_type,
-        (Namespace::TMDB, &tmdb_id.to_string()),
-        profiles,
-        target,
-        added_by,
-        (seasons, vec![]),
-    )
-    .await
-}
-
-/// `import_for_request` for an id of any namespace a provider serves.
+/// `importFromTmdb` for a request approval (rules 11, 25): no caller ACL, the requester is `addedBy`, for an id
+/// of any namespace a provider serves.
 pub async fn import_in(
     st: &AppState,
     media_type: MediaKind,
@@ -514,16 +491,8 @@ pub async fn import_in(
     if matches!(ns, Namespace::TMDB | Namespace::TVDB) && !media_type.is_video() {
         return Err(AppError::bad_request("the provider describes video only"));
     }
-    if ns == Namespace::TMDB {
-        if !st.metadata.available(ns) {
-            return Err(AppError::bad_request("TMDB API key is not configured"));
-        }
-        if let Ok(tmdb) = value.parse() {
-            duplicate(st, media_type, false, tmdb).await?;
-        }
-    } else if !st.metadata.available(ns) {
-        return Err(AppError::bad_request("the provider is not available"));
-    }
+    st.metadata.require(Some(ns.as_str()))?;
+    duplicate_ref(st, media_type, ns, value).await?;
     let all = all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, media_type, library_id, folder_id).await?;
     let imp = Import {
@@ -559,10 +528,8 @@ pub async fn import_tmdb(
     let b = Body::new(v, &TMDB_FIELDS)?;
     let c = common(&b)?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
-    if !st.metadata.available(Namespace::TMDB) {
-        return Err(AppError::bad_request("TMDB API key is not configured"));
-    }
-    duplicate(&st, c.media_type, false, tmdb).await?;
+    st.metadata.require(None)?;
+    duplicate_ref(&st, c.media_type, Namespace::TMDB, &tmdb.to_string()).await?;
     let imp = prepare(&st, &a, &c, None).await?;
     let id = import_title(
         &st,
@@ -589,7 +556,15 @@ pub async fn import_media(
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let c = common(&b)?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;
-    let provider = b.one_of("provider", &["tmdb", "tvdb"])?.flatten();
+    let plugin =
+        b.0.get("provider")
+            .and_then(Value::as_str)
+            .and_then(Namespace::parse)
+            .filter(|p| p.core().is_none());
+    let provider = match plugin {
+        Some(p) => Some(p.as_str().to_owned()),
+        None => b.one_of("provider", &["tmdb", "tvdb"])?.flatten(),
+    };
     let seasons = match b.0.get("monitoredSeasons") {
         None | Some(Value::Null) => None,
         Some(Value::Array(a)) => Some(
@@ -612,15 +587,32 @@ pub async fn import_media(
             ]));
         }
     };
-    let n: i32 = external
-        .trim()
-        .parse()
-        .ok()
-        .filter(|n| *n > 0)
-        .ok_or_else(|| {
-            AppError::bad_request(vec!["externalId must be a number string".to_owned()])
-        })?;
-    duplicate(&st, c.media_type, provider.as_deref() == Some("tvdb"), n).await?;
+    let external = match plugin {
+        Some(p) => {
+            let id = p.normalize(&external).ok_or_else(|| {
+                AppError::bad_request(vec![format!("externalId is not a {} id", p.as_str())])
+            })?;
+            duplicate_ref(&st, c.media_type, p, &id).await?;
+            id
+        }
+        None => {
+            let n: i32 = external
+                .trim()
+                .parse()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or_else(|| {
+                    AppError::bad_request(vec!["externalId must be a number string".to_owned()])
+                })?;
+            let ns = if provider.as_deref() == Some("tvdb") {
+                Namespace::TVDB
+            } else {
+                Namespace::TMDB
+            };
+            duplicate_ref(&st, c.media_type, ns, &n.to_string()).await?;
+            external
+        }
+    };
     let imp = prepare(&st, &a, &c, seasons).await?;
     let id = import_title(&st, provider, external, imp, Priority::Interactive).await?;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))

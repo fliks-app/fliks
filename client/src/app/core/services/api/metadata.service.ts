@@ -1,12 +1,16 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
 import { KIND_REGISTRY, assertNever } from '../../media-kinds';
 
 export interface MetadataSearchResult {
-  tmdbId: number;
+  /** Absent on a result of a provider that is not TMDB. */
+  tmdbId?: number;
+  /** The id in `provider`'s namespace, stamped by the server. */
+  externalId?: string;
   tvdbId?: number | null;
   imdbId?: string | null;
   provider: string;
@@ -26,7 +30,7 @@ export interface MetadataSearchResult {
 
 /** TVDB reports `tmdbId: 0` for works TheMovieDB doesn't know, so every such row would share that key. */
 export function searchResultKey(r: MetadataSearchResult): string {
-  return `${r.provider}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
+  return `${r.provider}:${r.externalId ?? ''}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
 }
 
 /** The ids worth sending to the API — the 0 above is not an id. */
@@ -36,7 +40,7 @@ export function searchResultIds(r: MetadataSearchResult): {
   imdbId?: string;
 } {
   return {
-    ...(r.tmdbId > 0 ? { tmdbId: r.tmdbId } : {}),
+    ...(r.tmdbId && r.tmdbId > 0 ? { tmdbId: r.tmdbId } : {}),
     ...(r.tvdbId ? { tvdbId: r.tvdbId } : {}),
     ...(r.imdbId ? { imdbId: r.imdbId } : {}),
   };
@@ -191,18 +195,6 @@ export class MetadataService {
     return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/discover/tv', { params: this.discoverParams(opts) }));
   }
 
-  getMovieDetails(tmdbId: number) {
-    return firstValueFrom(
-      this.http.get<MetadataDetails>(`/api/metadata/movie/${tmdbId}`),
-    );
-  }
-
-  getTvDetails(tmdbId: number) {
-    return firstValueFrom(
-      this.http.get<MetadataDetails>(`/api/metadata/tv/${tmdbId}`),
-    );
-  }
-
   searchByKind(type: MediaType, q: string, year?: number, provider?: string, mediaId?: number) {
     switch (type) {
       case 'movie': return this.searchMovie(q, year, provider, mediaId);
@@ -253,37 +245,34 @@ export class MetadataService {
     }
   }
 
-  detailsByKind(type: MediaType, tmdbId: number) {
-    switch (type) {
-      case 'movie': return this.getMovieDetails(tmdbId);
-      case 'series': return this.getTvDetails(tmdbId);
-      case 'book': throw new Error('Books go through BooksApiService');
-      case 'comic': throw new Error('Comics have no external metadata provider yet');
-      default: return assertNever(type);
-    }
-  }
-
   /** Season numbers + episode counts only: one provider call, unlike
    *  {@link getSeasons} which fetches every episode of every season. */
+  /** Whether TMDB answers: a request is keyed by `tmdbId` only then. */
+  async isTmdbAvailable(): Promise<boolean> {
+    const r = await firstValueFrom(this.http.get<{ tmdb: boolean }>('/api/metadata/providers'));
+    return r.tmdb;
+  }
+
   getSeasonStubs(provider: string, externalId: string) {
     return firstValueFrom(
-      this.http.get<SeasonStub[]>(`/api/metadata/${provider}/tv/${externalId}/season-stubs`),
+      this.http.get<SeasonStub[]>(`/api/metadata/${provider}/tv/${encodeURIComponent(externalId)}/season-stubs`),
     );
   }
 
   getSeasons(provider: string, externalId: string) {
     return firstValueFrom(
       this.http.get<MetadataSeason[]>(
-        `/api/metadata/${provider}/tv/${externalId}/seasons`,
+        `/api/metadata/${provider}/tv/${encodeURIComponent(externalId)}/seasons`,
       ),
     );
   }
 
   /** Provider-aware detail fetch */
-  getDetails(provider: string, mediaType: MediaType, externalId: string) {
+  getDetails(provider: string, mediaType: MediaType, externalId: string, opts: { silent?: boolean } = {}) {
     const segment = KIND_REGISTRY[mediaType].providerSegment;
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent);
     return firstValueFrom(
-      this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${externalId}`),
+      this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${encodeURIComponent(externalId)}`, { context }),
     );
   }
 

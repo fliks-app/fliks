@@ -31,6 +31,7 @@ pub(crate) type Res = Result<Json<Value>, AppError>;
 pub fn router() -> Router<AppState> {
     let m = "/api/metadata";
     super::books::routes::routes(Router::new())
+        .route(&format!("{m}/providers"), get(providers))
         .route(&format!("{m}/search/movie"), get(search_movie))
         .route(&format!("{m}/search/tv"), get(search_tv))
         .route(&format!("{m}/trending/movie"), get(trending_movie))
@@ -122,6 +123,24 @@ async fn preferred(db: &PgPool, media_id: Option<&str>) -> Result<Option<String>
     Ok(row.and_then(|r| r.media_pref.or(r.library_pref)))
 }
 
+/// Fills what a plugin record leaves out from the namespace that answered, so the client can link it.
+fn stamp(records: &mut [Value], ns: Namespace, kind: MediaKind) {
+    for r in records {
+        let ext = r["ids"][ns.as_str()].as_str().map(str::to_owned);
+        let Some(o) = r.as_object_mut() else { continue };
+        o.entry("provider").or_insert_with(|| ns.as_str().into());
+        o.entry("mediaType").or_insert_with(|| kind.as_str().into());
+        if let Some(e) = ext {
+            o.entry("externalId").or_insert(e.into());
+        }
+    }
+}
+
+/// The `(provider, externalId)` a record names.
+fn title_ref(r: &Value) -> Option<(&str, &str)> {
+    Some((r["provider"].as_str()?, r["externalId"].as_str()?))
+}
+
 /// Rule 12: `existingMediaId` / `existingMediaType`, only for libraries the caller can read.
 async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Result<Value, AppError> {
     if results.is_empty() {
@@ -166,6 +185,26 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
         .map(|r| (r.id, r.tmdb_id, r.tvdb_id))
         .collect();
     }
+    let refs: Vec<(&str, &str)> = results.iter().filter_map(title_ref).collect();
+    let held: Vec<(i32, String, String)> = if refs.is_empty() {
+        vec![]
+    } else {
+        let libs = accessible_library_ids(db, a).await?;
+        let (ps, vs): (Vec<&str>, Vec<&str>) = refs.into_iter().unzip();
+        sqlx::query_as(
+            r#"SELECT m.id, e.provider::text, e.value FROM media m
+               JOIN media_external_ids e ON e."mediaId" = m.id AND e.kind = m.type
+               WHERE m.type = $1 AND m."libraryId" = ANY($2)
+                 AND (e.provider::text, e.value) IN (SELECT * FROM unnest($3::text[], $4::text[]))
+               ORDER BY m.id ASC"#,
+        )
+        .bind(kind.as_str())
+        .bind(&libs)
+        .bind(&ps)
+        .bind(&vs)
+        .fetch_all(db)
+        .await?
+    };
     let out = results
         .into_iter()
         .map(|mut r| {
@@ -175,7 +214,13 @@ async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Resul
                     .rfind(|m| col(m).map(i64::from) == Some(want))
                     .map(|m| m.0)
             };
-            let hit = find("tmdbId", |m| m.1).or_else(|| find("tvdbId", |m| m.2));
+            let named = || {
+                let (p, e) = title_ref(&r)?;
+                held.iter().rfind(|h| h.1 == p && h.2 == e).map(|h| h.0)
+            };
+            let hit = find("tmdbId", |m| m.1)
+                .or_else(|| find("tvdbId", |m| m.2))
+                .or_else(named);
             r["existingMediaId"] = hit.map_or(Value::Null, Value::from);
             r["existingMediaType"] = hit.map_or(Value::Null, |_| kind.as_str().into());
             r
@@ -206,19 +251,32 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
         None => preferred(&st.db, bare(&q, "mediaId").as_deref()).await?,
     };
     let kind = MediaKind::from_tv(tv);
-    let primary = md.resolve(name.as_deref(), kind).unwrap_or(Namespace::TMDB);
+    let Some(primary) = md.resolve(name.as_deref(), kind) else {
+        return Ok(Json(json!([])));
+    };
     let search = Search::text(kind, query, year(bare(&q, "year").as_deref()));
     let lang = lang(&st).await?;
     let go = Priority::Interactive;
+    let mut answered = primary;
     let mut found = md.of(primary).search(&search, &lang, go).await;
     if let (Ok(r), Some(other)) = (&found, md.fallback(primary, search.kind))
         && r.is_empty()
     {
         tracing::info!("no {} result, trying {}", primary.as_str(), other.as_str());
+        answered = other;
         found = md.of(other).search(&search, &lang, go).await;
     }
-    let results = found.map_err(|e| unavailable("search", primary, &e))?;
+    let mut results = found.map_err(|e| unavailable("search", answered, &e))?;
+    stamp(&mut results, answered, kind);
     Ok(Json(enrich(&st.db, &a, results, tv).await?))
+}
+
+/// Whether the TMDB provider answers: a client keys a request by `tmdbId` only then.
+#[utoipa::path(get, path = "/api/metadata/providers", responses((status = 200)))]
+pub async fn providers(State(st): State<AppState>, _a: Authed) -> Res {
+    Ok(Json(
+        json!({"tmdb": st.metadata.available(Namespace::TMDB)}),
+    ))
 }
 
 #[utoipa::path(get, path = "/api/metadata/search/movie", responses((status = 200)))]
@@ -238,19 +296,18 @@ async fn listed(
     name: &str,
     params: &[(String, String)],
 ) -> Res {
+    let kind = MediaKind::from_tv(tv);
+    let Some(id) = st.metadata.lister(kind) else {
+        return Ok(Json(json!([])));
+    };
     let l = lang(st).await?;
     let v = st
         .metadata
-        .list(
-            MediaKind::from_tv(tv),
-            name,
-            params,
-            &l,
-            Priority::Interactive,
-        )
+        .list(id, kind, name, params, &l, Priority::Interactive)
         .await
         .map_err(|(p, e)| fail(p, &e, false))?;
-    let items = v.as_array().cloned().unwrap_or_default();
+    let mut items = v.as_array().cloned().unwrap_or_default();
+    stamp(&mut items, id, kind);
     Ok(Json(enrich(&st.db, a, items, tv).await?))
 }
 
@@ -297,16 +354,14 @@ pub async fn upcoming_tv(State(st): State<AppState>, a: Authed) -> Res {
 }
 
 async fn genres(st: &AppState, tv: bool) -> Res {
+    let kind = MediaKind::from_tv(tv);
+    let Some(id) = st.metadata.lister(kind) else {
+        return Ok(Json(json!([])));
+    };
     let l = lang(st).await?;
     let v = st
         .metadata
-        .list(
-            MediaKind::from_tv(tv),
-            "genres",
-            &[],
-            &l,
-            Priority::Interactive,
-        )
+        .list(id, kind, "genres", &[], &l, Priority::Interactive)
         .await
         .map_err(|(p, e)| fail(p, &e, false))?;
     Ok(Json(v))
@@ -355,6 +410,7 @@ fn target(md: &Metadata, provider: &str, id: &str) -> Result<(Namespace, String)
     Ok((p, id))
 }
 
+type Legacy = Result<PathParams<String>, AppError>;
 pub(crate) type Ids = Result<PathParams<(String, String)>, AppError>;
 
 async fn details(st: &AppState, p: Namespace, kind: MediaKind, id: &str) -> Res {
@@ -409,28 +465,19 @@ pub async fn season_stubs(State(st): State<AppState>, _a: Authed, ids: Ids) -> R
 }
 
 #[utoipa::path(get, path = "/api/metadata/movie/{tmdbId}", responses((status = 200)))]
-pub async fn legacy_movie(
-    State(st): State<AppState>,
-    _a: Authed,
-    id: Result<PathParams<i32>, AppError>,
-) -> Res {
-    details(&st, Namespace::TMDB, MediaKind::Movie, &id?.0.to_string()).await
+pub async fn legacy_movie(State(st): State<AppState>, _a: Authed, id: Legacy) -> Res {
+    let (p, id) = target(&st.metadata, "tmdb", &id?.0)?;
+    details(&st, p, MediaKind::Movie, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
-pub async fn legacy_tv(
-    State(st): State<AppState>,
-    _a: Authed,
-    id: Result<PathParams<i32>, AppError>,
-) -> Res {
-    details(&st, Namespace::TMDB, MediaKind::Series, &id?.0.to_string()).await
+pub async fn legacy_tv(State(st): State<AppState>, _a: Authed, id: Legacy) -> Res {
+    let (p, id) = target(&st.metadata, "tmdb", &id?.0)?;
+    details(&st, p, MediaKind::Series, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
-pub async fn legacy_seasons(
-    State(st): State<AppState>,
-    _a: Authed,
-    id: Result<PathParams<i32>, AppError>,
-) -> Res {
-    seasons_of(&st, Namespace::TMDB, &id?.0.to_string(), false).await
+pub async fn legacy_seasons(State(st): State<AppState>, _a: Authed, id: Legacy) -> Res {
+    let (p, id) = target(&st.metadata, "tmdb", &id?.0)?;
+    seasons_of(&st, p, &id, false).await
 }

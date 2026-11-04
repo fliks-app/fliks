@@ -9,22 +9,21 @@ use fliks_domain::{
 use serde_json::Value;
 
 impl Metadata {
-    /// The first available provider of the kind's order that serves lists, else TMDB.
-    pub fn lister(&self, kind: MediaKind) -> Namespace {
+    /// The first available provider of the kind's order that serves lists.
+    pub fn lister(&self, kind: MediaKind) -> Option<Namespace> {
         self.pick(None, self.order(kind), |p| p.has_lists(kind))
-            .unwrap_or(Namespace::TMDB)
     }
 
-    /// `name` for `kind`; the last good copy answers when the live call fails, except for `discover`.
+    /// `name` of `id` for `kind`; the last good copy answers when the live call fails, except for `discover`.
     pub async fn list(
         &self,
+        id: Namespace,
         kind: MediaKind,
         name: &str,
         params: &[(String, String)],
         lang: &Resolved,
         p: Priority,
     ) -> Result<Value, (Namespace, Upstream)> {
-        let id = self.lister(kind);
         let live = self.of(id).list(kind, name, params, lang, p).await;
         if name == "discover" {
             return live.map_err(|e| (id, e));
@@ -174,8 +173,15 @@ mod tests {
         let ask = |name: &'static str, params: Vec<(String, String)>| {
             let (md, lang) = (&md, &lang);
             async move {
-                md.list(MediaKind::Movie, name, &params, lang, Priority::Interactive)
-                    .await
+                md.list(
+                    Namespace::TMDB,
+                    MediaKind::Movie,
+                    name,
+                    &params,
+                    lang,
+                    Priority::Interactive,
+                )
+                .await
             }
         };
         let day = vec![("window".to_owned(), "day".to_owned())];

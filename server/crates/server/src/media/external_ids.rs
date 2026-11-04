@@ -55,6 +55,29 @@ pub async fn find(
     .await
 }
 
+/// The media of `kind` holding `value` when exactly one does: an id held twice (non-unique namespaces)
+/// names no single title.
+pub async fn holder(
+    db: impl PgExecutor<'_>,
+    kind: MediaKind,
+    provider: Namespace,
+    value: &str,
+) -> sqlx::Result<Option<i32>> {
+    let held: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT "mediaId" FROM media_external_ids
+           WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 2"#,
+    )
+    .bind(kind.as_str())
+    .bind(provider.as_str())
+    .bind(value)
+    .fetch_all(db)
+    .await?;
+    Ok(match held.as_slice() {
+        [id] => Some(*id),
+        _ => None,
+    })
+}
+
 /// Every id the media holds, by provider, as the domain events name them.
 pub async fn refs(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<ExternalId>> {
     let rows: Vec<(String, String)> = sqlx::query_as(

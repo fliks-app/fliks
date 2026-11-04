@@ -42,7 +42,7 @@ function setup(libraries: LibrarySummary[]) {
   const fixture = TestBed.createComponent(RequestModalComponent);
   fixture.componentRef.setInput('libraries', libraries);
   fixture.detectChanges();
-  fixture.componentInstance.open({ title: 'T', mediaType: 'movie', tmdbId: 1 });
+  fixture.componentInstance.open({ title: 'T', mediaType: 'movie', titleKey: { tmdbId: 1 } });
   return { cmp: fixture.componentInstance, sent };
 }
 

@@ -147,16 +147,17 @@ pub async fn candidates(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<C
     let mut rules = db::rules_enabled(&st.db).await?;
     rules.retain(|r| could_match(&r.criteria.0, a, dto.media_type));
     let scoped = dto.seasons.as_deref().is_some_and(|s| !s.is_empty());
-    let facts = if let Some(tmdb_id) = dto.key.tmdb_id()
+    let facts = if dto.media_type.is_video()
         && rules.iter().any(|r| reads_metadata(&r.criteria.0, scoped))
     {
-        match services::title_facts(st, dto.media_type, tmdb_id).await {
+        match services::title_facts(st, &dto.key).await {
             Ok(f) => Some(f),
             Err(e) => {
                 tracing::warn!(
-                    "Auto-approval: metadata lookup failed for {} {}, genre/year/season criteria cannot match: {e}",
+                    "Auto-approval: metadata lookup failed for {} {}:{}, genre/year/season criteria cannot match: {e}",
                     dto.media_type,
-                    tmdb_id
+                    dto.key.provider,
+                    dto.key.external_id
                 );
                 None
             }

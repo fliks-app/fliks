@@ -103,15 +103,15 @@ export class ImportModalComponent {
   async open(params: {
     title: string;
     mediaType: MediaType;
-    tmdbId: number;
+    tmdbId?: number;
     provider?: string;
     externalId?: string;
   }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
-    this.tmdbId.set(params.tmdbId);
+    this.tmdbId.set(params.tmdbId ?? 0);
     this.provider.set(params.provider ?? 'tmdb');
-    this.externalId.set(params.externalId ?? String(params.tmdbId));
+    this.externalId.set(params.externalId ?? String(params.tmdbId ?? ''));
     this.error.set('');
     this.importing.set(false);
     this.seasons.set([]);

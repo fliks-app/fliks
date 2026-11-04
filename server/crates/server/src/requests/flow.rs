@@ -144,8 +144,12 @@ async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -
 }
 
 /// Rule 12a.
-async fn assert_no_active_duplicate(tx: &mut PgConnection, dto: &CreateRequest) -> Res<()> {
-    let existing = db::active_adds(&mut *tx, &dto.key()).await?;
+async fn assert_no_active_duplicate(
+    tx: &mut PgConnection,
+    dto: &CreateRequest,
+    keys: &[TitleKey],
+) -> Res<()> {
+    let existing = db::active_adds_of(&mut *tx, keys).await?;
     if existing.is_empty() {
         return Ok(());
     }
@@ -233,17 +237,26 @@ fn want_label(w: &WantSpec) -> String {
 type Profiles = (Option<i32>, Option<i32>);
 
 /// Rule 12b: the profiles of the earliest active request, else of the library row.
-async fn existing_series_profiles(st: &AppState, key: &TitleKey) -> Res<Option<Profiles>> {
-    if let Some(r) = db::active_adds(&st.db, key).await?.first() {
+async fn existing_series_profiles(
+    conn: &mut PgConnection,
+    key: &TitleKey,
+    keys: &[TitleKey],
+) -> Res<Option<Profiles>> {
+    if let Some(r) = db::active_adds_of(&mut *conn, keys).await?.first() {
         return Ok(Some((r.quality_profile_id, r.language_profile_id)));
     }
-    Ok(db::media_by_ref(&st.db, key)
-        .await?
-        .map(|m| (m.quality_profile_id, m.language_profile_id)))
+    // a title held twice has no single library row to lock the profiles to
+    match db::media_by_ref_on(conn, key).await {
+        Ok(m) => Ok(m.map(|m| (m.quality_profile_id, m.language_profile_id))),
+        Err(e) if e.status() == StatusCode::CONFLICT => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
-    let active = db::active_adds(&st.db, key).await?;
+    let mut conn = st.db.acquire().await?;
+    let keys = db::title_keys(&mut conn, key).await?;
+    let active = db::active_adds_of(&mut conn, &keys).await?;
     let series = key.media_type.has_seasons();
     let whole = series && active.iter().any(|r| r.scope().is_none());
     let mut seasons: Vec<i64> = active
@@ -253,7 +266,7 @@ pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
     seasons.sort_unstable();
     seasons.dedup();
     let locked = if series {
-        existing_series_profiles(st, key).await?
+        existing_series_profiles(&mut conn, key, &keys).await?
     } else {
         None
     };
@@ -312,6 +325,13 @@ pub async fn ensure_media(
             let Some(existing) = db::media_by_ref(&st.db, &spec.title).await? else {
                 return Ok(None);
             };
+            if let Some(l) = existing.library_id.filter(|l| *l != 0)
+                && !services::libraries_of(st, approver).await?.contains(&l)
+            {
+                return Err(AppError::forbidden(
+                    "You do not have access to the library holding this title",
+                ));
+            }
             let covers = profiles::envelope_covers(
                 &st.db,
                 (existing.quality_profile_id, existing.language_profile_id),
@@ -348,7 +368,7 @@ async fn row_json(st: &AppState, id: i32) -> Res<Map<String, Value>> {
         libraries: None,
         status: None,
         kind: None,
-        tmdb_id: None,
+        title: None,
         media_type: None,
     };
     match db::rows(&st.db, &f, 1, 0).await?.into_iter().next() {
@@ -483,6 +503,16 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         return create_delete(st, a, &dto).await;
     }
     let key = dto.key();
+    if let Some(p) = st.metadata.get(key.provider)
+        && key.media_type.is_video()
+        && !p.supports(key.media_type)
+    {
+        return Err(AppError::bad_request(format!(
+            "The {} provider does not serve {}",
+            key.provider, key.media_type
+        )));
+    }
+    let keys = db::title_keys(&mut *st.db.acquire().await?, &key).await?;
     // network first: no lock, no connection held while TMDB answers
     let candidates = rules::candidates(st, a, &dto).await?;
     let limited = a.user.quotas.limit(dto.media_type) != 0;
@@ -501,10 +531,10 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             .map_err(|e| lock_err(e, false))?;
     }
     check_quota(&mut tx, a, dto.media_type).await?;
-    db::lock_title(&mut tx, &key)
+    db::lock_titles(&mut tx, &keys)
         .await
         .map_err(|e| lock_err(e, true))?;
-    assert_no_active_duplicate(&mut tx, &dto).await?;
+    assert_no_active_duplicate(&mut tx, &dto, &keys).await?;
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
         assert_exist(st, None, None, Some(l)).await?;
@@ -523,7 +553,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         crate::libraries::assert_folder_in_library(&mut *tx, library_id, f).await?;
     }
     if dto.media_type.has_seasons()
-        && let Some((q, l)) = existing_series_profiles(st, &key).await?
+        && let Some((q, l)) = existing_series_profiles(&mut tx, &key, &keys).await?
     {
         (dto.quality_profile_id, dto.language_profile_id) = (q, l);
     }
@@ -946,6 +976,8 @@ pub async fn comment_add(st: &AppState, a: &Authed, id: i32, message: &str) -> R
         "mediaType",
         "kind",
         "tmdbId",
+        "provider",
+        "externalId",
         "title",
         "status",
         "declinedReason",
@@ -1004,7 +1036,7 @@ pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
         libraries: libraries.as_deref(),
         status: q.status.as_deref(),
         kind: q.kind.as_deref(),
-        tmdb_id: q.tmdb_id.filter(|t| *t != 0),
+        title: q.title.as_ref().map(|(p, e)| (p.as_str(), e.as_str())),
         media_type: q.media_type,
     };
     let offset = (q.page - 1).saturating_mul(q.limit);

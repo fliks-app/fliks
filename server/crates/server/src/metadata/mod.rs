@@ -18,7 +18,8 @@ pub use provider::{Call, EditionRef, MetadataProvider, Search};
 pub use routes::*;
 pub use types::{Credits, MetaError, PersonDetails, Upstream};
 
-use crate::sync::RwLockExt;
+use crate::{http::AppError, sync::RwLockExt};
+use axum::http::StatusCode;
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind, metadata::merge::FieldOrder};
 use std::{
     collections::HashMap,
@@ -133,11 +134,24 @@ impl Metadata {
         self.pick(name, self.order(kind), |p| p.supports(kind))
     }
 
-    /// The named provider iff it is available, else TMDB: an id is read in one namespace only.
-    pub fn named(&self, name: Option<&str>) -> Namespace {
+    /// The named provider iff it is available.
+    pub fn named(&self, name: Option<&str>) -> Option<Namespace> {
         name.and_then(Namespace::parse)
             .filter(|p| self.available(*p))
-            .unwrap_or(Namespace::TMDB)
+    }
+
+    /// The named provider (TMDB when unnamed): 400 when unknown, 503 naming it when not available.
+    pub fn require(&self, name: Option<&str>) -> Result<Namespace, AppError> {
+        let name = name.unwrap_or(Namespace::TMDB.as_str());
+        let ns = Namespace::parse(name)
+            .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {name}")))?;
+        match self.available(ns) {
+            true => Ok(ns),
+            false => Err(AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("The {} provider is not available", ns.as_str()),
+            )),
+        }
     }
 
     /// The first other provider of the kind's order that is available and supports `kind`.

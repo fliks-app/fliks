@@ -10,11 +10,11 @@
       "as": "admin",
       "expect": {
         "body": {
-          "error": "Bad Request",
-          "message": "TMDB API key is not configured",
-          "statusCode": 400
+          "error": "Service Unavailable",
+          "message": "The tmdb provider is not available",
+          "statusCode": 503
         },
-        "status": 400
+        "status": 503
       },
       "method": "POST",
       "path": "/api/requests/1/approve"
@@ -50,6 +50,7 @@
             }
           ],
           "declinedReason": null,
+          "externalId": "9001",
           "fanartUrl": null,
           "id": 1,
           "kind": "add",
@@ -59,6 +60,7 @@
           "mediaId": null,
           "mediaType": "movie",
           "posterUrl": null,
+          "provider": "tmdb",
           "qualityProfileId": null,
           "seasons": null,
           "status": "pending",

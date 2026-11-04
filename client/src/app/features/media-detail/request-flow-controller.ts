@@ -76,7 +76,7 @@ export class RequestFlowController {
   private async loadTitleState(tmdbId: number | null, mediaType: MediaType) {
     if (tmdbId == null) return;
     try {
-      this.titleState.set(await this.deps.requests.getTitleState(tmdbId, mediaType));
+      this.titleState.set(await this.deps.requests.getTitleState({ tmdbId }, mediaType));
     } catch {
       /* swallowed; global interceptor surfaces it */
     }
@@ -144,7 +144,7 @@ export class RequestFlowController {
     this.host.requestModal()?.open({
       title: m.title,
       mediaType: m.type,
-      tmdbId: m.tmdbId,
+      titleKey: { tmdbId: m.tmdbId },
       alreadyRequestedSeasons: this.requestedSeasons(),
       ...extra,
       profilesLocked: state?.profilesLocked ?? false,
