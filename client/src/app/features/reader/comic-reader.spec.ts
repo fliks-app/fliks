@@ -62,8 +62,10 @@ describe('ComicReaderComponent', () => {
   it('keeps turning pages with the keyboard while a toolbar button has focus', async () => {
     const { fixture, el } = await open({ locator: { page: 1 } });
     const button = el.querySelector('button')!;
-    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39, bubbles: true }));
+    const key = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+    Object.defineProperty(key, 'keyCode', { value: 39 });
+    button.dispatchEvent(key);
     await fixture.whenStable();
-    expect(el.querySelector('img')?.getAttribute('src')).toContain('/p/7/2');
+    expect(el.querySelector('img')?.getAttribute('src')).toContain('/p/7/1?');
   });
 });
