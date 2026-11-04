@@ -29,8 +29,6 @@ const DIMS_BUDGET: u64 = 64 * 1024 * 1024;
 pub const SOLID_CACHE_BYTES: u64 = 256 * 1024 * 1024;
 /// Uncompressed bytes of a `ComicInfo.xml`.
 pub const MAX_INFO_BYTES: u64 = 1024 * 1024;
-/// Bytes a solid archive may decode while looking for its `ComicInfo.xml`.
-const INFO_SCAN_BYTES: u64 = 256 * 1024 * 1024;
 const PAGE_EXTS: [&str; 5] = ["jpg", "jpeg", "png", "webp", "gif"];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -270,6 +268,9 @@ pub(super) mod local {
     use super::*;
     use crate::comics::ar::{Fail, Reader, Src};
 
+    /// Bytes a solid archive may decode while looking for its `ComicInfo.xml`.
+    const INFO_SCAN_BYTES: u64 = 256 * 1024 * 1024;
+
     fn map(f: Fail) -> Error {
         match f {
             Fail::Corrupt => Error::Corrupt,
@@ -419,10 +420,6 @@ pub(super) mod local {
     use super::*;
 
     pub fn list(_: &Path) -> Result<Listing, Error> {
-        Err(Error::Unsupported("libarchive"))
-    }
-
-    pub fn names(_: &Path) -> Result<Vec<(usize, String)>, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 
