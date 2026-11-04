@@ -3169,10 +3169,11 @@ mod book_ingest {
         let l = shelf(&c).await;
         let m = media(&c, l, "Mirelune", "book").await;
         epub(&lib.join("Mirelune/Mirelune.epub"));
-        let reg = books::register(
+        let reg = books::register_language(
             &c.st,
             m,
             &placed(&c, &["Mirelune/Gone.epub", "Mirelune/Mirelune.epub"]),
+            Some("en"),
         )
         .await
         .unwrap();
