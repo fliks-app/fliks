@@ -230,7 +230,8 @@ async fn merge_issues(
     .await?;
     sqlx::query(
         r#"INSERT INTO items (id, "mediaId", "editionId", monitored, title, "airDate")
-           SELECT u.id, $1, $2, (SELECT monitored FROM media WHERE id = $1), u.title, u.date::date
+           SELECT u.id, $1, $2, (SELECT monitored FROM media WHERE id = $1) AND (u.date IS NULL OR u.date::date > CURRENT_DATE),
+                  u.title, u.date::date
            FROM UNNEST($3::int[], $4::text[], $5::text[]) AS u(id, title, date)"#,
     )
     .bind(media)

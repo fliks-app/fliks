@@ -390,10 +390,9 @@ async fn import_creates_the_volume_and_its_fileless_issues(pool: PgPool) {
     assert_eq!(issues[0]["title"], "Start");
     assert_eq!(issues[0]["releaseDate"], "2016-06-01");
     let id = v["id"].as_i64().unwrap() as i32;
-    assert!(
-        c.issues(id).await.iter().all(|r| r.5),
-        "a monitored volume wants every issue"
-    );
+    // only the undated issues are wanted: the dated ones are back issues
+    let flags: Vec<bool> = c.issues(id).await.iter().map(|r| r.5).collect();
+    assert_eq!(flags, [true, false, true, false]);
     let ext: String = sqlx::query_scalar(
         r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = $2"#,
     )
@@ -931,4 +930,23 @@ async fn a_long_run_imports_in_one_go(pool: PgPool) {
     let (s, v) = c.import(json!({})).await;
     assert_eq!(s, 201);
     assert_eq!(v["comic"]["issues"].as_array().unwrap().len(), 4000);
+}
+
+#[sqlx::test(migrations = false)]
+async fn only_coming_issues_of_a_monitored_volume_are_wanted(pool: PgPool) {
+    let mut f = Fake::default();
+    f.works.insert("42".into(), work());
+    f.children.insert(
+        "42".into(),
+        vec![
+            issue("1", json!(1), "issue", None, Some("2016-06-01")),
+            issue("2", json!(2), "issue", None, Some("2999-01-01")),
+            issue("3", json!(3), "issue", None, None),
+        ],
+    );
+    let c = ctx(pool, Some(Arc::new(f))).await;
+    let (_, v) = c.import(json!({})).await;
+    let id = v["id"].as_i64().unwrap() as i32;
+    let flags: Vec<bool> = c.issues(id).await.iter().map(|r| r.5).collect();
+    assert_eq!(flags, [false, true, true]);
 }
