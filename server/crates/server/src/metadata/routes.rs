@@ -271,12 +271,21 @@ async fn search(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> 
     Ok(Json(enrich(&st.db, &a, results, tv).await?))
 }
 
-/// Whether the TMDB provider answers: a client keys a request by `tmdbId` only then.
+/// Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available providers serving each video kind.
 #[utoipa::path(get, path = "/api/metadata/providers", responses((status = 200)))]
 pub async fn providers(State(st): State<AppState>, _a: Authed) -> Res {
-    Ok(Json(
-        json!({"tmdb": st.metadata.available(Namespace::TMDB)}),
-    ))
+    let serving = |kind| -> Vec<Value> {
+        st.metadata
+            .order(kind)
+            .into_iter()
+            .filter(|p| st.metadata.available(*p) && st.metadata.of(*p).supports(kind))
+            .map(|p| json!({"provider": p.as_str(), "label": p.label()}))
+            .collect()
+    };
+    Ok(Json(json!({
+        "tmdb": st.metadata.available(Namespace::TMDB),
+        "serving": {"movie": serving(MediaKind::Movie), "series": serving(MediaKind::Series)},
+    })))
 }
 
 #[utoipa::path(get, path = "/api/metadata/search/movie", responses((status = 200)))]

@@ -78,6 +78,37 @@ pub async fn holder(
     })
 }
 
+/// `find` among the media of `library` (a non-unique id can sit in several libraries).
+pub async fn find_in_library(
+    db: impl PgExecutor<'_>,
+    kind: MediaKind,
+    provider: Namespace,
+    value: &str,
+    library: i32,
+) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT e."mediaId" FROM media_external_ids e JOIN media m ON m.id = e."mediaId"
+           WHERE e.kind = $1 AND e.provider = $2 AND e.value = $3 AND m."libraryId" = $4
+           ORDER BY e."mediaId" LIMIT 1"#,
+    )
+    .bind(kind.as_str())
+    .bind(provider.as_str())
+    .bind(value)
+    .bind(library)
+    .fetch_optional(db)
+    .await
+}
+
+/// Whether the media holds an id of a plugin namespace.
+pub async fn has_plugin_id(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1 AND provider LIKE '%:%')"#,
+    )
+    .bind(media_id)
+    .fetch_one(db)
+    .await
+}
+
 /// Every id the media holds, by provider, as the domain events name them.
 pub async fn refs(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<ExternalId>> {
     let rows: Vec<(String, String)> = sqlx::query_as(

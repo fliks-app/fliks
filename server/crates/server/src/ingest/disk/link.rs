@@ -20,10 +20,9 @@ pub(super) async fn link_files(
     if let Some(l) = media.library_id
         && l != d.library_id
     {
-        return Err(AppError::bad_request(format!(
-            "Media already belongs to another library (\"{}\")",
-            media.library_name.clone().unwrap_or_default()
-        )));
+        return Err(AppError::bad_request(
+            "Media already belongs to another library",
+        ));
     }
     let guard = st.ingest.media.lock(media.id).await;
     let (mut errors, mut slot) = (vec![], false);
@@ -46,7 +45,10 @@ pub(super) async fn link_files(
                 };
             (linked, 0)
         };
-    let identified = media.tmdb_id.is_some() || media.tvdb_id.is_some() || media.imdb_id.is_some();
+    let identified = media.tmdb_id.is_some()
+        || media.tvdb_id.is_some()
+        || media.imdb_id.is_some()
+        || crate::media::external_ids::has_plugin_id(&st.db, media.id).await?;
     if media.has_seasons()
         && slot
         && identified
@@ -450,18 +452,44 @@ pub(super) async fn find_or_import(
     a: &Authed,
     d: &RelinkDto,
 ) -> Result<(MediaRow, bool), AppError> {
-    let ext = d.external_id.clone().unwrap_or_default();
-    let n: i32 = ext.trim().parse().ok().filter(|n| *n > 0).ok_or_else(|| {
-        AppError::bad_request(vec!["externalId must be a number string".to_owned()])
+    let raw = d.external_id.clone().unwrap_or_default();
+    let ns = match d.provider.as_deref() {
+        None | Some("tmdb") => Namespace::TMDB,
+        Some(p) => Namespace::parse(p)
+            .filter(|n| match n.core() {
+                Some(_) => *n == Namespace::TVDB,
+                None => st
+                    .metadata
+                    .get(*n)
+                    .is_some_and(|m| m.supports(d.media_type)),
+            })
+            .ok_or_else(|| AppError::bad_request(format!("Unknown provider: {p}")))?,
+    };
+    let ext = match ns.core() {
+        Some(_) => raw
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|n| *n > 0)
+            .map(|n| n.to_string()),
+        None => ns.normalize(raw.trim()),
+    }
+    .ok_or_else(|| {
+        AppError::bad_request(vec!["externalId is not an id of the provider".to_owned()])
     })?;
-    let tvdb = d.provider.as_deref() == Some("tvdb");
     let lookup = async || -> Result<Option<MediaRow>, AppError> {
-        let p = if tvdb {
-            Namespace::TVDB
+        let id = if ns.is_unique() {
+            crate::media::external_ids::find(&st.db, d.media_type, ns, &ext).await?
         } else {
-            Namespace::TMDB
+            crate::media::external_ids::find_in_library(
+                &st.db,
+                d.media_type,
+                ns,
+                &ext,
+                d.library_id,
+            )
+            .await?
         };
-        let id = crate::media::external_ids::find_numeric(&st.db, d.media_type, p, n).await?;
         Ok(match id {
             Some(id) => load_media(&st.db, id).await?,
             None => None,
@@ -470,7 +498,7 @@ pub(super) async fn find_or_import(
     if let Some(m) = lookup().await? {
         return Ok((m, false));
     }
-    let provider = d.provider.clone().filter(|p| p == "tmdb" || p == "tvdb");
+    let provider = Some(ns.as_str().to_owned());
     let imported = async {
         let target =
             mw::resolve_target(st, a, d.media_type, Some(d.library_id), d.folder_id).await?;

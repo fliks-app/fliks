@@ -84,6 +84,29 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     expect(searchTv).toHaveBeenCalledWith('A Series', undefined, undefined, 795);
   });
 
+  it('identifies a plugin result by its namespace and id', async () => {
+    const { cmp, identify } = setup();
+
+    await cmp.apply({ ...tvdbOnly, provider: 'org.x:aid', externalId: '9' });
+
+    expect(identify).toHaveBeenCalledWith(795, {
+      tvdbId: 4242,
+      imdbId: 'tt0499308',
+      provider: 'org.x:aid',
+      externalId: '9',
+    });
+  });
+
+  it('searches the provider picked in the form', async () => {
+    const { cmp, searchTv } = setup();
+    cmp.formTitle.set('A Series');
+    cmp.formProvider.set('org.x:aid');
+
+    await cmp.search();
+
+    expect(searchTv).toHaveBeenCalledWith('A Series', undefined, 'org.x:aid', 795);
+  });
+
   it('keys the in-flight spinner by result, not by the shared 0 id', async () => {
     const { cmp } = setup();
     const other = { ...tvdbOnly, tvdbId: 5150 };

@@ -777,6 +777,69 @@ async fn delete_request_approve_removes_the_media_and_resolves_every_duplicate(p
 }
 
 #[sqlx::test(migrations = false)]
+async fn approving_a_delete_never_removes_a_media_that_changed_identity(pool: PgPool) {
+    let c = ctx(pool).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (7, 'M', 'movie', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, 'tmdb', '73' FROM m"#).await;
+    let del = json!({"mediaType": "movie", "kind": "delete", "tmdbId": 73, "title": "M"});
+    let (s, a) = call(&c, "POST", "/api/requests", &c.user, del).await;
+    assert_eq!(s, 201, "{a}");
+    q(
+        &c.pool(),
+        "UPDATE media_external_ids SET value = '99' WHERE \"mediaId\" = 7",
+    )
+    .await;
+    let (s, r) = call(
+        &c,
+        "POST",
+        &format!("/api/requests/{}/approve", rid(&a)),
+        &c.admin,
+        json!(null),
+    )
+    .await;
+    assert_eq!(s, 409, "{r}");
+    let kept: i64 = sqlx::query_scalar("SELECT count(*) FROM media WHERE id = 7")
+        .fetch_one(&c.pool())
+        .await
+        .unwrap();
+    assert_eq!(kept, 1, "the media is not deleted");
+    let pending: i64 = sqlx::query_scalar("SELECT count(*) FROM requests WHERE status = 'pending'")
+        .fetch_one(&c.pool())
+        .await
+        .unwrap();
+    assert_eq!(pending, 1, "the request is not claimed");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_delete_request_needs_a_readable_library_and_a_detail_hides_the_media(pool: PgPool) {
+    let c = ctx(pool).await;
+    q(&c.pool(), r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (9, 'Hidden', '["movie"]'::jsonb)"#).await;
+    q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (8, 'H', 'movie', 9) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, 'tmdb', '74' FROM m"#).await;
+    let del = json!({"mediaType": "movie", "kind": "delete", "tmdbId": 74, "title": "H"});
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, del).await;
+    assert_eq!(
+        (s, r["message"].clone()),
+        (
+            400,
+            json!("This title is not in the library and cannot be deleted")
+        ),
+        "{r}"
+    );
+    let add = json!({"mediaType": "movie", "tmdbId": 75, "title": "A"});
+    let (s, a) = call(&c, "POST", "/api/requests", &c.user, add).await;
+    assert_eq!(s, 201, "{a}");
+    q(&c.pool(), "UPDATE requests SET \"mediaId\" = 8").await;
+    let (s, r) = call(
+        &c,
+        "GET",
+        &format!("/api/requests/{}", rid(&a)),
+        &c.user,
+        json!(null),
+    )
+    .await;
+    assert_eq!((s, &r["media"]), (200, &Value::Null), "{r}");
+}
+
+#[sqlx::test(migrations = false)]
 async fn delete_request_rolls_back_when_the_removal_fails(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId") VALUES (8, 'M', 'movie', 1) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (72)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;

@@ -268,3 +268,63 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_title_is_identified_by_its_namespace_and_deleted_through_a_request() {
+    let Some(w) = wasm("fixture_provider") else {
+        return;
+    };
+    let Some(s) = Scratch::create("notmdbid").await else {
+        return;
+    };
+    let h = harness(&s, "notmdbid", |_| {}).await;
+    allow_unsigned(&h).await;
+    series_library(&h).await;
+    let r = h
+        .install(&pack(&template("fixture-provider"), "0.1.0", &w, None))
+        .await;
+    assert_eq!(r["status"], "active", "{r}");
+    held(&h, 200, &[]).await;
+
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/media/200/identify",
+            Some(&h.admin),
+            Some(json!({"provider": NS, "externalId": "1"})),
+        )
+        .await;
+    assert_eq!(st, 201, "{r}");
+    assert_eq!(r["preferredProvider"], NS, "{r}");
+    assert_eq!(
+        r["externalIds"],
+        json!([{"provider": NS, "value": "1"}]),
+        "{r}"
+    );
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/media/200/identify",
+            Some(&h.admin),
+            Some(json!({"provider": NS})),
+        )
+        .await;
+    assert_eq!(st, 400, "a provider without its id: {r}");
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/media/200/identify",
+            Some(&h.admin),
+            Some(json!({"provider": NS, "externalId": "1", "preferredProvider": "tvdb"})),
+        )
+        .await;
+    assert_eq!(st, 400, "a pair and a pin contradict: {r}");
+
+    let del = json!({"kind": "delete", "mediaType": "series", "provider": NS, "externalId": "1", "title": "T"});
+    let (st, r) = h
+        .call("POST", "/api/requests", Some(&h.admin), Some(del))
+        .await;
+    assert_eq!((st, &r["kind"]), (201, &json!("delete")), "{r}");
+    h.finish().await;
+    s.finish().await;
+}

@@ -33,6 +33,11 @@ export function searchResultKey(r: MetadataSearchResult): string {
   return `${r.provider}:${r.externalId ?? ''}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
 }
 
+export interface ProvidersInfo {
+  tmdb: boolean;
+  serving: Record<'movie' | 'series', { provider: string; label: string }[]>;
+}
+
 /** The ids worth sending to the API — the 0 above is not an id. */
 export function searchResultIds(r: MetadataSearchResult): {
   tmdbId?: number;
@@ -245,14 +250,22 @@ export class MetadataService {
     }
   }
 
-  /** Season numbers + episode counts only: one provider call, unlike
-   *  {@link getSeasons} which fetches every episode of every season. */
-  /** Whether TMDB answers: a request is keyed by `tmdbId` only then. */
-  async isTmdbAvailable(): Promise<boolean> {
-    const r = await firstValueFrom(this.http.get<{ tmdb: boolean }>('/api/metadata/providers'));
-    return r.tmdb;
+  private providers() {
+    return firstValueFrom(this.http.get<ProvidersInfo>('/api/metadata/providers'));
   }
 
+  /** Whether TMDB answers: a request is keyed by `tmdbId` only then. */
+  async isTmdbAvailable(): Promise<boolean> {
+    return (await this.providers()).tmdb;
+  }
+
+  /** The available providers serving a video kind, in the admin's order. */
+  async providersServing(kind: 'movie' | 'series') {
+    return (await this.providers()).serving[kind];
+  }
+
+  /** Season numbers + episode counts only: one provider call, unlike
+   *  {@link getSeasons} which fetches every episode of every season. */
   getSeasonStubs(provider: string, externalId: string) {
     return firstValueFrom(
       this.http.get<SeasonStub[]>(`/api/metadata/${provider}/tv/${encodeURIComponent(externalId)}/season-stubs`),

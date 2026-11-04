@@ -1066,6 +1066,8 @@
     "identify_field_imdb": "ID IMDb",
     "identify_field_tmdb": "ID TheMovieDb",
     "identify_field_tvdb": "ID TheTVDB",
+    "identify_field_provider": "Fournisseur",
+    "identify_provider_auto": "Automatique",
     "identify_search": "Rechercher",
     "identify_apply_ids": "Utiliser ces identifiants",
     "identify_results": "Résultats de la recherche",

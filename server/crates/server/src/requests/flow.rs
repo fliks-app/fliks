@@ -379,6 +379,13 @@ async fn row_json(st: &AppState, id: i32) -> Res<Map<String, Value>> {
 
 /// `media` of a loaded Media entity: its library, profiles and metadata, without files or seasons.
 pub async fn media_entity(st: &AppState, a: &Authed, media_id: i32) -> Res<Value> {
+    let libs = crate::libraries::accessible_library_ids(&st.db, a).await?;
+    if crate::libraries::assert_media_accessible(&st.db, media_id, &libs)
+        .await
+        .is_err()
+    {
+        return Ok(Value::Null);
+    }
     let mut m = hydrate::detail(&st.db, media_id, paths_visible(&a.perms))
         .await?
         .unwrap_or(Value::Null);
@@ -657,7 +664,11 @@ async fn art_wait(st: &AppState, id: i32, key: TitleKey) -> Option<Art> {
 /// Rule 19.
 async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Value> {
     let key = dto.key();
-    let Some(media) = db::media_by_ref(&st.db, &key).await? else {
+    let libs = crate::libraries::accessible_library_ids(&st.db, a).await?;
+    let media = db::media_by_ref(&st.db, &key)
+        .await?
+        .filter(|m| m.library_id.is_some_and(|l| libs.contains(&l)));
+    let Some(media) = media else {
         return Err(AppError::bad_request(
             "This title is not in the library and cannot be deleted",
         ));
@@ -905,13 +916,22 @@ async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value>
 
 /// Rule 26: the request is done once the title is removed.
 async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> {
-    let media = db::media_by_ref(&st.db, &row.key()).await?;
     let id = row.id;
-    if !db::claim_approval(&st.db, id, a.user.id, media.as_ref().map(|m| m.id)).await? {
+    let media = row.media_id;
+    let mut tx = st.db.begin().await?;
+    if let Some(m) = media
+        && !db::lock_media_holding(&mut tx, m, &row.key()).await?
+    {
+        return Err(AppError::conflict(
+            "The title of this request changed, decline it and ask again",
+        ));
+    }
+    if !db::claim_approval(&mut *tx, id, a.user.id, media).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
+    tx.commit().await?;
     if let Some(m) = media {
-        match services::remove_media(st, m.id).await {
+        match services::remove_media(st, m).await {
             Ok(removed) => {
                 if !removed.disk_paths.is_empty() {
                     tokio::spawn(async move {
