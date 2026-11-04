@@ -99,10 +99,10 @@ async fn history_rejects_fractional_paging(pool: PgPool) {
 async fn toggles_check_the_media_and_the_season(pool: PgPool) {
     let c = ctx(pool).await;
     let a = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('a', 'series') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('a', 'series', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let b = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('b', 'series') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('b', 'series', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let season = c
         .id(&format!(
@@ -128,7 +128,7 @@ async fn toggles_check_the_media_and_the_season(pool: PgPool) {
 async fn toggle_watched_round_trip_and_state(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let item = c.shell(m).await;
     let f = c
@@ -181,7 +181,7 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
 async fn toggle_watched_without_a_file_keeps_duration_null(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
@@ -249,7 +249,7 @@ async fn recommendation_ties_break_by_media_id(pool: PgPool) {
 async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
@@ -266,7 +266,7 @@ async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
 async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('s', 'series') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('s', 'series', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     c.id(&format!(
         r#"INSERT INTO editions ("mediaId", family) VALUES ({m}, 'video') RETURNING id"#
@@ -423,6 +423,41 @@ async fn a_movie_sorts_before_a_series_on_equal_continue_times(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_audio_item_stays_out_of_continue_watching(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c
+        .id(r#"INSERT INTO libraries (name) VALUES ('l') RETURNING id"#)
+        .await;
+    let media = c
+        .id(&format!(
+            r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', {lib}) RETURNING id"#
+        ))
+        .await;
+    let item = c.shell(media).await;
+    c.id(&format!(
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+             VALUES ({media}, 'm.mkv', 1, 'q', (SELECT min(id) FROM library_folders)) RETURNING id)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") SELECT {item}, id, {media}, 0 FROM f
+           RETURNING "mediaFileId""#
+    ))
+    .await;
+    c.id(&format!(
+        r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds", "durationSeconds", completed, "lastPlayedAt")
+           VALUES ({}, {item}, 100, 3600, false, now()) RETURNING id"#,
+        c.user
+    ))
+    .await;
+    let (_, got) = c.api("GET", "/api/playback/continue-watching", None).await;
+    assert_eq!(got.as_array().unwrap().len(), 1);
+    c.id(&format!(
+        r#"UPDATE editions SET family = 'audio' WHERE "mediaId" = {media} RETURNING id"#
+    ))
+    .await;
+    let (_, got) = c.api("GET", "/api/playback/continue-watching", None).await;
+    assert!(got.as_array().unwrap().is_empty());
+}
+
+#[sqlx::test(migrations = false)]
 async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let u = c.user;
@@ -461,7 +496,7 @@ async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
 async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let item = c.shell(m).await;
     let state = format!("/api/playback/media/{m}/state");

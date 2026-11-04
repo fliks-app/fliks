@@ -100,7 +100,7 @@ async fn ctx_with(pool: PgPool, engine: Option<&str>) -> Ctx {
     .await
     .unwrap();
     let media: i32 =
-        sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -506,7 +506,7 @@ async fn a_pair_that_names_no_item_writes_nothing(pool: PgPool) {
 async fn a_file_bound_stream_token_beats_only_for_its_own_file(pool: PgPool) {
     let mut c = ctx(pool).await;
     let other_media: i32 =
-        sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('o', 'movie') RETURNING id"#)
+        sqlx::query_scalar(r#"INSERT INTO media (title, type, "libraryId") VALUES ('o', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
             .fetch_one(&c.pool)
             .await
             .unwrap();

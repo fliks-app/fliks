@@ -3,7 +3,11 @@ ALTER TABLE "item_groups" RENAME COLUMN "seasonNumber" TO "number";
 ALTER SEQUENCE "seasons_id_seq" RENAME TO "item_groups_id_seq";
 ALTER TABLE "item_groups" RENAME CONSTRAINT "PK_cb8ed53b5fe109dcd4a4449ec9d" TO "PK_item_groups";
 ALTER INDEX "IDX_seasons_mediaId" RENAME TO "IDX_item_groups_mediaId";
-DELETE FROM "item_groups" WHERE "mediaId" IS NULL;
+DO $$ DECLARE n bigint; BEGIN
+  DELETE FROM "item_groups" WHERE "mediaId" IS NULL;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n > 0 THEN RAISE NOTICE 'item_groups: % season(s) without a media dropped', n; END IF;
+END $$;
 ALTER TABLE "item_groups"
   ALTER COLUMN "mediaId" SET NOT NULL,
   ADD CONSTRAINT "UQ_item_groups_id_media" UNIQUE ("id", "mediaId");
@@ -15,7 +19,11 @@ ALTER TABLE "items" RENAME COLUMN "endEpisodeNumber" TO "endNumber";
 ALTER SEQUENCE "episodes_id_seq" RENAME TO "items_id_seq";
 ALTER TABLE "items" RENAME CONSTRAINT "PK_6a003fda8b0473fffc39cb831c7" TO "PK_items";
 ALTER TABLE "items" ALTER COLUMN "number" DROP NOT NULL;
-DELETE FROM "items" WHERE "groupId" IS NULL;
+DO $$ DECLARE n bigint; BEGIN
+  DELETE FROM "items" WHERE "groupId" IS NULL;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n > 0 THEN RAISE NOTICE 'items: % episode(s) without a season dropped, with their progress, history and markers', n; END IF;
+END $$;
 
 CREATE TABLE "editions" (
   "id" SERIAL PRIMARY KEY,

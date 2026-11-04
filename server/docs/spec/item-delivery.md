@@ -35,7 +35,7 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
 
 ## Item identity on the playback routes
 
-15. `itemId` (integer) names the item directly: in the body of the heartbeat and of `toggle-watched`, and in the query of `GET` and `DELETE state`. The item must belong to the path `mediaId` and to a visible edition (`COALESCE(editions."libraryId", media."libraryId")` among the caller's libraries, like rule 1), else it names none (the answer of an unknown pair: empty body, no-op, 404 `not_found`, `{state: null}`). When `itemId` is present `episodeId` is not read.
+15. `itemId` (integer) names the item directly: in the body of the heartbeat and of `toggle-watched`, and in the query of `GET` and `DELETE state`. The item must belong to the path `mediaId` and to a visible edition (`COALESCE(editions."libraryId", media."libraryId")` among the caller's libraries, like rule 1), else it names none (the answer of an unknown pair: empty body, no-op, 404 `not_found`, `{state: null}`). When `itemId` is present `episodeId` is not read. The same gate (media library, then visible edition) applies to the item a `(mediaId, episodeId?)` pair names.
 16. Without `itemId` the pair `(mediaId, episodeId?)` resolves as before, so a book with several editions is still `409 ambiguous_item`. The wire `episodeId` of a state, of `remote.state` and of the history is the item's id only when the item is grouped, whatever named it.
 17. The heartbeat's debounce key is `<user>:<media>:i<itemId>` when `itemId` is given, so two editions of one book never share a flush. A file-bound token must be a part of the named item (the route's auth in `heartbeat.md`).
 
@@ -52,10 +52,10 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
     - `video`: `duration > 0` and `position >= duration - 30` or `position >= duration * 0.9` (the rule of every video heartbeat, unchanged).
     - `audio`: `duration > 0` and `position >= duration * 0.98`; or the position is at or past the start of the last chapter, when the item's version has at least two chapters and that start is above 0 (a one-chapter book, or a part-per-chapter fallback of one part, never finishes by it).
     - `text`: `progression >= 0.99`. The last position of a Readium publication has a `totalProgression` just under 1, so the last page is read as 0.99; no page count is needed.
-    - `image`: never.
+    - `image`: `progression >= 0.99`, like `text` (a comic reader reports only a progression).
     A music rule (scrobble) belongs here when a music kind exists; none is defined yet.
 23. The last chapter start of an audio item is read from the `chapter` markers of its version's parts shifted by their offsets (rule 5), when the heartbeat names an audio item.
-24. `completed` is recomputed on every written beat, as before; an offline replay keeps its rule (`heartbeat.md` rule 21) with the same family rule. The debounce flushes every beat of the finish zone: the video zone, and a text `progression` of 0.99 or more; and a beat whose `progression` or `locator` differs from the last write's (rule 19).
+24. `completed` is recomputed on every written beat, as before; an offline replay keeps its rule (`heartbeat.md` rule 21) with the same family rule. The debounce flushes every beat of the finish zone: the video zone, and a text or image `progression` of 0.99 or more; and a beat whose `progression` or `locator` differs from the last write's (rule 19).
 
 ## Migration
 
