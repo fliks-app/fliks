@@ -99,10 +99,10 @@ async fn history_rejects_fractional_paging(pool: PgPool) {
 async fn toggles_check_the_media_and_the_season(pool: PgPool) {
     let c = ctx(pool).await;
     let a = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('a', 'series') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('a', 'series', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let b = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('b', 'series') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('b', 'series', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let season = c
         .id(&format!(
@@ -181,7 +181,7 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
 async fn toggle_watched_without_a_file_keeps_duration_null(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
@@ -249,7 +249,7 @@ async fn recommendation_ties_break_by_media_id(pool: PgPool) {
 async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     c.shell(m).await;
     let uri = format!("/api/playback/media/{m}/toggle-watched");
@@ -266,7 +266,7 @@ async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
 async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('s', 'series') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('s', 'series', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     c.id(&format!(
         r#"INSERT INTO editions ("mediaId", family) VALUES ({m}, 'video') RETURNING id"#
@@ -496,7 +496,7 @@ async fn watched_ids_follow_the_rule_of_each_kind(pool: PgPool) {
 async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
     let c = ctx(pool).await;
     let m = c
-        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
         .await;
     let item = c.shell(m).await;
     let state = format!("/api/playback/media/{m}/state");
