@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterNextRender,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideChevronDown,
@@ -18,6 +28,7 @@ import {
   READER_THEMES,
   THEME_PRESETS,
   presetPatch,
+  resetPatch,
   type ReaderSettings,
 } from './reader-settings.service';
 
@@ -26,6 +37,7 @@ import {
   selector: 'app-reader-appearance',
   imports: [TranslatePipe, LucideChevronDown, LucideMinus, LucidePlus, LucideRotateCcw, LucideX],
   templateUrl: './reader-appearance.html',
+  styleUrl: './reader-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderAppearanceComponent {
@@ -48,6 +60,11 @@ export class ReaderAppearanceComponent {
     () => this.settings().fontSize < FONT_SIZE_RANGE.max - 1e-6,
   );
 
+  constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef);
+    afterNextRender(() => host.nativeElement.querySelector<HTMLElement>('.rd-theme[aria-pressed=true]')?.focus());
+  }
+
   protected pick(theme: ReaderSettings['theme']): void {
     this.changed.emit(presetPatch(theme));
   }
@@ -57,8 +74,7 @@ export class ReaderAppearanceComponent {
   }
 
   protected reset(): void {
-    const { zoom: _zoom, ...rest } = READER_DEFAULTS;
-    this.changed.emit({ ...rest, ...presetPatch(READER_DEFAULTS.theme) });
+    this.changed.emit(resetPatch(this.settings().theme));
   }
 
   protected numberOf(e: Event): number {

@@ -85,6 +85,12 @@ export const presetPatch = (theme: ReaderTheme): Partial<ReaderSettings> => ({
   lineHeight: THEME_PRESETS[theme].lineHeight,
 });
 
+/** The reset button: the current theme's own preset, and the defaults of the size, margins, columns and justification. */
+export const resetPatch = (theme: ReaderTheme): Partial<ReaderSettings> => {
+  const { fontSize, margins, columns, justify } = READER_DEFAULTS;
+  return { ...presetPatch(theme), fontSize, margins, columns, justify };
+};
+
 export function toReaderPreferences(settings: ReaderSettings, colors: ThemeColors): IEpubPreferences {
   const gutter = GUTTER_PX[settings.margins];
   return {
@@ -113,16 +119,16 @@ const clamp = (value: unknown, range: { min: number; max: number }, fallback: nu
 const oneOf = <T extends string>(allowed: readonly T[], value: unknown, fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
 
-/** Values stored before the six presets and four fonts. */
-const LEGACY: Record<string, string> = { light: 'original', dark: 'night', serif: 'literata' };
+/** Names a stored blob may carry for a theme or a font, mapped to the current ones. */
+const ALIASES: Record<string, string> = { light: 'original', dark: 'night', serif: 'literata' };
 
 /** Anything a stored blob got wrong falls back to its default, field by field. */
 export function sanitizeReaderSettings(raw: unknown): ReaderSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   return {
     fontSize: clamp(r['fontSize'], FONT_SIZE_RANGE, READER_DEFAULTS.fontSize),
-    fontFamily: oneOf(READER_FONTS, LEGACY[String(r['fontFamily'])] ?? r['fontFamily'], READER_DEFAULTS.fontFamily),
-    theme: oneOf(READER_THEMES, LEGACY[String(r['theme'])] ?? r['theme'], READER_DEFAULTS.theme),
+    fontFamily: oneOf(READER_FONTS, ALIASES[String(r['fontFamily'])] ?? r['fontFamily'], READER_DEFAULTS.fontFamily),
+    theme: oneOf(READER_THEMES, ALIASES[String(r['theme'])] ?? r['theme'], READER_DEFAULTS.theme),
     lineHeight: clamp(r['lineHeight'], LINE_HEIGHT_RANGE, READER_DEFAULTS.lineHeight),
     margins: oneOf(READER_MARGINS, r['margins'], READER_DEFAULTS.margins),
     scroll: typeof r['scroll'] === 'boolean' ? r['scroll'] : READER_DEFAULTS.scroll,

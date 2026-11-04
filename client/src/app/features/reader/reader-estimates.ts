@@ -51,7 +51,7 @@ export function chapterAt(marks: ChapterMark[], progression: number): ChapterMar
   return hit ?? marks[0];
 }
 
-/** "1 h 05" or "12 min". */
+/** Hours and minutes of a duration in minutes. */
 export function formatMinutes(total: number): { h: number; m: number } {
   return { h: Math.floor(total / 60), m: total % 60 };
 }

@@ -4,6 +4,7 @@ import {
   READER_DEFAULTS,
   THEME_PRESETS,
   presetPatch,
+  resetPatch,
   ReaderSettingsService,
   sanitizeReaderSettings,
   toReaderPreferences,
@@ -148,5 +149,20 @@ describe('ReaderSettingsService comic prefs', () => {
   it('falls back to paged on a corrupt stored mode', () => {
     localStorage.setItem('reader.comics:srv::1', JSON.stringify({ 1: { mode: 'sideways', spread: 3 } }));
     expect(make().comicPrefs(1)).toEqual({ mode: 'paged', spread: false });
+  });
+});
+
+describe('resetPatch', () => {
+  it('keeps the theme with its own preset and restores the layout defaults', () => {
+    const patch = resetPatch('sepia');
+    expect(patch).toMatchObject({ ...presetPatch('sepia') });
+    expect(patch).toMatchObject({
+      fontSize: READER_DEFAULTS.fontSize,
+      margins: READER_DEFAULTS.margins,
+      columns: READER_DEFAULTS.columns,
+      justify: READER_DEFAULTS.justify,
+    });
+    expect(patch.theme).toBe('sepia');
+    expect(patch).not.toHaveProperty('zoom');
   });
 });

@@ -34,7 +34,7 @@
     aria-hidden="true"
   >
     <span>{{ page() }} / {{ pageTotal() }}</span>
-    <span>{{ 'reader.min_left' | translate: { n: chapterMinutes() } }}</span>
+    <span>{{ 'reader.min_left' | translatePlural: chapterMinutes() }}</span>
     <span>{{ percent() }}%</span>
   </div>
   <div
@@ -178,7 +178,7 @@
       <div class="flex items-baseline justify-between gap-4 text-xs text-base-content/70">
         <span class="min-w-0 truncate font-medium text-base-content">{{ chapterTitle() }}</span>
         <span class="shrink-0 tabular-nums">
-          {{ 'reader.min_left' | translate: { n: chapterMinutes() } }}
+          {{ 'reader.min_left' | translatePlural: chapterMinutes() }}
           &middot;
           {{ 'reader.page_of' | translate: { n: page(), total: pageTotal() } }}
         </span>
@@ -232,7 +232,12 @@
           <svg lucideListTree class="h-5 w-5"></svg>
           <span>{{ 'reader.contents' | translate }}</span>
         </button>
-        <button type="button" class="rd-action" (click)="openPanel('appearance')">
+        <button
+          type="button"
+          class="rd-action"
+          [attr.aria-label]="'reader.appearance' | translate"
+          (click)="openPanel('appearance')"
+        >
           <svg lucideType class="h-5 w-5"></svg>
           <span>{{ 'reader.appearance_short' | translate }}</span>
         </button>

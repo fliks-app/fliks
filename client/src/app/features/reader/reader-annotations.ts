@@ -64,3 +64,25 @@ export function annotationsMarkdown(
   }
   return lines.join('\n').trimEnd() + '\n';
 }
+
+const BLOCKS = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, td, th, dd, dt, figcaption, div';
+
+/** The block element holding a selection, whose selector tells a phrase from its twin elsewhere in the chapter. */
+export function blockOf(range: Range): Element | null {
+  const node = range.commonAncestorContainer;
+  const el = node instanceof Element ? node : node.parentElement;
+  return el?.closest(BLOCKS) ?? null;
+}
+
+/** The text on either side of a selection, read across the whole document rather than from its end text nodes. */
+export function rangeContext(range: Range, chars: number): { before: string; after: string } {
+  const body = range.startContainer.ownerDocument?.body ?? null;
+  if (!body) return { before: '', after: '' };
+  const head = range.cloneRange();
+  head.selectNodeContents(body);
+  head.setEnd(range.startContainer, range.startOffset);
+  const tail = range.cloneRange();
+  tail.selectNodeContents(body);
+  tail.setStart(range.endContainer, range.endOffset);
+  return { before: head.toString().slice(-chars), after: tail.toString().slice(0, chars) };
+}

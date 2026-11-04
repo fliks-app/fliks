@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injector,
   input,
   OnDestroy,
   ViewEncapsulation,
@@ -35,6 +36,9 @@ import {
 import { Layout, Locator, ReadingProgression, type Link, type Publication } from '@readium/shared';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { saveFile } from '../../core/plugins/save-file.plugin';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
+import { TvService } from '../../core/services/tv.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -46,14 +50,26 @@ import {
   type AnnotationColour,
 } from './annotations-api.service';
 import { bookProgression } from './book-progress';
-import { provideCssSelectorGenerator, sandboxContentFrames } from './frame-hardening';
+import { provideCssSelectorGenerator, sandboxContentFrames, selectorOf } from './frame-hardening';
 import { allowedExternalLink } from './link-scheme';
-import { COLOUR_HEX, annotationsMarkdown, groupByChapter } from './reader-annotations';
+import {
+  COLOUR_HEX,
+  annotationsMarkdown,
+  blockOf,
+  groupByChapter,
+  rangeContext,
+} from './reader-annotations';
 import { ReaderAppearanceComponent } from './reader-appearance';
 import { ReaderApiService, type ReaderTarget } from './reader-api.service';
-import { bookMinutesLeft, chapterAt, chapterMarks, chapterMinutesLeft } from './reader-estimates';
+import {
+  bookMinutesLeft,
+  chapterAt,
+  chapterMarks,
+  chapterMinutesLeft,
+  formatMinutes,
+} from './reader-estimates';
 import { provideReaderFonts } from './reader-fonts';
-import { READER_KEY_BINDINGS, readerKeyAction, type ReaderKeyAction } from './reader-keys';
+import { keyGate, readerKeyAction, readerKeyBindings, type ReaderKeyAction } from './reader-keys';
 import { ReaderProgressService } from './reader-progress.service';
 import {
   SEARCH_MAX_HITS,
@@ -94,6 +110,7 @@ interface PendingSelection {
 type Panel = 'appearance' | 'sidebar';
 
 const HIDE_AFTER_MS = 3000;
+const PHONE = '(max-width: 639px)';
 
 const flattenToc = (links: Link[], depth = 0): TocRow[] =>
   links.flatMap((link) => [
@@ -113,6 +130,7 @@ const EXCERPT_MAX = 2000;
   selector: 'app-reader',
   imports: [
     TranslatePipe,
+    TranslatePluralPipe,
     ResolveUrlPipe,
     CachedSrcDirective,
     ReaderAppearanceComponent,
@@ -153,6 +171,9 @@ export class ReaderComponent implements OnDestroy {
   private readonly dismissStack = inject(DismissableStackService);
   private readonly settingsStore = inject(ReaderSettingsService);
   private readonly progress = inject(ReaderProgressService);
+  private readonly tv = inject(TvService);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   private readonly pageHost = viewChild.required<ElementRef<HTMLElement>>('pageHost');
   private navigator: EpubNavigator | null = null;
@@ -162,6 +183,11 @@ export class ReaderComponent implements OnDestroy {
   private destroyed = false;
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
   private searchRun = 0;
+  private readonly chapterText = new Map<string, string>();
+  private readonly framed = new WeakSet<Window>();
+  private readonly arrowGate = keyGate();
+  private opener: HTMLElement | null = null;
+  private marking = false;
 
   protected readonly settings = this.settingsStore.settings;
   protected readonly colors = computed(() => readerThemeColors(this.settings().theme));
@@ -215,10 +241,9 @@ export class ReaderComponent implements OnDestroy {
     const loc = this.locator();
     return loc ? chapterMinutesLeft(loc, this.positions) : 0;
   });
-  protected readonly bookTime = computed(() => {
-    const total = bookMinutesLeft(this.totalProgression(), this.positions);
-    return { h: Math.floor(total / 60), m: total % 60 };
-  });
+  protected readonly bookTime = computed(() =>
+    formatMinutes(bookMinutesLeft(this.totalProgression(), this.positions)),
+  );
   protected readonly percent = computed(() => Math.round(this.shownProgression() * 100));
   /** The furthest the reader has been, so read chapters stay marked after a jump back. */
   private readonly furthest = signal(0);
@@ -243,8 +268,12 @@ export class ReaderComponent implements OnDestroy {
   protected readonly searched = signal(false);
   protected readonly searchText = signal('');
 
-  private readonly frames = new Set<Window>();
   private readonly dismissPanel = () => this.closePanel();
+  private readonly sidebar = viewChild(ReaderSidebarComponent);
+  /** On a TV the arrows move focus while the bars or a panel are up. */
+  private readonly arrowsTurnPages = computed(
+    () => !(this.tv.isTv() && (this.chromeVisible() || this.panel())),
+  );
 
   constructor() {
     afterNextRender(() => void this.open());
@@ -252,6 +281,7 @@ export class ReaderComponent implements OnDestroy {
       const prefs = toReaderPreferences(this.settings(), this.colors());
       untracked(() => void this.navigator?.submitPreferences(new EpubPreferences(prefs)));
     });
+    effect(() => this.arrowGate.set(this.arrowsTurnPages()));
     effect(() => {
       const highlights = this.annotations().filter((a) => a.kind === 'highlight');
       untracked(() => this.paint(highlights));
@@ -308,7 +338,7 @@ export class ReaderComponent implements OnDestroy {
         {
           preferences: prefs,
           defaults: {},
-          keyboardPeripherals: READER_KEY_BINDINGS,
+          keyboardPeripherals: readerKeyBindings(this.arrowGate),
           upgradeInsecureRequests: 'auto',
         },
       );
@@ -362,7 +392,8 @@ export class ReaderComponent implements OnDestroy {
   private onFrame(wnd: Window): void {
     provideCssSelectorGenerator(wnd);
     provideReaderFonts(wnd.document);
-    this.frames.add(wnd);
+    if (this.framed.has(wnd)) return;
+    this.framed.add(wnd);
     wnd.addEventListener('mousemove', () => this.onMouseMove(), { passive: true });
     wnd.document.addEventListener('selectionchange', () => {
       if (wnd.getSelection()?.isCollapsed) this.selection.set(null);
@@ -386,7 +417,7 @@ export class ReaderComponent implements OnDestroy {
     if (target?.closest('input, select, textarea')) return;
     const action = readerKeyAction(e);
     if (!action) return;
-    // Enter on a focused control activates it; it only toggles the bars from the page.
+    if ((action === 'left' || action === 'right') && !this.arrowsTurnPages()) return;
     if (action === 'chrome' && target?.closest('button, a, summary')) return;
     e.preventDefault();
     this.act(action);
@@ -431,10 +462,12 @@ export class ReaderComponent implements OnDestroy {
         break;
       case 'chrome':
         this.toggleChrome();
+        if (this.chromeVisible()) this.focusBar();
         break;
       case 'close':
         if (this.panel()) this.closePanel();
         else if (this.selection()) this.selection.set(null);
+        else if (this.tv.isTv() && this.chromeVisible()) this.setChrome(false, false);
         else this.back();
         break;
     }
@@ -443,8 +476,6 @@ export class ReaderComponent implements OnDestroy {
   protected back(): void {
     this.navbar.goBack(['/']);
   }
-
-  // The bars
 
   protected toggleChrome(): void {
     this.setChrome(!this.chromeVisible(), false);
@@ -458,7 +489,15 @@ export class ReaderComponent implements OnDestroy {
   }
 
   private hideIdle(): void {
-    if (!this.panel() && !this.scrubbing()) this.chromeVisible.set(false);
+    if (this.panel() || this.scrubbing() || this.host.nativeElement.querySelector('.rd-bar:focus-within')) return;
+    this.chromeVisible.set(false);
+  }
+
+  /** Bars opened from a key put focus on their first control, the way a D-pad needs. */
+  private focusBar(): void {
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.rd-bar button')?.focus(), {
+      injector: this.injector,
+    });
   }
 
   /** A mouse that moves brings the bars up and lets them go again; a touch or a key keeps them until toggled. */
@@ -470,7 +509,11 @@ export class ReaderComponent implements OnDestroy {
 
   protected openPanel(panel: Panel, tab?: SidebarTab): void {
     if (this.panel() === panel && (!tab || this.tab() === tab)) return this.closePanel();
-    if (!this.panel()) this.dismissStack.push(this.dismissPanel);
+    if (!this.panel()) {
+      this.dismissStack.push(this.dismissPanel);
+      const active = document.activeElement;
+      this.opener = active instanceof HTMLElement && active.closest('.rd-bar') ? active : null;
+    }
     if (tab) this.tab.set(tab);
     this.panel.set(panel);
     this.setChrome(true, false);
@@ -478,12 +521,15 @@ export class ReaderComponent implements OnDestroy {
 
   protected closePanel(): void {
     if (!this.panel()) return;
+    this.sidebar()?.flushNote();
+    this.searchRun++;
+    this.searching.set(false);
     this.panel.set(null);
     this.focusId.set(null);
     this.dismissStack.remove(this.dismissPanel);
+    if (this.opener?.isConnected) this.opener.focus();
+    this.opener = null;
   }
-
-  // Navigation
 
   protected goToRow(index: number): void {
     const row = this.toc()[index];
@@ -509,7 +555,7 @@ export class ReaderComponent implements OnDestroy {
   protected goToAnnotation(a: Annotation): void {
     const target = parseLocator(a.locator);
     if (target) this.navigator?.go(target, false, () => undefined);
-    if (window.matchMedia('(max-width: 639px)').matches) this.closePanel();
+    if (window.matchMedia(PHONE).matches) this.closePanel();
   }
 
   protected change(patch: Partial<ReaderSettings>): void {
@@ -528,8 +574,6 @@ export class ReaderComponent implements OnDestroy {
     });
     this.back();
   }
-
-  // Annotations
 
   private sameSpot(a: Annotation, loc: Locator): boolean {
     const at = a.locator['locations'] as { position?: number } | undefined;
@@ -562,7 +606,8 @@ export class ReaderComponent implements OnDestroy {
 
   protected async toggleBookmark(): Promise<void> {
     const loc = this.locator();
-    if (!loc) return;
+    if (!loc || this.marking) return;
+    this.marking = true;
     try {
       const here = this.annotations().find((a) => a.kind === 'bookmark' && this.sameSpot(a, loc));
       if (here) {
@@ -578,6 +623,8 @@ export class ReaderComponent implements OnDestroy {
       this.annotations.update((list) => [...list, created]);
     } catch {
       // The error interceptor has already told the reader.
+    } finally {
+      this.marking = false;
     }
   }
 
@@ -605,17 +652,9 @@ export class ReaderComponent implements OnDestroy {
       ? frame.contentWindow.getSelection()!.getRangeAt(0)
       : null;
     const current = nav.currentLocator;
-    const before =
-      range && range.startContainer.nodeType === Node.TEXT_NODE
-        ? (range.startContainer.textContent ?? '').slice(0, range.startOffset).slice(-CONTEXT_CHARS)
-        : '';
-    const after =
-      range && range.endContainer.nodeType === Node.TEXT_NODE
-        ? (range.endContainer.textContent ?? '').slice(
-            range.endOffset,
-            range.endOffset + CONTEXT_CHARS,
-          )
-        : '';
+    const { before, after } = range ? rangeContext(range, CONTEXT_CHARS) : { before: '', after: '' };
+    const block = range ? blockOf(range) : null;
+    const cssSelector = block ? selectorOf(block) : undefined;
     this.writing.set(false);
     this.selection.set({
       x: (rect?.left ?? 0) + sel.x + sel.width / 2,
@@ -630,6 +669,7 @@ export class ReaderComponent implements OnDestroy {
           progression: current.locations.progression ?? 0,
           position: current.locations.position ?? 0,
           totalProgression: this.totalProgression(),
+          ...(cssSelector && { cssSelector }),
         },
         text: { before, highlight: text.slice(0, EXCERPT_MAX), after },
       },
@@ -730,18 +770,11 @@ export class ReaderComponent implements OnDestroy {
     const blob = new Blob([annotationsMarkdown(this.title(), groups, labels)], {
       type: 'text/markdown',
     });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${
-      this.title()
-        .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
-        .trim() || 'book'
-    }.md`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 0);
+    const name = this.title().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim() || 'book';
+    void saveFile(blob, `${name}.md`).catch(() =>
+      this.toast.error(this.translate.instant('reader.export_failed')),
+    );
   }
-
-  // Search
 
   protected async search(query: string): Promise<void> {
     const pub = this.publication;
@@ -754,14 +787,18 @@ export class ReaderComponent implements OnDestroy {
     for (const link of pub.readingOrder.items) {
       if (run !== this.searchRun || this.destroyed || found.length >= SEARCH_MAX_HITS) break;
       try {
-        const markup = await pub.get(link).readAsString();
         const href = pathOf(link.href);
+        let text = this.chapterText.get(href);
+        if (text === undefined) {
+          text = textOfMarkup((await pub.get(link).readAsString()) ?? '');
+          this.chapterText.set(href, text);
+        }
         const chapter = this.toc().find((r) => pathOf(r.link.href) === href)?.title ?? '';
         found.push(
           ...hitsIn(
             link.href,
             chapter,
-            textOfMarkup(markup ?? ''),
+            text,
             query,
             SEARCH_MAX_HITS - found.length,
           ),
@@ -781,9 +818,10 @@ export class ReaderComponent implements OnDestroy {
       href: hit.href,
       type: 'application/xhtml+xml',
       locations: { progression: hit.progression },
+      text: { before: hit.before, highlight: hit.match, after: hit.after },
     });
     if (target) this.navigator?.go(target, false, () => undefined);
-    if (window.matchMedia('(max-width: 639px)').matches) this.closePanel();
+    if (window.matchMedia(PHONE).matches) this.closePanel();
   }
 
   protected flushProgress(): void {

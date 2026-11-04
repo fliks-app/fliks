@@ -14,10 +14,14 @@
             type="button"
             role="tab"
             [attr.aria-selected]="tab() === t"
-            [attr.aria-pressed]="tab() === t"
             (click)="tab.set(t)"
           >
             {{ 'reader.tab_' + t | translate }}
+            @if (t === 'bookmarks') {
+              <span class="ms-1 text-xs tabular-nums opacity-60">{{ bookmarks().length }}</span>
+            } @else if (t === 'notes') {
+              <span class="ms-1 text-xs tabular-nums opacity-60">{{ highlights().length }}</span>
+            }
           </button>
         }
       </div>
@@ -106,7 +110,7 @@
             <button
               type="button"
               class="rd-dot"
-              [style.background-color]="hex[c]"
+              [style.--dot]="hex[c]"
               [attr.aria-pressed]="filter() === c"
               [attr.aria-label]="('reader.colour_' + c | translate) + ' (' + count(c) + ')'"
               (click)="toggleFilter(c)"
@@ -141,12 +145,13 @@
                 </button>
                 @if (editing() === a.id) {
                   <textarea
+                    #note
                     class="textarea textarea-bordered mt-2 w-full text-sm"
                     rows="3"
                     maxlength="4000"
                     [value]="a.note"
                     [attr.aria-label]="'reader.note' | translate"
-                    (blur)="commit(a, $event)"
+                    (blur)="commit(a, note.value)"
                   ></textarea>
                 } @else if (a.note) {
                   <p class="mt-2 whitespace-pre-line text-sm">{{ a.note }}</p>
@@ -193,7 +198,6 @@
             [placeholder]="'reader.search_placeholder' | translate"
             [attr.aria-label]="'reader.search' | translate"
             (keydown.enter)="query.emit(text($event))"
-            (search)="query.emit(text($event))"
           />
         </label>
         @if (searching()) {

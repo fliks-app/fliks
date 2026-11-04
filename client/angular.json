@@ -36,12 +36,12 @@
                 "output": "pdfjs/wasm"
               },
               {
-                "glob": "literata-latin-wght-*.woff2",
+                "glob": "literata-latin*-wght-*.woff2",
                 "input": "node_modules/@fontsource-variable/literata/files",
                 "output": "reader-fonts"
               },
               {
-                "glob": "atkinson-hyperlegible-latin-{400,700}-{normal,italic}.woff2",
+                "glob": "atkinson-hyperlegible-latin*-{400,700}-{normal,italic}.woff2",
                 "input": "node_modules/@fontsource/atkinson-hyperlegible/files",
                 "output": "reader-fonts"
               }

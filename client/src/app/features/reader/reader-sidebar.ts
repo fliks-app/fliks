@@ -5,6 +5,7 @@ import {
   Injector,
   afterNextRender,
   computed,
+  effect,
   inject,
   input,
   model,
@@ -55,6 +56,7 @@ export interface TocEntry {
     LucideX,
   ],
   templateUrl: './reader-sidebar.html',
+  styleUrl: './reader-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderSidebarComponent {
@@ -105,6 +107,20 @@ export class ReaderSidebarComponent {
     groupByChapter(this.bookmarks(), this.tocRows()),
   );
 
+  constructor() {
+    // The panel opens with a control focused: the search field on its tab, else the selected tab.
+    effect(() => {
+      const search = this.tab() === 'search';
+      afterNextRender(
+        () =>
+          this.host.nativeElement
+            .querySelector<HTMLElement>(search ? 'input[type=search]' : '[role=tab][aria-selected=true]')
+            ?.focus(),
+        { injector: this.injector },
+      );
+    });
+  }
+
   /** A chapter is read once the reader is past its end; the current one shows how far in it is. */
   protected isRead(e: TocEntry, i: number): boolean {
     return i !== this.currentRow() && e.end <= this.progression() + 1e-6;
@@ -132,10 +148,18 @@ export class ReaderSidebarComponent {
     });
   }
 
-  protected commit(a: Annotation, e: Event): void {
+  protected commit(a: Annotation, value: string): void {
     this.editing.set(null);
-    const note = (e.target as HTMLTextAreaElement).value.trim();
+    const note = value.trim();
     if (note !== a.note) this.saveNote.emit({ annotation: a, note });
+  }
+
+  /** Saves a note still being typed; the owner calls it before the panel goes, as no blur follows a removal. */
+  flushNote(): void {
+    const id = this.editing();
+    const field = this.host.nativeElement.querySelector('textarea');
+    const a = this.annotations().find((x) => x.id === id);
+    if (a && field) this.commit(a, field.value);
   }
 
   protected text(e: Event): string {

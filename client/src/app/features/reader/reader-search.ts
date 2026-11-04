@@ -18,9 +18,11 @@ export function textOfMarkup(markup: string): string {
   return (doc.body?.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
-/** One character in, one out, so offsets in the folded text are offsets in the original. */
+/** One code point in, one of the same UTF-16 length out, so offsets in the folded text are offsets in the original. */
 const fold = (s: string): string =>
-  Array.from(s.normalize('NFC'), (c) => c.normalize('NFD')[0].toLowerCase()).join('');
+  Array.from(s.normalize('NFC'), (c) =>
+    String.fromCodePoint(c.normalize('NFD').codePointAt(0)!).toLowerCase(),
+  ).join('');
 
 /** Case and accent insensitive matches of `query` in `text`, with the words around each. */
 export function hitsIn(

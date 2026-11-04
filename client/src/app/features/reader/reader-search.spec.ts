@@ -20,6 +20,12 @@ describe('reader search', () => {
     expect(hits[0].progression).toBeCloseTo(14 / 44, 2);
   });
 
+  it('keeps offsets right after a character outside the BMP', () => {
+    const [hit] = hitsIn('a', 'x', 'Un \u{1F4D6} \u00C9t\u00E9 chaud', 'ete', 5);
+    expect(hit.match).toBe('\u00C9t\u00E9');
+    expect(hit.before).toBe('Un \u{1F4D6} ');
+  });
+
   it('stops at the limit and ignores a query that is too short', () => {
     expect(hitsIn('a', 'x', 'aa aa aa aa', 'aa', 2)).toHaveLength(2);
     expect(hitsIn('a', 'x', 'aa', 'a', 5)).toEqual([]);

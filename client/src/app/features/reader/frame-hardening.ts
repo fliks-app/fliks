@@ -28,3 +28,15 @@ export function provideCssSelectorGenerator(frame: Window): void {
     },
   };
 }
+
+/** The selector of an element of a frame, from the same selector kinds the toolkit's own anchors use. */
+export function selectorOf(element: Element): string | undefined {
+  try {
+    return getCssSelector(element, {
+      root: element.ownerDocument,
+      selectors: ['tag', 'id', 'class', 'nthchild', 'nthoftype', 'attribute'],
+    });
+  } catch {
+    return undefined;
+  }
+}
