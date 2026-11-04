@@ -415,6 +415,10 @@ async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     if media.media_type == MediaKind::Comic {
         crate::metadata::comics::refresh(st, id, Priority::Background).await?;
+    } else if media.media_type == MediaKind::Book {
+        crate::ingest::books::refresh_media(st, id, Priority::Interactive)
+            .await
+            .map_err(|e| AppError::internal(e.cause))?;
     } else {
         let found = refresh_metadata(st, id, true, Priority::Interactive).await?;
         if media.has_seasons() {
@@ -539,7 +543,17 @@ pub async fn identify(
         return Err(already_running());
     }
     let applied = async {
-        apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?;
+        match (media.media_type, pin) {
+            (MediaKind::Book, Some((ns, value))) => {
+                crate::metadata::books::routes::identify_to(&st, id, ns, &value).await?;
+            }
+            (MediaKind::Book, None) => {
+                return Err(AppError::bad_request(
+                    "Provide the id of a book provider (provider and externalId) to identify this media against",
+                ));
+            }
+            (_, pin) => apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?,
+        }
         entity_or_404(&st, &a, id).await
     };
     let body = match applied.await {

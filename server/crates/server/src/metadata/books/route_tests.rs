@@ -607,3 +607,26 @@ async fn sources_check_access_kind_and_input(pool: PgPool) {
         (404, Some(&*format!("Edition #{ed} not found")))
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn identify_links_the_work_of_a_book_and_refuses_one_another_book_holds(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![full_anchor()]).await;
+    let (a, b) = (c.book(1).await, c.book(1).await);
+    let identify = async |id: i32, body: Value| {
+        c.call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{id}/identify"),
+            Some(body),
+        )
+        .await
+    };
+    let (s, v) = identify(a, json!({"provider": "openlibrary", "externalId": "OL1W"})).await;
+    assert_eq!(s, 201, "{v}");
+    let (_, v) = c.get(&sources_uri(a)).await;
+    assert_eq!(v["work"]["value"], "OL1W");
+    let (s, _) = identify(b, json!({"provider": "openlibrary", "externalId": "OL1W"})).await;
+    assert_eq!(s, 409);
+    let (s, _) = identify(b, json!({"tmdbId": 5})).await;
+    assert_eq!(s, 400);
+}

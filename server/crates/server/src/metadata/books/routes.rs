@@ -1,7 +1,7 @@
 //! Book search, preview and sources routes (`docs/spec/book-metadata.md` rules 18-25).
 use super::{
     ANCHOR,
-    identify::BookMatch,
+    identify::{self, BookMatch},
     link::{attach, stored},
     people, text, work_id,
 };
@@ -367,7 +367,7 @@ pub async fn sources_put(
         }
         Level::Edition(edition) => {
             visible_edition(&st.db, &g, edition).await?;
-            put_edition(&st, &g, edition, provider, value).await?;
+            put_edition(&st, g.media, edition, provider, value).await?;
         }
     }
     Ok(Json(sources(&st.db, &g).await?))
@@ -375,18 +375,18 @@ pub async fn sources_put(
 
 async fn put_edition(
     st: &AppState,
-    g: &Gate,
+    media: i32,
     edition: i32,
     provider: Namespace,
     value: String,
 ) -> Result<(), AppError> {
     let replace = provider != Namespace::ISBN;
-    let Some(mut m) = stored(&st.db, g.media, Some(edition)).await? else {
+    let Some(mut m) = stored(&st.db, media, Some(edition)).await? else {
         let mut tx = st.db.begin().await?;
         if replace {
             external_ids::unlink_edition(&mut tx, edition, provider, None).await?;
         }
-        external_ids::link_edition(&mut tx, edition, g.media, provider, &value).await?;
+        external_ids::link_edition(&mut tx, edition, media, provider, &value).await?;
         tx.commit().await?;
         return Ok(());
     };
@@ -398,7 +398,7 @@ async fn put_edition(
         .collect();
     m.edition.retain(|(p, _)| !(replace && *p == provider));
     m.edition.push((provider, value));
-    attach(st, g.media, Some(edition), &m, GO)
+    attach(st, media, Some(edition), &m, GO)
         .await
         .map_err(|e| meta_fail(ANCHOR, e))?;
     let mut tx = st.db.begin().await?;
@@ -406,6 +406,56 @@ async fn put_edition(
         external_ids::unlink_edition(&mut tx, edition, provider, Some(&old)).await?;
     }
     tx.commit().await?;
+    Ok(())
+}
+
+/// `POST /api/media/:id/identify` of a book: links the work the id names (an edition id is looked up on
+/// the providers) and keeps an edition id on the first edition; the caller refreshes afterwards.
+pub(crate) async fn identify_to(
+    st: &AppState,
+    media: i32,
+    provider: Namespace,
+    value: &str,
+) -> Result<(), AppError> {
+    let lang = st.metadata.lang.resolve(None).await?;
+    let (work, edition) = if provider == ANCHOR {
+        let w = work_id(value)
+            .ok_or_else(|| AppError::bad_request("value must be an Open Library work id"))?;
+        (Some(w), None)
+    } else {
+        let v = edition_id(provider, value).ok_or_else(|| {
+            AppError::bad_request(format!("value is not a {provider} edition id"))
+        })?;
+        let work = identify::work_of(st, &[(provider, v.clone())], &lang, GO).await;
+        (work, Some((provider, v)))
+    };
+    if let Some(work) = work.as_deref() {
+        if external_ids::find(&st.db, MediaKind::Book, ANCHOR, work)
+            .await?
+            .is_some_and(|m| m != media)
+        {
+            return Err(taken());
+        }
+        let m = BookMatch {
+            work: work.to_owned(),
+            edition: vec![],
+            confidence: 100,
+        };
+        attach(st, media, None, &m, GO)
+            .await
+            .map_err(|e| meta_fail(ANCHOR, e))?;
+    }
+    if let Some((ns, v)) = edition {
+        let first = sqlx::query_scalar!(
+            r#"SELECT id FROM editions WHERE "mediaId" = $1 ORDER BY id LIMIT 1"#,
+            media
+        )
+        .fetch_optional(&st.db)
+        .await?;
+        if let Some(e) = first {
+            put_edition(st, media, e, ns, v).await?;
+        }
+    }
     Ok(())
 }
 
