@@ -2472,8 +2472,10 @@
       "folder_removed": "{{removedMedia}} medios quitados de Fliks, {{unlinkedMedia}} conservados con sus otros archivos.",
       "extra_folders": "Carpetas adicionales",
       "extra_folders_hint": "Se añaden cuando se crea la biblioteca. Aquí solo se analiza la primera carpeta: analiza las demás desde la página de la biblioteca.",
-      "preferred_provider": "Proveedor de metadatos",
-      "provider_auto": "Auto (TMDB por defecto)",
+      "preferred_provider": "Proveedor preferido",
+      "provider_auto": "Auto (orden global)",
+      "provider_order_hint": "Los metadatos se leen de estos proveedores en orden, por tipo de medio. El proveedor preferido va primero en los tipos que cubre. El orden global se define en Ajustes › Metadatos.",
+      "provider_none": "Ningún proveedor disponible",
       "metadata_language": "Idioma de los metadatos",
       "metadata_region": "Región de los metadatos",
       "metadata_inherit": "Heredar del ajuste global",
@@ -2557,6 +2559,7 @@
       "scan_search_failed_count": "{{count}} carpeta(s) no analizada(s) (búsqueda fallida), vuelva a lanzar el análisis desde la pestaña Medios",
       "media_filter_unidentified": "No identificados",
       "scan_reorganize_needs_folder": "Mover/renombrar solo se aplica a títulos con su propia carpeta",
+      "media_type_book": "Libros y audiolibros",
       "media_type_comic": "Cómics"
     },
     "users": {
@@ -2709,6 +2712,7 @@
       "configure": "Configurar",
       "empty": "Ningún proveedor de metadatos instalado.",
       "order": "Orden por tipo",
+      "drag": "Mover",
       "move_up": "Subir",
       "move_down": "Bajar",
       "load_error": "No se pudieron cargar los ajustes de metadatos.",

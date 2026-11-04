@@ -2472,8 +2472,10 @@
       "folder_removed": "{{removedMedia}} médias retirés de Fliks, {{unlinkedMedia}} conservés avec leurs autres fichiers.",
       "extra_folders": "Dossiers supplémentaires",
       "extra_folders_hint": "Ajoutés une fois la bibliothèque créée. Seul le premier dossier est analysé ici : analysez les autres depuis la page de la bibliothèque.",
-      "preferred_provider": "Fournisseur de métadonnées",
-      "provider_auto": "Auto (TMDB par défaut)",
+      "preferred_provider": "Fournisseur prioritaire",
+      "provider_auto": "Auto (ordre global)",
+      "provider_order_hint": "Les métadonnées sont lues chez ces fournisseurs dans l'ordre, pour chaque type de média. Le fournisseur prioritaire passe en tête des types qu'il couvre. L'ordre global se règle dans Paramètres › Métadonnées.",
+      "provider_none": "Aucun fournisseur disponible",
       "metadata_language": "Langue des métadonnées",
       "metadata_region": "Région des métadonnées",
       "metadata_inherit": "Hériter du réglage global",
@@ -2557,6 +2559,7 @@
       "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias",
       "media_filter_unidentified": "Non identifiés",
       "scan_reorganize_needs_folder": "Le déplacement/renommage ne s'applique qu'aux titres dans leur propre dossier",
+      "media_type_book": "Livres et livres audio",
       "media_type_comic": "Bandes dessinées"
     },
     "users": {
@@ -2709,6 +2712,7 @@
       "configure": "Configurer",
       "empty": "Aucun fournisseur de métadonnées installé.",
       "order": "Ordre par type",
+      "drag": "Déplacer",
       "move_up": "Monter",
       "move_down": "Descendre",
       "load_error": "Impossible de charger les réglages de métadonnées.",

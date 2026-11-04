@@ -67,7 +67,7 @@ export interface Season {
   id: number;
   seasonNumber: number;
   monitored: boolean;
-  preferredProvider?: 'tmdb' | 'tvdb' | null;
+  preferredProvider?: string | null;
   /** Season-specific poster (TMDB/TVDB); null → fall back to series poster. */
   posterUrl: string | null;
   /** Season synopsis; null on providers that don't carry one (TVDB). */
@@ -78,8 +78,6 @@ export interface Season {
   deleteAt?: string | null;
   episodes: Episode[];
 }
-
-export type MetadataProvider = 'tmdb' | 'tvdb';
 
 export interface Media {
   id: number;
@@ -124,7 +122,7 @@ export interface Media {
   watched?: boolean;
   /** Resume progress 0-100 (movies only; 0 for series). */
   progressPercent?: number;
-  preferredProvider?: 'tmdb' | 'tvdb' | null;
+  preferredProvider?: string | null;
   /** Plugin namespaces only; absent when the media holds none. */
   externalIds?: { provider: string; value: string }[];
   imdbId?: string | null;
@@ -554,7 +552,7 @@ export class MediaService {
 
   updateSeason(
     seasonId: number,
-    patch: { monitored?: boolean; preferredProvider?: 'tmdb' | 'tvdb' | null },
+    patch: { monitored?: boolean; preferredProvider?: string | null },
   ) {
     return firstValueFrom(
       this.http.patch<Season>(`/api/media/seasons/${seasonId}`, patch),

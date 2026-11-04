@@ -2472,8 +2472,10 @@
       "folder_removed": "{{removedMedia}} contenuti rimossi da Fliks, {{unlinkedMedia}} mantenuti con i loro altri file.",
       "extra_folders": "Cartelle aggiuntive",
       "extra_folders_hint": "Aggiunte dopo la creazione della libreria. Qui viene analizzata solo la prima cartella: analizza le altre dalla pagina della libreria.",
-      "preferred_provider": "Provider di metadati",
-      "provider_auto": "Auto (TMDB per impostazione predefinita)",
+      "preferred_provider": "Provider preferito",
+      "provider_auto": "Auto (ordine globale)",
+      "provider_order_hint": "I metadati vengono letti da questi provider in ordine, per tipo di media. Il provider preferito passa per primo nei tipi che copre. L'ordine globale si imposta in Impostazioni › Metadati.",
+      "provider_none": "Nessun provider disponibile",
       "metadata_language": "Lingua dei metadati",
       "metadata_region": "Regione dei metadati",
       "metadata_inherit": "Eredita dall'impostazione globale",
@@ -2557,6 +2559,7 @@
       "scan_search_failed_count": "{{count}} cartella/e non analizzata/e (ricerca fallita), rilancia la scansione dalla scheda Media",
       "media_filter_unidentified": "Non identificati",
       "scan_reorganize_needs_folder": "Sposta/rinomina si applica solo ai titoli con una propria cartella",
+      "media_type_book": "Libri e audiolibri",
       "media_type_comic": "Fumetti"
     },
     "users": {
@@ -2709,6 +2712,7 @@
       "configure": "Configura",
       "empty": "Nessun provider di metadati installato.",
       "order": "Ordine per tipo",
+      "drag": "Sposta",
       "move_up": "Su",
       "move_down": "Giù",
       "load_error": "Impossibile caricare le impostazioni dei metadati.",

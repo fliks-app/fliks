@@ -33,9 +33,26 @@ export function searchResultKey(r: MetadataSearchResult): string {
   return `${r.provider}:${r.externalId ?? ''}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
 }
 
+export interface ServingProvider {
+  provider: string;
+  label: string;
+}
+
 export interface ProvidersInfo {
   tmdb: boolean;
-  serving: Record<'movie' | 'series', { provider: string; label: string }[]>;
+  serving: Record<MediaType, ServingProvider[]>;
+}
+
+/** `list` plus the stored choice when it is not served any more, so a select still shows it. */
+export function withStoredProvider(list: ServingProvider[], stored: string | null): ServingProvider[] {
+  return !stored || list.some((p) => p.provider === stored)
+    ? list
+    : [...list, { provider: stored, label: stored }];
+}
+
+/** The order a refresh reads `list` in: `preferred` first when it serves the kind. */
+export function readOrder(list: ServingProvider[], preferred: string | null): ServingProvider[] {
+  return [...list.filter((p) => p.provider === preferred), ...list.filter((p) => p.provider !== preferred)];
 }
 
 /** The ids worth sending to the API — the 0 above is not an id. */
@@ -259,8 +276,13 @@ export class MetadataService {
     return (await this.providers()).tmdb;
   }
 
-  /** The available providers serving a video kind, in the admin's order. */
-  async providersServing(kind: 'movie' | 'series') {
+  /** The available providers of every kind, each in the admin's order. */
+  async providersByKind(): Promise<Record<MediaType, ServingProvider[]>> {
+    return (await this.providers()).serving;
+  }
+
+  /** The available providers serving a kind, in the admin's order. */
+  async providersServing(kind: MediaType) {
     return (await this.providers()).serving[kind];
   }
 

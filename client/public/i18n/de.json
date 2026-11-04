@@ -2472,8 +2472,10 @@
       "folder_removed": "{{removedMedia}} Medien aus Fliks entfernt, {{unlinkedMedia}} mit ihren anderen Dateien behalten.",
       "extra_folders": "Weitere Ordner",
       "extra_folders_hint": "Werden hinzugefügt, sobald die Bibliothek erstellt ist. Hier wird nur der erste Ordner durchsucht: Durchsuchen Sie die anderen über die Seite der Bibliothek.",
-      "preferred_provider": "Metadaten-Provider",
-      "provider_auto": "Auto (TMDB als Standard)",
+      "preferred_provider": "Bevorzugter Provider",
+      "provider_auto": "Auto (globale Reihenfolge)",
+      "provider_order_hint": "Metadaten werden pro Medientyp in dieser Reihenfolge von den Providern gelesen. Der bevorzugte Provider steht bei den Typen, die er abdeckt, an erster Stelle. Die globale Reihenfolge wird unter Einstellungen, Metadaten festgelegt.",
+      "provider_none": "Kein Provider verfügbar",
       "metadata_language": "Sprache der Metadaten",
       "metadata_region": "Region der Metadaten",
       "metadata_inherit": "Von der globalen Einstellung erben",
@@ -2557,6 +2559,7 @@
       "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut",
       "media_filter_unidentified": "Nicht identifiziert",
       "scan_reorganize_needs_folder": "Verschieben/Umbenennen gilt nur für Titel mit eigenem Ordner",
+      "media_type_book": "Bücher und Hörbücher",
       "media_type_comic": "Comics"
     },
     "users": {
@@ -2709,6 +2712,7 @@
       "configure": "Konfigurieren",
       "empty": "Kein Metadatenanbieter installiert.",
       "order": "Reihenfolge pro Art",
+      "drag": "Verschieben",
       "move_up": "Nach oben",
       "move_down": "Nach unten",
       "load_error": "Die Metadaten-Einstellungen konnten nicht geladen werden.",

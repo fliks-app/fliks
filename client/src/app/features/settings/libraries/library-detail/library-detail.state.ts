@@ -12,6 +12,7 @@ import {
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../../core/services/toast.service';
 import type { MediaType } from '../../../../core/enums/media-type.enum';
+import { MEDIA_KINDS } from '../../../../core/media-kinds';
 
 /** Shared state between the library-detail shell and its tab components. */
 @Injectable()
@@ -33,9 +34,7 @@ export class LibraryDetailState {
   readonly formName = signal('');
   readonly formIcon = signal<string | null>(null);
   readonly formColor = signal<string | null>(null);
-  readonly formMovies = signal(true);
-  readonly formSeries = signal(true);
-  readonly formComics = signal(false);
+  readonly formKinds = signal<ReadonlySet<MediaType>>(new Set(['movie', 'series']));
   readonly formProvider = signal<string | null>(null);
   readonly formMetadataLanguage = signal<string | null>(null);
   readonly formMetadataRegion = signal<string | null>(null);
@@ -55,9 +54,7 @@ export class LibraryDetailState {
     this.formName.set(lib.name);
     this.formIcon.set(lib.icon);
     this.formColor.set(lib.color);
-    this.formMovies.set(lib.mediaTypes.includes('movie'));
-    this.formSeries.set(lib.mediaTypes.includes('series'));
-    this.formComics.set(lib.mediaTypes.includes('comic'));
+    this.formKinds.set(new Set(lib.mediaTypes));
     this.formProvider.set(lib.preferredProvider);
     this.formMetadataLanguage.set(lib.metadataLanguage);
     this.formMetadataRegion.set(lib.metadataRegion);
@@ -67,6 +64,13 @@ export class LibraryDetailState {
     this.formMergeM4bReplace.set(lib.mergeM4bReplace);
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
+  }
+
+  toggleKind(kind: MediaType, on: boolean) {
+    const next = new Set(this.formKinds());
+    if (on) next.add(kind);
+    else next.delete(kind);
+    this.formKinds.set(next);
   }
 
   toggleUser(id: number) {
@@ -144,18 +148,8 @@ export class LibraryDetailState {
     }
   }
 
-  /** The form has no book toggle: a book library keeps its type on save. */
-  isBook(): boolean {
-    return this.library()?.mediaTypes.includes('book') ?? false;
-  }
-
   mediaTypes(): MediaType[] {
-    const types: MediaType[] = [];
-    if (this.formMovies()) types.push('movie');
-    if (this.formSeries()) types.push('series');
-    if (this.formComics()) types.push('comic');
-    if (this.isBook()) types.push('book');
-    return types;
+    return MEDIA_KINDS.filter((k) => this.formKinds().has(k));
   }
 
   private payload(): UpdateLibraryBody {

@@ -96,4 +96,3 @@ export interface BookSourcePut {
 // DELETE /api/media/:id/sources?level=&editionId=&provider=&value= -> BookSources
 export type BookSourceDelete = BookSourcePut;
 
-// Settings (GET/PUT /api/settings): metadata_contact_email (plain), google_books_api_key (secret, secretsSet)

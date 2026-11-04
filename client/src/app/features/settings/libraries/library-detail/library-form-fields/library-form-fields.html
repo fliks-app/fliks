@@ -60,25 +60,17 @@
     <span class="label-text text-base">{{ 'settings.libraries.media_types' | translate }}</span>
   </div>
   <div class="flex flex-col gap-2">
-    <label class="label cursor-pointer justify-start gap-3 max-w-max">
-      <input type="checkbox" class="toggle"
-        [ngModel]="state.formMovies()" (ngModelChange)="state.formMovies.set($event)" />
-      <span class="label-text text-base">{{ 'settings.libraries.media_type_movie' | translate }}</span>
-    </label>
-    <label class="label cursor-pointer justify-start gap-3 max-w-max">
-      <input type="checkbox" class="toggle"
-        [ngModel]="state.formSeries()" (ngModelChange)="state.formSeries.set($event)" />
-      <span class="label-text text-base">{{ 'settings.libraries.media_type_series' | translate }}</span>
-    </label>
-    <label class="label cursor-pointer justify-start gap-3 max-w-max">
-      <input type="checkbox" class="toggle"
-        [ngModel]="state.formComics()" (ngModelChange)="state.formComics.set($event)" />
-      <span class="label-text text-base">{{ 'settings.libraries.media_type_comic' | translate }}</span>
-    </label>
+    @for (kind of kinds; track kind) {
+      <label class="label cursor-pointer justify-start gap-3 max-w-max">
+        <input type="checkbox" class="toggle"
+          [ngModel]="state.formKinds().has(kind)" (ngModelChange)="state.toggleKind(kind, $event)" />
+        <span class="label-text text-base">{{ registry[kind].libraryLabelKey | translate }}</span>
+      </label>
+    }
   </div>
 </div>
 
-@if (state.isBook()) {
+@if (state.formKinds().has('book')) {
   <label class="label cursor-pointer justify-start gap-3 max-w-max">
     <input type="checkbox" class="toggle"
       [ngModel]="state.formMergeM4b()" (ngModelChange)="state.formMergeM4b.set($event)" />
@@ -105,11 +97,24 @@
   <select
     appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formProvider()" (ngModelChange)="state.formProvider.set($event || null)">
-    @for (opt of providerOptions; track opt.value) {
-      <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
+    <option [ngValue]="null">{{ 'settings.libraries.provider_auto' | translate }}</option>
+    @for (p of providerOptions(); track p.provider) {
+      <option [ngValue]="p.provider">{{ p.label }}</option>
     }
   </select>
 </label>
+
+@if (readOrders().length) {
+  <div class="max-w-md text-sm -mt-2">
+    <p class="opacity-70">{{ 'settings.libraries.provider_order_hint' | translate }}</p>
+    <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+      @for (row of readOrders(); track row.kind) {
+        <dt class="opacity-70">{{ registry[row.kind].libraryLabelKey | translate }}</dt>
+        <dd>{{ row.labels.length ? row.labels.join(' → ') : ('settings.libraries.provider_none' | translate) }}</dd>
+      }
+    </dl>
+  </div>
+}
 
 <label class="form-control w-full max-w-md">
   <div class="label">

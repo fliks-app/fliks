@@ -2472,8 +2472,10 @@
       "folder_removed": "{{removedMedia}} medias removidas do Fliks, {{unlinkedMedia}} mantidas com os seus outros ficheiros.",
       "extra_folders": "Pastas adicionais",
       "extra_folders_hint": "Adicionadas depois de a biblioteca ser criada. Aqui só a primeira pasta é analisada: analise as outras a partir da página da biblioteca.",
-      "preferred_provider": "Fornecedor de metadados",
-      "provider_auto": "Auto (TMDB por predefinição)",
+      "preferred_provider": "Fornecedor preferido",
+      "provider_auto": "Auto (ordem global)",
+      "provider_order_hint": "Os metadados são lidos destes fornecedores por ordem, para cada tipo de media. O fornecedor preferido passa à frente nos tipos que cobre. A ordem global define-se em Definições › Metadados.",
+      "provider_none": "Nenhum fornecedor disponível",
       "metadata_language": "Idioma dos metadados",
       "metadata_region": "Região dos metadados",
       "metadata_inherit": "Herdar da definição global",
@@ -2557,6 +2559,7 @@
       "scan_search_failed_count": "{{count}} pasta(s) não analisada(s) (pesquisa falhou), reinicie a análise no separador Media",
       "media_filter_unidentified": "Não identificados",
       "scan_reorganize_needs_folder": "Mover/renomear aplica-se apenas a títulos com pasta própria",
+      "media_type_book": "Livros e audiolivros",
       "media_type_comic": "Quadrinhos"
     },
     "users": {
@@ -2709,6 +2712,7 @@
       "configure": "Configurar",
       "empty": "Nenhum fornecedor de metadados instalado.",
       "order": "Ordem por tipo",
+      "drag": "Mover",
       "move_up": "Subir",
       "move_down": "Descer",
       "load_error": "Não foi possível carregar as definições de metadados.",

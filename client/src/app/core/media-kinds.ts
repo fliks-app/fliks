@@ -7,6 +7,8 @@ export interface KindDescriptor {
   providerSegment: string;
   /** Key of the request-type label. */
   requestLabelKey: string;
+  /** Key of the label naming the kind in library settings. */
+  libraryLabelKey: string;
   /** The kind is made of seasons and episodes. */
   hasSeasons: boolean;
 }
@@ -17,24 +19,28 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     segment: 'movies',
     providerSegment: 'movie',
     requestLabelKey: 'requests.type_movie',
+    libraryLabelKey: 'settings.libraries.media_type_movie',
     hasSeasons: false,
   },
   series: {
     segment: 'series',
     providerSegment: 'tv',
     requestLabelKey: 'requests.type_series',
+    libraryLabelKey: 'settings.libraries.media_type_series',
     hasSeasons: true,
   },
   book: {
     segment: 'books',
     providerSegment: 'book',
     requestLabelKey: 'kinds.book',
+    libraryLabelKey: 'settings.libraries.media_type_book',
     hasSeasons: false,
   },
   comic: {
     segment: 'comics',
     providerSegment: 'comic',
     requestLabelKey: 'kinds.comic',
+    libraryLabelKey: 'settings.libraries.media_type_comic',
     hasSeasons: false,
   },
 };

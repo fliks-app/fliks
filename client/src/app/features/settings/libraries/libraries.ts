@@ -7,6 +7,7 @@ import {
   LibrariesApiService,
 } from '../../../core/services/api/libraries-api.service';
 import { formatBytes } from '../../../core/utils/format-bytes';
+import { KIND_REGISTRY, MEDIA_KINDS } from '../../../core/media-kinds';
 
 @Component({
   selector: 'app-libraries-settings',
@@ -17,6 +18,8 @@ export class LibrariesSettingsComponent implements OnInit {
   private readonly api = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
 
+  readonly kinds = MEDIA_KINDS;
+  readonly registry = KIND_REGISTRY;
   readonly libraries = signal<Library[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
