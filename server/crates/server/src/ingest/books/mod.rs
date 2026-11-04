@@ -931,12 +931,12 @@ pub(crate) async fn record_of(
     }
 }
 
-/// Boot sweep: books with files and no id nor merge yet get a settle, one at a time, which merges their file records.
-/// A settle stamps `metadataRefreshedAt`, so each book leaves the sweep once it has been merged.
+/// Boot sweep: media with files, no id and no merge yet get their files merged, one at a time.
+/// A merge stamps `metadataRefreshedAt`, so each media leaves the sweep once it has been merged.
 pub async fn backfill_unmatched(st: &AppState) {
-    let ids = sqlx::query_scalar!(
-        r#"SELECT m.id FROM media m
-           WHERE m.type = 'book' AND m."metadataRefreshedAt" IS NULL
+    let ids = sqlx::query!(
+        r#"SELECT m.id, m.type FROM media m
+           WHERE m."metadataRefreshedAt" IS NULL
              AND NOT EXISTS (SELECT 1 FROM media_external_ids x WHERE x."mediaId" = m.id)
              AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id)
            ORDER BY m.id"#
@@ -946,8 +946,12 @@ pub async fn backfill_unmatched(st: &AppState) {
     .unwrap_or_default();
     let st = st.clone();
     tokio::spawn(async move {
-        for id in ids {
-            settled(&st, id).await;
+        for r in ids {
+            if r.r#type == "book" {
+                settled(&st, r.id).await;
+            } else if let Err(e) = crate::media::write::fields::merge_unmatched(&st, r.id).await {
+                tracing::warn!("Backfill[media #{}]: file merge failed: {e}", r.id);
+            }
         }
     });
 }

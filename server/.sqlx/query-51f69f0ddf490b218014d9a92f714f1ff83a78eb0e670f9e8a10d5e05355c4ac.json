@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id, m.type FROM media m\n           WHERE m.\"metadataRefreshedAt\" IS NULL\n             AND NOT EXISTS (SELECT 1 FROM media_external_ids x WHERE x.\"mediaId\" = m.id)\n             AND EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id)\n           ORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "51f69f0ddf490b218014d9a92f714f1ff83a78eb0e670f9e8a10d5e05355c4ac"
+}
