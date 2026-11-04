@@ -1,18 +1,24 @@
 @if (!desktopLayout()) {
-  <app-mobile-fanart-hero class="block" [fanartUrl]="posterUrl()" [blur]="true" />
+  <!-- The poster shares the backdrop's grid cell, so it sits inside the hero without a negative offset. -->
+  <div class="grid">
+    <app-mobile-fanart-hero class="block [grid-area:1/1]" [fanartUrl]="posterUrl()" [blur]="true" />
+    <app-hero-poster class="[grid-area:1/1] self-end justify-self-center relative z-20" [kind]="mediaType()" [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
+  </div>
 }
 
 <div
   class="relative z-20 has-[.dropdown-open]:z-50 flex gap-4"
   [attr.data-hero-lead]="desktopLayout() ? null : ''"
-  [class.-mt-24]="!desktopLayout()"
+  [class.mt-4]="!desktopLayout()"
   [class.flex-col]="!desktopLayout()"
   [class.items-center]="!desktopLayout()"
   [class.lg:gap-10]="desktopLayout()"
   [class.gap-6]="desktopLayout()"
   [style.padding-top]="desktopLayout() ? navbar.heroPaddingTop() : null"
 >
-  <app-hero-poster [kind]="mediaType()" [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
+  @if (desktopLayout()) {
+    <app-hero-poster [kind]="mediaType()" [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
+  }
 
   <div class="min-w-0 self-stretch flex-1 flex flex-col gap-2 md:pt-2">
     <h1 class="text-3xl md:text-2xl lg:text-4xl font-bold tracking-tight">{{ title() }}</h1>
