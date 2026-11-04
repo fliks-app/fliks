@@ -1209,3 +1209,33 @@ async fn the_boot_sweep_keeps_a_source_with_no_identical_copy(pool: PgPool) {
     fliks_server::media::write::recover(&c.st).await;
     assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
 }
+
+#[cfg(unix)]
+#[sqlx::test(migrations = false)]
+async fn a_stuck_source_survives_a_move_that_runs_before_it_is_freed(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let c = ctx(pool.clone()).await;
+    let (f1, f2) = folder_pair(&c).await;
+    let id = media_with_files(&pool, "Mv", &[f1]).await;
+    put(&c, "f1/Mv/0.mkv", b"zero");
+    let src_dir = c.tmp.join("f1/Mv");
+    std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::File::create(src_dir.join("probe")).is_ok() {
+        return; // permissions are not enforced (root)
+    }
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    let plan: String =
+        sqlx::query_scalar(r#"SELECT plan::text FROM media_moves WHERE "mediaId" = $1"#)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(plan.contains("0.mkv"), "{plan}");
+    std::fs::set_permissions(&src_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(move_to(&c, id, f2).await, 202);
+    settled(&c).await;
+    assert!(!src_dir.join("0.mkv").exists());
+}
