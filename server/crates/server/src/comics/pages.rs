@@ -4,7 +4,11 @@ use super::{
     cache::{self, Entry, Key},
 };
 use crate::{
-    http::{AppError, auth::FileBoundAuthed, validate::PathParams},
+    http::{
+        AppError,
+        auth::{Authed, FileBoundAuthed},
+        validate::PathParams,
+    },
     libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
     state::AppState,
     stream::resolve_file,
@@ -39,7 +43,7 @@ use tokio::sync::Semaphore;
 const PAGE_JOBS: usize = 3;
 const MAX_PIXELS: u64 = 25_000_000;
 const MAX_ALLOC: u64 = MAX_PIXELS * 8;
-const MAX_WIDTH: u32 = 4096;
+pub(crate) const MAX_WIDTH: u32 = 4096;
 const JPEG_QUALITY: u8 = 82;
 /// Revalidated on every use: a page is cheap to confirm and the ACL can change.
 const NO_CACHE: &str = "private, no-cache";
@@ -88,8 +92,13 @@ impl Source {
 }
 
 /// One lookup applies the ACL, so a hidden issue costs what a missing one does and reads like it.
-async fn source(st: &AppState, a: &FileBoundAuthed, item: i32) -> Result<Source, AppError> {
-    let acl = accessible_library_ids(&st.db, &a.auth).await?;
+async fn source(
+    st: &AppState,
+    auth: &Authed,
+    bound_file: Option<u32>,
+    item: i32,
+) -> Result<Source, AppError> {
+    let acl = accessible_library_ids(&st.db, auth).await?;
     let row: Option<(i32, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT mf.id, mf."relativePath" FROM items i
            JOIN comic_issues ci ON ci."itemId" = i.id
@@ -100,7 +109,7 @@ async fn source(st: &AppState, a: &FileBoundAuthed, item: i32) -> Result<Source,
     )))
     .bind(item)
     .bind(&acl)
-    .bind(a.auth.user.id)
+    .bind(auth.user.id)
     .fetch_optional(&st.db)
     .await?;
     let (file, rel) = row.ok_or_else(|| item_missing(item))?;
@@ -108,9 +117,7 @@ async fn source(st: &AppState, a: &FileBoundAuthed, item: i32) -> Result<Source,
         return Err(AppError::not_found(format!("Issue #{item} is a PDF")));
     }
     // A token bound to a file reads the pages of that file only.
-    if a.bound_file
-        .is_some_and(|b| i64::from(b) != i64::from(file))
-    {
+    if bound_file.is_some_and(|b| i64::from(b) != i64::from(file)) {
         return Err(item_missing(item));
     }
     let f = resolve_file(st, None, i64::from(file)).await.map_err(|e| {
@@ -180,7 +187,7 @@ pub async fn pages(
 ) -> Result<Response, AppError> {
     a.auth.require(Action::Read, Subject::Media)?;
     let PathParams(item) = p?;
-    let src = source(&st, &a, item).await?;
+    let src = source(&st, &a.auth, a.bound_file, item).await?;
     let etag = format!("\"p-{}\"", src.tag());
     if let Some(r) = cached(&headers, &etag) {
         return Ok(r);
@@ -265,17 +272,30 @@ pub async fn page(
 ) -> Result<Response, AppError> {
     a.auth.require(Action::Read, Subject::Media)?;
     let PathParams((item, index)) = p?;
-    if q.width.is_some_and(|w| w == 0 || w > MAX_WIDTH) {
+    serve_page(&st, &a.auth, a.bound_file, &headers, item, index, q.width).await
+}
+
+/// The page route's answer for any credential: the OPDS-PSE route calls it too.
+pub(crate) async fn serve_page(
+    st: &AppState,
+    auth: &Authed,
+    bound_file: Option<u32>,
+    headers: &HeaderMap,
+    item: i32,
+    index: i64,
+    width: Option<u32>,
+) -> Result<Response, AppError> {
+    if width.is_some_and(|w| w == 0 || w > MAX_WIDTH) {
         return Err(AppError::bad_request(format!(
             "width must be 1 to {MAX_WIDTH}"
         )));
     }
     // Widths snap up to the next 256 px step, so the client's steps share one answer.
-    let width = q.width.map(|w| w.div_ceil(256) * 256);
+    let width = width.map(|w| w.div_ceil(256) * 256);
     let index = usize::try_from(index).map_err(|_| AppError::not_found("Page not found"))?;
-    let src = source(&st, &a, item).await?;
+    let src = source(st, auth, bound_file, item).await?;
     let etag = format!("\"{}-{index}-{}\"", src.tag(), width.unwrap_or(0));
-    if let Some(r) = cached(&headers, &etag) {
+    if let Some(r) = cached(headers, &etag) {
         return Ok(r);
     }
     let key = src.key;

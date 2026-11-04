@@ -1,6 +1,6 @@
 # Spec: OPDS 1.2 catalogue
 
-Scope: the Atom catalogue an e-reader app (KOReader, Moon+ Reader, Librera, Cantook) browses to find and download books: its routes, its credential, the ACL on every entry and link, and the feed shapes. The credential is a device token of kind `opds` (`device-tokens.md`); the bytes are not served here: every acquisition link goes to the engine's data plane, which resolves the same Basic credential (`device-tokens.md` rules 7-10). The books domain is `books.md` and `books-api.md`; nothing here has its own table.
+Scope: the Atom catalogue an e-reader app (KOReader, Moon+ Reader, Librera, Cantook, Panels) browses to find and download books and comics, with OPDS-PSE page streaming for comics: its routes, its credential, the ACL on every entry and link, and the feed shapes. The credential is a device token of kind `opds` (`device-tokens.md`); the bytes are not served here: every acquisition link goes to the engine's data plane, which resolves the same Basic credential (`device-tokens.md` rules 7-10). The books domain is `books.md` and `books-api.md`, the comics domain `comics.md`; nothing here has its own table.
 
 ## Routes
 
@@ -8,14 +8,17 @@ All `GET` (and `HEAD`), under `/api/opds` so that the engine front door forwards
 
 | Route | Feed | Filled by |
 |---|---|---|
-| `/api/opds` | navigation: libraries, recently added, authors, series | libraries readable by the caller that hold books |
-| `/api/opds/libraries/:id` | acquisition: the books of the library, by title | `media::list::find_all` |
+| `/api/opds` | navigation: libraries, recently added, authors, series, comics | libraries readable by the caller that hold books or comics |
+| `/api/opds/libraries/:id` | acquisition: the books of the library, by title; navigation: its comic volumes when it holds no books (rule 16) | `media::list::find_all` |
 | `/api/opds/recent` | acquisition: the newest books (`createdAt DESC`) | `media::list::find_all` |
 | `/api/opds/authors` | navigation: authors, by `COALESCE(sortName, name)` | `persons::service::people` |
 | `/api/opds/authors/:id` | acquisition: the author's books, by title | `media::list::find_all` (`authorId`) |
 | `/api/opds/series` | navigation: series (book collections), by name | `collections::service::list` |
 | `/api/opds/series/:id` | acquisition: the series in position order | `collections::service::detail` |
-| `/api/opds/search?q=` | acquisition: books matching `q` | `media::list::find_all` (`q`) |
+| `/api/opds/comics` | navigation: the comic volumes, by title | `media::list::find_ids` (`type=comic`) |
+| `/api/opds/comics/:id` | acquisition: the issues of a volume | `comic_issues` (rule 17) |
+| `/api/opds/issues/:itemId/pages/:index?width=` | the page image (PSE stream URL) | `comics::serve_page` (rule 19) |
+| `/api/opds/search?q=` | acquisition: books matching `q`, then the comic volumes matching it | `media::list::find_all` (`q`) |
 | `/api/opds/opensearch.xml` | `application/opensearchdescription+xml` | none |
 
 ## Credential
@@ -42,5 +45,14 @@ All `GET` (and `HEAD`), under `/api/opds` so that the engine front door forwards
 
 ## Not covered
 
-14. OPDS-PSE (page streaming) is phase 7 (plan 7.5), OPDS 2.0 is not planned, and neither are per-device scopes beyond the token kind. Facets and `rel="related"` links are left out.
+14. OPDS 2.0 is not planned, and neither are per-device scopes beyond the token kind. Facets and `rel="related"` links are left out. The recently-added, author and series feeds list books only; a comic is reached through its library, `/api/opds/comics` and search.
 15. Acquisition links of audio editions are one per file; OPDS 1.2 has no multi-file audiobook model, so a reader that does not play audio ignores them.
+
+## Comics and page streaming
+
+16. A library is listed (root, `/api/opds/libraries/:id`) when it holds `book` or `comic`. A library that holds comics and no books answers a navigation feed of its volumes (`find_ids`, `type=comic`, by title); one that holds both answers its books, its comics being under `/api/opds/comics`. The root carries a `Comics` entry when a readable library holds comics. A volume is listed only with at least one readable issue; a missing, hidden or non-comic id is `404 Comic #<id> not found`.
+17. `/api/opds/comics/:id` is an acquisition feed of the volume's issues in the order of `comics.md` rule 9 (issues by `"sortNumber"`, then annuals and specials), 50 per page. An issue is listed when its edition is readable (`COALESCE(editions."libraryId", media."libraryId")`) and the file `comic_part(item, user)` names (`comics.md` rule 26) is hidden by no edition (`HIDDEN_FILES_FROM`); a page past the last is empty, an empty first page `404`. An entry is `{ title (`<volume> #<label>`, `Annual` or `Special` before the `#`, `: <issue title>` when it has one), id `urn:fliks:comic:<itemId>`, updated (the volume's), dc:publisher (the volume's), dc:issued (the release year), links }`.
+18. Links of an issue: one `http://opds-spec.org/acquisition` to the part file, like a book's (rule 11), `type` `application/vnd.comicbook+zip` (`cbz`), `application/x-cb7`, `application/vnd.comicbook-rar` or `application/pdf`; and, when `"pageCount"` is not NULL (a PDF or an unreadable archive has none), the OPDS-PSE 1.2 link `rel="http://vaemendis.net/opds-pse/stream"`, `type="image/jpeg"`, `href="/api/opds/issues/<itemId>/pages/{pageNumber}?width={maxWidth}"`, `pse:count` the page count and, when the caller has a playback state with a numeric `locator.page` (`comics-contract.md`, Progress) or a completed one, `pse:lastRead` (1-based, clamped to the count; the count when completed with no page) and `pse:lastReadDate` (that state's `lastPlayedAt`, UTC). Every feed declares `xmlns:pse="http://vaemendis.net/opds-pse/ns"`.
+19. The stream URL runs the page route of `comics.md` rules 26-28 (same ACL, issue resolution, ETag, caches, budgets and job slots) under the OPDS credential of rules 1-3, not the cookie or the stream token. `{pageNumber}` is the 0-based index. `{maxWidth}` is clamped to 1 to 4096 then snapped like `width`; with no width the page is served at 4096 so the answer is always a JPEG, as the link declares (the page route without `width` may answer a png, webp or gif).
+20. Reading progress is read-only: OPDS-PSE 1.2 defines no write path, so a PSE client leaves the state untouched (a reader that wants to sync uses the playback routes).
+21. Search (rule 13) answers up to 50 books followed by up to 50 comic volumes as navigation entries; `next` is present when either list continues.

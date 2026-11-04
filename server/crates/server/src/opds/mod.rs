@@ -1,6 +1,11 @@
 //! The OPDS 1.2 catalogue (`docs/spec/opds.md`): Atom feeds of the books the token's owner can read.
 mod auth;
+mod comics;
 mod entries;
+
+pub use comics::{
+    __path_comics_list, __path_issue_page, __path_volume, comics_list, issue_page, volume,
+};
 
 use crate::{
     collections::service as series,
@@ -10,7 +15,7 @@ use crate::{
     persons::service as persons,
     state::AppState,
 };
-use auth::OpdsAuthed;
+pub(crate) use auth::OpdsAuthed;
 use axum::{
     Router,
     extract::{Path, Query, State},
@@ -42,6 +47,9 @@ pub fn router() -> Router<AppState> {
         .route("/api/opds/authors/{id}", get(author))
         .route("/api/opds/series", get(series_list))
         .route("/api/opds/series/{id}", get(series_one))
+        .route("/api/opds/comics", get(comics_list))
+        .route("/api/opds/comics/{id}", get(volume))
+        .route("/api/opds/issues/{itemId}/pages/{index}", get(issue_page))
         .route("/api/opds/search", get(search))
         .route("/api/opds/opensearch.xml", get(opensearch_description))
 }
@@ -123,10 +131,14 @@ fn nav_entry(id: String, title: &str, content: Option<String>, href: String) -> 
     }
 }
 
-/// The readable libraries that hold books, by name.
-async fn book_libraries(db: &sqlx::PgPool, acl: &[i32]) -> Result<Vec<(i32, String)>, sqlx::Error> {
+/// The readable libraries that hold books or comics, by name, with whether they hold books and comics.
+async fn catalogue_libraries(
+    db: &sqlx::PgPool,
+    acl: &[i32],
+) -> Result<Vec<(i32, String, bool, bool)>, sqlx::Error> {
     sqlx::query_as(
-        r#"SELECT id, name FROM libraries WHERE id = ANY($1) AND "mediaTypes" ? 'book'
+        r#"SELECT id, name, "mediaTypes" ? 'book', "mediaTypes" ? 'comic' FROM libraries
+           WHERE id = ANY($1) AND "mediaTypes" ?| ARRAY['book', 'comic']
            ORDER BY name COLLATE "C", id"#,
     )
     .bind(acl)
@@ -185,23 +197,32 @@ pub async fn root(
     OpdsAuthed(a): OpdsAuthed,
 ) -> Result<Response, AppError> {
     let acl = accessible_library_ids(&st.db, &a).await?;
-    let mut entries: Vec<Entry> = book_libraries(&st.db, &acl)
-        .await?
-        .into_iter()
-        .map(|(id, name)| {
-            nav_entry(
+    let libs = catalogue_libraries(&st.db, &acl).await?;
+    let mut entries: Vec<Entry> = libs
+        .iter()
+        .map(|(id, name, books, _)| {
+            let mut e = nav_entry(
                 format!("urn:fliks:opds:libraries:{id}"),
-                &name,
+                name,
                 None,
                 format!("/api/opds/libraries/{id}"),
-            )
+            );
+            if !books {
+                e.links[0].kind = Some(NAV_TYPE.to_owned());
+            }
+            e
         })
         .collect();
+    let comics = libs.iter().any(|l| l.3);
     let fixed = [
         ("recent", "Recently added", "recent", ACQ_TYPE),
         ("authors", "Authors", "authors", NAV_TYPE),
         ("series", "Series", "series", NAV_TYPE),
     ];
+    let comics_entry = [("comics", "Comics", "comics", NAV_TYPE)];
+    let fixed = fixed
+        .into_iter()
+        .chain(comics.then_some(comics_entry).into_iter().flatten());
     for (id, title, path, kind) in fixed {
         let mut e = nav_entry(
             format!("urn:fliks:opds:{id}"),
@@ -231,11 +252,28 @@ pub async fn library(
 ) -> Result<Response, AppError> {
     let page = page_of(&q)?;
     let acl = accessible_library_ids(&st.db, &a).await?;
-    let lib = book_libraries(&st.db, &acl)
+    let lib = catalogue_libraries(&st.db, &acl)
         .await?
         .into_iter()
         .find(|l| l.0 == id)
         .ok_or_else(|| missing("Library", id))?;
+    if !lib.2 {
+        let s = Search {
+            library_id: Some(id),
+            ..comics::comic_search(page)
+        };
+        let feed_id = format!("urn:fliks:opds:libraries:{id}");
+        let href = format!("/api/opds/libraries/{id}");
+        return comics::volume_list(
+            &st,
+            a.user.id,
+            &acl,
+            &s,
+            (&feed_id, lib.1, &href, ROOT),
+            page,
+        )
+        .await;
+    }
     let s = Search {
         library_id: Some(id),
         ..book_search(page)
@@ -452,31 +490,41 @@ pub async fn search(
         .get("q")
         .map(|t| t.trim().chars().take(200).collect())
         .unwrap_or_default();
-    let (ids, total) = if term.is_empty() {
-        (vec![], 0)
+    let (ids, total, vols, vtotal) = if term.is_empty() {
+        (vec![], 0, vec![], 0)
     } else {
         let s = Search {
             q: Some(term.clone()),
             ..book_search(page)
         };
-        listed(&st, a.user.id, &s, &acl).await?
+        let (ids, total) = listed(&st, a.user.id, &s, &acl).await?;
+        let c = Search {
+            q: Some(term.clone()),
+            ..comics::comic_search(page)
+        };
+        let (vols, vtotal) = listed(&st, a.user.id, &c, &acl).await?;
+        (ids, total, vols, vtotal)
     };
     let href = format!(
         "/api/opds/search?q={}",
         utf8_percent_encode(&term, NON_ALPHANUMERIC)
     );
-    acquisition(
-        &st,
-        &acl,
-        &ids,
-        "urn:fliks:opds:search".into(),
-        format!("Search: {term}"),
-        &href,
-        ROOT,
-        page,
-        total > page * PAGE,
-    )
-    .await
+    let mut entries = entries::read(&st.db, &ids, &acl).await?;
+    entries.extend(comics::volumes(&st.db, &vols, &acl).await?);
+    let feed = Feed {
+        id: "urn:fliks:opds:search".into(),
+        title: format!("Search: {term}"),
+        updated: now(),
+        links: links(
+            &href,
+            Some(ROOT),
+            ACQ_TYPE,
+            page,
+            total.max(vtotal) > page * PAGE,
+        ),
+        entries,
+    };
+    Ok(xml(ACQ_TYPE, render(&feed)))
 }
 
 #[utoipa::path(get, path = "/api/opds/opensearch.xml", responses((status = 200)))]

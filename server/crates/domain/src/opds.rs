@@ -5,6 +5,16 @@ pub const ACQUISITION: &str = "http://opds-spec.org/acquisition";
 pub const NAV_TYPE: &str = "application/atom+xml;profile=opds-catalog;kind=navigation";
 pub const ACQ_TYPE: &str = "application/atom+xml;profile=opds-catalog;kind=acquisition";
 
+pub const PSE_STREAM: &str = "http://vaemendis.net/opds-pse/stream";
+
+/// The OPDS-PSE attributes of a stream link; `last_read` is 1-based.
+#[derive(Debug, Clone, Default)]
+pub struct Pse {
+    pub count: i64,
+    pub last_read: Option<i64>,
+    pub last_read_date: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Link {
     pub rel: Option<String>,
@@ -12,6 +22,7 @@ pub struct Link {
     pub kind: Option<String>,
     pub title: Option<String>,
     pub length: Option<i64>,
+    pub pse: Option<Pse>,
 }
 
 impl Link {
@@ -81,6 +92,15 @@ fn link(o: &mut String, l: &Link) {
     if let Some(n) = l.length {
         let _ = write!(o, " length=\"{n}\"");
     }
+    if let Some(p) = &l.pse {
+        let _ = write!(o, " pse:count=\"{}\"", p.count);
+        if let Some(n) = p.last_read {
+            let _ = write!(o, " pse:lastRead=\"{n}\"");
+        }
+        if let Some(d) = &p.last_read_date {
+            let _ = write!(o, " pse:lastReadDate=\"{}\"", esc(d));
+        }
+    }
     o.push_str("/>");
 }
 
@@ -91,7 +111,8 @@ fn text(o: &mut String, tag: &str, v: &str) {
 pub fn render(f: &Feed) -> String {
     let mut o = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\" \
-         xmlns:dc=\"http://purl.org/dc/terms/\" xmlns:opds=\"http://opds-spec.org/2010/catalog\">",
+         xmlns:dc=\"http://purl.org/dc/terms/\" xmlns:opds=\"http://opds-spec.org/2010/catalog\" \
+         xmlns:pse=\"http://vaemendis.net/opds-pse/ns\">",
     );
     text(&mut o, "id", &f.id);
     text(&mut o, "title", &f.title);
@@ -154,6 +175,25 @@ mod tests {
     }
 
     #[test]
+    fn a_stream_link_carries_the_pse_attributes() {
+        let mut o = String::new();
+        link(
+            &mut o,
+            &Link {
+                pse: Some(Pse {
+                    count: 35,
+                    last_read: Some(10),
+                    last_read_date: Some("2010-01-10T10:01:11Z".into()),
+                }),
+                ..Link::new(PSE_STREAM, "/p/{pageNumber}?width={maxWidth}", "image/jpeg")
+            },
+        );
+        assert!(o.contains(
+            "pse:count=\"35\" pse:lastRead=\"10\" pse:lastReadDate=\"2010-01-10T10:01:11Z\"/>"
+        ));
+    }
+
+    #[test]
     fn a_feed_renders_well_formed_xml_with_its_entries() {
         let f = Feed {
             id: "urn:x".into(),
@@ -180,6 +220,7 @@ mod tests {
         assert!(x.contains("href=\"/api/opds?a=1&amp;b=2\""));
         assert!(x.contains("<name>A &lt;B&gt;</name>"));
         assert!(x.contains("length=\"5\""));
+        assert!(x.contains("xmlns:pse=\"http://vaemendis.net/opds-pse/ns\""));
         let mut r = quick_xml::Reader::from_str(&x);
         while r.read_event().unwrap() != quick_xml::events::Event::Eof {}
     }
