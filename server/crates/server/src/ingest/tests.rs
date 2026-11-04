@@ -2735,6 +2735,38 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn an_unmatched_book_takes_no_profile_of_another_family(pool: PgPool) {
+        let c = ctx(pool).await;
+        let l = shelf(&c).await;
+        sqlx::query(r#"INSERT INTO quality_profiles (name, cutoff, items) VALUES ('P', 18, '[]')"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let file = c.dir.join("books/Mirelune.epub");
+        epub(&file);
+        let body = json!({"libraryId": l, "type": "book", "folderName": "", "title": "Mirelune",
+            "files": [{"filePath": file}]});
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body,
+        )
+        .await;
+        assert_eq!((s, &b["linked"]), (201, &json!(1)), "{b}");
+        assert_eq!(count(&c, "SELECT count(*) FROM wants").await, 2);
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM wants WHERE "qualityProfileId" IS NOT NULL"#
+            )
+            .await,
+            0
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn deleting_a_book_keeps_the_files_it_does_not_own(pool: PgPool) {
         let c = ctx(pool).await;
         let lib = c.dir.join("books");
