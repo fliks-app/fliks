@@ -4115,7 +4115,9 @@
       "kind_special": "Hors-série",
       "release_date": "Date de parution",
       "saved": "Enregistré",
-      "invalid": "Le numéro et la position de tri sont requis."
+      "invalid_number": "Le numéro est requis.",
+      "invalid_sort": "La position de tri doit être un nombre entre -9999 et 9999.",
+      "reset": "Rétablir l'automatique"
     }
   }
 }

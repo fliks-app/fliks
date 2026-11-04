@@ -4115,7 +4115,9 @@
       "kind_special": "Especial",
       "release_date": "Fecha de publicación",
       "saved": "Guardado",
-      "invalid": "El número y la posición de orden son obligatorios."
+      "invalid_number": "El número es obligatorio.",
+      "invalid_sort": "La posición de orden debe ser un número entre -9999 y 9999.",
+      "reset": "Restablecer a automático"
     }
   }
 }

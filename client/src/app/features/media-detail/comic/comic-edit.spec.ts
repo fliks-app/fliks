@@ -16,6 +16,7 @@ const issue: ComicIssue = {
   kind: 'issue',
   annual: false,
   title: null,
+  overview: null,
   releaseDate: null,
   pageCount: 20,
   progression: null,
@@ -43,16 +44,18 @@ describe('comic edits', () => {
   });
 
   it('sends only the issue fields that changed and refuses a missing number', () => {
-    const same = { number: '1', sort: '1', kind: 'issue', title: '', releaseDate: '' };
+    const same = { number: '1', sort: '1', kind: 'issue', title: '', overview: '', releaseDate: '' };
     expect(issuePatch(form(same), issue)).toEqual({});
-    expect(issuePatch(form({ ...same, number: '1.5', sort: '1.5', kind: 'annual', title: 'T', releaseDate: '2020-01-02' }), issue)).toEqual({
+    expect(issuePatch(form({ ...same, number: '1.5', sort: '1.5', kind: 'annual', title: 'T', overview: 'O', releaseDate: '2020-01-02' }), issue)).toEqual({
       number: '1.5',
       sort: 1.5,
       kind: 'annual',
       title: 'T',
+      overview: 'O',
       releaseDate: '2020-01-02',
     });
-    expect(issuePatch(form({ ...same, number: '' }), issue)).toBeNull();
-    expect(issuePatch(form({ ...same, sort: '' }), issue)).toBeNull();
+    expect(issuePatch(form({ ...same, number: '' }), issue)).toBe('number');
+    expect(issuePatch(form({ ...same, sort: '' }), issue)).toBe('sort');
+    expect(issuePatch(form({ ...same, sort: '10000' }), issue)).toBe('sort');
   });
 });

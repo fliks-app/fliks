@@ -7,7 +7,7 @@ use serde_json::json;
 
 #[test]
 fn info_reproduces_expected() {
-    replay("comics-info", 9, |i| {
+    replay("comics-info", 19, |i| {
         let xml = i["xml"].as_str().unwrap();
         let n = name::parse_path(i["path"].as_str().unwrap());
         match info::parse(xml.as_bytes()) {

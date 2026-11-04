@@ -1,5 +1,5 @@
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePencil } from '@lucide/angular';
@@ -13,7 +13,7 @@ import { CachedSrcDirective } from '../../../shared/directives/cached-src.direct
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { nextIssue, type ComicMedia } from './comic-media';
-import { issuePatch, volumePatch } from './comic-edit';
+import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
 
 /** The page of a comic volume, rendered by the media detail page for the `comic` kind. */
 @Component({
@@ -42,12 +42,16 @@ export class ComicVolumeComponent {
   private readonly volumeDialog = viewChild<ElementRef<HTMLDialogElement>>('volumeDialog');
   private readonly issueDialog = viewChild<ElementRef<HTMLDialogElement>>('issueDialog');
   /** What the last edit answered: the volume as saved, over the input until the page reloads. */
-  private readonly saved = signal<{ comic: ComicDetail; title: string; overview: string | null } | null>(null);
+  private readonly saved = linkedSignal<ComicMedia, { comic: ComicDetail; title: string; overview: string | null } | null>({
+    source: this.media,
+    computation: () => null,
+  });
 
   /** The reader is a personal-device feature: a TV form factor lists the issues without opening them. */
   protected readonly canRead = !inject(TvService).isTv();
   /** Admin edits are not offered on a TV. */
-  protected readonly canEdit = !inject(TvService).isTv() && inject(AuthService).hasPermission('media.edit');
+  private readonly auth = inject(AuthService);
+  protected readonly canEdit = computed(() => this.canRead && this.auth.hasPermission('media.edit'));
   protected readonly comic = computed(() => this.saved()?.comic ?? this.media().comic);
   protected readonly title = computed(() => this.saved()?.title ?? this.media().title);
   protected readonly overview = computed(() => (this.saved() ? this.saved()!.overview : this.media().overview));
@@ -106,13 +110,30 @@ export class ComicVolumeComponent {
     e.preventDefault();
     const i = this.editingIssue();
     if (!i) return;
-    const patch: ComicIssuePatch | null = issuePatch(new FormData(e.target as HTMLFormElement), i);
-    if (patch === null) {
-      this.toast.error(this.translate.instant('comic.edit.invalid'));
+    const patch: ComicIssuePatch | 'number' | 'sort' = issuePatch(new FormData(e.target as HTMLFormElement), i);
+    if (typeof patch === 'string') {
+      this.toast.error(this.translate.instant(`comic.edit.invalid_${patch}`));
       return;
     }
     await this.run(Object.keys(patch).length === 0, async () => {
       const comic = await this.api.patchIssue(i.itemId, patch);
+      this.saved.set({ comic, title: this.title(), overview: this.overview() });
+    });
+  }
+
+  /** Unlocks every field of the dialog: the next scan fills them again. */
+  protected async resetVolume(): Promise<void> {
+    await this.run(false, async () => {
+      const comic = await this.api.patchVolume(this.media().id, volumeReset);
+      this.saved.set({ comic, title: this.title(), overview: this.overview() });
+    });
+  }
+
+  protected async resetIssue(): Promise<void> {
+    const i = this.editingIssue();
+    if (!i) return;
+    await this.run(false, async () => {
+      const comic = await this.api.patchIssue(i.itemId, issueReset);
       this.saved.set({ comic, title: this.title(), overview: this.overview() });
     });
   }

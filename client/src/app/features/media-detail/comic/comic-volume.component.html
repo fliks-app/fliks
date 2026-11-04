@@ -20,7 +20,7 @@
     <div class="flex-1 min-w-0 flex flex-col gap-2">
       <div class="flex items-start gap-2">
         <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ title() }}</h1>
-        @if (canEdit) {
+        @if (canEdit()) {
           <button type="button" class="btn btn-ghost btn-sm btn-square mt-1" [attr.aria-label]="'comic.edit.volume' | translate" (click)="openVolume()" data-testid="edit-volume">
             <svg lucidePencil class="size-4"></svg>
           </button>
@@ -68,7 +68,7 @@
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </div>
         }
-        @if (canEdit) {
+        @if (canEdit()) {
           <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'comic.edit.issue' | translate" (click)="openIssue(i)" data-testid="edit-issue">
             <svg lucidePencil class="size-4"></svg>
           </button>
@@ -150,13 +150,14 @@
           <textarea class="textarea textarea-bordered w-full" rows="4" name="overview" [value]="overview() ?? ''"></textarea>
         </label>
         <app-modal-footer>
+          <button type="button" class="btn btn-ghost me-auto" [disabled]="saving()" (click)="resetVolume()" data-testid="reset-volume">{{ 'comic.edit.reset' | translate }}</button>
           <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
           <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
         </app-modal-footer>
       </form>
     }
   </div>
-  <form method="dialog" class="modal-backdrop"><button aria-label="close"></button></form>
+  <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
 </dialog>
 
 <dialog #issueDialog class="modal" (close)="editingIssue.set(null)">
@@ -190,12 +191,17 @@
           <span class="label-text">{{ 'comic.edit.release_date' | translate }}</span>
           <input class="input input-bordered w-full" name="releaseDate" type="date" [value]="i.releaseDate ?? ''" />
         </label>
+        <label class="form-control">
+          <span class="label-text">{{ 'comic.edit.overview' | translate }}</span>
+          <textarea class="textarea textarea-bordered w-full" rows="3" name="overview" [value]="i.overview ?? ''"></textarea>
+        </label>
         <app-modal-footer>
+          <button type="button" class="btn btn-ghost me-auto" [disabled]="saving()" (click)="resetIssue()" data-testid="reset-issue">{{ 'comic.edit.reset' | translate }}</button>
           <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
           <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
         </app-modal-footer>
       </form>
     }
   </div>
-  <form method="dialog" class="modal-backdrop"><button aria-label="close"></button></form>
+  <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
 </dialog>

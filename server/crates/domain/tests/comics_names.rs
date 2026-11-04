@@ -7,7 +7,7 @@ use serde_json::json;
 
 #[test]
 fn names_reproduce_expected() {
-    replay("comics-names", 23, |i| {
+    replay("comics-names", 34, |i| {
         json!(name::parse_path(i["path"].as_str().unwrap()))
     });
 }

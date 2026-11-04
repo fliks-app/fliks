@@ -258,10 +258,10 @@ fn u64_of(r: &mut dyn Read) -> Result<u64, Error> {
     Ok(u64::from_le_bytes(b))
 }
 
-/// A length-prefixed byte string of at most one entry.
-fn bytes_of(r: &mut dyn Read) -> Result<Vec<u8>, Error> {
+/// A length-prefixed byte string of at most `max` bytes.
+fn bytes_of(r: &mut dyn Read, max: u64) -> Result<Vec<u8>, Error> {
     let n = u64_of(r)?;
-    if n > MAX_ENTRY_BYTES {
+    if n > max {
         return Err(Error::Corrupt);
     }
     let mut b = vec![0u8; n as usize];
@@ -294,7 +294,11 @@ pub fn list(path: &Path) -> Result<Listing, Error> {
             .map(|_| u32_of(r).map(|o| o as usize))
             .collect::<Result<Vec<_>, _>>()?;
         let solid = if u8_of(r)? == 1 {
-            Some((0..n).map(|_| bytes_of(r)).collect::<Result<Vec<_>, _>>()?)
+            Some(
+                (0..n)
+                    .map(|_| bytes_of(r, MAX_ENTRY_BYTES))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
         } else {
             None
         };
@@ -320,14 +324,14 @@ pub fn count(path: &Path) -> Result<usize, Error> {
 pub fn page(path: &Path, index: usize) -> Result<Vec<u8>, Error> {
     call("page", path, index, MAX_ENTRY_BYTES + (1 << 20), |r| {
         status(r)?;
-        bytes_of(r)
+        bytes_of(r, MAX_ENTRY_BYTES)
     })
 }
 
 pub fn page_at(path: &Path, ordinal: usize) -> Result<Vec<u8>, Error> {
     call("page-at", path, ordinal, MAX_ENTRY_BYTES + (1 << 20), |r| {
         status(r)?;
-        bytes_of(r)
+        bytes_of(r, MAX_ENTRY_BYTES)
     })
 }
 
@@ -336,7 +340,7 @@ pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
     call("info", path, 0, MAX_INFO_BYTES + (1 << 20), |r| {
         status(r)?;
         match u8_of(r)? {
-            1 => bytes_of(r).map(Some),
+            1 => bytes_of(r, MAX_INFO_BYTES).map(Some),
             _ => Ok(None),
         }
     })

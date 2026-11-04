@@ -21,5 +21,16 @@
 {"expected":{"kind":"issue","label":"Series One v2","sort":null,"volume":"Series One","volumeNo":2,"year":null},"input":{"path":"Series One v2.cbz"}},
 {"expected":{"kind":"issue","label":"7","sort":"7","volume":"Series One","volumeNo":null,"year":null},"input":{"path":"Series One-007.cbz"}},
 {"expected":{"kind":"special","label":"Series One Special","sort":null,"volume":"Series One","volumeNo":null,"year":null},"input":{"path":"Series One Special.cbz"}},
-{"expected":{"kind":"issue","label":"12","sort":"12","volume":"Series One","volumeNo":null,"year":2019},"input":{"path":"Series One 12 (2019) (Digital-Empire).cbr"}}
+{"expected":{"kind":"issue","label":"12","sort":"12","volume":"Series One","volumeNo":null,"year":2019},"input":{"path":"Series One 12 (2019) (Digital-Empire).cbr"}},
+{"expected":{"kind":"issue","label":"1","sort":"1","volume":"Series One 2099","volumeNo":null,"year":null},"input":{"path":"Series One 2099 001.cbz"}},
+{"expected":{"kind":"issue","label":"Series One ０１","sort":null,"volume":"Series One ０１","volumeNo":null,"year":null},"input":{"path":"Series One ０１.cbz"}},
+{"expected":{"kind":"issue","label":"Series One 1.2.3","sort":null,"volume":"Series One 1.2.3","volumeNo":null,"year":null},"input":{"path":"Series One 1.2.3.cbz"}},
+{"expected":{"kind":"issue","label":"Series One 12345","sort":null,"volume":"Series One 12345","volumeNo":null,"year":null},"input":{"path":"Series One 12345.cbz"}},
+{"expected":{"kind":"issue","label":"1","sort":"1","volume":"Series One","volumeNo":2,"year":null},"input":{"path":"Volume 2/Series One 001.cbz"}},
+{"expected":{"kind":"issue","label":"1","sort":"1","volume":"Special Forces","volumeNo":null,"year":null},"input":{"path":"Special Forces 001.cbz"}},
+{"expected":{"kind":"issue","label":"5","sort":"5","volume":"Band of","volumeNo":null,"year":null},"input":{"path":"Band of 5.cbz"}},
+{"expected":{"kind":"issue","label":"3","sort":"3","volume":"Mini Ch","volumeNo":1,"year":null},"input":{"path":"Mini Vol 1 Ch 3.cbz"}},
+{"expected":{"kind":"issue","label":"-1","sort":"-1","volume":"Series One","volumeNo":null,"year":null},"input":{"path":"Series One --1.cbz"}},
+{"expected":{"kind":"issue","label":"1","sort":"1","volume":"Series One","volumeNo":null,"year":null},"input":{"path":"Series One 001 of 12.cbz"}},
+{"expected":{"kind":"special","label":"3","sort":"3","volume":"Series One","volumeNo":null,"year":null},"input":{"path":"Series One Special 3.cbz"}}
 ]}

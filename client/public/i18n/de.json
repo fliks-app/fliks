@@ -4115,7 +4115,9 @@
       "kind_special": "Sonderheft",
       "release_date": "Erscheinungsdatum",
       "saved": "Gespeichert",
-      "invalid": "Nummer und Sortierposition sind erforderlich."
+      "invalid_number": "Die Nummer ist erforderlich.",
+      "invalid_sort": "Die Sortierposition muss eine Zahl zwischen -9999 und 9999 sein.",
+      "reset": "Auf automatisch zurücksetzen"
     }
   }
 }

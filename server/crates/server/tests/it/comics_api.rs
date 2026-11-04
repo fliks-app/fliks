@@ -105,7 +105,7 @@ async fn detail_lists_main_issues_then_annuals_by_decimal_sort(pool: PgPool) {
     assert_eq!(
         c["issues"][1],
         json!({"itemId": 1, "mediaFileId": 1, "format": "cbz", "number": "1", "sort": 1, "annual": false,
-               "kind": "issue", "title": "Start", "releaseDate": "2016-03-02", "pageCount": 24,
+               "kind": "issue", "title": "Start", "overview": null, "releaseDate": "2016-03-02", "pageCount": 24,
                "progression": 1, "finished": true})
     );
     assert_eq!(c["issues"][2]["progression"], 0.25);
@@ -355,4 +355,98 @@ async fn an_admin_edits_an_issue_and_the_key_stays_unique(pool: PgPool) {
     )
     .await;
     assert_eq!(s, 404);
+}
+
+#[sqlx::test(migrations = false)]
+async fn unlock_caps_and_null_kind_are_refused_or_honoured(pool: PgPool) {
+    let (app, admin, _) = ctx(&pool).await;
+    let long = "x".repeat(501);
+    let (s, _) = patch(&app, &admin, "/api/media/10/comic", json!({"title": long})).await;
+    assert_eq!(s, 400);
+    let (s, _) = patch(&app, &admin, "/api/media/10/comic", json!({"title": "T"})).await;
+    assert_eq!(s, 200);
+    let (s, _) = patch(
+        &app,
+        &admin,
+        "/api/media/10/comic",
+        json!({"title": "U", "unlock": ["title"]}),
+    )
+    .await;
+    assert_eq!(s, 400);
+    let (s, _) = patch(
+        &app,
+        &admin,
+        "/api/media/10/comic",
+        json!({"unlock": ["bogus"]}),
+    )
+    .await;
+    assert_eq!(s, 400);
+    let (s, _) = patch(
+        &app,
+        &admin,
+        "/api/media/10/comic",
+        json!({"unlock": ["title"]}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    let n: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM media_field_sources WHERE "mediaId" = 10"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 0);
+    let (s, _) = patch(&app, &admin, "/api/comics/issues/2", json!({"kind": null})).await;
+    assert_eq!(s, 400);
+    let (s, v) = patch(
+        &app,
+        &admin,
+        "/api/comics/issues/2",
+        json!({"overview": "O", "title": "T"}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    let i = v["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["itemId"] == 2)
+        .unwrap();
+    assert_eq!(i["overview"], "O");
+    let (s, v) = patch(
+        &app,
+        &admin,
+        "/api/comics/issues/2",
+        json!({"unlock": ["title", "overview"]}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert!(v["issues"].is_array());
+    let locked: Vec<String> =
+        sqlx::query_scalar(r#"SELECT unnest("lockedFields") FROM comic_issues WHERE "itemId" = 2"#)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(locked.is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_edit_waits_for_the_versions_lock_of_the_volume(pool: PgPool) {
+    let (app, admin, _) = ctx(&pool).await;
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(1230393939, 10)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let waiting = tokio::time::timeout(
+        std::time::Duration::from_millis(400),
+        patch(
+            &app,
+            &admin,
+            "/api/media/10/comic",
+            json!({"publisher": "P"}),
+        ),
+    )
+    .await;
+    assert!(waiting.is_err(), "the edit must wait for the lock");
+    tx.commit().await.unwrap();
 }

@@ -1,6 +1,6 @@
 //! `ComicInfo.xml` (the Anansi schema, v2.0/2.1) and how it combines with a file name
 //! (`docs/spec/comics.md`, rules 32-34). Hostile input: a DTD is refused, no entity is expanded.
-use super::name::{ComicName, canonical};
+use super::name::{ComicName, number};
 use crate::livetv::xmltv as text;
 use quick_xml::{Reader, events::Event};
 use serde::Serialize;
@@ -67,14 +67,16 @@ pub fn parse(xml: &[u8]) -> Result<ComicInfo, String> {
             }
             Event::Text(t) if depth == 2 => buf.push_str(&t),
             Event::CData(t) if depth == 2 => buf.push_str(&t),
-            Event::GeneralRef(t) if depth == 2 => buf.push_str(&format!("&{};", &*t)),
+            Event::GeneralRef(t) if depth == 2 => {
+                buf.push_str(&text::decode_xml_text(&format!("&{};", &*t)))
+            }
             Event::End(_) => {
                 if depth == 2
                     && let Some(f) = field.take()
                 {
                     found
                         .entry(f)
-                        .or_insert_with(|| text::decode_xml_text(&buf));
+                        .or_insert_with(|| buf.trim().replace('\0', ""));
                 }
                 depth = depth.saturating_sub(1);
             }
@@ -138,15 +140,10 @@ impl ComicInfo {
 pub fn resolve(name: &ComicName, info: Option<&ComicInfo>) -> Resolved {
     let none = ComicInfo::default();
     let i = info.unwrap_or(&none);
-    let number = i.number.as_deref().and_then(|n| {
-        let n = n.trim().trim_start_matches('#');
-        let ok = !n.is_empty()
-            && n.trim_start_matches('-')
-                .chars()
-                .all(|c| c.is_ascii_digit() || c == '.')
-            && n.trim_start_matches('-').len() <= 7;
-        ok.then(|| canonical(n)).flatten()
-    });
+    let number = i
+        .number
+        .as_deref()
+        .and_then(|n| number(n.trim().trim_start_matches('#')));
     let (label, sort) = match number {
         Some(n) => (n.clone(), Some(n)),
         None => (name.label.clone(), name.sort.clone()),

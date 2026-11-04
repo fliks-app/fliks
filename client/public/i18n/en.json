@@ -4115,7 +4115,9 @@
       "kind_special": "Special",
       "release_date": "Release date",
       "saved": "Saved",
-      "invalid": "Number and sort position are required."
+      "invalid_number": "The number is required.",
+      "invalid_sort": "The sort position must be a number between -9999 and 9999.",
+      "reset": "Reset to automatic"
     }
   }
 }

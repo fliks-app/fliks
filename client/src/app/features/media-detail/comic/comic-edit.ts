@@ -28,20 +28,27 @@ export function volumePatch(
   return out;
 }
 
-/** The issue fields that differ from `now`; null when a field holds a value the server would refuse. */
-export function issuePatch(f: FormData, now: ComicIssue): ComicIssuePatch | null {
+/** Every field of the volume dialog: what "reset to automatic" unlocks. */
+export const volumeReset: ComicVolumePatch = { unlock: ['title', 'overview', 'publisher', 'startYear', 'volume'] };
+
+export const issueReset: ComicIssuePatch = { unlock: ['number', 'sort', 'kind', 'title', 'overview', 'releaseDate'] };
+
+/** The issue fields that differ from `now`; the name of the field when it holds a value the server would refuse. */
+export function issuePatch(f: FormData, now: ComicIssue): ComicIssuePatch | 'number' | 'sort' {
   const out: ComicIssuePatch = {};
   const number = text(f, 'number');
-  if (!number) return null;
+  if (!number) return 'number';
   if (number !== now.number) out.number = number;
   const sortRaw = text(f, 'sort');
   const sort = Number(sortRaw);
-  if (sortRaw === '' || !Number.isFinite(sort) || Math.abs(sort) >= 10000) return null;
+  if (sortRaw === '' || !Number.isFinite(sort) || Math.abs(sort) >= 10000) return 'sort';
   if (sort !== now.sort) out.sort = sort;
   const kind = text(f, 'kind') as ComicIssue['kind'];
   if (kind !== now.kind) out.kind = kind;
   const title = text(f, 'title') || null;
   if (title !== (now.title || null)) out.title = title;
+  const overview = text(f, 'overview') || null;
+  if (overview !== (now.overview || null)) out.overview = overview;
   const date = text(f, 'releaseDate') || null;
   if (date !== now.releaseDate) out.releaseDate = date;
   return out;
