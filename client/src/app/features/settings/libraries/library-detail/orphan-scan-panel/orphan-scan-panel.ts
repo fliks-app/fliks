@@ -369,8 +369,7 @@ export class OrphanScanPanelComponent {
       // Auto-select the match a file id names; a book is identified from its file.
       const auto = results.find((r) => namesHit(vm.group.fileIds, r));
       const fromFile = !!auto || identifiesFromFile(vm.group);
-      // Import-all takes the first result when nothing is picked, so pick it
-      // here: the row the import will use is the row the user sees selected.
+      // The row the user sees selected is the row an import uses.
       this.patch(index, {
         results,
         searching: false,
@@ -517,8 +516,8 @@ export class OrphanScanPanelComponent {
     }
   }
 
-  /** One server batch for every group not linked yet: the row the user chose, the file's id or the
-   *  book's file decide, else the server takes the best hit of a search of the title. */
+  /** One server batch for every group not linked yet: the row shown selected, the file's id or the
+   *  book's file decide; a group never searched is searched by the server, which takes its best hit. */
   private async queueAll(libraryId: number): Promise<number> {
     const queued = this.groups()
       .map((vm, i) => ({ vm, i }))
@@ -531,7 +530,7 @@ export class OrphanScanPanelComponent {
   }
 
   private batchBody(libraryId: number, vm: GroupVM): RelinkOrphansBody {
-    if (vm.chosen || vm.fromFile) return this.relinkBody(libraryId, vm, vm.pick);
+    if (vm.chosen || vm.fromFile || vm.pick) return this.relinkBody(libraryId, vm, vm.pick);
     const fileId = vm.group.fileIds.find((f) => f.provider === vm.group.suggestedProvider);
     if (fileId) return this.relinkBody(libraryId, vm, fileId);
     return {

@@ -1,10 +1,10 @@
--- A person's or series' name with accents, case, punctuation and word order ignored:
--- `McFadden Freida`, `Freida McFadden` and `freida, mcfadden` are one key
+-- A name ignoring accents, case, punctuation and word order (`Ana Placeholder`, `placeholder, ana`);
+-- marks go before lower() and words split on space and punctuation, so a C-locale database keys too
 CREATE FUNCTION name_key(t text) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT string_agg(w, ' ' ORDER BY w)
   FROM regexp_split_to_table(
-    replace(replace(regexp_replace(normalize(lower(t), NFD), '[\u0300-\u036f]', '', 'g'), 'œ', 'oe'), 'æ', 'ae'),
-    '[^[:alnum:]]+') AS w
+    replace(replace(lower(regexp_replace(normalize(t, NFD), '[\u0300-\u036f]', '', 'g')), 'œ', 'oe'), 'æ', 'ae'),
+    '[[:space:][:punct:]]+') AS w
   WHERE w <> ''
 $$;
 

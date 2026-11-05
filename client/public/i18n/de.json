@@ -243,6 +243,7 @@
     "rescan_started": "Scan läuft: {{title}}",
     "rescan_completed": "Scan abgeschlossen: {{title}}, {{added}} hinzugefügt, {{removed}} entfernt, {{updated}} aktualisiert",
     "rescan_subtitles_cleaned": "{{missing}} Untertiteleintrag/-einträge ohne Datei entfernt, {{duplicates}} Duplikat(e) zusammengeführt",
+    "orphan_import_failed": "{{count}} Titel nicht importiert, Details in den Protokollen",
     "rescan_failed": "Fehler beim Scan: {{title}}",
     "media_move_completed": "Verschoben: {{title}}",
     "media_move_leftover": "Verschoben: {{title}}, {{count}} Quelldatei(en) konnten nicht entfernt werden",

@@ -130,6 +130,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 19 | `rescan.failed` | U(requesting admin) | `{mediaId: number, title: string, error: string}` |
 | 19a | `media.move.completed` | U(requesting admin) | `{mediaId: number, title: string, files: number, leftover: number}` |
 | 19b | `media.move.failed` | U(requesting admin) | `{mediaId: number, title: string, error: string}` |
+| 19c | `orphan_import.completed` | U(requesting user) | `{created: number, linked: number, failed: number}`, once a relink batch ends (`ingest.md` rule 73) |
 | 20 | `media.files.delete_failed` | U(requesting admin) | `{mediaId: number, title: string}` |
 | 21 | `player.command` | C (the session's `sseConnectionId` when still connected), else U(session owner) | `{sessionId: string, mediaFileId: number, userId: number, action: 'pause'|'play'|'stop'|'message', message?: string}` |
 | 22 | `markers.season.completed` | B | `{mediaId: number, seasonId: number, seasonNumber: number, introsDetected: number}` |

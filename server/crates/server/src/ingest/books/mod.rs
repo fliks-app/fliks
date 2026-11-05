@@ -153,7 +153,6 @@ async fn store_hash(db: &PgPool, file: i32, abs: &Path) {
     }
 }
 
-/// The picture becomes the work's poster when it has none.
 /// The cover a book file carries: an EPUB's own, a CBZ's first page.
 pub(crate) async fn file_cover(path: &Path) -> Option<Vec<u8>> {
     let p = path.to_path_buf();
@@ -172,6 +171,7 @@ pub(crate) async fn file_cover(path: &Path) -> Option<Vec<u8>> {
     }
 }
 
+/// The picture becomes the work's poster when it has none.
 pub async fn store_cover(st: &AppState, media: i32, bytes: &[u8]) {
     let _one = st.ingest.covers.lock(media).await;
     let has = sqlx::query_scalar!(
@@ -383,7 +383,7 @@ pub async fn register_to(
                     });
                     found_cover = e.cover;
                 }
-            } else {
+            } else if cover.is_none() {
                 found_cover = file_cover(&f.abs).await;
             }
             (None::<Value>, None)

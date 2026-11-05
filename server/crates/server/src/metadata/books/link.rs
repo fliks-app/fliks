@@ -130,7 +130,7 @@ pub async fn attach_with(
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
         .execute(&mut *tx)
         .await?;
-    crate::media::write::orphans::hold_persons(&mut tx).await?;
+    crate::media::write::orphans::hold(&mut tx).await?;
     let alive = sqlx::query_scalar!("SELECT id FROM media WHERE id = $1 FOR UPDATE", media)
         .fetch_optional(&mut *tx)
         .await?;

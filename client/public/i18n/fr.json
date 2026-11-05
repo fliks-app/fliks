@@ -243,6 +243,7 @@
     "rescan_started": "Scan en cours : {{title}}",
     "rescan_completed": "Scan terminé : {{title}}, {{added}} ajouté(s), {{removed}} supprimé(s), {{updated}} mis à jour",
     "rescan_subtitles_cleaned": "{{missing}} entrée(s) sous-titre sans fichier supprimée(s), {{duplicates}} doublon(s) fusionné(s)",
+    "orphan_import_failed": "{{count}} titre(s) non importé(s), détails dans les journaux",
     "rescan_failed": "Erreur lors du scan : {{title}}",
     "media_move_completed": "Déplacé : {{title}}",
     "media_move_leftover": "Déplacé : {{title}}, {{count}} fichier(s) source n'ont pas pu être supprimés",

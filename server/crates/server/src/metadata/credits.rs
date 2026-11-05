@@ -50,7 +50,7 @@ pub async fn persist_credits(
         }
     }
     let mut tx = st.db.begin().await?;
-    crate::media::write::orphans::hold_persons(&mut tx).await?;
+    crate::media::write::orphans::hold(&mut tx).await?;
     let (people, avatars) = if unique.is_empty() {
         (HashMap::new(), vec![])
     } else {

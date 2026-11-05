@@ -850,6 +850,14 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
     tracing::info!(
         "Orphan batch import done: {total} item(s), {created} created, {linked} linked, {failed} failed"
     );
+    st.hub.emit_to_user(
+        a.user.id,
+        SseEvent::OrphanImportCompleted {
+            created: created as i64,
+            linked,
+            failed,
+        },
+    );
 }
 
 fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppError> {

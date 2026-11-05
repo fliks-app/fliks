@@ -243,6 +243,7 @@
     "rescan_started": "Escaneo en curso: {{title}}",
     "rescan_completed": "Escaneo completado: {{title}}, {{added}} añadido(s), {{removed}} eliminado(s), {{updated}} actualizado(s)",
     "rescan_subtitles_cleaned": "{{missing}} entrada(s) de subtítulo sin archivo eliminada(s), {{duplicates}} duplicado(s) fusionado(s)",
+    "orphan_import_failed": "{{count}} título(s) sin importar, detalles en los registros",
     "rescan_failed": "Error durante el escaneo: {{title}}",
     "media_move_completed": "Movido: {{title}}",
     "media_move_leftover": "Movido: {{title}}, no se pudieron eliminar {{count}} archivo(s) de origen",

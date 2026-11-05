@@ -243,6 +243,7 @@
     "rescan_started": "Análise em curso: {{title}}",
     "rescan_completed": "Análise concluída: {{title}}, {{added}} adicionado(s), {{removed}} removido(s), {{updated}} atualizado(s)",
     "rescan_subtitles_cleaned": "{{missing}} entrada(s) de legenda sem ficheiro removida(s), {{duplicates}} duplicado(s) fundido(s)",
+    "orphan_import_failed": "{{count}} título(s) não importado(s), detalhes nos registos",
     "rescan_failed": "Erro durante a análise: {{title}}",
     "media_move_completed": "Movido: {{title}}",
     "media_move_leftover": "Movido: {{title}}, não foi possível remover {{count}} ficheiro(s) de origem",

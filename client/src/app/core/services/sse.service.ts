@@ -576,6 +576,13 @@ export class SseService implements OnDestroy {
         this.toast.success(msg);
         break;
       }
+      case 'orphan_import.completed': {
+        const failed = Number(event['failed'] ?? 0);
+        if (failed > 0) {
+          this.toast.warning(this.translate.instant('sse.orphan_import_failed', { count: failed }));
+        }
+        break;
+      }
       case 'rescan.failed':
         this.toast.error(
           this.translate.instant('sse.rescan_failed', { title: event['title'] ?? '' }),

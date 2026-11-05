@@ -140,14 +140,15 @@ pub async fn follow_put(
     ValidJson(v): ValidJson<Value>,
 ) -> Res {
     let id = id?.0;
+    // Held before the checks: the orphan sweep cannot drop the person between them and the insert.
+    let mut tx = st.db.begin().await?;
+    crate::media::write::orphans::hold(&mut tx).await?;
     person_name(&st, id).await?;
     let p = read_put(&st, &a, v, false).await?;
     if !can_follow(&st, id).await? {
         return Err(AppError::bad_request(vec!["this person is not an author"]));
     }
     let wants = p.wants.as_deref().map(|w| wants_json(Some(w)));
-    let mut tx = st.db.begin().await?;
-    crate::media::write::orphans::hold_persons(&mut tx).await?;
     sqlx::query(
         r#"INSERT INTO person_follows ("userId", "personId", role, "newReleases", "libraryId", wants)
            VALUES ($1, $2, 'author', COALESCE($3, true), $4, COALESCE($5::jsonb, $6::jsonb))
@@ -232,6 +233,8 @@ pub async fn watch_put(
     ValidJson(v): ValidJson<Value>,
 ) -> Res {
     let id = id?.0;
+    let mut tx = st.db.begin().await?;
+    crate::media::write::orphans::hold(&mut tx).await?;
     series_name(&st, &a, id).await?;
     let p = read_put(&st, &a, v, true).await?;
     let wants = p.wants.as_deref().map(|w| wants_json(Some(w)));
@@ -246,8 +249,9 @@ pub async fn watch_put(
     .bind(p.library)
     .bind(wants)
     .bind(wants_json(None))
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     watch_body(&st, a.user.id, id).await
 }
 

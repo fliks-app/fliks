@@ -151,7 +151,7 @@ describe('OrphanScanPanelComponent.importAll', () => {
     expect(alpha.year).toBe(2001);
     expect(alpha.reorganize).toBe(false);
     const beta = relinked.find((b) => b.folderName === 'Beta')!;
-    expect(beta.auto).toBe(true);
+    expect(beta.externalId).toBe('11');
   });
 
   it('selects the first result as soon as a group is searched', async () => {
@@ -227,18 +227,19 @@ describe('OrphanScanPanelComponent.importAll', () => {
 });
 
 describe('OrphanScanPanelComponent.autoImportAll', () => {
-  it('hands every group to one server batch, the server picking the match, and reports it queued', async () => {
+  it('hands every group to one server batch, keeping the rows shown selected, and reports it queued', async () => {
     const { panel, relinked, linked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
+    panel.edit(1, { query: 'Renamed' });
     let queued = false;
     panel.queued.subscribe(() => (queued = true));
 
     await panel.autoImportAll();
 
     expect(linked).toEqual([]);
-    expect(relinked.map((b) => [b.folderName, b.auto, b.externalId, b.provider, b.title])).toEqual([
-      ['Alpha', true, undefined, 'tmdb', 'Alpha'],
-      ['Beta', true, undefined, 'tmdb', 'Beta'],
+    expect(relinked.map((b) => [b.folderName, b.auto, b.externalId, b.title])).toEqual([
+      ['Alpha', undefined, '11', undefined],
+      ['Beta', true, undefined, 'Renamed'],
     ]);
     expect(panel.groups().every((g) => g.done)).toBe(true);
     expect(queued).toBe(true);
@@ -436,9 +437,9 @@ describe('OrphanScanPanelComponent: a group whose search errored', () => {
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
     expect(await panel.importAll(7)).toBe(2);
-    expect(relinked.map((b) => [b.folderName, b.auto])).toEqual([
-      ['Alpha', true],
-      ['Beta', true],
+    expect(relinked.map((b) => [b.folderName, b.externalId, b.auto])).toEqual([
+      ['Alpha', '11', undefined],
+      ['Beta', undefined, true],
     ]);
   });
 
@@ -451,7 +452,7 @@ describe('OrphanScanPanelComponent: a group whose search errored', () => {
     await panel.autoImportAll();
 
     expect(relinked.map((b) => [b.folderName, b.auto])).toEqual([
-      ['Alpha', true],
+      ['Alpha', undefined],
       ['Beta', true],
     ]);
   });
@@ -585,7 +586,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
 
     expect(relinked).toHaveLength(1);
     expect(relinked[0].folderName).toBe('');
-    expect(relinked[0].auto).toBe(true);
+    expect(relinked[0].externalId).toBe('11');
     expect(relinked[0].reorganize).toBe(false);
   });
 
@@ -639,9 +640,9 @@ describe('OrphanScanPanelComponent.edit', () => {
 
     expect(panel.groups()[1].pick).toBeNull();
     await panel.importAll(7);
-    expect(relinked.map((b) => [b.folderName, b.title, b.auto])).toEqual([
-      ['Alpha', 'Alpha', true],
-      ['Beta', 'Renamed', true],
+    expect(relinked.map((b) => [b.folderName, b.externalId, b.title, b.auto])).toEqual([
+      ['Alpha', '11', undefined, undefined],
+      ['Beta', undefined, 'Renamed', true],
     ]);
   });
 

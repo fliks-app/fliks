@@ -204,7 +204,7 @@ async fn m1789000000760_name_key_ignores_accents_case_punctuation_and_order(pool
     apply_until(&pool, 1_789_000_000_761).await;
     let keys: Vec<(Option<String>,)> = rows(
         &pool,
-        "SELECT name_key(n) FROM unnest(ARRAY['Placeholder, Âna', 'ana PLACEHOLDER', 'Les Sept Sœurs', ' ']) n",
+        "SELECT name_key(n) FROM unnest(ARRAY['Placeholder, Âna', 'ana PLACEHOLDER', 'La Saga des Sœurs', ' ']) n",
     )
     .await;
     assert_eq!(
@@ -212,7 +212,7 @@ async fn m1789000000760_name_key_ignores_accents_case_punctuation_and_order(pool
         [
             (Some("ana placeholder".into()),),
             (Some("ana placeholder".into()),),
-            (Some("les sept soeurs".into()),),
+            (Some("des la saga soeurs".into()),),
             (None,)
         ]
     );

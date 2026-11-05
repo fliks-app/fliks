@@ -10,9 +10,9 @@ use std::{
 static PENDING: AtomicBool = AtomicBool::new(false);
 static RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Taken by every transaction that credits or follows a person, so a sweep never deletes one between
-/// its lookup and its credit.
-pub async fn hold_persons(c: &mut PgConnection) -> sqlx::Result<()> {
+/// Taken by every transaction that references a person or a collection, so a sweep never deletes one
+/// between its lookup and its use.
+pub async fn hold(c: &mut PgConnection) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock_shared(hashtext('persons:orphans'))")
         .execute(c)
         .await
@@ -47,18 +47,15 @@ pub async fn sweep(st: &AppState) -> sqlx::Result<()> {
     )
     .fetch_all(&mut *tx)
     .await?;
-    tx.commit().await?;
     let collections = sqlx::query(
-        // A collection a writer is adding an entry to holds a key-share lock: it is skipped.
-        r#"DELETE FROM collections WHERE id IN (
-             SELECT c.id FROM collections c
-              WHERE NOT EXISTS (SELECT 1 FROM collection_entries e WHERE e."collectionId" = c.id)
-                AND NOT EXISTS (SELECT 1 FROM series_watches w WHERE w."collectionId" = c.id)
-              FOR UPDATE SKIP LOCKED)"#,
+        r#"DELETE FROM collections c
+           WHERE NOT EXISTS (SELECT 1 FROM collection_entries e WHERE e."collectionId" = c.id)
+             AND NOT EXISTS (SELECT 1 FROM series_watches w WHERE w."collectionId" = c.id)"#,
     )
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
+    tx.commit().await?;
     let mut files = 0;
     for (dir, rows) in [
         ("media", "SELECT id FROM media"),

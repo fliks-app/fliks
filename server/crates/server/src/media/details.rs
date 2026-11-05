@@ -213,6 +213,7 @@ pub async fn set_tmdb_collection(
     media: i32,
     collection: Option<(i32, &str)>,
 ) -> sqlx::Result<()> {
+    crate::media::write::orphans::hold(c).await?;
     let mut values = sqlx::query_scalar!(
         r#"SELECT x.value FROM collection_entries e
            JOIN collection_external_ids x ON x."collectionId" = e."collectionId" AND x.provider = 'tmdb'

@@ -61,7 +61,8 @@ export class AnalyzeController {
   }
 
   setOpt(key: AnalyzeOptKey, value: boolean) {
-    this.opts.update((o) => ({ ...o, [key]: value }));
+    // Force only qualifies a rescan: it goes with it.
+    this.opts.update((o) => ({ ...o, [key]: value, ...(key === 'rescan' && !value && { force: false }) }));
   }
 
   async run() {
