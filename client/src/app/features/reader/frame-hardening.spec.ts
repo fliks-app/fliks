@@ -1,66 +1,46 @@
-import { destroyNavigator, provideCssSelectorGenerator, sandboxContentFrames } from './frame-hardening';
+import { destroyNavigator, provideCssSelectorGenerator, provideFrameSelectors } from './frame-hardening';
 
-const frameWithToolkitSandbox = () => {
+const generatorOf = (frame: HTMLIFrameElement) =>
+  (frame.contentWindow as { _readium_cssSelectorGenerator?: unknown })._readium_cssSelectorGenerator;
+
+const loadIn = async (container: HTMLElement, parent: HTMLElement = container) => {
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', 'allow-same-origin allow-scripts');
+  parent.append(frame);
+  await Promise.resolve();
+  frame.dispatchEvent(new Event('load'));
   return frame;
 };
 
-describe('sandboxContentFrames', () => {
-  it('replaces the toolkit sandbox with one that has no allow-scripts', async () => {
+describe('provideFrameSelectors', () => {
+  it('hands each document a frame loads the selector generator, and keeps the toolkit sandbox', async () => {
     const container = document.createElement('div');
-    const stop = sandboxContentFrames(container);
-    const frame = frameWithToolkitSandbox();
-    container.append(frame);
-    await Promise.resolve();
-    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin');
+    document.body.append(container);
+    const stop = provideFrameSelectors(container);
+    const frame = await loadIn(container);
+    expect(generatorOf(frame)).toBeDefined();
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin allow-scripts');
     stop();
+    container.remove();
   });
 
   it('also covers a frame nested deeper in the container', async () => {
     const container = document.createElement('div');
     const wrapper = document.createElement('div');
     container.append(wrapper);
-    const stop = sandboxContentFrames(container);
-    const frame = frameWithToolkitSandbox();
-    wrapper.append(frame);
-    await Promise.resolve();
-    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin');
-    stop();
-  });
-
-  it('covers a frame inside a wrapper added as a whole', async () => {
-    const container = document.createElement('div');
-    const stop = sandboxContentFrames(container);
-    const wrapper = document.createElement('div');
-    const frame = frameWithToolkitSandbox();
-    wrapper.append(frame);
-    container.append(wrapper);
-    await Promise.resolve();
-    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin');
-    stop();
-  });
-
-  it('hands each document a frame loads the selector generator its blocked script would have installed', async () => {
-    const container = document.createElement('div');
     document.body.append(container);
-    const stop = sandboxContentFrames(container);
-    const frame = frameWithToolkitSandbox();
-    container.append(frame);
-    await Promise.resolve();
-    frame.dispatchEvent(new Event('load'));
-    expect((frame.contentWindow as { _readium_cssSelectorGenerator?: unknown })._readium_cssSelectorGenerator).toBeDefined();
+    const stop = provideFrameSelectors(container);
+    expect(generatorOf(await loadIn(container, wrapper))).toBeDefined();
     stop();
     container.remove();
   });
 
   it('stops once disconnected', async () => {
     const container = document.createElement('div');
-    sandboxContentFrames(container)();
-    const frame = frameWithToolkitSandbox();
-    container.append(frame);
-    await Promise.resolve();
-    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin allow-scripts');
+    document.body.append(container);
+    provideFrameSelectors(container)();
+    expect(generatorOf(await loadIn(container))).toBeUndefined();
+    container.remove();
   });
 });
 

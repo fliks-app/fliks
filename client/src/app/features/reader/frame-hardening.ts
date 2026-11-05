@@ -1,17 +1,15 @@
 import { getCssSelector } from 'css-selector-generator';
 
-/** Readium hard-codes `allow-scripts` on its content iframes; drop it as each one is added, before its first navigation.
- *  The selector generator the blocked script would have installed is then handed to every document the frame loads. */
-export function sandboxContentFrames(container: HTMLElement): () => void {
-  const harden = (f: HTMLIFrameElement) => {
-    f.setAttribute('sandbox', 'allow-same-origin');
+/** Hands every document a content frame loads the selector generator its CSP keeps Readium from injecting.
+ *  The frames keep `allow-scripts`: WebKit runs no listener, not even the toolkit's, in a frame without it. */
+export function provideFrameSelectors(container: HTMLElement): () => void {
+  const provide = (f: HTMLIFrameElement) =>
     f.addEventListener('load', () => f.contentWindow && provideCssSelectorGenerator(f.contentWindow));
-  };
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (!(node instanceof Element)) continue;
-        (node instanceof HTMLIFrameElement ? [node] : node.querySelectorAll('iframe')).forEach(harden);
+        (node instanceof HTMLIFrameElement ? [node] : node.querySelectorAll('iframe')).forEach(provide);
       }
     }
   });
@@ -30,7 +28,7 @@ type SelectorWindow = Window & {
   _readium_cssSelectorGenerator?: { getCssSelector: typeof getCssSelector };
 };
 
-/** Readium injects its generator as a script, which a frame without `allow-scripts` never runs. */
+/** Readium injects its generator as a script, which the `script-src 'none'` of the served markup blocks. */
 export function provideCssSelectorGenerator(frame: Window): void {
   (frame as SelectorWindow)._readium_cssSelectorGenerator = {
     getCssSelector: (element, options) => {
